@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.service;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
@@ -63,12 +64,17 @@ public class SyncPushService implements SyncUseCase {
     }
 
     /**
-     * Story 12.7 — the tenant's module state, read once per push batch (before the loop): its active modules, or,
-     * for an unknown / deleted tenant, the reason every (non-replayed) operation is rejected with
-     * ({@code TENANT_NOT_FOUND}, transient on the device).
+     * Story 12.7 / 13.5 — the tenant's module state, read once per push batch (before the loop): the effective state
+     * of every installed module, or, for an unknown / deleted tenant, the reason every (non-replayed) operation is
+     * rejected with ({@code TENANT_NOT_FOUND}, transient on the device).
      */
-    private record ModuleGate(Set<String> active, String tenantRejection) {
-        static final ModuleGate NONE = new ModuleGate(Set.of(), null);
+    private record ModuleGate(Map<String, ModuleState> states, String tenantRejection) {
+        static final ModuleGate NONE = new ModuleGate(Map.of(), null);
+
+        ModuleState stateOf(String moduleId) {
+            ModuleState state = moduleId != null ? states.get(moduleId) : null;
+            return state != null ? state : ModuleState.DISABLED;
+        }
     }
 
     /**
@@ -80,10 +86,10 @@ public class SyncPushService implements SyncUseCase {
             if (!moduleRegistry.isKnownTenant(command.tenantId())) {
                 log.warn("[Sync] Push for a tenant that is not registered — every operation is rejected as "
                         + "TENANT_NOT_FOUND");
-                return new ModuleGate(Set.of(), ErrorCode.TENANT_NOT_FOUND.name());
+                return new ModuleGate(Map.of(), ErrorCode.TENANT_NOT_FOUND.name());
             }
-            Set<String> active = moduleRegistry.activeModules(command.tenantId());
-            return new ModuleGate(active != null ? active : Set.of(), null);
+            Map<String, ModuleState> states = moduleRegistry.moduleStates(command.tenantId());
+            return new ModuleGate(states != null ? states : Map.of(), null);
         } catch (Exception e) {
             log.error("[Sync] Could not read the tenant's active modules — push answered 503", e);
             throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
@@ -93,7 +99,9 @@ public class SyncPushService implements SyncUseCase {
 
     /**
      * Story 12.7 — refuses an operation whose module is not active for the tenant ({@code MODULE_INACTIVE}),
-     * or every operation of an unknown tenant ({@code TENANT_NOT_FOUND}). Runs after the
+     * or every operation of an unknown tenant ({@code TENANT_NOT_FOUND}). Story 13.5 — a module in its read-only
+     * grace (subscription expired) refuses the operation with {@code MODULE_READ_ONLY}: every sync operation is a
+     * write. Both reasons are held on the device (data kept, retried automatically). Runs after the
      * duplicate/replay detection and before anything else touches the operation. {@code null} = proceed
      * (an unknown operation type keeps {@code UNKNOWN_OPERATION_TYPE}, decided further down).
      */
@@ -107,13 +115,15 @@ public class SyncPushService implements SyncUseCase {
             return null;
         }
         String moduleId = handler.get().moduleId(); // never null for a registered handler (boot check)
-        if (moduleId != null && gate.active().contains(moduleId)) {
+        ModuleState state = gate.stateOf(moduleId);
+        if (state == ModuleState.ENABLED) {
             return null;
         }
-        log.info("[Sync] Operation {} ({}) refused: module {} is not active for the tenant",
-                operation.operationId(), operation.operationType(), moduleId);
-        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null,
-                ErrorCode.MODULE_INACTIVE.name());
+        ErrorCode reason = state == ModuleState.READ_ONLY ? ErrorCode.MODULE_READ_ONLY : ErrorCode.MODULE_INACTIVE;
+        log.info("[Sync] Operation {} ({}) refused: module {} is {} for the tenant",
+                operation.operationId(), operation.operationType(), moduleId,
+                state == ModuleState.READ_ONLY ? "read-only" : "not active");
+        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null, reason.name());
     }
 
     /**

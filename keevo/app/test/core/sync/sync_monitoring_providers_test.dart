@@ -42,7 +42,10 @@ void main() {
 
   var clock = DateTime(2026, 10, 1);
   Future<void> op(String id, String operation,
-      {String? entityId, bool quarantined = false, bool synced = false}) {
+      {String? entityId,
+      bool quarantined = false,
+      bool synced = false,
+      String? lastError}) {
     clock = clock.add(const Duration(seconds: 1));
     return db.into(db.syncQueue).insert(SyncQueueCompanion.insert(
           id: id,
@@ -52,6 +55,7 @@ void main() {
           synced: Value(synced),
           entityId: Value(entityId),
           quarantinedAt: Value(quarantined ? clock : null),
+          lastError: Value(lastError),
         ));
   }
 
@@ -74,6 +78,33 @@ void main() {
             .map((o) => o.id),
         ['sale', 'validate', 'adjust', 'lone-cancel']);
     expect(await container.read(quarantinedSyncCountProvider.future), 3);
+  });
+
+  test('12.7 / 13.5: held rows (MODULE_INACTIVE, MODULE_READ_ONLY) are listed '
+      'but not counted as pending', () async {
+    await op('pending', 'UPDATE_CLIENT', entityId: 'c-1', lastError: 'X');
+    await op('inactive', 'CREATE_CLIENT',
+        entityId: 'c-2', lastError: 'MODULE_INACTIVE');
+    await op('read-only', 'CREATE_CLIENT',
+        entityId: 'c-3', lastError: 'MODULE_READ_ONLY');
+
+    expect(await container.read(pendingSyncCountProvider.future), 1);
+    expect(
+        (await container.read(pendingSyncQueueProvider.future)).map((o) => o.id),
+        ['pending', 'inactive', 'read-only']);
+  });
+
+  test('13.5: the stale-queue check ignores held (both reasons) and '
+      'quarantined rows', () async {
+    await op('read-only', 'CREATE_CLIENT',
+        entityId: 'c-1', lastError: 'MODULE_READ_ONLY');
+    await op('inactive', 'CREATE_CLIENT',
+        entityId: 'c-2', lastError: 'MODULE_INACTIVE');
+    await op('blocked', 'CREATE_SALE', entityId: 's-1', quarantined: true);
+    expect(await oldestPendingOperation(db), isNull);
+
+    await op('pending', 'UPDATE_CLIENT', entityId: 'c-3', lastError: 'X');
+    expect((await oldestPendingOperation(db))?.id, 'pending');
   });
 
   // J24 (device test): « 18 appareils actifs » for one phone.

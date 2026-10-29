@@ -3,17 +3,22 @@ package com.keevo.shared.module.application;
 import com.keevo.shared.module.ActivationPlan;
 import com.keevo.shared.module.BlockReason;
 import com.keevo.shared.module.DeactivationCheck;
+import com.keevo.shared.module.ModuleActivationEligibility;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleState;
+import com.keevo.shared.module.TenantModuleStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 import static com.keevo.shared.module.TestModuleCatalogs.dependencyCatalog;
@@ -32,7 +37,7 @@ class DependencyResolverServiceTest {
     private final DependencyResolverService resolver = new DependencyResolverService(catalog, registry,
             (schema, module) -> {
                 eligibilityCalls.add(schema + ":" + module.id());
-                return new FreeModulesOnlyEligibility().check(schema, module);
+                return new EntitlementActivationEligibility().check(schema, module);
             });
 
     // ── activation ──────────────────────────────────────────────────────────────────────────────────
@@ -259,7 +264,7 @@ class DependencyResolverServiceTest {
                 loaded("core", ModuleCategory.CORE, true),
                 loaded("lonely", ModuleCategory.BUSINESS, true, List.of("missing"), List.of())));
         assertThatThrownBy(() -> new DependencyResolverService(unknown, new FakeRegistry(unknown),
-                new FreeModulesOnlyEligibility()))
+                new EntitlementActivationEligibility()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'lonely' requires 'missing', which is not in the module catalogue");
         ModuleCatalog duplicated = new ModuleCatalog(List.of(
@@ -267,7 +272,7 @@ class DependencyResolverServiceTest {
                 loaded("base", ModuleCategory.BUSINESS, true),
                 loaded("twice", ModuleCategory.BUSINESS, true, List.of("base", "base"), List.of())));
         assertThatThrownBy(() -> new DependencyResolverService(duplicated, new FakeRegistry(duplicated),
-                new FreeModulesOnlyEligibility()))
+                new EntitlementActivationEligibility()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("'twice' requires 'base' more than once");
     }
@@ -291,17 +296,55 @@ class DependencyResolverServiceTest {
                 loaded("left", ModuleCategory.BUSINESS, true, List.of("right"), List.of()),
                 loaded("right", ModuleCategory.BUSINESS, true, List.of("left"), List.of())));
         assertThatThrownBy(() -> new DependencyResolverService(cyclic, new FakeRegistry(cyclic),
-                new FreeModulesOnlyEligibility()))
+                new EntitlementActivationEligibility()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("left");
     }
 
     @Test
-    @DisplayName("default eligibility: free → eligible, paid → not")
+    @DisplayName("13.5 eligibility bean: free → eligible, initial status ACTIVE; paid → NOT_ENTITLED")
     void defaultEligibility() {
-        FreeModulesOnlyEligibility eligibility = new FreeModulesOnlyEligibility();
-        assertThat(eligibility.check(TENANT, catalog.find("solo").orElseThrow()).eligible()).isTrue();
-        assertThat(eligibility.check(TENANT, catalog.find("paid").orElseThrow()).eligible()).isFalse();
+        EntitlementActivationEligibility eligibility = new EntitlementActivationEligibility();
+        ModuleActivationEligibility.Eligibility free = eligibility.check(TENANT, catalog.find("solo").orElseThrow());
+        assertThat(free).isEqualTo(new ModuleActivationEligibility.Eligibility(true, null, TenantModuleStatus.ACTIVE));
+        ModuleActivationEligibility.Eligibility paid = eligibility.check(TENANT, catalog.find("paid").orElseThrow());
+        assertThat(paid).isEqualTo(new ModuleActivationEligibility.Eligibility(false, BlockReason.Code.NOT_ENTITLED, null));
+    }
+
+    @Test
+    @DisplayName("13.5 contract: a null answer or a throwing port → step not eligible, ELIGIBILITY_UNAVAILABLE")
+    void nullOrThrowingEligibility() {
+        DependencyResolverService nullPort = new DependencyResolverService(catalog, registry, (schema, module) -> null);
+        ActivationPlan plan = nullPort.planActivation(TENANT, "solo");
+        assertThat(plan.blocked()).isTrue();
+        assertThat(plan.steps()).singleElement().extracting(ActivationPlan.Step::eligible).isEqualTo(false);
+        assertThat(plan.reasons()).containsExactly(new BlockReason(BlockReason.Code.ELIGIBILITY_UNAVAILABLE, "solo"));
+
+        DependencyResolverService throwing = new DependencyResolverService(catalog, registry, (schema, module) -> {
+            if ("inventory".equals(module.id())) {
+                throw new IllegalStateException("secret " + schema);
+            }
+            return new EntitlementActivationEligibility().check(schema, module);
+        });
+        ActivationPlan cascade = throwing.planActivation(TENANT, "x");
+        assertThat(cascade.moduleIds()).containsExactly("catalog", "inventory", "x");
+        assertThat(cascade.reasons())
+                .containsExactly(new BlockReason(BlockReason.Code.ELIGIBILITY_UNAVAILABLE, "inventory"));
+    }
+
+    @Test
+    @DisplayName("Eligibility invariants: eligible ⇒ initial status, no reason; refused ⇒ reason, no status")
+    void eligibilityInvariants() {
+        assertThatThrownBy(() -> new ModuleActivationEligibility.Eligibility(true, null, null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new ModuleActivationEligibility.Eligibility(true, BlockReason.Code.NOT_ENTITLED,
+                TenantModuleStatus.ACTIVE))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ModuleActivationEligibility.Eligibility(false, null, null))
+                .isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new ModuleActivationEligibility.Eligibility(false, BlockReason.Code.NOT_ENTITLED,
+                TenantModuleStatus.ACTIVE))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     /** Registry fake: core always active, plus the modules activated by the test. */
@@ -343,6 +386,18 @@ class DependencyResolverServiceTest {
         @Override
         public boolean isActive(String tenantSchema, String moduleId) {
             return active.contains(moduleId);
+        }
+
+        @Override
+        public ModuleState moduleState(String tenantSchema, String moduleId) {
+            return active.contains(moduleId) ? ModuleState.ENABLED : ModuleState.DISABLED;
+        }
+
+        @Override
+        public Map<String, ModuleState> moduleStates(String tenantSchema) {
+            Map<String, ModuleState> states = new TreeMap<>();
+            catalog.manifests().forEach(m -> states.put(m.id(), moduleState(tenantSchema, m.id())));
+            return states;
         }
 
         @Override

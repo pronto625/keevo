@@ -112,7 +112,7 @@ class SyncPushServiceTransactionFailureTest {
     @Test
     @DisplayName("log save fails after a REJECTED handler outcome: that reason is kept, the next op is APPLIED")
     void abortedTransaction_keepsHandlerReason_otherOpApplied() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(ALL);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(ALL));
         org.mockito.Mockito.doAnswer(inv -> new SyncOperationResult(
                 ((SyncOperation) inv.getArgument(0)).operationId(), SyncOperationStatus.REJECTED, null,
                 "CLIENT_NOT_FOUND")).when(clientHandler).handle(any(), any(), any());
@@ -137,7 +137,7 @@ class SyncPushServiceTransactionFailureTest {
     @Test
     @DisplayName("handler mapped the failure to INTERNAL_ERROR and a data-access error escapes: DATA_INTEGRITY_VIOLATION")
     void dataAccessFailure_dataIntegrityViolation() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(ALL);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(ALL));
         org.mockito.Mockito.doAnswer(inv -> new SyncOperationResult(
                 ((SyncOperation) inv.getArgument(0)).operationId(), SyncOperationStatus.REJECTED, null,
                 "INTERNAL_ERROR")).when(saleHandler).handle(any(), any(), any());
@@ -157,7 +157,7 @@ class SyncPushServiceTransactionFailureTest {
     @Test
     @DisplayName("any other runtime failure in the transaction: that operation REJECTED INTERNAL_ERROR, no exception")
     void otherRuntimeFailure_internalError() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(ALL);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(ALL));
         org.mockito.Mockito.doThrow(new IllegalStateException("boom")).when(productHandler).handle(any(), any(), any());
         org.mockito.Mockito.doThrow(new IllegalStateException("log store down"))
                 .doNothing()

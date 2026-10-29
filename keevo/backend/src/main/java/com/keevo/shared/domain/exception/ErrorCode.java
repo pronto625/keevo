@@ -112,6 +112,8 @@ public enum ErrorCode {
     SYNC_DUPLICATE_OPERATION,      // Story 5.1 — operationId already processed
     SYNC_UNKNOWN_OPERATION_TYPE,   // Story 5.1 — no handler registered for operationType
     MODULE_INACTIVE,               // Story 12.7 — the operation's module is not active for the tenant (sync push: REJECTED)
+    MODULE_NOT_ENTITLED,           // Story 13.5 — HTTP 403: the module is not in the tenant's subscription (@RequiresEntitlement)
+    MODULE_READ_ONLY,              // Story 13.5 — HTTP 403: subscription expired, read-only grace (writes refused; sync push: REJECTED)
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

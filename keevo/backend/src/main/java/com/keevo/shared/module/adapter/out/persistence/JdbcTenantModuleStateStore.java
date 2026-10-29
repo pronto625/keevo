@@ -11,6 +11,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +21,7 @@ import java.util.Optional;
 /**
  * JDBC adapter of {@link TenantModuleStatePort} on {@code public.tenant_modules} (Story 13.2). One query per call:
  * the tenant is resolved from its schema name ({@code public.tenants.schema_name}, UNIQUE) and its rows are
- * left-joined, so an unknown tenant (no row at all) is told apart from a tenant without module rows (one row with
+ * left-joined (status, {@code expires_at}, {@code grace_until}, {@code tier} — Story 13.5), so an unknown tenant (no row at all) is told apart from a tenant without module rows (one row with
  * a null module id). A {@code DELETED} tenant counts as unknown (like every other public reader).
  * Schema-qualified, bind parameters only.
  *
@@ -34,7 +36,7 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
     private static final Logger log = LoggerFactory.getLogger(JdbcTenantModuleStateStore.class);
 
     static final String FIND_STATUSES_SQL = """
-            SELECT tm.module_id, tm.status
+            SELECT tm.module_id, tm.status, tm.expires_at, tm.grace_until, tm.tier
             FROM public.tenants t
             LEFT JOIN public.tenant_modules tm ON tm.tenant_id = t.id
             WHERE t.schema_name = ? AND t.status <> 'DELETED'
@@ -72,9 +74,9 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
     }
 
     @Override
-    public Optional<Map<String, TenantModuleStatus>> findStatuses(String tenantSchema) {
+    public Optional<Map<String, Row>> findRows(String tenantSchema) {
         String schema = TenantSchema.validate(tenantSchema);
-        Map<String, TenantModuleStatus> statuses = new LinkedHashMap<>();
+        Map<String, Row> rows = new LinkedHashMap<>();
         boolean[] tenantFound = {false};
         jdbc.query(FIND_STATUSES_SQL, rs -> {
             tenantFound[0] = true;
@@ -83,14 +85,22 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
                 return;
             }
             String code = rs.getString("status");
-            statuses.put(moduleId, TenantModuleStatus.fromCode(code).orElseGet(() -> {
+            TenantModuleStatus status = TenantModuleStatus.fromCode(code).orElseGet(() -> {
                 // the column CHECK makes this unreachable; never let an unexpected value activate a module
                 log.warn("Module registry: unexpected tenant_modules status for module '{}' — treated as DISABLED",
                         moduleId);
                 return TenantModuleStatus.DISABLED;
-            }));
+            });
+            // V29: expires_at / grace_until are TIMESTAMPTZ — read as OffsetDateTime (an absolute instant, never
+            // reinterpreted in the JVM default zone like java.sql.Timestamp would be)
+            rows.put(moduleId, new Row(status, instant(rs.getObject("expires_at", OffsetDateTime.class)),
+                    instant(rs.getObject("grace_until", OffsetDateTime.class)), rs.getString("tier")));
         }, schema);
-        return tenantFound[0] ? Optional.of(Map.copyOf(statuses)) : Optional.empty();
+        return tenantFound[0] ? Optional.of(Map.copyOf(rows)) : Optional.empty();
+    }
+
+    private static Instant instant(OffsetDateTime value) {
+        return value != null ? value.toInstant() : null;
     }
 
     @Override

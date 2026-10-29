@@ -759,7 +759,7 @@ So that **l'offline-first reste cohérent quand on active/désactive/ajoute des 
 
 - [x] [Deferred-from: review 13-2, 2026-10-29] Source of `moduleOf(operationType)`: manifest field (e.g. `syncOperations`, validated by the loader) or per-handler declaration — every existing handler mapped, unmapped op types fail the boot/test [sync] — ✅ 12.7: per-handler declaration `SyncOperationHandler.moduleId()` (required) on the 19 handlers; `SyncOperationHandlerRegistry` fails the boot naming the handler (module not installed / no type / type handled twice) — `SyncOperationHandlerRegistryTest`, mapping asserted on the real beans in `SyncModuleGuardPostgresIntegrationTest.handlerModuleMapping`
 
-- [x] [Deferred-from: review 13-2, 2026-10-29] Guard placement: read `activeModules(schema)` once per push batch before the loop, check per operation before `processOperation`; a registry failure → that operation REJECTED (not a batch-wide 500); distinguish `MODULE_INACTIVE` vs `MODULE_READ_ONLY` once 13.5 exposes grace [SyncPushService] — ✅ 12.7: `SyncPushService` reads once per batch, guard after replay detection and before LWW/handler, `MODULE_INACTIVE`; registry failure → every non-replayed op REJECTED `INTERNAL_ERROR`, HTTP 200 — `SyncPushServiceModuleGuardTest` (9). `MODULE_READ_ONLY` stays with 13.5 (already routed there)
+- [x] [Deferred-from: review 13-2, 2026-10-29] Guard placement: read `activeModules(schema)` once per push batch before the loop, check per operation before `processOperation`; a registry failure → that operation REJECTED (not a batch-wide 500); distinguish `MODULE_INACTIVE` vs `MODULE_READ_ONLY` once 13.5 exposes grace [SyncPushService] — ✅ 12.7: `SyncPushService` reads once per batch, guard after replay detection and before LWW/handler, `MODULE_INACTIVE`; registry failure → every non-replayed op REJECTED `INTERNAL_ERROR`, HTTP 200 — `SyncPushServiceModuleGuardTest` (9). `MODULE_READ_ONLY` stays with 13.5 (already routed there) — ✅ 13.5: READ_ONLY → REJECTED `MODULE_READ_ONLY` (held on the device like `MODULE_INACTIVE`), `SyncPushServiceModuleGuardTest`, `SyncModuleGuardPostgresIntegrationTest.crmReadOnly_*`
 
 - [x] [Deferred-from: review 13-2, 2026-10-29] Full-context proof of the per-request registry cache through a real HTTP call (MockMvc sync push: N operations → 1 `tenant_modules` query) [shared.module cache] — ✅ 12.7: `SyncModuleGuardPostgresIntegrationTest` (MockMvc `POST /api/v1/sync/push`, real JWT chain, spy on `TenantModuleStatePort`: 2 and 3 operations → 1 read)
 
@@ -882,9 +882,9 @@ So that **l'accès est refusé proprement si le module n'est pas souscrit (MOD-F
 - Aspects `@RequiresEntitlement` (+ `@RequiresPermission` généralisant le RBAC) ; mapping `domainCode=MODULE_NOT_ENTITLED` → HTTP dans `GlobalExceptionHandler`.
 - TDD slice : 402/403 si non entitled, OK sinon ; combinable avec `@RequiresPermission`.
 
-- [ ] [Deferred-from: review 13-2, 2026-10-29] Single source of truth between `ModuleRegistry.isActive` and `EntitlementService`: extend `TenantModuleStatePort` with `expires_at`/`grace_until`/`tier`, EXPIRED in grace = read-only, keep the free-without-row rule shared; decide SUSPENDED / DELETION_PENDING tenants [entitlement]
+- [x] [Deferred-from: review 13-2, 2026-10-29] Single source of truth between `ModuleRegistry.isActive` and `EntitlementService`: extend `TenantModuleStatePort` with `expires_at`/`grace_until`/`tier`, EXPIRED in grace = read-only, keep the free-without-row rule shared; decide SUSPENDED / DELETION_PENDING tenants [entitlement] — ✅ 13.5: one computation `shared.module.application.ModuleStateRules` (`ModuleState` ENABLED/READ_ONLY/DISABLED, injected `Clock`, evaluated at every call) used by `ModuleRegistryService.moduleState(s)` and, through it, `ModuleEntitlementService`; `TenantModuleStatePort.findRows` returns status + `expires_at` + `grace_until` + `tier` (one query, request cache holds raw rows); free-without-row rule kept; read-only stays « active » for reads. SUSPENDED / DELETION_PENDING: not handled here, already refused at authentication (documented on `EntitlementService`) — `ModuleRegistryServiceTest`, `ModuleRegistryPostgresIntegrationTest.expiryColumnsRead`, `ModuleEntitlementServiceTest`
 
-- [ ] [Deferred-from: review 13-3, 2026-10-29] Replace `FreeModulesOnlyEligibility` (plain `@Component` — a second `ModuleActivationEligibility` bean breaks the context): delete it or make the 13.5 bean the only one, update `DependencyResolverBootIntegrationTest`; enrich `Eligibility` (reason, TRIAL vs ACTIVE, read-only grace) and define the contract for a throwing/null port [entitlement]
+- [x] [Deferred-from: review 13-3, 2026-10-29] Replace `FreeModulesOnlyEligibility` (plain `@Component` — a second `ModuleActivationEligibility` bean breaks the context): delete it or make the 13.5 bean the only one, update `DependencyResolverBootIntegrationTest`; enrich `Eligibility` (reason, TRIAL vs ACTIVE, read-only grace) and define the contract for a throwing/null port [entitlement] — ✅ 13.5: `FreeModulesOnlyEligibility` deleted, single bean `EntitlementActivationEligibility`; `Eligibility(eligible, reason, initialStatus)` (free → ACTIVE, paid → NOT_ENTITLED; trial vs active and payments = 16.1, read-only grace is a runtime state, not an activation input); null / throwing port → not eligible `ELIGIBILITY_UNAVAILABLE` (`BlockReason.Code`) — `DependencyResolverServiceTest.nullOrThrowingEligibility`, `DependencyResolverBootIntegrationTest` (one bean)
 
 ### Story 13.6 : `CapabilityRegistry` (intégration synchrone optionnelle)
 
@@ -950,11 +950,13 @@ So that **je gère le catalogue de chaque tenant sans redéploiement (MOD-FR2, M
 
 - [ ] [Deferred-from: review 13-2, 2026-10-29] Deactivation must upsert a `DISABLED` row (+ `disabled_at`) — deleting the row re-activates a free module; evict the registry request cache (`ModuleRegistry.evict(schema)`) after every write; resolve the schema from the tenant UUID of the admin API [ModuleLifecycleService]
 
-- [ ] [Deferred-from: live test 12-7, 2026-10-29] **Blocking before any module can be DISABLED in prod**: while a sale is held (`MODULE_INACTIVE`), pulls overwrite the local views — the held sale disappears from « Mes Ventes » and the stock shows the server value (19 instead of 18) until the module is back; the cashier may think the sale is lost and re-enter it. Show held operations in the lists (badge « En attente — module non activé ») and keep local-only rows/stock deltas through pulls [Flutter sync / sales list]
+- [ ] [Deferred-from: live test 12-7, 2026-10-29] **Blocking before any module can be DISABLED or expire in prod**: while a sale is held (`MODULE_INACTIVE` or `MODULE_READ_ONLY` — the latter can happen without any admin action as soon as a row has `expires_at`), pulls overwrite the local views — the held sale disappears from « Mes Ventes » and the stock shows the server value (19 instead of 18) until the module is back; the cashier may think the sale is lost and re-enter it. Show held operations in the lists (badge « En attente — module non activé ») and keep local-only rows/stock deltas through pulls [Flutter sync / sales list]
 
 - [ ] [Deferred-from: spec 13-4, 2026-10-29] Activation calls `ModuleProvisioner.provision(schema, id)` for each plan step **after** writing its `tenant_modules` row (a paid module without a row → `IllegalStateException`); map `ModuleProvisioningException` to a French error without technical detail; Flyway's own INFO logs name the tenant schema (`Migrating schema "kv_…"`) — lower `org.flywaydb` to WARN in prod or accept; expose `provisionAll` for the super-admin console (16.4) [ModuleLifecycleService]
 
 - [ ] [Deferred-from: review 13-3, 2026-10-29] Call `planActivation` (and honour `blocked()`) **before** writing any `tenant_modules` row (spec-socle §10 step 1/2 order swapped — writing the target row first makes the plan empty and skips the cascade), then write/provision every step in `moduleIds()` order and evict the registry cache; check `ModuleRegistry.isKnownTenant` first; per-tenant lock or re-check inside the transaction against concurrent activations; responses/audit show French display names, not module ids [ModuleLifecycleService]
+
+- [ ] [Deferred-from: review 13-5, 2026-10-29] Super-admin activation must be able to grant a paid module (in V1 the super-admin activation after a Mobile Money payment IS the entitlement): override/extend `ModuleActivationEligibility` for that actor, write ACTIVE/TRIAL with `expires_at` + `grace_until` [ModuleLifecycleService]
 
 ### Story 13.9 : Convertir 2 modules existants au contrat `KeevoModule`
 
@@ -1010,6 +1012,8 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 - S'appuie sur `EntitlementService` (13.5) + `PlanLimitGuard` (refonte 16.8) ; produire une **table de correspondance endpoint→entitlement** (doc + test).
 - Dépend de 13.5 ; à faire après la conversion des modules (13.9).
 
+- [ ] [Deferred-from: 13-5, 2026-10-29] `@RequiresPermission` (spec-socle §9.2) not built in 13.5: no permission model exists yet (roles OWNER/EMPLOYEE/SUPER_ADMIN only, checked by `CurrentActor` / `@PreAuthorize`). Proposed decision (13.10 spec confirms or revises): 13.10 introduces it as a thin annotation over the existing role checks (a `Permission` enum mapped to roles, enforced by Spring method security), combinable with `@RequiresEntitlement` — the entitlement aspect already runs after the method-security interceptors and before `@Transactional` (`EntitlementAspect` order 1000). Also: `@RequiresEntitlement` is not matched on interface-only annotations and not on self-invocation (Spring AOP) — annotate controller/use-case classes [entitlement / RBAC]
+
 
 
 ---
@@ -1019,6 +1023,8 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 > Livrer le **premier module vendable, autonome ET composable**, qui **prouve la vision** : facturation seule → +CRM → +POS (facture auto) → POS désactivé sans casse. C'est le **patron** de tout futur module.
 
 - [ ] [Deferred-from: spec 12-7, 2026-10-29] `GET /api/v1/sync/pull` must skip `DeltaEntityProvider`s of inactive modules (same `ModuleRegistry` rule as the push guard) [sync pull gating]
+
+- [ ] [Deferred-from: review 13-5, 2026-10-29] Gating rollout: slice test combining `@RequiresEntitlement` + `@RequiresPermission` with an asserted interceptor order; class-level default `WRITE` would refuse GET endpoints during grace — default READ for safe HTTP verbs or check READ/WRITE per verb in the endpoint mapping test; annotate HTTP/use-case entry points only (no tenant in schedulers/async listeners); confirm tenant-module endpoints are role-guarded against the super-admin (entitlement passes for `public`); Flutter `auth_interceptor` handles 403 `MODULE_NOT_ENTITLED`/`MODULE_READ_ONLY` [gating]
 
 ### Story 14.1 : Module Facturation autonome (domaine + provisioning + CRUD)
 
@@ -1363,6 +1369,8 @@ So that **le blocage est déterministe, humain et favorise la conversion (MOD-FR
 - Transitions sur `tenant_modules` (`grace_until = expires_at + 7j`) ; trial hybride (6 mois global à l'inscription, 14 j par module).
 - Le **Core n'entre jamais** dans ce cycle (jamais auto-désactivé).
 
+- [ ] [Deferred-from: review 13-5, 2026-10-29] Every write of an expiring row sets `grace_until` (= `expires_at` + 7 d) — with `grace_until` null the state rules go straight to DISABLED; renewal of a READ_ONLY module: `planActivation` treats a READ_ONLY target/dependency as already active (spec 13.5 decision), so renewal must go through the lifecycle, not the plan [licences]
+
 ### Story 16.2 : À-la-carte + Bundles
 
 As a **super-admin**,
@@ -1403,6 +1411,8 @@ So that **le frontend gâte hors-ligne, le backend restant source de vérité (M
 
 **Implementation Notes:**
 - Étendre la génération JWT (au `select-tenant`, Story 1.7 existante) ; backend continue d'appliquer `@RequiresEntitlement` (défense).
+
+- [ ] [Deferred-from: review 13-5, 2026-10-29] Claim shape must carry read-only modules (`{id: state}` or a separate list) built from `ModuleRegistry.moduleStates` — `enabledModules` mixes ENABLED and READ_ONLY [JWT]
 
 ### Story 16.4 : Console super-admin « Modules »
 

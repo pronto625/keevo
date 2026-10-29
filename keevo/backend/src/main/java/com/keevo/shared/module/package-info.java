@@ -12,6 +12,9 @@
  * tenant ({@code public.tenant_modules}, {@link com.keevo.shared.module.TenantModuleStatus}). Since
  * Story 13.3 {@link com.keevo.shared.module.DependencyResolver} plans activations (missing {@code requires} first,
  * each step checked by {@link com.keevo.shared.module.ModuleActivationEligibility}) and checks deactivations
- * (blocked by active dependents); activation itself and real entitlement come with Stories 13.5+.
+ * (blocked by active dependents). Since Story 13.5 the effective {@link com.keevo.shared.module.ModuleState} of a
+ * module (real-time expiry, read-only grace) is computed once and shared by the registry and
+ * {@link com.keevo.shared.module.EntitlementService}; {@link com.keevo.shared.module.RequiresEntitlement} gates use
+ * cases / controllers declaratively. Activation itself comes with Story 13.8.
  */
 package com.keevo.shared.module;

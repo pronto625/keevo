@@ -319,6 +319,116 @@ void main() {
     expect(await queuedIds(), isEmpty);
   });
 
+  test(
+      '13.5: MODULE_READ_ONLY holds like MODULE_INACTIVE — kept, not '
+      'quarantined, not pending; an operation referencing it is held with '
+      'the same reason', () async {
+    await insertPendingOp(
+        id: 'op-1', operation: 'CREATE_CLIENT', entityId: 'client-x');
+    await insertPendingOp(
+        id: 'op-2',
+        operation: 'CREATE_SALE',
+        entityId: 'sale-1',
+        payload: {'storeId': 'store-1', 'clientId': 'client-x'});
+    await insertPendingOp(
+        id: 'op-3',
+        operation: 'CREATE_SALE',
+        entityId: 'sale-2',
+        payload: {'storeId': 'store-1'});
+    stubPushResults([
+      ('op-1', 'REJECTED', 'MODULE_READ_ONLY'),
+      ('op-2', 'REJECTED', 'CLIENT_NOT_FOUND'),
+      ('op-3', 'APPLIED', null),
+    ]);
+
+    final notices = await syncService.push();
+
+    expect(await queuedIds(), unorderedEquals(['op-1', 'op-2']));
+    for (final id in ['op-1', 'op-2']) {
+      final op = await queued(id);
+      expect(op.lastError, 'MODULE_READ_ONLY', reason: id);
+      expect(op.quarantinedAt, isNull, reason: id);
+    }
+    expect(jsonDecode((await queued('op-2')).payload)['clientId'], 'client-x');
+    expect(notices.map((n) => n['reason']).toSet(), {'MODULE_READ_ONLY'});
+    expect(notices.every((n) => n['held'] == true), isTrue);
+    expect(await syncService.hasPendingOperations(), isFalse);
+    expect(await syncService.quarantinedOperationCount(), 0);
+
+    // Renewal: re-pushed on the next app start and applied.
+    syncService = newService(prefs);
+    stubPushResults([('op-1', 'APPLIED', null), ('op-2', 'APPLIED', null)]);
+    await syncService.push();
+    expect(await queuedIds(), isEmpty);
+  });
+
+  test('13.5: a read-only op turning inactive is re-notified with the new '
+      'reason', () async {
+    await insertPendingOp(
+        id: 'op-1', operation: 'UPDATE_CLIENT', entityId: 'client-1');
+    stubPushResults([('op-1', 'REJECTED', 'MODULE_READ_ONLY')]);
+    expect(await syncService.push(), hasLength(1));
+
+    syncService = newService(prefs);
+    stubPushResults([('op-1', 'REJECTED', 'MODULE_INACTIVE')]);
+    final notices = await syncService.push();
+    expect(notices.single['reason'], 'MODULE_INACTIVE');
+    expect((await queued('op-1')).lastError, 'MODULE_INACTIVE');
+  });
+
+  test(
+      '13.5: an operation referencing held entities with both reasons is '
+      'held MODULE_INACTIVE, whatever the order, and not re-notified',
+      () async {
+    await insertPendingOp(
+        id: 'op-1', operation: 'CREATE_CLIENT', entityId: 'client-x');
+    await insertPendingOp(
+        id: 'op-2', operation: 'CREATE_SUPPLIER', entityId: 'supplier-y');
+    await insertPendingOp(
+        id: 'op-3',
+        operation: 'CREATE_SALE',
+        entityId: 'sale-1',
+        payload: {
+          'storeId': 'store-1',
+          'clientId': 'client-x',
+          'supplierId': 'supplier-y'
+        });
+    stubPushResults([
+      ('op-1', 'REJECTED', 'MODULE_READ_ONLY'),
+      ('op-2', 'REJECTED', 'MODULE_INACTIVE'),
+      ('op-3', 'REJECTED', 'CLIENT_NOT_FOUND'),
+    ]);
+
+    final first = await syncService.push();
+    expect((await queued('op-3')).lastError, 'MODULE_INACTIVE');
+    expect(first, hasLength(3));
+
+    // App restart: same refusals → same reasons, no new notice.
+    syncService = newService(prefs);
+    final second = await syncService.push();
+    expect(second, isEmpty);
+    expect((await queued('op-3')).lastError, 'MODULE_INACTIVE');
+  });
+
+  test('13.5: a MODULE_READ_ONLY operation is throttled like MODULE_INACTIVE',
+      () async {
+    await insertPendingOp(
+        id: 'op-1', operation: 'CREATE_CLIENT', entityId: 'client-1');
+    stubPushResults([('op-1', 'REJECTED', 'MODULE_READ_ONLY')]);
+    await syncService.push();
+    await syncService.push(); // same session, within heldRetryInterval
+    expect(sentIds, hasLength(1));
+
+    await (db.update(db.syncQueue)..where((t) => t.id.equals('op-1'))).write(
+        SyncQueueCompanion(
+            lastAttemptAt: Value(DateTime.now()
+                .subtract(heldRetryInterval + const Duration(minutes: 1)))));
+    stubPushResults([('op-1', 'APPLIED', null)]);
+    await syncService.push();
+    expect(sentIds, hasLength(2));
+    expect(await queuedIds(), isEmpty);
+  });
+
   test('HTTP 503 (module state unreadable) keeps the queue as it is', () async {
     await insertPendingOp(
         id: 'op-1', operation: 'CREATE_SALE', entityId: 'sale-1');

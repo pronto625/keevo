@@ -6,8 +6,10 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.TenantModuleStatus;
 import com.keevo.shared.module.application.port.TenantModuleStatePort;
+import com.keevo.shared.module.application.port.TenantModuleStatePort.Row;
 import com.keevo.shared.module.infrastructure.RequestScopedActiveModulesCache;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +23,11 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Story 13.2 — effective state rule of {@link ModuleRegistryService} and its request-scoped cache, on a fake port
+ * Story 13.2 / 13.5 — effective state rule (with a movable clock) of {@link ModuleRegistryService} and its request-scoped cache, on a fake port
  * (the SQL side is covered by {@code ModuleRegistryPostgresIntegrationTest}).
  */
 class ModuleRegistryServiceTest {
@@ -44,12 +51,14 @@ class ModuleRegistryServiceTest {
     private static final String TENANT = "kv_abc123";
     private static final String OTHER = "kv_zzz999";
     /** Fake port: per-schema rows (absent schema = unknown tenant) + a call counter. */
-    private final Map<String, Map<String, TenantModuleStatus>> tenants = new HashMap<>();
+    private final Map<String, Map<String, Row>> tenants = new HashMap<>();
     private final AtomicInteger queries = new AtomicInteger();
     private final TenantModuleStatePort port = schema -> {
         queries.incrementAndGet();
         return Optional.ofNullable(tenants.get(schema)).map(Map::copyOf);
     };
+    private static final Instant NOW = Instant.parse("2026-10-29T10:00:00Z");
+    private final MutableClock clock = new MutableClock(NOW);
 
     private ModuleRegistryService registry;
 
@@ -57,7 +66,7 @@ class ModuleRegistryServiceTest {
     void setUp() {
         tenants.put(TENANT, new HashMap<>());
         tenants.put(OTHER, new HashMap<>());
-        registry = new ModuleRegistryService(testCatalog(), port, new RequestScopedActiveModulesCache());
+        registry = new ModuleRegistryService(testCatalog(), port, new RequestScopedActiveModulesCache(), clock);
     }
 
     @AfterEach
@@ -66,7 +75,39 @@ class ModuleRegistryServiceTest {
     }
 
     private void row(String moduleId, TenantModuleStatus status) {
-        tenants.get(TENANT).put(moduleId, status);
+        tenants.get(TENANT).put(moduleId, Row.of(status));
+    }
+
+    private void row(String moduleId, TenantModuleStatus status, Instant expiresAt, Instant graceUntil) {
+        tenants.get(TENANT).put(moduleId, new Row(status, expiresAt, graceUntil, "STANDARD"));
+    }
+
+    /** A clock the test moves forward (the registry reads it at every call). */
+    static final class MutableClock extends Clock {
+        private Instant now;
+
+        MutableClock(Instant now) {
+            this.now = now;
+        }
+
+        void advance(Duration d) {
+            now = now.plus(d);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return now;
+        }
     }
 
     private static void bindRequest() {
@@ -199,6 +240,94 @@ class ModuleRegistryServiceTest {
         assertThat(registry.isActive("public", "invoicing")).isFalse();
         registry.evict("public"); // no-op
         assertThat(queries).hasValue(0);
+    }
+
+    // ── effective state with time (Story 13.5) ─────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("13.5 matrix: free/no row ENABLED, paid/no row DISABLED, ACTIVE expiring tomorrow ENABLED")
+    void stateMatrixBasics() {
+        row("pos", TenantModuleStatus.ACTIVE, NOW.plus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(8)));
+        assertThat(registry.moduleState(TENANT, "crm")).isEqualTo(ModuleState.ENABLED);
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "pos")).isEqualTo(ModuleState.ENABLED);
+        assertThat(registry.moduleState(TENANT, "core")).isEqualTo(ModuleState.ENABLED);
+    }
+
+    @Test
+    @DisplayName("13.5 matrix: ACTIVE expired 1 h ago with grace +7 d → READ_ONLY (still active); grace ended → DISABLED")
+    void expiredActiveRow() {
+        row("invoicing", TenantModuleStatus.ACTIVE, NOW.minus(Duration.ofHours(1)), NOW.plus(Duration.ofDays(7)));
+        row("crm", TenantModuleStatus.ACTIVE, NOW.minus(Duration.ofDays(8)), NOW.minus(Duration.ofDays(1)));
+        row("pos", TenantModuleStatus.TRIAL, NOW.minus(Duration.ofHours(1)), null); // no grace at all
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.READ_ONLY);
+        assertThat(registry.isActive(TENANT, "invoicing")).isTrue();
+        assertThat(registry.activeModules(TENANT)).contains("invoicing").doesNotContain("crm", "pos");
+        assertThat(registry.moduleState(TENANT, "crm")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "pos")).isEqualTo(ModuleState.DISABLED);
+    }
+
+    @Test
+    @DisplayName("13.5 matrix: EXPIRED in grace → READ_ONLY; EXPIRED without / after grace → DISABLED; DISABLED and AVAILABLE rows → DISABLED")
+    void expiredAndDisabledRows() {
+        row("invoicing", TenantModuleStatus.EXPIRED, NOW.minus(Duration.ofDays(1)), NOW.plus(Duration.ofDays(6)));
+        row("crm", TenantModuleStatus.EXPIRED, NOW.minus(Duration.ofDays(9)), NOW.minus(Duration.ofDays(2)));
+        row("store", TenantModuleStatus.EXPIRED);
+        row("pos", TenantModuleStatus.DISABLED, null, NOW.plus(Duration.ofDays(6))); // grace ignored when DISABLED
+        row("reporting", TenantModuleStatus.AVAILABLE);
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.READ_ONLY);
+        assertThat(registry.moduleState(TENANT, "crm")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "store")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "pos")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "reporting")).isEqualTo(ModuleState.DISABLED);
+    }
+
+    @Test
+    @DisplayName("13.5: the clock moving past expires_at turns the same row read-only, then off — no cron, even within one request")
+    void clockMovesPastExpiry() {
+        bindRequest();
+        row("invoicing", TenantModuleStatus.ACTIVE, NOW.plus(Duration.ofMinutes(5)), NOW.plus(Duration.ofDays(7)));
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.ENABLED);
+        clock.advance(Duration.ofMinutes(5)); // exactly at expires_at: the subscription is over
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.READ_ONLY);
+        clock.advance(Duration.ofDays(7));
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.DISABLED);
+        assertThat(queries).hasValue(1); // the rows are cached, the state is recomputed
+    }
+
+    @Test
+    @DisplayName("13.5: grace_until is exclusive — READ_ONLY one instant before, DISABLED exactly at it")
+    void graceBoundaryExclusive() {
+        row("invoicing", TenantModuleStatus.EXPIRED, NOW.minus(Duration.ofDays(7)), NOW.plusMillis(1));
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.READ_ONLY);
+        clock.advance(Duration.ofMillis(1)); // now == grace_until
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.DISABLED);
+    }
+
+    @Test
+    @DisplayName("13.5: ACTIVE past expires_at with no grace_until → DISABLED straight away")
+    void activeExpiredWithoutGrace() {
+        row("invoicing", TenantModuleStatus.ACTIVE, NOW.minus(Duration.ofSeconds(1)), null);
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.isActive(TENANT, "invoicing")).isFalse();
+    }
+
+    @Test
+    @DisplayName("13.5: moduleStates lists every installed module once, sorted; unknown ids and orphans are DISABLED")
+    void moduleStatesMap() {
+        row("legacy", TenantModuleStatus.ACTIVE);
+        Map<String, ModuleState> states = registry.moduleStates(TENANT);
+        assertThat(states.keySet()).containsExactlyElementsOf(ALL);
+        assertThat(states.get("invoicing")).isEqualTo(ModuleState.DISABLED);
+        assertThatThrownBy(() -> states.put("ghost", ModuleState.ENABLED)).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(registry.moduleState(TENANT, "legacy")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "ghost")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, null)).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleStates("kv_nobody")).containsEntry("core", ModuleState.ENABLED)
+                .containsEntry("pos", ModuleState.DISABLED);
+        assertThat(registry.moduleStates("public")).containsEntry("admin", ModuleState.ENABLED)
+                .containsEntry("core", ModuleState.ENABLED).containsEntry("pos", ModuleState.DISABLED);
+        assertThatThrownBy(() -> registry.moduleState("KV_1", "pos")).isInstanceOf(IllegalArgumentException.class);
     }
 
     // ── catalogue invariants ────────────────────────────────────────────────────────────────────────

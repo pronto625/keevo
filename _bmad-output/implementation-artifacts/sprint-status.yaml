@@ -250,7 +250,7 @@ development_status:
   13-2-module-registry: done  # 2026-10-29 done — ModuleRegistry (règle effective core/ligne/free, cache par requête, evict), ModuleCatalog, V30, modulith-core hors du jar de prod (enforcer + profil prod-classpath en CI) ; 3 903 tests | 2026-10-29 bmad-build-auto (spec-13-2-module-registry.md)
   13-3-dependency-resolver: done  # 2026-10-29 done — plan d’activation (Kahn, cascade, réparation), check de désactivation (dépendants actifs, core), éligibilité gratuite par défaut | 2026-10-29 bmad-build-auto (spec-13-3-dependency-resolver.md)
   13-4-module-provisioner-flyway-par-module: done  # 2026-10-29 done — Flyway par module (connexion dédiée, historique isolé, version monotone), lot tous tenants, tables globales plus recopiées (copies gardées, décision 16.7) | 2026-10-29 bmad-build-auto (spec-13-4-module-provisioner.md)
-  13-5-entitlement-service-gating: backlog
+  13-5-entitlement-service-gating: done  # 2026-10-29 done — état ENABLED/READ_ONLY/DISABLED en temps réel, EntitlementService + @RequiresEntitlement (validé au démarrage), MODULE_NOT_ENTITLED/READ_ONLY 403, sync + app (en attente) ; test live Redmi OK | 2026-10-29 bmad-build-auto (spec-13-5-entitlement-service.md)
   13-6-capability-registry: backlog
   13-7-extension-registry: backlog
   13-8-module-lifecycle-service-api-admin: backlog

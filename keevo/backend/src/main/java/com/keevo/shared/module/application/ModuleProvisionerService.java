@@ -8,7 +8,6 @@ import com.keevo.shared.module.ModuleProvisioningException;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ProvisioningReport;
 import com.keevo.shared.module.ProvisioningResult;
-import com.keevo.shared.module.TenantModuleStatus;
 import com.keevo.shared.module.TenantNotFoundException;
 import com.keevo.shared.module.application.port.ModuleMigrationPort;
 import com.keevo.shared.module.application.port.TenantModuleProvisioningPort;
@@ -64,7 +63,7 @@ public class ModuleProvisionerService implements ModuleProvisioner {
         if (!migrations.hasMigrations(id)) {
             return new ProvisioningResult(id, null, null, 0);
         }
-        Map<String, TenantModuleStatus> tenantRows = states.findStatuses(schema)
+        Map<String, TenantModuleStatePort.Row> tenantRows = states.findRows(schema)
                 .orElseThrow(TenantNotFoundException::new);
         boolean rowExists = tenantRows.containsKey(id);
         if (!rowExists && !module.isCore() && !registry.isActive(schema, id)) {

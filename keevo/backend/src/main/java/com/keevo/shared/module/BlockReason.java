@@ -20,6 +20,11 @@ public record BlockReason(Code code, String moduleId) {
     public enum Code {
         /** The tenant is not entitled to activate this module ({@link ModuleActivationEligibility}). */
         NOT_ENTITLED,
+        /**
+         * The eligibility of this module could not be decided (the check failed or answered nothing, Story 13.5):
+         * not eligible, retry later.
+         */
+        ELIGIBILITY_UNAVAILABLE,
         /** {@code core} can never be deactivated. */
         CORE_MODULE,
         /** An active module requires the module being deactivated. */

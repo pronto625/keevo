@@ -10,18 +10,37 @@ part 'sync_monitoring_providers.g.dart';
 
 /// Pending sync operations count — reads from local sync_queue.
 /// Quarantined operations (v1s-16-15) are not pending, nor held ones
-/// (`MODULE_INACTIVE`, Story 12.7 — still listed by [pendingSyncQueue]).
+/// (`MODULE_INACTIVE` / `MODULE_READ_ONLY`, Stories 12.7, 13.5 — still listed
+/// by [pendingSyncQueue]).
 @riverpod
 Future<int> pendingSyncCount(PendingSyncCountRef ref) async {
   final db = ref.watch(appDatabaseProvider);
   final count = await db.customSelect(
     'SELECT COUNT(*) AS c FROM sync_queue '
     'WHERE synced = 0 AND quarantined_at IS NULL '
-    'AND (last_error IS NULL OR last_error <> ?)',
-    variables: [Variable.withString(heldSyncRejectionReason)],
+    'AND (last_error IS NULL OR last_error NOT IN '
+    '(${List.filled(heldSyncRejectionReasons.length, '?').join(', ')}))',
+    variables: [
+      for (final reason in heldSyncRejectionReasons) Variable.withString(reason),
+    ],
   ).getSingle();
   return count.read<int>('c');
 }
+
+/// The oldest operation that is waiting for a push — the stale-queue check of
+/// the periodic push: quarantined operations wait for the user and held ones
+/// (`MODULE_INACTIVE` / `MODULE_READ_ONLY`) for their module, so neither makes
+/// the queue stale.
+Future<SyncQueueData?> oldestPendingOperation(AppDatabase db) =>
+    (db.select(db.syncQueue)
+          ..where((t) =>
+              t.synced.equals(false) &
+              t.quarantinedAt.isNull() &
+              (t.lastError.isNull() |
+                  t.lastError.isNotIn(heldSyncRejectionReasons)))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
+          ..limit(1))
+        .getSingleOrNull();
 
 /// Pending sync operations list — for queue tab display.
 @riverpod

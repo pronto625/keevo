@@ -44,6 +44,8 @@ String friendlySyncRejectionReason(String? reasonCode) {
       'Action non prise en charge — mettez l\'application à jour',
     // Story 12.7 — the operation's module is switched off for the tenant.
     'MODULE_INACTIVE' => 'Module non activé pour votre compte',
+    // Story 13.5 — subscription expired, module read-only during its grace.
+    'MODULE_READ_ONLY' => 'Module en lecture seule : abonnement expiré',
     'SUBSCRIPTION_NOT_FOUND' => 'Abonnement introuvable',
     'TENANT_NOT_FOUND' => 'Compte de l\'entreprise introuvable',
     'WAREHOUSE_ALREADY_EXISTS' => 'Un seul entrepôt est autorisé par compte',

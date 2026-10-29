@@ -4,16 +4,12 @@ import java.util.Arrays;
 import java.util.Optional;
 
 /**
- * Status of a module for a tenant ({@code public.tenant_modules.status}, spec-socle §2.2). Only {@link #TRIAL} and
- * {@link #ACTIVE} make a module active.
+ * Status of a module for a tenant ({@code public.tenant_modules.status}, spec-socle §2.2). The stored status alone
+ * does not decide access: since Story 13.5 the effective {@link ModuleState} also depends on {@code expires_at} and
+ * {@code grace_until}, evaluated in real time ({@code shared.module.application.ModuleStateRules}).
  */
 public enum TenantModuleStatus {
     AVAILABLE, TRIAL, ACTIVE, EXPIRED, DISABLED;
-
-    /** Whether a module in this status is active for the tenant. */
-    public boolean isActive() {
-        return this == TRIAL || this == ACTIVE;
-    }
 
     /** The status stored as {@code code}, if it is one (the column CHECK guarantees it). */
     public static Optional<TenantModuleStatus> fromCode(String code) {

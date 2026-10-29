@@ -24,6 +24,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
+import java.time.Clock;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -92,11 +93,11 @@ class ModuleRegistryPostgresIntegrationTest {
         jdbc.update("DELETE FROM public.tenant_modules");
         TenantModuleStatePort counting = schema -> {
             queries.incrementAndGet();
-            return store.findStatuses(schema);
+            return store.findRows(schema);
         };
         // rule cases run on a test catalogue (free + paid + core + platform), not on the shipped manifests
         registry = new ModuleRegistryService(TestModuleCatalogs.testCatalog(), counting,
-                new RequestScopedActiveModulesCache());
+                new RequestScopedActiveModulesCache(), Clock.systemUTC());
     }
 
     @AfterEach
@@ -112,7 +113,7 @@ class ModuleRegistryPostgresIntegrationTest {
     @Test
     @DisplayName("shipped set: the 10 manifests, all free today (precondition), all active for a tenant without rows")
     void shippedCatalogue() {
-        ModuleRegistry shipped = new ModuleRegistryService(shippedCatalog, store, new RequestScopedActiveModulesCache());
+        ModuleRegistry shipped = new ModuleRegistryService(shippedCatalog, store, new RequestScopedActiveModulesCache(), Clock.systemUTC());
         assertThat(shipped.installed()).extracting(ModuleManifest::id).containsExactly(SHIPPED);
         assertThat(shipped.installed()).allSatisfy(m -> assertThat(m.free())
                 .as("shipped module %s is expected free (V1 parity: no backfill)", m.id()).isTrue());
@@ -136,7 +137,7 @@ class ModuleRegistryPostgresIntegrationTest {
     @Test
     @DisplayName("DELETED tenant = unknown: only core")
     void deletedTenant() {
-        assertThat(store.findStatuses(DELETED_TENANT)).isEmpty();
+        assertThat(store.findRows(DELETED_TENANT)).isEmpty();
         assertThat(registry.activeModules(DELETED_TENANT)).containsExactly("core");
         assertThat(registry.isKnownTenant(DELETED_TENANT)).isFalse();
     }
@@ -181,6 +182,50 @@ class ModuleRegistryPostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("13.5: expires_at / grace_until / tier are read — ACTIVE past expiry in grace = READ_ONLY")
+    void expiryColumnsRead() {
+        jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, expires_at, grace_until) "
+                + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM', now() - interval '1 hour', now() + interval '7 days')",
+                TENANT_ID);
+        jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, expires_at, grace_until) "
+                + "VALUES (?, 'crm', 'EXPIRED', 'STANDARD', now() - interval '8 days', now() - interval '1 day')",
+                TENANT_ID);
+        jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, expires_at) "
+                + "VALUES (?, 'pos', 'TRIAL', 'STANDARD', now() + interval '1 day')", TENANT_ID);
+        assertThat(store.findRows(TENANT)).get().satisfies(rows -> {
+            assertThat(rows.get("invoicing").tier()).isEqualTo("PREMIUM");
+            assertThat(rows.get("invoicing").expiresAt()).isBefore(java.time.Instant.now());
+            assertThat(rows.get("invoicing").graceUntil()).isAfter(java.time.Instant.now());
+            assertThat(rows.get("pos").graceUntil()).isNull();
+        });
+        assertThat(registry.moduleState(TENANT, "invoicing")).isEqualTo(ModuleState.READ_ONLY);
+        assertThat(registry.moduleState(TENANT, "crm")).isEqualTo(ModuleState.DISABLED);
+        assertThat(registry.moduleState(TENANT, "pos")).isEqualTo(ModuleState.ENABLED);
+        assertThat(registry.isActive(TENANT, "invoicing")).isTrue(); // read-only stays active (data visible)
+    }
+
+    @Test
+    @DisplayName("13.5: TIMESTAMPTZ instants are read exactly, whatever the JVM default zone")
+    void expiryInstantsIndependentOfJvmZone() {
+        java.time.Instant expires = java.time.Instant.parse("2026-11-02T23:30:00Z");
+        java.time.Instant grace = java.time.Instant.parse("2026-11-09T23:30:00Z");
+        jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, expires_at, grace_until) "
+                        + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM', ?, ?)", TENANT_ID,
+                java.time.OffsetDateTime.ofInstant(expires, java.time.ZoneOffset.UTC),
+                java.time.OffsetDateTime.ofInstant(grace, java.time.ZoneOffset.ofHours(-5)));
+        java.util.TimeZone previous = java.util.TimeZone.getDefault();
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Pacific/Kiritimati")); // UTC+14
+            assertThat(store.findRows(TENANT)).get().satisfies(rows -> {
+                assertThat(rows.get("invoicing").expiresAt()).isEqualTo(expires);
+                assertThat(rows.get("invoicing").graceUntil()).isEqualTo(grace);
+            });
+        } finally {
+            java.util.TimeZone.setDefault(previous);
+        }
+    }
+
+    @Test
     @DisplayName("core DISABLED: core still active")
     void coreDisabledStillActive() {
         row("core", "DISABLED");
@@ -191,8 +236,8 @@ class ModuleRegistryPostgresIntegrationTest {
     @DisplayName("orphan legacy ACTIVE: not active, not installed")
     void orphanRow() {
         row("legacy", "ACTIVE");
-        assertThat(store.findStatuses(TENANT)).get().satisfies(rows ->
-                assertThat(rows).containsEntry("legacy", TenantModuleStatus.ACTIVE));
+        assertThat(store.findRows(TENANT)).get().satisfies(rows ->
+                assertThat(rows.get("legacy").status()).isEqualTo(TenantModuleStatus.ACTIVE));
         assertThat(registry.isActive(TENANT, "legacy")).isFalse();
         assertThat(registry.activeModules(TENANT)).doesNotContain("legacy");
         assertThat(registry.installed()).extracting(ModuleManifest::id).doesNotContain("legacy");
@@ -208,8 +253,8 @@ class ModuleRegistryPostgresIntegrationTest {
     @Test
     @DisplayName("unknown tenant: only core; the adapter tells it apart from a tenant without rows")
     void unknownTenant() {
-        assertThat(store.findStatuses("kv_nobody")).isEmpty();
-        assertThat(store.findStatuses(TENANT)).contains(Map.of());
+        assertThat(store.findRows("kv_nobody")).isEmpty();
+        assertThat(store.findRows(TENANT)).contains(Map.of());
         assertThat(registry.activeModules("kv_nobody")).containsExactly("core");
         assertThat(registry.isKnownTenant("kv_nobody")).isFalse();
         assertThat(registry.isKnownTenant(TENANT)).isTrue();
@@ -228,10 +273,10 @@ class ModuleRegistryPostgresIntegrationTest {
     void invalidSchema() {
         for (String schema : new String[]{"KV_1", "PUBLIC"}) {
             assertThatThrownBy(() -> registry.activeModules(schema)).isInstanceOf(IllegalArgumentException.class);
-            assertThatThrownBy(() -> store.findStatuses(schema)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> store.findRows(schema)).isInstanceOf(IllegalArgumentException.class);
         }
         // the adapter never accepts the platform schema (the service answers it without a query)
-        assertThatThrownBy(() -> store.findStatuses("public")).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> store.findRows("public")).isInstanceOf(IllegalArgumentException.class);
         assertThat(queries).hasValue(0);
     }
 

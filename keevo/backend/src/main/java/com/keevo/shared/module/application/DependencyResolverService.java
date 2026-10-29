@@ -9,6 +9,8 @@ import com.keevo.shared.module.ModuleActivationEligibility;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.ModuleRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayDeque;
@@ -30,6 +32,8 @@ import java.util.TreeSet;
  */
 @Service
 public class DependencyResolverService implements DependencyResolver {
+
+    private static final Logger log = LoggerFactory.getLogger(DependencyResolverService.class);
 
     private final ModuleCatalog catalog;
     private final ModuleRegistry registry;
@@ -96,10 +100,10 @@ public class DependencyResolverService implements DependencyResolver {
         List<BlockReason> reasons = new ArrayList<>();
         for (String id : topologicalOrder(needed)) {
             ModuleManifest manifest = catalog.find(id).orElseThrow();
-            boolean eligible = eligibility.check(tenantSchema, manifest).eligible();
-            steps.add(new ActivationPlan.Step(id, eligible));
-            if (!eligible) {
-                reasons.add(new BlockReason(BlockReason.Code.NOT_ENTITLED, id));
+            ModuleActivationEligibility.Eligibility outcome = checkEligibility(tenantSchema, manifest);
+            steps.add(new ActivationPlan.Step(id, outcome.eligible()));
+            if (!outcome.eligible()) {
+                reasons.add(new BlockReason(outcome.reason(), id));
             }
         }
         return new ActivationPlan(target.id(), steps, alreadyActive, reasons);
@@ -123,6 +127,25 @@ public class DependencyResolverService implements DependencyResolver {
             }
         }
         return new DeactivationCheck(target.id(), seen.stream().filter(active::contains).toList(), false);
+    }
+
+    /**
+     * The eligibility of one step (Story 13.5 contract): a {@code null} answer or an exception of the port counts as
+     * not eligible, reason {@code ELIGIBILITY_UNAVAILABLE} — logged with the module id only (no tenant data, no
+     * exception message, which could carry it).
+     */
+    private ModuleActivationEligibility.Eligibility checkEligibility(String tenantSchema, ModuleManifest manifest) {
+        try {
+            ModuleActivationEligibility.Eligibility outcome = eligibility.check(tenantSchema, manifest);
+            if (outcome != null) {
+                return outcome;
+            }
+            log.warn("Activation plan: eligibility of module '{}' answered nothing — not eligible", manifest.id());
+        } catch (RuntimeException e) {
+            log.warn("Activation plan: eligibility of module '{}' failed ({}) — not eligible", manifest.id(),
+                    e.getClass().getSimpleName());
+        }
+        return ModuleActivationEligibility.Eligibility.refused(BlockReason.Code.ELIGIBILITY_UNAVAILABLE);
     }
 
     /** Validates the schema (tenant, not platform admin) and the module id; returns the module's manifest. */

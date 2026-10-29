@@ -59,7 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @AutoConfigureMockMvc
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
-@DisplayName("Sync push — module guard, full context (Story 12.7)")
+@DisplayName("Sync push — module guard, full context (Stories 12.7, 13.5)")
 class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest {
 
     @Autowired MockMvc mockMvc;
@@ -194,7 +194,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 .andExpect(jsonPath(result(id(client), "reason"), contains("MODULE_INACTIVE")))
                 .andExpect(jsonPath(result(id(sale), "status"), contains("APPLIED")));
 
-        verify(tenantModuleStatePort, times(1)).findStatuses(anyString());
+        verify(tenantModuleStatePort, times(1)).findRows(anyString());
 
         Map<String, Object> error = jdbc.queryForMap("SELECT operation_type, error_reason, payload::text AS payload "
                 + "FROM \"" + schema + "\".sync_error_log WHERE operation_id = ?", id(client));
@@ -210,6 +210,28 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
     }
 
     @Test
+    @DisplayName("13.5 — crm EXPIRED in grace (read-only): client REJECTED MODULE_READ_ONLY, sale APPLIED; 1 read")
+    void crmReadOnly_clientRejectedReadOnly_saleApplied() throws Exception {
+        jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, expires_at, grace_until) "
+                + "VALUES (?, 'crm', 'ACTIVE', 'STANDARD', now() - interval '1 hour', now() + interval '7 days')",
+                tenantId);
+        var client = createClient("Client en lecture seule");
+        var sale = createSale();
+
+        push(client, sale)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(client), "status"), contains("REJECTED")))
+                .andExpect(jsonPath(result(id(client), "reason"), contains("MODULE_READ_ONLY")))
+                .andExpect(jsonPath(result(id(sale), "status"), contains("APPLIED")));
+
+        verify(tenantModuleStatePort, times(1)).findRows(anyString());
+        assertThat(jdbc.queryForObject("SELECT error_reason FROM \"" + schema + "\".sync_error_log "
+                + "WHERE operation_id = ?", String.class, id(client))).isEqualTo("MODULE_READ_ONLY");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".clients WHERE name = ?",
+                Integer.class, "Client en lecture seule")).isZero();
+    }
+
+    @Test
     @DisplayName("all modules active (no row): mixed batch applied as today, 1 tenant_modules read for N operations")
     void allActive_mixedBatchApplied_oneRead() throws Exception {
         var c1 = createClient("Client un");
@@ -221,7 +243,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 .andExpect(jsonPath("$.data.results", hasSize(3)))
                 .andExpect(jsonPath("$.data.results[*].status", everyItem(is("APPLIED"))));
 
-        verify(tenantModuleStatePort, times(1)).findStatuses(anyString());
+        verify(tenantModuleStatePort, times(1)).findRows(anyString());
     }
 
     @Test
@@ -267,7 +289,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
     @DisplayName("module state unreadable: the push is answered 503, nothing is processed or recorded")
     void registryFailure_503_nothingRecorded() throws Exception {
         doThrow(new org.springframework.dao.DataAccessResourceFailureException("database down"))
-                .when(tenantModuleStatePort).findStatuses(anyString());
+                .when(tenantModuleStatePort).findRows(anyString());
         var client = createClient("Client 503");
         var sale = createSale();
 
@@ -290,7 +312,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
 
         pushAs(token, createClient("Client admin")).andExpect(status().isForbidden());
 
-        verify(tenantModuleStatePort, never()).findStatuses(anyString());
+        verify(tenantModuleStatePort, never()).findRows(anyString());
     }
 
     @Test

@@ -412,12 +412,17 @@ class RestSyncService implements SyncService {
           // own refusal, e.g. PRODUCT_NOT_FOUND, follows from the hold).
           // Kept as is: nothing rolled back, stripped, dropped or
           // quarantined; retried at heldRetryInterval.
-          if (isHeldSyncRejection(reason) ||
-              await _referencesHeldEntity(currentOp)) {
-            if (currentOp.lastError != heldSyncRejectionReason) {
+          // Story 13.5 — MODULE_READ_ONLY (expired, in grace) holds the same
+          // way; the recorded reason is the server's, or the one of the held
+          // operation referenced, so the queue shows the right message.
+          final heldReason = isHeldSyncRejection(reason)
+              ? reason!
+              : await _referencedHeldReason(currentOp);
+          if (heldReason != null) {
+            if (currentOp.lastError != heldReason) {
               conflicts.add({
                 ...notice(rolledBack: false),
-                'reason': heldSyncRejectionReason,
+                'reason': heldReason,
                 'held': true,
               });
             }
@@ -426,7 +431,7 @@ class RestSyncService implements SyncService {
                 .write(SyncQueueCompanion(
               retryCount: Value(currentOp.retryCount + 1),
               lastAttemptAt: Value(DateTime.now()),
-              lastError: const Value(heldSyncRejectionReason),
+              lastError: Value(heldReason),
             ));
             continue;
           }
@@ -534,27 +539,39 @@ class RestSyncService implements SyncService {
     return conflicts;
   }
 
-  /// Whether [op] references (same entity, or an id anywhere in its payload)
-  /// the entity of another held operation still queued (Story 12.7).
-  Future<bool> _referencesHeldEntity(SyncQueueData op) async {
+  /// The held reason of the held operations still queued whose entities [op]
+  /// references (same entity, or an id anywhere in its payload), or null when
+  /// it references none (Stories 12.7, 13.5). Several reasons → the dominant
+  /// one ([dominantHeldReason]), independent of the read order.
+  Future<String?> _referencedHeldReason(SyncQueueData op) async {
     final held = await (_database.select(_database.syncQueue)
           ..where((t) =>
               t.synced.equals(false) &
               t.quarantinedAt.isNull() &
-              t.lastError.equals(heldSyncRejectionReason) &
+              t.lastError.isIn(heldSyncRejectionReasons) &
               t.id.equals(op.id).not() &
               t.entityId.isNotNull()))
         .get();
-    if (held.isEmpty) return false;
-    final ids = held.map((h) => h.entityId!).toSet();
-    if (op.entityId != null && ids.contains(op.entityId)) return true;
-    bool scan(Object? node) => switch (node) {
-          String value => ids.contains(value),
-          Map<dynamic, dynamic> map => map.values.any(scan),
-          List<dynamic> list => list.any(scan),
-          _ => false,
-        };
-    return scan(_payloadOf(op));
+    if (held.isEmpty) return null;
+    final reasonsById = <String, Set<String>>{};
+    for (final h in held) {
+      reasonsById.putIfAbsent(h.entityId!, () => {}).add(h.lastError!);
+    }
+    final found = <String>{};
+    void scan(Object? node) {
+      switch (node) {
+        case String value:
+          found.addAll(reasonsById[value] ?? const <String>{});
+        case Map<dynamic, dynamic> map:
+          map.values.forEach(scan);
+        case List<dynamic> list:
+          list.forEach(scan);
+      }
+    }
+
+    if (op.entityId != null) scan(op.entityId);
+    scan(_payloadOf(op));
+    return dominantHeldReason(found);
   }
 
   /// Puts [op] in quarantine (v1s-16-15) with, for a `CREATE_SALE`, its
@@ -842,7 +859,8 @@ class RestSyncService implements SyncService {
 
   /// Quarantined operations are not pending: they are never pushed and must
   /// not block the server refreshes (v1s-16-15). Neither are held ones
-  /// (`MODULE_INACTIVE`, Story 12.7): they wait for their module.
+  /// (`MODULE_INACTIVE` / `MODULE_READ_ONLY`, Stories 12.7, 13.5): they wait
+  /// for their module.
   @override
   Future<bool> hasPendingOperations() async {
     final count = await (_database.selectOnly(_database.syncQueue)
@@ -851,8 +869,7 @@ class RestSyncService implements SyncService {
               _database.syncQueue.quarantinedAt.isNull() &
               (_database.syncQueue.lastError.isNull() |
                   _database.syncQueue.lastError
-                      .equals(heldSyncRejectionReason)
-                      .not())))
+                      .isNotIn(heldSyncRejectionReasons))))
         .map((row) => row.read(_database.syncQueue.id.count()))
         .getSingle();
     return (count ?? 0) > 0;

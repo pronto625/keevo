@@ -74,6 +74,11 @@ void main() {
         'Module non activé pour votre compte');
   });
 
+  test('13.5: MODULE_READ_ONLY has its French message', () {
+    expect(friendlySyncRejectionReason('MODULE_READ_ONLY'),
+        'Module en lecture seule : abonnement expiré');
+  });
+
   group('friendlySyncOperationLabel', () {
     test('maps known operations to French labels', () {
       expect(friendlySyncOperationLabel('CREATE_PRODUCT'), 'Création de produit');

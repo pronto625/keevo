@@ -99,7 +99,8 @@ class ModuleProvisionerPostgresIntegrationTest {
             jdbc.update("INSERT INTO \"" + schema + "\".existing_data VALUES (1, 'avant')");
         }
         registry = new ModuleRegistryService(TestModuleCatalogs.provisioningCatalog(),
-                new JdbcTenantModuleStateStore(dataSource), new RequestScopedActiveModulesCache());
+                new JdbcTenantModuleStateStore(dataSource), new RequestScopedActiveModulesCache(),
+                java.time.Clock.systemUTC());
         provisioner = provisioner(List.of(FlywayModuleMigrations.DEFAULT_ROOT));
     }
 

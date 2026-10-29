@@ -3,7 +3,6 @@ import 'dart:developer' as dev;
 import 'dart:math';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -28,7 +27,6 @@ import 'account_read_only_exception.dart';
 import 'sync_event_logger.dart';
 import 'sync_gate_provider.dart';
 import 'sync_monitoring_providers.dart';
-import 'sync_rejection_policy.dart';
 import 'sync_required_exception.dart';
 import 'sync_status_provider.dart';
 
@@ -190,16 +188,8 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       final db = ref.read(appDatabaseProvider);
       // Quarantined operations (v1s-16-15) wait for the user, not for a
       // push: they do not make the queue stale.
-      // Held operations (Story 12.7) wait for their module either.
-      final oldestPending = await (db.select(db.syncQueue)
-            ..where((t) =>
-                t.synced.equals(false) &
-                t.quarantinedAt.isNull() &
-                (t.lastError.isNull() |
-                    t.lastError.equals(heldSyncRejectionReason).not()))
-            ..orderBy([(t) => OrderingTerm.asc(t.createdAt)])
-            ..limit(1))
-          .getSingleOrNull();
+      // Held operations (Stories 12.7, 13.5) wait for their module either.
+      final oldestPending = await oldestPendingOperation(db);
       if (oldestPending != null &&
           DateTime.now().difference(oldestPending.createdAt).inHours >= 1) {
         await ref.read(syncDiagnosticRunnerProvider).runIfNeeded();

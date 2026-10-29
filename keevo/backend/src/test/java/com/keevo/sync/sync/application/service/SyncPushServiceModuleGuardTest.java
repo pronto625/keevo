@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.service;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
 import com.keevo.sync.sync.domain.model.SyncErrorLogEntry;
@@ -52,7 +53,7 @@ import static org.mockito.Mockito.when;
  * full-context ones, covered by {@code SyncOperationHandlerRegistryTest} and {@code SyncModuleGuardPostgresIntegrationTest}).
  */
 @ExtendWith(MockitoExtension.class)
-@DisplayName("SyncPushService — module guard (Story 12.7)")
+@DisplayName("SyncPushService — module guard (Stories 12.7, 13.5)")
 class SyncPushServiceModuleGuardTest {
 
     private static final UUID ACTOR_ID = UUID.randomUUID();
@@ -112,13 +113,13 @@ class SyncPushServiceModuleGuardTest {
     @Test
     @DisplayName("all modules active: a batch of 3 mixed operations is applied as today, registry read once")
     void allActive_allApplied() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(ALL);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(ALL));
 
         SyncBatchResult batch = push(op("c1", "CREATE_CLIENT"), op("s1", "CREATE_SALE"), op("p1", "UPDATE_PRODUCT"));
 
         assertThat(batch.results()).extracting(SyncOperationResult::status)
                 .containsOnly(SyncOperationStatus.APPLIED);
-        verify(moduleRegistry, times(1)).activeModules(TENANT);
+        verify(moduleRegistry, times(1)).moduleStates(TENANT);
         verify(saleHandler).handle(any(), any(), any());
         verify(clientHandler).handle(any(), any(), any());
         verify(productHandler).handle(any(), any(), any());
@@ -128,7 +129,7 @@ class SyncPushServiceModuleGuardTest {
     @Test
     @DisplayName("crm off: the client is REJECTED MODULE_INACTIVE (logged, payload kept), the sale is APPLIED")
     void crmOff_clientRejected_saleApplied() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(Set.of("core", "pos", "catalog", "inventory", "store"));
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(Set.of("core", "pos", "catalog", "inventory", "store")));
 
         SyncOperation client = op("c1", "CREATE_CLIENT");
         SyncBatchResult batch = push(client, op("s1", "CREATE_SALE"));
@@ -156,7 +157,7 @@ class SyncPushServiceModuleGuardTest {
     @Test
     @DisplayName("pos off: CREATE_SALE is REJECTED MODULE_INACTIVE before any conflict check or handler")
     void posOff_saleRejected() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(Set.of("core", "crm", "catalog"));
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(Set.of("core", "crm", "catalog")));
 
         SyncBatchResult batch = push(op("s1", "CREATE_SALE"));
 
@@ -171,7 +172,7 @@ class SyncPushServiceModuleGuardTest {
     @Test
     @DisplayName("replay of an applied operation whose module is now off: still DUPLICATE, nothing re-logged")
     void replayOfAppliedOp_moduleOff_duplicate() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(Set.of("core"));
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(Set.of("core")));
         when(logRepository.isSettled("s1")).thenReturn(true);
 
         SyncBatchResult batch = push(op("s1", "CREATE_SALE"));
@@ -186,13 +187,13 @@ class SyncPushServiceModuleGuardTest {
     @Test
     @DisplayName("registry throws: the whole push fails SERVICE_UNAVAILABLE (503), nothing processed or recorded")
     void registryThrows_batchUnavailable() {
-        when(moduleRegistry.activeModules(TENANT)).thenThrow(new IllegalStateException("database down"));
+        when(moduleRegistry.moduleStates(TENANT)).thenThrow(new IllegalStateException("database down"));
 
         assertThatThrownBy(() -> push(op("c1", "CREATE_CLIENT"), op("s1", "CREATE_SALE")))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode())
                 .isEqualTo(ErrorCode.SERVICE_UNAVAILABLE);
-        verify(moduleRegistry, times(1)).activeModules(TENANT);
+        verify(moduleRegistry, times(1)).moduleStates(TENANT);
         verifyNoInteractions(logRepository, syncErrorLogRepository, eventPublisher);
         verify(saleHandler, never()).handle(any(), any(), any());
         verify(clientHandler, never()).handle(any(), any(), any());
@@ -209,14 +210,14 @@ class SyncPushServiceModuleGuardTest {
             assertThat(r.status()).isEqualTo(SyncOperationStatus.REJECTED);
             assertThat(r.reason()).isEqualTo("TENANT_NOT_FOUND");
         });
-        verify(moduleRegistry, never()).activeModules(any());
+        verify(moduleRegistry, never()).moduleStates(any());
         verify(saleHandler, never()).handle(any(), any(), any());
     }
 
     @Test
     @DisplayName("known tenant with every business module off: MODULE_INACTIVE, not TENANT_NOT_FOUND")
     void knownTenantAllOff_moduleInactive() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(Set.of("core"));
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(Set.of("core")));
 
         SyncBatchResult batch = push(op("s1", "CREATE_SALE"));
 
@@ -227,7 +228,7 @@ class SyncPushServiceModuleGuardTest {
     @Test
     @DisplayName("unknown operation type keeps UNKNOWN_OPERATION_TYPE")
     void unknownType_keepsReason() {
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(ALL);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(ALL));
 
         SyncBatchResult batch = push(op("x1", "CREATE_UNICORN"));
 
@@ -247,12 +248,44 @@ class SyncPushServiceModuleGuardTest {
     void inactiveOp_notSuperseded() {
         ConflictResolutionStrategy strategy = mock(ConflictResolutionStrategy.class);
         lenient().when(conflictStrategyRegistry.resolve("UPDATE_PRODUCT")).thenReturn(strategy);
-        when(moduleRegistry.activeModules(TENANT)).thenReturn(Set.of("core", "pos"));
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(ModuleStatesFixture.enabled(Set.of("core", "pos")));
 
         SyncBatchResult batch = push(op("p1", "UPDATE_PRODUCT"));
 
         assertThat(batch.results()).singleElement()
                 .extracting(SyncOperationResult::reason).isEqualTo("MODULE_INACTIVE");
         verifyNoInteractions(strategy);
+    }
+    @Test
+    @DisplayName("13.5 — crm read-only (expired, in grace): CREATE_CLIENT REJECTED MODULE_READ_ONLY (payload kept), the sale is APPLIED")
+    void crmReadOnly_clientRejectedReadOnly_saleApplied() {
+        Map<String, ModuleState> states = new java.util.TreeMap<>(ModuleStatesFixture.enabled(ALL));
+        states.put("crm", ModuleState.READ_ONLY);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(states);
+
+        SyncOperation client = op("c1", "CREATE_CLIENT");
+        SyncBatchResult batch = push(client, op("s1", "CREATE_SALE"));
+
+        assertThat(resultOf(batch, "c1").status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(resultOf(batch, "c1").reason()).isEqualTo("MODULE_READ_ONLY");
+        assertThat(resultOf(batch, "s1").status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(clientHandler, never()).handle(any(), any(), any());
+        ArgumentCaptor<SyncErrorLogEntry> errors = ArgumentCaptor.forClass(SyncErrorLogEntry.class);
+        verify(syncErrorLogRepository, times(1)).save(errors.capture());
+        assertThat(errors.getValue().payload()).isEqualTo(client.payload());
+        assertThat(errors.getValue().errorReason()).isEqualTo("MODULE_READ_ONLY");
+    }
+
+    @Test
+    @DisplayName("13.5 — DISABLED keeps MODULE_INACTIVE; a module missing from the states map counts as DISABLED")
+    void disabledOrMissing_moduleInactive() {
+        Map<String, ModuleState> states = new java.util.TreeMap<>(ModuleStatesFixture.enabled(Set.of("core", "crm")));
+        states.put("pos", ModuleState.DISABLED);
+        when(moduleRegistry.moduleStates(TENANT)).thenReturn(states);
+
+        SyncBatchResult batch = push(op("s1", "CREATE_SALE"), op("p1", "UPDATE_PRODUCT"));
+
+        assertThat(batch.results()).hasSize(2)
+                .allSatisfy(r -> assertThat(r.reason()).isEqualTo("MODULE_INACTIVE"));
     }
 }

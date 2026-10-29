@@ -1,7 +1,9 @@
 package com.keevo.shared.module;
 
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
-import com.keevo.shared.module.application.FreeModulesOnlyEligibility;
+import com.keevo.shared.module.application.EntitlementActivationEligibility;
+import com.keevo.shared.module.infrastructure.EntitlementAspect;
+import org.springframework.context.ApplicationContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,7 +16,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Story 13.3 — the resolver beans wire in the real application context, on the shipped catalogue and the real
+ * Story 13.3 / 13.5 — the resolver beans wire in the real application context, on the shipped catalogue and the real
  * registry: a tenant with {@code pos} DISABLED (its requires {@code catalog}/{@code inventory} free, hence active)
  * gets the plan {@code [pos]}.
  */
@@ -36,6 +38,9 @@ class DependencyResolverBootIntegrationTest extends FullContextIntegrationTest {
 
     @Autowired
     private ModuleRegistry registry;
+
+    @Autowired
+    private ApplicationContext context;
 
     /** A valid tenant schema ({@code kv_} + 6 random [a-z0-9]), unique per run. */
     private static String randomSchema() {
@@ -65,7 +70,14 @@ class DependencyResolverBootIntegrationTest extends FullContextIntegrationTest {
         jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier) "
                 + "VALUES (?, 'pos', 'DISABLED', 'FREE')", tenantId);
 
-        assertThat(eligibility).isInstanceOf(FreeModulesOnlyEligibility.class);
+        // Story 13.5: exactly one eligibility bean (a second one would break the resolver's injection)
+        assertThat(context.getBeansOfType(ModuleActivationEligibility.class)).hasSize(1);
+        assertThat(eligibility).isInstanceOf(EntitlementActivationEligibility.class);
+        assertThat(eligibility.check(tenant, registry.definition("pos").orElseThrow()).initialStatus())
+                .isEqualTo(TenantModuleStatus.ACTIVE);
+        // the entitlement layer is wired on the same registry, and its aspect is registered
+        assertThat(context.getBean(EntitlementService.class).state(tenant, "pos")).isEqualTo(ModuleState.DISABLED);
+        assertThat(context.getBeansOfType(EntitlementAspect.class)).hasSize(1);
         ActivationPlan plan = resolver.planActivation(tenant, "pos");
         assertThat(plan.moduleIds()).containsExactly("pos");
         assertThat(plan.alreadyActive()).containsExactly("catalog", "inventory");

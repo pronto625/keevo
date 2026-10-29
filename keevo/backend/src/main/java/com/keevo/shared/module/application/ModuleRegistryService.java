@@ -4,15 +4,17 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleRegistry;
-import com.keevo.shared.module.TenantModuleStatus;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.application.port.ActiveModulesCache;
 import com.keevo.shared.module.application.port.TenantModuleStatePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -21,8 +23,10 @@ import java.util.TreeSet;
 
 /**
  * {@link ModuleRegistry} of the core (Story 13.2): installed modules from the {@link ModuleCatalog}, per-tenant
- * state from {@code public.tenant_modules} ({@link TenantModuleStatePort}), effective state computed by
- * {@link #effectiveActiveModules} and cached through {@link ActiveModulesCache} (one read per tenant per request).
+ * rows from {@code public.tenant_modules} ({@link TenantModuleStatePort}), cached through
+ * {@link ActiveModulesCache} (one read per tenant per request). Since Story 13.5 the effective state is computed
+ * by {@link ModuleStateRules} at every call, with the injected {@link Clock} — a cached row past its
+ * {@code expires_at} turns read-only within the same request.
  */
 @Service
 public class ModuleRegistryService implements ModuleRegistry {
@@ -32,11 +36,14 @@ public class ModuleRegistryService implements ModuleRegistry {
     private final ModuleCatalog catalog;
     private final TenantModuleStatePort states;
     private final ActiveModulesCache cache;
+    private final Clock clock;
 
-    public ModuleRegistryService(ModuleCatalog catalog, TenantModuleStatePort states, ActiveModulesCache cache) {
+    public ModuleRegistryService(ModuleCatalog catalog, TenantModuleStatePort states, ActiveModulesCache cache,
+                                 Clock clock) {
         this.catalog = catalog;
         this.states = states;
         this.cache = cache;
+        this.clock = clock;
     }
 
     @Override
@@ -51,10 +58,9 @@ public class ModuleRegistryService implements ModuleRegistry {
 
     @Override
     public Set<String> activeModules(String tenantSchema) {
-        if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema)) {
-            return platformAdminModules(catalog.manifests());
-        }
-        return lookup(tenantSchema).activeModules();
+        return sortedImmutable(moduleStates(tenantSchema).entrySet().stream()
+                .filter(e -> e.getValue().readable())
+                .map(Map.Entry::getKey).toList());
     }
 
     @Override
@@ -65,6 +71,28 @@ public class ModuleRegistryService implements ModuleRegistry {
         return lookup(tenantSchema).knownTenant();
     }
 
+    @Override
+    public boolean isActive(String tenantSchema, String moduleId) {
+        return moduleState(tenantSchema, moduleId).readable();
+    }
+
+    @Override
+    public ModuleState moduleState(String tenantSchema, String moduleId) {
+        Map<String, ModuleState> all = moduleStates(tenantSchema); // validates the schema first, even for a bad id
+        ModuleState state = moduleId != null ? all.get(moduleId) : null;
+        return state != null ? state : ModuleState.DISABLED;
+    }
+
+    @Override
+    public Map<String, ModuleState> moduleStates(String tenantSchema) {
+        if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema)) {
+            return platformAdminStates(catalog.manifests());
+        }
+        ActiveModulesCache.Entry entry = lookup(tenantSchema);
+        return effectiveStates(catalog.manifests(),
+                entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), clock);
+    }
+
     /** The tenant's entry: from the request cache, else one query (cached for the rest of the request). */
     private ActiveModulesCache.Entry lookup(String tenantSchema) {
         String schema = TenantSchema.validate(tenantSchema);
@@ -72,20 +100,13 @@ public class ModuleRegistryService implements ModuleRegistry {
         if (cached.isPresent()) {
             return cached.get();
         }
-        Optional<Map<String, TenantModuleStatus>> rows = states.findStatuses(schema);
+        Optional<Map<String, TenantModuleStatePort.Row>> rows = states.findRows(schema);
         if (rows.isEmpty()) {
             log.debug("Module registry: no tenant registered for the given schema — only core is active");
         }
-        ActiveModulesCache.Entry entry = new ActiveModulesCache.Entry(rows.isPresent(),
-                effectiveActiveModules(catalog.manifests(), rows));
+        ActiveModulesCache.Entry entry = new ActiveModulesCache.Entry(rows.isPresent(), rows.orElse(Map.of()));
         cache.put(schema, entry);
         return entry;
-    }
-
-    @Override
-    public boolean isActive(String tenantSchema, String moduleId) {
-        Set<String> active = activeModules(tenantSchema);
-        return moduleId != null && active.contains(moduleId);
     }
 
     @Override
@@ -96,10 +117,13 @@ public class ModuleRegistryService implements ModuleRegistry {
     }
 
     /** Platform-admin session ({@code public}): {@code core} + the installed {@code platform} modules, no query. */
-    static Set<String> platformAdminModules(Collection<ModuleManifest> installed) {
-        return sortedImmutable(installed.stream()
+    static Map<String, ModuleState> platformAdminStates(Collection<ModuleManifest> installed) {
+        Map<String, ModuleState> states = new LinkedHashMap<>();
+        installed.stream().map(ModuleManifest::id).sorted().forEach(id -> states.put(id, ModuleState.DISABLED));
+        installed.stream()
                 .filter(m -> m.isCore() || m.category() == ModuleCategory.PLATFORM)
-                .map(ModuleManifest::id).toList());
+                .forEach(m -> states.put(m.id(), ModuleState.ENABLED));
+        return Collections.unmodifiableMap(states);
     }
 
     /** Sorted, immutable, and {@code contains(null)} answers {@code false} (unlike an unmodifiable TreeSet). */
@@ -108,28 +132,20 @@ public class ModuleRegistryService implements ModuleRegistry {
     }
 
     /**
-     * The effective state rule (spec 13.2): only installed modules can be active; {@code core} always is; a
-     * {@code tenant_modules} row decides when present (TRIAL/ACTIVE); otherwise the manifest's {@code free} flag
-     * decides. An unknown tenant ({@code rows} empty) only gets {@code core}.
+     * The effective state of every installed module ({@link ModuleStateRules}), evaluated at {@code clock.instant()}.
      *
      * @param installed the installed manifests
-     * @param rows      the tenant's rows (module id → status), empty when the tenant is unknown
-     * @return the active module ids, immutable, sorted
+     * @param rows      the tenant's rows (module id → row), empty when the tenant is unknown
+     * @return module id → state, immutable, sorted by id, {@code get(null)} answers {@code null}
      */
-    static Set<String> effectiveActiveModules(Collection<ModuleManifest> installed,
-                                              Optional<Map<String, TenantModuleStatus>> rows) {
-        Set<String> active = new TreeSet<>();
-        for (ModuleManifest manifest : installed) {
-            String id = manifest.id();
-            if (manifest.isCore()) {
-                active.add(id);
-            } else if (rows.isPresent()) {
-                TenantModuleStatus status = rows.get().get(id);
-                if (status != null ? status.isActive() : manifest.free()) {
-                    active.add(id);
-                }
-            }
-        }
-        return sortedImmutable(active);
+    static Map<String, ModuleState> effectiveStates(Collection<ModuleManifest> installed,
+                                                    Optional<Map<String, TenantModuleStatePort.Row>> rows,
+                                                    Clock clock) {
+        var now = clock.instant();
+        Map<String, ModuleState> states = new LinkedHashMap<>();
+        installed.stream()
+                .sorted(java.util.Comparator.comparing(ModuleManifest::id))
+                .forEach(m -> states.put(m.id(), ModuleStateRules.stateOf(m, rows, now)));
+        return Collections.unmodifiableMap(states);
     }
 }

@@ -24,4 +24,28 @@ void main() {
       expect(quarantinesOnRejection('CREATE_SALE', 'INTERNAL_ERROR'), isFalse);
     });
   });
+
+  group('Story 13.5 — MODULE_READ_ONLY holds the operation too', () {
+    test('is held, not transient, never quarantined', () {
+      expect(isHeldSyncRejection('MODULE_READ_ONLY'), isTrue);
+      expect(isTransientSyncRejection('MODULE_READ_ONLY'), isFalse);
+      expect(heldSyncRejectionReasons,
+          unorderedEquals(['MODULE_INACTIVE', 'MODULE_READ_ONLY']));
+      for (final op in moneyLedgerOperations) {
+        expect(quarantinesOnRejection(op, 'MODULE_READ_ONLY'), isFalse,
+            reason: op);
+      }
+    });
+
+    test('dominantHeldReason: MODULE_INACTIVE wins, whatever the order', () {
+      expect(dominantHeldReason(['MODULE_READ_ONLY', 'MODULE_INACTIVE']),
+          'MODULE_INACTIVE');
+      expect(dominantHeldReason(['MODULE_INACTIVE', 'MODULE_READ_ONLY']),
+          'MODULE_INACTIVE');
+      expect(dominantHeldReason(['MODULE_READ_ONLY', 'PRODUCT_NOT_FOUND']),
+          'MODULE_READ_ONLY');
+      expect(dominantHeldReason(['PRODUCT_NOT_FOUND', null]), isNull);
+      expect(dominantHeldReason(const []), isNull);
+    });
+  });
 }

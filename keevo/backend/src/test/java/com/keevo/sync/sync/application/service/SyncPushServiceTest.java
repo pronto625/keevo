@@ -51,7 +51,7 @@ class SyncPushServiceTest {
                 .thenReturn(new SimpleTransactionStatus());
         // Story 12.7 — every module active (today's state): the guard lets everything through.
         lenient().when(moduleRegistry.isKnownTenant(any())).thenReturn(true);
-        lenient().when(moduleRegistry.activeModules(any())).thenReturn(java.util.Set.of("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync"));
+        lenient().when(moduleRegistry.moduleStates(any())).thenReturn(ModuleStatesFixture.enabled(java.util.Set.of("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync")));
         lenient().when(saleHandler.moduleId()).thenReturn("pos");
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager, List.of(),
                 conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);

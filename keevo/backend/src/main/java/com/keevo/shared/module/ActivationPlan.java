@@ -14,8 +14,9 @@ import java.util.Objects;
  *                      re-planned)
  * @param alreadyActive the active members of {target} ∪ its {@code requires} closure, sorted by id, {@code core}
  *                      always excluded (so planning {@code core} itself gives an empty plan and an empty list)
- * @param reasons       why the plan is blocked (one {@code NOT_ENTITLED} per ineligible step, in plan order); empty
- *                      when the plan can run
+ * @param reasons       why the plan is blocked (one {@code NOT_ENTITLED} — or {@code ELIGIBILITY_UNAVAILABLE} when
+ *                      the check failed, Story 13.5 — per ineligible step, in plan order); empty when the plan can
+ *                      run
  */
 public record ActivationPlan(String moduleId, List<Step> steps, List<String> alreadyActive,
                              List<BlockReason> reasons) {

@@ -10,9 +10,11 @@
 ///   operation stays queued, `lastError` is recorded (visible in the queue
 ///   screen) and the user is told once per distinct reason — some of them
 ///   (UNAUTHORIZED, DATA_INTEGRITY_VIOLATION…) may never clear.
-/// * **Held** reason ([isHeldSyncRejection], Story 12.7): `MODULE_INACTIVE`,
-///   the operation's module is switched off for the account — a state the
-///   owner can undo, and the data is kept for life (spec-socle §2.2). The
+/// * **Held** reasons ([isHeldSyncRejection], Story 12.7): `MODULE_INACTIVE`,
+///   the operation's module is switched off for the account, and (Story 13.5)
+///   `MODULE_READ_ONLY`, its subscription expired and it is in its read-only
+///   grace — states the owner can undo (renewal), and the data is kept for
+///   life (spec-socle §2.2). The
 ///   operation stays queued with `lastError`, nothing is rolled back, reverted,
 ///   stripped, dropped or quarantined; it is not counted as pending (pulls
 ///   keep running) but still protects its entity from pull overwrites. Held
@@ -70,9 +72,32 @@ const transientSyncRejectionReasons = {
 /// Reason of a held operation (Story 12.7): the module is off for the account.
 const heldSyncRejectionReason = 'MODULE_INACTIVE';
 
+/// Reason of a held operation (Story 13.5): the module's subscription expired
+/// and it is read-only during its grace period (sync operations are writes).
+const readOnlySyncRejectionReason = 'MODULE_READ_ONLY';
+
+/// Every reason that holds an operation (Stories 12.7, 13.5).
+const heldSyncRejectionReasons = [
+  heldSyncRejectionReason,
+  readOnlySyncRejectionReason,
+];
+
+/// The reason recorded on an operation held because it references entities of
+/// held operations with [reasons]: `MODULE_INACTIVE` wins over
+/// `MODULE_READ_ONLY` (the stronger state), so the result does not depend on
+/// the order the held operations are read in. Null when [reasons] holds none.
+String? dominantHeldReason(Iterable<String?> reasons) {
+  final held = reasons.where(isHeldSyncRejection).toSet();
+  if (held.isEmpty) return null;
+  return held.contains(heldSyncRejectionReason)
+      ? heldSyncRejectionReason
+      : readOnlySyncRejectionReason;
+}
+
 /// Whether a REJECTED [reason] holds the operation (kept, nothing undone,
 /// retried at [heldRetryInterval]).
-bool isHeldSyncRejection(String? reason) => reason == heldSyncRejectionReason;
+bool isHeldSyncRejection(String? reason) =>
+    reason != null && heldSyncRejectionReasons.contains(reason);
 
 /// Minimum delay between two pushes of a held operation (besides the first
 /// push after the app starts). A module is re-activated by the owner or the
