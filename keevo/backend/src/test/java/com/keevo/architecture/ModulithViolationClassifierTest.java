@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Classifier used by {@link ApplicationModulesBaselineTest} on sample Spring Modulith 1.4 messages. */
+/** Classifier feeding the diagnostics report of {@link ApplicationModulesBaselineTest} (sample Spring Modulith 1.4 messages). */
 class ModulithViolationClassifierTest {
 
     private static final String MODULE_DECLARED =
@@ -50,97 +50,13 @@ class ModulithViolationClassifierTest {
         assertThat(ApplicationModulesBaselineTest.moduleOf("shared")).isEqualTo("shared");
     }
 
-    private static final String NON_EXPOSED_INTO_INVENTORY =
-        "Module 'commerce' depends on non-exposed type com.keevo.inventory.stock.domain.entity.StockLevel "
-            + "within module 'inventory'!";
-    private static final String NON_EXPOSED_FROM_SHARED =
-        "Module 'shared' depends on non-exposed type com.keevo.inventory.stock.domain.entity.StockLevel "
-            + "within module 'inventory'!";
-    private static final String NON_EXPOSED_INTO_STORE =
-        "Module 'commerce' depends on non-exposed type com.keevo.store.store.domain.model.Store "
-            + "within module 'store'!";
-    /** sync is a consumer only and publishes no API (12.2e): its internals are not pinned. */
-    private static final String NON_EXPOSED_INTO_REPORTING =
-        "Module 'identity' depends on non-exposed type com.keevo.reporting.report.application.service.DailyReportFormatter "
-            + "within module 'reporting'!";
-    private static final String INTERNAL_OF_DECLARED_FEEDBACK =
-        "Module 'admin' depends on module 'feedback' via com.keevo.admin.A -> com.keevo.feedback.feedback.domain.model.Feedback. "
-            + "Allowed targets: feedback :: api, shared.";
-    private static final String NON_EXPOSED_INTO_SYNC =
-        "Module 'commerce' depends on non-exposed type com.keevo.sync.sync.domain.model.SyncOperation "
-            + "within module 'sync'!";
-    private static final String NON_EXPOSED_INTO_MESSAGING =
-        "Module 'commerce' depends on non-exposed type com.keevo.messaging.notification.domain.model.DeviceToken "
-            + "within module 'messaging'!";
-    private static final String INTERNAL_OF_DECLARED_CATALOG =
-        "Module 'sync' depends on module 'catalog' via com.keevo.sync.A -> com.keevo.catalog.product.domain.entity.Product. "
-            + "Allowed targets: catalog :: api, shared.";
-
-    @Test
-    void internalAccessToPublishedModuleIsFlaggedExceptFromShared() {
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_INVENTORY)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(INTERNAL_OF_DECLARED_CATALOG)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_FROM_SHARED)).isFalse();
-        // store's API is published since 12.2d
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_STORE)).isTrue();
-        // messaging, reporting and feedback are published since 12.2e
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_MESSAGING)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_REPORTING)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(INTERNAL_OF_DECLARED_FEEDBACK)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_SYNC)).isFalse();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(MODULE_UNDECLARED)).isFalse();
-    }
-
-    /** Real Modulith 1.4 messages, captured 2026-10-29 with a temporary probe class in shared (not committed). */
-    private static final String SHARED_ALLOWED = "Allowed targets: catalog :: events, commerce :: api, "
-        + "commerce :: events, crm :: events, identity :: api, identity :: events, inventory :: events, "
-        + "reporting :: events, store :: api, store :: events.";
-    private static final String SHARED_INTO_IDENTITY_INTERNAL =
-        "Module 'shared' depends on module 'identity' via com.keevo.shared.tmpprobe.TmpProbe -> "
-            + "com.keevo.identity.auth.domain.port.out.UserRepository. " + SHARED_ALLOWED;
-    private static final String SHARED_INTO_INVENTORY_INTERNAL =
-        "Module 'shared' depends on module 'inventory' via com.keevo.shared.tmpprobe.TmpProbe -> "
-            + "com.keevo.inventory.stock.domain.entity.StockLevel. " + SHARED_ALLOWED;
     /** admin is not in shared's allow-list: Modulith reports it as a module dependency on an undeclared target. */
     private static final String SHARED_INTO_ADMIN =
         "Module 'shared' depends on module 'admin' via com.keevo.shared.tmpprobe.TmpProbe -> "
-            + "com.keevo.admin.alerts.domain.port.in.PurgeAlertAcksUseCase. " + SHARED_ALLOWED;
-
-    @Test
-    void internalAccessFromSharedIsFlaggedWhateverTheTarget() {
-        // pre-12.2f form (shared had no allow-list)
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(NON_EXPOSED_FROM_SHARED)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_IDENTITY_INTERNAL)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_INVENTORY_INTERNAL)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(NON_EXPOSED_INTO_INVENTORY)).isFalse();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(INTERNAL_OF_DECLARED_CATALOG)).isFalse();
-    }
+            + "com.keevo.admin.alerts.domain.port.in.PurgeAlertAcksUseCase. Allowed targets: identity :: api.";
 
     @Test
     void sharedIntoAModuleOutsideItsAllowListIsNotAllowed() {
         assertThat(ApplicationModulesBaselineTest.isModuleDependency(SHARED_INTO_ADMIN, false)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_ADMIN)).isFalse();
-    }
-
-    /** Real Modulith 1.4 cycle messages (shape of target/modulith-violations.txt, 12.2f and 12.3 runs). */
-    private static final String CYCLE_CATALOG_MESSAGING = "Cycle detected: Slice catalog -> \n"
-        + "                Slice messaging -> \n"
-        + "                Slice catalog\n"
-        + "  1. Dependencies of Slice catalog\n"
-        + "    - Field <com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.draftValidation> ...\n"
-        + "  2. Dependencies of Slice messaging\n";
-    private static final String CYCLE_THROUGH_COMMERCE = "Cycle detected: Slice identity -> \n"
-        + "                Slice messaging -> \n"
-        + "                Slice commerce -> \n"
-        + "                Slice identity\n"
-        + "  1. Dependencies of Slice identity\n";
-
-    @Test
-    void twoModuleCyclesAreRecognisedByTheirSlices() {
-        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(CYCLE_CATALOG_MESSAGING, "messaging", "catalog")).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(CYCLE_CATALOG_MESSAGING, "messaging", "commerce")).isFalse();
-        // a longer cycle through both modules is not a two-module cycle
-        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(CYCLE_THROUGH_COMMERCE, "messaging", "commerce")).isFalse();
-        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(MODULE_UNDECLARED, "messaging", "catalog")).isFalse();
     }
 }

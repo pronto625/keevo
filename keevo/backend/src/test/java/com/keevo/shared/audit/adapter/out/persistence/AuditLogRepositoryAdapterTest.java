@@ -1,8 +1,6 @@
-package com.keevo.shared.infrastructure.persistence.impl;
+package com.keevo.shared.audit.adapter.out.persistence;
 
 import com.keevo.shared.application.port.AuditPort;
-import com.keevo.shared.infrastructure.persistence.entity.AuditLogJpaEntity;
-import com.keevo.shared.infrastructure.persistence.jpa.AuditLogSpringRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;

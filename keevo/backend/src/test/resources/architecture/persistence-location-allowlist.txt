@@ -1,0 +1,5 @@
+# Story 12.6b — reviewed exceptions for KeevoArchitectureRulesTest (persistence-location).
+# Format: <key>   # <reason>   (one entry per line, reason mandatory). Ratchet: a new violation fails the
+# build unless listed here; an entry that no longer matches a violation fails too (remove it).
+
+com.keevo.shared.infrastructure.persistence.JpaBaseEntity   # core-wide @MappedSuperclass (id/audit columns) extended by the JPA entities of identity, store, subscription, feedback; it is shared persistence infrastructure, not one module's adapter — moving it would only rename 12 imports into an artificial ..adapter.out.persistence package

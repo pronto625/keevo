@@ -709,21 +709,21 @@ So that **les invariants spécifiques Keevo sont garantis en CI (MOD-NFR2/3)**.
 - Combiner avec `verify()` de 12.2 dans une suite « architecture » dédiée, bloquante.
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: CR 10-6, 2026-06-19] ArchUnit/Modulith baseline -> ratchet [ArchitectureTest / ModulithVerificationTest] — assert known-violation set, fail on new ones
-- [ ] [Deferred-from: CR 10-6, 2026-06-19] allowedDependencies target vs actual [package-info allowedDependencies] — align identity/messaging/catalog/store before enforcement
-- [ ] [Deferred-from: CR 10-6, 2026-06-19] Wrap detectModulesAndGenerateDocumentation in try/catch [Modulith doc test] — invalid model must not break the warning-mode build
-- [ ] [Deferred-from: CR 10-6, 2026-06-19] Refine ArchUnit rules (persistence pattern, DO_NOT_INCLUDE_TESTS) [ArchitectureTest] — -
-- [ ] [Deferred-from: CR 10-6, 2026-06-19] CI upload-artifact without if-no-files-found: warn [.github/workflows/backend-ci.yml:62,69] — missing reports fail the job
-- [ ] [Deferred-from: CR 10-6, 2026-06-19] Dependency scopes (spring-modulith-api provided, archunit via BOM) [pom.xml] — avoid version skew vs pinned 1.3.0
+- [x] [Deferred-from: CR 10-6, 2026-06-19] ArchUnit/Modulith baseline -> ratchet [ArchitectureTest / ModulithVerificationTest] — assert known-violation set, fail on new ones — ✅ 12.6b: Modulith known set = 0, `verify()` blocking (`ApplicationModulesBaselineTest.verifyModuleBoundaries`); ArchUnit rules ratchet on `src/test/resources/architecture/*-allowlist.txt` (new violation or stale entry fails, `KeevoArchitectureRulesTest`)
+- [x] [Deferred-from: CR 10-6, 2026-06-19] allowedDependencies target vs actual [package-info allowedDependencies] — align identity/messaging/catalog/store before enforcement — ✅ every module has an explicit list including `shared` (12.2x/12.6a: identity `{shared, store :: api}`, messaging `{commerce/identity/store :: api, shared}`, catalog `{crm/store/subscription :: api, shared}`, store `{shared}`); enforced by blocking `verify()` (12.6b)
+- [x] [Deferred-from: CR 10-6, 2026-06-19] Wrap detectModulesAndGenerateDocumentation in try/catch [Modulith doc test] — invalid model must not break the warning-mode build — ✅ 12.6b: failure reported in `target/spring-modulith-docs/GENERATION-FAILED.txt`, no crash
+- [x] [Deferred-from: CR 10-6, 2026-06-19] Refine ArchUnit rules (persistence pattern, DO_NOT_INCLUDE_TESTS) [ArchitectureTest] — - — ✅ 12.6b: `@Entity`/`@Embeddable`/`@MappedSuperclass`/`@Repository` + Spring Data `Repository` only under `..adapter.out.persistence..` (audit entity/repository moved to `shared.audit.adapter.out.persistence`; core-wide `JpaBaseEntity` allow-listed), all rules on main classes only (`DO_NOT_INCLUDE_TESTS`). AC (a) is enforced by the pair ArchUnit rule (a) (class level) + `TenantSchemaInterpolationGuardTest` (line-level source scan); AC (c) covers all of `..domain..` + `..application..`
+- [x] [Deferred-from: CR 10-6, 2026-06-19] CI upload-artifact without if-no-files-found: warn [.github/workflows/backend-ci.yml:62,69] — missing reports fail the job — ✅ 12.6b: `if-no-files-found: warn` on both uploads
+- [x] [Deferred-from: CR 10-6, 2026-06-19] Dependency scopes (spring-modulith-api provided, archunit via BOM) [pom.xml] — avoid version skew vs pinned 1.3.0 — ✅ 12.6b: pinned `archunit-junit5` 1.3.0 removed; `archunit` now comes transitively from `spring-modulith-core` 1.4.14 (its own pom fixes archunit 1.4.2 — the Modulith BOM does not manage archunit), resolved `archunit:1.4.2:runtime`; `provided` for `spring-modulith-api` rejected with reason: spring-modulith-starter-jdbc already brings it at compile scope (BOM version). Excluding modulith-core/archunit from the prod jar → 13.2
 
 **AC (interim):** every routed item above is resolved or explicitly rejected with a reason, in addition to the epic's own ACs.
 
 **Items (routed 2026-10-29 from 12.3):**
-- [ ] [Deferred-from: 12.3 implementation, 2026-10-29] identity ↔ messaging cycle (API-only: identity → `messaging.api.WhatsAppPort` for OTP/account deletion/test report; messaging → identity query ports) — core-owned notification port implemented by messaging, or recipient data carried by events [identity/*, messaging/notification] — must be gone before verify() becomes blocking
+- [x] [Deferred-from: 12.3 implementation, 2026-10-29] identity ↔ messaging cycle (API-only: identity → `messaging.api.WhatsAppPort` for OTP/account deletion/test report; messaging → identity query ports) — core-owned notification port implemented by messaging, or recipient data carried by events [identity/*, messaging/notification] — must be gone before verify() becomes blocking — ✅ 12.6a: notification contracts in `shared.capability.notification` (implemented by messaging), report `✓ No module violations detected.` (0 cycles)
 
-- [ ] [Deferred-from: review 12-3/12-4, 2026-10-29] Four `@Async @EventListener` notification listeners fire before commit and are not durable (`DayClosureNotificationListener` push, `StockAlertNotificationListener`, `StockModificationNotificationListener`, `ProductCreationNotificationListener.onCsvImportCompleted`) — move to after-commit module listeners (timing change: no push for rolled-back actions) [messaging/notification/application/listener]
+- [x] [Deferred-from: review 12-3/12-4, 2026-10-29] Four `@Async @EventListener` notification listeners fire before commit and are not durable (`DayClosureNotificationListener` push, `StockAlertNotificationListener`, `StockModificationNotificationListener`, `ProductCreationNotificationListener.onCsvImportCompleted`) — move to after-commit module listeners (timing change: no push for rolled-back actions) [messaging/notification/application/listener] — ✅ 12.6a: the four listeners are `@ApplicationModuleListener` (+ `@DeliverOnce` where sending), rollback IT `stockAlertListener_afterCommitOnly`
 
-- [ ] [Deferred-from: review 12-6a, 2026-10-29] Rule: publishers of events consumed only by after-commit module listeners (`DayClosedEvent`, `StockThresholdBreachedEvent`, `StockAdjustedEvent`, `CsvImportCompletedEvent`…) must publish inside a transaction — ArchUnit/registry test, else the notification is silently dropped [architecture tests] — 12-6b
+- [x] [Deferred-from: review 12-6a, 2026-10-29] Rule: publishers of events consumed only by after-commit module listeners (`DayClosedEvent`, `StockThresholdBreachedEvent`, `StockAdjustedEvent`, `CsvImportCompletedEvent`…) must publish inside a transaction — ArchUnit/registry test, else the notification is silently dropped [architecture tests] — 12-6b — ✅ 12.6b: rule (e) `moduleListenedEvents_publishedInsideATransaction` (event types = parameters of every `@ApplicationModuleListener`; + `@TransactionalEventListener` AFTER_* without fallbackExecution; 1 allow-listed: `SaleSyncHandler#apply(SyncOperation,UUID,String)`, runs in SyncPushService's TransactionTemplate)
 
 ### Story 12.7 : Rendre le moteur de synchronisation « module-aware »
 
@@ -779,6 +779,8 @@ So that **la plateforme connaît les modules installés et leur état par tenant
 - Scan classpath des beans `KeevoModule` (ou ressources `module.json`) ; seed via `ApplicationRunner` idempotent.
 - TDD : Testcontainers (seed idempotent, relance = no-op) + unit (manifest invalide → exception).
 
+- [ ] [Deferred-from: review 12-6b, 2026-10-29] `RequiresGraphAcyclicityTest` manifest loading: glob `classpath*:**/module.json` (or the chosen manifest path), assert unique non-blank `id`, `requires` must be an array — else the cycle check silently sees one manifest / loses edges [architecture tests] — enable the test with the manifests
+
 ### Story 13.2 : `ModuleRegistry`
 
 As a **développeur plateforme**,
@@ -795,6 +797,8 @@ So that **tout composant peut savoir si un module est actif pour un tenant (MOD-
 **Implementation Notes:**
 - Interface `ModuleRegistry` (spec §5.1) ; impl JDBC/JPA ; cache `@RequestScope` ou `ThreadLocal` invalidé en fin de requête.
 - Pas de Redis (différé) — DB suffit < 100 tenants.
+
+- [ ] [Deferred-from: review 12-6b, 2026-10-29] `spring-modulith-core` + ArchUnit ship in the prod boot jar via `spring-modulith-starter-jdbc` but are unused at runtime — decide (exclusion vs `spring-modulith-runtime` for the registry), verify with `dependency:tree` + boot smoke [pom.xml]
 
 ### Story 13.3 : `DependencyResolver` (requires, cascade, cycles, blocage)
 

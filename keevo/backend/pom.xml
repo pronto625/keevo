@@ -202,7 +202,9 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Story 10.6: Spring Modulith — @ApplicationModule annotation (compile scope for package-info.java) -->
+        <!-- Story 10.6: Spring Modulith — @ApplicationModule annotation (package-info.java). Version from the
+             Modulith BOM. Compile scope kept (12.6b): spring-modulith-starter-jdbc (via starter-core) already brings
+             it at compile scope, so `provided` here would only make the two declarations disagree. -->
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-api</artifactId>
@@ -222,14 +224,10 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Story 10.6: ArchUnit — layering and module boundary rules -->
-        <dependency>
-            <groupId>com.tngtech.archunit</groupId>
-            <artifactId>archunit-junit5</artifactId>
-            <version>1.3.0</version>
-            <scope>test</scope>
-        </dependency>
-
+        <!-- Story 10.6 / 12.6b: ArchUnit is NOT declared here. The architecture tests use the ArchUnit core API
+             only (no @AnalyzeClasses engine); `com.tngtech.archunit:archunit` comes TRANSITIVELY from
+             spring-modulith-core (its own pom fixes 1.4.2; the Modulith BOM does not manage archunit). The former
+             pinned archunit-junit5 1.3.0 overrode that transitive version (skew vs. what modulith-core is built on). -->
         <!-- Story 2.4: CSV import -->
         <dependency>
             <groupId>org.apache.commons</groupId>

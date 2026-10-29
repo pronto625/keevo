@@ -1,4 +1,4 @@
-package com.keevo.shared.infrastructure.persistence.entity;
+package com.keevo.shared.audit.adapter.out.persistence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

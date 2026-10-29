@@ -1,6 +1,5 @@
-package com.keevo.shared.infrastructure.persistence.jpa;
+package com.keevo.shared.audit.adapter.out.persistence;
 
-import com.keevo.shared.infrastructure.persistence.entity.AuditLogJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

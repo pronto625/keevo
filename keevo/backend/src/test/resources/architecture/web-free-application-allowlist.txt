@@ -1,0 +1,3 @@
+# Story 12.6b — reviewed exceptions for KeevoArchitectureRulesTest (web-free-application).
+# Format: <key>   # <reason>   (one entry per line, reason mandatory). Ratchet: a new violation fails the
+# build unless listed here; an entry that no longer matches a violation fails too (remove it).

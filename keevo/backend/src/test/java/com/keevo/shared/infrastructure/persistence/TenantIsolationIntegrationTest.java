@@ -1,7 +1,7 @@
 package com.keevo.shared.infrastructure.persistence;
 
 import com.keevo.shared.application.port.AuditPort;
-import com.keevo.shared.infrastructure.persistence.entity.AuditLogJpaEntity;
+import com.keevo.shared.audit.adapter.out.persistence.AuditLogJpaEntity;
 import org.junit.jupiter.api.*;
 import org.postgresql.ds.PGSimpleDataSource;
 

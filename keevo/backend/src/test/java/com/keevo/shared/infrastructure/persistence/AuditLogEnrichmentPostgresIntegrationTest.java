@@ -4,7 +4,7 @@ import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.application.port.AuditPort.AuditEntryRecord;
 import com.keevo.shared.application.port.AuditPort.AuditQuery;
 import com.keevo.shared.application.port.AuditPort.AuditSlice;
-import com.keevo.shared.infrastructure.persistence.impl.AuditLogRepositoryAdapter;
+import com.keevo.shared.audit.adapter.out.persistence.AuditLogRepositoryAdapter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

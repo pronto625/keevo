@@ -12,7 +12,7 @@ import java.util.UUID;
  * AuditPort — Domain port interface for recording and querying immutable audit trail entries.
  *
  * <p>Pure Java — NO Spring/JPA imports.
- * Implementation lives in the adapter layer (shared/infrastructure/persistence/impl/).
+ * Implementation lives in the adapter layer (shared/audit/adapter/out/persistence/).
  *
  * <p>GoF Pattern: Strategy — concrete storage strategy (JPA) is injected by Spring DI.
  * Swapping to a remote audit service only requires a new AuditPort implementation.

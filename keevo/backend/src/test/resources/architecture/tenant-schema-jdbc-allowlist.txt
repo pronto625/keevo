@@ -1,0 +1,8 @@
+# Story 12.6b — reviewed exceptions for KeevoArchitectureRulesTest (tenant-schema-jdbc).
+# Format: <key>   # <reason>   (one entry per line, reason mandatory). Ratchet: a new violation fails the
+# build unless listed here; an entry that no longer matches a violation fails too (remove it).
+# An entry exempts the WHOLE class from this class-level rule; TenantSchemaInterpolationGuardTest (line-level source
+# scan, own allow-list tenant-schema-interpolation-allowlist.txt) still covers it. AC (a) = this rule + that guard test.
+
+com.keevo.admin.subscription.application.service.AdminTenantSuspensionService   # schema only carried in events / passed to TokenRevocationPort; its SQL (SUSPEND/REACTIVATE/MEMBERS) targets public.* with bind parameters, no schema concatenation
+com.keevo.identity.auth.application.service.TenantDeletionService   # schema only bound as a parameter (refresh_tokens.tenant_id = ?) or handed to TenantSchemaProvisioner.dropSchemaForDeletion, which validates it; no schema concatenated into SQL

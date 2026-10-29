@@ -1,6 +1,7 @@
 package com.keevo.architecture;
 
 import com.keevo.KeevoApplication;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModule;
 import org.springframework.modulith.core.ApplicationModules;
@@ -11,7 +12,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,10 +24,16 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Spring Modulith architecture suite — rules 1-3 of spec-socle §13. Since 12.6b {@link #verifyModuleBoundaries()}
+ * is blocking; the message classifier below only feeds the diagnostics report (see ModulithViolationClassifierTest).
+ */
 class ApplicationModulesBaselineTest {
 
     private static final Path VIOLATIONS_FILE =
         Path.of("target/modulith-violations.txt");
+    private static final Path DOCS_FAILURE_FILE =
+        Path.of("target/spring-modulith-docs/GENERATION-FAILED.txt");
 
     /** The 13 top-level packages under com.keevo (story 12.1; crm split out of catalog in 12.5). */
     private static final Set<String> EXPECTED_MODULES = Set.of(
@@ -42,11 +48,6 @@ class ApplicationModulesBaselineTest {
      */
     static final Pattern MODULE_DEPENDENCY =
         Pattern.compile("^Module '([^']+)' depends on (?:module|named interface\\(s\\)) '([^']+)' via .* Allowed targets: (.*?)\\.?$", Pattern.DOTALL);
-    /** Modules whose public API is published (12.2a catalog/crm, 12.2b inventory, 12.2c commerce, 12.2d identity/store/subscription, 12.2e messaging/reporting/feedback): internals are off-limits. Only shared, sync and admin (consumers) are unpinned. */
-    static final Set<String> PUBLISHED_API_MODULES =
-        Set.of("catalog", "crm", "inventory", "commerce", "identity", "store", "subscription",
-            "messaging", "reporting", "feedback");
-
     static final Pattern NON_EXPOSED_TYPE =
         Pattern.compile("^Module '([^']+)' depends on non-exposed type .* within module '([^']+)'.*", Pattern.DOTALL);
 
@@ -61,116 +62,52 @@ class ApplicationModulesBaselineTest {
         assertThat(names).containsExactlyInAnyOrderElementsOf(EXPECTED_MODULES);
     }
 
+    /**
+     * Documenter output (C4 + PlantUML → target/spring-modulith-docs/). Guarded (10-6 → 12.6b): a model the
+     * Documenter cannot render is reported in {@link #DOCS_FAILURE_FILE} instead of failing the build — the
+     * boundary check itself is {@link #verifyModuleBoundaries()}.
+     */
     @Test
     void detectModulesAndGenerateDocumentation() throws IOException {
-        ApplicationModules modules = ApplicationModules.of(KeevoApplication.class);
-
-        // Generate C4 + PlantUML docs → target/spring-modulith-docs/
-        new Documenter(modules)
-            .writeModulesAsPlantUml()
-            .writeIndividualModulesAsPlantUml()
-            .writeDocumentation();
+        Files.deleteIfExists(DOCS_FAILURE_FILE);
+        String failure = null;
+        try {
+            ApplicationModules modules = ApplicationModules.of(KeevoApplication.class);
+            new Documenter(modules)
+                .writeModulesAsPlantUml()
+                .writeIndividualModulesAsPlantUml()
+                .writeDocumentation();
+        } catch (RuntimeException | LinkageError e) {
+            Files.createDirectories(DOCS_FAILURE_FILE.getParent());
+            Files.writeString(DOCS_FAILURE_FILE, "Spring Modulith Documenter failed: " + e + "\n");
+            System.err.println("[architecture] Documenter failed — see " + DOCS_FAILURE_FILE + ": " + e);
+            failure = e.toString();
+        }
+        if (failure != null) {
+            // reported, not crashed — but shown as skipped, never as passed
+            Assumptions.abort("Spring Modulith Documenter failed (see " + DOCS_FAILURE_FILE + "): " + failure);
+        }
     }
 
+    /**
+     * BLOCKING since 12.6b: {@code ApplicationModules.verify()} semantics (internal access, allowed dependencies,
+     * cycles, non-exposed types). The diagnostics report {@link #VIOLATIONS_FILE} is written first, so it is
+     * available (CI artifact) when the build fails.
+     */
     @Test
-    void verifyModuleBoundaries_warningModeOnly() throws IOException {
+    void verifyModuleBoundaries() throws IOException {
+        // a previous clean report must never survive a crash of this run
+        Files.deleteIfExists(VIOLATIONS_FILE);
         ApplicationModules modules = ApplicationModules.of(KeevoApplication.class);
 
-        // Warning mode — captures violations without failing (blocking at the end of 12.6)
         Violations violations = modules.detectViolations();
         Files.createDirectories(VIOLATIONS_FILE.getParent());
+        Files.writeString(VIOLATIONS_FILE, violations.hasViolations()
+            ? buildReport(violations.getMessages())
+            : "✓ No module violations detected.\n");
 
-        if (!violations.hasViolations()) {
-            // 12.6a: 0 violations of any kind (cycles included)
-            Files.writeString(VIOLATIONS_FILE, "✓ No module violations detected.\n");
-            return;
-        }
-
-        List<String> messages = violations.getMessages();
-        Files.writeString(VIOLATIONS_FILE, buildReport(messages));
-        // Cycles and non-exposed stay warning-only (blocking at the end of 12.6); the allow-lists are pinned:
-        // a new undeclared module edge must be declared (or removed), never pass silently.
-        assertThat(messages.stream().filter(m -> isModuleDependency(m, false)).toList())
-            .as("not-allowed module dependencies (undeclared target) — see " + VIOLATIONS_FILE)
-            .isEmpty();
-        // 12.2a–12.2d pinned: no module but shared reaches into a published module's internals
-        // (12.3: an event consumed outside its producer but left in the producer instead of
-        // shared.event.catalog lands here too).
-        assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessToPublishedModule).toList())
-            .as("non-exposed access to published-module internals (use their 'api' or shared.event.catalog) — see "
-                + VIOLATIONS_FILE)
-            .isEmpty();
-        // 12.2f pinned: shared (the future core) reaches no internals of the modules in its allow-list
-        // (it may use their listed named interfaces only — see shared/package-info); an edge to a module
-        // outside the list is reported as not-allowed and caught above.
-        assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessFromShared).toList())
-            .as("shared depends on another module's internals (move the code to its owner or use an 'api') — see "
-                + VIOLATIONS_FILE)
-            .isEmpty();
-        // 12.3 pinned: with the event contracts in shared.event.catalog, messaging no longer forms a
-        // two-module cycle with catalog or commerce.
-        assertThat(messages.stream().filter(m -> isTwoModuleCycle(m, "messaging", "catalog")
-                || isTwoModuleCycle(m, "messaging", "commerce")).toList())
-            .as("two-module cycle messaging <-> catalog/commerce (consume catalogue events, not producer types) — see "
-                + VIOLATIONS_FILE)
-            .isEmpty();
-        // 12.6a pinned: zero module cycles (capabilities in shared.capability.*, onboarding seeding and draft
-        // tracking via catalogue events). A new cycle fails here; verify() itself becomes blocking in 12.6b.
-        assertThat(messages.stream().filter(m -> m.startsWith("Cycle detected")).toList())
-            .as("module cycles (move the contract to a core capability or use a catalogue event) — see "
-                + VIOLATIONS_FILE)
-            .isEmpty();
-    }
-
-    private static final Pattern CYCLE_SLICE = Pattern.compile("Slice (\\w+)");
-
-    /** True for a "Cycle detected" message whose slices are exactly {a, b} (Story 12.3). */
-    static boolean isTwoModuleCycle(String message, String a, String b) {
-        if (!message.startsWith("Cycle detected:")) {
-            return false;
-        }
-        int details = message.indexOf("1. Dependencies of");
-        Matcher matcher = CYCLE_SLICE.matcher(details < 0 ? message : message.substring(0, details));
-        Set<String> slices = new LinkedHashSet<>();
-        int count = 0;
-        while (matcher.find()) {
-            slices.add(matcher.group(1));
-            count++;
-        }
-        return count == 3 && slices.equals(Set.of(a, b));
-    }
-
-    /**
-     * True for a non-exposed-type or internal-of-declared-module violation whose source is {@code shared}
-     * (Story 12.2f). Since shared has an explicit allow-list, Modulith reports internals of a listed module
-     * as "depends on module X ... Allowed targets" with X listed; a module outside the list is not-allowed.
-     */
-    static boolean isInternalAccessFromShared(String message) {
-        Matcher matcher = NON_EXPOSED_TYPE.matcher(message);
-        if (!matcher.matches()) {
-            if (!isModuleDependency(message, true)) {
-                return false;
-            }
-            matcher = MODULE_DEPENDENCY.matcher(message);
-            matcher.matches();
-        }
-        return "shared".equals(matcher.group(1));
-    }
-
-    /**
-     * True for a non-exposed-type or internal-of-declared-module violation whose source is not
-     * {@code shared} and whose target is a module with a published API ({@link #PUBLISHED_API_MODULES}).
-     */
-    static boolean isInternalAccessToPublishedModule(String message) {
-        Matcher matcher = NON_EXPOSED_TYPE.matcher(message);
-        if (!matcher.matches()) {
-            if (!isModuleDependency(message, true)) {
-                return false;
-            }
-            matcher = MODULE_DEPENDENCY.matcher(message);
-            matcher.matches();
-        }
-        return !"shared".equals(matcher.group(1)) && PUBLISHED_API_MODULES.contains(moduleOf(matcher.group(2)));
+        // Same check as modules.verify() (= detectViolations().throwIfPresent()), without a second detection.
+        violations.throwIfPresent();
     }
 
     private static String buildReport(List<String> messages) {
@@ -183,7 +120,7 @@ class ApplicationModulesBaselineTest {
         long other = messages.size() - cycles.size() - nonExposed.size() - notAllowed.size();
 
         StringBuilder sb = new StringBuilder();
-        sb.append("=== Spring Modulith Violation Report (baseline — warning mode) ===\n");
+        sb.append("=== Spring Modulith Violation Report (diagnostics) ===\n");
         sb.append("Total violations: ").append(messages.size()).append('\n');
         sb.append("  cycle: ").append(cycles.size()).append('\n');
         sb.append("  non-exposed: ").append(nonExposed.size())
@@ -192,7 +129,7 @@ class ApplicationModulesBaselineTest {
         sb.append("  not-allowed (target module not declared): ").append(notAllowed.size()).append('\n');
         sb.append("  other: ").append(other).append('\n');
         sb.append("Run: ApplicationModules.of(KeevoApplication.class).detectViolations()\n");
-        sb.append("Status: NON-BLOCKING (becomes blocking at the end of 12.6)\n\n");
+        sb.append("Status: BLOCKING since 12.6b (verifyModuleBoundaries fails the build)\n\n");
 
         appendCounts(sb, "Not-allowed violations by source module", notAllowed, MODULE_DEPENDENCY, m -> m.group(1));
         appendCounts(sb, "Not-allowed violations by edge (source -> target)", notAllowed, MODULE_DEPENDENCY,

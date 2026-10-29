@@ -1,0 +1,6 @@
+# Story 12.6b — reviewed exceptions for KeevoArchitectureRulesTest (transactional-publishers).
+# Format: <key>   # <reason>   (one entry per line, reason mandatory). Ratchet: a new violation fails the
+# build unless listed here; an entry that no longer matches a violation fails too (remove it).
+# Key = Class#method(RawParameterSimpleNames); synthetic/bridge methods are skipped.
+
+com.keevo.sync.sync.application.handler.SaleSyncHandler#apply(SyncOperation,UUID,String)   # runs inside SyncPushService's per-operation transactionTemplate.execute (handler resolved through SyncOperationHandlerRegistry, invisible to the static call graph); @Transactional is not applicable (final handle() → self-invocation, CGLIB cannot proxy it)
