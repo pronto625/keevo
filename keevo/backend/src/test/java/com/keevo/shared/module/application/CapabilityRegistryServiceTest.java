@@ -116,6 +116,20 @@ class CapabilityRegistryServiceTest {
         }
     }
 
+    @ProvidesCapability(module = "crm")
+    interface AnnotatedNameLookup extends NameLookupPort {
+    }
+
+    static class ViaAnnotatedInterface implements AnnotatedNameLookup {
+        @Override
+        public String name() {
+            return "interface";
+        }
+    }
+
+    static class InheritsCrmNames extends CrmNames {
+    }
+
     static class NotAnnotated implements NameLookupPort {
         @Override
         public String name() {
@@ -208,6 +222,22 @@ class CapabilityRegistryServiceTest {
             assertThatThrownBy(() -> service.find(NameLookupPort.class, TENANT)).isInstanceOf(IllegalStateException.class);
             service.initialize(List.of());
             assertThatThrownBy(() -> service.initialize(List.of())).isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("annotation only on an interface or a superclass → boot fails naming the class; failure cached")
+        void inheritedAnnotation() {
+            CapabilityRegistryService service = new CapabilityRegistryService(registry,
+                    catalog(List.of("NameLookupPort"), List.of()), null);
+            Throwable failure = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> service.initialize(List.of(new ViaAnnotatedInterface(), new InheritsCrmNames())));
+            assertThat(failure).isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining(ViaAnnotatedInterface.class.getName())
+                    .hasMessageContaining(InheritsCrmNames.class.getName())
+                    .hasMessageContaining("@ProvidesCapability must be declared on the bean class itself")
+                    .hasMessageNotContaining("no bean annotated");
+            assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> service.find(NameLookupPort.class, TENANT)))
+                    .isSameAs(failure);
         }
 
         @Test

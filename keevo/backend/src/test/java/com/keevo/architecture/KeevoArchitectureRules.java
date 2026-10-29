@@ -58,8 +58,10 @@ final class KeevoArchitectureRules {
                 + "@TransactionalEventListener AFTER_* without fallbackExecution) run inside a transaction "
                 + "(@Transactional method/class, TransactionTemplate, or only called from such methods)"),
         CAPABILITY_INJECTION("capability-injection",
-            "(f) no field or constructor parameter typed as a Capability sub-interface outside shared.module: "
-                + "capabilities are resolved per tenant through CapabilityRegistry.find (Story 13.6)");
+            "(f) no field, constructor parameter, @Bean-method or @Autowired-method parameter typed as (or parameterized with) a Capability sub-interface or an "
+                + "Extension outside shared.module: capabilities are resolved per tenant through "
+                + "CapabilityRegistry.find (Story 13.6), extension contributions through "
+                + "ExtensionRegistry.contributions (Story 13.7)");
 
         final String id;
         final String description;
@@ -99,15 +101,17 @@ final class KeevoArchitectureRules {
         };
     }
 
-    // ── (f) capabilities never injected ─────────────────────────────────────────────────────────────
+    // ── (f) capabilities and extension contributions never injected ─────────────────────────────────
 
     static final String CAPABILITY = "com.keevo.shared.module.Capability";
+    static final String EXTENSION = "com.keevo.shared.module.Extension";
     private static final PackageMatcher SHARED_MODULE = PackageMatcher.of("com.keevo.shared.module..");
 
     /**
-     * A field or constructor parameter typed as a {@code Capability} sub-interface would bypass the tenant check of
-     * {@code CapabilityRegistry.find} (the providers are not autowire candidates either, so it also fails at
-     * startup). Key: the declaring class.
+     * A field, a constructor parameter or a parameter of a {@code @Bean} / {@code @Autowired} method typed as a {@code Capability} sub-interface or an {@code Extension} — or
+     * parameterized with one, e.g. {@code List<Extension>} — would bypass the tenant check of
+     * {@code CapabilityRegistry.find} / {@code ExtensionRegistry.contributions} (those beans are not autowire
+     * candidates either, so it also fails at startup or injects nothing). Key: the declaring class.
      */
     static SortedMap<String, String> capabilityInjection(JavaClasses classes) {
         SortedMap<String, Set<String>> found = new TreeMap<>();
@@ -115,26 +119,37 @@ final class KeevoArchitectureRules {
             if (SHARED_MODULE.matches(javaClass.getPackageName())) {
                 continue;
             }
-            javaClass.getFields().forEach(field -> {
-                if (isCapabilitySubtype(field.getRawType())) {
-                    found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
-                        .add("field " + field.getName() + " : " + field.getRawType().getSimpleName());
-                }
-            });
-            javaClass.getConstructors().forEach(constructor -> constructor.getRawParameterTypes().forEach(type -> {
-                if (isCapabilitySubtype(type)) {
-                    found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
-                        .add("constructor parameter : " + type.getSimpleName());
-                }
-            }));
+            javaClass.getFields().forEach(field -> registryOnlyType(field.getType().getAllInvolvedRawTypes())
+                .ifPresent(type -> found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
+                    .add("field " + field.getName() + " : " + type.getSimpleName())));
+            javaClass.getConstructors().forEach(constructor -> constructor.getParameters().forEach(parameter ->
+                registryOnlyType(parameter.getType().getAllInvolvedRawTypes())
+                    .ifPresent(type -> found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
+                        .add("constructor parameter : " + type.getSimpleName()))));
+            javaClass.getMethods().stream()
+                .filter(method -> method.isAnnotatedWith(INJECTION_METHOD_ANNOTATIONS.get(0))
+                    || method.isAnnotatedWith(INJECTION_METHOD_ANNOTATIONS.get(1)))
+                .forEach(method -> method.getParameters().forEach(parameter ->
+                    registryOnlyType(parameter.getType().getAllInvolvedRawTypes())
+                        .ifPresent(type -> found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
+                            .add("method " + method.getName() + " parameter : " + type.getSimpleName()))));
         }
         SortedMap<String, String> violations = new TreeMap<>();
-        found.forEach((name, where) -> violations.put(name, "injects " + where + " — use CapabilityRegistry.find"));
+        found.forEach((name, where) -> violations.put(name, "injects " + where
+            + " — use CapabilityRegistry.find / ExtensionRegistry.contributions"));
         return violations;
     }
 
-    private static boolean isCapabilitySubtype(JavaClass type) {
-        return !type.getName().equals(CAPABILITY) && type.isAssignableTo(CAPABILITY);
+    private static final List<String> INJECTION_METHOD_ANNOTATIONS = List.of(
+        "org.springframework.context.annotation.Bean", "org.springframework.beans.factory.annotation.Autowired");
+
+    /** The first type (by name, deterministic) among {@code involved} that only a core registry may hold. */
+    private static Optional<JavaClass> registryOnlyType(Set<JavaClass> involved) {
+        return involved.stream()
+            .sorted(java.util.Comparator.comparing(JavaClass::getName))
+            .filter(type -> (!type.getName().equals(CAPABILITY) && type.isAssignableTo(CAPABILITY))
+                || type.isAssignableTo(EXTENSION))
+            .findFirst();
     }
 
     // ── (a) tenant schema validation ────────────────────────────────────────────────────────────────

@@ -42,7 +42,17 @@ class KeevoArchitectureRulesSelfCheckTest {
     @Test
     void capabilityInjectionRuleFlagsFieldAndConstructorButNotTheRegistryUser() {
         assertThat(KeevoArchitectureRules.violations(Rule.CAPABILITY_INJECTION, fixtures))
-            .containsOnlyKeys(FIXTURES + "CapabilityFieldConsumer", FIXTURES + "CapabilityConstructorConsumer");
+            .containsOnlyKeys(FIXTURES + "CapabilityFieldConsumer", FIXTURES + "CapabilityConstructorConsumer",
+                FIXTURES + "ExtensionListConsumer", FIXTURES + "ExtensionConstructorConsumer",
+                FIXTURES + "CapabilityGeneric", FIXTURES + "CapabilityBeanMethod", FIXTURES + "ExtensionAutowiredSetter")
+            .hasEntrySatisfying(FIXTURES + "CapabilityGeneric",
+                detail -> assertThat(detail).contains("field lookup : ClientLookupPort"))
+            .hasEntrySatisfying(FIXTURES + "CapabilityBeanMethod",
+                detail -> assertThat(detail).contains("method consumer parameter : FixtureCapability"))
+            .hasEntrySatisfying(FIXTURES + "ExtensionAutowiredSetter",
+                detail -> assertThat(detail).contains("method setExtensions parameter : Extension"))
+            .hasEntrySatisfying(FIXTURES + "ExtensionListConsumer",
+                detail -> assertThat(detail).contains("field extensions : Extension"));
     }
 
     @Test

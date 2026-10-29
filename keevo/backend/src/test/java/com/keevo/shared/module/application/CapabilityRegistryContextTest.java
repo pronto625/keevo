@@ -7,7 +7,7 @@ import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.ProvidesCapability;
 import com.keevo.shared.module.TestModuleCatalogs;
-import com.keevo.shared.module.infrastructure.CapabilityProviderAutowireExclusion;
+import com.keevo.shared.module.infrastructure.ModuleBeanAutowireExclusion;
 import jakarta.annotation.PostConstruct;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -146,8 +146,10 @@ class CapabilityRegistryContextTest {
         }
         ctx.registerBean(ModuleRegistry.class, () -> registry);
         ctx.registerBean(ModuleCatalog.class, () -> catalog);
-        ctx.register(CapabilityRegistryService.class, CapabilityProviderAutowireExclusion.class);
-        ctx.register(components);
+        ctx.register(CapabilityRegistryService.class, ModuleBeanAutowireExclusion.class);
+        if (components.length > 0) {
+            ctx.register(components);
+        }
         return ctx;
     }
 
@@ -218,6 +220,28 @@ class CapabilityRegistryContextTest {
         assertThat(context.getBeanDefinition("capabilityRegistryContextTest.CrmGreeting").isAutowireCandidate())
                 .isFalse();
         assertThat(registry.find(GreetingPort.class, TENANT)).isPresent();
+    }
+
+    /** Annotated only through {@link CrmGreeting}. */
+    public static class InheritedGreeting extends CrmGreeting {
+    }
+
+    @Test
+    @DisplayName("annotation inherited from a superclass → boot fails naming the subclass, no duplicate provider")
+    void inheritedAnnotation() {
+        context = context(List.of("GreetingPort"), List.of(), false, CrmGreeting.class, InheritedGreeting.class);
+        assertThat(refreshFailure()).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(InheritedGreeting.class.getName())
+                .hasMessageContaining("@ProvidesCapability must be declared on the bean class itself")
+                .hasMessageNotContaining("provided twice");
+    }
+
+    @Test
+    @DisplayName("global lazy initialization + misconfiguration → the boot still fails (registry is @Lazy(false))")
+    void lazyInitializationStillValidates() {
+        context = context(List.of("GreetingPort"), List.of(), true); // manifest provides it, no bean
+        assertThat(refreshFailure()).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("lists 'GreetingPort' in 'provides'");
     }
 
     @Test

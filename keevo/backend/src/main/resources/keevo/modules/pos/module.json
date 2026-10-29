@@ -1,6 +1,6 @@
 {
   "id": "pos",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Point de vente",
   "category": "business",
   "requires": [
@@ -17,7 +17,9 @@
   "provides": [],
   "needs": [],
   "extensionPoints": {
-    "declares": [],
+    "declares": [
+      "pos.checkout.post-sale-actions"
+    ],
     "fills": []
   },
   "permissions": [],

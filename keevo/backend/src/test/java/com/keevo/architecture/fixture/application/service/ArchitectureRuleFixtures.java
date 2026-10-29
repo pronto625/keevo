@@ -52,6 +52,59 @@ final class ArchitectureRuleFixtures {
         }
     }
 
+    /** (f) violation: extension contributions injected as a list. */
+    static class ExtensionListConsumer {
+        java.util.List<com.keevo.shared.module.Extension> extensions;
+    }
+
+    /** (f) violation: an extension contribution injected through the constructor. */
+    static class ExtensionConstructorConsumer {
+        ExtensionConstructorConsumer(com.keevo.shared.module.Extension extension) {
+        }
+    }
+
+    /** (f) violation: a capability wrapped in a generic type. */
+    static class CapabilityGeneric {
+        java.util.Optional<com.keevo.crm.api.ClientLookupPort> lookup;
+    }
+
+    /** (f) violation: a capability as a @Bean method parameter. */
+    static class CapabilityBeanMethod {
+        @org.springframework.context.annotation.Bean
+        Object consumer(FixtureCapability capability) {
+            return capability;
+        }
+    }
+
+    /** (f) violation: extension contributions through an @Autowired setter. */
+    static class ExtensionAutowiredSetter {
+        @org.springframework.beans.factory.annotation.Autowired
+        void setExtensions(java.util.List<com.keevo.shared.module.Extension> extensions) {
+        }
+    }
+
+    /** (f) compliant: a plain method taking an extension (not an injection point), and a @Bean returning one. */
+    static class ExtensionPlainMethod {
+        String label(com.keevo.shared.module.Extension extension) {
+            return extension.label();
+        }
+
+        @org.springframework.context.annotation.Bean
+        com.keevo.shared.module.Extension contribution() {
+            return null;
+        }
+    }
+
+    /** (f) compliant: lists the contributions per tenant. */
+    static class ExtensionRegistryUser {
+        com.keevo.shared.module.ExtensionRegistry extensions;
+
+        int count(String tenant) {
+            java.util.List<com.keevo.shared.module.Extension> listed = extensions.contributions("pos.x", tenant);
+            return listed.size();
+        }
+    }
+
     record FixtureEvent(String id) {
     }
 

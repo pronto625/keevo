@@ -6,13 +6,12 @@ import com.keevo.shared.module.CapabilityRegistry;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ProvidesCapability;
+import com.keevo.shared.module.application.ModuleBeans.Found;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.aop.framework.AopProxyUtils;
-import org.springframework.aop.scope.ScopedProxyUtils;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
-import org.springframework.core.annotation.AnnotatedElementUtils;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.util.ClassUtils;
 
@@ -33,15 +32,14 @@ import java.util.Set;
  *
  * <p>The providers are collected and validated once: when every singleton exists
  * ({@link #afterSingletonsInstantiated()}) or at the first {@link #find} if that comes earlier (a consumer's init
- * hook, {@code spring.main.lazy-initialization=true}) — synchronized, idempotent. Providers are resolved by bean
- * name ({@link ListableBeanFactory#findAnnotationOnBean}: class-level or {@code @Bean}-method annotation, JDK or
- * CGLIB proxies); {@code scopedTarget.*} definitions are skipped and a non-singleton (prototype, scoped) provider
- * fails the boot. Every problem is reported at once in an {@link IllegalStateException}; the index is then
+ * hook, {@code spring.main.lazy-initialization=true}) — synchronized, idempotent. Providers are discovered by
+ * {@link ModuleBeans} (by bean name, singleton-only, shared with the extension registry). Every problem is reported at once in an {@link IllegalStateException}; the index is then
  * immutable. Resolution delegates the module state to {@link ModuleRegistry#moduleState} (request-cached), with no
  * transaction of its own. Provider beans are not autowire candidates
- * ({@code shared.module.infrastructure.CapabilityProviderAutowireExclusion}): {@link #find} is the only way in.
+ * ({@code shared.module.infrastructure.ModuleBeanAutowireExclusion}): {@link #find} is the only way in.
  */
 @Service
+@Lazy(false) // always validated at startup, even with spring.main.lazy-initialization=true
 public class CapabilityRegistryService implements CapabilityRegistry, SmartInitializingSingleton {
 
     private static final Logger log = LoggerFactory.getLogger(CapabilityRegistryService.class);
@@ -50,14 +48,12 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
     record Provision(Class<? extends Capability> type, String module, Object implementation, String providerName) {
     }
 
-    /** A provider bean to index; {@code problem} non-null when it cannot be used at all (e.g. not a singleton). */
-    record Candidate(String name, ProvidesCapability annotation, Class<?> type, Object bean, String problem) {
-    }
-
     private final ModuleRegistry registry;
     private final ModuleCatalog catalog;
     private final ListableBeanFactory beans;
     private volatile Map<Class<? extends Capability>, Provision> provisions;
+    /** A cached initialization failure (rethrown by every later call). */
+    private RuntimeException failure;
 
     public CapabilityRegistryService(ModuleRegistry registry, ModuleCatalog catalog, ListableBeanFactory beans) {
         this.registry = registry;
@@ -70,6 +66,11 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
         ensureInitialized();
     }
 
+    /**
+     * The index, built once. Normally at {@link #afterSingletonsInstantiated()} (the bean is {@code @Lazy(false)});
+     * the first call is only a fallback (e.g. a consumer's init hook running earlier). A validation failure is
+     * cached and rethrown as is — never rebuilt.
+     */
     private Map<Class<? extends Capability>, Provision> ensureInitialized() {
         Map<Class<? extends Capability>, Provision> index = provisions;
         if (index != null) {
@@ -77,34 +78,26 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
         }
         synchronized (this) {
             if (provisions == null) {
+                if (failure != null) {
+                    throw failure;
+                }
                 if (beans == null) {
                     throw new IllegalStateException("CapabilityRegistry has no bean factory and was not initialized");
                 }
-                provisions = build(collect());
+                buildOnce(ModuleBeans.collect(beans, ProvidesCapability.class, "capability provider"));
             }
             return provisions;
         }
     }
 
-    /** The {@link ProvidesCapability} beans of the factory, by name. */
-    private List<Candidate> collect() {
-        List<Candidate> candidates = new ArrayList<>();
-        for (String name : beans.getBeanNamesForAnnotation(ProvidesCapability.class)) {
-            if (ScopedProxyUtils.isScopedTarget(name)) {
-                continue; // the target of a scoped proxy: reported through its proxy below
-            }
-            ProvidesCapability annotation = beans.findAnnotationOnBean(name, ProvidesCapability.class);
-            Class<?> type = beans.getType(name);
-            boolean scoped = beans.containsBean(ScopedProxyUtils.getTargetBeanName(name));
-            if (scoped || !beans.isSingleton(name)) {
-                candidates.add(new Candidate(name, annotation, type, null, "capability provider bean '" + name + "' ("
-                        + (type != null ? ClassUtils.getUserClass(type).getName() : "?")
-                        + ") must be singleton-scoped (prototype / scoped providers are not supported)"));
-                continue;
-            }
-            candidates.add(new Candidate(name, annotation, type, beans.getBean(name), null));
+    /** Builds the index, caching a failure. Caller holds the lock. */
+    private void buildOnce(List<Found<ProvidesCapability>> found) {
+        try {
+            provisions = build(found);
+        } catch (RuntimeException e) {
+            failure = e;
+            throw e;
         }
-        return candidates;
     }
 
     /**
@@ -115,17 +108,14 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
      *         initialized
      */
     public synchronized void initialize(Collection<?> providers) {
-        if (provisions != null) {
+        if (provisions != null || failure != null) {
             throw new IllegalStateException("CapabilityRegistry already initialized");
         }
-        List<Candidate> candidates = new ArrayList<>();
+        List<Found<ProvidesCapability>> candidates = new ArrayList<>();
         for (Object bean : providers) {
-            Class<?> type = AopProxyUtils.ultimateTargetClass(bean);
-            candidates.add(new Candidate(type.getName(),
-                    AnnotatedElementUtils.findMergedAnnotation(type, ProvidesCapability.class), bean.getClass(), bean,
-                    null));
+            candidates.add(ModuleBeans.ofInstance(bean, ProvidesCapability.class));
         }
-        provisions = build(candidates);
+        buildOnce(candidates);
     }
 
     @Override
@@ -145,13 +135,13 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
 
     // ── validation ──────────────────────────────────────────────────────────────────────────────────────
 
-    private Map<Class<? extends Capability>, Provision> build(List<Candidate> candidates) {
+    private Map<Class<? extends Capability>, Provision> build(List<Found<ProvidesCapability>> candidates) {
         List<String> problems = new ArrayList<>();
         Map<Class<? extends Capability>, Provision> index = new LinkedHashMap<>();
         Map<String, Set<String>> skippedDuplicates = new LinkedHashMap<>(); // module → names already reported
-        List<Candidate> sorted = new ArrayList<>(candidates);
-        sorted.sort(Comparator.comparing(Candidate::name));
-        for (Candidate candidate : sorted) {
+        List<Found<ProvidesCapability>> sorted = new ArrayList<>(candidates);
+        sorted.sort(Comparator.comparing(c -> c.name()));
+        for (Found<ProvidesCapability> candidate : sorted) {
             index(candidate, index, skippedDuplicates, problems);
         }
         checkManifests(index, skippedDuplicates, problems);
@@ -163,7 +153,7 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
         return Map.copyOf(index);
     }
 
-    private void index(Candidate candidate, Map<Class<? extends Capability>, Provision> index,
+    private void index(Found<ProvidesCapability> candidate, Map<Class<? extends Capability>, Provision> index,
                        Map<String, Set<String>> skippedDuplicates, List<String> problems) {
         if (candidate.problem() != null) {
             problems.add(candidate.problem());
@@ -211,11 +201,8 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
         }
     }
 
-    private static String providerName(Candidate candidate) {
-        Class<?> target = candidate.bean() != null ? AopProxyUtils.ultimateTargetClass(candidate.bean())
-                : candidate.type();
-        String className = target != null ? ClassUtils.getUserClass(target).getName() : "?";
-        return className.equals(candidate.name()) ? className : className + " (bean '" + candidate.name() + "')";
+    private static String providerName(Found<ProvidesCapability> candidate) {
+        return ModuleBeans.describe(candidate);
     }
 
     @SuppressWarnings("unchecked")

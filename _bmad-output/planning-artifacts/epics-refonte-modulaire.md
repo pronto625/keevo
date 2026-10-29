@@ -1138,8 +1138,10 @@ So that **je déclenche une facture depuis la vente (MOD-FR10, UX-DR3)** *(rendu
 **Then** aucune contribution Facturation n'apparaît
 
 **Implementation Notes:**
-- POS `declare("pos.checkout.post-sale-actions")` (Story 13.7) ; Facturation `contribute(...)` dans `registerExtensions`.
+- POS déclare `pos.checkout.post-sale-actions` dans son manifest (`extensionPoints.declares`, fait en 13.7) ; Facturation contribue par manifest `fills` + bean `@ContributesExtension(module = "invoicing", point = ...)` (chemin déclaratif de 13.7 — pas de second chemin programmatique avant 13.9).
 - Le rendu Flutter du slot est en Story 15.3.
+
+- [ ] [Deferred-from: review 13-7, 2026-10-29] « Facturer » visibility: permission of the cashier and per-sale context (already auto-invoiced, 14.6 scenario 3) — client-side filter or an optional `permission()` on `Extension`; a `@Bean`-method `List<Extension>` parameter outside `shared.module` silently gets an empty list (documented gap) [invoicing / pos]
 
 ### Story 14.6 : Test d'acceptation de la vision (4 scénarios)
 
@@ -1227,6 +1229,8 @@ So that **les modules enrichissent l'UI d'autres modules et l'app reste légère
 - Cohérent avec le backend `ExtensionRegistry` (13.7) — le frontend a son propre registre alimenté au boot.
 
 > **Stories 15.4a → 15.4c** : la mise en place du monorepo + extraction est découpée. La migration Riverpod est faite **tôt** (transversale) avant l'extraction.
+
+- [ ] [Deferred-from: review 13-7, 2026-10-29] Decide who owns slot contributions: server-driven (`GET` endpoint over `ExtensionRegistry.contributions`, DTO from the immutable views incl. module id) vs a Flutter-side registry fed by active modules (spec-socle §11) — avoid defining « Facturer » label/action twice [Flutter ExtensionSlot]
 
 ### Story 15.4a : Workspace Melos + package `keevo_core`
 

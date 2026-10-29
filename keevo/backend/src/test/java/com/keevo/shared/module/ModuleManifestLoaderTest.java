@@ -359,6 +359,76 @@ class ModuleManifestLoaderTest {
         }
     }
 
+    private static String points(String declares, String fills) {
+        return ",\"extensionPoints\":{\"declares\":" + declares + ",\"fills\":" + fills + "}";
+    }
+
+    @Test
+    @DisplayName("13.7 — extension points: declared by their owner, filled by others, ids well-formed")
+    void extensionPoints() {
+        List<LoadedModuleManifest> ok = ModuleManifestLoader.load(withCore(
+                src("pos", module("pos", "[\"core\"]", points("[\"pos.checkout.post-sale-actions\"]", "[]"))),
+                src("invoicing", module("invoicing", "[\"core\"]",
+                        points("[]", "[\"pos.checkout.post-sale-actions\"]")))));
+        assertThat(ok).hasSize(3);
+        assertThat(ok).filteredOn(m -> m.manifest().id().equals("pos")).singleElement()
+                .satisfies(m -> assertThat(m.manifest().extensionPoints().declares())
+                        .containsExactly("pos.checkout.post-sale-actions"));
+    }
+
+    @Test
+    @DisplayName("13.7 — a declared point id matches the format and starts with its module id")
+    void declaredPointFormat() {
+        for (String bad : List.of("checkout", "Pos.checkout", "pos.", "pos..x", "pos.Checkout", "pos.1x", "pos-x",
+                "pos.check-", "pos.check--out", "pos.-check", "pos.check.")) {
+            assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]", points("[\"" + bad + "\"]", "[]"))))))
+                    .as(bad).anySatisfy(p -> assertThat(p).contains(loc("pos"),
+                            "'extensionPoints.declares' entry '" + bad + "' must match"));
+        }
+        assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]", points("[\"crm.x\"]", "[]"))))))
+                .singleElement().asString()
+                .contains(loc("pos"), "'extensionPoints.declares' entry 'crm.x' must start with 'pos.'");
+        assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]", points("[\"posx.a\"]", "[]"))))))
+                .singleElement().asString().contains("must start with 'pos.'");
+        assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]", points("[]", "[\"checkout\"]"))))))
+                .anySatisfy(p -> assertThat(p).contains(loc("pos"), "'extensionPoints.fills' entry 'checkout' must match"));
+    }
+
+    @Test
+    @DisplayName("13.7 — a 'fills' entry must target a point some installed module declares")
+    void fillsUndeclared() {
+        assertThat(problemsOf(withCore(src("invoicing", module("invoicing", "[\"core\"]",
+                points("[]", "[\"pos.checkout.post-sale-actions\"]"))))))
+                .singleElement().asString().contains(loc("invoicing"),
+                        "module 'invoicing' fills 'pos.checkout.post-sale-actions', which no installed module declares");
+    }
+
+    @Test
+    @DisplayName("13.7 — a module does not fill its own point; a 'fills' entry is listed once")
+    void fillsOwnPointOrTwice() {
+        assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]",
+                points("[\"pos.checkout.post-sale-actions\"]", "[\"pos.checkout.post-sale-actions\"]"))))))
+                .singleElement().asString().contains(loc("pos"), "'extensionPoints.fills' entry "
+                        + "'pos.checkout.post-sale-actions' is declared by the module itself");
+        assertThat(problemsOf(withCore(
+                src("pos", module("pos", "[\"core\"]", points("[\"pos.checkout.post-sale-actions\"]", "[]"))),
+                src("invoicing", module("invoicing", "[\"core\"]", points("[]",
+                        "[\"pos.checkout.post-sale-actions\",\"pos.checkout.post-sale-actions\"]"))))))
+                .singleElement().asString().contains(loc("invoicing"),
+                        "'extensionPoints.fills' lists 'pos.checkout.post-sale-actions' more than once");
+    }
+
+    @Test
+    @DisplayName("13.7 — the same point can only be declared twice through a duplicate module id, rejected as such")
+    void duplicateModuleDeclaringAPoint() {
+        // the owner-prefix rule leaves only two manifests of the same module id to declare the same point
+        String pos = module("pos", "[\"core\"]", points("[\"pos.checkout.post-sale-actions\"]", "[]"));
+        assertThat(problemsOf(List.of(src("core", CORE),
+                new ModuleManifestSource("jar-a:keevo/modules/pos/module.json", "pos", pos.getBytes(StandardCharsets.UTF_8)),
+                new ModuleManifestSource("jar-b:keevo/modules/pos/module.json", "pos", pos.getBytes(StandardCharsets.UTF_8)))))
+                .anySatisfy(p -> assertThat(p).contains("duplicate module id 'pos'"));
+    }
+
     @Test
     @DisplayName("13.6 — the same name cannot be both a hard and an optional need")
     void hardAndOptionalNeed() {

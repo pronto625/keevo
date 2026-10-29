@@ -22,7 +22,8 @@ class ClasspathModuleManifestsTest {
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
                 "messaging", "sync", "admin");
         assertThat(byId.values()).allSatisfy(m -> {
-            assertThat(m.version()).isEqualTo(m.id().equals("crm") ? "1.1.0" : "1.0.0"); // 13.6: crm provides
+            // 13.6: crm provides; 13.7: pos declares an extension point
+            assertThat(m.version()).isEqualTo(m.id().equals("crm") || m.id().equals("pos") ? "1.1.0" : "1.0.0");
             assertThat(m.free()).isTrue();
             assertThat(m.entitlement()).isEqualTo("module." + m.id());
         });
@@ -40,6 +41,10 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("crm").provides()).containsExactly("ClientLookupPort");
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm"))
                 .allSatisfy(m -> assertThat(m.provides()).isEmpty());
+        assertThat(byId.get("pos").extensionPoints().declares()).containsExactly("pos.checkout.post-sale-actions");
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("pos"))
+                .allSatisfy(m -> assertThat(m.extensionPoints().declares()).isEmpty());
+        assertThat(byId.values()).allSatisfy(m -> assertThat(m.extensionPoints().fills()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.isCore())
                 .allSatisfy(m -> assertThat(m.requires()).contains("core"));
         assertThat(byId.values().stream().filter(m -> m.category() == ModuleCategory.BUSINESS).map(ModuleManifest::id)

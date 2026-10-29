@@ -114,4 +114,14 @@ public final class TestModuleCatalogs {
                 List.of(), "module." + id, true);
         return new LoadedModuleManifest("test:" + id, manifest, "{}");
     }
+
+    /**
+     * Story 13.7 — a business module manifest (free, requires {@code core}) declaring and filling extension points.
+     */
+    public static LoadedModuleManifest withExtensionPoints(String id, List<String> declares, List<String> fills) {
+        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, ModuleCategory.BUSINESS,
+                List.of(ModuleManifest.CORE_ID), List.of(), List.of(), List.of(), List.of(), List.of(),
+                new ModuleManifest.ExtensionPoints(declares, fills), List.of(), List.of(), "module." + id, true);
+        return new LoadedModuleManifest("test:" + id, manifest, "{}");
+    }
 }

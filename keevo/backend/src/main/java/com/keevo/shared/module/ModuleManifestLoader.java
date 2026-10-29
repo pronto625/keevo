@@ -78,6 +78,14 @@ public final class ModuleManifestLoader {
     /** {@code provides} entry syntax: a capability simple name ending in {@code Port}. */
     public static final Pattern PROVIDES_PATTERN = Pattern.compile("^[A-Z][A-Za-z0-9]*Port$");
 
+    /**
+     * Story 13.7 — extension point id (also the format of an {@code Extension} id / action key): at least two
+     * dot-separated segments, each lowercase alphanumeric starting with a letter, single inner hyphens only (no
+     * leading, trailing or double hyphen); a declared point also starts with its declaring module id + {@code .}.
+     */
+    public static final Pattern POINT_PATTERN =
+            Pattern.compile("^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$");
+
     static final Pattern SEMVER = Pattern.compile("^(0|[1-9]\\d{0,5})\\.(0|[1-9]\\d{0,5})\\.(0|[1-9]\\d{0,5})$");
     static final int DISPLAY_NAME_MAX = 100;
 
@@ -259,6 +267,24 @@ public final class ModuleManifestLoader {
             }
         }
         ModuleManifest.ExtensionPoints extensionPoints = extensionPoints(root.get("extensionPoints"), at, problems);
+        for (String point : extensionPoints.declares()) {
+            if (!POINT_PATTERN.matcher(point).matches()) {
+                problems.add(at + ": field 'extensionPoints.declares' entry '" + point + "' must match "
+                        + POINT_PATTERN.pattern());
+            } else if (id != null && !point.startsWith(id + ".")) {
+                problems.add(at + ": field 'extensionPoints.declares' entry '" + point + "' must start with '" + id
+                        + ".' (a module declares only its own extension points)");
+            }
+        }
+        for (String point : extensionPoints.fills()) {
+            if (!POINT_PATTERN.matcher(point).matches()) {
+                problems.add(at + ": field 'extensionPoints.fills' entry '" + point + "' must match "
+                        + POINT_PATTERN.pattern());
+            } else if (extensionPoints.declares().contains(point)) {
+                problems.add(at + ": field 'extensionPoints.fills' entry '" + point
+                        + "' is declared by the module itself (a module does not fill its own extension point)");
+            }
+        }
         String entitlement = optionalString(root, "entitlement", at, problems);
         if (entitlement != null && !ENTITLEMENT_PATTERN.matcher(entitlement).matches()) {
             problems.add(at + ": field 'entitlement' = '" + entitlement + "' must match " + ENTITLEMENT_PATTERN.pattern());
@@ -445,6 +471,25 @@ public final class ModuleManifestLoader {
             problems.add("cycle in the 'requires' graph: " + String.join(" -> ", cycle));
         }
         validateCapabilities(byId, graph, problems);
+        validateExtensionPoints(byId, problems);
+    }
+
+    /**
+     * Story 13.7 — every {@code fills} entry targets a point some installed module declares. (A point declared by two
+     * modules cannot pass the per-file owner-prefix rule plus the duplicate-id check; the ExtensionRegistry still
+     * reports it for a catalogue built otherwise.)
+     */
+    private static void validateExtensionPoints(Map<String, LoadedModuleManifest> byId, List<String> problems) {
+        Set<String> declared = new HashSet<>();
+        byId.values().forEach(m -> declared.addAll(m.manifest().extensionPoints().declares()));
+        for (LoadedModuleManifest m : byId.values()) {
+            for (String point : m.manifest().extensionPoints().fills()) {
+                if (!declared.contains(point)) {
+                    problems.add(m.location() + ": field 'extensionPoints.fills' — module '" + m.manifest().id()
+                            + "' fills '" + point + "', which no installed module declares");
+                }
+            }
+        }
     }
 
     /** Story 13.6 — unique {@code provides} names; hard {@code needs} met within the {@code requires} closure. */
