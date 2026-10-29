@@ -2,10 +2,10 @@ package com.keevo.inventory.counting.application.service;
 
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductCommandPort;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.api.RegisterProductInput;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
@@ -46,7 +46,9 @@ public class QuickAddProductService implements QuickAddProductUseCase {
     private static final Logger log = LoggerFactory.getLogger(QuickAddProductService.class);
 
     private final InventorySessionRepository sessionRepository;
-    private final ProductRepository productRepository;
+    // 12.2a: catalog reached through its public API (+ its events named interface).
+    private final ProductQueryPort productQuery;
+    private final ProductCommandPort productCommand;
     private final StockLevelRepository stockLevelRepository;
     private final InventoryCountRepository countRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -58,7 +60,8 @@ public class QuickAddProductService implements QuickAddProductUseCase {
     private final TransactionLockPort transactionLock;
 
     public QuickAddProductService(InventorySessionRepository sessionRepository,
-                                  ProductRepository productRepository,
+                                  ProductQueryPort productQuery,
+                                  ProductCommandPort productCommand,
                                   StockLevelRepository stockLevelRepository,
                                   InventoryCountRepository countRepository,
                                   ApplicationEventPublisher eventPublisher,
@@ -68,7 +71,8 @@ public class QuickAddProductService implements QuickAddProductUseCase {
                                   PlanLimitGuard planLimitGuard,
                                   TransactionLockPort transactionLock) {
         this.sessionRepository = sessionRepository;
-        this.productRepository = productRepository;
+        this.productQuery = productQuery;
+        this.productCommand = productCommand;
         this.stockLevelRepository = stockLevelRepository;
         this.countRepository = countRepository;
         this.eventPublisher = eventPublisher;
@@ -98,7 +102,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
 
         // 2. Deduplication check (case-insensitive via repository)
         String trimmedName = cmd.name().trim();
-        if (productRepository.existsByName(trimmedName)) {
+        if (productQuery.existsByName(trimmedName)) {
             throw new DomainException(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS,
                     "Un produit avec le nom '" + trimmedName + "' existe déjà");
         }
@@ -119,30 +123,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         // J18: the product starts with NO stock. The counted quantity is recorded as the
         // session count (theoretical 0 → physical N) and applied ONCE, with its movement, by
         // the inventory validation. Creating the stock here as well doubled it (3 → 6).
-        Product product = new Product(
-                UUID.randomUUID(), trimmedName, null, sku,
-                cmd.categoryId(), price, 0, 0,
-                0, false, ProductStatus.ACTIVE,
-                0, now, now
-        );
-        Product savedProduct = productRepository.save(product);
-
-        // 4. Create StockLevel
-        StockLevel stockLevel = new StockLevel(
-                UUID.randomUUID(), savedProduct.getId(), null,
-                session.getStoreId(), 0, now
-        );
-        StockLevel savedStock = stockLevelRepository.save(stockLevel);
-
-        // 5. Create InventoryCount
-        InventoryCount count = InventoryCount.create(
-                cmd.sessionId(), savedProduct.getId(), null,
-                trimmedName, null,
-                0, cmd.physicalQty(), cmd.actorId()
-        );
-        InventoryCount savedCount = countRepository.save(count);
-
-        // 6. Publish events
+        // Actor context for the catalog's ProductCreatedEvent
         // Story 14.10: actorRole/actorName from the authenticated actor.
         // v1s-15-9: CurrentActor (label never a raw UUID) + storeName from the session's store.
         String actorRole = null;
@@ -165,14 +146,28 @@ public class QuickAddProductService implements QuickAddProductUseCase {
                 log.warn("[QUICKADD] Store-name lookup failed for storeId={}: {}", session.getStoreId(), e.getMessage());
             }
         }
-        eventPublisher.publishEvent(new ProductCreatedEvent(
-                savedProduct.getId(), savedProduct.getName(), savedProduct.getSku(),
-                TenantContext.getCurrentTenant(), cmd.actorId(),
-                actorRole, actorName, storeName,
-                now
-        ));
+        ProductView savedProduct = productCommand.register(new RegisterProductInput(
+                UUID.randomUUID(), trimmedName, sku, cmd.categoryId(), price, now,
+                cmd.actorId(), actorRole, actorName, storeName));
+
+        // 4. Create StockLevel
+        StockLevel stockLevel = new StockLevel(
+                UUID.randomUUID(), savedProduct.id(), null,
+                session.getStoreId(), 0, now
+        );
+        StockLevel savedStock = stockLevelRepository.save(stockLevel);
+
+        // 5. Create InventoryCount
+        InventoryCount count = InventoryCount.create(
+                cmd.sessionId(), savedProduct.id(), null,
+                trimmedName, null,
+                0, cmd.physicalQty(), cmd.actorId()
+        );
+        InventoryCount savedCount = countRepository.save(count);
+
+        // 6. Publish events (ProductCreatedEvent is published by the catalog's register, 12.2b)
         eventPublisher.publishEvent(new InventoryCountSavedEvent(
-                savedCount.getId(), cmd.sessionId(), savedProduct.getId(), null,
+                savedCount.getId(), cmd.sessionId(), savedProduct.id(), null,
                 0, cmd.physicalQty(), savedCount.getEcart(),
                 cmd.actorId(), TenantContext.getCurrentTenant(), now,
                 session.getStoreId()
@@ -190,7 +185,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
                 sb.append(chars.charAt(random.nextInt(chars.length())));
             }
             String sku = sb.toString();
-            if (productRepository.findBySku(sku).isEmpty()) {
+            if (!productQuery.existsBySku(sku)) {
                 return sku;
             }
         }

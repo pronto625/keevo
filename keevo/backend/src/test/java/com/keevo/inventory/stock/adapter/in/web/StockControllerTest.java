@@ -1,5 +1,6 @@
 package com.keevo.inventory.stock.adapter.in.web;
 
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.inventory.stock.application.usecase.*;
@@ -106,7 +107,7 @@ class StockControllerTest {
     @Test
     void get_current_stock_should_return_200() throws Exception {
         var snapshot = new GetCurrentStockUseCase.StockSnapshot(
-            sampleProduct(), List.of(sampleLevel()));
+            CatalogProductApiTestSupport.view(sampleProduct()), List.of(sampleLevel()));
         when(getCurrentStockUseCase.execute(productId)).thenReturn(snapshot);
 
         mockMvc.perform(get("/api/v1/products/{id}/stock", productId))
@@ -158,7 +159,7 @@ class StockControllerTest {
     @Test
     void set_threshold_should_return_200() throws Exception {
         when(setStockThresholdUseCase.execute(eq(productId), anyInt(), any()))
-            .thenReturn(sampleProduct());
+            .thenReturn(CatalogProductApiTestSupport.view(sampleProduct()));
 
         String body = """
             { "minimumThreshold": 5 }""";

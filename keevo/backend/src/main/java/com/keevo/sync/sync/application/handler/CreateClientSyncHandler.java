@@ -1,13 +1,14 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.crm.contact.domain.entity.Client;
-import com.keevo.crm.contact.domain.port.out.ClientRepository;
+import com.keevo.crm.api.ClientCommandPort;
+import com.keevo.crm.api.ClientQueryPort;
+import com.keevo.crm.api.ClientView;
+import com.keevo.crm.api.CreateClientInput;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -25,10 +26,13 @@ import java.util.UUID;
 @Component
 public class CreateClientSyncHandler extends AbstractSyncOperationHandler {
 
-    private final ClientRepository clientRepository;
+    // 12.2a: crm reached only through its public API.
+    private final ClientQueryPort clientQuery;
+    private final ClientCommandPort clientCommand;
 
-    public CreateClientSyncHandler(ClientRepository clientRepository) {
-        this.clientRepository = clientRepository;
+    public CreateClientSyncHandler(ClientQueryPort clientQuery, ClientCommandPort clientCommand) {
+        this.clientQuery = clientQuery;
+        this.clientCommand = clientCommand;
     }
 
     @Override
@@ -54,23 +58,17 @@ public class CreateClientSyncHandler extends AbstractSyncOperationHandler {
         UUID clientId = UUID.fromString((String) p.get("id"));
 
         // Idempotency: if already synced, return APPLIED without duplicate insert.
-        if (clientRepository.findById(clientId).isPresent()) {
+        if (clientQuery.existsById(clientId)) {
             return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                     clientId.toString(), null);
         }
 
-        Instant now = Instant.now();
-        Client client = new Client(
+        ClientView saved = clientCommand.createWithId(new CreateClientInput(
                 clientId,
                 (String) p.get("name"),
                 (String) p.get("phone"),
                 (String) p.getOrDefault("email", null),
-                (String) p.getOrDefault("notes", null),
-                false,
-                now,
-                now
-        );
-        Client saved = clientRepository.save(client);
+                (String) p.getOrDefault("notes", null)));
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saved.id().toString(), null);
     }

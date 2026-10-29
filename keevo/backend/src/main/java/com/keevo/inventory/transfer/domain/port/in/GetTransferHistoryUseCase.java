@@ -1,0 +1,12 @@
+package com.keevo.inventory.transfer.domain.port.in;
+
+import org.springframework.data.domain.Page;
+import com.keevo.inventory.transfer.domain.model.StockTransfer;
+
+/**
+ * GetTransferHistoryUseCase — input port for transfer history queries.
+ * Story 3.3.
+ */
+public interface GetTransferHistoryUseCase {
+    Page<StockTransfer> execute(GetTransferHistoryQuery query);
+}

@@ -1,7 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.catalog.category.domain.model.Category;
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.catalog.api.CategoryQueryPort;
+import com.keevo.catalog.api.CategoryView;
 import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
@@ -37,7 +37,7 @@ class CreateInventorySessionServiceTest {
 
     @Mock private InventorySessionRepository sessionRepository;
     @Mock private StoreRepository storeRepository;
-    @Mock private CategoryRepository categoryRepository;
+    @Mock private CategoryQueryPort categoryQuery;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private CreateInventorySessionService service;
@@ -48,7 +48,7 @@ class CreateInventorySessionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CreateInventorySessionService(sessionRepository, storeRepository, categoryRepository, eventPublisher);
+        service = new CreateInventorySessionService(sessionRepository, storeRepository, categoryQuery, eventPublisher);
     }
 
     @Test
@@ -95,7 +95,7 @@ class CreateInventorySessionServiceTest {
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(STORE));
         when(sessionRepository.findActiveByStoreId(STORE_ID)).thenReturn(Optional.empty());
         UUID invalidCatId = UUID.randomUUID();
-        when(categoryRepository.findById(invalidCatId)).thenReturn(Optional.empty());
+        when(categoryQuery.findById(invalidCatId)).thenReturn(Optional.empty());
 
         var cmd = new CreateInventorySessionCommand(STORE_ID, InventoryScope.PARTIAL, List.of(invalidCatId), ACTOR_ID);
         assertThatThrownBy(() -> service.execute(cmd))
@@ -114,7 +114,7 @@ class CreateInventorySessionServiceTest {
         var result = service.execute(cmd);
 
         assertThat(result.getCategoryIds()).isNull();
-        verify(categoryRepository, never()).findById(any());
+        verify(categoryQuery, never()).findById(any());
     }
 
     @Test
@@ -138,8 +138,8 @@ class CreateInventorySessionServiceTest {
         when(sessionRepository.findActiveByStoreId(STORE_ID)).thenReturn(Optional.empty());
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         UUID catId = UUID.randomUUID();
-        when(categoryRepository.findById(catId)).thenReturn(Optional.of(
-                new Category(catId, "Test", null, true, false, Instant.now(), Instant.now())));
+        when(categoryQuery.findById(catId)).thenReturn(Optional.of(
+                new CategoryView(catId, "Test", null, true, false, Instant.now(), Instant.now())));
 
         var cmd = new CreateInventorySessionCommand(STORE_ID, InventoryScope.PARTIAL, List.of(catId), ACTOR_ID);
         var result = service.execute(cmd);

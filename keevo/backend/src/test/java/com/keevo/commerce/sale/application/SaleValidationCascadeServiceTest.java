@@ -1,9 +1,8 @@
 package com.keevo.commerce.sale.application;
 
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.entity.StockLevel;
-import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.inventory.api.StockMovementKind;
+import com.keevo.inventory.api.StockQueryPort;
+import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.SaleValidationCascadeService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
@@ -33,8 +32,8 @@ class SaleValidationCascadeServiceTest {
 
     @Mock private SaleRepository saleRepository;
     @Mock private ProductStatusPort productStatusPort;
-    @Mock private StockLevelRepository stockLevelRepository;
-    @Mock private StockOperationService stockOperationService;
+    @Mock private StockQueryPort stockQuery;
+    @Mock private StockCommandPort stockCommand;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private SaleValidationCascadeService service;
@@ -50,8 +49,8 @@ class SaleValidationCascadeServiceTest {
     void setUp() {
         TenantContext.setCurrentTenant("kv_test");
         service = new SaleValidationCascadeService(
-                saleRepository, productStatusPort, stockLevelRepository,
-                stockOperationService, eventPublisher, new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
+                saleRepository, productStatusPort, stockQuery,
+                stockCommand, eventPublisher, new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules());
         // Story v1s-13-10: the cascade claims PENDING_VALIDATION→COMPLETED atomically; default = won.
         lenient().when(saleRepository.updateStatusIfCurrent(
                 any(), eq(SaleStatus.PENDING_VALIDATION), eq(SaleStatus.COMPLETED))).thenReturn(true);
@@ -72,9 +71,6 @@ class SaleValidationCascadeServiceTest {
                 PaymentMode.CASH, total, 0, SaleStatus.PENDING_VALIDATION, NOW, NOW, items);
     }
 
-    private StockLevel stockLevel(UUID productId, int qty) {
-        return new StockLevel(UUID.randomUUID(), productId, null, STORE_ID, qty, Instant.now());
-    }
 
     @Test
     void onProductActivated_allProductsActive_withStock_validatesSale() {
@@ -82,16 +78,15 @@ class SaleValidationCascadeServiceTest {
         when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
         when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
         when(productStatusPort.getProductStatus(PRODUCT_B)).thenReturn("ACTIVE");
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 10)));
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_B, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(PRODUCT_B, 5)));
+        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(10);
+        when(stockQuery.availableQuantity(PRODUCT_B, null, STORE_ID)).thenReturn(5);
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
         verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
-        verify(stockOperationService, times(2)).recordOperation(
-                any(), any(), eq(STORE_ID), any(), anyInt(), eq(ACTOR_ID), any(), any(), eq(false));
+        verify(stockCommand, times(2)).recordMovement(argThat(m -> java.util.Objects.equals(m.storeId(), STORE_ID)
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && !m.allowNegative()));
 
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
@@ -116,7 +111,7 @@ class SaleValidationCascadeServiceTest {
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
         verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
-        verifyNoInteractions(stockOperationService);
+        verifyNoInteractions(stockCommand);
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -125,13 +120,12 @@ class SaleValidationCascadeServiceTest {
         Sale pending = pendingSaleWith(PRODUCT_A);
         when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
         when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 0)));
+        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(0);
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
         verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
-        verifyNoInteractions(stockOperationService);
+        verifyNoInteractions(stockCommand);
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -146,8 +140,7 @@ class SaleValidationCascadeServiceTest {
 
         when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending1, pending2));
         when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 20)));
+        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(20);
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
@@ -170,8 +163,7 @@ class SaleValidationCascadeServiceTest {
         Sale pending = pendingSaleWith(PRODUCT_A);
         when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
         when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 5)));
+        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(5);
 
         service.onStockChanged(PRODUCT_A, STORE_ID, ACTOR_ID);
 
@@ -185,15 +177,18 @@ class SaleValidationCascadeServiceTest {
         Sale pending = pendingSaleWith(PRODUCT_A, PRODUCT_B);
         when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
         when(productStatusPort.getProductStatus(any())).thenReturn("ACTIVE");
-        when(stockLevelRepository.findByProductAndStore(any(), eq(STORE_ID)))
-                .thenAnswer(inv -> Optional.of(stockLevel(inv.getArgument(0), 10)));
+        when(stockQuery.availableQuantity(any(), isNull(), eq(STORE_ID))).thenReturn(10);
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
         for (SaleItem item : pending.getItems()) {
-            verify(stockOperationService).recordOperation(
-                    eq(item.getProductId()), any(), eq(STORE_ID), eq(MovementType.SALE),
-                    eq(-item.getQuantity()), eq(ACTOR_ID), any(), eq(item.getId()), eq(false));
+            verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), item.getProductId())
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && java.util.Objects.equals(m.kind(), StockMovementKind.SALE)
+                && m.quantityChange() == -item.getQuantity()
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && java.util.Objects.equals(m.movementId(), item.getId())
+                && !m.allowNegative()));
         }
     }
 
@@ -204,14 +199,13 @@ class SaleValidationCascadeServiceTest {
         Sale pending = pendingSaleWith(PRODUCT_A);
         when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
         when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_A, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(PRODUCT_A, 10)));
+        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(10);
         when(saleRepository.updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED))
                 .thenReturn(false);
 
         service.onProductActivated(PRODUCT_A, ACTOR_ID);
 
-        verifyNoInteractions(stockOperationService);
+        verifyNoInteractions(stockCommand);
         verify(eventPublisher, never()).publishEvent(any());
     }
 }

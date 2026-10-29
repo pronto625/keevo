@@ -1,6 +1,6 @@
 package com.keevo.inventory.stock.domain.port.in;
 
-import com.keevo.catalog.product.domain.entity.Product;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.model.CrossStoreAvailabilityEntry;
 
 import java.util.List;
@@ -16,7 +16,7 @@ import java.util.List;
 public interface GetCrossStoreAvailabilityUseCase {
 
     /** Result carrying the product context + per-store availability entries. */
-    record Result(Product product, List<CrossStoreAvailabilityEntry> entries) {}
+    record Result(ProductView product, List<CrossStoreAvailabilityEntry> entries) {}
 
     Result execute(GetCrossStoreAvailabilityQuery query);
 }

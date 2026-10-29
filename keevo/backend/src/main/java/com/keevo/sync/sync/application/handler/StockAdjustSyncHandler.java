@@ -1,7 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.stock.application.usecase.AdjustStockUseCase;
-import com.keevo.inventory.stock.application.usecase.RecordStockEntryUseCase;
+import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -16,13 +15,10 @@ import java.util.UUID;
 @Component
 public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
 
-    private final AdjustStockUseCase adjustStockUseCase;
-    private final RecordStockEntryUseCase recordStockEntryUseCase;
+    private final StockCommandPort stockCommand; // 12.2b: inventory public API
 
-    public StockAdjustSyncHandler(AdjustStockUseCase adjustStockUseCase,
-                                  RecordStockEntryUseCase recordStockEntryUseCase) {
-        this.adjustStockUseCase = adjustStockUseCase;
-        this.recordStockEntryUseCase = recordStockEntryUseCase;
+    public StockAdjustSyncHandler(StockCommandPort stockCommand) {
+        this.stockCommand = stockCommand;
     }
 
     @Override
@@ -62,9 +58,9 @@ public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
         if (productId.equals(movementId)) movementId = null;
 
         if ("RECORD_STOCK_ENTRY".equals(operation.operationType())) {
-            recordStockEntryUseCase.execute(productId, variantId, storeId, quantity, actorId, notes, movementId);
+            stockCommand.recordEntry(productId, variantId, storeId, quantity, actorId, notes, movementId);
         } else {
-            adjustStockUseCase.execute(productId, variantId, storeId, quantity, actorId, notes, movementId);
+            stockCommand.adjustTo(productId, variantId, storeId, quantity, actorId, notes, movementId);
         }
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED, null, null);

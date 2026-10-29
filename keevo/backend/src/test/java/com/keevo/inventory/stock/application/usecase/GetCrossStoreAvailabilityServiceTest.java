@@ -1,7 +1,9 @@
 package com.keevo.inventory.stock.application.usecase;
 
 import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.inventory.stock.domain.model.CrossStoreAvailabilityEntry;
 import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityQuery;
 import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityUseCase;
@@ -31,7 +33,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class GetCrossStoreAvailabilityServiceTest {
 
-    @Mock private ProductRepository productRepository;
+    @Mock private ProductQueryPort productQuery;
     @Mock private MultiStoreStockRepository multiStoreStockRepository;
 
     @InjectMocks private GetCrossStoreAvailabilityService service;
@@ -40,9 +42,9 @@ class GetCrossStoreAvailabilityServiceTest {
     private final UUID storeId1  = UUID.randomUUID();
     private final UUID storeId2  = UUID.randomUUID();
 
-    private Product sampleProduct() {
-        return new Product(productId, "Produit Test", null, "KEV-ABCDEF",
-                null, 1000, 500, 0, 0, false, null, 0, Instant.now(), Instant.now());
+    private ProductView sampleProduct() {
+        return CatalogProductApiTestSupport.view(new Product(productId, "Produit Test", null, "KEV-ABCDEF",
+                null, 1000, 500, 0, 0, false, null, 0, Instant.now(), Instant.now()));
     }
 
     private CrossStoreAvailabilityEntry sampleEntry(UUID storeId, int qty) {
@@ -54,7 +56,7 @@ class GetCrossStoreAvailabilityServiceTest {
     void execute_shouldReturnAvailabilityEntries_whenProductExists() {
         var product = sampleProduct();
         var entries = List.of(sampleEntry(storeId1, 10), sampleEntry(storeId2, 0));
-        when(productRepository.findById(productId)).thenReturn(Optional.of(product));
+        when(productQuery.findById(productId)).thenReturn(Optional.of(product));
         when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(entries);
 
         GetCrossStoreAvailabilityUseCase.Result result =
@@ -67,7 +69,7 @@ class GetCrossStoreAvailabilityServiceTest {
 
     @Test
     void execute_shouldThrowProductNotFound_whenProductIdUnknown() {
-        when(productRepository.findById(productId)).thenReturn(Optional.empty());
+        when(productQuery.findById(productId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.execute(new GetCrossStoreAvailabilityQuery(productId)))
                 .isInstanceOf(DomainException.class)
@@ -79,7 +81,7 @@ class GetCrossStoreAvailabilityServiceTest {
 
     @Test
     void execute_shouldReturnEmptyList_whenNoStockLevelsExist() {
-        when(productRepository.findById(productId)).thenReturn(Optional.of(sampleProduct()));
+        when(productQuery.findById(productId)).thenReturn(Optional.of(sampleProduct()));
         when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(List.of());
 
         GetCrossStoreAvailabilityUseCase.Result result =
@@ -90,12 +92,12 @@ class GetCrossStoreAvailabilityServiceTest {
 
     @Test
     void execute_shouldDelegateToRepository_withCorrectProductId() {
-        when(productRepository.findById(productId)).thenReturn(Optional.of(sampleProduct()));
+        when(productQuery.findById(productId)).thenReturn(Optional.of(sampleProduct()));
         when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(List.of());
 
         service.execute(new GetCrossStoreAvailabilityQuery(productId));
 
-        verify(productRepository).findById(productId);
+        verify(productQuery).findById(productId);
         verify(multiStoreStockRepository).getProductAvailability(productId);
     }
 }

@@ -1,7 +1,7 @@
 package com.keevo.inventory.counting.domain.service;
 
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
@@ -22,12 +22,12 @@ import java.util.*;
 public class FullScopeResolver implements InventoryScopeResolver {
 
     private final StockLevelRepository stockLevelRepository;
-    private final ProductRepository productRepository;
+    private final ProductQueryPort productQuery; // 12.2a: catalog public API
 
     public FullScopeResolver(StockLevelRepository stockLevelRepository,
-                             ProductRepository productRepository) {
+                             ProductQueryPort productQuery) {
         this.stockLevelRepository = stockLevelRepository;
-        this.productRepository = productRepository;
+        this.productQuery = productQuery;
     }
 
     @Override
@@ -38,12 +38,12 @@ public class FullScopeResolver implements InventoryScopeResolver {
     @Override
     public List<InventoryProductRow> resolveProducts(UUID storeId, List<UUID> categoryIds,
                                                       List<InventoryCount> existingCounts) {
-        List<Product> products = productRepository.findAllActive();
+        List<ProductView> products = productQuery.findAllActive();
         if (products.isEmpty()) return List.of();
 
         List<StockLevel> stockLevels = stockLevelRepository.findAllByStoreId(storeId);
-        Map<UUID, String> photoUrls = productRepository.findPhotoUrlsByIds(
-                products.stream().map(Product::getId).toList());
+        Map<UUID, String> photoUrls = productQuery.findPhotoUrlsByIds(
+                products.stream().map(ProductView::id).toList());
 
         return InventoryRowsAssembler.assemble(products, stockLevels, photoUrls, existingCounts);
     }

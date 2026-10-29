@@ -8,6 +8,7 @@ import java.util.UUID;
  * GoF Observer — audit handler reacts without coupling.
  * Story 6.4.
  */
+@org.springframework.modulith.NamedInterface("events") // 12.2b: merged into "inventory :: events" (see package-info)
 public record InventoryValidatedEvent(
         UUID sessionId,
         UUID actorId,

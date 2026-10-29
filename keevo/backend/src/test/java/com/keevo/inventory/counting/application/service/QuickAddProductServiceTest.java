@@ -1,8 +1,10 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductCommandPort;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductState;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.api.RegisterProductInput;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
@@ -45,7 +47,8 @@ import static org.mockito.Mockito.*;
 class QuickAddProductServiceTest {
 
     @Mock private InventorySessionRepository sessionRepository;
-    @Mock private ProductRepository productRepository;
+    @Mock private ProductQueryPort productQuery;
+    @Mock private ProductCommandPort productCommand;
     @Mock private StockLevelRepository stockLevelRepository;
     @Mock private InventoryCountRepository countRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
@@ -69,7 +72,7 @@ class QuickAddProductServiceTest {
     @BeforeEach
     void setUp() {
         service = new QuickAddProductService(
-                sessionRepository, productRepository, stockLevelRepository,
+                sessionRepository, productQuery, productCommand, stockLevelRepository,
                 countRepository, eventPublisher, storeRepository,
                 productCountPort, subscriptionRepository, planLimitGuard, transactionLock);
         TenantContext.setCurrentTenant(TENANT);
@@ -85,6 +88,12 @@ class QuickAddProductServiceTest {
                 null, null, null, Instant.now());
     }
 
+    /** Echoes what the catalog persists for a registered product (ACTIVE, no stock, no threshold). */
+    private static ProductView registered(RegisterProductInput in) {
+        return new ProductView(in.id(), in.name(), null, in.sku(), in.categoryId(), in.price(),
+                0, 0, 0, false, ProductState.ACTIVE, 0, in.createdAt(), in.createdAt());
+    }
+
     @AfterEach
     void tearDown() {
         TenantContext.clear();
@@ -95,31 +104,31 @@ class QuickAddProductServiceTest {
     @DisplayName("Happy path — creates product + stock level + inventory count atomically")
     void execute_happyPath_createsAllThreeEntities() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Robe Wax L")).thenReturn(false);
-        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.existsByName("Robe Wax L")).thenReturn(false);
+        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Robe Wax L", CATEGORY_ID, 5, null, ACTOR_ID);
         QuickAddProductResult result = service.execute(cmd);
 
-        assertThat(result.product().getName()).isEqualTo("Robe Wax L");
-        assertThat(result.product().getSku()).matches("^KEV-[A-Z0-9]{6}$");
-        assertThat(result.product().getCategoryId()).isEqualTo(CATEGORY_ID);
-        assertThat(result.product().getPriceValue()).isZero();
+        assertThat(result.product().name()).isEqualTo("Robe Wax L");
+        assertThat(result.product().sku()).matches("^KEV-[A-Z0-9]{6}$");
+        assertThat(result.product().categoryId()).isEqualTo(CATEGORY_ID);
+        assertThat(result.product().price()).isZero();
 
-        assertThat(result.stockLevel().getProductId()).isEqualTo(result.product().getId());
+        assertThat(result.stockLevel().getProductId()).isEqualTo(result.product().id());
         assertThat(result.stockLevel().getStoreId()).isEqualTo(STORE_ID);
         // J18 — no stock at creation: validation applies the count once (0 → 5).
         assertThat(result.stockLevel().getQuantity()).isZero();
-        assertThat(result.product().getStockQuantity()).isZero();
+        assertThat(result.product().stockQuantity()).isZero();
 
         assertThat(result.inventoryCount().getSessionId()).isEqualTo(SESSION_ID);
-        assertThat(result.inventoryCount().getProductId()).isEqualTo(result.product().getId());
+        assertThat(result.inventoryCount().getProductId()).isEqualTo(result.product().id());
         assertThat(result.inventoryCount().getTheoretical()).isZero();
         assertThat(result.inventoryCount().getPhysical()).isEqualTo(5);
 
-        verify(productRepository).save(any(Product.class));
+        verify(productCommand).register(any());
         verify(stockLevelRepository).save(any(StockLevel.class));
         verify(countRepository).save(any(InventoryCount.class));
     }
@@ -128,7 +137,7 @@ class QuickAddProductServiceTest {
     @DisplayName("Dedup blocks creation when product name already exists")
     void execute_duplicateName_throwsProductNameAlreadyExists() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Robe Wax L")).thenReturn(true);
+        when(productQuery.existsByName("Robe Wax L")).thenReturn(true);
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Robe Wax L", CATEGORY_ID, 5, null, ACTOR_ID);
 
@@ -137,7 +146,7 @@ class QuickAddProductServiceTest {
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
                         .isEqualTo(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS.name()));
 
-        verify(productRepository, never()).save(any());
+        verify(productCommand, never()).register(any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());
     }
@@ -176,42 +185,42 @@ class QuickAddProductServiceTest {
     @DisplayName("Name is trimmed before dedup check and product creation")
     void execute_nameWithSpaces_isTrimmed() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Chapeau")).thenReturn(false);
-        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.existsByName("Chapeau")).thenReturn(false);
+        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "  Chapeau  ", CATEGORY_ID, 3, null, ACTOR_ID);
         QuickAddProductResult result = service.execute(cmd);
 
-        assertThat(result.product().getName()).isEqualTo("Chapeau");
-        verify(productRepository).existsByName("Chapeau");
+        assertThat(result.product().name()).isEqualTo("Chapeau");
+        verify(productQuery).existsByName("Chapeau");
     }
 
     @Test
-    @DisplayName("Publishes ProductCreatedEvent and InventoryCountSavedEvent on success")
+    @DisplayName("Registers the product with its actor context (catalog publishes ProductCreatedEvent) and publishes InventoryCountSavedEvent")
     void execute_happyPath_publishesBothEvents() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Sac")).thenReturn(false);
-        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.existsByName("Sac")).thenReturn(false);
+        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Sac", CATEGORY_ID, 2, null, ACTOR_ID);
         service.execute(cmd);
 
+        // 12.2b: ProductCreatedEvent is the catalog's — published by register, fed by these fields
+        ArgumentCaptor<RegisterProductInput> registerCaptor = ArgumentCaptor.forClass(RegisterProductInput.class);
+        verify(productCommand).register(registerCaptor.capture());
+        assertThat(registerCaptor.getValue().name()).isEqualTo("Sac");
+        assertThat(registerCaptor.getValue().actorId()).isEqualTo(ACTOR_ID);
+
         ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
+        verify(eventPublisher, times(1)).publishEvent(eventCaptor.capture());
 
         var events = eventCaptor.getAllValues();
-        assertThat(events.get(0)).isInstanceOf(ProductCreatedEvent.class);
-        ProductCreatedEvent prodEvent = (ProductCreatedEvent) events.get(0);
-        assertThat(prodEvent.productName()).isEqualTo("Sac");
-        assertThat(prodEvent.tenantId()).isEqualTo(TENANT);
-        assertThat(prodEvent.actorId()).isEqualTo(ACTOR_ID);
-
-        assertThat(events.get(1)).isInstanceOf(InventoryCountSavedEvent.class);
-        InventoryCountSavedEvent countEvent = (InventoryCountSavedEvent) events.get(1);
+        assertThat(events.get(0)).isInstanceOf(InventoryCountSavedEvent.class);
+        InventoryCountSavedEvent countEvent = (InventoryCountSavedEvent) events.get(0);
         assertThat(countEvent.sessionId()).isEqualTo(SESSION_ID);
         assertThat(countEvent.theoretical()).isZero();
         assertThat(countEvent.physical()).isEqualTo(2);
@@ -220,18 +229,19 @@ class QuickAddProductServiceTest {
 
     // ── v1s-15-9: storeName + centralised actor extraction ───────────────
 
-    private ProductCreatedEvent quickAddAndCaptureProductEvent() {
+    /** The register input carries the ProductCreatedEvent's actor context (12.2b). */
+    private RegisterProductInput quickAddAndCaptureProductEvent() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Pagne")).thenReturn(false);
-        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.existsByName("Pagne")).thenReturn(false);
+        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.execute(new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID));
 
-        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(eventPublisher, times(2)).publishEvent(eventCaptor.capture());
-        return (ProductCreatedEvent) eventCaptor.getAllValues().get(0);
+        ArgumentCaptor<RegisterProductInput> captor = ArgumentCaptor.forClass(RegisterProductInput.class);
+        verify(productCommand).register(captor.capture());
+        return captor.getValue();
     }
 
     private static void authenticateEmployee(String firstName) {
@@ -243,14 +253,14 @@ class QuickAddProductServiceTest {
     }
 
     @Test
-    @DisplayName("v1s-15-9 — ProductCreatedEvent carries the session store's name")
+    @DisplayName("v1s-15-9 — the product-created context carries the session store's name")
     void execute_publishesStoreNameOfSessionStore() {
         authenticateEmployee("Awa");
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(new com.keevo.store.store.domain.model.Store(
                 STORE_ID, "Boutique Akwa", com.keevo.store.store.domain.model.StoreType.STORE,
                 null, null, true, Instant.now(), Instant.now())));
 
-        ProductCreatedEvent event = quickAddAndCaptureProductEvent();
+        RegisterProductInput event = quickAddAndCaptureProductEvent();
 
         assertThat(event.storeName()).isEqualTo("Boutique Akwa");
         assertThat(event.actorRole()).isEqualTo("EMPLOYEE");
@@ -262,7 +272,7 @@ class QuickAddProductServiceTest {
     void execute_missingFirstName_usesFallbackLabel() {
         authenticateEmployee(null);
 
-        ProductCreatedEvent event = quickAddAndCaptureProductEvent();
+        RegisterProductInput event = quickAddAndCaptureProductEvent();
 
         assertThat(event.actorName()).isEqualTo("Un employé");
         assertThat(event.actorName()).doesNotContain(ACTOR_ID.toString());
@@ -274,29 +284,29 @@ class QuickAddProductServiceTest {
     @DisplayName("v1s-14-13 — lock → session → name check → count/guard → save, in that order")
     void execute_takesLockFirst_thenChecksLimitBeforeSave() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Pagne")).thenReturn(false);
-        when(productRepository.save(any(Product.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.existsByName("Pagne")).thenReturn(false);
+        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.execute(new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID));
 
-        InOrder order = inOrder(transactionLock, sessionRepository, productRepository,
+        InOrder order = inOrder(transactionLock, sessionRepository, productQuery, productCommand,
                 productCountPort, subscriptionRepository, planLimitGuard);
         order.verify(transactionLock).lock("product-limit:" + TENANT);
         order.verify(sessionRepository).findById(SESSION_ID);
-        order.verify(productRepository).existsByName("Pagne");
+        order.verify(productQuery).existsByName("Pagne");
         order.verify(productCountPort).countActiveProducts();
         order.verify(subscriptionRepository).findActivePlan();
         order.verify(planLimitGuard).checkProductLimit(PlanType.FREE, 499);
-        order.verify(productRepository).save(any(Product.class));
+        order.verify(productCommand).register(any());
     }
 
     @Test
     @DisplayName("v1s-14-13 — at the cap → PLAN_LIMIT_EXCEEDED, nothing written, no event")
     void execute_atCap_throwsPlanLimitExceeded_writesNothing() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Pagne")).thenReturn(false);
+        when(productQuery.existsByName("Pagne")).thenReturn(false);
         when(productCountPort.countActiveProducts()).thenReturn(500);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
                 .when(planLimitGuard).checkProductLimit(PlanType.FREE, 500);
@@ -308,7 +318,7 @@ class QuickAddProductServiceTest {
                         .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED.name()));
 
         verify(transactionLock).lock("product-limit:" + TENANT);
-        verify(productRepository, never()).save(any());
+        verify(productCommand, never()).register(any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());
         verifyNoInteractions(eventPublisher);
@@ -318,7 +328,7 @@ class QuickAddProductServiceTest {
     @DisplayName("v1s-14-13 — no active subscription → SUBSCRIPTION_NOT_FOUND, nothing written")
     void execute_noSubscription_throwsSubscriptionNotFound() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Pagne")).thenReturn(false);
+        when(productQuery.existsByName("Pagne")).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.empty());
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
@@ -328,7 +338,7 @@ class QuickAddProductServiceTest {
                         .isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND.name()));
 
         verify(planLimitGuard, never()).checkProductLimit(any(), anyInt());
-        verify(productRepository, never()).save(any());
+        verify(productCommand, never()).register(any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());
         verifyNoInteractions(eventPublisher);
@@ -338,7 +348,7 @@ class QuickAddProductServiceTest {
     @DisplayName("v1s-14-13 — name taken → PRODUCT_NAME_ALREADY_EXISTS before any count, guard not called")
     void execute_nameTakenAtCap_dedupWins() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productRepository.existsByName("Pagne")).thenReturn(true);
+        when(productQuery.existsByName("Pagne")).thenReturn(true);
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
         assertThatThrownBy(() -> service.execute(cmd))
@@ -348,7 +358,7 @@ class QuickAddProductServiceTest {
 
         verify(transactionLock).lock("product-limit:" + TENANT);
         verifyNoInteractions(planLimitGuard, productCountPort);
-        verify(productRepository, never()).save(any());
+        verify(productCommand, never()).register(any());
     }
 
     @Test

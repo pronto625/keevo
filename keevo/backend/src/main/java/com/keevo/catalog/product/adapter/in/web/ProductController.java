@@ -1,12 +1,11 @@
 package com.keevo.catalog.product.adapter.in.web;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.crm.contact.adapter.in.web.dto.SupplierResponseDto;
-import com.keevo.crm.contact.application.usecase.GetSupplierByProductUseCase;
-import com.keevo.crm.contact.application.usecase.GetSupplierProfileUseCase;
+import com.keevo.crm.api.SupplierQueryPort;
 import com.keevo.catalog.product.adapter.in.web.dto.CreateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.UpdateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
+import com.keevo.catalog.product.adapter.in.web.dto.ProductSupplierResponseDto;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
@@ -41,8 +40,7 @@ public class ProductController {
     private final ArchiveProductUseCase archiveProductUseCase;
     private final ProductRepository productRepository;
     private final GetProductPricingUseCase getProductPricingUseCase;
-    private final GetSupplierByProductUseCase getSupplierByProductUseCase;
-    private final GetSupplierProfileUseCase getSupplierProfileUseCase;
+    private final SupplierQueryPort supplierQueryPort; // 12.2a: crm through its public API
     private final StoreRepository storeRepository; // Story 14.10: resolve store names
 
     public ProductController(CreateProductUseCase createProductUseCase,
@@ -50,16 +48,14 @@ public class ProductController {
                            ArchiveProductUseCase archiveProductUseCase,
                            ProductRepository productRepository,
                            GetProductPricingUseCase getProductPricingUseCase,
-                           GetSupplierByProductUseCase getSupplierByProductUseCase,
-                           GetSupplierProfileUseCase getSupplierProfileUseCase,
+                           SupplierQueryPort supplierQueryPort,
                            StoreRepository storeRepository) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
         this.productRepository = productRepository;
         this.getProductPricingUseCase = getProductPricingUseCase;
-        this.getSupplierByProductUseCase = getSupplierByProductUseCase;
-        this.getSupplierProfileUseCase = getSupplierProfileUseCase;
+        this.supplierQueryPort = supplierQueryPort;
         this.storeRepository = storeRepository;
     }
 
@@ -187,14 +183,11 @@ public class ProductController {
      * Returns 404 if no supplier is linked.
      */
     @GetMapping("/{productId}/supplier")
-    public ResponseEntity<ApiResponseWrapper<SupplierResponseDto>> getProductSupplier(
+    public ResponseEntity<ApiResponseWrapper<ProductSupplierResponseDto>> getProductSupplier(
             @PathVariable UUID productId) {
-        return getSupplierByProductUseCase.execute(productId)
-                .map(supplier -> {
-                    var profile = getSupplierProfileUseCase.execute(supplier.id());
-                    return ResponseEntity.ok(
-                            ApiResponseWrapper.ok(SupplierResponseDto.fromDomain(supplier, profile.productIds())));
-                })
+        return supplierQueryPort.findByProductId(productId)
+                .map(supplier -> ResponseEntity.ok(
+                        ApiResponseWrapper.ok(ProductSupplierResponseDto.from(supplier))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(ApiResponseWrapper.error(
                                 "Aucun fournisseur lié à ce produit",

@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.stock.domain.port.in.TransferStockCommand;
-import com.keevo.inventory.stock.domain.port.in.TransferStockUseCase;
+import com.keevo.inventory.api.TransferCommandPort;
+import com.keevo.inventory.api.TransferInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -16,10 +16,10 @@ import java.util.UUID;
 @Component
 public class TransferSyncHandler extends AbstractSyncOperationHandler {
 
-    private final TransferStockUseCase transferStockUseCase;
+    private final TransferCommandPort transferCommand; // 12.2b: inventory public API
 
-    public TransferSyncHandler(TransferStockUseCase transferStockUseCase) {
-        this.transferStockUseCase = transferStockUseCase;
+    public TransferSyncHandler(TransferCommandPort transferCommand) {
+        this.transferCommand = transferCommand;
     }
 
     @Override
@@ -53,7 +53,7 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
         // CREATE_PRODUCT). Without this, the pull-merge INSERT ... ON CONFLICT(id) inserts a
         // duplicate row instead of updating the original offline record.
         UUID clientId = operation.entityId() != null ? UUID.fromString(operation.entityId()) : null;
-        var transfer = transferStockUseCase.execute(new TransferStockCommand(
+        UUID transferId = transferCommand.transfer(new TransferInput(
                 sourceStoreId,
                 UUID.fromString((String) p.get("destinationStoreId")),
                 UUID.fromString((String) p.get("productId")),
@@ -64,6 +64,6 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
                 clientId));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                transfer.getId().toString(), null);
+                transferId.toString(), null);
     }
 }

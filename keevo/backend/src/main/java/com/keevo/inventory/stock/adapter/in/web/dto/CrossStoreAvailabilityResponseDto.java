@@ -43,8 +43,8 @@ public record CrossStoreAvailabilityResponseDto(
                 ? Instant.now()
                 : result.entries().get(0).refreshedAt();
         return new CrossStoreAvailabilityResponseDto(
-                result.product().getId(),
-                result.product().getName(),
+                result.product().id(),
+                result.product().name(),
                 result.entries().stream().map(Entry::from).toList(),
                 refreshedAt
         );

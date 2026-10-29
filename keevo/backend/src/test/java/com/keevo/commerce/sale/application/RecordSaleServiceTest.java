@@ -2,9 +2,8 @@ package com.keevo.commerce.sale.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
-import com.keevo.inventory.stock.domain.entity.StockLevel;
-import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.inventory.api.StockQueryPort;
+import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.RecordSaleService;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;
@@ -39,8 +38,8 @@ import static org.mockito.Mockito.*;
 class RecordSaleServiceTest {
 
     @Mock private SaleRepository saleRepository;
-    @Mock private StockLevelRepository stockLevelRepository;
-    @Mock private StockOperationService stockOperationService;
+    @Mock private StockQueryPort stockQuery;
+    @Mock private StockCommandPort stockCommand;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private RecordSaleService service;
@@ -54,7 +53,7 @@ class RecordSaleServiceTest {
     void setUp() {
         TenantContext.setCurrentTenant("kv_abc123");
         service = new RecordSaleService(
-                saleRepository, stockLevelRepository, stockOperationService,
+                saleRepository, stockQuery, stockCommand,
                 eventPublisher, new ObjectMapper());
     }
 
@@ -71,22 +70,21 @@ class RecordSaleServiceTest {
         );
     }
 
-    private StockLevel stockLevel(int qty) {
-        return new StockLevel(UUID.randomUUID(), PRODUCT_ID, null, STORE_ID, qty, Instant.now());
-    }
 
     @Test
     void recordSale_success_savesAndPublishesEvent() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         service.recordSale(validCommand());
 
         verify(saleRepository).save(any());
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
-                any(), eq(-2), eq(ACTOR_ID), any(), any(), eq(false));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_ID)
+                && m.variantId() == null
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && m.quantityChange() == -2
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && !m.allowNegative()));
 
         ArgumentCaptor<SaleCompletedEvent> eventCaptor = ArgumentCaptor.forClass(SaleCompletedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
@@ -97,8 +95,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_insufficientStock_throwsDomainException() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(1))); // only 1 available, need 2
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(1); // only 1 available, need 2
 
         assertThatThrownBy(() -> service.recordSale(validCommand()))
                 .isInstanceOf(DomainException.class)
@@ -107,11 +104,30 @@ class RecordSaleServiceTest {
         verify(saleRepository, never()).save(any());
     }
 
+    // 12.2b: a variant item reads the variant's stock level through the inventory query port.
+    @Test
+    void recordSale_variantItem_shortageCheckUsesTheVariantLevel() {
+        UUID variantId = UUID.randomUUID();
+        var command = new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(null, PRODUCT_ID, variantId, "Produit A", 1500, 1500, 2)));
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockQuery.availableQuantity(PRODUCT_ID, variantId, STORE_ID)).thenReturn(1);
+
+        assertThatThrownBy(() -> service.recordSale(command))
+                .isInstanceOf(DomainException.class)
+                .hasMessageContaining("INSUFFICIENT_STOCK");
+
+        verify(stockQuery).availableQuantity(PRODUCT_ID, variantId, STORE_ID);
+        verify(stockQuery, never()).availableQuantity(PRODUCT_ID, null, STORE_ID);
+        verify(saleRepository, never()).save(any());
+    }
+
     @Test
     void recordSale_stockNotFound_throwsDomainException() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.empty()); // no stock entry → 0 available, need 2
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(0); // no stock entry → 0 available, need 2
 
         assertThatThrownBy(() -> service.recordSale(validCommand()))
                 .isInstanceOf(DomainException.class)
@@ -131,8 +147,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_setsStatusToCompleted() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         service.recordSale(validCommand());
 
@@ -169,8 +184,7 @@ class RecordSaleServiceTest {
     void recordSale_withoutOccurredAt_usesNow() {
         var before = Instant.now();
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         service.recordSale(validCommand());
 
@@ -186,17 +200,20 @@ class RecordSaleServiceTest {
         service.recordSale(offlineCommand(Instant.now()));
 
         verify(saleRepository).save(any());
-        verify(stockLevelRepository, never()).findByProductAndStore(any(), any());
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
-                any(), eq(-2), eq(ACTOR_ID), any(), eq(null), eq(true));
+        verify(stockQuery, never()).availableQuantity(any(), any(), any());
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_ID)
+                && m.variantId() == null
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && m.quantityChange() == -2
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && m.movementId() == null
+                && m.allowNegative()));
     }
 
     @Test
     void recordSale_mobileMoney_keepsTheReference() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         service.recordSale(new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
@@ -213,8 +230,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_withDiscount_savesDiscountAmount() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
@@ -233,8 +249,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_withPriceOverride_publishesSalePriceOverriddenEvent() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         // catalogueUnitPrice=5000, appliedUnitPrice=4000 → price override
         var command = new RecordSaleCommand(
@@ -261,8 +276,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_noPriceOverride_doesNotPublishOverriddenEvent() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         // same catalogue and applied → no override
         var command = new RecordSaleCommand(
@@ -281,8 +295,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_withDiscountAmount_setsCorrectTotalAmount() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
@@ -301,8 +314,7 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_publishesSaleCompletedEvent_withDiscountAmount() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         var command = new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null,
@@ -342,8 +354,8 @@ class RecordSaleServiceTest {
         service.recordSale(pendingCommand());
 
         verify(saleRepository).save(any());
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
-        verify(stockLevelRepository, never()).findByProductAndStore(any(), any());
+        verify(stockCommand, never()).recordMovement(any());
+        verify(stockQuery, never()).availableQuantity(any(), any(), any());
     }
 
     @Test
@@ -371,14 +383,16 @@ class RecordSaleServiceTest {
     @Test
     void recordSale_withCompleted_existingBehaviorUnchanged() {
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         service.recordSale(validCommand());
 
         verify(saleRepository).save(any());
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_ID), any(), eq(STORE_ID), any(), eq(-2), eq(ACTOR_ID), any(), any(), eq(false));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_ID)
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && m.quantityChange() == -2
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && !m.allowNegative()));
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleCompletedEvent);
@@ -390,16 +404,19 @@ class RecordSaleServiceTest {
     void recordSale_saleMovementId_isTheClientItemId() {
         UUID itemId = UUID.randomUUID();
         when(saleRepository.existsById(SALE_ID)).thenReturn(false);
-        when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
-                .thenReturn(Optional.of(stockLevel(10)));
+        when(stockQuery.availableQuantity(PRODUCT_ID, null, STORE_ID)).thenReturn(10);
 
         service.recordSale(new RecordSaleCommand(
                 SALE_ID, ACTOR_ID, STORE_ID, null, PaymentMode.CASH, null, 0,
                 List.of(new SaleItemCommand(itemId, PRODUCT_ID, null, "Produit A", 1500, 1500, 2))));
 
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
-                any(), eq(-2), eq(ACTOR_ID), any(), eq(itemId), eq(false));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_ID)
+                && m.variantId() == null
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && m.quantityChange() == -2
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && java.util.Objects.equals(m.movementId(), itemId)
+                && !m.allowNegative()));
     }
 
     @Test
@@ -416,8 +433,12 @@ class RecordSaleServiceTest {
 
         service.recordSale(withItemId);
 
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_ID), eq(null), eq(STORE_ID),
-                any(), eq(-2), eq(ACTOR_ID), any(), eq(itemId), eq(true));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_ID)
+                && m.variantId() == null
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && m.quantityChange() == -2
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && java.util.Objects.equals(m.movementId(), itemId)
+                && m.allowNegative()));
     }
 }

@@ -58,6 +58,9 @@ class ProductControllerTest {
     @Mock
     private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
 
+    @Mock
+    private com.keevo.crm.api.SupplierQueryPort supplierQueryPort;
+
     @InjectMocks
     private ProductController productController;
 
@@ -378,5 +381,42 @@ class ProductControllerTest {
                 .doesNotContain(actorId.toString());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
         org.assertj.core.api.Assertions.assertThat(captor.getValue().actorId()).isEqualTo(actorId);
+    }
+
+    // ── 12.2a: supplier lookup through the crm public API, same JSON ──────
+
+    @Test
+    @DisplayName("GET /api/v1/products/{id}/supplier returns the linked supplier with its productIds")
+    void get_product_supplier_returns_supplier_payload() throws Exception {
+        UUID productId = UUID.randomUUID();
+        UUID supplierId = UUID.randomUUID();
+        UUID otherProductId = UUID.randomUUID();
+        when(supplierQueryPort.findByProductId(productId)).thenReturn(Optional.of(
+                new com.keevo.crm.api.SupplierView(supplierId, "Distributeur SA", "+237690000099",
+                        "contact@distrib.cm", false, List.of(productId, otherProductId),
+                        Instant.parse("2026-01-01T10:00:00Z"), Instant.parse("2026-01-02T10:00:00Z"))));
+
+        mockMvc.perform(get("/api/v1/products/{id}/supplier", productId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(supplierId.toString()))
+                .andExpect(jsonPath("$.data.name").value("Distributeur SA"))
+                .andExpect(jsonPath("$.data.phone").value("+237690000099"))
+                .andExpect(jsonPath("$.data.email").value("contact@distrib.cm"))
+                .andExpect(jsonPath("$.data.archived").value(false))
+                .andExpect(jsonPath("$.data.productIds.length()").value(2))
+                .andExpect(jsonPath("$.data.productIds[1]").value(otherProductId.toString()))
+                .andExpect(jsonPath("$.data.createdAt").exists())
+                .andExpect(jsonPath("$.data.updatedAt").exists());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/products/{id}/supplier returns 404 SUPPLIER_NOT_FOUND when none is linked")
+    void get_product_supplier_returns_404_when_none_linked() throws Exception {
+        UUID productId = UUID.randomUUID();
+        when(supplierQueryPort.findByProductId(productId)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/products/{id}/supplier", productId))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("SUPPLIER_NOT_FOUND"));
     }
 }

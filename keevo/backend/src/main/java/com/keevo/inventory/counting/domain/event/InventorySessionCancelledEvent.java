@@ -8,6 +8,7 @@ import java.util.UUID;
  *
  * <p>GoF Observer — consumed by AuditEventListener for audit logging.
  */
+@org.springframework.modulith.NamedInterface("events") // 12.2b: merged into "inventory :: events" (see package-info)
 public record InventorySessionCancelledEvent(
         UUID sessionId,
         UUID actorId,

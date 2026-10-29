@@ -1,7 +1,8 @@
 package com.keevo.inventory.counting;
 
 import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.entity.ProductStatus;
+import com.keevo.catalog.api.ProductState;
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
@@ -59,7 +60,11 @@ class QuickAddProductIntegrationTest {
     @BeforeEach
     void setUp() {
         service = new QuickAddProductService(
-                sessionRepository, productRepository, stockLevelRepository,
+                sessionRepository,
+                // 12.2a: real catalog API adapters over the mocked catalog repository (full stack)
+                CatalogProductApiTestSupport.queryPort(productRepository),
+                CatalogProductApiTestSupport.repositoryCommandPort(productRepository, eventPublisher),
+                stockLevelRepository,
                 countRepository, eventPublisher, storeRepository,
                 productCountPort, subscriptionRepository, planLimitGuard, transactionLock);
         TenantContext.setCurrentTenant("tenant_integration");
@@ -92,13 +97,13 @@ class QuickAddProductIntegrationTest {
 
         // Verify all 3 entities created
         assertThat(result.product()).isNotNull();
-        assertThat(result.product().getName()).isEqualTo("Sac à main");
-        assertThat(result.product().getSku()).matches("^KEV-[A-Z0-9]{6}$");
-        assertThat(result.product().getStatus()).isEqualTo(ProductStatus.ACTIVE);
-        assertThat(result.product().getCategoryId()).isEqualTo(CATEGORY_ID);
+        assertThat(result.product().name()).isEqualTo("Sac à main");
+        assertThat(result.product().sku()).matches("^KEV-[A-Z0-9]{6}$");
+        assertThat(result.product().status()).isEqualTo(ProductState.ACTIVE);
+        assertThat(result.product().categoryId()).isEqualTo(CATEGORY_ID);
 
         assertThat(result.stockLevel()).isNotNull();
-        assertThat(result.stockLevel().getProductId()).isEqualTo(result.product().getId());
+        assertThat(result.stockLevel().getProductId()).isEqualTo(result.product().id());
         assertThat(result.stockLevel().getStoreId()).isEqualTo(STORE_ID);
         // J18 — no stock at creation: validation applies the count once.
         assertThat(result.stockLevel().getQuantity()).isZero();

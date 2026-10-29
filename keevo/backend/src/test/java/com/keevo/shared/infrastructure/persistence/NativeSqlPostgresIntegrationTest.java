@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.persistence;
 
-import com.keevo.inventory.stock.adapter.out.persistence.StockTransferSpringRepository;
+import com.keevo.inventory.transfer.adapter.out.persistence.StockTransferSpringRepository;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
 import com.keevo.commerce.sale.domain.model.ClosureWindow;
 import com.keevo.sync.sync.adapter.out.persistence.jpa.SyncOperationsLogSpringRepository;

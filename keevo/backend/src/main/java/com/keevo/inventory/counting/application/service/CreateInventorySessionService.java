@@ -1,6 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
@@ -25,16 +25,16 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
 
     private final InventorySessionRepository sessionRepository;
     private final StoreRepository storeRepository;
-    private final CategoryRepository categoryRepository;
+    private final CategoryQueryPort categoryQuery; // 12.2a: catalog public API
     private final ApplicationEventPublisher eventPublisher;
 
     public CreateInventorySessionService(InventorySessionRepository sessionRepository,
                                          StoreRepository storeRepository,
-                                         CategoryRepository categoryRepository,
+                                         CategoryQueryPort categoryQuery,
                                          ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
         this.storeRepository = storeRepository;
-        this.categoryRepository = categoryRepository;
+        this.categoryQuery = categoryQuery;
         this.eventPublisher = eventPublisher;
     }
 
@@ -74,7 +74,7 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
         // 3. Validate categories if PARTIAL scope
         if (command.scope() == InventoryScope.PARTIAL && command.categoryIds() != null) {
             for (UUID catId : command.categoryIds()) {
-                categoryRepository.findById(catId)
+                categoryQuery.findById(catId)
                         .orElseThrow(() -> new DomainException(ErrorCode.INVENTORY_INVALID_CATEGORIES,
                                 "Category not found: " + catId));
             }

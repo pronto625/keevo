@@ -2,7 +2,9 @@ package com.keevo.inventory.counting.domain.service;
 
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
@@ -28,7 +30,7 @@ import static org.mockito.Mockito.*;
 class PartialScopeResolverTest {
 
     @Mock private StockLevelRepository stockLevelRepository;
-    @Mock private ProductRepository productRepository;
+    @Mock private ProductQueryPort productQuery;
 
     private PartialScopeResolver resolver;
 
@@ -39,7 +41,7 @@ class PartialScopeResolverTest {
 
     @BeforeEach
     void setUp() {
-        resolver = new PartialScopeResolver(stockLevelRepository, productRepository);
+        resolver = new PartialScopeResolver(stockLevelRepository, productQuery);
     }
 
     @Test
@@ -67,10 +69,10 @@ class PartialScopeResolverTest {
         var slB = new StockLevel(UUID.randomUUID(), PRODUCT_B, null, STORE_ID, 30, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slA, slB));
 
-        var productA = new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
-                CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
-        when(productRepository.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        var productA = CatalogProductApiTestSupport.view(new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
+                CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
+        when(productQuery.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 
@@ -82,10 +84,10 @@ class PartialScopeResolverTest {
     @Test
     void resolveProducts_shouldIncludeCategoryProductsNeverStockedInStore_withZeroExpected() {
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
-        var productA = new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
-                CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
-        when(productRepository.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        var productA = CatalogProductApiTestSupport.view(new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
+                CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
+        when(productQuery.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 
@@ -97,7 +99,7 @@ class PartialScopeResolverTest {
 
     @Test
     void resolveProducts_shouldReturnEmptyWhenCategoryHasNoActiveProduct() {
-        when(productRepository.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of());
+        when(productQuery.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 

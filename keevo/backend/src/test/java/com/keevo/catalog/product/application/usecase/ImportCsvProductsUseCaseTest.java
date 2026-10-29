@@ -10,7 +10,8 @@ import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
 import com.keevo.catalog.product.domain.port.out.CsvParserPort;
 import com.keevo.catalog.product.domain.port.out.DefaultStorePort;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.catalog.api.InitialStockPort;
+import org.springframework.beans.factory.ObjectProvider;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -56,7 +57,8 @@ class ImportCsvProductsUseCaseTest {
     @Mock private ProductCsvRowFactory    rowFactory;
     @Mock private CreateProductUseCase    createProductUseCase;
     @Mock private ProductRepository       productRepository;
-    @Mock private StockOperationService   stockOperationService;
+    @Mock private InitialStockPort        initialStockPort;
+    @Mock private ObjectProvider<InitialStockPort> initialStockProvider;
     @Mock private DefaultStorePort        defaultStorePort;
     @Mock private StoreRepository         storeRepository;
     @Mock private ProductCountPort        productCountPort;
@@ -71,9 +73,10 @@ class ImportCsvProductsUseCaseTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(initialStockProvider.getIfAvailable()).thenReturn(initialStockPort);
         useCase = new ImportCsvProductsUseCase(
                 csvParser, rowFactory, createProductUseCase, productRepository,
-                stockOperationService, defaultStorePort, storeRepository, productCountPort,
+                initialStockProvider, defaultStorePort, storeRepository, productCountPort,
                 subscriptionRepository, planLimitGuard, categoryRepository, eventPublisher);
     }
 
@@ -288,9 +291,35 @@ class ImportCsvProductsUseCaseTest {
 
             useCase.execute(ownerCommandForStore(activeStoreId));
 
-            verify(stockOperationService).recordOperation(
-                    any(), isNull(), eq(activeStoreId), any(), eq(5), eq(actorId), anyString());
+            verify(initialStockPort).recordInitialStock(
+                    any(), eq(activeStoreId), eq(5), eq(actorId), anyString());
             verifyNoInteractions(defaultStorePort);
+        }
+    }
+
+    @Test
+    @DisplayName("shouldImportWithoutInitialStockWhenNoStockModuleIsAvailable")
+    void shouldImportWithoutInitialStockWhenNoStockModuleIsAvailable() {
+        // 12.2b: InitialStockPort is optional — catalog runs without inventory.
+        when(initialStockProvider.getIfAvailable()).thenReturn(null);
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            UUID activeStoreId = UUID.randomUUID();
+            when(storeRepository.findById(activeStoreId)).thenReturn(Optional.of(stubStore(activeStoreId, true)));
+            when(categoryRepository.findAllActive()).thenReturn(List.of());
+
+            var row = Map.of("nom", "Produit", "prix_vente", "1000");
+            when(csvParser.parse(any())).thenReturn(List.of(row, row));
+            var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 5, actorId);
+            when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
+            when(productRepository.existsByName("Produit")).thenReturn(false);
+            when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
+
+            useCase.execute(ownerCommandForStore(activeStoreId));
+
+            verify(createProductUseCase, times(2)).execute(dto);
+            verifyNoInteractions(initialStockPort);
         }
     }
 

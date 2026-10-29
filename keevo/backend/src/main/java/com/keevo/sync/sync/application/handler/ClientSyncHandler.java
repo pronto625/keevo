@@ -1,9 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
-import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
-import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
-import com.keevo.crm.contact.application.usecase.UpdateClientUseCase.UpdateClientCommand;
+import com.keevo.crm.api.ClientCommandPort;
+import com.keevo.crm.api.UpdateClientInput;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -16,15 +14,11 @@ import java.util.UUID;
 @Component
 public class ClientSyncHandler extends AbstractSyncOperationHandler {
 
-    private final UpdateClientUseCase updateClient;
-    private final ArchiveClientUseCase archiveClient;
-    private final UnarchiveClientUseCase unarchiveClient;
+    // 12.2a: crm reached only through its public API.
+    private final ClientCommandPort clientCommand;
 
-    public ClientSyncHandler(UpdateClientUseCase updateClient, ArchiveClientUseCase archiveClient,
-                             UnarchiveClientUseCase unarchiveClient) {
-        this.updateClient = updateClient;
-        this.archiveClient = archiveClient;
-        this.unarchiveClient = unarchiveClient;
+    public ClientSyncHandler(ClientCommandPort clientCommand) {
+        this.clientCommand = clientCommand;
     }
 
     @Override
@@ -46,7 +40,7 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
 
         return switch (operation.operationType()) {
             case "UPDATE_CLIENT" -> {
-                var client = updateClient.execute(new UpdateClientCommand(
+                var client = clientCommand.update(new UpdateClientInput(
                         clientId,
                         (String) p.get("name"),
                         (String) p.get("phone"),
@@ -57,13 +51,13 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
                         client.id().toString(), null);
             }
             case "ARCHIVE_CLIENT" -> {
-                archiveClient.execute(clientId, actorId, tenantId);
+                clientCommand.archive(clientId, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         clientId.toString(), null);
             }
             case "UNARCHIVE_CLIENT" -> {
                 // Same access rules as ARCHIVE_CLIENT (no role restriction).
-                unarchiveClient.execute(clientId, actorId, tenantId);
+                clientCommand.unarchive(clientId, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         clientId.toString(), null);
             }

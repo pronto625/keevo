@@ -41,7 +41,10 @@ class ApplicationModulesBaselineTest {
      */
     static final Pattern MODULE_DEPENDENCY =
         Pattern.compile("^Module '([^']+)' depends on (?:module|named interface\\(s\\)) '([^']+)' via .* Allowed targets: (.*?)\\.?$", Pattern.DOTALL);
-    private static final Pattern NON_EXPOSED_TYPE =
+    /** Modules whose public API is published (12.2a catalog/crm, 12.2b inventory): internals are off-limits. */
+    static final Set<String> PUBLISHED_API_MODULES = Set.of("catalog", "crm", "inventory");
+
+    static final Pattern NON_EXPOSED_TYPE =
         Pattern.compile("^Module '([^']+)' depends on non-exposed type .* within module '([^']+)'.*", Pattern.DOTALL);
 
     @Test
@@ -86,6 +89,27 @@ class ApplicationModulesBaselineTest {
         assertThat(messages.stream().filter(m -> isModuleDependency(m, false)).toList())
             .as("not-allowed module dependencies (undeclared target) — see " + VIOLATIONS_FILE)
             .isEmpty();
+        // 12.2a/12.2b pinned: no module but shared reaches into catalog/crm/inventory internals
+        // (a missing type-level @NamedInterface("events") on a new event lands here too).
+        assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessToPublishedModule).toList())
+            .as("non-exposed access to catalog/crm/inventory internals (use their 'api'/'events') — see " + VIOLATIONS_FILE)
+            .isEmpty();
+    }
+
+    /**
+     * True for a non-exposed-type or internal-of-declared-module violation whose source is not
+     * {@code shared} and whose target is a module with a published API ({@link #PUBLISHED_API_MODULES}).
+     */
+    static boolean isInternalAccessToPublishedModule(String message) {
+        Matcher matcher = NON_EXPOSED_TYPE.matcher(message);
+        if (!matcher.matches()) {
+            if (!isModuleDependency(message, true)) {
+                return false;
+            }
+            matcher = MODULE_DEPENDENCY.matcher(message);
+            matcher.matches();
+        }
+        return !"shared".equals(matcher.group(1)) && PUBLISHED_API_MODULES.contains(moduleOf(matcher.group(2)));
     }
 
     private static String buildReport(List<String> messages) {

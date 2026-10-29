@@ -1,6 +1,6 @@
 package com.keevo.inventory.counting.domain.service;
 
-import com.keevo.catalog.product.domain.entity.Product;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
@@ -21,13 +21,13 @@ final class InventoryRowsAssembler {
 
     private InventoryRowsAssembler() {}
 
-    static List<InventoryProductRow> assemble(Collection<Product> eligibleProducts,
+    static List<InventoryProductRow> assemble(Collection<ProductView> eligibleProducts,
                                               List<StockLevel> storeStockLevels,
                                               Map<UUID, String> photoUrls,
                                               List<InventoryCount> existingCounts) {
-        Map<UUID, Product> productMap = eligibleProducts.stream()
-                .filter(p -> !Boolean.TRUE.equals(p.getArchived()))
-                .collect(Collectors.toMap(Product::getId, Function.identity(), (a, b) -> a,
+        Map<UUID, ProductView> productMap = eligibleProducts.stream()
+                .filter(p -> !p.archived())
+                .collect(Collectors.toMap(ProductView::id, Function.identity(), (a, b) -> a,
                         LinkedHashMap::new));
         if (productMap.isEmpty()) return List.of();
 
@@ -41,8 +41,8 @@ final class InventoryRowsAssembler {
         Map<UUID, String> photos = photoUrls != null ? photoUrls : Map.of();
 
         List<InventoryProductRow> rows = new ArrayList<>();
-        for (Product product : productMap.values()) {
-            List<StockLevel> levels = levelsByProduct.get(product.getId());
+        for (ProductView product : productMap.values()) {
+            List<StockLevel> levels = levelsByProduct.get(product.id());
             if (levels == null || levels.isEmpty()) {
                 rows.add(row(product, photos, null, 0, countLookup));
             } else {
@@ -56,9 +56,9 @@ final class InventoryRowsAssembler {
         return rows;
     }
 
-    private static InventoryProductRow row(Product product, Map<UUID, String> photos, UUID variantId,
+    private static InventoryProductRow row(ProductView product, Map<UUID, String> photos, UUID variantId,
                                            int theoreticalQty, Map<String, InventoryCount> countLookup) {
-        InventoryCount count = countLookup.get(compositeKey(product.getId(), variantId));
+        InventoryCount count = countLookup.get(compositeKey(product.id(), variantId));
         Integer physicalQty = count != null ? count.getPhysical() : null;
         // J17: a counted row reads its gap against the theoretical snapshot saved with the
         // count — the same rule as the gap report and the validation — not against the live
@@ -67,10 +67,10 @@ final class InventoryRowsAssembler {
             theoreticalQty = count.getTheoretical();
         }
         return InventoryProductRow.of(
-                product.getId(),
-                product.getName(),
-                product.getSku(),
-                photos.get(product.getId()),
+                product.id(),
+                product.name(),
+                product.sku(),
+                photos.get(product.id()),
                 variantId,
                 null, // variantLabel — future variant enrichment
                 theoreticalQty,

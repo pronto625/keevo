@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.adapter.in.rest;
 
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
@@ -146,7 +147,7 @@ class QuickAddProductControllerTest {
                 "Robe Wax L", null, 0, 5, actorId);
 
         when(quickAddProductUseCase.execute(any())).thenReturn(
-                new QuickAddProductResult(product, stockLevel, count));
+                new QuickAddProductResult(CatalogProductApiTestSupport.view(product), stockLevel, count));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", "Robe Wax L");
@@ -250,7 +251,7 @@ class QuickAddProductControllerTest {
         InventoryCount count = InventoryCount.create(sessionId, product.getId(), null,
                 "P", null, 0, 1, actorId);
         when(quickAddProductUseCase.execute(any())).thenReturn(
-                new QuickAddProductResult(product, sl, count));
+                new QuickAddProductResult(CatalogProductApiTestSupport.view(product), sl, count));
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("name", "P");

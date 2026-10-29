@@ -9,6 +9,7 @@ import java.util.UUID;
  *
  * @param active the new state: {@code true} = activated, {@code false} = deactivated
  */
+@org.springframework.modulith.NamedInterface("events") // 12.2a: merged into "catalog :: events" (see package-info)
 public record CategoryActiveChangedEvent(
         UUID categoryId,
         String name,

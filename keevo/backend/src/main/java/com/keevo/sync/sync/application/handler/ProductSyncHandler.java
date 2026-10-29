@@ -1,16 +1,10 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
-import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase.ArchiveProductDto;
-import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
-import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.CreateDraftCommand;
-import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
-import com.keevo.catalog.product.application.usecase.CreateProductUseCase.CreateProductDto;
-import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
-import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase.UnarchiveProductDto;
-import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
-import com.keevo.catalog.product.application.usecase.UpdateProductUseCase.UpdateProductDto;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.CreateDraftProductInput;
+import com.keevo.catalog.api.CreateProductInput;
+import com.keevo.catalog.api.ProductCommandPort;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.UpdateProductInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -27,25 +21,13 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
 
     public static final String MERGED_INTO_PREFIX = "MERGED_INTO:";
 
-    private final CreateProductUseCase createProduct;
-    private final CreateDraftProductUseCase createDraftProduct;
-    private final UpdateProductUseCase updateProduct;
-    private final ArchiveProductUseCase archiveProduct;
-    private final UnarchiveProductUseCase unarchiveProduct;
-    private final ProductRepository productRepository;
+    // 12.2a: catalog reached only through its public API.
+    private final ProductCommandPort productCommand;
+    private final ProductQueryPort productQuery;
 
-    public ProductSyncHandler(CreateProductUseCase createProduct,
-                              CreateDraftProductUseCase createDraftProduct,
-                              UpdateProductUseCase updateProduct,
-                              ArchiveProductUseCase archiveProduct,
-                              UnarchiveProductUseCase unarchiveProduct,
-                              ProductRepository productRepository) {
-        this.createProduct = createProduct;
-        this.createDraftProduct = createDraftProduct;
-        this.updateProduct = updateProduct;
-        this.archiveProduct = archiveProduct;
-        this.unarchiveProduct = unarchiveProduct;
-        this.productRepository = productRepository;
+    public ProductSyncHandler(ProductCommandPort productCommand, ProductQueryPort productQuery) {
+        this.productCommand = productCommand;
+        this.productQuery = productQuery;
     }
 
     @Override
@@ -69,7 +51,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
                 var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId);
                 if (merged != null) yield merged;
-                var product = createProduct.execute(new CreateProductDto(
+                var product = productCommand.create(new CreateProductInput(
+                        clientId,
                         (String) p.get("name"),
                         (String) p.get("description"),
                         (String) p.get("sku"),
@@ -78,13 +61,13 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         optionalIntegralInt(p.get("buyPrice"), "buyPrice"),
                         optionalIntegralInt(p.get("transportCost"), "transportCost"),
                         optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
-                        actorId, 0, null, null, null, null, clientId));
+                        actorId));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                        product.getId().toString(), null);
+                        product.id().toString(), null);
             }
             case "UPDATE_PRODUCT" -> {
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                var product = updateProduct.execute(new UpdateProductDto(
+                var product = productCommand.update(new UpdateProductInput(
                         productId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -97,17 +80,17 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         actorId,
                         actorRole()));  // v1s-12-10: real role → Story 2.4 draft guard fires for EMPLOYEE
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                        product.getId().toString(), null);
+                        product.id().toString(), null);
             }
             case "ARCHIVE_PRODUCT" -> {
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                archiveProduct.execute(new ArchiveProductDto(productId, actorId));
+                productCommand.archive(productId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         productId.toString(), null);
             }
             case "UNARCHIVE_PRODUCT" -> {
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                unarchiveProduct.execute(new UnarchiveProductDto(productId, actorId));
+                productCommand.unarchive(productId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         productId.toString(), null);
             }
@@ -117,7 +100,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
                 var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId);
                 if (merged != null) yield merged;
-                var draft = createDraftProduct.execute(new CreateDraftCommand(
+                var draft = productCommand.createDraft(new CreateDraftProductInput(
                         clientId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -129,7 +112,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         actorRole(),  // v1s-12-10: real role instead of hardcoded "OWNER"
                         "Sync"));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                        draft.getId().toString(), null);
+                        draft.id().toString(), null);
             }
             case "PROMOTE_PRODUCT" -> {
                 // Promote the EXISTING draft product (by its local UUID) to ACTIVE.
@@ -140,7 +123,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                             "Seul le propriétaire peut valider un produit en brouillon");
                 }
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                var promoted = updateProduct.execute(new UpdateProductDto(
+                var promoted = productCommand.update(new UpdateProductInput(
                         productId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -153,7 +136,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         actorId,
                         "OWNER"));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                        promoted.getId().toString(), null);
+                        promoted.id().toString(), null);
             }
             default -> new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED,
                     null, "UNKNOWN_OPERATION_TYPE");
@@ -170,9 +153,9 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
      */
     private SyncOperationResult mergeIntoExistingByName(SyncOperation operation, String name, UUID clientId) {
         if (name == null || name.isBlank()) return null;
-        var existing = productRepository.findByName(name);
-        if (existing.isEmpty() || existing.get().getId().equals(clientId)) return null;
-        String targetId = existing.get().getId().toString();
+        var existing = productQuery.findByName(name);
+        if (existing.isEmpty() || existing.get().id().equals(clientId)) return null;
+        String targetId = existing.get().id().toString();
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 targetId, MERGED_INTO_PREFIX + targetId);
     }

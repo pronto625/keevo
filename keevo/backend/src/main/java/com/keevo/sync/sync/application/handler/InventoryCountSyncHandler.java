@@ -1,9 +1,8 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.counting.domain.model.InventoryCount;
-import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand;
-import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountUseCase;
-import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.inventory.api.CountingCommandPort;
+import com.keevo.inventory.api.CountingQueryPort;
+import com.keevo.inventory.api.SaveCountInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -18,19 +17,20 @@ import java.util.UUID;
 /**
  * InventoryCountSyncHandler — Handles SAVE_INVENTORY_COUNT push operations.
  *
- * <p>Idempotent via upsert: delegates to SaveInventoryCountUseCase whose
+ * <p>Idempotent via upsert: delegates to the inventory counting port whose
  * repository upserts by (sessionId + productId + variantId).
  */
 @Component
 public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
 
-    private final SaveInventoryCountUseCase saveInventoryCountUseCase;
-    private final InventorySessionRepository sessionRepository;
+    // 12.2b: inventory public API
+    private final CountingCommandPort countingCommand;
+    private final CountingQueryPort countingQuery;
 
-    public InventoryCountSyncHandler(SaveInventoryCountUseCase saveInventoryCountUseCase,
-                                     InventorySessionRepository sessionRepository) {
-        this.saveInventoryCountUseCase = saveInventoryCountUseCase;
-        this.sessionRepository = sessionRepository;
+    public InventoryCountSyncHandler(CountingCommandPort countingCommand,
+                                     CountingQueryPort countingQuery) {
+        this.countingCommand = countingCommand;
+        this.countingQuery = countingQuery;
     }
 
     @Override
@@ -58,8 +58,8 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
         // Unknown session → left to the use case (existing not-found error).
         UUID assignedStoreId = extractAssignedStoreId();
         if (assignedStoreId != null) {
-            sessionRepository.findById(sessionId).ifPresent(session -> {
-                if (!assignedStoreId.equals(session.getStoreId())) {
+            countingQuery.findSessionStoreId(sessionId).ifPresent(sessionStoreId -> {
+                if (!assignedStoreId.equals(sessionStoreId)) {
                     throw new DomainException(ErrorCode.FORBIDDEN,
                             "Vous ne pouvez compter que dans un inventaire de votre boutique");
                 }
@@ -74,16 +74,16 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
         int physical = requireIntegralInt(p.get("physical"), "physical");
 
         // Keep the device's count id so the pull updates its own row instead of adding one.
-        var command = new SaveInventoryCountCommand(
+        var input = new SaveCountInput(
                 sessionId, productId, variantId,
                 productName, variantLabel,
                 theoretical, physical, actorId,
                 parseUuid(operation.entityId()));
 
-        InventoryCount saved = saveInventoryCountUseCase.execute(command);
+        UUID savedId = countingCommand.saveCount(input);
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                saved.getId().toString(), null);
+                savedId.toString(), null);
     }
 
     private void requireNonNull(Map<String, Object> payload, String key) {

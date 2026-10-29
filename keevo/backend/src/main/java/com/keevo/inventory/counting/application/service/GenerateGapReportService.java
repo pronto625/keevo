@@ -1,7 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryGapReport;
 import com.keevo.inventory.counting.domain.model.InventorySession;
@@ -34,16 +34,16 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
 
     private final InventorySessionRepository sessionRepo;
     private final InventoryCountRepository countRepo;
-    private final ProductRepository productRepo;
+    private final ProductQueryPort productQuery; // 12.2a: catalog public API
     private final StoreRepository storeRepo;
 
     public GenerateGapReportService(InventorySessionRepository sessionRepo,
                                      InventoryCountRepository countRepo,
-                                     ProductRepository productRepo,
+                                     ProductQueryPort productQuery,
                                      StoreRepository storeRepo) {
         this.sessionRepo = sessionRepo;
         this.countRepo = countRepo;
-        this.productRepo = productRepo;
+        this.productQuery = productQuery;
         this.storeRepo = storeRepo;
     }
 
@@ -60,8 +60,8 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
         // Step 3: Load product details for price enrichment
         List<UUID> productIds = counts.stream()
                 .map(InventoryCount::getProductId).distinct().toList();
-        Map<UUID, Product> productsMap = productRepo.findAllByIds(productIds).stream()
-                .collect(Collectors.toMap(Product::getId, Function.identity()));
+        Map<UUID, ProductView> productsMap = productQuery.findAllByIds(productIds).stream()
+                .collect(Collectors.toMap(ProductView::id, Function.identity()));
 
         // Step 4: Get store name
         String storeName = storeRepo.findById(session.getStoreId())
@@ -78,8 +78,8 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
 
         for (InventoryCount count : counts) {
             if (!count.isCounted()) continue; // skip uncounted
-            Product product = productsMap.get(count.getProductId());
-            int unitPrice = product != null ? product.getPriceValue() : 0;
+            ProductView product = productsMap.get(count.getProductId());
+            int unitPrice = product != null ? product.price() : 0;
             builder.addRow(count, unitPrice);
         }
 
@@ -87,7 +87,7 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
         Map<UUID, InventoryGapReportBuilder.ProductDetails> details = productsMap.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey,
                         e -> new InventoryGapReportBuilder.ProductDetails(
-                                e.getValue().getSku(), null, null)));
+                                e.getValue().sku(), null, null)));
         builder.enrichProductDetails(details);
 
         return builder.build();

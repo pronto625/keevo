@@ -1,10 +1,8 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.category.application.usecase.CreateCategoryUseCase;
-import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
-import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
-import com.keevo.catalog.category.domain.model.Category;
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.catalog.api.CategoryCommandPort;
+import com.keevo.catalog.api.CategoryQueryPort;
+import com.keevo.catalog.api.CategoryView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -28,10 +26,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CategorySyncHandlerTest {
 
-    @Mock private CategoryRepository categoryRepository;
-    @Mock private ToggleCategoryUseCase toggleCategory;
-    @Mock private RenameCategoryUseCase renameCategory;
-    @Mock private CreateCategoryUseCase createCategory;
+    @Mock private CategoryQueryPort categoryQuery;
+    @Mock private CategoryCommandPort categoryCommand;
 
     private CategorySyncHandler handler;
 
@@ -40,7 +36,7 @@ class CategorySyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CategorySyncHandler(categoryRepository, toggleCategory, renameCategory, createCategory);
+        handler = new CategorySyncHandler(categoryQuery, categoryCommand);
         SyncTestAuth.owner();
     }
 
@@ -49,8 +45,8 @@ class CategorySyncHandlerTest {
         SyncTestAuth.clear();
     }
 
-    private Category sampleCategory(UUID id, String name, boolean isActive) {
-        return new Category(id, name, null, isActive, true, Instant.now(), Instant.now());
+    private CategoryView sampleCategory(UUID id, String name, boolean isActive) {
+        return new CategoryView(id, name, null, isActive, true, Instant.now(), Instant.now());
     }
 
     // ── CREATE_CATEGORY ─────────────────────────────────────────────────────
@@ -58,8 +54,8 @@ class CategorySyncHandlerTest {
     @Test
     void handle_createCategory_createsViaUseCaseWithClientProvidedUUID() {
         var catId = UUID.randomUUID();
-        when(categoryRepository.findById(catId)).thenReturn(Optional.empty());
-        when(createCategory.createWithId(any(), any(), any(), any(), any()))
+        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
+        when(categoryCommand.createWithId(any(), any(), any(), any(), any()))
                 .thenReturn(sampleCategory(catId, "Électronique", true));
 
         var op = new SyncOperation("op-1", "CREATE_CATEGORY", catId.toString(),
@@ -69,16 +65,15 @@ class CategorySyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(catId.toString());
-        verify(createCategory).createWithId(catId, "Électronique", null, ACTOR_ID, TENANT_ID);
-        verify(categoryRepository, never()).save(any());
+        verify(categoryCommand).createWithId(catId, "Électronique", null, ACTOR_ID, TENANT_ID);
     }
 
     @Test
     void handle_createCategory_withParentId_passesParentToUseCase() {
         var parentId = UUID.randomUUID();
         var catId = UUID.randomUUID();
-        when(categoryRepository.findById(catId)).thenReturn(Optional.empty());
-        when(createCategory.createWithId(any(), any(), any(), any(), any()))
+        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
+        when(categoryCommand.createWithId(any(), any(), any(), any(), any()))
                 .thenReturn(sampleCategory(catId, "Sous-catégorie", true));
 
         var op = new SyncOperation("op-2", "CREATE_CATEGORY", catId.toString(),
@@ -88,13 +83,13 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(createCategory).createWithId(catId, "Sous-catégorie", parentId, ACTOR_ID, TENANT_ID);
+        verify(categoryCommand).createWithId(catId, "Sous-catégorie", parentId, ACTOR_ID, TENANT_ID);
     }
 
     @Test
     void handle_createCategory_idempotent_skipsWhenCategoryAlreadyExists() {
         var catId = UUID.randomUUID();
-        when(categoryRepository.findById(catId)).thenReturn(Optional.of(sampleCategory(catId, "Électronique", true)));
+        when(categoryQuery.findById(catId)).thenReturn(Optional.of(sampleCategory(catId, "Électronique", true)));
 
         var op = new SyncOperation("op-3", "CREATE_CATEGORY", catId.toString(),
                 Map.of("id", catId.toString(), "name", "Électronique"), Instant.now());
@@ -102,16 +97,15 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(categoryRepository, never()).save(any());
-        verifyNoInteractions(createCategory);
+        verifyNoInteractions(categoryCommand);
     }
 
     @Test
     void handle_createCategory_dedupByNameAndParent_returnsExistingId_noCreate() {
         var catId = UUID.randomUUID();
         var existingId = UUID.randomUUID();
-        when(categoryRepository.findById(catId)).thenReturn(Optional.empty());
-        when(categoryRepository.findByNameAndParentId("Électronique", null))
+        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
+        when(categoryQuery.findByNameAndParentId("Électronique", null))
                 .thenReturn(Optional.of(sampleCategory(existingId, "Électronique", true)));
 
         var op = new SyncOperation("op-3b", "CREATE_CATEGORY", catId.toString(),
@@ -121,8 +115,7 @@ class CategorySyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(existingId.toString());
-        verify(categoryRepository, never()).save(any());
-        verifyNoInteractions(createCategory);
+        verifyNoInteractions(categoryCommand);
     }
 
     @Test
@@ -133,7 +126,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(categoryRepository);
+        verifyNoInteractions(categoryQuery);
     }
 
     @Test
@@ -145,7 +138,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(categoryRepository);
+        verifyNoInteractions(categoryQuery);
     }
 
     // ── TOGGLE_CATEGORY ─────────────────────────────────────────────────────
@@ -154,9 +147,9 @@ class CategorySyncHandlerTest {
     void handle_toggleCategory_whenCurrentDiffersFromTarget_callsToggle() {
         var catId = UUID.randomUUID();
         // Current: active=true, target: isActive=false → toggle needed
-        when(categoryRepository.findById(catId))
+        when(categoryQuery.findById(catId))
                 .thenReturn(Optional.of(sampleCategory(catId, "Vêtements", true)));
-        when(toggleCategory.execute(catId, ACTOR_ID, TENANT_ID)).thenReturn(sampleCategory(catId, "Vêtements", false));
+        when(categoryCommand.toggleActive(catId, ACTOR_ID, TENANT_ID)).thenReturn(sampleCategory(catId, "Vêtements", false));
 
         var op = new SyncOperation("op-6", "TOGGLE_CATEGORY", catId.toString(),
                 Map.of("categoryId", catId.toString(), "isActive", false), Instant.now());
@@ -164,14 +157,14 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(toggleCategory).execute(catId, ACTOR_ID, TENANT_ID);
+        verify(categoryCommand).toggleActive(catId, ACTOR_ID, TENANT_ID);
     }
 
     @Test
     void handle_toggleCategory_whenAlreadyInTargetState_noToggle() {
         var catId = UUID.randomUUID();
         // Current: active=true, target: isActive=true → no-op
-        when(categoryRepository.findById(catId))
+        when(categoryQuery.findById(catId))
                 .thenReturn(Optional.of(sampleCategory(catId, "Vêtements", true)));
 
         var op = new SyncOperation("op-7", "TOGGLE_CATEGORY", catId.toString(),
@@ -180,13 +173,13 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verifyNoInteractions(toggleCategory);
+        verifyNoInteractions(categoryCommand);
     }
 
     @Test
     void handle_toggleCategory_categoryNotFound_returnsApplied() {
         var catId = UUID.randomUUID();
-        when(categoryRepository.findById(catId)).thenReturn(Optional.empty());
+        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
 
         var op = new SyncOperation("op-8", "TOGGLE_CATEGORY", catId.toString(),
                 Map.of("categoryId", catId.toString(), "isActive", false), Instant.now());
@@ -194,7 +187,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verifyNoInteractions(toggleCategory);
+        verifyNoInteractions(categoryCommand);
     }
 
     @Test
@@ -206,7 +199,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(categoryRepository, toggleCategory);
+        verifyNoInteractions(categoryQuery, categoryCommand);
     }
 
     @Test
@@ -217,7 +210,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(toggleCategory);
+        verifyNoInteractions(categoryCommand);
     }
 
     // ── RENAME_CATEGORY ─────────────────────────────────────────────────────
@@ -225,7 +218,7 @@ class CategorySyncHandlerTest {
     @Test
     void handle_renameCategory_delegatesToRenameCategoryUseCase() {
         var catId = UUID.randomUUID();
-        when(renameCategory.execute(any(), any(), any(), any())).thenReturn(sampleCategory(catId, "Nouveau nom", true));
+        when(categoryCommand.rename(any(), any(), any(), any())).thenReturn(sampleCategory(catId, "Nouveau nom", true));
 
         var op = new SyncOperation("op-11", "RENAME_CATEGORY", catId.toString(),
                 Map.of("categoryId", catId.toString(), "name", "Nouveau nom"), Instant.now());
@@ -233,13 +226,13 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(renameCategory).execute(eq(catId), any(), eq(ACTOR_ID), eq(TENANT_ID));
+        verify(categoryCommand).rename(eq(catId), any(), eq(ACTOR_ID), eq(TENANT_ID));
     }
 
     @Test
     void handle_renameCategory_unknownId_isRejectedCategoryNotFound() {
         var catId = UUID.randomUUID();
-        when(renameCategory.execute(any(), any(), any(), any()))
+        when(categoryCommand.rename(any(), any(), any(), any()))
                 .thenThrow(new DomainException(ErrorCode.CATEGORY_NOT_FOUND, "categoryId=" + catId));
 
         var op = new SyncOperation("op-11b", "RENAME_CATEGORY", catId.toString(),
@@ -260,7 +253,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(renameCategory);
+        verifyNoInteractions(categoryCommand);
     }
 
     // ── Metadata ─────────────────────────────────────────────────────────────
@@ -284,7 +277,7 @@ class CategorySyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verifyNoInteractions(categoryRepository, toggleCategory);
+        verifyNoInteractions(categoryQuery, categoryCommand);
     }
 
     @Test
@@ -298,6 +291,6 @@ class CategorySyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verifyNoInteractions(categoryRepository, toggleCategory);
+        verifyNoInteractions(categoryQuery, categoryCommand);
     }
 }

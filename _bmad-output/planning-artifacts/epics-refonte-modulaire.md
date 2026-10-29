@@ -563,6 +563,8 @@ As a **architecte**, I want **une `api` pour `inventory` (stock, mouvements, seu
 As a **architecte**, I want **une `api` pour `commerce` (ventes, clôture)**, So that **`sync`, `messaging`, `reporting` y accèdent via contrat**.
 **Acceptance Criteria:** **Given** les consommateurs de `commerce` **When** la story est faite **Then** accès via `commerce.api` (+ events au catalogue partagé) ; `verify()` propre côté `commerce`.
 
+- [ ] [Deferred-from: review 12-2a/12-2b, 2026-10-29] `ValidateSaleService` / `SaleValidationCascadeService` check availability on the no-variant level but record the movement on the variant — pre-existing; pass `item.getVariantId()` and pin with tests [commerce/sale/application/service]
+
 ### Story 12.2d : API publiques `identity` + `store` + `subscription`
 
 As a **architecte**, I want **des `api` pour les modules transverses très dépendus (`identity` 21+14 imports, `store`, `subscription`)**, So that **leurs consommateurs passent par contrat (MOD-NFR3)**.
@@ -570,6 +572,8 @@ As a **architecte**, I want **des `api` pour les modules transverses très dépe
 
 **Items (routed 2026-10-29 from review 12-1/12-5):**
 - [ ] [Deferred-from: review 12-1/12-5, 2026-10-29] `shared` depends on crm/inventory internals (`StockMovementJpaEntity`/`StockTransferJpaEntity` → `MovementType`/`TransferStatus`, `AuditEventListener` → crm/inventory events, Product/Stock/Supplier/Client JPA entities) [shared/infrastructure/persistence/entity, shared/infrastructure/web/AuditEventListener.java] — move entities to their owning modules / events to `core.event.catalog` during core extraction
+
+- [ ] [Deferred-from: review 12-2a/12-2b, 2026-10-29] One tenant convention for published ports (explicit `TenantId` vs ambient `TenantContext`) [catalog/api, crm/api, inventory/api]
 
 ### Story 12.2e : API publiques `reporting`/`messaging`/`sync` + activation `verify()` BLOQUANT
 
@@ -638,6 +642,8 @@ So that **chaque event est traité dans le bon contexte tenant sans fuite (MOD-N
 **Items (routed 2026-10-28 from refonte-journal-incoherences.md):**
 - [ ] [Deferred-from: journal A2, 2026-10-28] Pin the registry to `public`: `spring.modulith.events.jdbc.schema=public`, table created by a Flyway public migration [application.yml, db/migration] — unqualified `event_publication` would follow the per-tenant search_path
 - [ ] [Deferred-from: review 11-1/11-2, 2026-10-28] Propagate MDC (`traceId`, `tenantId`, `userId`) to `@Async` executors (e.g. `AsyncConfig.notificationExecutor`) with a context-propagating `TaskDecorator`, alongside the `TenantContext` restoration [shared/infrastructure/config/AsyncConfig.java] — async logs are not correlated today
+
+- [ ] [Deferred-from: review 12-2a/12-2b, 2026-10-29] `MovementType` exported via `inventory :: events` (carried by `StockAdjustedEvent`) — API-level kinds in `core.event.catalog`; collapse the type-level `@NamedInterface("events")` workaround (journal A9)
 
 ### Story 12.5 : Ré-aligner les modules mal placés (inventory, payment, warehouse)
 

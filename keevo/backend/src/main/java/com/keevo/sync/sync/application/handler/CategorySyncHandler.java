@@ -1,11 +1,8 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.catalog.category.application.usecase.CreateCategoryUseCase;
-import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
-import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase.RenameCategoryDto;
-import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
-import com.keevo.catalog.category.domain.model.Category;
-import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.catalog.api.CategoryCommandPort;
+import com.keevo.catalog.api.CategoryQueryPort;
+import com.keevo.catalog.api.CategoryView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -32,19 +29,13 @@ import java.util.UUID;
 @Component
 public class CategorySyncHandler extends AbstractSyncOperationHandler {
 
-    private final CategoryRepository categoryRepository;
-    private final ToggleCategoryUseCase toggleCategory;
-    private final RenameCategoryUseCase renameCategory;
-    private final CreateCategoryUseCase createCategory;
+    // 12.2a: catalog reached only through its public API.
+    private final CategoryQueryPort categoryQuery;
+    private final CategoryCommandPort categoryCommand;
 
-    public CategorySyncHandler(CategoryRepository categoryRepository,
-                               ToggleCategoryUseCase toggleCategory,
-                               RenameCategoryUseCase renameCategory,
-                               CreateCategoryUseCase createCategory) {
-        this.categoryRepository = categoryRepository;
-        this.createCategory = createCategory;
-        this.toggleCategory = toggleCategory;
-        this.renameCategory = renameCategory;
+    public CategorySyncHandler(CategoryQueryPort categoryQuery, CategoryCommandPort categoryCommand) {
+        this.categoryQuery = categoryQuery;
+        this.categoryCommand = categoryCommand;
     }
 
     @Override
@@ -86,7 +77,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
             case "CREATE_CATEGORY" -> {
                 UUID clientId = UUID.fromString((String) p.get("id"));
                 // Idempotency: skip if already exists with this UUID.
-                if (categoryRepository.findById(clientId).isPresent()) {
+                if (categoryQuery.findById(clientId).isPresent()) {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             clientId.toString(), null);
                 }
@@ -96,13 +87,13 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                         : null;
                 // G3: dedup by name+parentId — if a category with the same name already exists,
                 // return its ID as APPLIED to prevent duplicates from multiple offline devices.
-                var existingByName = categoryRepository.findByNameAndParentId(name, parentId);
+                var existingByName = categoryQuery.findByNameAndParentId(name, parentId);
                 if (existingByName.isPresent()) {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             existingByName.get().id().toString(), null);
                 }
                 // v1s-14-15: a genuinely new category goes through the use case (audit CATEGORY_CREATED).
-                Category saved = createCategory.createWithId(clientId, name, parentId, actorId, tenantId);
+                CategoryView saved = categoryCommand.createWithId(clientId, name, parentId, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         saved.id().toString(), null);
             }
@@ -116,15 +107,15 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                 UUID categoryId = UUID.fromString((String) p.get("categoryId"));
                 boolean targetActive = (boolean) p.get("isActive");
                 // Set-based: only toggle if current state differs from the target.
-                var existing = categoryRepository.findById(categoryId);
+                var existing = categoryQuery.findById(categoryId);
                 if (existing.isEmpty()) {
                     // Category not found — idempotent no-op.
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             categoryId.toString(), null);
                 }
-                Category current = existing.get();
-                Category result = (current.isActive() != targetActive)
-                        ? toggleCategory.execute(categoryId, actorId, tenantId)
+                CategoryView current = existing.get();
+                CategoryView result = (current.isActive() != targetActive)
+                        ? categoryCommand.toggleActive(categoryId, actorId, tenantId)
                         : current;
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         result.id().toString(), null);
@@ -132,7 +123,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
             case "RENAME_CATEGORY" -> {
                 UUID categoryId = UUID.fromString((String) p.get("categoryId"));
                 String name = (String) p.get("name");
-                var category = renameCategory.execute(categoryId, new RenameCategoryDto(name), actorId, tenantId);
+                var category = categoryCommand.rename(categoryId, name, actorId, tenantId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         category.id().toString(), null);
             }

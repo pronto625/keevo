@@ -19,10 +19,10 @@ public record QuickAddProductResponseDto(
 ) {
     public static QuickAddProductResponseDto fromDomain(QuickAddProductResult result) {
         return new QuickAddProductResponseDto(
-            result.product().getId(),
-            result.product().getName(),
-            result.product().getSku(),
-            result.product().getCategoryId(),
+            result.product().id(),
+            result.product().name(),
+            result.product().sku(),
+            result.product().categoryId(),
             result.inventoryCount().getPhysical(),
             result.inventoryCount().getId(),
             result.stockLevel().getId()

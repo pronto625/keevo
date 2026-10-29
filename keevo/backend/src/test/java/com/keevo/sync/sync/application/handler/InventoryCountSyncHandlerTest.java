@@ -1,11 +1,8 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.counting.domain.model.InventoryCount;
-import com.keevo.inventory.counting.domain.model.InventoryScope;
-import com.keevo.inventory.counting.domain.model.InventorySession;
-import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
-import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountUseCase;
-import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.inventory.api.CountingCommandPort;
+import com.keevo.inventory.api.CountingQueryPort;
+import com.keevo.inventory.api.SaveCountInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -29,8 +26,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class InventoryCountSyncHandlerTest {
 
-    @Mock private SaveInventoryCountUseCase saveInventoryCountUseCase;
-    @Mock private InventorySessionRepository sessionRepository;
+    @Mock private CountingCommandPort countingCommand;
+    @Mock private CountingQueryPort countingQuery;
 
     private InventoryCountSyncHandler handler;
 
@@ -39,7 +36,7 @@ class InventoryCountSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new InventoryCountSyncHandler(saveInventoryCountUseCase, sessionRepository);
+        handler = new InventoryCountSyncHandler(countingCommand, countingQuery);
         SyncTestAuth.owner();
     }
 
@@ -57,9 +54,7 @@ class InventoryCountSyncHandlerTest {
     void handle_validPayload_shouldDelegateAndReturnApplied() {
         UUID sessionId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        var saved = InventoryCount.create(sessionId, productId, null,
-                "Savon", null, 50, 47, ACTOR_ID);
-        when(saveInventoryCountUseCase.execute(any())).thenReturn(saved);
+        when(countingCommand.saveCount(any())).thenReturn(UUID.randomUUID());
 
         var op = new SyncOperation("op-1", "SAVE_INVENTORY_COUNT", "entity-1",
                 Map.of("sessionId", sessionId.toString(),
@@ -73,7 +68,7 @@ class InventoryCountSyncHandlerTest {
 
         assertThat(result.operationId()).isEqualTo("op-1");
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(saveInventoryCountUseCase).execute(any());
+        verify(countingCommand).saveCount(any());
     }
 
     @Test
@@ -85,14 +80,14 @@ class InventoryCountSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verify(saveInventoryCountUseCase, never()).execute(any());
+        verify(countingCommand, never()).saveCount(any());
     }
 
     @Test
     void handle_domainException_shouldReturnRejected() {
         UUID sessionId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
-        when(saveInventoryCountUseCase.execute(any()))
+        when(countingCommand.saveCount(any()))
                 .thenThrow(new DomainException(ErrorCode.INVENTORY_SESSION_NOT_IN_PROGRESS, "Not in progress"));
 
         var op = new SyncOperation("op-3", "SAVE_INVENTORY_COUNT", "entity-1",
@@ -115,9 +110,9 @@ class InventoryCountSyncHandlerTest {
         UUID sessionId = UUID.randomUUID();
         UUID productId = UUID.randomUUID();
         UUID countId = UUID.randomUUID();
-        when(saveInventoryCountUseCase.execute(any())).thenAnswer(inv -> {
-            com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand cmd = inv.getArgument(0);
-            return InventoryCount.create(cmd.countId(), sessionId, productId, null, "Savon", null, 50, 47, ACTOR_ID);
+        when(countingCommand.saveCount(any())).thenAnswer(inv -> {
+            SaveCountInput in = inv.getArgument(0);
+            return in.countId();
         });
 
         var op = new SyncOperation("op-4", "SAVE_INVENTORY_COUNT", countId.toString(),
@@ -130,9 +125,8 @@ class InventoryCountSyncHandlerTest {
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
-        var captor = org.mockito.ArgumentCaptor.forClass(
-                com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand.class);
-        verify(saveInventoryCountUseCase).execute(captor.capture());
+        var captor = org.mockito.ArgumentCaptor.forClass(SaveCountInput.class);
+        verify(countingCommand).saveCount(captor.capture());
         assertThat(captor.getValue().countId()).isEqualTo(countId);
         assertThat(result.serverEntityId()).isEqualTo(countId.toString());
     }
@@ -141,12 +135,6 @@ class InventoryCountSyncHandlerTest {
 
     private static final UUID STORE_A = UUID.randomUUID();
     private static final UUID STORE_C = UUID.randomUUID();
-
-    private InventorySession sessionOf(UUID sessionId, UUID storeId) {
-        return new InventorySession(sessionId, storeId, InventoryScope.FULL, null,
-                InventorySessionStatus.IN_PROGRESS, ACTOR_ID, Instant.now(),
-                null, null, null, Instant.now());
-    }
 
     private SyncOperation countOp(UUID sessionId) {
         return new SyncOperation("op-s", "SAVE_INVENTORY_COUNT", "entity-1",
@@ -162,22 +150,21 @@ class InventoryCountSyncHandlerTest {
     void handle_employeeCountInForeignStoreSession_isRejectedForbidden_andUseCaseNeverCalled() {
         SyncTestAuth.employee(STORE_A);
         UUID sessionId = UUID.randomUUID();
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(sessionId, STORE_C)));
+        when(countingQuery.findSessionStoreId(sessionId)).thenReturn(Optional.of(STORE_C));
 
         var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(saveInventoryCountUseCase, never()).execute(any());
+        verify(countingCommand, never()).saveCount(any());
     }
 
     @Test
     void handle_employeeCountInOwnStoreSession_isApplied() {
         SyncTestAuth.employee(STORE_A);
         UUID sessionId = UUID.randomUUID();
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(sessionOf(sessionId, STORE_A)));
-        when(saveInventoryCountUseCase.execute(any())).thenReturn(
-                InventoryCount.create(sessionId, UUID.randomUUID(), null, "Savon", null, 50, 47, ACTOR_ID));
+        when(countingQuery.findSessionStoreId(sessionId)).thenReturn(Optional.of(STORE_A));
+        when(countingCommand.saveCount(any())).thenReturn(UUID.randomUUID());
 
         var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
 
@@ -188,27 +175,26 @@ class InventoryCountSyncHandlerTest {
     void handle_employeeCountUnknownSession_isDelegatedToUseCase() {
         SyncTestAuth.employee(STORE_A);
         UUID sessionId = UUID.randomUUID();
-        when(sessionRepository.findById(sessionId)).thenReturn(Optional.empty());
-        when(saveInventoryCountUseCase.execute(any()))
+        when(countingQuery.findSessionStoreId(sessionId)).thenReturn(Optional.empty());
+        when(countingCommand.saveCount(any()))
                 .thenThrow(new DomainException(ErrorCode.INVENTORY_SESSION_NOT_FOUND, "not found"));
 
         var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("INVENTORY_SESSION_NOT_FOUND");
-        verify(saveInventoryCountUseCase).execute(any());
+        verify(countingCommand).saveCount(any());
     }
 
     @Test
     void handle_ownerCount_isUnscoped_noSessionLookup() {
         UUID sessionId = UUID.randomUUID();
-        when(saveInventoryCountUseCase.execute(any())).thenReturn(
-                InventoryCount.create(sessionId, UUID.randomUUID(), null, "Savon", null, 50, 47, ACTOR_ID));
+        when(countingCommand.saveCount(any())).thenReturn(UUID.randomUUID());
 
         var result = handler.handle(countOp(sessionId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verifyNoInteractions(sessionRepository);
+        verifyNoInteractions(countingQuery);
     }
 
     @Test
@@ -219,7 +205,7 @@ class InventoryCountSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(saveInventoryCountUseCase, never()).execute(any());
+        verify(countingCommand, never()).saveCount(any());
     }
 
     // ── v1s-15-9: integral guard ──────────────────────────────────────
@@ -240,7 +226,7 @@ class InventoryCountSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).startsWith("Invalid physical");
-        verifyNoInteractions(saveInventoryCountUseCase);
+        verifyNoInteractions(countingCommand);
     }
 
     @Test
@@ -249,6 +235,6 @@ class InventoryCountSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).startsWith("Invalid theoretical");
-        verifyNoInteractions(saveInventoryCountUseCase);
+        verifyNoInteractions(countingCommand);
     }
 }

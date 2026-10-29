@@ -2,7 +2,9 @@ package com.keevo.inventory.counting.domain.service;
 
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
@@ -29,7 +31,7 @@ import static org.mockito.Mockito.*;
 class FullScopeResolverTest {
 
     @Mock private StockLevelRepository stockLevelRepository;
-    @Mock private ProductRepository productRepository;
+    @Mock private ProductQueryPort productQuery;
 
     private FullScopeResolver resolver;
 
@@ -39,12 +41,12 @@ class FullScopeResolverTest {
 
     @BeforeEach
     void setUp() {
-        resolver = new FullScopeResolver(stockLevelRepository, productRepository);
+        resolver = new FullScopeResolver(stockLevelRepository, productQuery);
     }
 
-    private static Product product(UUID id, String name, boolean archived) {
-        return new Product(id, name, "desc", "KEV-" + name.substring(0, 3).toUpperCase() + "001",
-                UUID.randomUUID(), 100, 50, 0, 50, archived, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+    private static ProductView product(UUID id, String name, boolean archived) {
+        return CatalogProductApiTestSupport.view(new Product(id, name, "desc", "KEV-" + name.substring(0, 3).toUpperCase() + "001",
+                UUID.randomUUID(), 100, 50, 0, 50, archived, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
     }
 
     @Test
@@ -54,7 +56,7 @@ class FullScopeResolverTest {
 
     @Test
     void resolveProducts_shouldReturnEmptyWhenNoActiveProducts() {
-        when(productRepository.findAllActive()).thenReturn(List.of());
+        when(productQuery.findAllActive()).thenReturn(List.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
@@ -67,9 +69,9 @@ class FullScopeResolverTest {
         var slA = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         var slB = new StockLevel(UUID.randomUUID(), PRODUCT_B, null, STORE_ID, 30, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slA, slB));
-        when(productRepository.findAllActive()).thenReturn(List.of(
+        when(productQuery.findAllActive()).thenReturn(List.of(
                 product(PRODUCT_A, "Banane", false), product(PRODUCT_B, "Ananas", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of(PRODUCT_A, "url-a"));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of(PRODUCT_A, "url-a"));
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
@@ -85,9 +87,9 @@ class FullScopeResolverTest {
     void resolveProducts_shouldIncludeProductNeverStockedInStore_withZeroExpected() {
         var slA = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 12, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slA));
-        when(productRepository.findAllActive()).thenReturn(List.of(
+        when(productQuery.findAllActive()).thenReturn(List.of(
                 product(PRODUCT_A, "Banane", false), product(PRODUCT_B, "Cacao", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
@@ -102,8 +104,8 @@ class FullScopeResolverTest {
     @Test
     void resolveProducts_shouldIncludeAllProductsWhenStoreHasNoStockLevels() {
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
-        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         var existingCount = InventoryCount.create(
                 UUID.randomUUID(), PRODUCT_A, null, "Banane", null, 0, 4, UUID.randomUUID());
@@ -126,8 +128,8 @@ class FullScopeResolverTest {
     void resolveProducts_countedRow_usesTheCountSnapshot_likeTheGapReport() {
         var sl = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 3, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(sl));
-        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
         var count = InventoryCount.create(
                 UUID.randomUUID(), PRODUCT_A, null, "Banane", null, 0, 3, UUID.randomUUID());
 
@@ -143,8 +145,8 @@ class FullScopeResolverTest {
         var slBase = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 5, Instant.now());
         var slVar = new StockLevel(UUID.randomUUID(), PRODUCT_A, variant, STORE_ID, 7, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slBase, slVar));
-        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
@@ -156,8 +158,8 @@ class FullScopeResolverTest {
     void resolveProducts_shouldMergeExistingCounts() {
         var sl = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(sl));
-        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Pomme", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Pomme", false)));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         var existingCount = InventoryCount.create(
                 UUID.randomUUID(), PRODUCT_A, null, "Pomme", null, 50, 47, UUID.randomUUID());
@@ -174,8 +176,8 @@ class FullScopeResolverTest {
         var sl = new StockLevel(UUID.randomUUID(), PRODUCT_A, null, STORE_ID, 50, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(sl));
         // Defensive: even if the repository returned an archived product, it is skipped.
-        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Archived", true)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Archived", true)));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 
@@ -186,8 +188,8 @@ class FullScopeResolverTest {
     void resolveProducts_shouldIgnoreStockLevelsOfProductsOutsideActiveCatalogue() {
         var slOrphan = new StockLevel(UUID.randomUUID(), PRODUCT_B, null, STORE_ID, 9, Instant.now());
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of(slOrphan));
-        when(productRepository.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
-        when(productRepository.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findAllActive()).thenReturn(List.of(product(PRODUCT_A, "Banane", false)));
+        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, null, List.of());
 

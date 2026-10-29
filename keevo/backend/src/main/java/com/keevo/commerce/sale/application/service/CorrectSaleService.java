@@ -1,8 +1,9 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.inventory.api.StockCommandPort;
+import com.keevo.inventory.api.StockMovementInput;
+import com.keevo.inventory.api.StockMovementKind;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -31,16 +32,16 @@ import java.util.UUID;
 public class CorrectSaleService implements CorrectSaleUseCase {
 
     private final SaleRepository saleRepository;
-    private final StockOperationService stockOperationService;
+    private final StockCommandPort stockCommand;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     public CorrectSaleService(SaleRepository saleRepository,
-                              StockOperationService stockOperationService,
+                              StockCommandPort stockCommand,
                               ApplicationEventPublisher eventPublisher,
                               ObjectMapper objectMapper) {
         this.saleRepository = saleRepository;
-        this.stockOperationService = stockOperationService;
+        this.stockCommand = stockCommand;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
@@ -107,11 +108,11 @@ public class CorrectSaleService implements CorrectSaleUseCase {
             UUID movementId = command.correctionId() != null
                     ? DeterministicIds.saleCorrectionMovementId(command.correctionId(), before.getId())
                     : null;
-            stockOperationService.recordOperation(
+            stockCommand.recordMovement(new StockMovementInput(
                     before.getProductId(), before.getVariantId(), sale.getStoreId(),
-                    MovementType.ADJUSTMENT, -(after.getQuantity() - before.getQuantity()),
+                    StockMovementKind.ADJUSTMENT, -(after.getQuantity() - before.getQuantity()),
                     command.actorId(), "Correction vente " + sale.getId(),
-                    movementId, false);
+                    movementId, false));
         }
 
         Sale correctedSale = new Sale(sale.getId(), sale.getStoreId(), sale.getEmployeeId(),

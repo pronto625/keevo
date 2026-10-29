@@ -8,6 +8,7 @@ import java.util.UUID;
  *
  * @param parentId null for a root category
  */
+@org.springframework.modulith.NamedInterface("events") // 12.2a: merged into "catalog :: events" (see package-info)
 public record CategoryCreatedEvent(
         UUID categoryId,
         String name,

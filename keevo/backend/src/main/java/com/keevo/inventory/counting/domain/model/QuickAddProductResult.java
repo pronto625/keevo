@@ -1,6 +1,6 @@
 package com.keevo.inventory.counting.domain.model;
 
-import com.keevo.catalog.product.domain.entity.Product;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 
 /**
@@ -9,7 +9,7 @@ import com.keevo.inventory.stock.domain.entity.StockLevel;
  * Story 6.2.a.
  */
 public record QuickAddProductResult(
-    Product product,
+    ProductView product,
     StockLevel stockLevel,
     InventoryCount inventoryCount
 ) {}

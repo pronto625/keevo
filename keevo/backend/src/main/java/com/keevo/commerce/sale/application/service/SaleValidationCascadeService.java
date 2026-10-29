@@ -1,9 +1,10 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.inventory.api.StockCommandPort;
+import com.keevo.inventory.api.StockMovementInput;
+import com.keevo.inventory.api.StockMovementKind;
+import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -33,22 +34,22 @@ public class SaleValidationCascadeService {
 
     private final SaleRepository saleRepository;
     private final ProductStatusPort productStatusPort;
-    private final StockLevelRepository stockLevelRepository;
-    private final StockOperationService stockOperationService;
+    private final StockQueryPort stockQuery;
+    private final StockCommandPort stockCommand;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     public SaleValidationCascadeService(SaleRepository saleRepository,
                                         ProductStatusPort productStatusPort,
-                                        StockLevelRepository stockLevelRepository,
-                                        StockOperationService stockOperationService,
+                                        StockQueryPort stockQuery,
+                                        StockCommandPort stockCommand,
                                         ApplicationEventPublisher eventPublisher,
                                         ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
         this.saleRepository = saleRepository;
         this.productStatusPort = productStatusPort;
-        this.stockLevelRepository = stockLevelRepository;
-        this.stockOperationService = stockOperationService;
+        this.stockQuery = stockQuery;
+        this.stockCommand = stockCommand;
         this.eventPublisher = eventPublisher;
     }
 
@@ -82,9 +83,7 @@ public class SaleValidationCascadeService {
 
         // Check stock for ALL products (including the trigger product)
         for (SaleItem item : sale.getItems()) {
-            int available = stockLevelRepository.findByProductAndStore(item.getProductId(), sale.getStoreId())
-                    .map(sl -> sl.getQuantity())
-                    .orElse(0);
+            int available = stockQuery.availableQuantity(item.getProductId(), null, sale.getStoreId());
             if (available <= 0) {
                 log.warn("Vente #{} en attente : le produit '{}' n'a pas de stock",
                         sale.getId().toString().substring(0, 8), item.getProductName());
@@ -102,18 +101,18 @@ public class SaleValidationCascadeService {
 
         // Decrement stock for ALL items
         for (SaleItem item : sale.getItems()) {
-            stockOperationService.recordOperation(
+            stockCommand.recordMovement(new StockMovementInput(
                     item.getProductId(),
                     item.getVariantId(),
                     sale.getStoreId(),
-                    MovementType.SALE,
+                    StockMovementKind.SALE,
                     -item.getQuantity(),
                     actorId,
                     "Vente auto-validée " + sale.getId(),
                     // Story v1s-13-10: sale item id = SALE movement id (same on the app).
                     item.getId(),
                     false
-            );
+            ));
         }
 
         String tenantId = TenantContext.getCurrentTenant();

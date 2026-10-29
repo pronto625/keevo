@@ -1,9 +1,8 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.counting.domain.model.*;
-import com.keevo.inventory.counting.domain.port.in.ValidateInventoryCommand;
-import com.keevo.inventory.counting.domain.port.in.ValidateInventoryUseCase;
-import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.inventory.api.CountingCommandPort;
+import com.keevo.inventory.api.CountingQueryPort;
+import com.keevo.inventory.api.ValidateCountingInput;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -26,8 +25,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class InventoryValidationSyncHandlerTest {
 
-    @Mock ValidateInventoryUseCase validateUseCase;
-    @Mock InventorySessionRepository sessionRepo;
+    @Mock CountingCommandPort validateUseCase;
+    @Mock CountingQueryPort sessionRepo;
     @InjectMocks InventoryValidationSyncHandler handler;
 
     @BeforeEach
@@ -67,12 +66,8 @@ class InventoryValidationSyncHandlerTest {
         UUID actorId = UUID.randomUUID();
         String tenantId = "kv_test";
 
-        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(
-                new InventorySession(sessionId, UUID.randomUUID(), InventoryScope.FULL, null,
-                        InventorySessionStatus.IN_PROGRESS, actorId, Instant.now(),
-                        null, null, null, Instant.now())));
-        when(validateUseCase.execute(any())).thenReturn(
-                new ValidateInventoryResult(sessionId, 3, InventorySessionStatus.VALIDATED, Instant.now()));
+        when(sessionRepo.isSessionValidated(sessionId)).thenReturn(false);
+        when(validateUseCase.validate(any())).thenReturn(sessionId);
 
         var op = new SyncOperation("op1", "VALIDATE_INVENTORY", sessionId.toString(),
                 Map.of("sessionId", sessionId.toString()), Instant.now());
@@ -80,7 +75,7 @@ class InventoryValidationSyncHandlerTest {
         var result = handler.handle(op, actorId, tenantId);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(validateUseCase).execute(any(ValidateInventoryCommand.class));
+        verify(validateUseCase).validate(any(ValidateCountingInput.class));
     }
 
     @Test
@@ -90,14 +85,10 @@ class InventoryValidationSyncHandlerTest {
         UUID productId = UUID.randomUUID();
         UUID movementId = UUID.randomUUID();
 
-        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(
-                new InventorySession(sessionId, UUID.randomUUID(), InventoryScope.FULL, null,
-                        InventorySessionStatus.IN_PROGRESS, actorId, Instant.now(),
-                        null, null, null, Instant.now())));
-        when(validateUseCase.execute(any())).thenReturn(
-                new ValidateInventoryResult(sessionId, 1, InventorySessionStatus.VALIDATED, Instant.now()));
+        when(sessionRepo.isSessionValidated(sessionId)).thenReturn(false);
+        when(validateUseCase.validate(any())).thenReturn(sessionId);
 
-        String key = ValidateInventoryCommand.movementKey(productId, null);
+        String key = productId + "|"; // "productId|variantId", no variant
         var op = new SyncOperation("op1", "VALIDATE_INVENTORY", sessionId.toString(),
                 Map.of("sessionId", sessionId.toString(),
                         "movementIds", Map.of(key, movementId.toString(), "other|", "not-a-uuid")),
@@ -105,8 +96,8 @@ class InventoryValidationSyncHandlerTest {
 
         handler.handle(op, actorId, "kv_test");
 
-        var captor = org.mockito.ArgumentCaptor.forClass(ValidateInventoryCommand.class);
-        verify(validateUseCase).execute(captor.capture());
+        var captor = org.mockito.ArgumentCaptor.forClass(ValidateCountingInput.class);
+        verify(validateUseCase).validate(captor.capture());
         assertThat(captor.getValue().movementIds()).containsExactly(Map.entry(key, movementId));
     }
 
@@ -115,10 +106,7 @@ class InventoryValidationSyncHandlerTest {
         UUID sessionId = UUID.randomUUID();
         UUID actorId = UUID.randomUUID();
 
-        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(
-                new InventorySession(sessionId, UUID.randomUUID(), InventoryScope.FULL, null,
-                        InventorySessionStatus.VALIDATED, actorId, Instant.now(),
-                        null, null, Instant.now(), Instant.now())));
+        when(sessionRepo.isSessionValidated(sessionId)).thenReturn(true);
 
         var op = new SyncOperation("op2", "VALIDATE_INVENTORY", sessionId.toString(),
                 Map.of("sessionId", sessionId.toString()), Instant.now());
@@ -126,7 +114,7 @@ class InventoryValidationSyncHandlerTest {
         var result = handler.handle(op, actorId, "kv_test");
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(validateUseCase, never()).execute(any());
+        verify(validateUseCase, never()).validate(any());
     }
 
     @Test

@@ -1,28 +1,26 @@
 package com.keevo.commerce.sale.adapter.out.persistence.impl;
 
-import com.keevo.catalog.product.adapter.out.persistence.ProductSpringRepository;
+import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 /**
- * ProductStatusPortAdapter — queries the product table to resolve product status.
- * Story 4.3 — bridges the sale domain to the catalog persistence layer.
+ * ProductStatusPortAdapter — resolves a product's status for the sale domain.
+ * Story 4.3 — bridges the sale domain to the catalog, through its public API since 12.2a.
  */
 @Component
 public class ProductStatusPortAdapter implements ProductStatusPort {
 
-    private final ProductSpringRepository productRepository;
+    private final ProductQueryPort productQuery;
 
-    public ProductStatusPortAdapter(ProductSpringRepository productRepository) {
-        this.productRepository = productRepository;
+    public ProductStatusPortAdapter(ProductQueryPort productQuery) {
+        this.productQuery = productQuery;
     }
 
     @Override
     public String getProductStatus(UUID productId) {
-        return productRepository.findById(productId)
-                .map(entity -> entity.getStatus().name())
-                .orElse("UNKNOWN");
+        return productQuery.findStatusName(productId).orElse("UNKNOWN");
     }
 }

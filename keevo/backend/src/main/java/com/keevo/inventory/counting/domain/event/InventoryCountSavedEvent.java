@@ -7,6 +7,7 @@ import java.util.UUID;
  * InventoryCountSavedEvent — published when a physical count is saved.
  * GoF Observer: AuditEventListener records this for the immutable audit trail.
  */
+@org.springframework.modulith.NamedInterface("events") // 12.2b: merged into "inventory :: events" (see package-info)
 public record InventoryCountSavedEvent(
     UUID countId,
     UUID sessionId,

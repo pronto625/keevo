@@ -1,8 +1,8 @@
 package com.keevo.commerce.sale.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.inventory.api.StockMovementKind;
+import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.CorrectSaleService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase.CorrectSaleCommand;
@@ -35,7 +35,7 @@ import static org.mockito.Mockito.*;
 class CorrectSaleServiceTest {
 
     @Mock private SaleRepository saleRepository;
-    @Mock private StockOperationService stockOperationService;
+    @Mock private StockCommandPort stockCommand;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private CorrectSaleService service;
@@ -50,7 +50,7 @@ class CorrectSaleServiceTest {
     @BeforeEach
     void setUp() {
         TenantContext.setCurrentTenant("kv_test");
-        service = new CorrectSaleService(saleRepository, stockOperationService, eventPublisher, new ObjectMapper());
+        service = new CorrectSaleService(saleRepository, stockCommand, eventPublisher, new ObjectMapper());
     }
 
     @AfterEach
@@ -76,9 +76,13 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 2)));
 
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_A), any(), eq(STORE_ID), eq(MovementType.ADJUSTMENT),
-                eq(3), eq(ACTOR_ID), any(), isNull(), eq(false));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && java.util.Objects.equals(m.kind(), StockMovementKind.ADJUSTMENT)
+                && m.quantityChange() == 3
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && m.movementId() == null
+                && !m.allowNegative()));
 
         var captor = ArgumentCaptor.forClass(Sale.class);
         verify(saleRepository).save(captor.capture());
@@ -99,11 +103,13 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 2), correctionId));
 
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_A), any(), eq(STORE_ID), eq(MovementType.ADJUSTMENT),
-                eq(3), eq(ACTOR_ID), any(),
-                eq(com.keevo.shared.domain.DeterministicIds.saleCorrectionMovementId(correctionId, itemId)),
-                eq(false));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && java.util.Objects.equals(m.kind(), StockMovementKind.ADJUSTMENT)
+                && m.quantityChange() == 3
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && java.util.Objects.equals(m.movementId(), com.keevo.shared.domain.DeterministicIds.saleCorrectionMovementId(correctionId, itemId))
+                && !m.allowNegative()));
     }
 
     @Test
@@ -113,9 +119,13 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 5)));
 
-        verify(stockOperationService).recordOperation(
-                eq(PRODUCT_A), any(), eq(STORE_ID), eq(MovementType.ADJUSTMENT),
-                eq(-3), eq(ACTOR_ID), any(), isNull(), eq(false));
+        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+                && java.util.Objects.equals(m.storeId(), STORE_ID)
+                && java.util.Objects.equals(m.kind(), StockMovementKind.ADJUSTMENT)
+                && m.quantityChange() == -3
+                && java.util.Objects.equals(m.actorId(), ACTOR_ID)
+                && m.movementId() == null
+                && !m.allowNegative()));
 
         var captor = ArgumentCaptor.forClass(Sale.class);
         verify(saleRepository).save(captor.capture());
@@ -126,7 +136,7 @@ class CorrectSaleServiceTest {
     void correctSale_increaseBeyondAvailable_throwsInsufficientStock() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale(2, 0)));
         doThrow(new DomainException(com.keevo.shared.domain.exception.ErrorCode.INSUFFICIENT_STOCK, "insufficient"))
-                .when(stockOperationService).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+                .when(stockCommand).recordMovement(any());
 
         assertThatThrownBy(() -> service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 100))))
@@ -146,7 +156,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of(UUID.randomUUID(), 2))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -158,7 +168,7 @@ class CorrectSaleServiceTest {
                 "   ", Map.of(itemId, 2))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -170,7 +180,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of(itemId, 0))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -193,7 +203,7 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(UUID.randomUUID(), 9)));
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         var captor = ArgumentCaptor.forClass(Sale.class);
         verify(saleRepository).save(captor.capture());
         assertThat(captor.getValue().getItems().get(0).getQuantity()).isEqualTo(5);
@@ -207,7 +217,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, null)))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -219,7 +229,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of())))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -232,7 +242,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of(itemId, 2))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockOperationService, never()).recordOperation(any(), any(), any(), any(), anyInt(), any(), any(), any(), anyBoolean());
+        verify(stockCommand, never()).recordMovement(any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -248,7 +258,7 @@ class CorrectSaleServiceTest {
                 .extracting(e -> ((DomainException) e).getErrorCode())
                 .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.DISCOUNT_EXCEEDS_SUBTOTAL);
 
-        verifyNoInteractions(stockOperationService);
+        verifyNoInteractions(stockCommand);
         verify(saleRepository, never()).save(any());
     }
 

@@ -1,11 +1,11 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.inventory.api.StockCommandPort;
+import com.keevo.inventory.api.StockMovementInput;
+import com.keevo.inventory.api.StockMovementKind;
+import com.keevo.inventory.api.StockQueryPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
-import com.keevo.inventory.stock.domain.entity.StockLevel;
-import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
-import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;
 import com.keevo.commerce.sale.domain.model.SaleFactory;
@@ -35,19 +35,19 @@ import java.util.UUID;
 public class RecordSaleService implements RecordSaleUseCase {
 
     private final SaleRepository saleRepository;
-    private final StockLevelRepository stockLevelRepository;
-    private final StockOperationService stockOperationService;
+    private final StockQueryPort stockQuery;
+    private final StockCommandPort stockCommand;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     public RecordSaleService(SaleRepository saleRepository,
-                             StockLevelRepository stockLevelRepository,
-                             StockOperationService stockOperationService,
+                             StockQueryPort stockQuery,
+                             StockCommandPort stockCommand,
                              ApplicationEventPublisher eventPublisher,
                              ObjectMapper objectMapper) {
         this.saleRepository = saleRepository;
-        this.stockLevelRepository = stockLevelRepository;
-        this.stockOperationService = stockOperationService;
+        this.stockQuery = stockQuery;
+        this.stockCommand = stockCommand;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
@@ -87,17 +87,17 @@ public class RecordSaleService implements RecordSaleUseCase {
             // sides, so the device's pull upserts its own movement row instead of adding a
             // second one. itemId null → server-generated.
             for (var item : command.items()) {
-                stockOperationService.recordOperation(
+                stockCommand.recordMovement(new StockMovementInput(
                         item.productId(),
                         item.variantId(),
                         command.storeId(),
-                        MovementType.SALE,
+                        StockMovementKind.SALE,
                         -item.quantity(),
                         command.actorId(),
                         "Vente " + command.saleId(),
                         item.itemId(),
                         command.allowNegativeStock()
-                );
+                ));
             }
 
             // Story 4.2 — Publish SalePriceOverriddenEvent for each overridden item
@@ -145,14 +145,7 @@ public class RecordSaleService implements RecordSaleUseCase {
     }
 
     private int getAvailableStock(UUID productId, UUID variantId, UUID storeId) {
-        if (variantId != null) {
-            return stockLevelRepository.findByProductVariantAndStore(productId, variantId, storeId)
-                    .map(StockLevel::getQuantity)
-                    .orElse(0);
-        }
-        return stockLevelRepository.findByProductAndStore(productId, storeId)
-                .map(StockLevel::getQuantity)
-                .orElse(0);
+        return stockQuery.availableQuantity(productId, variantId, storeId);
     }
 
     private String serializeItems(RecordSaleCommand command) {

@@ -1,8 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.stock.domain.model.StockTransfer;
-import com.keevo.inventory.stock.domain.port.in.TransferStockCommand;
-import com.keevo.inventory.stock.domain.port.in.TransferStockUseCase;
+import com.keevo.inventory.api.TransferCommandPort;
+import com.keevo.inventory.api.TransferInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.AuthDetails;
@@ -34,7 +33,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class TransferSyncHandlerTest {
 
-    @Mock private TransferStockUseCase transferStockUseCase;
+    @Mock private TransferCommandPort transferCommand;
 
     private TransferSyncHandler handler;
 
@@ -43,7 +42,7 @@ class TransferSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new TransferSyncHandler(transferStockUseCase);
+        handler = new TransferSyncHandler(transferCommand);
     }
 
     @AfterEach
@@ -84,14 +83,12 @@ class TransferSyncHandlerTest {
         // OWNER is never scoped: any source store of the tenant is APPLIED.
         authenticateAsOwner();
         var transferId = UUID.randomUUID();
-        var mockTransfer = mock(StockTransfer.class);
-        when(mockTransfer.getId()).thenReturn(transferId);
-        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
+        when(transferCommand.transfer(any())).thenReturn(transferId);
 
         var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(transferStockUseCase).execute(any());
+        verify(transferCommand).transfer(any());
     }
 
     // ── Story v1s-12-11 — EMPLOYEE transfers only from their assigned store ──
@@ -100,14 +97,12 @@ class TransferSyncHandlerTest {
     void handle_employeeOwnStore_applied() {
         UUID storeA = UUID.randomUUID();
         authenticateAsEmployee(storeA);
-        var mockTransfer = mock(StockTransfer.class);
-        when(mockTransfer.getId()).thenReturn(UUID.randomUUID());
-        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
+        when(transferCommand.transfer(any())).thenReturn(UUID.randomUUID());
 
         var result = handler.handle(buildOp(storeA.toString()), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(transferStockUseCase).execute(any());
+        verify(transferCommand).transfer(any());
     }
 
     @Test
@@ -118,7 +113,7 @@ class TransferSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(transferStockUseCase, never()).execute(any());
+        verify(transferCommand, never()).transfer(any());
     }
 
     @Test
@@ -132,7 +127,7 @@ class TransferSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(transferStockUseCase, never()).execute(any());
+        verify(transferCommand, never()).transfer(any());
     }
 
     @Test
@@ -142,7 +137,7 @@ class TransferSyncHandlerTest {
         var result = handler.handle(buildOp("not-a-uuid"), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verify(transferStockUseCase, never()).execute(any());
+        verify(transferCommand, never()).transfer(any());
     }
 
     @Test
@@ -151,7 +146,7 @@ class TransferSyncHandlerTest {
         var op = buildOp();
 
         doThrow(new DomainException(ErrorCode.INSUFFICIENT_STOCK))
-                .when(transferStockUseCase).execute(any());
+                .when(transferCommand).transfer(any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
@@ -167,18 +162,16 @@ class TransferSyncHandlerTest {
     @Test
     void apply_propagates_entityId_as_clientId() {
         // Offline-first fix: operation.entityId() (the client-generated local id) must be
-        // forwarded as TransferStockCommand.clientId() so ExecuteTransferService preserves it
+        // forwarded as TransferInput.clientId() so ExecuteTransferService preserves it
         // instead of minting a new server-side UUID — prevents a phantom duplicate on pull.
         authenticateAsOwner();
         var op = buildOp();
-        var mockTransfer = mock(StockTransfer.class);
-        when(mockTransfer.getId()).thenReturn(UUID.randomUUID());
-        when(transferStockUseCase.execute(any())).thenReturn(mockTransfer);
+        when(transferCommand.transfer(any())).thenReturn(UUID.randomUUID());
 
         handler.handle(op, ACTOR_ID, TENANT_ID);
 
-        ArgumentCaptor<TransferStockCommand> captor = ArgumentCaptor.forClass(TransferStockCommand.class);
-        verify(transferStockUseCase).execute(captor.capture());
+        ArgumentCaptor<TransferInput> captor = ArgumentCaptor.forClass(TransferInput.class);
+        verify(transferCommand).transfer(captor.capture());
         assertThat(captor.getValue().clientId()).isEqualTo(UUID.fromString(op.entityId()));
     }
 
@@ -201,7 +194,7 @@ class TransferSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).startsWith("Invalid quantity");
-        verifyNoInteractions(transferStockUseCase);
+        verifyNoInteractions(transferCommand);
     }
 
     @Test
@@ -212,6 +205,6 @@ class TransferSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).startsWith("Invalid quantity");
-        verifyNoInteractions(transferStockUseCase);
+        verifyNoInteractions(transferCommand);
     }
 }

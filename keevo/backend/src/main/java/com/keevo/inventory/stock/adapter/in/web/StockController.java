@@ -1,9 +1,9 @@
 package com.keevo.inventory.stock.adapter.in.web;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.AdjustStockRequestDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.RecordStockEntryRequestDto;
+import com.keevo.inventory.stock.adapter.in.web.dto.ProductThresholdResponseDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.SetThresholdRequestDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.StockLevelResponseDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.StockMovementResponseDto;
@@ -78,7 +78,7 @@ public class StockController {
             @PathVariable UUID productId) {
 
         var snapshot = getCurrentStockUseCase.execute(productId);
-        int threshold = snapshot.product().getMinimumThreshold();
+        int threshold = snapshot.product().minimumThreshold();
 
         List<StockLevelResponseDto> dtos = snapshot.stockLevels().stream()
                 .map(level -> StockLevelResponseDto.from(level, threshold))
@@ -151,13 +151,13 @@ public class StockController {
      * Sets the minimum stock threshold for alert evaluation.
      */
     @PatchMapping("/threshold")
-    public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> setThreshold(
+    public ResponseEntity<ApiResponseWrapper<ProductThresholdResponseDto>> setThreshold(
             @PathVariable UUID productId,
             @Valid @RequestBody SetThresholdRequestDto request) {
 
         UUID actorId = CurrentActor.actorId();
         var product = setStockThresholdUseCase.execute(productId, request.minimumThreshold(), actorId);
-        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(product)));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductThresholdResponseDto.from(product)));
     }
 
     // ──────────────────────────────────────────────────────────────────

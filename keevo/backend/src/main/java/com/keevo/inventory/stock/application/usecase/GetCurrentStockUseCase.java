@@ -1,7 +1,7 @@
 package com.keevo.inventory.stock.application.usecase;
 
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.shared.domain.exception.DomainException;
@@ -23,12 +23,12 @@ import java.util.UUID;
 @Service
 public class GetCurrentStockUseCase {
 
-    private final ProductRepository productRepository;
+    private final ProductQueryPort productQuery; // 12.2a: catalog public API
     private final StockLevelRepository stockLevelRepository;
 
-    public GetCurrentStockUseCase(ProductRepository productRepository,
+    public GetCurrentStockUseCase(ProductQueryPort productQuery,
                                   StockLevelRepository stockLevelRepository) {
-        this.productRepository    = productRepository;
+        this.productQuery         = productQuery;
         this.stockLevelRepository = stockLevelRepository;
     }
 
@@ -38,11 +38,11 @@ public class GetCurrentStockUseCase {
      * @param product          the product (carries minimumThreshold)
      * @param stockLevels      stock levels across all stores (may be empty if never stocked)
      */
-    public record StockSnapshot(Product product, List<StockLevel> stockLevels) {
+    public record StockSnapshot(ProductView product, List<StockLevel> stockLevels) {
 
         /** True when at least one store is at or below the threshold. */
         public boolean isLowInAnyStore() {
-            int threshold = product.getMinimumThreshold();
+            int threshold = product.minimumThreshold();
             if (threshold <= 0) return false;
             return stockLevels.stream()
                     .anyMatch(l -> l.getQuantity() <= threshold);
@@ -56,7 +56,7 @@ public class GetCurrentStockUseCase {
      */
     @Transactional(readOnly = true)
     public StockSnapshot execute(UUID productId) {
-        Product product = productRepository.findById(productId)
+        ProductView product = productQuery.findById(productId)
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + productId));
 

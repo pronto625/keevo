@@ -1,8 +1,9 @@
 package com.keevo.inventory.stock.application.usecase;
 
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductCommandPort;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductState;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
@@ -17,47 +18,53 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.*;
 
 /**
- * SetStockThresholdUseCaseTest — Story 2.3.
+ * SetStockThresholdUseCaseTest — Story 2.3 (catalog reached through its public API since 12.2a).
  */
 @ExtendWith(MockitoExtension.class)
 class SetStockThresholdUseCaseTest {
 
-    @Mock private ProductRepository productRepository;
+    @Mock private ProductQueryPort productQuery;
+    @Mock private ProductCommandPort productCommand;
     @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @InjectMocks private SetStockThresholdUseCase useCase;
 
     private static final UUID PRODUCT_ID = UUID.randomUUID();
     private static final UUID ACTOR_ID = UUID.randomUUID();
 
-    private Product product(int threshold) {
-        return new Product(PRODUCT_ID, "Widget", "d", "KEV-ABCDEF",
+    private ProductView product(int threshold) {
+        return new ProductView(PRODUCT_ID, "Widget", "d", "KEV-ABCDEF",
             UUID.randomUUID(), 1000, 800, 50, 10,
-            false, ProductStatus.ACTIVE, threshold,
+            false, ProductState.ACTIVE, threshold,
             Instant.now(), Instant.now());
+    }
+
+    private void stubChangeEchoingThreshold() {
+        when(productCommand.changeMinimumThreshold(eq(PRODUCT_ID), anyInt()))
+            .thenAnswer(inv -> product(inv.getArgument(1)));
     }
 
     @Test
     void should_update_minimum_threshold() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product(0)));
-        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(product(0)));
+        stubChangeEchoingThreshold();
 
-        Product result = useCase.execute(PRODUCT_ID, 15, ACTOR_ID);
+        ProductView result = useCase.execute(PRODUCT_ID, 15, ACTOR_ID);
 
-        assertThat(result.getMinimumThreshold()).isEqualTo(15);
-        verify(productRepository).save(any(Product.class));
+        assertThat(result.minimumThreshold()).isEqualTo(15);
+        verify(productCommand).changeMinimumThreshold(PRODUCT_ID, 15);
     }
 
     @Test
     void should_accept_zero_threshold() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product(10)));
-        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(product(10)));
+        stubChangeEchoingThreshold();
 
-        Product result = useCase.execute(PRODUCT_ID, 0, ACTOR_ID);
-        assertThat(result.getMinimumThreshold()).isEqualTo(0);
+        ProductView result = useCase.execute(PRODUCT_ID, 0, ACTOR_ID);
+        assertThat(result.minimumThreshold()).isEqualTo(0);
     }
 
     @Test
@@ -66,24 +73,25 @@ class SetStockThresholdUseCaseTest {
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("negative");
 
-        verify(productRepository, never()).save(any());
+        verifyNoInteractions(productQuery, productCommand);
     }
 
     @Test
     void should_throw_product_not_found() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.empty());
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> useCase.execute(PRODUCT_ID, 5, ACTOR_ID))
             .isInstanceOf(DomainException.class)
             .satisfies(ex ->
                 assertThat(((DomainException) ex).getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
+        verifyNoInteractions(productCommand);
     }
 
     /** J10 — a real threshold change is recorded in the action history. */
     @Test
     void threshold_change_publishes_audit_event() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product(5)));
-        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(product(5)));
+        stubChangeEchoingThreshold();
 
         useCase.execute(PRODUCT_ID, 12, ACTOR_ID);
 
@@ -98,8 +106,8 @@ class SetStockThresholdUseCaseTest {
 
     @Test
     void same_threshold_publishes_nothing() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(product(5)));
-        when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(product(5)));
+        stubChangeEchoingThreshold();
 
         useCase.execute(PRODUCT_ID, 5, ACTOR_ID);
 

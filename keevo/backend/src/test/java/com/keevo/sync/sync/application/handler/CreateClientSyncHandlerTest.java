@@ -1,18 +1,22 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.crm.contact.domain.entity.Client;
-import com.keevo.crm.contact.domain.port.out.ClientRepository;
+import com.keevo.crm.api.ClientCommandPort;
+import com.keevo.crm.api.ClientQueryPort;
+import com.keevo.crm.api.ClientView;
+import com.keevo.crm.api.CreateClientInput;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,7 +26,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CreateClientSyncHandlerTest {
 
-    @Mock private ClientRepository clientRepository;
+    @Mock private ClientQueryPort clientQuery;
+    @Mock private ClientCommandPort clientCommand;
 
     private CreateClientSyncHandler handler;
 
@@ -31,36 +36,40 @@ class CreateClientSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CreateClientSyncHandler(clientRepository);
+        handler = new CreateClientSyncHandler(clientQuery, clientCommand);
     }
 
-    private Client sampleClient(UUID id) {
-        return new Client(id, "Alice Dupont", "+237690000001", null, null, false,
+    private ClientView sampleClient(UUID id) {
+        return new ClientView(id, "Alice Dupont", "+237690000001", null, null, false,
                 Instant.now(), Instant.now());
     }
 
     @Test
     void handle_createClient_savesWithClientProvidedUUID() {
         var clientId = UUID.randomUUID();
-        when(clientRepository.findById(clientId)).thenReturn(Optional.empty());
-        when(clientRepository.save(any())).thenReturn(sampleClient(clientId));
+        when(clientQuery.existsById(clientId)).thenReturn(false);
+        when(clientCommand.createWithId(any())).thenReturn(sampleClient(clientId));
 
         var op = new SyncOperation("op-1", "CREATE_CLIENT", clientId.toString(),
-                Map.of("id", clientId.toString(), "name", "Alice Dupont", "phone", "+237690000001"),
+                Map.of("id", clientId.toString(), "name", "Alice Dupont", "phone", "+237690000001",
+                        "notes", "VIP"),
                 Instant.now());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(clientId.toString());
-        // Verify saved with the exact client-provided UUID (idempotency).
-        verify(clientRepository).save(argThat(c -> clientId.equals(c.id())));
+        // Created with the exact client-provided UUID (idempotency).
+        var captor = ArgumentCaptor.forClass(CreateClientInput.class);
+        verify(clientCommand).createWithId(captor.capture());
+        assertThat(captor.getValue())
+                .isEqualTo(new CreateClientInput(clientId, "Alice Dupont", "+237690000001", null, "VIP"));
     }
 
     @Test
     void handle_createClient_idempotent_skipsWhenClientAlreadyExists() {
         var clientId = UUID.randomUUID();
-        when(clientRepository.findById(clientId)).thenReturn(Optional.of(sampleClient(clientId)));
+        when(clientQuery.existsById(clientId)).thenReturn(true);
 
         var op = new SyncOperation("op-2", "CREATE_CLIENT", clientId.toString(),
                 Map.of("id", clientId.toString(), "name", "Alice Dupont", "phone", "+237690000001"),
@@ -69,7 +78,7 @@ class CreateClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(clientRepository, never()).save(any());
+        verifyNoInteractions(clientCommand);
     }
 
     @Test
@@ -81,7 +90,7 @@ class CreateClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(clientRepository);
+        verifyNoInteractions(clientQuery, clientCommand);
     }
 
     @Test
@@ -93,14 +102,16 @@ class CreateClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(clientRepository);
+        verifyNoInteractions(clientQuery, clientCommand);
     }
 
     @Test
     void handle_createClient_invalidPhone_returnsRejected() {
-        // Client domain record throws DomainException for invalid E.164 format.
+        // The crm rejects a non-E.164 phone with VALIDATION_ERROR.
         var clientId = UUID.randomUUID();
-        when(clientRepository.findById(clientId)).thenReturn(Optional.empty());
+        when(clientQuery.existsById(clientId)).thenReturn(false);
+        when(clientCommand.createWithId(any()))
+                .thenThrow(new DomainException(ErrorCode.VALIDATION_ERROR, "Phone must be E.164 format"));
 
         var op = new SyncOperation("op-5", "CREATE_CLIENT", clientId.toString(),
                 Map.of("id", clientId.toString(), "name", "Bob", "phone", "invalid"),
@@ -109,7 +120,7 @@ class CreateClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verify(clientRepository, never()).save(any());
+        assertThat(result.reason()).isEqualTo("VALIDATION_ERROR");
     }
 
     @Test
@@ -128,6 +139,6 @@ class CreateClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verifyNoInteractions(clientRepository);
+        verifyNoInteractions(clientQuery, clientCommand);
     }
 }

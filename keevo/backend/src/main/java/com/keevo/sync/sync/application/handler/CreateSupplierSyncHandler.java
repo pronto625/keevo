@@ -1,13 +1,14 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.crm.contact.domain.entity.Supplier;
-import com.keevo.crm.contact.domain.port.out.SupplierRepository;
+import com.keevo.crm.api.CreateSupplierInput;
+import com.keevo.crm.api.SupplierCommandPort;
+import com.keevo.crm.api.SupplierQueryPort;
+import com.keevo.crm.api.SupplierView;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,10 +26,13 @@ import java.util.UUID;
 @Component
 public class CreateSupplierSyncHandler extends AbstractSyncOperationHandler {
 
-    private final SupplierRepository supplierRepository;
+    // 12.2a: crm reached only through its public API.
+    private final SupplierQueryPort supplierQuery;
+    private final SupplierCommandPort supplierCommand;
 
-    public CreateSupplierSyncHandler(SupplierRepository supplierRepository) {
-        this.supplierRepository = supplierRepository;
+    public CreateSupplierSyncHandler(SupplierQueryPort supplierQuery, SupplierCommandPort supplierCommand) {
+        this.supplierQuery = supplierQuery;
+        this.supplierCommand = supplierCommand;
     }
 
     @Override
@@ -54,30 +58,23 @@ public class CreateSupplierSyncHandler extends AbstractSyncOperationHandler {
         UUID supplierId = UUID.fromString((String) p.get("id"));
 
         // Idempotency: if already synced, return APPLIED without duplicate insert.
-        if (supplierRepository.findById(supplierId).isPresent()) {
+        if (supplierQuery.existsById(supplierId)) {
             return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                     supplierId.toString(), null);
         }
 
-        Instant now = Instant.now();
-        Supplier supplier = new Supplier(
+        // Product associations, when provided, are linked by the crm right after the insert.
+        @SuppressWarnings("unchecked")
+        List<String> rawIds = (List<String>) p.get("productIds");
+        List<UUID> productIds = rawIds != null
+                ? rawIds.stream().map(UUID::fromString).toList()
+                : List.of();
+        SupplierView saved = supplierCommand.createWithId(new CreateSupplierInput(
                 supplierId,
                 (String) p.get("name"),
                 (String) p.get("phone"),
                 (String) p.getOrDefault("email", null),
-                false,
-                now,
-                now
-        );
-        Supplier saved = supplierRepository.save(supplier);
-
-        // Link product associations when provided.
-        @SuppressWarnings("unchecked")
-        List<String> rawIds = (List<String>) p.get("productIds");
-        if (rawIds != null && !rawIds.isEmpty()) {
-            List<UUID> productIds = rawIds.stream().map(UUID::fromString).toList();
-            supplierRepository.linkProducts(saved.id(), productIds);
-        }
+                productIds));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saved.id().toString(), null);

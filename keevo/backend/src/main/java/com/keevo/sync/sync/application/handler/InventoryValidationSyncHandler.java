@@ -2,10 +2,9 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
-import com.keevo.inventory.counting.domain.port.in.ValidateInventoryCommand;
-import com.keevo.inventory.counting.domain.port.in.ValidateInventoryUseCase;
-import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.inventory.api.CountingCommandPort;
+import com.keevo.inventory.api.CountingQueryPort;
+import com.keevo.inventory.api.ValidateCountingInput;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -24,13 +23,14 @@ import java.util.UUID;
 @Component
 public class InventoryValidationSyncHandler extends AbstractSyncOperationHandler {
 
-    private final ValidateInventoryUseCase validateUseCase;
-    private final InventorySessionRepository sessionRepo;
+    // 12.2b: inventory public API
+    private final CountingCommandPort countingCommand;
+    private final CountingQueryPort countingQuery;
 
-    public InventoryValidationSyncHandler(ValidateInventoryUseCase validateUseCase,
-                                          InventorySessionRepository sessionRepo) {
-        this.validateUseCase = validateUseCase;
-        this.sessionRepo = sessionRepo;
+    public InventoryValidationSyncHandler(CountingCommandPort countingCommand,
+                                          CountingQueryPort countingQuery) {
+        this.countingCommand = countingCommand;
+        this.countingQuery = countingQuery;
     }
 
     @Override
@@ -71,15 +71,14 @@ public class InventoryValidationSyncHandler extends AbstractSyncOperationHandler
         UUID sessionId = UUID.fromString((String) operation.payload().get("sessionId"));
 
         // Idempotency guard: if session already VALIDATED, skip
-        var sessionOpt = sessionRepo.findById(sessionId);
-        if (sessionOpt.isPresent() && sessionOpt.get().getStatus() == InventorySessionStatus.VALIDATED) {
+        if (countingQuery.isSessionValidated(sessionId)) {
             return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                     sessionId.toString(), null);
         }
 
-        var result = validateUseCase.execute(
-                new ValidateInventoryCommand(sessionId, actorId, movementIds(operation.payload())));
+        UUID validatedId = countingCommand.validate(
+                new ValidateCountingInput(sessionId, actorId, movementIds(operation.payload())));
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                result.sessionId().toString(), null);
+                validatedId.toString(), null);
     }
 }

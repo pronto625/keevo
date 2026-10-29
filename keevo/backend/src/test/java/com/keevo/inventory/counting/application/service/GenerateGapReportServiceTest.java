@@ -2,7 +2,9 @@ package com.keevo.inventory.counting.application.service;
 
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.inventory.counting.domain.model.*;
 import com.keevo.inventory.counting.domain.port.in.GenerateGapReportQuery;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
@@ -32,7 +34,7 @@ class GenerateGapReportServiceTest {
 
     @Mock private InventorySessionRepository sessionRepo;
     @Mock private InventoryCountRepository countRepo;
-    @Mock private ProductRepository productRepo;
+    @Mock private ProductQueryPort productQuery;
     @Mock private StoreRepository storeRepo;
 
     private GenerateGapReportService service;
@@ -46,7 +48,7 @@ class GenerateGapReportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GenerateGapReportService(sessionRepo, countRepo, productRepo, storeRepo);
+        service = new GenerateGapReportService(sessionRepo, countRepo, productQuery, storeRepo);
     }
 
     @Test
@@ -58,7 +60,7 @@ class GenerateGapReportServiceTest {
                 InventoryCount.create(SESSION_ID, PRODUCT_B_ID, null, "Shortage", null, 10, 5, ACTOR_ID),
                 InventoryCount.create(SESSION_ID, PRODUCT_C_ID, null, "Surplus", null, 5, 8, ACTOR_ID)
         ));
-        when(productRepo.findAllByIds(anyList())).thenReturn(List.of(
+        when(productQuery.findAllByIds(anyList())).thenReturn(List.of(
                 product(PRODUCT_A_ID, "Concordant", 5000),
                 product(PRODUCT_B_ID, "Shortage", 5000),
                 product(PRODUCT_C_ID, "Surplus", 3000)
@@ -89,7 +91,7 @@ class GenerateGapReportServiceTest {
     void execute_emptyCounts_shouldReturnEmptyReport() {
         when(sessionRepo.findById(SESSION_ID)).thenReturn(Optional.of(createSession()));
         when(countRepo.findBySessionId(SESSION_ID)).thenReturn(List.of());
-        when(productRepo.findAllByIds(anyList())).thenReturn(List.of());
+        when(productQuery.findAllByIds(anyList())).thenReturn(List.of());
         when(storeRepo.findById(STORE_ID)).thenReturn(Optional.of(store()));
 
         InventoryGapReport report = service.execute(new GenerateGapReportQuery(SESSION_ID, ACTOR_ID));
@@ -106,7 +108,7 @@ class GenerateGapReportServiceTest {
                 "Uncounted", null, 10, null, null, null, Instant.now());
         InventoryCount counted = InventoryCount.create(SESSION_ID, PRODUCT_B_ID, null, "Counted", null, 10, 10, ACTOR_ID);
         when(countRepo.findBySessionId(SESSION_ID)).thenReturn(List.of(uncounted, counted));
-        when(productRepo.findAllByIds(anyList())).thenReturn(List.of(product(PRODUCT_B_ID, "Counted", 3000)));
+        when(productQuery.findAllByIds(anyList())).thenReturn(List.of(product(PRODUCT_B_ID, "Counted", 3000)));
         when(storeRepo.findById(STORE_ID)).thenReturn(Optional.of(store()));
 
         InventoryGapReport report = service.execute(new GenerateGapReportQuery(SESSION_ID, ACTOR_ID));
@@ -120,7 +122,7 @@ class GenerateGapReportServiceTest {
         when(countRepo.findBySessionId(SESSION_ID)).thenReturn(List.of(
                 InventoryCount.create(SESSION_ID, PRODUCT_A_ID, null, "FreeProduct", null, 10, 5, ACTOR_ID)
         ));
-        when(productRepo.findAllByIds(anyList())).thenReturn(List.of(product(PRODUCT_A_ID, "FreeProduct", 0)));
+        when(productQuery.findAllByIds(anyList())).thenReturn(List.of(product(PRODUCT_A_ID, "FreeProduct", 0)));
         when(storeRepo.findById(STORE_ID)).thenReturn(Optional.of(store()));
 
         InventoryGapReport report = service.execute(new GenerateGapReportQuery(SESSION_ID, ACTOR_ID));
@@ -142,8 +144,8 @@ class GenerateGapReportServiceTest {
                 null, null, true, Instant.now(), Instant.now());
     }
 
-    private Product product(UUID id, String name, int price) {
-        return new Product(id, name, null, "KEV-" + name.substring(0, Math.min(6, name.length())).toUpperCase().replaceAll("[^A-Z0-9]", "X").concat("XXXXXX").substring(0, 6),
-                UUID.randomUUID(), price, 0, 0, 0, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+    private ProductView product(UUID id, String name, int price) {
+        return CatalogProductApiTestSupport.view(new Product(id, name, null, "KEV-" + name.substring(0, Math.min(6, name.length())).toUpperCase().replaceAll("[^A-Z0-9]", "X").concat("XXXXXX").substring(0, 6),
+                UUID.randomUUID(), price, 0, 0, 0, false, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
     }
 }

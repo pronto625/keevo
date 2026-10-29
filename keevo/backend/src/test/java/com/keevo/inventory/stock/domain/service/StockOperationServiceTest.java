@@ -2,7 +2,9 @@ package com.keevo.inventory.stock.domain.service;
 
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
@@ -53,7 +55,7 @@ class StockOperationServiceTest {
 
     @Mock private StockLevelRepository     stockLevelRepository;
     @Mock private StockMovementRepository  stockMovementRepository;
-    @Mock private ProductRepository        productRepository;
+    @Mock private ProductQueryPort        productQuery;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository; // Story 14.10
 
@@ -76,11 +78,11 @@ class StockOperationServiceTest {
         org.springframework.security.core.context.SecurityContextHolder.clearContext();
     }
 
-    private Product productWithThreshold(int threshold) {
-        return new Product(PRODUCT_ID, "Widget", "desc", "KEV-ABCDEF",
+    private ProductView productWithThreshold(int threshold) {
+        return CatalogProductApiTestSupport.view(new Product(PRODUCT_ID, "Widget", "desc", "KEV-ABCDEF",
             UUID.randomUUID(), 1000, 800, 50, 100,
             false, ProductStatus.ACTIVE, threshold,
-            Instant.now(), Instant.now());
+            Instant.now(), Instant.now()));
     }
 
     private StockLevel levelWithQuantity(int qty) {
@@ -91,7 +93,7 @@ class StockOperationServiceTest {
 
     @Test
     void should_record_stock_entry_and_update_level() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -112,7 +114,7 @@ class StockOperationServiceTest {
 
     @Test
     void should_create_stock_level_at_zero_when_first_operation() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.empty());  // no level yet
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -129,7 +131,7 @@ class StockOperationServiceTest {
 
     @Test
     void should_throw_insufficient_stock_when_quantity_would_go_negative() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(3)));
 
@@ -147,7 +149,7 @@ class StockOperationServiceTest {
 
     @Test
     void should_publish_threshold_breached_event_when_quantity_falls_to_threshold() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(5)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(5)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -166,7 +168,7 @@ class StockOperationServiceTest {
 
     @Test
     void should_not_publish_threshold_breached_when_threshold_is_zero() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(1)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -184,7 +186,7 @@ class StockOperationServiceTest {
     @Test
     @DisplayName("AC4: should propagate OptimisticLockingFailureException on concurrent stock mutation")
     void shouldNotLoseUpdateOnConcurrentStockMutation() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         // Save movement succeeds, but save level throws — simulating concurrent write
@@ -204,7 +206,7 @@ class StockOperationServiceTest {
 
     @Test
     void allowNegative_appliesTheDeltaBelowZero() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(2)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -219,7 +221,7 @@ class StockOperationServiceTest {
 
     @Test
     void negativeLevel_canBeReadAndRestocked() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(-2)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -234,7 +236,7 @@ class StockOperationServiceTest {
     @Test
     void clientMovementId_isKeptAsTheMovementId() {
         UUID movementId = UUID.randomUUID();
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -255,7 +257,7 @@ class StockOperationServiceTest {
                 java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
         auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee(null, STORE_ID));
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -274,7 +276,7 @@ class StockOperationServiceTest {
     @Test
     void transferLeg_eventCarriesCounterpartStoreName() {
         UUID dest = UUID.randomUUID();
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -293,7 +295,7 @@ class StockOperationServiceTest {
     @Test
     void transferLeg_missingCounterpartStore_noNameNoFailure() {
         UUID dest = UUID.randomUUID();
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -309,7 +311,7 @@ class StockOperationServiceTest {
 
     @Test
     void nonTransfer_eventHasNoCounterpart() {
-        when(productRepository.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
+        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(productWithThreshold(0)));
         when(stockLevelRepository.findByProductAndStore(PRODUCT_ID, STORE_ID))
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

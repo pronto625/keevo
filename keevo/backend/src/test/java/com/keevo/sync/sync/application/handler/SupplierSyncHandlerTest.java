@@ -1,9 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.crm.contact.application.usecase.ArchiveSupplierUseCase;
-import com.keevo.crm.contact.application.usecase.UnarchiveSupplierUseCase;
-import com.keevo.crm.contact.application.usecase.UpdateSupplierUseCase;
-import com.keevo.crm.contact.domain.entity.Supplier;
+import com.keevo.crm.api.SupplierCommandPort;
+import com.keevo.crm.api.SupplierView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -25,9 +23,7 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SupplierSyncHandlerTest {
 
-    @Mock private UpdateSupplierUseCase updateSupplier;
-    @Mock private ArchiveSupplierUseCase archiveSupplier;
-    @Mock private UnarchiveSupplierUseCase unarchiveSupplier;
+    @Mock private SupplierCommandPort supplierCommand;
 
     private SupplierSyncHandler handler;
 
@@ -36,14 +32,14 @@ class SupplierSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new SupplierSyncHandler(updateSupplier, archiveSupplier, unarchiveSupplier);
+        handler = new SupplierSyncHandler(supplierCommand);
     }
 
     @Test
-    void handle_updateSupplier_delegatesToUpdateSupplierUseCase() {
+    void handle_updateSupplier_delegatesToUpdateSupplierPort() {
         var supplierId = UUID.randomUUID();
-        when(updateSupplier.execute(any())).thenReturn(
-                new Supplier(supplierId, "Updated Supplier", "+237600000001", null, false, Instant.now(), Instant.now()));
+        when(supplierCommand.update(any())).thenReturn(
+                new SupplierView(supplierId, "Updated Supplier", "+237600000001", null, false, java.util.List.of(), Instant.now(), Instant.now()));
 
         var op = new SyncOperation("op-1", "UPDATE_SUPPLIER", supplierId.toString(),
                 Map.of("supplierId", supplierId.toString(), "name", "Updated Supplier", "phone", "+237600000001"),
@@ -52,11 +48,11 @@ class SupplierSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(updateSupplier).execute(any());
+        verify(supplierCommand).update(any());
     }
 
     @Test
-    void handle_archiveSupplier_delegatesToArchiveSupplierUseCase() {
+    void handle_archiveSupplier_delegatesToArchiveSupplierPort() {
         var supplierId = UUID.randomUUID();
         var op = new SyncOperation("op-1", "ARCHIVE_SUPPLIER", supplierId.toString(),
                 Map.of("supplierId", supplierId.toString()), Instant.now());
@@ -64,7 +60,7 @@ class SupplierSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(archiveSupplier).execute(any(), any(), any());
+        verify(supplierCommand).archive(any(), any(), any());
     }
 
     @Test
@@ -75,7 +71,7 @@ class SupplierSyncHandlerTest {
                 Instant.now());
 
         doThrow(new DomainException(ErrorCode.SUPPLIER_NOT_FOUND))
-                .when(updateSupplier).execute(any());
+                .when(supplierCommand).update(any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
@@ -89,7 +85,7 @@ class SupplierSyncHandlerTest {
     }
 
     @Test
-    void handle_unarchiveSupplier_delegatesToUnarchiveSupplierUseCase() {
+    void handle_unarchiveSupplier_delegatesToUnarchiveSupplierPort() {
         var supplierId = UUID.randomUUID();
         var op = new SyncOperation("op-2", "UNARCHIVE_SUPPLIER", supplierId.toString(),
                 Map.of("supplierId", supplierId.toString()), Instant.now());
@@ -98,15 +94,15 @@ class SupplierSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(supplierId.toString());
-        verify(unarchiveSupplier).execute(supplierId, ACTOR_ID, TENANT_ID);
-        verifyNoInteractions(archiveSupplier);
+        verify(supplierCommand).unarchive(supplierId, ACTOR_ID, TENANT_ID);
+        verify(supplierCommand, never()).archive(any(), any(), any());
     }
 
     @Test
     void handle_unarchiveUnknownSupplier_isRejected() {
         var supplierId = UUID.randomUUID();
         doThrow(new DomainException(ErrorCode.SUPPLIER_NOT_FOUND))
-                .when(unarchiveSupplier).execute(any(), any(), any());
+                .when(supplierCommand).unarchive(any(), any(), any());
 
         var result = handler.handle(new SyncOperation("op-3", "UNARCHIVE_SUPPLIER", supplierId.toString(),
                 Map.of("supplierId", supplierId.toString()), Instant.now()), ACTOR_ID, TENANT_ID);

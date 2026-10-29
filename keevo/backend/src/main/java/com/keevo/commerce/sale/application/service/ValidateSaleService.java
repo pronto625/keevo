@@ -1,9 +1,10 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.inventory.api.StockCommandPort;
+import com.keevo.inventory.api.StockMovementInput;
+import com.keevo.inventory.api.StockMovementKind;
+import com.keevo.inventory.api.StockQueryPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.commerce.sale.domain.model.*;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetPendingSalesUseCase;
@@ -40,19 +41,19 @@ import java.util.UUID;
 public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSaleUseCase, GetPendingSalesUseCase {
 
     private final SaleRepository saleRepository;
-    private final StockLevelRepository stockLevelRepository;
-    private final StockOperationService stockOperationService;
+    private final StockQueryPort stockQuery;
+    private final StockCommandPort stockCommand;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
     public ValidateSaleService(SaleRepository saleRepository,
-                               StockLevelRepository stockLevelRepository,
-                               StockOperationService stockOperationService,
+                               StockQueryPort stockQuery,
+                               StockCommandPort stockCommand,
                                ApplicationEventPublisher eventPublisher,
                                ObjectMapper objectMapper) {
         this.saleRepository = saleRepository;
-        this.stockLevelRepository = stockLevelRepository;
-        this.stockOperationService = stockOperationService;
+        this.stockQuery = stockQuery;
+        this.stockCommand = stockCommand;
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
@@ -87,10 +88,10 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 UUID productId = entry.getKey();
                 int qty = entry.getValue();
                 if (qty > 0) {
-                    stockOperationService.recordOperation(
+                    stockCommand.recordMovement(new StockMovementInput(
                             productId, null, sale.getStoreId(),
-                            MovementType.STOCK_ENTRY, qty,
-                            actorId, "Stock initial à la validation du brouillon");
+                            StockMovementKind.STOCK_ENTRY, qty,
+                            actorId, "Stock initial à la validation du brouillon"));
                 }
             }
         }
@@ -102,9 +103,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
 
         // Decrement stock for each item — force to 0 if insufficient
         for (SaleItem item : sale.getItems()) {
-            int available = stockLevelRepository.findByProductAndStore(item.getProductId(), sale.getStoreId())
-                    .map(sl -> sl.getQuantity())
-                    .orElse(0);
+            int available = stockQuery.availableQuantity(item.getProductId(), null, sale.getStoreId());
 
             int effectiveDecrement = Math.min(available, item.getQuantity());
 
@@ -118,11 +117,11 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
             }
 
             if (effectiveDecrement > 0) {
-                stockOperationService.recordOperation(
+                stockCommand.recordMovement(new StockMovementInput(
                         item.getProductId(),
                         item.getVariantId(),
                         sale.getStoreId(),
-                        MovementType.SALE,
+                        StockMovementKind.SALE,
                         -effectiveDecrement,
                         command.actorId(),
                         "Validation manuelle vente " + sale.getId(),
@@ -130,7 +129,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                         // backend, so the device's pull does not add a second SALE movement.
                         item.getId(),
                         false
-                );
+                ));
             }
         }
 
@@ -183,11 +182,11 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 for (SaleItem item : sale.getItems()) {
                     // v1s-13-13: deterministic id (same on the device), so the pull does not
                     // add a second SALE_CANCELLED row to the history.
-                    stockOperationService.recordOperation(
+                    stockCommand.recordMovement(new StockMovementInput(
                             item.getProductId(), item.getVariantId(), sale.getStoreId(),
-                            MovementType.SALE_CANCELLED, item.getQuantity(),
+                            StockMovementKind.SALE_CANCELLED, item.getQuantity(),
                             command.actorId(), "Annulation vente " + sale.getId(),
-                            DeterministicIds.saleCancelledMovementId(item.getId()), false);
+                            DeterministicIds.saleCancelledMovementId(item.getId()), false));
                 }
                 eventPublisher.publishEvent(new SaleCancelledEvent(
                         sale.getId(), command.actorId(), command.justification(),

@@ -11,8 +11,7 @@ import com.keevo.catalog.product.domain.event.ProductImportedFromCsvEvent;
 import com.keevo.catalog.product.domain.port.out.CsvParserPort;
 import com.keevo.catalog.product.domain.port.out.DefaultStorePort;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.catalog.api.InitialStockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -22,6 +21,7 @@ import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +31,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 /**
@@ -62,7 +63,9 @@ public class ImportCsvProductsUseCase {
     private final ProductCsvRowFactory    rowFactory;
     private final CreateProductUseCase    createProductUseCase;
     private final ProductRepository       productRepository;
-    private final StockOperationService   stockOperationService;
+    // 12.2b: implemented by inventory; optional — catalog must start without inventory
+    private final ObjectProvider<InitialStockPort> initialStockPort;
+    private final AtomicBoolean            missingStockPortLogged = new AtomicBoolean();
     private final DefaultStorePort        defaultStorePort;
     private final StoreRepository         storeRepository;
     private final ProductCountPort        productCountPort;
@@ -76,7 +79,7 @@ public class ImportCsvProductsUseCase {
             ProductCsvRowFactory rowFactory,
             CreateProductUseCase createProductUseCase,
             ProductRepository productRepository,
-            StockOperationService stockOperationService,
+            ObjectProvider<InitialStockPort> initialStockPort,
             DefaultStorePort defaultStorePort,
             StoreRepository storeRepository,
             ProductCountPort productCountPort,
@@ -88,7 +91,7 @@ public class ImportCsvProductsUseCase {
         this.rowFactory            = rowFactory;
         this.createProductUseCase  = createProductUseCase;
         this.productRepository     = productRepository;
-        this.stockOperationService = stockOperationService;
+        this.initialStockPort      = initialStockPort;
         this.defaultStorePort      = defaultStorePort;
         this.storeRepository       = storeRepository;
         this.productCountPort      = productCountPort;
@@ -199,12 +202,17 @@ public class ImportCsvProductsUseCase {
                 var saved = createProductUseCase.execute(dto);
 
                 // Stock movement if initial quantity > 0
-                if (dto.stockQuantity() != null && dto.stockQuantity() > 0) {
-                    stockOperationService.recordOperation(
+                InitialStockPort stockPort = dto.stockQuantity() != null && dto.stockQuantity() > 0
+                        ? initialStockPort.getIfAvailable() : null;
+                if (dto.stockQuantity() != null && dto.stockQuantity() > 0 && stockPort == null
+                        && missingStockPortLogged.compareAndSet(false, true)) {
+                    log.warn("CSV import: no stock module available — products are imported without initial stock");
+                }
+                if (stockPort != null) {
+                    // 12.2b: STOCK_ENTRY movement recorded by inventory (catalog-owned required port)
+                    stockPort.recordInitialStock(
                             saved.getId(),
-                            null,                   // no variant
                             storeId,
-                            MovementType.STOCK_ENTRY,  // initial stock entry
                             dto.stockQuantity(),
                             command.actorId(),
                             "Import CSV ligne " + lineNumber

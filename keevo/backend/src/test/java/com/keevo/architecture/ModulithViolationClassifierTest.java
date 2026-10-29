@@ -49,4 +49,26 @@ class ModulithViolationClassifierTest {
         assertThat(ApplicationModulesBaselineTest.moduleOf("catalog :: api, catalog :: spi")).isEqualTo("catalog");
         assertThat(ApplicationModulesBaselineTest.moduleOf("shared")).isEqualTo("shared");
     }
+
+    private static final String NON_EXPOSED_INTO_INVENTORY =
+        "Module 'commerce' depends on non-exposed type com.keevo.inventory.stock.domain.entity.StockLevel "
+            + "within module 'inventory'!";
+    private static final String NON_EXPOSED_FROM_SHARED =
+        "Module 'shared' depends on non-exposed type com.keevo.inventory.stock.domain.entity.StockLevel "
+            + "within module 'inventory'!";
+    private static final String NON_EXPOSED_INTO_STORE =
+        "Module 'commerce' depends on non-exposed type com.keevo.store.store.domain.model.Store "
+            + "within module 'store'!";
+    private static final String INTERNAL_OF_DECLARED_CATALOG =
+        "Module 'sync' depends on module 'catalog' via com.keevo.sync.A -> com.keevo.catalog.product.domain.entity.Product. "
+            + "Allowed targets: catalog :: api, shared.";
+
+    @Test
+    void internalAccessToPublishedModuleIsFlaggedExceptFromShared() {
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_INVENTORY)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(INTERNAL_OF_DECLARED_CATALOG)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_FROM_SHARED)).isFalse();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_STORE)).isFalse();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(MODULE_UNDECLARED)).isFalse();
+    }
 }

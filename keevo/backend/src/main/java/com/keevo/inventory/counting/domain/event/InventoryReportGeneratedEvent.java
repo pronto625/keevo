@@ -7,6 +7,7 @@ import java.util.UUID;
  * Published when a gap report is generated — triggers audit trail logging.
  * Story 6.3 — Gap Analysis Report.
  */
+@org.springframework.modulith.NamedInterface("events") // 12.2b: merged into "inventory :: events" (see package-info)
 public record InventoryReportGeneratedEvent(
         UUID sessionId,
         UUID actorId,

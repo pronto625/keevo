@@ -1,7 +1,7 @@
 package com.keevo.inventory.stock.domain.service;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
@@ -49,18 +49,18 @@ public class StockOperationService {
 
     private final StockLevelRepository stockLevelRepository;
     private final StockMovementRepository stockMovementRepository;
-    private final ProductRepository productRepository;
+    private final ProductQueryPort productQuery; // 12.2a: catalog public API
     private final ApplicationEventPublisher eventPublisher;
     private final StoreRepository storeRepository; // Story 14.10
 
     public StockOperationService(StockLevelRepository stockLevelRepository,
                                  StockMovementRepository stockMovementRepository,
-                                 ProductRepository productRepository,
+                                 ProductQueryPort productQuery,
                                  ApplicationEventPublisher eventPublisher,
                                  StoreRepository storeRepository) {
         this.stockLevelRepository    = stockLevelRepository;
         this.stockMovementRepository = stockMovementRepository;
-        this.productRepository       = productRepository;
+        this.productQuery            = productQuery;
         this.eventPublisher          = eventPublisher;
         this.storeRepository         = storeRepository;
     }
@@ -127,7 +127,7 @@ public class StockOperationService {
                                           UUID movementId, boolean allowNegative,
                                           UUID counterpartStoreId) {
         // 1. Load product (for name + threshold)
-        var product = productRepository.findById(productId)
+        var product = productQuery.findById(productId)
                 .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
                         "Product not found: " + productId));
 
@@ -205,17 +205,17 @@ public class StockOperationService {
             quantityBefore, quantityChange, quantityAfter,
             actorId, notes,
             tenantId,
-            actorRole, actorName, storeName, product.getName(),
+            actorRole, actorName, storeName, product.name(),
             now,
             counterpartStoreName
         ));
 
         // 7. Threshold check — server-side enforcement (cannot be bypassed client-side)
-        int threshold = product.getMinimumThreshold();
+        int threshold = product.minimumThreshold();
         if (threshold > 0 && quantityAfter <= threshold) {
             eventPublisher.publishEvent(new StockThresholdBreachedEvent(
                 productId,
-                product.getName(),
+                product.name(),
                 storeId,
                 quantityAfter,
                 threshold,

@@ -1,7 +1,7 @@
 package com.keevo.inventory.stock.application.usecase;
 
-import com.keevo.catalog.product.domain.entity.Product;
-import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.api.ProductQueryPort;
+import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.stock.domain.model.CrossStoreAvailabilityEntry;
 import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityQuery;
 import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityUseCase;
@@ -24,19 +24,19 @@ import java.util.List;
 @Service
 public class GetCrossStoreAvailabilityService implements GetCrossStoreAvailabilityUseCase {
 
-    private final ProductRepository         productRepository;
+    private final ProductQueryPort          productQuery; // 12.2a: catalog public API
     private final MultiStoreStockRepository multiStoreStockRepository;
 
-    public GetCrossStoreAvailabilityService(ProductRepository productRepository,
+    public GetCrossStoreAvailabilityService(ProductQueryPort productQuery,
                                             MultiStoreStockRepository multiStoreStockRepository) {
-        this.productRepository         = productRepository;
+        this.productQuery              = productQuery;
         this.multiStoreStockRepository = multiStoreStockRepository;
     }
 
     @Override
     @Transactional(readOnly = true)
     public Result execute(GetCrossStoreAvailabilityQuery query) {
-        Product product = productRepository.findById(query.productId())
+        ProductView product = productQuery.findById(query.productId())
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + query.productId()));
 

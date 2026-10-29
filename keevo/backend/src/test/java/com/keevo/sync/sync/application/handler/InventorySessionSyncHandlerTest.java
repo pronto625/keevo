@@ -1,9 +1,8 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.inventory.counting.domain.model.InventoryScope;
-import com.keevo.inventory.counting.domain.model.InventorySession;
-import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionCommand;
-import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionUseCase;
+import com.keevo.inventory.api.CountingCommandPort;
+import com.keevo.inventory.api.CountingScope;
+import com.keevo.inventory.api.OpenCountingSessionInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -26,12 +25,12 @@ import static org.mockito.Mockito.*;
 
 /**
  * v1s-12-10: CREATE_INVENTORY_SESSION is scoped to the employee's assigned store.
- * v1s-13-8: the handler delegates to {@link CreateInventorySessionUseCase} with the client id.
+ * v1s-13-8: the handler delegates to the inventory {@link CountingCommandPort} with the client id (12.2b).
  */
 @ExtendWith(MockitoExtension.class)
 class InventorySessionSyncHandlerTest {
 
-    @Mock private CreateInventorySessionUseCase useCase;
+    @Mock private CountingCommandPort useCase;
 
     private InventorySessionSyncHandler handler;
 
@@ -59,9 +58,9 @@ class InventorySessionSyncHandlerTest {
     }
 
     private void useCaseEchoes() {
-        when(useCase.execute(any())).thenAnswer(inv -> {
-            CreateInventorySessionCommand c = inv.getArgument(0);
-            return InventorySession.create(c.sessionId(), c.storeId(), c.scope(), c.categoryIds(), c.actorId());
+        when(useCase.openSession(any())).thenAnswer(inv -> {
+            OpenCountingSessionInput in = inv.getArgument(0);
+            return in.sessionId();
         });
     }
 
@@ -91,11 +90,11 @@ class InventorySessionSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(sessionId.toString());
-        var captor = ArgumentCaptor.forClass(CreateInventorySessionCommand.class);
-        verify(useCase).execute(captor.capture());
+        var captor = ArgumentCaptor.forClass(OpenCountingSessionInput.class);
+        verify(useCase).openSession(captor.capture());
         assertThat(captor.getValue().sessionId()).isEqualTo(sessionId);
         assertThat(captor.getValue().storeId()).isEqualTo(STORE_A);
-        assertThat(captor.getValue().scope()).isEqualTo(InventoryScope.FULL);
+        assertThat(captor.getValue().scope()).isEqualTo(CountingScope.FULL);
         assertThat(captor.getValue().actorId()).isEqualTo(ACTOR_ID);
     }
 
@@ -108,7 +107,7 @@ class InventorySessionSyncHandlerTest {
         var result = handler.handle(createOp(sessionId, STORE_C), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(useCase).execute(any());
+        verify(useCase).openSession(any());
     }
 
     @Test
@@ -128,7 +127,7 @@ class InventorySessionSyncHandlerTest {
     @Test
     void activeSessionConflict_isRejectedAlreadyActive() {
         SyncTestAuth.owner();
-        when(useCase.execute(any())).thenThrow(new DomainException(
+        when(useCase.openSession(any())).thenThrow(new DomainException(
                 ErrorCode.INVENTORY_SESSION_ALREADY_ACTIVE, "Active session exists for store"));
 
         var result = handler.handle(createOp(UUID.randomUUID(), STORE_C), ACTOR_ID, TENANT_ID);
@@ -140,7 +139,7 @@ class InventorySessionSyncHandlerTest {
     @Test
     void unknownStore_isRejectedStoreNotFound() {
         SyncTestAuth.owner();
-        when(useCase.execute(any())).thenThrow(new DomainException(
+        when(useCase.openSession(any())).thenThrow(new DomainException(
                 ErrorCode.INVENTORY_STORE_NOT_FOUND, "Store not found"));
 
         var result = handler.handle(createOp(UUID.randomUUID(), STORE_C), ACTOR_ID, TENANT_ID);

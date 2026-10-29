@@ -1,5 +1,6 @@
 package com.keevo.inventory.stock.adapter.in.web;
 
+import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.inventory.stock.application.usecase.GetMultiStoreOverviewService;
 import com.keevo.inventory.stock.application.usecase.GetStoreStockDetailService;
@@ -132,7 +133,7 @@ class MultiStoreStockControllerTest {
     @Test
     void GET_products_productId_availability_shouldReturn200_withEntries() throws Exception {
         var entries = List.of(sampleAvailabilityEntry(5), sampleAvailabilityEntry(0));
-        var result  = new GetCrossStoreAvailabilityUseCase.Result(sampleProduct(), entries);
+        var result  = new GetCrossStoreAvailabilityUseCase.Result(CatalogProductApiTestSupport.view(sampleProduct()), entries);
         when(availabilityUseCase.execute(any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/stock/products/{productId}/availability", productId))
@@ -154,7 +155,7 @@ class MultiStoreStockControllerTest {
 
     @Test
     void GET_products_productId_availability_shouldReturn200_withEmptyEntries_whenNoStores() throws Exception {
-        var result = new GetCrossStoreAvailabilityUseCase.Result(sampleProduct(), List.of());
+        var result = new GetCrossStoreAvailabilityUseCase.Result(CatalogProductApiTestSupport.view(sampleProduct()), List.of());
         when(availabilityUseCase.execute(any())).thenReturn(result);
 
         mockMvc.perform(get("/api/v1/stock/products/{productId}/availability", productId))
