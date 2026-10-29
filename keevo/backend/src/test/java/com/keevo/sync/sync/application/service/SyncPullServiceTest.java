@@ -33,6 +33,7 @@ class SyncPullServiceTest {
     @Mock private ConflictStrategyRegistry conflictStrategyRegistry;
     @Mock private SyncConflictsLogRepository conflictsLogRepository;
     @Mock private com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository syncErrorLogRepository;
+    @Mock private com.keevo.shared.module.ModuleRegistry moduleRegistry;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private PlatformTransactionManager transactionManager;
     @Mock private DeltaEntityProvider productProvider;
@@ -51,7 +52,7 @@ class SyncPullServiceTest {
         lenient().when(clientProvider.entityKey()).thenReturn("clients");
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
                 transactionManager, List.of(productProvider, clientProvider),
-                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository);
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
     }
 
     private static DeltaEntityProvider.Page page(List<Map<String, Object>> rows) {

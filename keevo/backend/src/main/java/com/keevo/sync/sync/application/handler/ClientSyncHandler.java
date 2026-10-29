@@ -27,6 +27,11 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "crm";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         if (operation.payload().get("clientId") == null) {
             throw new IllegalArgumentException("Missing required field: clientId");

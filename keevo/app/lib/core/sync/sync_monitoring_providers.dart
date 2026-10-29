@@ -4,17 +4,21 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_database.dart';
+import 'sync_rejection_policy.dart';
 
 part 'sync_monitoring_providers.g.dart';
 
 /// Pending sync operations count — reads from local sync_queue.
-/// Quarantined operations (v1s-16-15) are not pending.
+/// Quarantined operations (v1s-16-15) are not pending, nor held ones
+/// (`MODULE_INACTIVE`, Story 12.7 — still listed by [pendingSyncQueue]).
 @riverpod
 Future<int> pendingSyncCount(PendingSyncCountRef ref) async {
   final db = ref.watch(appDatabaseProvider);
   final count = await db.customSelect(
     'SELECT COUNT(*) AS c FROM sync_queue '
-    'WHERE synced = 0 AND quarantined_at IS NULL',
+    'WHERE synced = 0 AND quarantined_at IS NULL '
+    'AND (last_error IS NULL OR last_error <> ?)',
+    variables: [Variable.withString(heldSyncRejectionReason)],
   ).getSingle();
   return count.read<int>('c');
 }

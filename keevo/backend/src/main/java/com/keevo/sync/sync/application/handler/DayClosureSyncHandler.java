@@ -33,6 +33,11 @@ public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "pos";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         if (operation.payload().get("storeId") == null) {
             throw new IllegalArgumentException("Missing required field: storeId");

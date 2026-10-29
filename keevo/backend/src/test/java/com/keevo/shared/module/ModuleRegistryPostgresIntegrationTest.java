@@ -138,6 +138,7 @@ class ModuleRegistryPostgresIntegrationTest {
     void deletedTenant() {
         assertThat(store.findStatuses(DELETED_TENANT)).isEmpty();
         assertThat(registry.activeModules(DELETED_TENANT)).containsExactly("core");
+        assertThat(registry.isKnownTenant(DELETED_TENANT)).isFalse();
     }
 
     @Test
@@ -210,6 +211,8 @@ class ModuleRegistryPostgresIntegrationTest {
         assertThat(store.findStatuses("kv_nobody")).isEmpty();
         assertThat(store.findStatuses(TENANT)).contains(Map.of());
         assertThat(registry.activeModules("kv_nobody")).containsExactly("core");
+        assertThat(registry.isKnownTenant("kv_nobody")).isFalse();
+        assertThat(registry.isKnownTenant(TENANT)).isTrue();
     }
 
     @Test

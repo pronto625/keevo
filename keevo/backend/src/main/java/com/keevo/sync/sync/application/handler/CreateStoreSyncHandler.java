@@ -44,6 +44,11 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "store";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         if (p.get("id") == null)

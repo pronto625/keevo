@@ -28,6 +28,11 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "inventory";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         if (p.get("sourceStoreId") == null || p.get("destinationStoreId") == null

@@ -6,7 +6,6 @@ import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * {@link ActiveModulesCache} bound to the current HTTP request (Story 13.2, spec-socle §5.1): the active modules
@@ -22,28 +21,27 @@ public class RequestScopedActiveModulesCache implements ActiveModulesCache {
     static final String ATTRIBUTE_PREFIX = RequestScopedActiveModulesCache.class.getName() + ".";
 
     @Override
-    @SuppressWarnings("unchecked")
-    public Optional<Set<String>> get(String tenantSchema) {
+    public Optional<Entry> get(String tenantSchema) {
         RequestAttributes request = RequestContextHolder.getRequestAttributes();
         if (request == null) {
             return Optional.empty();
         }
         try {
             Object cached = request.getAttribute(ATTRIBUTE_PREFIX + tenantSchema, RequestAttributes.SCOPE_REQUEST);
-            return cached instanceof Set<?> set ? Optional.of((Set<String>) set) : Optional.empty();
+            return cached instanceof Entry entry ? Optional.of(entry) : Optional.empty();
         } catch (IllegalStateException finishedRequest) {
             return Optional.empty(); // attributes of a completed request still bound to the thread: a miss
         }
     }
 
     @Override
-    public void put(String tenantSchema, Set<String> activeModules) {
+    public void put(String tenantSchema, Entry entry) {
         RequestAttributes request = RequestContextHolder.getRequestAttributes();
         if (request == null) {
             return;
         }
         try {
-            request.setAttribute(ATTRIBUTE_PREFIX + tenantSchema, activeModules, RequestAttributes.SCOPE_REQUEST);
+            request.setAttribute(ATTRIBUTE_PREFIX + tenantSchema, entry, RequestAttributes.SCOPE_REQUEST);
         } catch (IllegalStateException finishedRequest) {
             // completed request: nothing to cache into
         }

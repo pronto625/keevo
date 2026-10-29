@@ -3,23 +3,102 @@ package com.keevo.sync.sync.application.service;
 import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
 import org.junit.jupiter.api.Test;
 
+import com.keevo.shared.module.ModuleManifest;
+import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.sync.sync.domain.model.SyncOperation;
+import com.keevo.sync.sync.domain.model.SyncOperationResult;
+
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class SyncOperationHandlerRegistryTest {
 
+    private static final Set<String> INSTALLED = Set.of("admin", "catalog", "core", "crm", "inventory",
+            "messaging", "pos", "reporting", "store", "sync");
+
     private SyncOperationHandlerRegistry createRegistry(SyncOperationHandler... handlers) {
-        return new SyncOperationHandlerRegistry(List.of(handlers));
+        return new SyncOperationHandlerRegistry(List.of(handlers), INSTALLED);
     }
 
     private SyncOperationHandler handlerFor(String... types) {
         SyncOperationHandler handler = mock(SyncOperationHandler.class);
         when(handler.supportedTypes()).thenReturn(Set.of(types));
+        when(handler.moduleId()).thenReturn("pos");
         return handler;
+    }
+
+    /** A named (non-mock) handler so the boot error can be checked to name it. */
+    static final class GhostModuleHandler implements SyncOperationHandler {
+        private final String moduleId;
+        private final Set<String> types;
+
+        GhostModuleHandler(String moduleId, String... types) {
+            this.moduleId = moduleId;
+            this.types = Set.of(types);
+        }
+
+        @Override public Set<String> supportedTypes() { return types; }
+        @Override public String moduleId() { return moduleId; }
+        @Override public SyncOperationResult handle(SyncOperation operation, UUID actorId, String tenantId) {
+            return null;
+        }
+    }
+
+    @Test
+    void handlerWithUnknownModule_failsNamingTheHandler() {
+        assertThatThrownBy(() -> createRegistry(new GhostModuleHandler("ghost", "CREATE_GHOST")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(GhostModuleHandler.class.getName())
+                .hasMessageContaining("'ghost'");
+    }
+
+    @Test
+    void handlerWithoutModule_fails() {
+        assertThatThrownBy(() -> createRegistry(new GhostModuleHandler(null, "CREATE_GHOST")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(GhostModuleHandler.class.getName());
+    }
+
+    @Test
+    void handlerWithoutTypes_fails() {
+        assertThatThrownBy(() -> createRegistry(new GhostModuleHandler("pos")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(GhostModuleHandler.class.getName());
+    }
+
+    @Test
+    void sameTypeInTwoHandlers_failsNamingTheType() {
+        assertThatThrownBy(() -> createRegistry(new GhostModuleHandler("pos", "CREATE_SALE"),
+                new GhostModuleHandler("crm", "CREATE_CLIENT", "CREATE_SALE")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CREATE_SALE")
+                .hasMessageContaining(GhostModuleHandler.class.getName());
+    }
+
+    @Test
+    void springConstructor_readsInstalledModulesFromTheModuleRegistry() {
+        ModuleRegistry moduleRegistry = mock(ModuleRegistry.class);
+        ModuleManifest pos = mock(ModuleManifest.class);
+        when(pos.id()).thenReturn("pos");
+        when(moduleRegistry.installed()).thenReturn(List.of(pos));
+
+        var registry = new SyncOperationHandlerRegistry(List.of(new GhostModuleHandler("pos", "CREATE_SALE")),
+                moduleRegistry);
+        assertThat(registry.resolve("CREATE_SALE")).isPresent();
+        assertThatThrownBy(() -> new SyncOperationHandlerRegistry(
+                List.of(new GhostModuleHandler("crm", "CREATE_CLIENT")), moduleRegistry))
+                .hasMessageContaining("'crm'");
+    }
+
+    @Test
+    void nullType_resolvesEmpty() {
+        assertThat(createRegistry(handlerFor("CREATE_SALE")).resolve(null)).isEmpty();
     }
 
     @Test

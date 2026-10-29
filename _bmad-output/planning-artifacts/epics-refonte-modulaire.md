@@ -757,11 +757,11 @@ So that **l'offline-first reste cohérent quand on active/désactive/ajoute des 
 
 > Construire le noyau qui permet **d'activer/désactiver un module par tenant** avec gestion des dépendances. Cœur de la plateforme « mini-apps ». Réf : `spec-socle-modulaire.md §1-10`.
 
-- [ ] [Deferred-from: review 13-2, 2026-10-29] Source of `moduleOf(operationType)`: manifest field (e.g. `syncOperations`, validated by the loader) or per-handler declaration — every existing handler mapped, unmapped op types fail the boot/test [sync]
+- [x] [Deferred-from: review 13-2, 2026-10-29] Source of `moduleOf(operationType)`: manifest field (e.g. `syncOperations`, validated by the loader) or per-handler declaration — every existing handler mapped, unmapped op types fail the boot/test [sync] — ✅ 12.7: per-handler declaration `SyncOperationHandler.moduleId()` (required) on the 19 handlers; `SyncOperationHandlerRegistry` fails the boot naming the handler (module not installed / no type / type handled twice) — `SyncOperationHandlerRegistryTest`, mapping asserted on the real beans in `SyncModuleGuardPostgresIntegrationTest.handlerModuleMapping`
 
-- [ ] [Deferred-from: review 13-2, 2026-10-29] Guard placement: read `activeModules(schema)` once per push batch before the loop, check per operation before `processOperation`; a registry failure → that operation REJECTED (not a batch-wide 500); distinguish `MODULE_INACTIVE` vs `MODULE_READ_ONLY` once 13.5 exposes grace [SyncPushService]
+- [x] [Deferred-from: review 13-2, 2026-10-29] Guard placement: read `activeModules(schema)` once per push batch before the loop, check per operation before `processOperation`; a registry failure → that operation REJECTED (not a batch-wide 500); distinguish `MODULE_INACTIVE` vs `MODULE_READ_ONLY` once 13.5 exposes grace [SyncPushService] — ✅ 12.7: `SyncPushService` reads once per batch, guard after replay detection and before LWW/handler, `MODULE_INACTIVE`; registry failure → every non-replayed op REJECTED `INTERNAL_ERROR`, HTTP 200 — `SyncPushServiceModuleGuardTest` (9). `MODULE_READ_ONLY` stays with 13.5 (already routed there)
 
-- [ ] [Deferred-from: review 13-2, 2026-10-29] Full-context proof of the per-request registry cache through a real HTTP call (MockMvc sync push: N operations → 1 `tenant_modules` query) [shared.module cache]
+- [x] [Deferred-from: review 13-2, 2026-10-29] Full-context proof of the per-request registry cache through a real HTTP call (MockMvc sync push: N operations → 1 `tenant_modules` query) [shared.module cache] — ✅ 12.7: `SyncModuleGuardPostgresIntegrationTest` (MockMvc `POST /api/v1/sync/push`, real JWT chain, spy on `TenantModuleStatePort`: 2 and 3 operations → 1 read)
 
 ### Story 13.1 : Modèle de données du registre + manifest + seed au boot
 
@@ -948,6 +948,8 @@ So that **je gère le catalogue de chaque tenant sans redéploiement (MOD-FR2, M
 
 - [ ] [Deferred-from: review 13-2, 2026-10-29] Deactivation must upsert a `DISABLED` row (+ `disabled_at`) — deleting the row re-activates a free module; evict the registry request cache (`ModuleRegistry.evict(schema)`) after every write; resolve the schema from the tenant UUID of the admin API [ModuleLifecycleService]
 
+- [ ] [Deferred-from: live test 12-7, 2026-10-29] **Blocking before any module can be DISABLED in prod**: while a sale is held (`MODULE_INACTIVE`), pulls overwrite the local views — the held sale disappears from « Mes Ventes » and the stock shows the server value (19 instead of 18) until the module is back; the cashier may think the sale is lost and re-enter it. Show held operations in the lists (badge « En attente — module non activé ») and keep local-only rows/stock deltas through pulls [Flutter sync / sales list]
+
 ### Story 13.9 : Convertir 2 modules existants au contrat `KeevoModule`
 
 As a **architecte**,
@@ -969,6 +971,8 @@ So that **le socle est validé sur du réel avant le module pilote (MOD-FR1, MOD
 - Valide bout-en-bout : provisioning, gating, capability, events, lifecycle — avant Epic 14.
 
 - [ ] [Deferred-from: review 13-1, 2026-10-29] `ModuleManifest` canonical constructor is public — Java-built manifests (`KeevoModule.manifest()`) would bypass the loader's invariants; keep JSON as the single source or move validation into the record [shared.module]
+
+- [ ] [Deferred-from: spec 12-7, 2026-10-29] Relocate each `SyncOperationHandler` from `sync` into its owning module (registered through the `KeevoModule` contract), keeping the declared `moduleId()` [sync handlers]
 
 ### Story 13.10 : Appliquer le gating entitlement à TOUS les endpoints existants (classement Free/Premium)
 
@@ -1001,6 +1005,8 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 ## Epic 14 : Module Pilote Facturation (Phase 4)
 
 > Livrer le **premier module vendable, autonome ET composable**, qui **prouve la vision** : facturation seule → +CRM → +POS (facture auto) → POS désactivé sans casse. C'est le **patron** de tout futur module.
+
+- [ ] [Deferred-from: spec 12-7, 2026-10-29] `GET /api/v1/sync/pull` must skip `DeltaEntityProvider`s of inactive modules (same `ModuleRegistry` rule as the push guard) [sync pull gating]
 
 ### Story 14.1 : Module Facturation autonome (domaine + provisioning + CRUD)
 
@@ -1066,6 +1072,8 @@ So that **la facturation s'enrichit automatiquement sans l'imposer (MOD-FR9)**.
 **Implementation Notes:**
 - Consommer `ClientLookupPort` (fourni par CRM en Story 13.9) via `CapabilityRegistry` (Optional).
 - Aucun import du module CRM hors de son `api` (vérifié par `verify()`).
+
+- [ ] [Deferred-from: live test 12-7, 2026-10-29] `POST /api/v1/sales` with an unknown `clientId` → FK `sales_client_id_fkey` at commit → HTTP 500; resolve through the optional `ClientLookupPort` capability (commerce must not hard-depend on `crm`) → clean domain error; align `SaleSyncHandler` (today `crm.api.ClientQueryPort`) on the same capability [commerce / sync]
 
 ### Story 14.4 : Bridge POS → Facturation (facture auto sur vente)
 

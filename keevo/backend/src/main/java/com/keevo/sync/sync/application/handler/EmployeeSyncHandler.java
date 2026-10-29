@@ -28,6 +28,11 @@ public class EmployeeSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "core";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         // Domain services handle validation
     }

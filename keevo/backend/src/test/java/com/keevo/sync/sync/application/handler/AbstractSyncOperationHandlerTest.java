@@ -22,6 +22,7 @@ class AbstractSyncOperationHandlerTest {
     /** Minimal handler exposing the protected helpers. */
     private static final class ProbeHandler extends AbstractSyncOperationHandler {
         @Override public Set<String> supportedTypes() { return Set.of("PROBE"); }
+        @Override public String moduleId() { return "core"; }
         @Override protected void validate(SyncOperation operation) { }
         @Override protected SyncOperationResult apply(SyncOperation op, UUID actorId, String tenantId) {
             UUID store = extractAssignedStoreId();

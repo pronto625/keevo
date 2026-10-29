@@ -44,6 +44,11 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "store";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         if (operation.payload().get("storeId") == null) {
             throw new IllegalArgumentException("Missing required field: storeId");

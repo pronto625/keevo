@@ -1,5 +1,8 @@
 package com.keevo.sync.sync.application.service;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
@@ -13,6 +16,7 @@ import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.UnexpectedRollbackException;
@@ -36,6 +40,7 @@ public class SyncPushService implements SyncUseCase {
     private final ConflictStrategyRegistry conflictStrategyRegistry;
     private final SyncConflictsLogRepository conflictsLogRepository;
     private final SyncErrorLogRepository syncErrorLogRepository;
+    private final ModuleRegistry moduleRegistry;
 
     public SyncPushService(SyncOperationHandlerRegistry handlerRegistry,
                            SyncOperationsLogRepository logRepository,
@@ -44,7 +49,8 @@ public class SyncPushService implements SyncUseCase {
                            List<DeltaEntityProvider> deltaProviders,
                            ConflictStrategyRegistry conflictStrategyRegistry,
                            SyncConflictsLogRepository conflictsLogRepository,
-                           SyncErrorLogRepository syncErrorLogRepository) {
+                           SyncErrorLogRepository syncErrorLogRepository,
+                           ModuleRegistry moduleRegistry) {
         this.handlerRegistry = handlerRegistry;
         this.logRepository = logRepository;
         this.eventPublisher = eventPublisher;
@@ -53,6 +59,61 @@ public class SyncPushService implements SyncUseCase {
         this.conflictStrategyRegistry = conflictStrategyRegistry;
         this.conflictsLogRepository = conflictsLogRepository;
         this.syncErrorLogRepository = syncErrorLogRepository;
+        this.moduleRegistry = moduleRegistry;
+    }
+
+    /**
+     * Story 12.7 — the tenant's module state, read once per push batch (before the loop): its active modules, or,
+     * for an unknown / deleted tenant, the reason every (non-replayed) operation is rejected with
+     * ({@code TENANT_NOT_FOUND}, transient on the device).
+     */
+    private record ModuleGate(Set<String> active, String tenantRejection) {
+        static final ModuleGate NONE = new ModuleGate(Set.of(), null);
+    }
+
+    /**
+     * @throws DomainException {@code SERVICE_UNAVAILABLE} (HTTP 503) when the module state cannot be read: the
+     *         whole batch is answered 503, nothing is processed or recorded, the device keeps its queue and retries
+     */
+    private ModuleGate readModuleGate(PushBatchCommand command) {
+        try {
+            if (!moduleRegistry.isKnownTenant(command.tenantId())) {
+                log.warn("[Sync] Push for a tenant that is not registered — every operation is rejected as "
+                        + "TENANT_NOT_FOUND");
+                return new ModuleGate(Set.of(), ErrorCode.TENANT_NOT_FOUND.name());
+            }
+            Set<String> active = moduleRegistry.activeModules(command.tenantId());
+            return new ModuleGate(active != null ? active : Set.of(), null);
+        } catch (Exception e) {
+            log.error("[Sync] Could not read the tenant's active modules — push answered 503", e);
+            throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
+                    "Service momentanément indisponible, réessayez dans un instant");
+        }
+    }
+
+    /**
+     * Story 12.7 — refuses an operation whose module is not active for the tenant ({@code MODULE_INACTIVE}),
+     * or every operation of an unknown tenant ({@code TENANT_NOT_FOUND}). Runs after the
+     * duplicate/replay detection and before anything else touches the operation. {@code null} = proceed
+     * (an unknown operation type keeps {@code UNKNOWN_OPERATION_TYPE}, decided further down).
+     */
+    private SyncOperationResult refuseByModule(SyncOperation operation, Optional<SyncOperationHandler> handler,
+                                               ModuleGate gate) {
+        if (gate.tenantRejection() != null) {
+            return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null,
+                    gate.tenantRejection());
+        }
+        if (handler.isEmpty()) {
+            return null;
+        }
+        String moduleId = handler.get().moduleId(); // never null for a registered handler (boot check)
+        if (moduleId != null && gate.active().contains(moduleId)) {
+            return null;
+        }
+        log.info("[Sync] Operation {} ({}) refused: module {} is not active for the tenant",
+                operation.operationId(), operation.operationType(), moduleId);
+        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null,
+                ErrorCode.MODULE_INACTIVE.name());
     }
 
     /**
@@ -88,6 +149,8 @@ public class SyncPushService implements SyncUseCase {
         List<SyncOperation> sorted = dependencyOrder(command.operations());
 
         List<SyncOperationResult> results = new ArrayList<>();
+        // Story 12.7 — one registry read per batch (request-cached as well), not one per operation.
+        ModuleGate moduleGate = sorted.isEmpty() ? ModuleGate.NONE : readModuleGate(command);
 
         for (SyncOperation operation : sorted) {
             // Each operation runs in its own transaction — one failure does NOT roll back others (AC3)
@@ -97,7 +160,7 @@ public class SyncPushService implements SyncUseCase {
             var handlerOutcome = new java.util.concurrent.atomic.AtomicReference<SyncOperationResult>();
             try {
                 result = transactionTemplate.execute(status -> {
-                    SyncOperationResult opResult = processOperation(operation, command);
+                    SyncOperationResult opResult = processOperation(operation, command, moduleGate);
                     handlerOutcome.set(opResult);
 
                     // Skip saving the log entry for DUPLICATE operations — the entry already exists
@@ -139,6 +202,24 @@ public class SyncPushService implements SyncUseCase {
                         ? "PRODUCT_NAME_ALREADY_EXISTS" : "DATA_INTEGRITY_VIOLATION";
                 log.warn("[Sync] Constraint violation for operation {} ({}): {}",
                         operation.operationId(), operation.operationType(), reason);
+                result = rejectAfterRollback(operation, reason);
+            } catch (RuntimeException e) {
+                // Story 12.7 (live test) — anything else escaping the per-operation transaction, e.g. a
+                // JpaSystemException "current transaction is aborted" when the handler already hit a constraint
+                // (the PostgreSQL transaction is dead, so saving the log row fails too). Rejecting only this
+                // operation keeps the batch answering 200; otherwise the device replays it forever.
+                var decided = handlerOutcome.get();
+                String reason;
+                if (decided != null && decided.status() == SyncOperationStatus.REJECTED && decided.reason() != null
+                        && !ErrorCode.INTERNAL_ERROR.name().equals(decided.reason())) {
+                    reason = decided.reason();
+                } else if (e instanceof DataAccessException) {
+                    reason = "DATA_INTEGRITY_VIOLATION";
+                } else {
+                    reason = ErrorCode.INTERNAL_ERROR.name();
+                }
+                log.error("[Sync] Operation {} ({}) failed in its transaction — rejected as {}",
+                        operation.operationId(), operation.operationType(), reason, e);
                 result = rejectAfterRollback(operation, reason);
             }
 
@@ -252,7 +333,8 @@ public class SyncPushService implements SyncUseCase {
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null, reason);
     }
 
-    private SyncOperationResult processOperation(SyncOperation originalOperation, PushBatchCommand command) {
+    private SyncOperationResult processOperation(SyncOperation originalOperation, PushBatchCommand command,
+                                                 ModuleGate moduleGate) {
         // A previously REJECTED op is processed again; saving its new outcome
         // below overwrites the log row (assigned id → merge).
         if (logRepository.isSettled(originalOperation.operationId())
@@ -264,6 +346,13 @@ public class SyncPushService implements SyncUseCase {
             return new SyncOperationResult(
                     originalOperation.operationId(), SyncOperationStatus.DUPLICATE, null, null);
         }
+        // Story 12.7 — after the replay detection (an APPLIED operation keeps answering DUPLICATE even if its
+        // module is now off), before the conflict checks and the handler.
+        Optional<SyncOperationHandler> handler = handlerRegistry.resolve(originalOperation.operationType());
+        SyncOperationResult refused = refuseByModule(originalOperation, handler, moduleGate);
+        if (refused != null) {
+            return refused;
+        }
         SyncOperation operation = redirectMergedProductIds(originalOperation);
 
         // Last-write-wins: an operation older than the entity's current state is not applied.
@@ -273,10 +362,10 @@ public class SyncPushService implements SyncUseCase {
             return supersede(operation, preApply.superseded(), command.actorId());
         }
 
-        SyncOperationResult handlerResult = handlerRegistry.resolve(operation.operationType())
-                .map(handler -> {
+        SyncOperationResult handlerResult = handler
+                .map(h -> {
                     try {
-                        return handler.handle(operation, command.actorId(), command.tenantId());
+                        return h.handle(operation, command.actorId(), command.tenantId());
                     } catch (Exception e) {
                         return new SyncOperationResult(
                                 operation.operationId(), SyncOperationStatus.REJECTED, null, "INTERNAL_ERROR");

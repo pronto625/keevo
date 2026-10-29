@@ -34,6 +34,11 @@ public class SubmitFeedbackSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "core";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         Object typeObj = p.get("type");

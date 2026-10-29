@@ -120,6 +120,18 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("MODULE_INACTIVE maps to 403 with its French message (Story 12.7)")
+    void moduleInactive_mapsTo403_inFrench() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp =
+                handler.handleDomainException(new DomainException(ErrorCode.MODULE_INACTIVE, "module crm off"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().domainCode()).isEqualTo("MODULE_INACTIVE");
+        assertThat(resp.getBody().error()).isEqualTo("Module non activé pour votre compte");
+    }
+
+    @Test
     @DisplayName("handleDomainException: response body has non-null timestamp and no stackTrace field")
     void domainException_responseHasTimestampAndNoStackTrace() {
         ResponseEntity<ApiResponseWrapper<Void>> resp =

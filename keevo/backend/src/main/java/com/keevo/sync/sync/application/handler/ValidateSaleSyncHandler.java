@@ -27,6 +27,11 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "pos";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         if (p.get("saleId") == null) {

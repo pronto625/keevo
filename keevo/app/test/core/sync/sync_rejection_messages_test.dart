@@ -69,6 +69,11 @@ void main() {
     });
   });
 
+  test('12.7: MODULE_INACTIVE has its French message', () {
+    expect(friendlySyncRejectionReason('MODULE_INACTIVE'),
+        'Module non activé pour votre compte');
+  });
+
   group('friendlySyncOperationLabel', () {
     test('maps known operations to French labels', () {
       expect(friendlySyncOperationLabel('CREATE_PRODUCT'), 'Création de produit');

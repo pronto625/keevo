@@ -44,6 +44,11 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "catalog";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         switch (operation.operationType()) {

@@ -7,6 +7,7 @@ import com.keevo.commerce.api.SaleCommandPort;
 import com.keevo.commerce.api.SaleLineInput;
 import com.keevo.commerce.api.SalePaymentMode;
 import com.keevo.commerce.api.SaleState;
+import com.keevo.crm.api.ClientQueryPort;
 import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.store.api.StoreQueryPort;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -24,18 +25,26 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
     private final SaleCommandPort saleCommandPort;
     private final ApplicationEventPublisher eventPublisher;
     private final StoreQueryPort storeQuery;
+    private final ClientQueryPort clientQuery;
 
     public SaleSyncHandler(SaleCommandPort saleCommandPort,
                            ApplicationEventPublisher eventPublisher,
-                           StoreQueryPort storeQuery) {
+                           StoreQueryPort storeQuery,
+                           ClientQueryPort clientQuery) {
         this.saleCommandPort = saleCommandPort;
         this.eventPublisher = eventPublisher;
         this.storeQuery = storeQuery;
+        this.clientQuery = clientQuery;
     }
 
     @Override
     public Set<String> supportedTypes() {
         return Set.of("CREATE_SALE");
+    }
+
+    @Override
+    public String moduleId() {
+        return "pos";
     }
 
     @Override
@@ -67,6 +76,11 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
             throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
+        // Story 12.7 (live test): sales.client_id has a FK — an unknown client (e.g. its offline creation is held
+        // because crm is off) would abort the transaction at insert. Refused cleanly before any write.
+        if (clientId != null && !clientQuery.existsById(tenantId, clientId)) {
+            throw new DomainException(ErrorCode.CLIENT_NOT_FOUND, "Client not found: " + clientId);
+        }
         SalePaymentMode paymentMode = SalePaymentMode.valueOf((String) p.get("paymentMode"));
         String mobileMoneyRef = (String) p.get("mobileMoneyRef");
         int discountAmount = p.get("discountAmount") != null ? requireIntegralInt(p.get("discountAmount"), "discountAmount") : 0;

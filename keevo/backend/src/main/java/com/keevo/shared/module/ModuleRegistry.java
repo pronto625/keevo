@@ -38,6 +38,13 @@ public interface ModuleRegistry {
     /** Ids of the modules active for the tenant (always contains {@code core}). */
     Set<String> activeModules(String tenantSchema);
 
+    /**
+     * Whether the schema names a registered, non-{@code DELETED} tenant (Story 12.7: tells an unknown tenant, which
+     * only has {@code core}, from a tenant whose modules are off). Same query and request cache as
+     * {@link #activeModules(String)}; {@code false} for the platform-admin schema; invalid schema strings throw.
+     */
+    boolean isKnownTenant(String tenantSchema);
+
     /** Whether {@code moduleId} is active for the tenant ({@code false} for an unknown module id). */
     boolean isActive(String tenantSchema, String moduleId);
 

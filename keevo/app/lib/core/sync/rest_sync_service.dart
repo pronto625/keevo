@@ -79,6 +79,11 @@ class RestSyncService implements SyncService {
   // operations twice. A caller arriving mid-push joins the running one.
   Future<List<Map<String, dynamic>>>? _pushInFlight;
 
+  // Story 12.7 — held operations (`MODULE_INACTIVE`) are pushed again on the
+  // first push of this service (app start) that reaches the server, then at
+  // most every [heldRetryInterval].
+  bool _retryHeldOnNextPush = true;
+
   @override
   Future<List<Map<String, dynamic>>> push() {
     final running = _pushInFlight;
@@ -126,10 +131,19 @@ class RestSyncService implements SyncService {
           ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull())
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .get();
+    // Story 12.7 — a held operation waits for its retry slot.
+    final now = DateTime.now();
+    bool due(SyncQueueData o) =>
+        !isHeldSyncRejection(o.lastError) ||
+        _retryHeldOnNextPush ||
+        o.lastAttemptAt == null ||
+        now.difference(o.lastAttemptAt!) >= heldRetryInterval;
     final pendingOps = queued
         .where((o) => !ProductPhotoOutbox.isPhotoOperation(o.operation))
+        .where(due)
         .toList();
-    final hasPhotoOps = queued.length != pendingOps.length;
+    final hasPhotoOps = queued.any(
+        (o) => ProductPhotoOutbox.isPhotoOperation(o.operation));
 
     if (pendingOps.isEmpty) {
       if (!hasPhotoOps) return [];
@@ -186,6 +200,7 @@ class RestSyncService implements SyncService {
         return allConflicts;
       }
     }
+    _retryHeldOnNextPush = false;
     // Every product creation is on the server now: its photo can follow.
     if (hasPhotoOps) await _photoOutbox.processPending();
     return allConflicts;
@@ -392,6 +407,30 @@ class RestSyncService implements SyncService {
             continue;
           }
 
+          // Story 12.7 — held: the module is off for the account (undoable),
+          // or the operation references an entity of a held operation (its
+          // own refusal, e.g. PRODUCT_NOT_FOUND, follows from the hold).
+          // Kept as is: nothing rolled back, stripped, dropped or
+          // quarantined; retried at heldRetryInterval.
+          if (isHeldSyncRejection(reason) ||
+              await _referencesHeldEntity(currentOp)) {
+            if (currentOp.lastError != heldSyncRejectionReason) {
+              conflicts.add({
+                ...notice(rolledBack: false),
+                'reason': heldSyncRejectionReason,
+                'held': true,
+              });
+            }
+            await (_database.update(_database.syncQueue)
+                  ..where((t) => t.id.equals(opId)))
+                .write(SyncQueueCompanion(
+              retryCount: Value(currentOp.retryCount + 1),
+              lastAttemptAt: Value(DateTime.now()),
+              lastError: const Value(heldSyncRejectionReason),
+            ));
+            continue;
+          }
+
           // A money / stock-ledger operation refused for good: kept on the
           // device but set aside (never pushed, not pending) until the user
           // acts on it — see sync_rejection_policy.dart.
@@ -493,6 +532,29 @@ class RestSyncService implements SyncService {
       rethrow;
     }
     return conflicts;
+  }
+
+  /// Whether [op] references (same entity, or an id anywhere in its payload)
+  /// the entity of another held operation still queued (Story 12.7).
+  Future<bool> _referencesHeldEntity(SyncQueueData op) async {
+    final held = await (_database.select(_database.syncQueue)
+          ..where((t) =>
+              t.synced.equals(false) &
+              t.quarantinedAt.isNull() &
+              t.lastError.equals(heldSyncRejectionReason) &
+              t.id.equals(op.id).not() &
+              t.entityId.isNotNull()))
+        .get();
+    if (held.isEmpty) return false;
+    final ids = held.map((h) => h.entityId!).toSet();
+    if (op.entityId != null && ids.contains(op.entityId)) return true;
+    bool scan(Object? node) => switch (node) {
+          String value => ids.contains(value),
+          Map<dynamic, dynamic> map => map.values.any(scan),
+          List<dynamic> list => list.any(scan),
+          _ => false,
+        };
+    return scan(_payloadOf(op));
   }
 
   /// Puts [op] in quarantine (v1s-16-15) with, for a `CREATE_SALE`, its
@@ -779,13 +841,18 @@ class RestSyncService implements SyncService {
   }
 
   /// Quarantined operations are not pending: they are never pushed and must
-  /// not block the server refreshes (v1s-16-15).
+  /// not block the server refreshes (v1s-16-15). Neither are held ones
+  /// (`MODULE_INACTIVE`, Story 12.7): they wait for their module.
   @override
   Future<bool> hasPendingOperations() async {
     final count = await (_database.selectOnly(_database.syncQueue)
           ..addColumns([_database.syncQueue.id.count()])
           ..where(_database.syncQueue.synced.equals(false) &
-              _database.syncQueue.quarantinedAt.isNull()))
+              _database.syncQueue.quarantinedAt.isNull() &
+              (_database.syncQueue.lastError.isNull() |
+                  _database.syncQueue.lastError
+                      .equals(heldSyncRejectionReason)
+                      .not())))
         .map((row) => row.read(_database.syncQueue.id.count()))
         .getSingle();
     return (count ?? 0) > 0;

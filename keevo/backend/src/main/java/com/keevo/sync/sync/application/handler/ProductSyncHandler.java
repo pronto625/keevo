@@ -36,6 +36,11 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "catalog";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         // Minimal validation — domain services handle deeper checks
     }

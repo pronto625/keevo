@@ -39,6 +39,7 @@ class SyncPushServiceConflictTest {
     @Mock private ConflictResolutionStrategy conflictStrategy;
     @Mock private PlatformTransactionManager transactionManager;
     @Mock private com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository syncErrorLogRepository;
+    @Mock private com.keevo.shared.module.ModuleRegistry moduleRegistry;
 
     private SyncPushService service;
 
@@ -54,8 +55,12 @@ class SyncPushServiceConflictTest {
         lenient().when(conflictStrategy.evaluate(any(), any(), any(), any(), any())).thenAnswer(inv ->
                 ((ConflictResolutionStrategy) inv.getMock()).evaluate(inv.getArgument(0), inv.getArgument(1),
                         inv.getArgument(2), inv.getArgument(3)));
+        // Story 12.7 — every module active (today's state): the guard lets everything through.
+        lenient().when(moduleRegistry.isKnownTenant(any())).thenReturn(true);
+        lenient().when(moduleRegistry.activeModules(any())).thenReturn(java.util.Set.of("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync"));
+        lenient().when(saleHandler.moduleId()).thenReturn("pos");
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
-                transactionManager, List.of(), conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository);
+                transactionManager, List.of(), conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
     }
 
     @Test
@@ -254,7 +259,9 @@ class SyncPushServiceConflictTest {
         assertThat(r.reason()).isEqualTo("LWW_SUPERSEDED");
         assertThat(r.serverEntityId()).isEqualTo("p1");
         assertThat(r.conflictData()).containsEntry("conflictType", "LAST_WRITE_SUPERSEDED");
-        verifyNoInteractions(handlerRegistry);
+        // Story 12.7: the registry is consulted once (module guard); no handler ever runs.
+        verify(handlerRegistry, times(1)).resolve("UPDATE_PRODUCT");
+        verifyNoMoreInteractions(handlerRegistry);
         var conflict = ArgumentCaptor.forClass(SyncConflictsLogEntry.class);
         verify(conflictsLogRepository).save(conflict.capture());
         assertThat(conflict.getValue().conflictType()).isEqualTo("LAST_WRITE_SUPERSEDED");

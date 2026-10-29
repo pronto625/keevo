@@ -42,6 +42,8 @@ String friendlySyncRejectionReason(String? reasonCode) {
       'Données en conflit avec le serveur — nouvel essai automatique',
     'UNKNOWN_OPERATION_TYPE' =>
       'Action non prise en charge — mettez l\'application à jour',
+    // Story 12.7 — the operation's module is switched off for the tenant.
+    'MODULE_INACTIVE' => 'Module non activé pour votre compte',
     'SUBSCRIPTION_NOT_FOUND' => 'Abonnement introuvable',
     'TENANT_NOT_FOUND' => 'Compte de l\'entreprise introuvable',
     'WAREHOUSE_ALREADY_EXISTS' => 'Un seul entrepôt est autorisé par compte',

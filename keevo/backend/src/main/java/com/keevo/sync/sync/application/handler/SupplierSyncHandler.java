@@ -27,6 +27,11 @@ public class SupplierSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "crm";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         if (operation.payload().get("supplierId") == null) {
             throw new IllegalArgumentException("Missing required field: supplierId");

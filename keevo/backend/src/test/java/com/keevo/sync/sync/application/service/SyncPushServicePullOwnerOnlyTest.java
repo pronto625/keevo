@@ -41,6 +41,7 @@ class SyncPushServicePullOwnerOnlyTest {
     @Mock private ConflictStrategyRegistry conflictStrategyRegistry;
     @Mock private SyncConflictsLogRepository conflictsLogRepository;
     @Mock private SyncErrorLogRepository syncErrorLogRepository;
+    @Mock private com.keevo.shared.module.ModuleRegistry moduleRegistry;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private PlatformTransactionManager transactionManager;
     @Mock private DeltaEntityProvider productProvider;
@@ -62,7 +63,7 @@ class SyncPushServicePullOwnerOnlyTest {
                 new DeltaEntityProvider.Page(List.of(Map.of("id", "p1")), null));
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
                 transactionManager, List.of(productProvider, auditProvider),
-                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository);
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
     }
 
     @Test

@@ -54,8 +54,21 @@ public class ModuleRegistryService implements ModuleRegistry {
         if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema)) {
             return platformAdminModules(catalog.manifests());
         }
+        return lookup(tenantSchema).activeModules();
+    }
+
+    @Override
+    public boolean isKnownTenant(String tenantSchema) {
+        if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema)) {
+            return false;
+        }
+        return lookup(tenantSchema).knownTenant();
+    }
+
+    /** The tenant's entry: from the request cache, else one query (cached for the rest of the request). */
+    private ActiveModulesCache.Entry lookup(String tenantSchema) {
         String schema = TenantSchema.validate(tenantSchema);
-        Optional<Set<String>> cached = cache.get(schema);
+        Optional<ActiveModulesCache.Entry> cached = cache.get(schema);
         if (cached.isPresent()) {
             return cached.get();
         }
@@ -63,9 +76,10 @@ public class ModuleRegistryService implements ModuleRegistry {
         if (rows.isEmpty()) {
             log.debug("Module registry: no tenant registered for the given schema — only core is active");
         }
-        Set<String> active = effectiveActiveModules(catalog.manifests(), rows);
-        cache.put(schema, active);
-        return active;
+        ActiveModulesCache.Entry entry = new ActiveModulesCache.Entry(rows.isPresent(),
+                effectiveActiveModules(catalog.manifests(), rows));
+        cache.put(schema, entry);
+        return entry;
     }
 
     @Override

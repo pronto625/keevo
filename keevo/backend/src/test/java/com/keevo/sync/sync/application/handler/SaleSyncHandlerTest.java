@@ -44,6 +44,7 @@ class SaleSyncHandlerTest {
     @Mock private RecordSaleUseCase recordSaleUseCase;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private StoreRepository storeRepository;
+    @Mock private com.keevo.crm.api.ClientQueryPort clientQuery;
 
     private SaleSyncHandler handler;
 
@@ -53,7 +54,9 @@ class SaleSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new SaleSyncHandler(
-                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository));
+                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository),
+                clientQuery);
+        lenient().when(clientQuery.existsById(any(), any())).thenReturn(true);
         lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
@@ -445,5 +448,46 @@ class SaleSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(capturedCommand().items().get(0).quantity()).isEqualTo(2);
+    }
+
+    private SyncOperation saleWithClient(UUID clientId) {
+        var saleId = UUID.randomUUID();
+        return new SyncOperation("op-1", "CREATE_SALE", saleId.toString(),
+                Map.of("saleId", saleId.toString(), "storeId", UUID.randomUUID().toString(),
+                        "clientId", clientId.toString(), "paymentMode", "CASH",
+                        "discountAmount", 0, "items", validItems()),
+                Instant.now());
+    }
+
+    // Story 12.7 (live test): sales.client_id has a FK — an unknown client (its creation held because crm is
+    // off) is refused before any write instead of aborting the transaction at insert.
+    @Test
+    void handle_unknownClient_isRejectedClientNotFound_beforeAnyWrite() {
+        UUID clientId = UUID.randomUUID();
+        when(clientQuery.existsById(TENANT_ID, clientId)).thenReturn(false);
+
+        var result = handler.handle(saleWithClient(clientId), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("CLIENT_NOT_FOUND");
+        verifyNoInteractions(recordSaleUseCase);
+    }
+
+    @Test
+    void handle_knownClient_isApplied() {
+        UUID clientId = UUID.randomUUID();
+
+        var result = handler.handle(saleWithClient(clientId), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(clientQuery).existsById(TENANT_ID, clientId);
+        verify(recordSaleUseCase).recordSale(any());
+    }
+
+    @Test
+    void handle_withoutClient_doesNotQueryClients() {
+        handler.handle(saleIn(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
+
+        verifyNoInteractions(clientQuery);
     }
 }

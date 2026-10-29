@@ -37,6 +37,7 @@ class SyncPushServiceTest {
     @Mock private ConflictStrategyRegistry conflictStrategyRegistry;
     @Mock private SyncConflictsLogRepository conflictsLogRepository;
     @Mock private com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository syncErrorLogRepository;
+    @Mock private com.keevo.shared.module.ModuleRegistry moduleRegistry;
 
     private SyncPushService service;
 
@@ -48,8 +49,12 @@ class SyncPushServiceTest {
         // Simulate a pass-through transaction manager for unit tests
         lenient().when(transactionManager.getTransaction(any()))
                 .thenReturn(new SimpleTransactionStatus());
+        // Story 12.7 — every module active (today's state): the guard lets everything through.
+        lenient().when(moduleRegistry.isKnownTenant(any())).thenReturn(true);
+        lenient().when(moduleRegistry.activeModules(any())).thenReturn(java.util.Set.of("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync"));
+        lenient().when(saleHandler.moduleId()).thenReturn("pos");
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager, List.of(),
-                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository);
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
     }
 
     @Test
@@ -75,7 +80,7 @@ class SyncPushServiceTest {
 
     @Test
     void pushBatch_withMixedTypes_routesToCorrectHandlers() {
-        SyncOperationHandler productHandler = mock(SyncOperationHandler.class);
+        SyncOperationHandler productHandler = handlerIn("catalog");
         var op1 = new SyncOperation("op-1", "CREATE_SALE", "e1", Map.of(), Instant.now());
         var op2 = new SyncOperation("op-2", "CREATE_PRODUCT", "e2", Map.of(), Instant.now());
 
@@ -231,7 +236,7 @@ class SyncPushServiceTest {
     void pushBatch_constraintViolationAtCommit_rejectsOnlyThatOperationAndContinues() {
         var op1 = new SyncOperation("op-1", "UPDATE_PRODUCT", "p1", Map.of(), Instant.parse("2026-03-20T10:00:00Z"));
         var op2 = new SyncOperation("op-2", "CREATE_SALE", "e2", Map.of(), Instant.parse("2026-03-20T10:01:00Z"));
-        SyncOperationHandler productHandler = mock(SyncOperationHandler.class);
+        SyncOperationHandler productHandler = handlerIn("catalog");
 
         when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("UPDATE_PRODUCT")).thenReturn(Optional.of(productHandler));
@@ -263,7 +268,7 @@ class SyncPushServiceTest {
     void pushBatch_stockEntryOnMergedLocalProductId_isRedirectedToExistingProduct() {
         var op = new SyncOperation("op-1", "RECORD_STOCK_ENTRY", "e1",
                 Map.of("productId", "local-id", "quantity", 5), Instant.now());
-        SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
+        SyncOperationHandler stockHandler = handlerIn("inventory");
 
         when(logRepository.isSettled(any())).thenReturn(false);
         when(logRepository.findMergedProductTargets(any())).thenReturn(Map.of("local-id", "existing-id"));
@@ -283,7 +288,7 @@ class SyncPushServiceTest {
     @Test
     void pushBatch_rollbackOnlyAfterHandlerRejection_keepsTheRealReason() {
         var op = new SyncOperation("op-1", "STOCK_ADJUST", "e1", Map.of(), Instant.now());
-        SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
+        SyncOperationHandler stockHandler = handlerIn("inventory");
 
         when(logRepository.isSettled(any())).thenReturn(false);
         when(handlerRegistry.resolve("STOCK_ADJUST")).thenReturn(Optional.of(stockHandler));
@@ -303,7 +308,7 @@ class SyncPushServiceTest {
     }
 
     private List<String> processedOrder(List<SyncOperation> ops) {
-        SyncOperationHandler handler = mock(SyncOperationHandler.class);
+        SyncOperationHandler handler = handlerIn("catalog");
         List<String> order = new java.util.ArrayList<>();
         lenient().when(logRepository.isSettled(any())).thenReturn(false);
         lenient().when(handlerRegistry.resolve(any())).thenReturn(Optional.of(handler));
@@ -359,7 +364,7 @@ class SyncPushServiceTest {
     void pushBatch_operationClaimedByConcurrentPush_isDuplicateAndHandlerNotRun() {
         var op = new SyncOperation("op-race", "RECORD_STOCK_ENTRY", "m1",
                 Map.of("productId", "p1", "quantity", 3), Instant.now());
-        SyncOperationHandler stockHandler = mock(SyncOperationHandler.class);
+        SyncOperationHandler stockHandler = handlerIn("inventory");
         when(logRepository.isSettled("op-race")).thenReturn(false);
         when(logRepository.isSettledElseClaim(eq("op-race"), eq("RECORD_STOCK_ENTRY"), eq("m1"), any()))
                 .thenReturn(true);
@@ -387,5 +392,12 @@ class SyncPushServiceTest {
         inOrder.verify(logRepository).isSettledElseClaim(eq("op-1"), eq("CREATE_SALE"), eq("s1"), any());
         inOrder.verify(saleHandler).handle(any(), eq(ACTOR_ID), eq(TENANT_ID));
         inOrder.verify(logRepository).save(any());
+    }
+
+    /** A mocked handler owned by {@code moduleId} (Story 12.7 — the push guard reads it). */
+    private static SyncOperationHandler handlerIn(String moduleId) {
+        SyncOperationHandler handler = mock(SyncOperationHandler.class);
+        lenient().when(handler.moduleId()).thenReturn(moduleId);
+        return handler;
     }
 }

@@ -290,4 +290,36 @@ class ModuleRegistryServiceTest {
         registry.evict(TENANT);
         assertThat(queries).hasValue(3);
     }
+
+    // ── isKnownTenant (Story 12.7) ──────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("isKnownTenant: a registered tenant is known even with every non-core module off")
+    void knownTenantWithModulesOff() {
+        for (String id : FREE) {
+            if (!"core".equals(id)) {
+                row(id, TenantModuleStatus.DISABLED);
+            }
+        }
+        assertThat(registry.activeModules(TENANT)).containsExactly("core");
+        assertThat(registry.isKnownTenant(TENANT)).isTrue();
+    }
+
+    @Test
+    @DisplayName("isKnownTenant: an unknown tenant is not; the platform schema is not; invalid strings throw")
+    void unknownTenantIsNotKnown() {
+        assertThat(registry.isKnownTenant("kv_nobody")).isFalse();
+        assertThat(registry.isKnownTenant("public")).isFalse();
+        assertThatThrownBy(() -> registry.isKnownTenant("KV_1")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("isKnownTenant + activeModules in one request: one query")
+    void knownTenantSharesTheRequestCache() {
+        bindRequest();
+        registry.isKnownTenant(TENANT);
+        registry.activeModules(TENANT);
+        registry.isKnownTenant(TENANT);
+        assertThat(queries).hasValue(1);
+    }
 }

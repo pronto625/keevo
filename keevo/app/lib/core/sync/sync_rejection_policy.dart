@@ -10,9 +10,19 @@
 ///   operation stays queued, `lastError` is recorded (visible in the queue
 ///   screen) and the user is told once per distinct reason — some of them
 ///   (UNAUTHORIZED, DATA_INTEGRITY_VIOLATION…) may never clear.
-/// * **Terminal** reasons: everything else. The same payload will be refused
-///   again on every push (the server even replays the settled REJECTED
-///   result). Per operation:
+/// * **Held** reason ([isHeldSyncRejection], Story 12.7): `MODULE_INACTIVE`,
+///   the operation's module is switched off for the account — a state the
+///   owner can undo, and the data is kept for life (spec-socle §2.2). The
+///   operation stays queued with `lastError`, nothing is rolled back, reverted,
+///   stripped, dropped or quarantined; it is not counted as pending (pulls
+///   keep running) but still protects its entity from pull overwrites. Held
+///   operations are pushed again on the first push after the app starts and
+///   then at most every [heldRetryInterval], so they apply as soon as the
+///   module is active again. A queued operation refused (for any reason)
+///   while it references an entity of a held operation is held too.
+/// * **Terminal** reasons: everything else. The same payload would be refused
+///   again on every push (the server re-evaluates a REJECTED operation each
+///   time it is pushed, and the outcome does not change). Per operation:
 ///   - money / stock-ledger operations ([moneyLedgerOperations]) are never
 ///     deleted by their own rejection: they go into **quarantine**
 ///     ([quarantinesOnRejection], v1s-16-15) — `sync_queue.quarantined_at`
@@ -57,6 +67,19 @@ const transientSyncRejectionReasons = {
   'TENANT_NOT_FOUND',
 };
 
+/// Reason of a held operation (Story 12.7): the module is off for the account.
+const heldSyncRejectionReason = 'MODULE_INACTIVE';
+
+/// Whether a REJECTED [reason] holds the operation (kept, nothing undone,
+/// retried at [heldRetryInterval]).
+bool isHeldSyncRejection(String? reason) => reason == heldSyncRejectionReason;
+
+/// Minimum delay between two pushes of a held operation (besides the first
+/// push after the app starts). A module is re-activated by the owner or the
+/// platform, rarely more than a few times a day: 6 hours keeps held operations
+/// from adding a refused round-trip to every 5-minute sync cycle.
+const heldRetryInterval = Duration(hours: 6);
+
 /// Whether a REJECTED [reason] is expected to clear on a later push. A null
 /// reason (no information from the server) is treated as transient.
 bool isTransientSyncRejection(String? reason) =>
@@ -69,6 +92,7 @@ bool isTransientSyncRejection(String? reason) =>
 /// forever would pin the queue.
 bool quarantinesOnRejection(String operation, String? reason) =>
     moneyLedgerOperations.contains(operation) &&
+    !isHeldSyncRejection(reason) &&
     (!isTransientSyncRejection(reason) ||
         reason == 'DATA_INTEGRITY_VIOLATION');
 

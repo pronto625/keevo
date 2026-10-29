@@ -27,6 +27,11 @@ public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "inventory";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         if (p.get("productId") == null || p.get("storeId") == null || p.get("quantity") == null) {

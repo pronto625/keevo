@@ -39,6 +39,11 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
     }
 
     @Override
+    public String moduleId() {
+        return "inventory";
+    }
+
+    @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
         requireNonNull(p, "sessionId");
