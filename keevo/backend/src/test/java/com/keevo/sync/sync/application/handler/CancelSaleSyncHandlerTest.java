@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
 import com.keevo.shared.domain.exception.DomainException;
@@ -44,7 +45,8 @@ class CancelSaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CancelSaleSyncHandler(cancelPendingSaleUseCase);
+        handler = new CancelSaleSyncHandler(
+                CommerceSaleApiTestSupport.saleCommandPort(null, null, cancelPendingSaleUseCase));
     }
 
     @AfterEach

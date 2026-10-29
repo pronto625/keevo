@@ -56,7 +56,7 @@ class ProductControllerTest {
     private GetProductPricingUseCase getProductPricingUseCase;
 
     @Mock
-    private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
+    private com.keevo.store.api.StoreQueryPort storeQuery;
 
     @Mock
     private com.keevo.crm.api.SupplierQueryPort supplierQueryPort;

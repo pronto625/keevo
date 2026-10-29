@@ -2,7 +2,7 @@ package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.UserSpringRepository;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.out.UserRepository;

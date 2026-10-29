@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.model.WeeklyReportData;

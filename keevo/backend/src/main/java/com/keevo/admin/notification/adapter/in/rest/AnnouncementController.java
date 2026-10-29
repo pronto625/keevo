@@ -2,7 +2,7 @@ package com.keevo.admin.notification.adapter.in.rest;
 
 import com.keevo.admin.notification.adapter.in.rest.dto.AnnouncementDto;
 import com.keevo.admin.notification.domain.port.in.ListAnnouncementsUseCase;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

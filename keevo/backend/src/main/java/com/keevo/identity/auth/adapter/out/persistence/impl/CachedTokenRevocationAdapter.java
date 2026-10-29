@@ -2,7 +2,7 @@ package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;

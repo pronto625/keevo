@@ -3,7 +3,7 @@ package com.keevo.inventory.stock.adapter.out.persistence;
 import com.keevo.inventory.stock.domain.model.StoreProductStockEntry;
 import com.keevo.inventory.stock.domain.model.StoreStockSummary;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

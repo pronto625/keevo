@@ -1,16 +1,21 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.model.Sale;
-import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
+import com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
@@ -66,8 +71,9 @@ class SaleDraftValidatedNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new SaleDraftValidatedNotificationListener(saleRepository, employeeRepository,
-                storeRepository, userRepository, ownerRecipientResolver, tenantPreferencesRepository, notificationPort, whatsAppPort);
+        listener = new SaleDraftValidatedNotificationListener(
+                CommerceSaleApiTestSupport.saleQueryPort(saleRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository),
+                StoreApiTestSupport.queryPort(storeRepository), IdentityAuthApiTestSupport.userQueryPort(userRepository), ownerRecipientResolver, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), notificationPort, whatsAppPort);
 
         SaleItem item = mock(SaleItem.class);
         when(item.getProductId()).thenReturn(draftId);

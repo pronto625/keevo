@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.security;
 
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.observability.PrometheusScrapeAuthFilter;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;

@@ -18,7 +18,7 @@ import com.keevo.admin.platform.domain.port.in.GetSystemHealthUseCase;
 import com.keevo.admin.subscription.domain.model.PlanAlert;
 import com.keevo.admin.subscription.domain.port.in.ListPlanAlertsUseCase;
 import com.keevo.feedback.feedback.domain.port.in.HandleFeedbackUseCase;
-import com.keevo.identity.auth.domain.model.AccountDeletionPolicy;
+import com.keevo.identity.api.AccountDeletionPolicy;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.slf4j.Logger;

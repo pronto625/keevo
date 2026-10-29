@@ -1,7 +1,7 @@
 package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.PhoneNumbers;
 import org.slf4j.Logger;

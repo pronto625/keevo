@@ -1,6 +1,6 @@
 package com.keevo.identity.auth.adapter.out.persistence.impl;
 
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;

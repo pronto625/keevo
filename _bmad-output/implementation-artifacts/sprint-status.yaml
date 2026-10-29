@@ -231,9 +231,10 @@ development_status:
   12-1-declarer-modules-spring-modulith: review  # 2026-10-29 done (revue groupée avec 12-5) — 13 modules, allow-lists = graphe observé + shared, not-allowed épinglé à 0 | 2026-10-29 bmad-build-auto (spec-12-1-declarer-modules-spring-modulith.md)
   12-2a-api-publique-catalog: review  # 2026-10-29 done — catalog.api + crm.api, events exposés, consommateurs recâblés (revue groupée avec 12-2b) | 2026-10-29 bmad-build-auto (spec-12-2a-api-publique-catalog-crm.md, inclut crm) | 2026-10-29 review 12-1/12-5 — +1 item (API crm + consommateurs) | 2026-10-29 12.5 — 1 item routé (ProductController → crm)
   12-2b-api-publique-inventory: review  # 2026-10-29 done — inventory.api, transferts → inventory.transfer, cycle catalog↔inventory direct supprimé ; 833 violations ; test live OK | 2026-10-29 bmad-build-auto (spec-12-2b-api-publique-inventory.md) | 2026-10-29 review 12-1/12-5 — +1 item (consommateurs messaging/sync/commerce) | 2026-10-29 12.5 — 1 item routé (import CSV → stock)
-  12-2c-api-publique-commerce: backlog  # 2026-10-29 review 12-2a/12-2b — +1 item (variant stock check) |
-  12-2d-api-publiques-identity-store-subscription: backlog  # 2026-10-29 review 12-2a/12-2b — +1 item (tenant convention) |  # 2026-10-29 review 12-1/12-5 — 1 item (shared → crm/inventory, entités)
-  12-2e-api-reporting-messaging-sync-verify-bloquant: backlog
+  12-2c-api-publique-commerce: review  # 2026-10-29 done — commerce.api, events regroupés, correctif variante (validation forcée) ; revue groupée avec 12-2d | 2026-10-29 bmad-build-auto (spec-12-2c-api-publique-commerce.md) | 2026-10-29 review 12-2a/12-2b — +1 item (variant stock check) |
+  12-2d-api-publiques-identity-store-subscription: review  # 2026-10-29 done — identity/store/subscription api, garde tenant centralisé, 270 violations ; test live OK | 2026-10-29 bmad-build-auto (spec-12-2d-…) | 2026-10-29 review 12-2a/12-2b — +1 item (tenant convention) |  # 2026-10-29 review 12-1/12-5 — 1 item (shared → crm/inventory, entités)
+  12-2e-api-reporting-messaging-sync-verify-bloquant: backlog  # 2026-10-29 review 12-2c/12-2d — 2 items (identity→reporting, convention tenant)
+  12-2f-extraction-core-shared: backlog  # 2026-10-29 run autonome refonte — 4 items (+2 review 12-2c/12-2d : cycle identity↔subscription, comptages JDBC cross-module) (shared → modules métier, ~400 violations) ; clé seule
   12-3-events-spring-modulith-registry: backlog  # 2026-10-29 review 12-2a/12-2b — +1 item (MovementType in events) |  # 2026-10-28 refonte-journal A3/A4 — 2 items routés dans le brief (epics-refonte-modulaire.md)
   12-4-registre-events-schema-per-tenant: backlog  # 2026-10-28 review 11-1/11-2 — +1 item (MDC vers @Async) | 2026-10-28 refonte-journal A2 — 1 item routé dans le brief (schéma public du registre)
   12-5-realignement-modules-inventory-payment-warehouse: review  # 2026-10-29 done — stock→inventory, contact→crm.contact, placeholders supprimés ; baseline 1308 ; test live Redmi OK | 2026-10-29 bmad-build-auto (spec-12-5-realigner-modules-inventory-crm.md), avancée avant 12-2a/b (journal A6)
@@ -296,7 +297,7 @@ development_status:
   16-5-migration-backfill-tenant-modules: backlog
   16-6-rgpd-suppression-compte-donnees: backlog
   16-7-go-live-canary-runbook: backlog
-  16-8-profils-plan-plafonds-configurables: backlog
+  16-8-profils-plan-plafonds-configurables: backlog  # 2026-10-29 journal I14 — +1 item (FREE employés : 3 dans le code vs 2 dans le plan) | 2026-10-29 review 12-2c/12-2d — 1 item (ProductCountPort fail-open)
   epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

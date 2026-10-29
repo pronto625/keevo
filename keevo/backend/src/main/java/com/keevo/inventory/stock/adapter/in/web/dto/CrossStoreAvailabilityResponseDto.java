@@ -2,7 +2,7 @@ package com.keevo.inventory.stock.adapter.in.web.dto;
 
 import com.keevo.inventory.stock.domain.model.CrossStoreAvailabilityEntry;
 import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityUseCase;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 
 import java.time.Instant;
 import java.util.List;

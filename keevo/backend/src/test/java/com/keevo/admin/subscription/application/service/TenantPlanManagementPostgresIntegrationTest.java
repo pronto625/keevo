@@ -1,13 +1,14 @@
 package com.keevo.admin.subscription.application.service;
 
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.admin.subscription.adapter.out.persistence.JdbcTenantPaymentRepository;
 import com.keevo.admin.subscription.domain.model.PaymentMethod;
 import com.keevo.admin.subscription.domain.model.TenantPayment;
 import com.keevo.admin.subscription.domain.port.in.ActivatePremiumCommand;
 import com.keevo.admin.subscription.domain.port.in.DowngradeToFreeCommand;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
@@ -410,7 +411,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
 
     private AdminPlanService planService() {
         JdbcPlanChangeRecorder recorder = new JdbcPlanChangeRecorder(jdbc);
-        return new AdminPlanService(new TargetTenantLookup(jdbc), new ChangeTenantPlanService(jdbc, recorder),
+        return new AdminPlanService(new TargetTenantLookup(jdbc), SubscriptionApiTestSupport.administrationPort(null, new ChangeTenantPlanService(jdbc, recorder)),
                 new JdbcTenantPaymentRepository(jdbc), publisher, jdbc, clock);
     }
 

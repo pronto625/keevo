@@ -12,7 +12,7 @@ import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -51,18 +51,18 @@ public class StockOperationService {
     private final StockMovementRepository stockMovementRepository;
     private final ProductQueryPort productQuery; // 12.2a: catalog public API
     private final ApplicationEventPublisher eventPublisher;
-    private final StoreRepository storeRepository; // Story 14.10
+    private final StoreQueryPort storeQuery; // Story 14.10
 
     public StockOperationService(StockLevelRepository stockLevelRepository,
                                  StockMovementRepository stockMovementRepository,
                                  ProductQueryPort productQuery,
                                  ApplicationEventPublisher eventPublisher,
-                                 StoreRepository storeRepository) {
+                                 StoreQueryPort storeQuery) {
         this.stockLevelRepository    = stockLevelRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.productQuery            = productQuery;
         this.eventPublisher          = eventPublisher;
-        this.storeRepository         = storeRepository;
+        this.storeQuery         = storeQuery;
     }
 
     /**
@@ -180,7 +180,7 @@ public class StockOperationService {
                 actorRole = CurrentActor.role();
                 actorName = CurrentActor.actorLabel();
                 // Resolve store name from repository
-                storeName = storeRepository.findById(storeId)
+                storeName = storeQuery.findById(TenantContext.getCurrentTenant(), storeId)
                         .map(s -> s.name())
                         .orElse(null);
             }
@@ -191,7 +191,7 @@ public class StockOperationService {
         String counterpartStoreName = null;
         if (counterpartStoreId != null) {
             try {
-                counterpartStoreName = storeRepository.findById(counterpartStoreId)
+                counterpartStoreName = storeQuery.findById(TenantContext.getCurrentTenant(), counterpartStoreId)
                         .map(s -> s.name())
                         .orElse(null);
             } catch (Exception e) {

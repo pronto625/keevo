@@ -3,7 +3,7 @@ package com.keevo.admin.alerts.application.service;
 import com.keevo.admin.alerts.domain.model.AlertSourceRows.SilentTenant;
 import com.keevo.admin.alerts.domain.port.out.AlertSourcesPort;
 import com.keevo.admin.alerts.domain.port.out.SyncSilenceNoticeRepository;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

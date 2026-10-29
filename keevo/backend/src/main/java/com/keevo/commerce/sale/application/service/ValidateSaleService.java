@@ -6,6 +6,8 @@ import com.keevo.inventory.api.StockMovementKind;
 import com.keevo.inventory.api.StockQueryPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetPendingSalesUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
@@ -101,9 +103,11 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
 
         List<UUID> forcedProducts = new ArrayList<>();
 
-        // Decrement stock for each item — force to 0 if insufficient
+        // Decrement stock for each item — force to 0 if insufficient. Availability is read on the
+        // level that is decremented (the item's variant, null for a simple product), as
+        // RecordSaleService does (Story 12.2c; previously the no-variant level was read).
         for (SaleItem item : sale.getItems()) {
-            int available = stockQuery.availableQuantity(item.getProductId(), null, sale.getStoreId());
+            int available = stockQuery.availableQuantity(item.getProductId(), item.getVariantId(), sale.getStoreId());
 
             int effectiveDecrement = Math.min(available, item.getQuantity());
 

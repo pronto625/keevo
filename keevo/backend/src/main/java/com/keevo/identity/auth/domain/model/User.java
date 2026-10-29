@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.domain.model;
 
+import com.keevo.identity.api.Role;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;

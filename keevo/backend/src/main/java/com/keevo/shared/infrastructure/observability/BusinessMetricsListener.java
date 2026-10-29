@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.observability;
 
-import com.keevo.commerce.sale.domain.model.SaleCompletedEvent;
+import com.keevo.commerce.sale.domain.event.SaleCompletedEvent;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;

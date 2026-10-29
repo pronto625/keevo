@@ -5,6 +5,8 @@ import com.keevo.inventory.api.StockMovementKind;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.CorrectSaleService;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase.CorrectSaleCommand;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.domain.exception.DomainException;

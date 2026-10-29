@@ -3,7 +3,7 @@ package com.keevo.identity.employee.application.service;
 import com.keevo.shared.domain.PasswordLimits;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
 import com.keevo.identity.employee.domain.model.Employee;

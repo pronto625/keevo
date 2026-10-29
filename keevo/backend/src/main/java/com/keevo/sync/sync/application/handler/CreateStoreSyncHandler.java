@@ -1,21 +1,16 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreFactory;
-import com.keevo.store.store.domain.model.StoreType;
-import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.store.api.CreateStoreWithIdInput;
+import com.keevo.store.api.StoreCommandPort;
+import com.keevo.store.api.StoreType;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,8 +23,9 @@ import java.util.UUID;
  *
  * <p>Bypasses {@code CreateStoreUseCase} intentionally — the use case generates
  * its own {@code UUID.randomUUID()}, which would discard the client-assigned UUID
- * needed for offline-first idempotency. Plan-limit and warehouse-uniqueness checks
- * are re-enforced here directly (mirroring {@code CreateStoreService}) — code review
+ * needed for offline-first idempotency. The store-limit lock, idempotency, plan-limit and
+ * warehouse-uniqueness checks (mirroring {@code CreateStoreService}) are enforced by
+ * {@code StoreCommandPort#createWithId} (store module, 12.2d) — code review
  * of v1s-16-6 found that, once this handler exists, a queued CREATE_STORE reaching
  * the backend without these checks would let an offline OWNER exceed the FREE-plan
  * store cap or create a second warehouse.
@@ -37,19 +33,10 @@ import java.util.UUID;
 @Component
 public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
 
-    private final StoreRepository storeRepository;
-    private final SubscriptionRepository subscriptionRepository;
-    private final PlanLimitGuard planLimitGuard;
-    private final TransactionLockPort transactionLock;
+    private final StoreCommandPort storeCommand;
 
-    public CreateStoreSyncHandler(StoreRepository storeRepository,
-                                   SubscriptionRepository subscriptionRepository,
-                                   PlanLimitGuard planLimitGuard,
-                                   TransactionLockPort transactionLock) {
-        this.storeRepository = storeRepository;
-        this.subscriptionRepository = subscriptionRepository;
-        this.planLimitGuard = planLimitGuard;
-        this.transactionLock = transactionLock;
+    public CreateStoreSyncHandler(StoreCommandPort storeCommand) {
+        this.storeCommand = storeCommand;
     }
 
     @Override
@@ -66,7 +53,7 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
             throw new IllegalArgumentException("Invalid field: name");
         // v1s-13-8: same rule as the REST DTO / StoreFactory (2–100 chars once trimmed)
         // → DomainException VALIDATION_ERROR → REJECTED.
-        StoreFactory.validateName((String) p.get("name"));
+        storeCommand.validateName((String) p.get("name"));
     }
 
     @Override
@@ -79,45 +66,18 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
         Map<String, Object> p = operation.payload();
         UUID storeId = UUID.fromString((String) p.get("id"));
 
-        // v1s-13-13: same per-tenant lock as CreateStoreService, taken BEFORE the idempotency
-        // read so a concurrent replay of the same id sees the winner's row (APPLIED) instead of
-        // a spurious plan-limit REJECTED. Runs inside SyncPushService's per-op transaction.
-        transactionLock.lock("store-limit:" + TenantContext.getCurrentTenant());
-
-        // Idempotency: if already synced, return APPLIED without duplicate insert.
-        if (storeRepository.findById(storeId).isPresent()) {
-            return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                    storeId.toString(), null);
-        }
-
         StoreType type = p.get("type") != null
                 ? StoreType.valueOf((String) p.get("type"))
                 : StoreType.STORE;
 
-        // Plan-limit and warehouse-uniqueness checks — mirrors CreateStoreService.
-        var planType = subscriptionRepository.findActivePlan()
-                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Aucun abonnement actif"))
-                .getPlanType();
-        planLimitGuard.checkStoreLimit(planType, storeRepository.countActive());
-
-        if (type == StoreType.WAREHOUSE && storeRepository.existsWarehouse()) {
-            throw new DomainException(ErrorCode.WAREHOUSE_ALREADY_EXISTS,
-                    "Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte.");
-        }
-
-        Instant now = Instant.now();
-        Store store = new Store(
+        // Lock, idempotency (existing id → APPLIED, no duplicate), plan-limit and warehouse checks, then
+        // the insert — all in the store module (12.2d), inside SyncPushService's per-op transaction.
+        storeCommand.createWithId(TenantContext.getCurrentTenant(), new CreateStoreWithIdInput(
                 storeId,
-                StoreFactory.validateName((String) p.get("name")),
+                (String) p.get("name"),
                 type,
                 (String) p.getOrDefault("address", null),
-                (String) p.getOrDefault("phone", null),
-                true,
-                now,
-                now
-        );
-        storeRepository.save(store);
+                (String) p.getOrDefault("phone", null)));
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 storeId.toString(), null);
     }

@@ -570,8 +570,7 @@ As a **architecte**, I want **une `api` pour `commerce` (ventes, clôture)**, So
 As a **architecte**, I want **des `api` pour les modules transverses très dépendus (`identity` 21+14 imports, `store`, `subscription`)**, So that **leurs consommateurs passent par contrat (MOD-NFR3)**.
 **Acceptance Criteria:** **Given** `reporting→identity`, `messaging→identity`, `subscription→identity`, `catalog→store/subscription` **When** la story est faite **Then** tous via `{module}.api` ; `verify()` propre sur ces 3 modules.
 
-**Items (routed 2026-10-29 from review 12-1/12-5):**
-- [ ] [Deferred-from: review 12-1/12-5, 2026-10-29] `shared` depends on crm/inventory internals (`StockMovementJpaEntity`/`StockTransferJpaEntity` → `MovementType`/`TransferStatus`, `AuditEventListener` → crm/inventory events, Product/Stock/Supplier/Client JPA entities) [shared/infrastructure/persistence/entity, shared/infrastructure/web/AuditEventListener.java] — move entities to their owning modules / events to `core.event.catalog` during core extraction
+*(2026-10-29: the `shared → crm/inventory` item first routed here moved to Story 12.2f.)*
 
 - [ ] [Deferred-from: review 12-2a/12-2b, 2026-10-29] One tenant convention for published ports (explicit `TenantId` vs ambient `TenantContext`) [catalog/api, crm/api, inventory/api]
 
@@ -585,6 +584,23 @@ As a **architecte**, I want **finaliser les dernières `api` et passer `verify()
 **And** le diagramme de modules (Documenter) est à jour
 
 **Implementation Notes:** clôture d'Epic 12 côté frontières ; combiner avec les règles ArchUnit complémentaires (12.6).
+
+- [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] identity depends on the whole `reporting` module and its internals (`DailyReportFormatter`, `EndOfDayReportBuilder`) — route through a reporting `api` [identity/package-info.java]
+- [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] commerce/catalog/crm/inventory ports rely on the ambient tenant — align with the explicit `tenantSchema` + `TenantContext.requireCurrent` convention of identity/store/subscription [commerce/api, catalog/api, crm/api, inventory/api]
+
+### Story 12.2f : Extraire le `core` — `shared` ne dépend plus d'aucun module métier
+
+*(Story créée 2026-10-29 par le run autonome de la refonte — clé seule, story file à créer par bmad-create-story.)*
+
+Scope: `shared` (future `core`) still references ~400 internal types of business modules: JPA entities for Product/Stock*/Supplier/Client/Transfer in `shared.infrastructure.persistence.entity`, identity Spring repositories, `AuditEventListener` consuming every module's events, enums such as `ProductStatus`, `TransferStatus`, `InventoryScope`. Move each entity/repository back to its owning module (`adapter/out/persistence`), turn the audit listener into per-module contributions or consume events via the event catalogue (12.3), and extract the shared kernel (`Money`, `TenantId`, `ActorId`, `DomainEvent`) into `core`.
+
+- [ ] [Deferred-from: review 12-1/12-5, 2026-10-29, re-routed from 12.2d] `shared` depends on crm/inventory internals (`StockMovementJpaEntity`/`StockTransferJpaEntity` → `MovementType`/`TransferStatus`, `AuditEventListener` → crm/inventory events, Product/Stock/Supplier/Client JPA entities) [shared/infrastructure/persistence/entity, shared/infrastructure/web/AuditEventListener.java]
+- [ ] [Deferred-from: 12.2a/12.2b implementation, 2026-10-29] Remaining `shared → catalog` (8, `ProductStatus` in `ProductJpaEntity`) and `shared → inventory` (8, `TransferStatus` ×7, `InventoryScope`)
+
+**AC (interim):** Given the architecture report, when regenerated, then no violation has `shared` as source, and `shared`'s `allowedDependencies` is empty (it depends on no business module).
+
+- [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] identity ↔ subscription cycle (identity checks plan limits and records plan-change events; subscription reads tenants and `PlanType`) — split tenant vs plan ownership [identity/auth, subscription/plan]
+- [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] `StoreCountAdapter` / `UserCountAdapter` (subscription) read store/identity tables over JDBC — move counts to the owning modules as `subscription.api` SPI implementations, like `ProductCountAdapter`/`EmployeeCountAdapter` [subscription/plan/adapter/out]
 
 ### Story 12.3 : Migrer les events vers le registre Spring Modulith + catalogue partagé
 
@@ -1429,6 +1445,10 @@ So that **je peux ajuster l'offre commerciale dynamiquement (MOD-FR13b, décisio
 - TDD : changer un plafond en base → la création au-delà est refusée/autorisée en conséquence sans redémarrage.
 
 ---
+
+
+**Items (routed 2026-10-29 from review 12-2c/12-2d):**
+- [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] `ProductCountPort` returns 0 for an invalid schema / missing table, so the product limit fails open (same JDBC code as before 12.2d) — fail closed when limits become configurable [catalog ProductCountAdapter]
 
 ## Epic 17 : Complétion Fonctionnelle & Gating Produit (Phase 7)
 

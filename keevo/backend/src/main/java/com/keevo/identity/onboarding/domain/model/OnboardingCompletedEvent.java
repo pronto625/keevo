@@ -11,6 +11,7 @@ import java.util.UUID;
  *
  * <p>Pure Java record — immutable, no framework dependencies.
  */
+@org.springframework.modulith.NamedInterface("events")
 public record OnboardingCompletedEvent(
         String tenantId,
         SectorType sectorType,

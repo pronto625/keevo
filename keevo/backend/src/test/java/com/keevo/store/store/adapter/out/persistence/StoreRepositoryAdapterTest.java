@@ -1,7 +1,7 @@
 package com.keevo.store.store.adapter.out.persistence;
 
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

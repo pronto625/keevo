@@ -15,10 +15,10 @@ import com.keevo.catalog.api.InitialStockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.store.api.StoreQueryPort;
+import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.subscription.api.ProductCountPort;
+import com.keevo.subscription.api.SubscriptionQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -67,10 +67,10 @@ public class ImportCsvProductsUseCase {
     private final ObjectProvider<InitialStockPort> initialStockPort;
     private final AtomicBoolean            missingStockPortLogged = new AtomicBoolean();
     private final DefaultStorePort        defaultStorePort;
-    private final StoreRepository         storeRepository;
+    private final StoreQueryPort         storeQuery;
     private final ProductCountPort        productCountPort;
-    private final SubscriptionRepository  subscriptionRepository;
-    private final PlanLimitGuard          planLimitGuard;
+    private final SubscriptionQueryPort  subscriptionQuery;
+    private final PlanLimitPort          planLimit;
     private final CategoryRepository      categoryRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -81,10 +81,10 @@ public class ImportCsvProductsUseCase {
             ProductRepository productRepository,
             ObjectProvider<InitialStockPort> initialStockPort,
             DefaultStorePort defaultStorePort,
-            StoreRepository storeRepository,
+            StoreQueryPort storeQuery,
             ProductCountPort productCountPort,
-            SubscriptionRepository subscriptionRepository,
-            PlanLimitGuard planLimitGuard,
+            SubscriptionQueryPort subscriptionQuery,
+            PlanLimitPort planLimit,
             CategoryRepository categoryRepository,
             ApplicationEventPublisher eventPublisher) {
         this.csvParser             = csvParser;
@@ -93,10 +93,10 @@ public class ImportCsvProductsUseCase {
         this.productRepository     = productRepository;
         this.initialStockPort      = initialStockPort;
         this.defaultStorePort      = defaultStorePort;
-        this.storeRepository       = storeRepository;
+        this.storeQuery       = storeQuery;
         this.productCountPort      = productCountPort;
-        this.subscriptionRepository = subscriptionRepository;
-        this.planLimitGuard        = planLimitGuard;
+        this.subscriptionQuery = subscriptionQuery;
+        this.planLimit        = planLimit;
         this.categoryRepository    = categoryRepository;
         this.eventPublisher        = eventPublisher;
     }
@@ -143,13 +143,12 @@ public class ImportCsvProductsUseCase {
         List<Map<String, String>> rows = csvParser.parse(command.csvStream());
 
         // ── 3. Determine remaining product capacity ──────────────────────────
-        int currentCount = productCountPort.countActiveProducts();
-        var planType = subscriptionRepository.findActivePlan()
+        int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
+        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Aucun abonnement actif trouvé"))
-                .getPlanType();
+                        "Aucun abonnement actif trouvé"));
 
-        int maxProducts = planType.getMaxProducts();
+        int maxProducts = plan.maxProducts();
         int remaining   = maxProducts - currentCount;
 
         // ── 4. Build category name→UUID map (case-insensitive) ────────────────
@@ -279,10 +278,10 @@ public class ImportCsvProductsUseCase {
         if (requestedStoreId == null) {
             return defaultStorePort.getDefaultStoreId();
         }
-        var store = storeRepository.findById(requestedStoreId)
+        var store = storeQuery.findById(TenantContext.getCurrentTenant(), requestedStoreId)
                 .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
                         "Boutique introuvable: " + requestedStoreId));
-        if (!store.isActive()) {
+        if (!store.active()) {
             throw new DomainException(ErrorCode.STORE_NOT_ACTIVE,
                     "La boutique sélectionnée est désactivée: " + requestedStoreId);
         }

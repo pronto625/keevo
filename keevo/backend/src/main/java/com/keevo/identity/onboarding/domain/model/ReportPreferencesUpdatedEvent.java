@@ -11,6 +11,7 @@ import java.util.UUID;
  *
  * <p>Pure Java — NO Spring/framework imports.
  */
+@org.springframework.modulith.NamedInterface("events")
 public record ReportPreferencesUpdatedEvent(
         UUID preferencesId,
         Map<String, Object> before,

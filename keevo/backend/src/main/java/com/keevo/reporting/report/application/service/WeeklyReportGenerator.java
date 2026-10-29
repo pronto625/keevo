@@ -1,9 +1,10 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
@@ -13,7 +14,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.application.port.TransactionLockPort;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -50,7 +51,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
 
     private final WeeklyReportBuilder builder;
     private final WeeklyReportFormatter formatter;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final TransactionLockPort transactionLock;
     private final TransactionTemplate afterCommitTx;
@@ -60,14 +61,14 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
                                   MultiStoreSummaryService multiStoreSummaryService,
                                   WeeklyReportBuilder builder,
                                   WeeklyReportFormatter formatter,
-                                  StoreRepository storeRepository,
+                                  StoreQueryPort storeQuery,
                                   OwnerRecipientResolver ownerRecipientResolver,
                                   TransactionLockPort transactionLock,
                                   PlatformTransactionManager transactionManager) {
         super(reportRepository, whatsAppPort, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.transactionLock = transactionLock;
         // afterCommit still sees the committed transaction's resources bound: writes there
@@ -113,7 +114,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
 
     @Override
     protected EndOfDayReportData collectData(GenerateEndOfDayReportUseCase.GenerateReportCommand command) {
-        String storeName = storeRepository.findById(command.storeId())
+        String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), command.storeId())
                 .map(s -> s.name())
                 .orElse("Boutique #" + command.storeId().toString().substring(0, 8));
 

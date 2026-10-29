@@ -1,5 +1,7 @@
 package com.keevo.inventory.counting;
 
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.api.ProductState;
 import com.keevo.catalog.product.adapter.in.api.CatalogProductApiTestSupport;
@@ -44,7 +46,7 @@ class QuickAddProductIntegrationTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
     // v1s-14-13: plan-limit collaborators (active FREE plan under the cap)
-    @Mock private com.keevo.subscription.plan.domain.port.out.ProductCountPort productCountPort;
+    @Mock private com.keevo.subscription.api.ProductCountPort productCountPort;
     @Mock private com.keevo.subscription.plan.domain.port.out.SubscriptionRepository subscriptionRepository;
     @Mock private com.keevo.subscription.plan.application.service.PlanLimitGuard planLimitGuard;
     @Mock private com.keevo.shared.application.port.TransactionLockPort transactionLock;
@@ -65,11 +67,11 @@ class QuickAddProductIntegrationTest {
                 CatalogProductApiTestSupport.queryPort(productRepository),
                 CatalogProductApiTestSupport.repositoryCommandPort(productRepository, eventPublisher),
                 stockLevelRepository,
-                countRepository, eventPublisher, storeRepository,
-                productCountPort, subscriptionRepository, planLimitGuard, transactionLock);
+                countRepository, eventPublisher, StoreApiTestSupport.queryPort(storeRepository),
+                productCountPort, SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), transactionLock);
         TenantContext.setCurrentTenant("tenant_integration");
         lenient().when(freeSubscription.getPlanType())
-                .thenReturn(com.keevo.identity.auth.domain.model.PlanType.FREE);
+                .thenReturn(com.keevo.identity.api.PlanType.FREE);
         lenient().when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
     }
 

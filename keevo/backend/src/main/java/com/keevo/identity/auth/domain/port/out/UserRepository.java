@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.domain.port.out;
 
+import com.keevo.identity.api.OwnerRecipientResolver;
+
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 

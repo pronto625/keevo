@@ -6,7 +6,7 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.in.UpdateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

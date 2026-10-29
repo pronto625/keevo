@@ -1,12 +1,13 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.commerce.api.DayClosureSummary;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +38,7 @@ class DayClosureNotificationListenerTest {
     void setUp() {
         notificationPort = mock(NotificationPort.class);
         storeRepository = mock(StoreRepository.class);
-        listener = new DayClosureNotificationListener(notificationPort, storeRepository);
+        listener = new DayClosureNotificationListener(notificationPort, StoreApiTestSupport.queryPort(storeRepository));
     }
 
     @AfterEach

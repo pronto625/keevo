@@ -1,6 +1,6 @@
 package com.keevo.store.store.domain.port.in;
 
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 
 import java.util.UUID;
 

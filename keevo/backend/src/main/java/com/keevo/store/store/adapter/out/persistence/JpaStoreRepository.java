@@ -1,6 +1,6 @@
 package com.keevo.store.store.adapter.out.persistence;
 
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

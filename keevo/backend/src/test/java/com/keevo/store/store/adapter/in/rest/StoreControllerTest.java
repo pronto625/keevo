@@ -3,7 +3,7 @@ package com.keevo.store.store.adapter.in.rest;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import com.keevo.store.store.domain.port.in.*;
 import org.junit.jupiter.api.BeforeEach;

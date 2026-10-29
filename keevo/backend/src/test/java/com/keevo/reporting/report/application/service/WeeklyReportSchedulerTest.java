@@ -1,12 +1,15 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.SectorType;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -14,7 +17,7 @@ import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,8 +74,8 @@ class WeeklyReportSchedulerTest {
         // Default: Sunday 20:05 WAT
         Clock defaultClock = fixedClockAt(SUNDAY_DATE, "20:05:00", WAT);
         scheduler = new WeeklyReportScheduler(
-                tenantRepository, storeRepository, reportRepository,
-                weeklyReportGenerator, tenantPreferencesRepository, new WeeklyReportWindowResolver(reportRepository), defaultClock);
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository), reportRepository,
+                weeklyReportGenerator, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), new WeeklyReportWindowResolver(reportRepository), defaultClock);
     }
 
     @Test
@@ -99,8 +102,8 @@ class WeeklyReportSchedulerTest {
     void correctDay_wrongTime_doesNotTrigger() {
         // Given: Sunday 19:30 — too early, prefs say Sunday 20:00
         Clock earlyClock = fixedClockAt(SUNDAY_DATE, "19:30:00", WAT);
-        scheduler = new WeeklyReportScheduler(tenantRepository, storeRepository, reportRepository,
-                weeklyReportGenerator, tenantPreferencesRepository, new WeeklyReportWindowResolver(reportRepository), earlyClock);
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository), reportRepository,
+                weeklyReportGenerator, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), new WeeklyReportWindowResolver(reportRepository), earlyClock);
 
         var tenant = activeTenant();
         when(tenantRepository.findAll()).thenReturn(List.of(tenant));
@@ -116,8 +119,8 @@ class WeeklyReportSchedulerTest {
     void wrongDay_correctTime_doesNotTrigger() {
         // Given: Saturday 20:05 but prefs say Sunday (day=0) 20:00
         Clock saturdayClock = fixedClockAt(SATURDAY_DATE, "20:05:00", WAT);
-        scheduler = new WeeklyReportScheduler(tenantRepository, storeRepository, reportRepository,
-                weeklyReportGenerator, tenantPreferencesRepository, new WeeklyReportWindowResolver(reportRepository), saturdayClock);
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository), reportRepository,
+                weeklyReportGenerator, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), new WeeklyReportWindowResolver(reportRepository), saturdayClock);
 
         var tenant = activeTenant();
         when(tenantRepository.findAll()).thenReturn(List.of(tenant));
@@ -207,8 +210,8 @@ class WeeklyReportSchedulerTest {
     void configuredSaturday_triggersOnSaturday() {
         // Given: Saturday clock + prefs day=6 (Saturday) 20:00
         Clock saturdayClock = fixedClockAt(SATURDAY_DATE, "20:05:00", WAT);
-        scheduler = new WeeklyReportScheduler(tenantRepository, storeRepository, reportRepository,
-                weeklyReportGenerator, tenantPreferencesRepository, new WeeklyReportWindowResolver(reportRepository), saturdayClock);
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository), reportRepository,
+                weeklyReportGenerator, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), new WeeklyReportWindowResolver(reportRepository), saturdayClock);
 
         var tenant = activeTenant();
         var store = activeStore();
@@ -272,8 +275,8 @@ class WeeklyReportSchedulerTest {
     void shouldReportLastCompletedWeekWhenTriggeredOnSaturday() {
         // Given: Saturday 20:05 WAT + prefs day=6 (Saturday)
         Clock saturdayClock = fixedClockAt(SATURDAY_DATE, "20:05:00", WAT);
-        scheduler = new WeeklyReportScheduler(tenantRepository, storeRepository, reportRepository,
-                weeklyReportGenerator, tenantPreferencesRepository, new WeeklyReportWindowResolver(reportRepository), saturdayClock);
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository), reportRepository,
+                weeklyReportGenerator, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), new WeeklyReportWindowResolver(reportRepository), saturdayClock);
 
         var tenant = activeTenant();
         var store = activeStore();

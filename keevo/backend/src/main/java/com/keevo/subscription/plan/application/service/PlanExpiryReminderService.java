@@ -1,7 +1,7 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.PlanType;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.domain.time.KeevoZones;

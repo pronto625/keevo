@@ -1,14 +1,15 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.commerce.sale.domain.model.PaymentMode;
-import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
-import com.keevo.commerce.sale.domain.model.SaleStatus;
-import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
-import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
-import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.commerce.api.RecordSaleInput;
+import com.keevo.commerce.api.SaleCommandPort;
+import com.keevo.commerce.api.SaleLineInput;
+import com.keevo.commerce.api.SalePaymentMode;
+import com.keevo.commerce.api.SaleState;
+import com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent;
+import com.keevo.store.api.StoreQueryPort;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -21,16 +22,16 @@ import java.util.*;
 @Component
 public class SaleSyncHandler extends AbstractSyncOperationHandler {
 
-    private final RecordSaleUseCase recordSaleUseCase;
+    private final SaleCommandPort saleCommandPort;
     private final ApplicationEventPublisher eventPublisher;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
 
-    public SaleSyncHandler(RecordSaleUseCase recordSaleUseCase,
+    public SaleSyncHandler(SaleCommandPort saleCommandPort,
                            ApplicationEventPublisher eventPublisher,
-                           StoreRepository storeRepository) {
-        this.recordSaleUseCase = recordSaleUseCase;
+                           StoreQueryPort storeQuery) {
+        this.saleCommandPort = saleCommandPort;
         this.eventPublisher = eventPublisher;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
     }
 
     @Override
@@ -63,19 +64,19 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         // v1s-16-15: sales.store_id has no FK — a sale for a store the server does not
         // know (rolled back offline creation) would be stored as an orphan. Refused so the
         // device quarantines it and the payload lands in sync_error_log.
-        if (storeRepository.findById(storeId).isEmpty()) {
+        if (storeQuery.findById(TenantContext.getCurrentTenant(), storeId).isEmpty()) {
             throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
-        PaymentMode paymentMode = PaymentMode.valueOf((String) p.get("paymentMode"));
+        SalePaymentMode paymentMode = SalePaymentMode.valueOf((String) p.get("paymentMode"));
         String mobileMoneyRef = (String) p.get("mobileMoneyRef");
         int discountAmount = p.get("discountAmount") != null ? requireIntegralInt(p.get("discountAmount"), "discountAmount") : 0;
 
-        SaleStatus requestedStatus = resolveRequestedStatus(p);
+        SaleState requestedStatus = resolveRequestedStatus(p);
 
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> items = (List<Map<String, Object>>) p.get("items");
-        List<SaleItemCommand> saleItems = items.stream().map(item -> new SaleItemCommand(
+        List<SaleLineInput> saleItems = items.stream().map(item -> new SaleLineInput(
                 item.get("itemId") != null ? UUID.fromString((String) item.get("itemId")) : null,
                 UUID.fromString((String) item.get("productId")),
                 item.get("variantId") != null ? UUID.fromString((String) item.get("variantId")) : null,
@@ -85,7 +86,7 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
                 requireIntegralInt(item.get("quantity"), "quantity")
         )).toList();
 
-        recordSaleUseCase.recordSale(new RecordSaleCommand(
+        saleCommandPort.recordSale(new RecordSaleInput(
                 saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef,
                 discountAmount, requestedStatus, saleItems,
                 resolveClientTime(p.get("occurredAt"), operation.clientTimestamp()),
@@ -116,16 +117,16 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
      * carry {@code status}: used only when it is exactly one of those two values, otherwise
      * ignored (null → COMPLETED by default) so a stale sale is not rejected.
      */
-    private static SaleStatus resolveRequestedStatus(Map<String, Object> p) {
+    private static SaleState resolveRequestedStatus(Map<String, Object> p) {
         Object explicit = p.get("requestedStatus");
         if (explicit != null) {
-            if ("COMPLETED".equals(explicit)) return SaleStatus.COMPLETED;
-            if ("PENDING_VALIDATION".equals(explicit)) return SaleStatus.PENDING_VALIDATION;
+            if ("COMPLETED".equals(explicit)) return SaleState.COMPLETED;
+            if ("PENDING_VALIDATION".equals(explicit)) return SaleState.PENDING_VALIDATION;
             throw new IllegalArgumentException("Invalid requestedStatus: " + explicit);
         }
         Object legacy = p.get("status");
-        if ("COMPLETED".equals(legacy)) return SaleStatus.COMPLETED;
-        if ("PENDING_VALIDATION".equals(legacy)) return SaleStatus.PENDING_VALIDATION;
+        if ("COMPLETED".equals(legacy)) return SaleState.COMPLETED;
+        if ("PENDING_VALIDATION".equals(legacy)) return SaleState.PENDING_VALIDATION;
         return null;
     }
 

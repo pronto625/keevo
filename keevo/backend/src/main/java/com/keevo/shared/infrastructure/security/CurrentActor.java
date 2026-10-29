@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.security;
 
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.springframework.security.core.Authentication;

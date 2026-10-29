@@ -1,12 +1,14 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.in.DeactivateStoreCommand;
 import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -43,13 +45,18 @@ class StoreSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new StoreSyncHandler(updateStoreUseCase, deactivateStoreUseCase, storeRepository);
+        // 12.2d: the real store API adapter over the mocked use cases / repository
+        handler = new StoreSyncHandler(
+                StoreApiTestSupport.commandPort(storeRepository, updateStoreUseCase, deactivateStoreUseCase, null, null, null),
+                StoreApiTestSupport.queryPort(storeRepository));
         authenticateAsOwner();
+        TenantContext.setCurrentTenant(TENANT_ID);
     }
 
     @AfterEach
     void tearDown() {
         SecurityContextHolder.clearContext();
+        TenantContext.clear();
     }
 
     private void authenticateAsOwner() {

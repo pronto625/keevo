@@ -57,7 +57,7 @@ class StockOperationServiceTest {
     @Mock private StockMovementRepository  stockMovementRepository;
     @Mock private ProductQueryPort        productQuery;
     @Mock private ApplicationEventPublisher eventPublisher;
-    @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository; // Story 14.10
+    @Mock private com.keevo.store.api.StoreQueryPort storeQuery; // Story 14.10 (store :: api since 12.2d)
 
     @InjectMocks
     private StockOperationService service;
@@ -281,8 +281,8 @@ class StockOperationServiceTest {
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(storeRepository.findById(dest)).thenReturn(Optional.of(new com.keevo.store.store.domain.model.Store(
-            dest, "Boutique B", com.keevo.store.store.domain.model.StoreType.STORE, null, null, true,
+        when(storeQuery.findById(TENANT, dest)).thenReturn(Optional.of(new com.keevo.store.api.StoreView(
+            dest, "Boutique B", com.keevo.store.api.StoreType.STORE, null, null, true,
             java.time.Instant.now(), java.time.Instant.now())));
 
         service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.TRANSFER_OUT, -3, ACTOR_ID, null, dest);
@@ -300,7 +300,7 @@ class StockOperationServiceTest {
             .thenReturn(Optional.of(levelWithQuantity(10)));
         when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(stockLevelRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        when(storeRepository.findById(dest)).thenReturn(Optional.empty());
+        when(storeQuery.findById(TENANT, dest)).thenReturn(Optional.empty());
 
         service.recordOperation(PRODUCT_ID, null, STORE_ID, MovementType.TRANSFER_OUT, -3, ACTOR_ID, null, dest);
 

@@ -6,6 +6,8 @@ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
 import com.keevo.commerce.sale.adapter.out.persistence.impl.SaleRepositoryAdapter;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

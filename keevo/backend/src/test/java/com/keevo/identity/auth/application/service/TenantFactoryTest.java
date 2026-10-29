@@ -1,14 +1,14 @@
 package com.keevo.identity.auth.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.subscription.plan.domain.model.PlanChangeCause;
-import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
+import com.keevo.subscription.api.PlanChangeCause;
+import com.keevo.subscription.api.PlanChangeRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

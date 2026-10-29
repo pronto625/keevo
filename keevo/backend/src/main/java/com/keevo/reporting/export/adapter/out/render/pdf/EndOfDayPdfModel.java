@@ -1,8 +1,8 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
-import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
+import com.keevo.commerce.api.ClosureWindow;
+import com.keevo.commerce.api.DayClosureQueryPort;
+import com.keevo.commerce.api.DayClosureView;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Model of the « Fin de journée » PDF (Story v1s-18-3): one section per closure of the
  * {@code day_closures} rows matching the filter. Each section's figures come from
  * {@link EndOfDayReportBuilder#build(UUID, ClosureWindow, String, java.time.LocalDate, java.time.LocalTime, boolean)}
- * over {@link ClosureWindow#forClosure(DayClosure, Optional)} — the window the closure was made
+ * over {@link ClosureWindow#forClosure(DayClosureView, Optional)} — the window the closure was made
  * with, late offline sales included — so the PDF equals the WhatsApp end-of-day report.
  */
 @Component
@@ -38,11 +38,11 @@ public class EndOfDayPdfModel {
                                  List<TopLine> topProducts, List<EmployeeLine> employees) {
     }
 
-    private final DayClosureRepository closureRepository;
+    private final DayClosureQueryPort closureQueryPort;
     private final EndOfDayReportBuilder reportBuilder;
 
-    public EndOfDayPdfModel(DayClosureRepository closureRepository, EndOfDayReportBuilder reportBuilder) {
-        this.closureRepository = closureRepository;
+    public EndOfDayPdfModel(DayClosureQueryPort closureQueryPort, EndOfDayReportBuilder reportBuilder) {
+        this.closureQueryPort = closureQueryPort;
         this.reportBuilder = reportBuilder;
     }
 
@@ -54,7 +54,7 @@ public class EndOfDayPdfModel {
                 row -> rows.add(new String[]{row.text("id"), row.text("store")}));
         List<ClosureSection> sections = new ArrayList<>();
         for (String[] r : rows) {
-            closureRepository.findById(UUID.fromString(r[0]))
+            closureQueryPort.findById(UUID.fromString(r[0]))
                     .map(c -> section(c, r[1]))
                     .ifPresent(sections::add);
         }
@@ -65,21 +65,21 @@ public class EndOfDayPdfModel {
     }
 
     /** Figures of one closure, exactly as its end-of-day report. */
-    EndOfDayReportData report(DayClosure closure, String storeName) {
-        Optional<DayClosure> previous = closureRepository.findPreviousForStore(closure.getStoreId(),
-                closure.getClosedAt());
+    EndOfDayReportData report(DayClosureView closure, String storeName) {
+        Optional<DayClosureView> previous = closureQueryPort.findPreviousForStore(closure.storeId(),
+                closure.closedAt());
         ClosureWindow window = ClosureWindow.forClosure(closure, previous);
-        Instant closedAt = closure.getClosedAt();
-        return reportBuilder.build(closure.getStoreId(), window, storeName,
+        Instant closedAt = closure.closedAt();
+        return reportBuilder.build(closure.storeId(), window, storeName,
                 closedAt.atZone(PdfFormats.WAT).toLocalDate(), closedAt.atZone(PdfFormats.WAT).toLocalTime(),
-                closure.isAutomatic());
+                closure.automatic());
     }
 
-    private ClosureSection section(DayClosure closure, String storeName) {
+    private ClosureSection section(DayClosureView closure, String storeName) {
         EndOfDayReportData d = report(closure, storeName);
-        Instant closedAt = closure.getClosedAt();
+        Instant closedAt = closure.closedAt();
         String subtitle = (storeName == null || storeName.isEmpty() ? "Boutique" : storeName)
-                + " · " + (closure.isAutomatic() ? "Clôture automatique" : "Clôture manuelle");
+                + " · " + (closure.automatic() ? "Clôture automatique" : "Clôture manuelle");
         return new ClosureSection(
                 "Clôture du " + PdfFormats.date(closedAt) + " à " + PdfFormats.time(closedAt),
                 subtitle,

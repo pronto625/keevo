@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.persistence;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
@@ -13,7 +13,7 @@ import com.keevo.identity.employee.domain.port.in.CreateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.CreateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeUseCase;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.inventory.counting.domain.port.in.QuickAddProductCommand;
 import com.keevo.inventory.counting.domain.port.in.QuickAddProductUseCase;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -22,7 +22,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.Wee
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.DeterministicIds;
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.in.CreateStoreCommand;
 import com.keevo.store.store.domain.port.in.CreateStoreUseCase;
 import com.keevo.sync.sync.application.handler.CreateStoreSyncHandler;
@@ -563,7 +563,7 @@ class ResidualRacesPostgresIntegrationTest extends FullContextIntegrationTest {
         ClosureWindow window = ClosureWindow.forClosure(r, ClosureWindow.receivedLimit(r), Optional.empty());
         DayClosure closure = new DayClosure(UUID.randomUUID(), store, null, r, null, false, schema,
                 ClosureWindow.receivedLimit(r));
-        ClosureWindow next = ClosureWindow.forClosure(rNext, ClosureWindow.receivedLimit(rNext), Optional.of(closure));
+        ClosureWindow next = ClosureWindow.forClosure(rNext, ClosureWindow.receivedLimit(rNext), Optional.of(closure.toView()));
 
         UUID lagging = UUID.randomUUID();
         UUID onTime = UUID.randomUUID();

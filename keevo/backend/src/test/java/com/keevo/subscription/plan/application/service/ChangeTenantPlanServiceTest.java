@@ -1,12 +1,12 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.subscription.api.PlanChangeCause;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
-import com.keevo.subscription.plan.domain.port.in.CurrentPlan;
-import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
+import com.keevo.subscription.api.CurrentPlan;
+import com.keevo.subscription.api.PlanChangeRecorder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

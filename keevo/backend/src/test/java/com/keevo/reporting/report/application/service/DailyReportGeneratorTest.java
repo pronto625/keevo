@@ -1,10 +1,12 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.adapter.out.persistence.impl.OwnerRecipientResolverAdapter;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
@@ -15,7 +17,7 @@ import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class DailyReportGeneratorTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private MultiStoreSummaryService multiStoreSummaryService;
@@ -60,7 +73,7 @@ class DailyReportGeneratorTest {
     void setUp() {
         generator = new DailyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, ownerRecipientResolver, employeeRepository);
+                builder, formatter, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver, IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         storeId = UUID.randomUUID();
         actorId = UUID.randomUUID();
         command = new GenerateReportCommand(storeId, null, "kv_test01", false, Instant.now(), null);
@@ -221,8 +234,8 @@ class DailyReportGeneratorTest {
                 new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
         DailyReportGenerator realResolverGenerator = new DailyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository,
-                new OwnerRecipientResolverAdapter(userRepository), employeeRepository);
+                builder, formatter, StoreApiTestSupport.queryPort(storeRepository),
+                new OwnerRecipientResolverAdapter(userRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");

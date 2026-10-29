@@ -1,9 +1,11 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
 import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.model.SectorType;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
@@ -11,7 +13,7 @@ import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepo
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -61,7 +63,7 @@ class StockAlertNotificationListenerTest {
         clock = new MutableClock(Instant.parse("2026-10-11T10:00:00Z"));
         listener = new StockAlertNotificationListener(
                 notificationPort, whatsAppPort, cooldownRepository,
-                tenantPreferencesRepository, ownerRecipientResolver, storeRepository, clock);
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), ownerRecipientResolver, StoreApiTestSupport.queryPort(storeRepository), clock);
     }
 
     private StockThresholdBreachedEvent event() {

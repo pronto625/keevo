@@ -1,7 +1,7 @@
 package com.keevo.store.store.adapter.out.persistence;
 
 import com.keevo.shared.infrastructure.persistence.JpaBaseEntity;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import jakarta.persistence.*;
 
 import java.time.Instant;

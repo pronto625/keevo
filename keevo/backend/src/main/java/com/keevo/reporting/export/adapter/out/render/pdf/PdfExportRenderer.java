@@ -1,7 +1,7 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
-import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.api.TenantView;
+import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.port.out.DocumentExportRenderer;
@@ -10,8 +10,8 @@ import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreView;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.stereotype.Component;
 
 import java.io.FilterOutputStream;
@@ -42,20 +42,20 @@ public class PdfExportRenderer implements DocumentExportRenderer {
 
     private final PdfDocumentFactory documents;
     private final EndOfDayPdfModel endOfDay;
-    private final TenantRepository tenantRepository;
-    private final StoreRepository storeRepository;
+    private final TenantQueryPort tenantQuery;
+    private final StoreQueryPort storeQuery;
     private final Clock clock;
     private final int pageSize;
     private final int maxRows;
     private final int maxClosures;
 
     public PdfExportRenderer(PdfDocumentFactory documents, EndOfDayPdfModel endOfDay,
-                             TenantRepository tenantRepository, StoreRepository storeRepository,
+                             TenantQueryPort tenantQuery, StoreQueryPort storeQuery,
                              ExportProperties properties, Clock clock) {
         this.documents = documents;
         this.endOfDay = endOfDay;
-        this.tenantRepository = tenantRepository;
-        this.storeRepository = storeRepository;
+        this.tenantQuery = tenantQuery;
+        this.storeQuery = storeQuery;
         this.clock = clock;
         this.pageSize = properties.getPageSize();
         this.maxRows = properties.getPdfMaxRows();
@@ -142,12 +142,12 @@ public class PdfExportRenderer implements DocumentExportRenderer {
     private String businessName() {
         String schema = TenantContext.getCurrentTenant();
         if (schema == null) return null;
-        return tenantRepository.findBySchemaName(schema).map(Tenant::getName).orElse(null);
+        return tenantQuery.findBySchemaName(schema).map(TenantView::name).orElse(null);
     }
 
     private String storeName(ExportFilter filter) {
         if (filter.storeId() == null) return null;
-        return storeRepository.findById(filter.storeId()).map(Store::name).orElse("Boutique");
+        return storeQuery.findById(TenantContext.getCurrentTenant(), filter.storeId()).map(StoreView::name).orElse("Boutique");
     }
 
     /** Keeps the response / job file stream open when the PDF writer closes its output. */

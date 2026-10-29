@@ -3,7 +3,7 @@ package com.keevo.commerce.sale.adapter.in.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.api.DayClosureSummary;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;

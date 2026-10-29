@@ -1,6 +1,6 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

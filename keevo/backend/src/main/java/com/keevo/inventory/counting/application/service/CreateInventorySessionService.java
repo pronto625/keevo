@@ -10,7 +10,7 @@ import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,16 +24,16 @@ import java.util.UUID;
 public class CreateInventorySessionService implements CreateInventorySessionUseCase {
 
     private final InventorySessionRepository sessionRepository;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final CategoryQueryPort categoryQuery; // 12.2a: catalog public API
     private final ApplicationEventPublisher eventPublisher;
 
     public CreateInventorySessionService(InventorySessionRepository sessionRepository,
-                                         StoreRepository storeRepository,
+                                         StoreQueryPort storeQuery,
                                          CategoryQueryPort categoryQuery,
                                          ApplicationEventPublisher eventPublisher) {
         this.sessionRepository = sessionRepository;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.categoryQuery = categoryQuery;
         this.eventPublisher = eventPublisher;
     }
@@ -56,7 +56,7 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
         }
 
         // 1. Verify store exists
-        storeRepository.findById(command.storeId())
+        storeQuery.findById(TenantContext.getCurrentTenant(), command.storeId())
                 .orElseThrow(() -> new DomainException(ErrorCode.INVENTORY_STORE_NOT_FOUND,
                         "Store not found: " + command.storeId()));
 

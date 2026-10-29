@@ -1,7 +1,7 @@
 package com.keevo.admin.analytics.application.service;
 
 import com.keevo.admin.analytics.domain.model.*;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.infrastructure.config.ClockConfig;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;

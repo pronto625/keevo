@@ -1,6 +1,6 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;

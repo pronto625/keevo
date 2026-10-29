@@ -15,6 +15,7 @@ import java.util.UUID;
  * @param ipAddress   client IP address (nullable — not always available)
  * @param occurredAt  UTC instant of authentication
  */
+@org.springframework.modulith.NamedInterface("events")
 public record UserAuthenticatedEvent(
     UUID userId,
     String tenantId,

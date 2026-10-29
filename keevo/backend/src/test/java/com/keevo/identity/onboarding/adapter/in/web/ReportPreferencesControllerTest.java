@@ -1,9 +1,9 @@
 package com.keevo.identity.onboarding.adapter.in.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.SectorType;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;

@@ -1,12 +1,11 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.store.store.domain.port.in.DeactivateStoreCommand;
-import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
-import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
-import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreCommandPort;
+import com.keevo.store.api.StoreQueryPort;
+import com.keevo.store.api.UpdateStoreInput;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -32,16 +31,12 @@ import java.util.UUID;
 @Component
 public class StoreSyncHandler extends AbstractSyncOperationHandler {
 
-    private final UpdateStoreUseCase updateStoreUseCase;
-    private final DeactivateStoreUseCase deactivateStoreUseCase;
-    private final StoreRepository storeRepository;
+    private final StoreCommandPort storeCommand;
+    private final StoreQueryPort storeQuery;
 
-    public StoreSyncHandler(UpdateStoreUseCase updateStoreUseCase,
-                            DeactivateStoreUseCase deactivateStoreUseCase,
-                            StoreRepository storeRepository) {
-        this.updateStoreUseCase = updateStoreUseCase;
-        this.deactivateStoreUseCase = deactivateStoreUseCase;
-        this.storeRepository = storeRepository;
+    public StoreSyncHandler(StoreCommandPort storeCommand, StoreQueryPort storeQuery) {
+        this.storeCommand = storeCommand;
+        this.storeQuery = storeQuery;
     }
 
     @Override
@@ -65,7 +60,7 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
 
         Map<String, Object> p = operation.payload();
         UUID storeId = UUID.fromString((String) p.get("storeId"));
-        var current = storeRepository.findById(storeId);
+        var current = storeQuery.findById(TenantContext.getCurrentTenant(), storeId);
 
         return switch (operation.operationType()) {
             case "UPDATE_STORE" -> {
@@ -80,7 +75,7 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             storeId.toString(), null);
                 }
-                var store = updateStoreUseCase.execute(new UpdateStoreCommand(
+                var store = storeCommand.update(TenantContext.getCurrentTenant(), new UpdateStoreInput(
                         storeId,
                         name,
                         address,
@@ -90,11 +85,11 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
                         store.id().toString(), null);
             }
             case "DEACTIVATE_STORE" -> {
-                if (current.isPresent() && !current.get().isActive()) {
+                if (current.isPresent() && !current.get().active()) {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             storeId.toString(), null);
                 }
-                deactivateStoreUseCase.execute(new DeactivateStoreCommand(storeId, actorId));
+                storeCommand.deactivate(TenantContext.getCurrentTenant(), storeId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         storeId.toString(), null);
             }

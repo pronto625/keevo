@@ -2,7 +2,7 @@ package com.keevo.shared.infrastructure.persistence;
 
 import com.keevo.inventory.transfer.adapter.out.persistence.StockTransferSpringRepository;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.sync.sync.adapter.out.persistence.jpa.SyncOperationsLogSpringRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

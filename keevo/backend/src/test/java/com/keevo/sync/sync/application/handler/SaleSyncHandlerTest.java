@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -28,6 +30,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SaleSyncHandlerTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private RecordSaleUseCase recordSaleUseCase;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private StoreRepository storeRepository;
@@ -39,7 +52,8 @@ class SaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new SaleSyncHandler(recordSaleUseCase, eventPublisher, storeRepository);
+        handler = new SaleSyncHandler(
+                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository));
         lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
@@ -242,9 +256,9 @@ class SaleSyncHandlerTest {
                 Instant.now());
     }
 
-    private com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent publishedDraftEvent() {
+    private com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent publishedDraftEvent() {
         var captor = org.mockito.ArgumentCaptor.forClass(
-                com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent.class);
+                com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         return captor.getValue();
     }

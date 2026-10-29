@@ -6,6 +6,8 @@ import com.keevo.inventory.api.StockMovementKind;
 import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -81,9 +83,10 @@ public class SaleValidationCascadeService {
             }
         }
 
-        // Check stock for ALL products (including the trigger product)
+        // Check stock for ALL products (including the trigger product), on the level that is
+        // decremented below — the item's variant, null for a simple product (Story 12.2c).
         for (SaleItem item : sale.getItems()) {
-            int available = stockQuery.availableQuantity(item.getProductId(), null, sale.getStoreId());
+            int available = stockQuery.availableQuantity(item.getProductId(), item.getVariantId(), sale.getStoreId());
             if (available <= 0) {
                 log.warn("Vente #{} en attente : le produit '{}' n'a pas de stock",
                         sale.getId().toString().substring(0, 8), item.getProductName());

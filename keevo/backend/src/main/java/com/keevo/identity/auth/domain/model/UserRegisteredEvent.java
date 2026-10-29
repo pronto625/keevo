@@ -10,6 +10,7 @@ import java.util.UUID;
  * Observer pattern: captured by {@code AuditEventListener}.
  * Naming: {Entity}{PastTense}Event per architecture convention.
  */
+@org.springframework.modulith.NamedInterface("events")
 public record UserRegisteredEvent(
     UUID userId,
     UUID tenantId,

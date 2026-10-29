@@ -1,5 +1,7 @@
 package com.keevo.subscription.plan.domain.port.in;
 
+import com.keevo.subscription.api.CurrentPlan;
+
 import java.util.Optional;
 
 /**
@@ -16,7 +18,7 @@ public interface ChangeTenantPlanUseCase {
     Optional<CurrentPlan> currentPlan(String schemaName);
 
     /**
-     * Applies {@code newPlan} (limits from {@link com.keevo.identity.auth.domain.model.PlanType},
+     * Applies {@code newPlan} (limits from {@link com.keevo.identity.api.PlanType},
      * status ACTIVE, {@code expiresAt}), syncs {@code public.tenants.plan_type} and appends a plan event.
      *
      * @return the plan before the change

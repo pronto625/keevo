@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain;
 
-import com.keevo.commerce.sale.domain.model.SaleAutoValidatedEvent;
+import com.keevo.commerce.sale.domain.event.SaleAutoValidatedEvent;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

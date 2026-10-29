@@ -1,6 +1,6 @@
 package com.keevo.subscription.plan.domain.port.in;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 
 import java.time.Instant;
 

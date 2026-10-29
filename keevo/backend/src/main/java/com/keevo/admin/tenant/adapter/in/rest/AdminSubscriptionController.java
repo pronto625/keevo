@@ -1,11 +1,11 @@
 package com.keevo.admin.tenant.adapter.in.rest;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
-import com.keevo.subscription.plan.adapter.in.rest.dto.ActivatePlanRequest;
-import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
-import com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase;
+import com.keevo.admin.tenant.adapter.in.rest.dto.ActivatePlanRequest;
+import com.keevo.subscription.api.ActivatePlanInput;
+import com.keevo.subscription.api.PlanAdministrationPort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,10 +30,10 @@ import java.util.UUID;
 @RequestMapping("/api/v1/admin/subscriptions")
 public class AdminSubscriptionController {
 
-    private final ActivatePlanUseCase activatePlanUseCase;
+    private final PlanAdministrationPort planAdministration;
 
-    public AdminSubscriptionController(ActivatePlanUseCase activatePlanUseCase) {
-        this.activatePlanUseCase = activatePlanUseCase;
+    public AdminSubscriptionController(PlanAdministrationPort planAdministration) {
+        this.planAdministration = planAdministration;
     }
 
     @Operation(
@@ -53,9 +53,9 @@ public class AdminSubscriptionController {
 
         UUID actorId = CurrentActor.actorId();
 
-        activatePlanUseCase.execute(new ActivatePlanCommand(
-                actorId.toString(),
-                tenantId,
+        planAdministration.activatePlan(new ActivatePlanInput(
+                actorId,
+                tenantId, // path variable carries the tenant schema (kv_xxxxxx)
                 PlanType.valueOf(request.planType()),
                 request.expiresAt()
         ));

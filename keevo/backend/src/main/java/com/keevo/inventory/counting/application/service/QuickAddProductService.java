@@ -1,6 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.api.ProductCommandPort;
 import com.keevo.catalog.api.ProductQueryPort;
@@ -21,9 +21,9 @@ import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.subscription.api.ProductCountPort;
+import com.keevo.subscription.api.SubscriptionQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -52,11 +52,11 @@ public class QuickAddProductService implements QuickAddProductUseCase {
     private final StockLevelRepository stockLevelRepository;
     private final InventoryCountRepository countRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final StoreRepository storeRepository; // v1s-15-9: ProductCreatedEvent.storeName
+    private final StoreQueryPort storeQuery; // v1s-15-9: ProductCreatedEvent.storeName
     // v1s-14-13: FREE plan product limit (same rule as CreateProductUseCase)
     private final ProductCountPort productCountPort;
-    private final SubscriptionRepository subscriptionRepository;
-    private final PlanLimitGuard planLimitGuard;
+    private final SubscriptionQueryPort subscriptionQuery;
+    private final PlanLimitPort planLimit;
     private final TransactionLockPort transactionLock;
 
     public QuickAddProductService(InventorySessionRepository sessionRepository,
@@ -65,10 +65,10 @@ public class QuickAddProductService implements QuickAddProductUseCase {
                                   StockLevelRepository stockLevelRepository,
                                   InventoryCountRepository countRepository,
                                   ApplicationEventPublisher eventPublisher,
-                                  StoreRepository storeRepository,
+                                  StoreQueryPort storeQuery,
                                   ProductCountPort productCountPort,
-                                  SubscriptionRepository subscriptionRepository,
-                                  PlanLimitGuard planLimitGuard,
+                                  SubscriptionQueryPort subscriptionQuery,
+                                  PlanLimitPort planLimit,
                                   TransactionLockPort transactionLock) {
         this.sessionRepository = sessionRepository;
         this.productQuery = productQuery;
@@ -76,10 +76,10 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         this.stockLevelRepository = stockLevelRepository;
         this.countRepository = countRepository;
         this.eventPublisher = eventPublisher;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.productCountPort = productCountPort;
-        this.subscriptionRepository = subscriptionRepository;
-        this.planLimitGuard = planLimitGuard;
+        this.subscriptionQuery = subscriptionQuery;
+        this.planLimit = planLimit;
         this.transactionLock = transactionLock;
     }
 
@@ -109,12 +109,11 @@ public class QuickAddProductService implements QuickAddProductUseCase {
 
         // 2b. Plan limit check (v1s-14-13) — after the name check, as in CreateProductUseCase,
         // so the « produit existant » dedup still wins at the cap; before any write.
-        int currentCount = productCountPort.countActiveProducts();
-        var planType = subscriptionRepository.findActivePlan()
+        int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
+        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Aucun abonnement actif"))
-                .getPlanType();
-        planLimitGuard.checkProductLimit(planType, currentCount);
+                        "Aucun abonnement actif"));
+        planLimit.checkProductLimit(plan, currentCount);
 
         // 3. Create Product
         String sku = generateSku();
@@ -139,7 +138,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
         }
         if (session.getStoreId() != null) {
             try {
-                storeName = storeRepository.findById(session.getStoreId())
+                storeName = storeQuery.findById(TenantContext.getCurrentTenant(), session.getStoreId())
                         .map(s -> s.name())
                         .orElse(null);
             } catch (Exception e) {

@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -13,7 +14,6 @@ import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
@@ -30,6 +30,8 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.junit.jupiter.api.AfterEach;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -53,17 +55,27 @@ class ReportControllerTest {
     // v1s-13-11 follow-up: the controller takes the shared Clock bean.
     @Mock private com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository reportRepository;
     @org.mockito.Spy private java.time.Clock clock = java.time.Clock.systemUTC();
-    @InjectMocks private ReportController controller;
+    private ReportController controller;
 
     private MockMvc mockMvc;
     private UUID ownerId;
 
     @BeforeEach
     void setUp() {
+        // 12.2d: the real store API adapter over the mocked repository (unused delegates stay null)
+        controller = new ReportController(getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator, null,
+                StoreApiTestSupport.queryPort(storeRepository), null, weeklyWindowResolver, reportRepository, clock);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         ownerId = UUID.randomUUID();
+        // 12.2d: tenant-scoped ports require the bound tenant (JwtAuthFilter binds it in production)
+        TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @AfterEach
+    void clearTenant() {
+        TenantContext.clear();
     }
 
     private void authenticateAs(String role) {
@@ -188,7 +200,7 @@ class ReportControllerTest {
         authenticateAs("OWNER");
         var wat = java.time.ZoneId.of("Africa/Lagos");
         var store = new com.keevo.store.store.domain.model.Store(UUID.randomUUID(), "Boutique",
-                com.keevo.store.store.domain.model.StoreType.STORE, "Yaoundé", null, true,
+                com.keevo.store.api.StoreType.STORE, "Yaoundé", null, true,
                 Instant.now(), Instant.now());
         when(storeRepository.findAllActive()).thenReturn(List.of(store));
         var window = new com.keevo.reporting.report.application.service.WeeklyReportWindowResolver.Window(

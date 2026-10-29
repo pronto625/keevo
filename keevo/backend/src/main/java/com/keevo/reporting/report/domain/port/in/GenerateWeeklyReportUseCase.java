@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.domain.port.in;
 
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 
 import java.time.Instant;

@@ -13,8 +13,8 @@ import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.subscription.api.SubscriptionQueryPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,24 +36,24 @@ public class ReactivateEmployeeService implements ReactivateEmployeeUseCase {
     private final EmployeeRepository employeeRepository;
     private final UserMembershipRepository membershipRepository;
     private final TenantRepository tenantRepository;
-    private final PlanLimitGuard planLimitGuard;
+    private final PlanLimitPort planLimit;
     private final EmployeeCountPort employeeCountPort;
-    private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionQueryPort subscriptionQuery;
     private final TransactionLockPort transactionLock;
 
     public ReactivateEmployeeService(EmployeeRepository employeeRepository,
                                       UserMembershipRepository membershipRepository,
                                       TenantRepository tenantRepository,
-                                      PlanLimitGuard planLimitGuard,
+                                      PlanLimitPort planLimit,
                                       EmployeeCountPort employeeCountPort,
-                                      SubscriptionRepository subscriptionRepository,
+                                      SubscriptionQueryPort subscriptionQuery,
                                       TransactionLockPort transactionLock) {
         this.employeeRepository = employeeRepository;
         this.membershipRepository = membershipRepository;
         this.tenantRepository = tenantRepository;
-        this.planLimitGuard = planLimitGuard;
+        this.planLimit = planLimit;
         this.employeeCountPort = employeeCountPort;
-        this.subscriptionRepository = subscriptionRepository;
+        this.subscriptionQuery = subscriptionQuery;
         this.transactionLock = transactionLock;
     }
 
@@ -83,10 +83,10 @@ public class ReactivateEmployeeService implements ReactivateEmployeeUseCase {
         // Enforce the plan limit only when the reactivation actually grows the active count:
         // an already-ACTIVE employee (idempotent REACTIVATE_EMPLOYEE replay) is not re-counted.
         if (employee.getStatus() != EmployeeStatus.ACTIVE) {
-            var subscription = subscriptionRepository.findActivePlan()
+            var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                     .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
             int currentCount = employeeCountPort.countActiveEmployees();
-            planLimitGuard.checkEmployeeLimit(subscription.getPlanType(), currentCount);
+            planLimit.checkEmployeeLimit(plan, currentCount);
         }
 
         employeeRepository.updateStatus(command.employeeId(), EmployeeStatus.ACTIVE);

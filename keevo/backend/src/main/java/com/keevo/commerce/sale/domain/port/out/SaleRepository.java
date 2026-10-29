@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain.port.out;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleStatus;

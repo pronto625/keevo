@@ -1,12 +1,13 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.adapter.out.persistence.impl.OwnerRecipientResolverAdapter;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
@@ -17,7 +18,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.Wee
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -46,6 +47,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class WeeklyReportGeneratorTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private MultiStoreSummaryService multiStoreSummaryService;
@@ -67,7 +79,7 @@ class WeeklyReportGeneratorTest {
     void setUp() {
         generator = new WeeklyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, ownerRecipientResolver, transactionLock,
+                builder, formatter, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver, transactionLock,
                 transactionManager);
         storeId = UUID.randomUUID();
         command = new WeeklyReportCommand(
@@ -213,11 +225,11 @@ class WeeklyReportGeneratorTest {
         EndOfDayReport report = generator.generateWeeklyReport(chained);
 
         var windowCaptor = org.mockito.ArgumentCaptor.forClass(
-                com.keevo.commerce.sale.domain.model.ClosureWindow.class);
+                com.keevo.commerce.api.ClosureWindow.class);
         verify(builder).build(eq(storeId), windowCaptor.capture(), anyString(), eq(SUNDAY),
                 eq("kv_test01"), eq(true));
         assertThat(windowCaptor.getValue()).isEqualTo(
-                new com.keevo.commerce.sale.domain.model.ClosureWindow(start, now, lateFrom, now));
+                new com.keevo.commerce.api.ClosureWindow(start, now, lateFrom, now));
         assertThat(report.getCreatedAt()).isEqualTo(now);
         var savedCaptor = org.mockito.ArgumentCaptor.forClass(EndOfDayReport.class);
         verify(reportRepository, atLeastOnce()).save(savedCaptor.capture());
@@ -235,12 +247,12 @@ class WeeklyReportGeneratorTest {
         generator.generateWeeklyReport(command);
 
         var windowCaptor = org.mockito.ArgumentCaptor.forClass(
-                com.keevo.commerce.sale.domain.model.ClosureWindow.class);
+                com.keevo.commerce.api.ClosureWindow.class);
         verify(builder).build(eq(storeId), windowCaptor.capture(), anyString(), any(), anyString(), anyBoolean());
         assertThat(windowCaptor.getValue().lateFrom())
-                .isEqualTo(com.keevo.commerce.sale.domain.model.ClosureWindow.NEVER);
+                .isEqualTo(com.keevo.commerce.api.ClosureWindow.NEVER);
         assertThat(windowCaptor.getValue().receivedUntil())
-                .isEqualTo(com.keevo.commerce.sale.domain.model.ClosureWindow.NEVER);
+                .isEqualTo(com.keevo.commerce.api.ClosureWindow.NEVER);
     }
 
     /** v1s-14-17 — real resolver over a blank owner phone: IN_APP_ONLY, WhatsApp never called. */
@@ -251,7 +263,7 @@ class WeeklyReportGeneratorTest {
                 new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
         WeeklyReportGenerator realResolverGenerator = new WeeklyReportGenerator(
                 reportRepository, whatsAppPort, multiStoreSummaryService,
-                builder, formatter, storeRepository, new OwnerRecipientResolverAdapter(userRepository),
+                builder, formatter, StoreApiTestSupport.queryPort(storeRepository), new OwnerRecipientResolverAdapter(userRepository),
                 transactionLock, transactionManager);
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
         when(builder.build(any(), any(), anyString(), any(), anyString(), anyBoolean()))

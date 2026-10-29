@@ -1,16 +1,18 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
+
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
-import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
+import com.keevo.subscription.api.PlanChangeRecorder;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
-import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.subscription.api.PlanChangeCause;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -74,7 +76,8 @@ class ActivatePlanServiceTest {
         }).when(requiresNewTemplate).execute(any(TransactionCallback.class));
 
         // Use the package-private test constructor
-        service = new ActivatePlanService(subscriptionRepository, tenantRepository, requiresNewTemplate,
+        service = new ActivatePlanService(subscriptionRepository,
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), requiresNewTemplate,
                 planChangeRecorder);
     }
 

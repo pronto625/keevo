@@ -2,9 +2,8 @@ package com.keevo.admin.subscription.application.service;
 
 import com.keevo.admin.subscription.domain.model.TenantReactivatedEvent;
 import com.keevo.admin.subscription.domain.model.TenantSuspendedEvent;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.subscription.plan.application.service.PlanWhatsAppMessages;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -25,6 +24,10 @@ public class TenantStatusWhatsAppNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(TenantStatusWhatsAppNotificationListener.class);
 
+    /** Owner-facing texts of the account status changes (moved from subscription's PlanWhatsAppMessages, 12.2d). */
+    static final String SUSPENDED = "Votre compte Keevo est suspendu. Contactez le support Keevo.";
+    static final String REACTIVATED = "Votre compte Keevo est réactivé.";
+
     private final WhatsAppPort whatsAppPort;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
@@ -36,12 +39,12 @@ public class TenantStatusWhatsAppNotificationListener {
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onSuspended(TenantSuspendedEvent event) {
-        send(event.tenantId(), event.schemaName(), "suspension", PlanWhatsAppMessages.suspended());
+        send(event.tenantId(), event.schemaName(), "suspension", SUSPENDED);
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onReactivated(TenantReactivatedEvent event) {
-        send(event.tenantId(), event.schemaName(), "reactivation", PlanWhatsAppMessages.reactivated());
+        send(event.tenantId(), event.schemaName(), "reactivation", REACTIVATED);
     }
 
     private void send(UUID tenantId, String schemaName, String kind, String text) {

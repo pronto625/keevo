@@ -1,5 +1,7 @@
 package com.keevo.shared.infrastructure.scheduling;
 
+import com.keevo.identity.api.TenantStatus;
+
 import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;

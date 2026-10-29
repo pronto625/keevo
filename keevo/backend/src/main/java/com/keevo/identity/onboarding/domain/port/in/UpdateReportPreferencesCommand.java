@@ -1,7 +1,7 @@
 package com.keevo.identity.onboarding.domain.port.in;
 
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.StockAlertChannel;
 
 /**
  * UpdateReportPreferencesCommand — Command record for updating report preferences.

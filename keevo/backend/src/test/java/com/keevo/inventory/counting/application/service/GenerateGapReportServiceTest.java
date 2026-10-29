@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.api.ProductQueryPort;
@@ -11,7 +12,7 @@ import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +33,17 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class GenerateGapReportServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private InventorySessionRepository sessionRepo;
     @Mock private InventoryCountRepository countRepo;
     @Mock private ProductQueryPort productQuery;
@@ -48,7 +60,7 @@ class GenerateGapReportServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new GenerateGapReportService(sessionRepo, countRepo, productQuery, storeRepo);
+        service = new GenerateGapReportService(sessionRepo, countRepo, productQuery, StoreApiTestSupport.queryPort(storeRepo));
     }
 
     @Test

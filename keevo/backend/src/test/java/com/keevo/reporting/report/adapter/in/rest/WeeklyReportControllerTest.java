@@ -1,5 +1,7 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -10,7 +12,7 @@ import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +29,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.junit.jupiter.api.AfterEach;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -58,12 +62,20 @@ class WeeklyReportControllerTest {
     void setUp() {
         mockMvc = mvcWithClock(java.time.Clock.systemUTC());
         ownerId = UUID.randomUUID();
+        // 12.2d: tenant-scoped ports require the bound tenant (JwtAuthFilter binds it in production)
+        TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @AfterEach
+    void clearTenant() {
+        TenantContext.clear();
     }
 
     private MockMvc mvcWithClock(java.time.Clock clock) {
         ReportController controller = new ReportController(
                 getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator,
-                dailyReportGenerator, storeRepository, dayClosureRepository,
+                dailyReportGenerator, StoreApiTestSupport.queryPort(storeRepository),
+                CommerceSaleApiTestSupport.dayClosureQueryPort(dayClosureRepository),
                 new com.keevo.reporting.report.application.service.WeeklyReportWindowResolver(reportRepository),
                 reportRepository, clock);
         return MockMvcBuilders.standaloneSetup(controller)

@@ -1,6 +1,8 @@
 package com.keevo.commerce.sale.application;
 
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.application.service.DayClosureSummaryBuilder;
 import org.junit.jupiter.api.Test;
 

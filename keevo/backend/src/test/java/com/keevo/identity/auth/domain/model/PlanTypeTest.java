@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.domain.model;
 
+import com.keevo.identity.api.PlanType;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

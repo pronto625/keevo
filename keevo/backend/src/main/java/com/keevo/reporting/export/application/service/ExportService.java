@@ -1,7 +1,9 @@
 package com.keevo.reporting.export.application.service;
 
-import com.keevo.identity.auth.domain.model.TenantStatus;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+
+import com.keevo.identity.api.TenantStatus;
+import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.reporting.export.adapter.out.config.ExportExecutorConfig;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.event.DataExportedEvent;
@@ -20,8 +22,8 @@ import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.infrastructure.export.ExportValues;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.subscription.plan.domain.model.Subscription;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.subscription.api.PlanView;
+import com.keevo.subscription.api.SubscriptionQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -76,9 +78,9 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     private final ExportFileStorage storage;
     private final ExportRateLimiter rateLimiter;
     private final ExportLinkSigner linkSigner;
-    private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionQueryPort subscriptionQuery;
     private final ApplicationEventPublisher eventPublisher;
-    private final TenantRepository tenantRepository;
+    private final TenantQueryPort tenantQuery;
     private final Executor exportExecutor;
     private final ExportJobRunner jobRunner;
     private final long syncRowThreshold;
@@ -92,9 +94,9 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
                          ExportFileStorage storage,
                          ExportRateLimiter rateLimiter,
                          ExportLinkSigner linkSigner,
-                         SubscriptionRepository subscriptionRepository,
+                         SubscriptionQueryPort subscriptionQuery,
                          ApplicationEventPublisher eventPublisher,
-                         TenantRepository tenantRepository,
+                         TenantQueryPort tenantQuery,
                          @Qualifier(ExportExecutorConfig.EXPORT_EXECUTOR) Executor exportExecutor,
                          ExportJobRunner jobRunner,
                          ExportProperties properties,
@@ -106,9 +108,9 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         this.storage = storage;
         this.rateLimiter = rateLimiter;
         this.linkSigner = linkSigner;
-        this.subscriptionRepository = subscriptionRepository;
+        this.subscriptionQuery = subscriptionQuery;
         this.eventPublisher = eventPublisher;
-        this.tenantRepository = tenantRepository;
+        this.tenantQuery = tenantQuery;
         this.exportExecutor = exportExecutor;
         this.jobRunner = jobRunner;
         this.syncRowThreshold = properties.getSyncRowThreshold();
@@ -246,13 +248,13 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     }
 
     private boolean isPremium() {
-        return subscriptionRepository.findActivePlan()
+        return subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .map(ExportService::isActivePremium)
                 .orElse(false); // no subscription row ⇒ FREE
     }
 
-    static boolean isActivePremium(Subscription s) {
-        return (s.isPremium() || s.isPremiumTrial()) && s.isActive();
+    static boolean isActivePremium(PlanView s) {
+        return (s.isPremium() || s.isPremiumTrial()) && s.active();
     }
 
     /**
@@ -315,8 +317,8 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     public LinkTarget verifyLink(String token) {
         ExportLinkSigner.Claims claims = linkSigner.verify(token);
         // A link must not outlive its tenant's access: suspended / deleted tenants → invalid.
-        boolean tenantActive = tenantRepository.findBySchemaName(claims.tenantSchema())
-                .map(t -> t.getStatus() == TenantStatus.ACTIVE)
+        boolean tenantActive = tenantQuery.findBySchemaName(claims.tenantSchema())
+                .map(t -> t.status() == TenantStatus.ACTIVE)
                 .orElse(false);
         if (!tenantActive) {
             throw new DomainException(ErrorCode.EXPORT_LINK_INVALID, "Tenant of the export link is not active");

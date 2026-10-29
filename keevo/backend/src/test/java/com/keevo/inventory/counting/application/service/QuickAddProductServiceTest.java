@@ -1,5 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.api.ProductCommandPort;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.catalog.api.ProductState;
@@ -12,14 +14,14 @@ import com.keevo.inventory.counting.domain.model.*;
 import com.keevo.inventory.counting.domain.port.in.QuickAddProductCommand;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,14 +75,14 @@ class QuickAddProductServiceTest {
     void setUp() {
         service = new QuickAddProductService(
                 sessionRepository, productQuery, productCommand, stockLevelRepository,
-                countRepository, eventPublisher, storeRepository,
-                productCountPort, subscriptionRepository, planLimitGuard, transactionLock);
+                countRepository, eventPublisher, StoreApiTestSupport.queryPort(storeRepository),
+                productCountPort, SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), transactionLock);
         TenantContext.setCurrentTenant(TENANT);
 
         // v1s-14-13: active FREE plan under the cap (lenient: early-failure tests never reach it)
         lenient().when(freeSubscription.getPlanType()).thenReturn(PlanType.FREE);
         lenient().when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
-        lenient().when(productCountPort.countActiveProducts()).thenReturn(499);
+        lenient().when(productCountPort.countActiveProducts(any())).thenReturn(499);
 
         inProgressSession = new InventorySession(
                 SESSION_ID, STORE_ID, InventoryScope.FULL, null,
@@ -257,7 +259,7 @@ class QuickAddProductServiceTest {
     void execute_publishesStoreNameOfSessionStore() {
         authenticateEmployee("Awa");
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(new com.keevo.store.store.domain.model.Store(
-                STORE_ID, "Boutique Akwa", com.keevo.store.store.domain.model.StoreType.STORE,
+                STORE_ID, "Boutique Akwa", com.keevo.store.api.StoreType.STORE,
                 null, null, true, Instant.now(), Instant.now())));
 
         RegisterProductInput event = quickAddAndCaptureProductEvent();
@@ -296,7 +298,7 @@ class QuickAddProductServiceTest {
         order.verify(transactionLock).lock("product-limit:" + TENANT);
         order.verify(sessionRepository).findById(SESSION_ID);
         order.verify(productQuery).existsByName("Pagne");
-        order.verify(productCountPort).countActiveProducts();
+        order.verify(productCountPort).countActiveProducts(any());
         order.verify(subscriptionRepository).findActivePlan();
         order.verify(planLimitGuard).checkProductLimit(PlanType.FREE, 499);
         order.verify(productCommand).register(any());
@@ -307,7 +309,7 @@ class QuickAddProductServiceTest {
     void execute_atCap_throwsPlanLimitExceeded_writesNothing() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
         when(productQuery.existsByName("Pagne")).thenReturn(false);
-        when(productCountPort.countActiveProducts()).thenReturn(500);
+        when(productCountPort.countActiveProducts(any())).thenReturn(500);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
                 .when(planLimitGuard).checkProductLimit(PlanType.FREE, 500);
 

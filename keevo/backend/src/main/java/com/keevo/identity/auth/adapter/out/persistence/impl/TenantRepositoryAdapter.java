@@ -2,9 +2,9 @@ package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import org.springframework.stereotype.Component;
 

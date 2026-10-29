@@ -4,7 +4,7 @@ import com.keevo.admin.subscription.application.service.TargetTenantLookup.Targe
 import com.keevo.admin.subscription.domain.model.TenantReactivatedEvent;
 import com.keevo.admin.subscription.domain.model.TenantSuspendedEvent;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;

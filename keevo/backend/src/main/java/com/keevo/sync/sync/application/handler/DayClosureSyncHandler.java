@@ -1,11 +1,12 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
-import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.commerce.api.CloseDayInput;
+import com.keevo.commerce.api.DayClosureCommandPort;
+import com.keevo.commerce.api.DayClosureView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -19,12 +20,12 @@ import java.util.UUID;
 @Component
 public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
 
-    private final CloseDayUseCase closeDayUseCase;
-    private final StoreRepository storeRepository;
+    private final DayClosureCommandPort dayClosureCommandPort;
+    private final StoreQueryPort storeQuery;
 
-    public DayClosureSyncHandler(CloseDayUseCase closeDayUseCase, StoreRepository storeRepository) {
-        this.closeDayUseCase = closeDayUseCase;
-        this.storeRepository = storeRepository;
+    public DayClosureSyncHandler(DayClosureCommandPort dayClosureCommandPort, StoreQueryPort storeQuery) {
+        this.dayClosureCommandPort = dayClosureCommandPort;
+        this.storeQuery = storeQuery;
     }
 
     @Override
@@ -49,7 +50,7 @@ public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
         }
         // v1s-16-15: a closure for a store the server does not know is refused (quarantined
         // on the device, logged in sync_error_log) instead of being stored as an orphan.
-        if (storeRepository.findById(storeId).isEmpty()) {
+        if (storeQuery.findById(TenantContext.getCurrentTenant(), storeId).isEmpty()) {
             throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
 
@@ -59,11 +60,11 @@ public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
         if (closureId == null) closureId = parseUuid(operation.entityId());
         Instant closedAt = resolveClientTime(p.get("closedAt"), operation.clientTimestamp());
 
-        DayClosure closure = closeDayUseCase.closeDay(
-                new CloseDayCommand(storeId, actorId, tenantId, false, closureId, closedAt));
+        DayClosureView closure = dayClosureCommandPort.closeDay(
+                new CloseDayInput(storeId, actorId, tenantId, false, closureId, closedAt));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                closure.getId().toString(), null);
+                closure.id().toString(), null);
     }
 
     /**

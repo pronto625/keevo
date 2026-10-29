@@ -1,7 +1,7 @@
 package com.keevo.store.store.adapter.out.persistence;
 
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.springframework.stereotype.Component;
 

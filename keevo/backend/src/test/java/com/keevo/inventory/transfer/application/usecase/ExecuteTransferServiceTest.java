@@ -1,5 +1,6 @@
 package com.keevo.inventory.transfer.application.usecase;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
@@ -17,7 +18,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -76,7 +77,7 @@ class ExecuteTransferServiceTest {
         TenantContext.setCurrentTenant("kv_test01");
         validationStrategy = new DefaultTransferValidationStrategy();
         service = new ExecuteTransferService(
-            storeRepository, stockLevelRepository, stockOperationService,
+            StoreApiTestSupport.queryPort(storeRepository), stockLevelRepository, stockOperationService,
             transferRepository, validationStrategy, eventPublisher, transactionLock
         );
     }

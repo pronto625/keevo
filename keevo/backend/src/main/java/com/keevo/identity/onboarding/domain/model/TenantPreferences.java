@@ -1,5 +1,9 @@
 package com.keevo.identity.onboarding.domain.model;
 
+import com.keevo.identity.api.StockAlertChannel;
+
+import com.keevo.identity.api.ReportChannel;
+
 import java.time.Instant;
 import java.util.UUID;
 

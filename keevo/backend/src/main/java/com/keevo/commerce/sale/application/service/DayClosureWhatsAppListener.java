@@ -1,10 +1,10 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -40,16 +40,16 @@ public class DayClosureWhatsAppListener {
     private static final Logger log = LoggerFactory.getLogger(DayClosureWhatsAppListener.class);
 
     private final WhatsAppPort whatsAppPort;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final ClosureReportStrategy manualReportStrategy;
     private final ClosureReportStrategy autoReportStrategy;
 
     public DayClosureWhatsAppListener(WhatsAppPort whatsAppPort,
-                                      StoreRepository storeRepository,
+                                      StoreQueryPort storeQuery,
                                       OwnerRecipientResolver ownerRecipientResolver) {
         this.whatsAppPort = whatsAppPort;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.manualReportStrategy = new ManualReportStrategy();
         this.autoReportStrategy = new AutoReportStrategy();
@@ -72,7 +72,7 @@ public class DayClosureWhatsAppListener {
             }
 
             TenantContext.setCurrentTenant(event.tenantId());
-            String storeName = storeRepository.findById(event.storeId())
+            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), event.storeId())
                     .map(s -> s.name())
                     .orElse("Boutique #" + event.storeId().toString().substring(0, 8));
 

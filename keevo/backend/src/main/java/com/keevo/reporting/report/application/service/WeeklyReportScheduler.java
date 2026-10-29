@@ -1,15 +1,15 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.identity.auth.domain.model.TenantStatus;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.onboarding.domain.model.TenantPreferences;
-import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.api.TenantStatus;
+import com.keevo.identity.api.TenantQueryPort;
+import com.keevo.identity.api.TenantPreferencesView;
+import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase.WeeklyReportCommand;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,27 +44,27 @@ public class WeeklyReportScheduler {
     private static final LocalTime DEFAULT_REPORT_TIME = LocalTime.of(20, 0);
     private static final int DEFAULT_REPORT_DAY = 0; // Sunday
 
-    private final TenantRepository tenantRepository;
-    private final StoreRepository storeRepository;
+    private final TenantQueryPort tenantQuery;
+    private final StoreQueryPort storeQuery;
     private final EndOfDayReportRepository reportRepository;
     private final GenerateWeeklyReportUseCase weeklyReportGenerator;
-    private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final TenantPreferencesQueryPort preferencesQuery;
     private final WeeklyReportWindowResolver windowResolver;
     private final Clock clock;
 
     /** Production constructor — the shared {@code Clock} bean (ClockConfig), as CloseDayService (v1s-13-11 follow-up). */
-    public WeeklyReportScheduler(TenantRepository tenantRepository,
-                           StoreRepository storeRepository,
+    public WeeklyReportScheduler(TenantQueryPort tenantQuery,
+                           StoreQueryPort storeQuery,
                            EndOfDayReportRepository reportRepository,
                            GenerateWeeklyReportUseCase weeklyReportGenerator,
-                           TenantPreferencesRepository tenantPreferencesRepository,
+                           TenantPreferencesQueryPort preferencesQuery,
                            WeeklyReportWindowResolver windowResolver,
                            Clock clock) {
-        this.tenantRepository = tenantRepository;
-        this.storeRepository = storeRepository;
+        this.tenantQuery = tenantQuery;
+        this.storeQuery = storeQuery;
         this.reportRepository = reportRepository;
         this.weeklyReportGenerator = weeklyReportGenerator;
-        this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.preferencesQuery = preferencesQuery;
         this.windowResolver = windowResolver;
         this.clock = clock;
     }
@@ -75,15 +75,15 @@ public class WeeklyReportScheduler {
         LocalDate todayWAT = LocalDate.now(clock.withZone(WAT));
         LocalTime nowWAT   = LocalTime.now(clock.withZone(WAT));
 
-        tenantRepository.findAll().forEach(tenant -> {
-            if (tenant.getStatus() != TenantStatus.ACTIVE) {
+        tenantQuery.findAll().forEach(tenant -> {
+            if (tenant.status() != TenantStatus.ACTIVE) {
                 return;
             }
-            TenantContext.setCurrentTenant(tenant.getSchemaName());
+            TenantContext.setCurrentTenant(tenant.schemaName());
             try {
-                processTenant(tenant.getSchemaName(), todayWAT, nowWAT);
+                processTenant(tenant.schemaName(), todayWAT, nowWAT);
             } catch (Exception e) {
-                log.error("WeeklyReportScheduler error for tenant={}: {}", tenant.getSchemaName(), e.getMessage(), e);
+                log.error("WeeklyReportScheduler error for tenant={}: {}", tenant.schemaName(), e.getMessage(), e);
             } finally {
                 TenantContext.clear();
             }
@@ -91,7 +91,7 @@ public class WeeklyReportScheduler {
     }
 
     private void processTenant(String tenantId, LocalDate todayWAT, LocalTime nowWAT) {
-        TenantPreferences prefs = tenantPreferencesRepository.findByCurrentTenant().orElse(null);
+        TenantPreferencesView prefs = preferencesQuery.find(TenantContext.getCurrentTenant()).orElse(null);
 
         boolean enabled     = prefs != null ? prefs.weeklyReportEnabled() : true;
         int configuredDay   = prefs != null ? prefs.weeklyReportDay() : DEFAULT_REPORT_DAY;
@@ -125,7 +125,7 @@ public class WeeklyReportScheduler {
 
         Instant now = Instant.now(clock);
 
-        storeRepository.findAllActive().forEach(store -> {
+        storeQuery.findAllActive(TenantContext.getCurrentTenant()).forEach(store -> {
             if (generatedStoreIds.contains(store.id())) {
                 log.debug("WeeklyReport already generated for tenant={} store={} week ending {}",
                         tenantId, store.id(), weekEndLocal);

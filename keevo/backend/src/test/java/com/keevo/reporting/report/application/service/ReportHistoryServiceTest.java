@@ -1,7 +1,8 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -36,6 +37,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ReportHistoryServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
@@ -49,7 +61,7 @@ class ReportHistoryServiceTest {
     @BeforeEach
     void setUp() {
         service = new ReportHistoryService(reportRepository, whatsAppPort, ownerRecipientResolver,
-                employeeRepository);
+                IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         reportId = UUID.randomUUID();
         tenantId = "kv_test01";
         sampleReport = EndOfDayReport.createNew(

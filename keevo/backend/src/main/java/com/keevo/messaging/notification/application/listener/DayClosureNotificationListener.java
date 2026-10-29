@@ -1,13 +1,13 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.commerce.api.DayClosureSummary;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreView;
+import com.keevo.store.api.StoreType;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
@@ -36,12 +36,12 @@ public class DayClosureNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(DayClosureNotificationListener.class);
 
     private final NotificationPort notificationPort;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
 
     public DayClosureNotificationListener(NotificationPort notificationPort,
-                                          StoreRepository storeRepository) {
+                                          StoreQueryPort storeQuery) {
         this.notificationPort = notificationPort;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
     }
 
     @Async
@@ -57,12 +57,12 @@ public class DayClosureNotificationListener {
                         event.closureId());
                 return;
             }
-            Optional<Store> store = findStore(event);
+            Optional<StoreView> store = findStore(event);
             if (store.map(st -> st.type() == StoreType.WAREHOUSE).orElse(false)) {
                 log.info("[FCM-CLOSURE] Warehouse closure — no push (closureId={})", event.closureId());
                 return;
             }
-            String storeName = store.map(Store::name).orElse("Boutique");
+            String storeName = store.map(StoreView::name).orElse("Boutique");
             String mode = event.isAutomatic() ? "automatique" : "manuelle";
             String body = String.format(
                     "%s — Clôture %s : %d vente(s) · %s XAF · Espèces : %s · Mobile Money : %s",
@@ -91,11 +91,11 @@ public class DayClosureNotificationListener {
     }
 
     /** Store lookup in the closure's tenant schema (async thread: no tenant context yet). */
-    private Optional<Store> findStore(DayClosedEvent event) {
+    private Optional<StoreView> findStore(DayClosedEvent event) {
         String previous = TenantContext.getCurrentTenant();
         try {
             TenantContext.setCurrentTenant(event.tenantId());
-            return storeRepository.findById(event.storeId());
+            return storeQuery.findById(TenantContext.getCurrentTenant(), event.storeId());
         } catch (Exception e) {
             log.warn("[FCM-CLOSURE] Store lookup failed for storeId={}: {}", event.storeId(), e.getMessage());
             return Optional.empty();

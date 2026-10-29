@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.catalog.api.CategoryView;
 import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
@@ -10,7 +11,7 @@ import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionCommand
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,6 +36,17 @@ import static org.mockito.Mockito.*;
 @DisplayName("CreateInventorySessionService")
 class CreateInventorySessionServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private InventorySessionRepository sessionRepository;
     @Mock private StoreRepository storeRepository;
     @Mock private CategoryQueryPort categoryQuery;
@@ -48,7 +60,7 @@ class CreateInventorySessionServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CreateInventorySessionService(sessionRepository, storeRepository, categoryQuery, eventPublisher);
+        service = new CreateInventorySessionService(sessionRepository, StoreApiTestSupport.queryPort(storeRepository), categoryQuery, eventPublisher);
     }
 
     @Test

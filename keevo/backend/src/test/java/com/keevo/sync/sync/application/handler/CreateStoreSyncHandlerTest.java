@@ -1,12 +1,14 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
@@ -48,8 +50,11 @@ class CreateStoreSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new CreateStoreSyncHandler(storeRepository, subscriptionRepository, planLimitGuard,
-                transactionLock);
+        // 12.2d: real store / subscription API adapters over the mocked internals
+        handler = new CreateStoreSyncHandler(
+                StoreApiTestSupport.commandPort(storeRepository, null, null,
+                        SubscriptionApiTestSupport.queryPort(subscriptionRepository),
+                        SubscriptionApiTestSupport.limitPort(planLimitGuard), transactionLock));
         authenticateAsOwner();
         TenantContext.setCurrentTenant(TENANT_ID);
     }

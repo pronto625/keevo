@@ -1,13 +1,13 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanUseCase;
-import com.keevo.subscription.plan.domain.port.in.CurrentPlan;
-import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
+import com.keevo.subscription.api.CurrentPlan;
+import com.keevo.subscription.api.PlanChangeRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;

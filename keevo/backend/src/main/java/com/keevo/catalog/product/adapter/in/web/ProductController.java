@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.adapter.in.web;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.crm.api.SupplierQueryPort;
 import com.keevo.catalog.product.adapter.in.web.dto.CreateProductRequestDto;
@@ -14,7 +15,7 @@ import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +42,7 @@ public class ProductController {
     private final ProductRepository productRepository;
     private final GetProductPricingUseCase getProductPricingUseCase;
     private final SupplierQueryPort supplierQueryPort; // 12.2a: crm through its public API
-    private final StoreRepository storeRepository; // Story 14.10: resolve store names
+    private final StoreQueryPort storeQuery; // Story 14.10: resolve store names
 
     public ProductController(CreateProductUseCase createProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
@@ -49,14 +50,14 @@ public class ProductController {
                            ProductRepository productRepository,
                            GetProductPricingUseCase getProductPricingUseCase,
                            SupplierQueryPort supplierQueryPort,
-                           StoreRepository storeRepository) {
+                           StoreQueryPort storeQuery) {
         this.createProductUseCase = createProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
         this.productRepository = productRepository;
         this.getProductPricingUseCase = getProductPricingUseCase;
         this.supplierQueryPort = supplierQueryPort;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
     }
 
     /**
@@ -219,7 +220,7 @@ public class ProductController {
     private String resolveEmployeeStoreName() {
         if (CurrentActor.authentication() != null
                 && CurrentActor.authentication().getDetails() instanceof AuthDetails ad && ad.storeId() != null) {
-            return storeRepository.findById(ad.storeId())
+            return storeQuery.findById(TenantContext.getCurrentTenant(), ad.storeId())
                     .map(s -> s.name())
                     .orElse(null);
         }

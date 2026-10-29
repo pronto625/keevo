@@ -1,5 +1,7 @@
 package com.keevo.store.store.domain.model;
 
+import com.keevo.store.api.StoreType;
+
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 

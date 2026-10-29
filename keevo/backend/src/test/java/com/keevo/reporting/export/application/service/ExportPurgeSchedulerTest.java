@@ -1,9 +1,10 @@
 package com.keevo.reporting.export.application.service;
 
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.model.ExportJob;
@@ -50,7 +51,7 @@ class ExportPurgeSchedulerTest {
     }
 
     private ExportPurgeScheduler scheduler() {
-        return new ExportPurgeScheduler(tenantRepository, jobRepository, storage, new ExportProperties(),
+        return new ExportPurgeScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), jobRepository, storage, new ExportProperties(),
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

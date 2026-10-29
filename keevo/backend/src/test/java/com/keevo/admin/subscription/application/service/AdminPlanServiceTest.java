@@ -1,5 +1,6 @@
 package com.keevo.admin.subscription.application.service;
 
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.admin.subscription.application.service.TargetTenantLookup.TargetTenant;
 import com.keevo.admin.subscription.domain.model.PaymentMethod;
 import com.keevo.admin.subscription.domain.model.PlanAlert;
@@ -7,15 +8,15 @@ import com.keevo.admin.subscription.domain.model.TenantPayment;
 import com.keevo.admin.subscription.domain.port.in.ActivatePremiumCommand;
 import com.keevo.admin.subscription.domain.port.in.DowngradeToFreeCommand;
 import com.keevo.admin.subscription.domain.port.out.TenantPaymentRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.subscription.api.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanUseCase;
-import com.keevo.subscription.plan.domain.port.in.CurrentPlan;
+import com.keevo.subscription.api.CurrentPlan;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -69,7 +70,7 @@ class AdminPlanServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new AdminPlanService(lookup, changePlan, payments, publisher, jdbc,
+        service = new AdminPlanService(lookup, SubscriptionApiTestSupport.administrationPort(null, changePlan), payments, publisher, jdbc,
                 Clock.fixed(NOW, ZoneOffset.UTC));
     }
 

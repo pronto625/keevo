@@ -9,8 +9,8 @@ import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.in.ReactivateStoreCommand;
 import com.keevo.store.store.domain.port.in.ReactivateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.subscription.api.SubscriptionQueryPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,20 +28,20 @@ import java.time.Instant;
 public class ReactivateStoreService implements ReactivateStoreUseCase {
 
     private final StoreRepository storeRepository;
-    private final SubscriptionRepository subscriptionRepository;
-    private final PlanLimitGuard planLimitGuard;
+    private final SubscriptionQueryPort subscriptionQuery;
+    private final PlanLimitPort planLimit;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort transactionLock;
 
     public ReactivateStoreService(
             StoreRepository storeRepository,
-            SubscriptionRepository subscriptionRepository,
-            PlanLimitGuard planLimitGuard,
+            SubscriptionQueryPort subscriptionQuery,
+            PlanLimitPort planLimit,
             ApplicationEventPublisher eventPublisher,
             TransactionLockPort transactionLock) {
         this.storeRepository = storeRepository;
-        this.subscriptionRepository = subscriptionRepository;
-        this.planLimitGuard = planLimitGuard;
+        this.subscriptionQuery = subscriptionQuery;
+        this.planLimit = planLimit;
         this.eventPublisher = eventPublisher;
         this.transactionLock = transactionLock;
     }
@@ -58,11 +58,10 @@ public class ReactivateStoreService implements ReactivateStoreUseCase {
 
         // Même verrou que CreateStoreService / CREATE_STORE : count → save sérialisés par tenant.
         transactionLock.lock("store-limit:" + TenantContext.getCurrentTenant());
-        var planType = subscriptionRepository.findActivePlan()
+        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Aucun abonnement actif"))
-                .getPlanType();
-        planLimitGuard.checkStoreLimit(planType, storeRepository.countActive());
+                        "Aucun abonnement actif"));
+        planLimit.checkStoreLimit(plan, storeRepository.countActive());
 
         Store reactivated = new Store(
                 existing.id(),

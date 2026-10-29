@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
 
 /**
  * ClosureReportStrategy — GoF Strategy pattern for building closure reports.

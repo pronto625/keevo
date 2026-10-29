@@ -1,15 +1,15 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.api.TenantView;
+import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.domain.model.Subscription;
-import com.keevo.identity.auth.domain.model.PlanType;
-import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.identity.api.PlanType;
+import com.keevo.subscription.api.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
-import com.keevo.subscription.plan.domain.port.out.PlanChangeRecorder;
+import com.keevo.subscription.api.PlanChangeRecorder;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
@@ -53,17 +53,17 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     private static final Logger log = LoggerFactory.getLogger(ActivatePlanService.class);
 
     private final SubscriptionRepository subscriptionRepository;
-    private final TenantRepository tenantRepository;
+    private final TenantQueryPort tenantQuery;
     private final TransactionTemplate requiresNewTemplate;
     private final PlanChangeRecorder planChangeRecorder;
 
     /** Production constructor — Spring injects the {@link PlatformTransactionManager}. */
     @org.springframework.beans.factory.annotation.Autowired
     public ActivatePlanService(SubscriptionRepository subscriptionRepository,
-                               TenantRepository tenantRepository,
+                               TenantQueryPort tenantQuery,
                                PlatformTransactionManager transactionManager,
                                PlanChangeRecorder planChangeRecorder) {
-        this(subscriptionRepository, tenantRepository, buildTemplate(transactionManager), planChangeRecorder);
+        this(subscriptionRepository, tenantQuery, buildTemplate(transactionManager), planChangeRecorder);
     }
 
     /**
@@ -71,11 +71,11 @@ public class ActivatePlanService implements ActivatePlanUseCase {
      * Allows unit tests to mock the template without a real transaction manager.
      */
     ActivatePlanService(SubscriptionRepository subscriptionRepository,
-                        TenantRepository tenantRepository,
+                        TenantQueryPort tenantQuery,
                         TransactionTemplate requiresNewTemplate,
                         PlanChangeRecorder planChangeRecorder) {
         this.subscriptionRepository = subscriptionRepository;
-        this.tenantRepository = tenantRepository;
+        this.tenantQuery = tenantQuery;
         this.requiresNewTemplate = requiresNewTemplate;
         this.planChangeRecorder = planChangeRecorder;
     }
@@ -90,10 +90,10 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     public void execute(ActivatePlanCommand command) {
         // Step 1: Verify tenant exists via schemaName (public schema — safe with current OEMIV session)
         String schemaName = command.targetTenantId(); // e.g., "kv_abc123" from LoginResponse.tenantId
-        Tenant tenant = tenantRepository.findBySchemaName(schemaName)
+        TenantView tenant = tenantQuery.findBySchemaName(schemaName)
                 .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND,
                         "Tenant not found: " + schemaName));
-        log.debug("Tenant resolved: schema={} uuid={}", schemaName, tenant.getId());
+        log.debug("TenantView resolved: schema={} uuid={}", schemaName, tenant.id());
 
         // Step 2: Set TenantContext BEFORE the new transaction opens so Hibernate reads it at
         // session-creation time (inside requiresNewTemplate.execute below).
@@ -123,8 +123,8 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                 // Story 9-2 — global plan view + history in the same transaction, only for a real
                 // plan change (an expiry-only update writes no history row).
                 if (current.getPlanType() != command.newPlan()) {
-                    planChangeRecorder.syncPublicPlanType(tenant.getId(), command.newPlan());
-                    planChangeRecorder.recordEvent(tenant.getId(), current.getPlanType(), command.newPlan(),
+                    planChangeRecorder.syncPublicPlanType(tenant.id(), command.newPlan());
+                    planChangeRecorder.recordEvent(tenant.id(), current.getPlanType(), command.newPlan(),
                             command.newPlan() == PlanType.FREE
                                     ? PlanChangeCause.ADMIN_DOWNGRADE : PlanChangeCause.ADMIN_ACTIVATION,
                             parseActor(command.actorId()), null);

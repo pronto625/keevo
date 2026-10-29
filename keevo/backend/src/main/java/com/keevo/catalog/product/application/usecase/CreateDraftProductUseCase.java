@@ -10,9 +10,9 @@ import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
+import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.subscription.api.ProductCountPort;
+import com.keevo.subscription.api.SubscriptionQueryPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,8 +44,8 @@ public class CreateDraftProductUseCase {
     private final ProductRepository         productRepository;
     private final DraftNotificationRepository draftRepository;
     private final ProductCountPort          productCountPort;
-    private final SubscriptionRepository    subscriptionRepository;
-    private final PlanLimitGuard            planLimitGuard;
+    private final SubscriptionQueryPort    subscriptionQuery;
+    private final PlanLimitPort            planLimit;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort       transactionLock;
 
@@ -53,15 +53,15 @@ public class CreateDraftProductUseCase {
             ProductRepository productRepository,
             DraftNotificationRepository draftRepository,
             ProductCountPort productCountPort,
-            SubscriptionRepository subscriptionRepository,
-            PlanLimitGuard planLimitGuard,
+            SubscriptionQueryPort subscriptionQuery,
+            PlanLimitPort planLimit,
             ApplicationEventPublisher eventPublisher,
             TransactionLockPort transactionLock) {
         this.productRepository     = productRepository;
         this.draftRepository       = draftRepository;
         this.productCountPort      = productCountPort;
-        this.subscriptionRepository = subscriptionRepository;
-        this.planLimitGuard        = planLimitGuard;
+        this.subscriptionQuery = subscriptionQuery;
+        this.planLimit        = planLimit;
         this.eventPublisher        = eventPublisher;
         this.transactionLock       = transactionLock;
     }
@@ -115,12 +115,11 @@ public class CreateDraftProductUseCase {
         }
 
         // Plan limit check — all roles (DRAFT products count toward the tenant limit)
-        int currentCount = productCountPort.countActiveProducts();
-        var planType = subscriptionRepository.findActivePlan()
+        int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
+        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
-                        "Aucun abonnement actif"))
-                .getPlanType();
-        planLimitGuard.checkProductLimit(planType, currentCount);
+                        "Aucun abonnement actif"));
+        planLimit.checkProductLimit(plan, currentCount);
 
         String sku = generateSku();
         var now = Instant.now();

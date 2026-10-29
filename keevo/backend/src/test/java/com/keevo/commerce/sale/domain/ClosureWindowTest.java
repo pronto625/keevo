@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -84,7 +84,7 @@ class ClosureWindowTest {
         DayClosure prev = closure(at(20), at(21));
         DayClosure c = closure(at(44), at(45));
 
-        ClosureWindow w = ClosureWindow.forClosure(c, Optional.of(prev));
+        ClosureWindow w = ClosureWindow.forClosure(c.toView(), Optional.of(prev.toView()));
 
         assertThat(w).isEqualTo(new ClosureWindow(at(20).plusNanos(1000), at(44), at(21), at(45)));
         assertThat(w.covers(at(10), at(30))).as("made before P, received after it: late sale of C").isTrue();
@@ -96,7 +96,7 @@ class ClosureWindowTest {
         Instant closedAt = Instant.parse("2026-10-10T23:30:00Z"); // 00:30 WAT on the 11th
         DayClosure c = closure(closedAt, closedAt.plusSeconds(2));
 
-        ClosureWindow w = ClosureWindow.forClosure(c, Optional.empty());
+        ClosureWindow w = ClosureWindow.forClosure(c.toView(), Optional.empty());
 
         assertThat(w).isEqualTo(new ClosureWindow(Instant.parse("2026-10-10T23:00:00Z"), closedAt, null,
                 closedAt.plusSeconds(2)));
@@ -107,6 +107,6 @@ class ClosureWindowTest {
     @DisplayName("forClosure of a closure predating receivedAt uses closedAt as its reception time")
     void forClosureLegacyReceivedAt() {
         DayClosure c = closure(at(44), null);
-        assertThat(ClosureWindow.forClosure(c, Optional.empty()).receivedUntil()).isEqualTo(at(44));
+        assertThat(ClosureWindow.forClosure(c.toView(), Optional.empty()).receivedUntil()).isEqualTo(at(44));
     }
 }

@@ -1,8 +1,9 @@
 package com.keevo.identity.employee.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.employee.domain.model.Employee;
@@ -23,7 +24,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -51,7 +51,7 @@ class ReactivateEmployeeServiceTest {
     @Mock SubscriptionRepository subscriptionRepository;
     @Mock TransactionLockPort transactionLock;
 
-    @InjectMocks ReactivateEmployeeService reactivateEmployeeService;
+    ReactivateEmployeeService reactivateEmployeeService;
 
     UUID actorId;
     UUID employeeId;
@@ -62,6 +62,10 @@ class ReactivateEmployeeServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 12.2d: real subscription API adapters over the mocked repository / guard
+        reactivateEmployeeService = new ReactivateEmployeeService(employeeRepository, membershipRepository, tenantRepository,
+                SubscriptionApiTestSupport.limitPort(planLimitGuard), employeeCountPort,
+                SubscriptionApiTestSupport.queryPort(subscriptionRepository), transactionLock);
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         userId = UUID.randomUUID();

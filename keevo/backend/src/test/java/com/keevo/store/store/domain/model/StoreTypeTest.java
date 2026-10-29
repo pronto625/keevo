@@ -1,5 +1,7 @@
 package com.keevo.store.store.domain.model;
 
+import com.keevo.store.api.StoreType;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 

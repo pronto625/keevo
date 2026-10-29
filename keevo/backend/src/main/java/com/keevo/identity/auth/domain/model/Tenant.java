@@ -1,5 +1,9 @@
 package com.keevo.identity.auth.domain.model;
 
+import com.keevo.identity.api.TenantStatus;
+
+import com.keevo.identity.api.PlanType;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;

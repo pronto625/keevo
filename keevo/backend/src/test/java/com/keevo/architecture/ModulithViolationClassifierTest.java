@@ -59,6 +59,10 @@ class ModulithViolationClassifierTest {
     private static final String NON_EXPOSED_INTO_STORE =
         "Module 'commerce' depends on non-exposed type com.keevo.store.store.domain.model.Store "
             + "within module 'store'!";
+    /** messaging publishes no API yet (12.2e): its internals are not pinned. */
+    private static final String NON_EXPOSED_INTO_MESSAGING =
+        "Module 'commerce' depends on non-exposed type com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort "
+            + "within module 'messaging'!";
     private static final String INTERNAL_OF_DECLARED_CATALOG =
         "Module 'sync' depends on module 'catalog' via com.keevo.sync.A -> com.keevo.catalog.product.domain.entity.Product. "
             + "Allowed targets: catalog :: api, shared.";
@@ -68,7 +72,9 @@ class ModulithViolationClassifierTest {
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_INVENTORY)).isTrue();
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(INTERNAL_OF_DECLARED_CATALOG)).isTrue();
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_FROM_SHARED)).isFalse();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_STORE)).isFalse();
+        // store's API is published since 12.2d
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_STORE)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_MESSAGING)).isFalse();
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(MODULE_UNDECLARED)).isFalse();
     }
 }

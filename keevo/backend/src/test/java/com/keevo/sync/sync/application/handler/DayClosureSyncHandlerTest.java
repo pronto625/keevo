@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
@@ -33,6 +35,17 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class DayClosureSyncHandlerTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private CloseDayUseCase closeDayUseCase;
     @Mock private StoreRepository storeRepository;
 
@@ -43,7 +56,8 @@ class DayClosureSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new DayClosureSyncHandler(closeDayUseCase, storeRepository);
+        handler = new DayClosureSyncHandler(
+                CommerceSaleApiTestSupport.dayClosureCommandPort(closeDayUseCase), StoreApiTestSupport.queryPort(storeRepository));
         lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }

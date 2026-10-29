@@ -1,12 +1,13 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,18 +29,18 @@ public class MultiStoreSummaryService {
 
 
     private final EndOfDayReportRepository reportRepository;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final WhatsAppPort whatsAppPort;
     private final DailyReportFormatter formatter;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
     public MultiStoreSummaryService(EndOfDayReportRepository reportRepository,
-                                    StoreRepository storeRepository,
+                                    StoreQueryPort storeQuery,
                                     WhatsAppPort whatsAppPort,
                                     DailyReportFormatter formatter,
                                     OwnerRecipientResolver ownerRecipientResolver) {
         this.reportRepository = reportRepository;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.whatsAppPort = whatsAppPort;
         this.formatter = formatter;
         this.ownerRecipientResolver = ownerRecipientResolver;
@@ -50,7 +51,7 @@ public class MultiStoreSummaryService {
      * If ALL active stores have been closed for today, generates a DAILY_COMBINED report.
      */
     public void checkAndGenerateCombinedSummary(GenerateReportCommand command) {
-        int activeStoreCount = storeRepository.countActive();
+        int activeStoreCount = storeQuery.countActive(TenantContext.getCurrentTenant());
         if (activeStoreCount <= 1) {
             // Single store: no combined report needed
             return;

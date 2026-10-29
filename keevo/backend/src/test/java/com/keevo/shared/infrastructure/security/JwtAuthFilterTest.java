@@ -2,7 +2,7 @@ package com.keevo.shared.infrastructure.security;
 
 import org.springframework.security.core.context.SecurityContextHolder;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import io.jsonwebtoken.Claims;

@@ -4,7 +4,7 @@ import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeeDeactivatedEvent;

@@ -1,8 +1,8 @@
 package com.keevo.reporting.export.application.service;
 
-import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.api.TenantView;
+import com.keevo.identity.api.TenantStatus;
+import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.port.out.ExportFileStorage;
@@ -44,15 +44,15 @@ public class ExportPurgeScheduler {
     private static final Logger log = LoggerFactory.getLogger(ExportPurgeScheduler.class);
     static final String INTERRUPTED = "EXPORT_INTERRUPTED";
 
-    private final TenantRepository tenantRepository;
+    private final TenantQueryPort tenantQuery;
     private final ExportJobRepository jobRepository;
     private final ExportFileStorage storage;
     private final Duration staleJobAfter;
     private final Clock clock;
 
-    public ExportPurgeScheduler(TenantRepository tenantRepository, ExportJobRepository jobRepository,
+    public ExportPurgeScheduler(TenantQueryPort tenantQuery, ExportJobRepository jobRepository,
                                 ExportFileStorage storage, ExportProperties properties, Clock clock) {
-        this.tenantRepository = tenantRepository;
+        this.tenantQuery = tenantQuery;
         this.jobRepository = jobRepository;
         this.storage = storage;
         this.staleJobAfter = properties.getStaleJobAfter();
@@ -72,19 +72,19 @@ public class ExportPurgeScheduler {
     }
 
     private void forEachTenant(String errorTag, Consumer<String> action) {
-        List<Tenant> tenants;
+        List<TenantView> tenants;
         try {
-            tenants = tenantRepository.findAll();
+            tenants = tenantQuery.findAll();
         } catch (RuntimeException e) {
             log.error("{} — cannot list tenants: {}", errorTag, e.getMessage(), e);
             return;
         }
-        for (Tenant tenant : tenants) {
-            if (tenant.getStatus() == TenantStatus.DELETED) continue;
+        for (TenantView tenant : tenants) {
+            if (tenant.status() == TenantStatus.DELETED) continue;
             try {
-                action.accept(tenant.getSchemaName());
+                action.accept(tenant.schemaName());
             } catch (Exception e) {
-                log.error("{} tenant={} error={}", errorTag, tenant.getSchemaName(), e.getMessage(), e);
+                log.error("{} tenant={} error={}", errorTag, tenant.schemaName(), e.getMessage(), e);
             }
         }
     }

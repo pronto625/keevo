@@ -4,7 +4,7 @@ import com.keevo.inventory.stock.domain.model.StoreStockSummary;
 import com.keevo.inventory.stock.domain.port.in.GetMultiStoreOverviewQuery;
 import com.keevo.inventory.stock.domain.port.in.GetMultiStoreOverviewUseCase;
 import com.keevo.inventory.stock.domain.port.out.MultiStoreStockRepository;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

@@ -1,9 +1,10 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.TenantStatus;import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -41,7 +42,7 @@ class ReportDeliveryRetryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReportDeliveryRetryService(reportRepository, whatsAppPort, tenantRepository, ownerRecipientResolver);
+        service = new ReportDeliveryRetryService(reportRepository, whatsAppPort, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), ownerRecipientResolver);
         activeTenant = mock(Tenant.class);
         lenient().when(activeTenant.getStatus()).thenReturn(TenantStatus.ACTIVE);
         lenient().when(activeTenant.getSchemaName()).thenReturn("kv_test01");

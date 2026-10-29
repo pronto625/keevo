@@ -2,7 +2,7 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;

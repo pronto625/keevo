@@ -1,6 +1,6 @@
 package com.keevo.store.store.domain.event;
 
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 
 import java.time.Instant;
 import java.util.UUID;

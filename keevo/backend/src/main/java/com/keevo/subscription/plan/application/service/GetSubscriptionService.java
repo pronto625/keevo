@@ -1,13 +1,15 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.subscription.plan.adapter.in.rest.dto.SubscriptionResponse;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.port.in.GetSubscriptionQuery;
 import com.keevo.subscription.plan.domain.port.in.GetSubscriptionUseCase;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.StoreCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import com.keevo.subscription.plan.domain.port.out.UserCountPort;
@@ -46,7 +48,7 @@ public class GetSubscriptionService implements GetSubscriptionUseCase {
                         "No subscription found for tenant"));
 
         int currentStores    = storeCountPort.countActiveStores();
-        int currentProducts  = productCountPort.countActiveProducts();
+        int currentProducts  = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
         int currentEmployees = userCountPort.countEmployees();
 
         boolean unlimited = sub.getPlanType() != PlanType.FREE;

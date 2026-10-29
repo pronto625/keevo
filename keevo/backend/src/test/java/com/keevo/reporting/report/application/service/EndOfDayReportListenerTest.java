@@ -1,8 +1,9 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
@@ -45,7 +46,7 @@ class EndOfDayReportListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new EndOfDayReportListener(generateReportUseCase, builder, tenantPreferencesRepository);
+        listener = new EndOfDayReportListener(generateReportUseCase, builder, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository));
         // Default: EOD report is enabled with WHATSAPP channel
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(java.util.Optional.of(enabledPrefs()));

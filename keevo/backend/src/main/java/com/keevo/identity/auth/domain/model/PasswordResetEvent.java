@@ -13,6 +13,7 @@ import java.util.UUID;
  * @param userId     user who reset their password
  * @param occurredAt when the reset was completed
  */
+@org.springframework.modulith.NamedInterface("events")
 public record PasswordResetEvent(
         UUID userId,
         Instant occurredAt

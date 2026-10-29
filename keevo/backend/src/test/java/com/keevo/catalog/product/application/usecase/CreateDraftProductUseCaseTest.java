@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.application.usecase;
 
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
@@ -11,8 +12,8 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.identity.auth.domain.model.PlanType;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.identity.api.PlanType;
+import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,6 +41,17 @@ import static org.mockito.Mockito.*;
 @DisplayName("CreateDraftProductUseCase")
 class CreateDraftProductUseCaseTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private ProductRepository           productRepository;
     @Mock private DraftNotificationRepository draftRepository;
     @Mock private ProductCountPort            productCountPort;
@@ -56,7 +68,7 @@ class CreateDraftProductUseCaseTest {
     void setUp() {
         useCase = new CreateDraftProductUseCase(
                 productRepository, draftRepository, productCountPort,
-                subscriptionRepository, planLimitGuard, eventPublisher, transactionLock);
+                SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), eventPublisher, transactionLock);
     }
 
     private CreateDraftProductUseCase.CreateDraftCommand ownerCmd(String name) {
@@ -79,7 +91,7 @@ class CreateDraftProductUseCaseTest {
         var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
-        when(productCountPort.countActiveProducts()).thenReturn(0);
+        when(productCountPort.countActiveProducts(any())).thenReturn(0);
         lenient().doNothing().when(planLimitGuard).checkProductLimit(any(), anyInt());
     }
 
@@ -176,7 +188,7 @@ class CreateDraftProductUseCaseTest {
         var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
-        when(productCountPort.countActiveProducts()).thenReturn(500);
+        when(productCountPort.countActiveProducts(any())).thenReturn(500);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite atteinte"))
                 .when(planLimitGuard).checkProductLimit(any(), anyInt());
 
@@ -201,7 +213,7 @@ class CreateDraftProductUseCaseTest {
             InOrder inOrder = inOrder(transactionLock, productCountPort, productRepository);
             inOrder.verify(transactionLock).lock("product-limit:kv_test");
             inOrder.verify(productRepository).existsByName("Article Lock");
-            inOrder.verify(productCountPort).countActiveProducts();
+            inOrder.verify(productCountPort).countActiveProducts(any());
             inOrder.verify(productRepository).save(any());
         }
     }
@@ -215,7 +227,7 @@ class CreateDraftProductUseCaseTest {
             var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
             when(sub.getPlanType()).thenReturn(PlanType.FREE);
             when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
-            when(productCountPort.countActiveProducts()).thenReturn(20);
+            when(productCountPort.countActiveProducts(any())).thenReturn(20);
             doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite atteinte"))
                     .when(planLimitGuard).checkProductLimit(PlanType.FREE, 20);
 

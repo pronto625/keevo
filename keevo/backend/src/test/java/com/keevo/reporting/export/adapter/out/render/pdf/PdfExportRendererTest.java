@@ -1,14 +1,17 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.inventory.stock.adapter.out.export.StockLevelsExportDatasetProvider;
 import com.keevo.commerce.sale.adapter.out.export.DayClosuresExportDatasetProvider;
 import com.keevo.commerce.sale.adapter.out.export.SalesExportDatasetProvider;
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.inventory.counting.adapter.out.export.InventoryCountsExportDatasetProvider;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
@@ -22,7 +25,7 @@ import com.keevo.shared.application.port.export.ExportPage;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -87,8 +90,9 @@ class PdfExportRendererTest {
     }
 
     private PdfExportRenderer renderer() {
-        return new PdfExportRenderer(new PdfDocumentFactory(), new EndOfDayPdfModel(closures, reportBuilder),
-                tenants, stores, props, Clock.fixed(NOW, ZoneOffset.UTC));
+        return new PdfExportRenderer(new PdfDocumentFactory(), new EndOfDayPdfModel(
+                CommerceSaleApiTestSupport.dayClosureQueryPort(closures), reportBuilder),
+                IdentityAuthApiTestSupport.tenantQueryPort(tenants), StoreApiTestSupport.queryPort(stores), props, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     // ── synthetic providers with the real column schemas ───────────────────────────
@@ -269,7 +273,7 @@ class PdfExportRendererTest {
                 true, TENANT, closedAt.minusSeconds(86_000));
         when(closures.findById(closureId)).thenReturn(Optional.of(closure));
         when(closures.findPreviousForStore(STORE, closedAt)).thenReturn(Optional.of(previous));
-        ClosureWindow expected = ClosureWindow.forClosure(closure, Optional.of(previous));
+        ClosureWindow expected = ClosureWindow.forClosure(closure.toView(), Optional.of(previous.toView()));
         when(reportBuilder.build(eq(STORE), eq(expected), eq("Boutique Akwa"), eq(LocalDate.of(2026, 10, 11)),
                 eq(LocalTime.of(20, 0)), anyBoolean())).thenReturn(new EndOfDayReportData(
                 "Boutique Akwa", LocalDate.of(2026, 10, 11), LocalTime.of(20, 0), false, false,

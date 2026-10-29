@@ -3,7 +3,7 @@ package com.keevo.subscription.plan.domain.model;
 /**
  * SubscriptionStatus — Lifecycle status of a tenant subscription.
  *
- * <p>Note: PREMIUM_TRIAL is a {@link com.keevo.identity.auth.domain.model.PlanType},
+ * <p>Note: PREMIUM_TRIAL is a {@link com.keevo.identity.api.PlanType},
  * NOT a status. A PREMIUM_TRIAL tenant has {@code status=ACTIVE} + {@code planType=PREMIUM_TRIAL}
  * + {@code expiresAt} set. On expiry, planType becomes FREE (status stays ACTIVE).
  * SUSPENDED is reserved for manual Super Admin lockout only (not used in natural expiry flow).

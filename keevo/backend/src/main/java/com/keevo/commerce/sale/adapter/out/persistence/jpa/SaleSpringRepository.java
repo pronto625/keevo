@@ -56,7 +56,7 @@ public interface SaleSpringRepository extends JpaRepository<SaleJpaEntity, UUID>
             UUID storeId, Instant from, Instant to, Pageable pageable);
 
     /**
-     * Sales covered by a day closure — see {@link com.keevo.commerce.sale.domain.model.ClosureWindow}.
+     * Sales covered by a day closure — see {@link com.keevo.commerce.api.ClosureWindow}.
      */
     @Query("SELECT s FROM SaleJpaEntity s WHERE s.storeId = :storeId " +
            "AND s.occurredAt <= :end AND s.createdAt <= :receivedUntil " +

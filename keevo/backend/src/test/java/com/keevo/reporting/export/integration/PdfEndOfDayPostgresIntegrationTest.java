@@ -1,6 +1,6 @@
 package com.keevo.reporting.export.integration;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.identity.auth.application.service.TenantFactory;
@@ -126,7 +126,7 @@ class PdfEndOfDayPostgresIntegrationTest extends FullContextIntegrationTest {
             DayClosure c = closureRepository.findById(closureId).orElseThrow();
             Optional<DayClosure> previous = closureRepository.findPreviousForStore(store, c.getClosedAt());
             assertThat(previous).map(DayClosure::getId).contains(previousId);
-            expected = reportBuilder.build(store, ClosureWindow.forClosure(c, previous), "Boutique Clôture",
+            expected = reportBuilder.build(store, ClosureWindow.forClosure(c.toView(), previous.map(DayClosure::toView)), "Boutique Clôture",
                     LocalDate.of(2026, 3, 15), c.getClosedAt().atZone(WAT).toLocalTime(), false);
         } finally {
             TenantContext.clear();

@@ -1,12 +1,13 @@
 package com.keevo.store.store.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.in.CreateStoreCommand;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
@@ -19,7 +20,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -40,13 +40,24 @@ import static org.mockito.Mockito.*;
 @DisplayName("CreateStoreService")
 class CreateStoreServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock StoreRepository storeRepository;
     @Mock SubscriptionRepository subscriptionRepository;
     @Mock PlanLimitGuard planLimitGuard;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock TransactionLockPort transactionLock;
 
-    @InjectMocks CreateStoreService createStoreService;
+    CreateStoreService createStoreService;
 
     UUID actorId;
     Subscription freeSubscription;
@@ -54,6 +65,9 @@ class CreateStoreServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 12.2d: real subscription API adapters over the mocked repository / guard
+        createStoreService = new CreateStoreService(storeRepository, SubscriptionApiTestSupport.queryPort(subscriptionRepository),
+                SubscriptionApiTestSupport.limitPort(planLimitGuard), eventPublisher, transactionLock);
         actorId = UUID.randomUUID();
         freeSubscription = mock(Subscription.class);
         lenient().when(freeSubscription.getPlanType()).thenReturn(PlanType.FREE);

@@ -1,20 +1,20 @@
 package com.keevo.identity.onboarding.application.service;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.reporting.report.application.service.DailyReportFormatter;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.TopProductEntry;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -36,13 +36,24 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SendTestReportServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private EndOfDayReportBuilder endOfDayReportBuilder;
     @Mock private DailyReportFormatter dailyReportFormatter;
     @Mock private WhatsAppPort whatsAppPort;
     @Mock private StoreRepository storeRepository;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
-    @InjectMocks private SendTestReportService service;
+    private SendTestReportService service;
 
     private static final String TENANT_ID = "kv_test_7_5";
     private static final UUID STORE_ID = UUID.randomUUID();
@@ -54,6 +65,9 @@ class SendTestReportServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 12.2d: the real store API adapter over the mocked repository
+        service = new SendTestReportService(endOfDayReportBuilder, dailyReportFormatter, whatsAppPort,
+                StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver);
         store = new Store(STORE_ID, "Boutique Test", StoreType.STORE, "Kinshasa", null, true, Instant.now(), Instant.now());
 
         reportData = new EndOfDayReportData(

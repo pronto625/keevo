@@ -1,7 +1,7 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.commerce.api.DayClosureSummary;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;

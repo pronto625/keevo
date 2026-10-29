@@ -1,6 +1,8 @@
 package com.keevo.commerce.sale.application.service;
 
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -96,7 +98,7 @@ public class CloseDayService implements CloseDayUseCase {
         // now − commit-safety margin (v1s-13-13): a sale stamped just before now but not yet
         // committed is left to the next closure, which chains on this persisted receivedAt.
         Instant receivedAt = ClosureWindow.receivedLimit(now);
-        ClosureWindow window = ClosureWindow.forClosure(closedAt, receivedAt, previous);
+        ClosureWindow window = ClosureWindow.forClosure(closedAt, receivedAt, previous.map(DayClosure::toView));
         List<Sale> sales = saleRepository.findForClosure(command.storeId(), window);
 
         // Step 3: Build summary

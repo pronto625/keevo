@@ -12,17 +12,17 @@ import com.keevo.admin.subscription.domain.port.in.ListTenantPaymentsUseCase;
 import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand;
 import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentUseCase;
 import com.keevo.admin.subscription.domain.port.out.TenantPaymentRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import static com.keevo.shared.domain.time.KeevoZones.WAT;
-import com.keevo.subscription.plan.domain.model.PlanChangeCause;
+import com.keevo.subscription.api.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;
-import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
-import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanUseCase;
-import com.keevo.subscription.plan.domain.port.in.CurrentPlan;
+import com.keevo.subscription.api.ChangePlanInput;
+import com.keevo.subscription.api.PlanAdministrationPort;
+import com.keevo.subscription.api.CurrentPlan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -104,14 +104,14 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
             + "ORDER BY e.occurred_at DESC";
 
     private final TargetTenantLookup tenantLookup;
-    private final ChangeTenantPlanUseCase changeTenantPlan;
+    private final PlanAdministrationPort changeTenantPlan;
     private final TenantPaymentRepository paymentRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final JdbcTemplate jdbc;
     private final Clock clock;
 
     public AdminPlanService(TargetTenantLookup tenantLookup,
-                            ChangeTenantPlanUseCase changeTenantPlan,
+                            PlanAdministrationPort changeTenantPlan,
                             TenantPaymentRepository paymentRepository,
                             ApplicationEventPublisher eventPublisher,
                             JdbcTemplate jdbc,
@@ -161,7 +161,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                 cmd.paidAt() != null ? cmd.paidAt() : now,
                 periodStart, cmd.expiresAt(), blankToNull(cmd.note()), cmd.actorId()));
 
-        CurrentPlan previous = changeTenantPlan.changePlan(new ChangeTenantPlanCommand(
+        CurrentPlan previous = changeTenantPlan.changePlan(new ChangePlanInput(
                 tenant.id(), tenant.schemaName(), PlanType.PREMIUM, expiresAt,
                 PlanChangeCause.ADMIN_ACTIVATION, cmd.actorId(), blankToNull(cmd.note())));
 
@@ -191,7 +191,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
             throw new DomainException(ErrorCode.INVALID_STATE, "Tenant already on FREE: " + tenant.id());
         }
 
-        changeTenantPlan.changePlan(new ChangeTenantPlanCommand(
+        changeTenantPlan.changePlan(new ChangePlanInput(
                 tenant.id(), tenant.schemaName(), PlanType.FREE, null,
                 PlanChangeCause.ADMIN_DOWNGRADE, cmd.actorId(), reason));
 

@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
@@ -8,7 +9,7 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,14 +33,14 @@ public class UserProfileService implements GetUserProfileUseCase {
 
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
 
     public UserProfileService(UserRepository userRepository,
                                EmployeeRepository employeeRepository,
-                               StoreRepository storeRepository) {
+                               StoreQueryPort storeQuery) {
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
     }
 
     @Override
@@ -52,7 +53,7 @@ public class UserProfileService implements GetUserProfileUseCase {
 
         if (employeeOpt.isPresent()) {
             Employee emp = employeeOpt.get();
-            String storeName = storeRepository.findById(emp.getStoreId())
+            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), emp.getStoreId())
                     .map(s -> s.name())
                     .orElse(null);
             return new UserProfileData(

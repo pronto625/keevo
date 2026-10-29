@@ -1,6 +1,8 @@
 package com.keevo.commerce.sale.application;
 
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
@@ -277,7 +279,7 @@ class CloseDayServiceTest {
 
             var saved = ArgumentCaptor.forClass(DayClosure.class);
             verify(dayClosureRepository).save(saved.capture());
-            assertThat(ClosureWindow.forClosure(saved.getValue(), previous)).isEqualTo(event.window());
+            assertThat(ClosureWindow.forClosure(saved.getValue().toView(), previous.map(DayClosure::toView))).isEqualTo(event.window());
         }
     }
 
@@ -400,7 +402,7 @@ class CloseDayServiceTest {
         ClosureWindow next = ClosureWindow.forClosure(
                 FIXED_NOW.plus(java.time.Duration.ofDays(1)),
                 ClosureWindow.receivedLimit(FIXED_NOW.plus(java.time.Duration.ofDays(1))),
-                java.util.Optional.of(closure));
+                java.util.Optional.of(closure.toView()));
         assertThat(next.covers(lagging, lagging)).isTrue();
         // A sale received before the margin stays in this closure only.
         Instant onTime = FIXED_NOW.minusSeconds(6);

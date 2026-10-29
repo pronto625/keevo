@@ -1,8 +1,8 @@
 package com.keevo.identity.onboarding.adapter.in.web;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;

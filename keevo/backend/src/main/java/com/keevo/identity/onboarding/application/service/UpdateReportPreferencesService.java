@@ -1,9 +1,9 @@
 package com.keevo.identity.onboarding.application.service;
 
 import com.keevo.identity.onboarding.domain.model.PreferenceUpdatedEvent;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;

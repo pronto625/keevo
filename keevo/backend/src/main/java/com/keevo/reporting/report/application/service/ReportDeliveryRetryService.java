@@ -1,10 +1,10 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.TenantView;
+import com.keevo.identity.api.TenantStatus;
+import com.keevo.identity.api.TenantQueryPort;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -32,15 +32,15 @@ public class ReportDeliveryRetryService {
 
     private final EndOfDayReportRepository reportRepository;
     private final WhatsAppPort whatsAppPort;
-    private final TenantRepository tenantRepository;
+    private final TenantQueryPort tenantQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
     public ReportDeliveryRetryService(EndOfDayReportRepository reportRepository,
                                        WhatsAppPort whatsAppPort,
-                                       TenantRepository tenantRepository,
+                                       TenantQueryPort tenantQuery,
                                        OwnerRecipientResolver ownerRecipientResolver) {
         this.reportRepository = reportRepository;
         this.whatsAppPort = whatsAppPort;
-        this.tenantRepository = tenantRepository;
+        this.tenantQuery = tenantQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
@@ -49,28 +49,28 @@ public class ReportDeliveryRetryService {
     public void retryFailedDeliveries() {
         log.debug("ReportDeliveryRetryService: checking failed reports");
 
-        for (Tenant tenant : tenantRepository.findAll()) {
-            if (tenant.getStatus() != TenantStatus.ACTIVE) continue;
+        for (TenantView tenant : tenantQuery.findAll()) {
+            if (tenant.status() != TenantStatus.ACTIVE) continue;
 
             try {
-                TenantContext.setCurrentTenant(tenant.getSchemaName());
+                TenantContext.setCurrentTenant(tenant.schemaName());
                 retryForTenant(tenant);
             } catch (Exception e) {
-                log.error("Error retrying reports for tenant {}: {}", tenant.getSchemaName(), e.getMessage());
+                log.error("Error retrying reports for tenant {}: {}", tenant.schemaName(), e.getMessage());
             } finally {
                 TenantContext.clear();
             }
         }
     }
 
-    private void retryForTenant(Tenant tenant) {
+    private void retryForTenant(TenantView tenant) {
         List<EndOfDayReport> pendingRetries = reportRepository.findPendingRetries(MAX_ATTEMPTS);
         if (pendingRetries.isEmpty()) return;
 
-        Optional<String> ownerPhoneOpt = ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenant.getSchemaName());
+        Optional<String> ownerPhoneOpt = ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenant.schemaName());
         if (ownerPhoneOpt.isEmpty()) {
             log.warn("No usable owner WhatsApp phone for tenant {} — skipping retry for {} report(s)",
-                    tenant.getSchemaName(), pendingRetries.size());
+                    tenant.schemaName(), pendingRetries.size());
             return;
         }
         String ownerPhone = ownerPhoneOpt.get();

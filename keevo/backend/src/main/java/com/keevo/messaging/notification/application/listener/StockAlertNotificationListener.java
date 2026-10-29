@@ -1,16 +1,16 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
-import com.keevo.identity.onboarding.domain.model.TenantPreferences;
-import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.StockAlertChannel;
+import com.keevo.identity.api.TenantPreferencesView;
+import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -52,9 +52,9 @@ public class StockAlertNotificationListener {
     private final NotificationPort notificationPort;
     private final WhatsAppPort whatsAppPort;
     private final NotificationCooldownRepository cooldownRepository;
-    private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final TenantPreferencesQueryPort preferencesQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final Clock clock;
 
     private final ConcurrentHashMap<String, BatchWindow> batchWindows = new ConcurrentHashMap<>();
@@ -63,28 +63,28 @@ public class StockAlertNotificationListener {
     public StockAlertNotificationListener(NotificationPort notificationPort,
                                           WhatsAppPort whatsAppPort,
                                           NotificationCooldownRepository cooldownRepository,
-                                          TenantPreferencesRepository tenantPreferencesRepository,
+                                          TenantPreferencesQueryPort preferencesQuery,
                                           OwnerRecipientResolver ownerRecipientResolver,
-                                          StoreRepository storeRepository) {
-        this(notificationPort, whatsAppPort, cooldownRepository, tenantPreferencesRepository,
-             ownerRecipientResolver, storeRepository, Clock.systemUTC());
+                                          StoreQueryPort storeQuery) {
+        this(notificationPort, whatsAppPort, cooldownRepository, preferencesQuery,
+             ownerRecipientResolver, storeQuery, Clock.systemUTC());
     }
 
     /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
     StockAlertNotificationListener(NotificationPort notificationPort,
                                    WhatsAppPort whatsAppPort,
                                    NotificationCooldownRepository cooldownRepository,
-                                   TenantPreferencesRepository tenantPreferencesRepository,
+                                   TenantPreferencesQueryPort preferencesQuery,
                                    OwnerRecipientResolver ownerRecipientResolver,
-                                   StoreRepository storeRepository,
+                                   StoreQueryPort storeQuery,
                                    Clock clock) {
         this.clock = clock;
         this.notificationPort = notificationPort;
         this.whatsAppPort = whatsAppPort;
         this.cooldownRepository = cooldownRepository;
-        this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.preferencesQuery = preferencesQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
     }
 
     @Async
@@ -96,7 +96,7 @@ public class StockAlertNotificationListener {
             TenantContext.setCurrentTenant(event.tenantId());
 
             // AC1: check preferences
-            TenantPreferences prefs = tenantPreferencesRepository.findByCurrentTenant().orElse(null);
+            TenantPreferencesView prefs = preferencesQuery.find(TenantContext.getCurrentTenant()).orElse(null);
             if (prefs == null || !prefs.stockAlertEnabled()) {
                 log.debug("[STOCK-ALERT] Stock alerts disabled for tenant={}", event.tenantId());
                 return;
@@ -106,7 +106,7 @@ public class StockAlertNotificationListener {
                     ? prefs.stockAlertChannel()
                     : StockAlertChannel.PUSH;
 
-            String storeName = storeRepository.findById(event.storeId())
+            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), event.storeId())
                     .map(s -> s.name())
                     .orElse("Boutique");
 

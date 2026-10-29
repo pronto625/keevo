@@ -10,6 +10,7 @@ import java.util.UUID;
  * <p>Pure Java record — NO Spring, JPA, or framework imports.
  * Observer pattern: captured by {@code AuditEventListener}.
  */
+@org.springframework.modulith.NamedInterface("events")
 public record AccountDeletionCancelledEvent(
     UUID tenantId,
     UUID actorId,

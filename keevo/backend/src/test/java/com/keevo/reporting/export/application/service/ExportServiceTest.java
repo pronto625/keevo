@@ -1,8 +1,10 @@
 package com.keevo.reporting.export.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.application.port.export.ExportPage;
 import com.keevo.reporting.export.SyntheticExportProvider;
@@ -65,6 +67,17 @@ import static org.mockito.Mockito.when;
 @DisplayName("ExportService (v1s-18-1)")
 class ExportServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     private static final String TENANT = "kv_abc123";
     private static final Instant NOW = Instant.parse("2026-10-12T12:30:00Z"); // 13:30 WAT
     private static final UUID ACTOR = UUID.randomUUID();
@@ -125,7 +138,7 @@ class ExportServiceTest {
                 new ExportRendererRegistry(renderers),
                 new ExportStreamingWriter(1000), jobRepository, storage,
                 new ExportRateLimiter(maxRequestsPerHour, 3, jobRepository, clock), signer,
-                subscriptionRepository, eventPublisher, tenantRepository, executor, jobRunner, props, clock);
+                SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner, props, clock);
     }
 
     private void plan(PlanType type, SubscriptionStatus status) {
@@ -292,7 +305,7 @@ class ExportServiceTest {
             ExportService s = new ExportService(new ExportDatasetRegistry(List.of(five, fivePlus)),
                     new ExportRendererRegistry(List.of(new CsvExportRenderer())), new ExportStreamingWriter(1000),
                     jobRepository, storage, new ExportRateLimiter(30, 3, jobRepository, clock), signer,
-                    subscriptionRepository, eventPublisher, tenantRepository, executor, jobRunner,
+                    SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
                     new ExportProperties(), clock);
 
             assertThat(s.request(TENANT, ACTOR, req(ExportFormat.CSV, "five"), direct))
@@ -315,7 +328,7 @@ class ExportServiceTest {
             ExportService s = new ExportService(new ExportDatasetRegistry(List.of(noCount)),
                     new ExportRendererRegistry(List.of(new CsvExportRenderer())), new ExportStreamingWriter(1000),
                     jobRepository, storage, new ExportRateLimiter(30, 3, jobRepository, clock), signer,
-                    subscriptionRepository, eventPublisher, tenantRepository, executor, jobRunner,
+                    SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
                     new ExportProperties(), clock);
             assertThat(s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct))
                     .isInstanceOf(RequestExportUseCase.Direct.class);
@@ -336,7 +349,7 @@ class ExportServiceTest {
             ExportService s = new ExportService(new ExportDatasetRegistry(List.of(failing)),
                     new ExportRendererRegistry(List.of(new CsvExportRenderer())), new ExportStreamingWriter(1000),
                     jobRepository, storage, new ExportRateLimiter(30, 3, jobRepository, clock), signer,
-                    subscriptionRepository, eventPublisher, tenantRepository, executor, jobRunner,
+                    SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
                     new ExportProperties(), clock);
 
             assertThatThrownBy(() -> s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct))

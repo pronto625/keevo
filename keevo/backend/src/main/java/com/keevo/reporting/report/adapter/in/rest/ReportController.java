@@ -1,9 +1,9 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.commerce.api.DayClosureQueryPort;
+import com.keevo.commerce.api.DayClosureView;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportListResponseDto;
 import com.keevo.reporting.report.adapter.in.rest.dto.ReportResponseDto;
 import com.keevo.reporting.report.application.service.WeeklyReportWindowResolver;
@@ -22,7 +22,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.PageRequest;
@@ -71,8 +71,8 @@ public class ReportController {
     private final ResendReportUseCase resendReportUseCase;
     private final GenerateWeeklyReportUseCase weeklyReportGenerator;
     private final GenerateEndOfDayReportUseCase dailyReportGenerator;
-    private final StoreRepository storeRepository;
-    private final DayClosureRepository dayClosureRepository;
+    private final StoreQueryPort storeQuery;
+    private final DayClosureQueryPort dayClosureQueryPort;
     private final WeeklyReportWindowResolver weeklyWindowResolver;
     private final EndOfDayReportRepository reportRepository;
     /** v1s-13-11 follow-up: same Clock bean as WeeklyReportScheduler (deterministic window tests). */
@@ -82,8 +82,8 @@ public class ReportController {
                              ResendReportUseCase resendReportUseCase,
                              GenerateWeeklyReportUseCase weeklyReportGenerator,
                              GenerateEndOfDayReportUseCase dailyReportGenerator,
-                             StoreRepository storeRepository,
-                             DayClosureRepository dayClosureRepository,
+                             StoreQueryPort storeQuery,
+                             DayClosureQueryPort dayClosureQueryPort,
                              WeeklyReportWindowResolver weeklyWindowResolver,
                              EndOfDayReportRepository reportRepository,
                              Clock clock) {
@@ -91,8 +91,8 @@ public class ReportController {
         this.resendReportUseCase = resendReportUseCase;
         this.weeklyReportGenerator = weeklyReportGenerator;
         this.dailyReportGenerator = dailyReportGenerator;
-        this.storeRepository = storeRepository;
-        this.dayClosureRepository = dayClosureRepository;
+        this.storeQuery = storeQuery;
+        this.dayClosureQueryPort = dayClosureQueryPort;
         this.weeklyWindowResolver = weeklyWindowResolver;
         this.reportRepository = reportRepository;
         this.clock = clock;
@@ -157,19 +157,19 @@ public class ReportController {
         String tenantId = TenantContext.getCurrentTenant();
         LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now(WAT);
 
-        java.util.List<DayClosure> closures = dayClosureRepository.findByStoreIdAndDate(storeId, targetDate);
+        java.util.List<DayClosureView> closures = dayClosureQueryPort.findByStoreAndDate(storeId, targetDate);
         if (closures.isEmpty()) {
             throw new DomainException(ErrorCode.NOT_FOUND,
                     "Aucune clôture trouvée pour storeId=" + storeId + " date=" + targetDate);
         }
-        DayClosure closure = closures.get(0);
+        DayClosureView closure = closures.get(0);
 
         var cmd = new GenerateReportCommand(
                 storeId,
                 null,                       // store-level report (owner only)
                 tenantId,
-                closure.isAutomatic(),
-                closure.getClosedAt(),
+                closure.automatic(),
+                closure.closedAt(),
                 null,                       // windowStart=null → defaults to start-of-day WAT
                 ReportChannel.IN_APP_ONLY   // recovery: persist only, no WhatsApp re-send
         );
@@ -195,7 +195,7 @@ public class ReportController {
         var generatedStoreIds = reportRepository.findByDateAndTenant(weekEndDate, tenantId, ReportType.WEEKLY)
                 .stream().map(EndOfDayReport::getStoreId).collect(java.util.stream.Collectors.toSet());
 
-        storeRepository.findAllActive().forEach(store -> {
+        storeQuery.findAllActive(TenantContext.getCurrentTenant()).forEach(store -> {
             if (generatedStoreIds.contains(store.id())) {
                 return;
             }

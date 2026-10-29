@@ -1,6 +1,6 @@
 package com.keevo.inventory.stock.domain.model;
 
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;

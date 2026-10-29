@@ -1,9 +1,8 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
-import com.keevo.identity.onboarding.domain.model.TenantPreferences;
-import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -34,14 +33,14 @@ public class EndOfDayReportListener {
 
     private final GenerateEndOfDayReportUseCase generateReportUseCase;
     private final EndOfDayReportBuilder builder;
-    private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final TenantPreferencesQueryPort preferencesQuery;
 
     public EndOfDayReportListener(GenerateEndOfDayReportUseCase generateReportUseCase,
                                   EndOfDayReportBuilder builder,
-                                  TenantPreferencesRepository tenantPreferencesRepository) {
+                                  TenantPreferencesQueryPort preferencesQuery) {
         this.generateReportUseCase = generateReportUseCase;
         this.builder = builder;
-        this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.preferencesQuery = preferencesQuery;
     }
 
     /**
@@ -124,7 +123,7 @@ public class EndOfDayReportListener {
      * Defaults to WHATSAPP when no preference record exists (safe fallback for legacy tenants).
      */
     private ReportChannel resolveEodChannel() {
-        return tenantPreferencesRepository.findByCurrentTenant()
+        return preferencesQuery.find(TenantContext.getCurrentTenant())
                 .map(prefs -> prefs.eodReportEnabled()
                         ? (prefs.eodReportChannel() != null ? prefs.eodReportChannel() : ReportChannel.WHATSAPP)
                         : null)

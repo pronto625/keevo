@@ -1,22 +1,21 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.commerce.sale.domain.model.Sale;
-import com.keevo.commerce.sale.domain.model.SaleDraftProductsUpgradedEvent;
-import com.keevo.commerce.sale.domain.model.SaleManuallyValidatedEvent;
-import com.keevo.commerce.sale.domain.model.SalePendingValidationEvent;
-import com.keevo.commerce.sale.domain.port.out.SaleRepository;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.employee.domain.model.Employee;
-import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
-import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.commerce.api.SaleQueryPort;
+import com.keevo.commerce.api.SaleView;
+import com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent;
+import com.keevo.commerce.sale.domain.event.SaleManuallyValidatedEvent;
+import com.keevo.commerce.sale.domain.event.SalePendingValidationEvent;
+import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.UserQueryPort;
+import com.keevo.identity.api.EmployeeQueryPort;
+import com.keevo.identity.api.StockAlertChannel;
+import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreView;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -41,30 +40,30 @@ public class SaleDraftValidatedNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(SaleDraftValidatedNotificationListener.class);
 
-    private final SaleRepository saleRepository;
-    private final EmployeeRepository employeeRepository;
-    private final StoreRepository storeRepository;
-    private final UserRepository userRepository;
+    private final SaleQueryPort saleQueryPort;
+    private final EmployeeQueryPort employeeQuery;
+    private final StoreQueryPort storeQuery;
+    private final UserQueryPort userQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
-    private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final TenantPreferencesQueryPort preferencesQuery;
     private final NotificationPort notificationPort;
     private final WhatsAppPort whatsAppPort;
 
     public SaleDraftValidatedNotificationListener(
-            SaleRepository saleRepository,
-            EmployeeRepository employeeRepository,
-            StoreRepository storeRepository,
-            UserRepository userRepository,
+            SaleQueryPort saleQueryPort,
+            EmployeeQueryPort employeeQuery,
+            StoreQueryPort storeQuery,
+            UserQueryPort userQuery,
             OwnerRecipientResolver ownerRecipientResolver,
-            TenantPreferencesRepository tenantPreferencesRepository,
+            TenantPreferencesQueryPort preferencesQuery,
             NotificationPort notificationPort,
             WhatsAppPort whatsAppPort) {
-        this.saleRepository = saleRepository;
-        this.employeeRepository = employeeRepository;
-        this.storeRepository = storeRepository;
-        this.userRepository = userRepository;
+        this.saleQueryPort = saleQueryPort;
+        this.employeeQuery = employeeQuery;
+        this.storeQuery = storeQuery;
+        this.userQuery = userQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
-        this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.preferencesQuery = preferencesQuery;
         this.notificationPort = notificationPort;
         this.whatsAppPort = whatsAppPort;
     }
@@ -81,27 +80,26 @@ public class SaleDraftValidatedNotificationListener {
         try {
             TenantContext.setCurrentTenant(event.tenantId());
 
-            Sale sale = saleRepository.findById(event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-VALIDATED] Sale {} not found — skipping notification", event.saleId());
                 return;
             }
 
             // Resolve employee display name
-            String employeeName = employeeRepository.findByUserId(sale.getEmployeeId())
-                    .map(e -> e.getFirstName() + " " + e.getLastName())
-                    .orElseGet(() -> userRepository.findById(sale.getEmployeeId())
-                            .map(u -> u.getPhoneNumber())
+            String employeeName = employeeQuery.findByUserId(TenantContext.getCurrentTenant(), sale.employeeId())
+                    .map(e -> e.firstName() + " " + e.lastName())
+                    .orElseGet(() -> userQuery.findPhoneNumber(sale.employeeId())
                             .orElse("Employé inconnu"));
 
             // Resolve store name
-            String storeName = storeRepository.findById(sale.getStoreId())
-                    .map(Store::name)
+            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), sale.storeId())
+                    .map(StoreView::name)
                     .orElse("Boutique");
 
             // Collect product names from sale items
-            String productNames = sale.getItems().stream()
-                    .map(item -> item.getProductName())
+            String productNames = sale.items().stream()
+                    .map(item -> item.productName())
                     .collect(Collectors.joining(", "));
 
             String title = "✅ Vente validée";
@@ -114,13 +112,13 @@ public class SaleDraftValidatedNotificationListener {
                     body,
                     deepLink,
                     Map.of("saleId", event.saleId().toString(),
-                            "storeId", sale.getStoreId().toString())
+                            "storeId", sale.storeId().toString())
             );
 
             // Resolve channel preference (falls back to PUSH if prefs not found)
             // TenantContext already set above so findByCurrentTenant() resolves correctly.
-            StockAlertChannel channel = tenantPreferencesRepository
-                    .findByCurrentTenant()
+            StockAlertChannel channel = preferencesQuery
+                    .find(TenantContext.getCurrentTenant())
                     .map(p -> p.stockAlertChannel())
                     .orElse(StockAlertChannel.PUSH);
 
@@ -166,24 +164,23 @@ public class SaleDraftValidatedNotificationListener {
         try {
             TenantContext.setCurrentTenant(event.tenantId());
 
-            Sale sale = saleRepository.findById(event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-PENDING] Sale {} not found — skipping notification", event.saleId());
                 return;
             }
 
-            String employeeName = employeeRepository.findByUserId(sale.getEmployeeId())
-                    .map(e -> e.getFirstName() + " " + e.getLastName())
-                    .orElseGet(() -> userRepository.findById(sale.getEmployeeId())
-                            .map(u -> u.getPhoneNumber())
+            String employeeName = employeeQuery.findByUserId(TenantContext.getCurrentTenant(), sale.employeeId())
+                    .map(e -> e.firstName() + " " + e.lastName())
+                    .orElseGet(() -> userQuery.findPhoneNumber(sale.employeeId())
                             .orElse("Employé inconnu"));
 
-            String storeName = storeRepository.findById(sale.getStoreId())
-                    .map(Store::name)
+            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), sale.storeId())
+                    .map(StoreView::name)
                     .orElse("Boutique");
 
-            String productNames = sale.getItems().stream()
-                    .map(item -> item.getProductName())
+            String productNames = sale.items().stream()
+                    .map(item -> item.productName())
                     .collect(Collectors.joining(", "));
 
             String title = "🔶 Vente en attente de validation";
@@ -201,8 +198,8 @@ public class SaleDraftValidatedNotificationListener {
                             "storeId", event.storeId().toString())
             );
 
-            StockAlertChannel channel = tenantPreferencesRepository
-                    .findByCurrentTenant()
+            StockAlertChannel channel = preferencesQuery
+                    .find(TenantContext.getCurrentTenant())
                     .map(p -> p.stockAlertChannel())
                     .orElse(StockAlertChannel.PUSH);
 
@@ -247,7 +244,7 @@ public class SaleDraftValidatedNotificationListener {
         try {
             TenantContext.setCurrentTenant(event.tenantId());
 
-            Sale sale = saleRepository.findById(event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-DRAFT-UPGRADED] Sale {} not found — skipping notification", event.saleId());
                 return;
@@ -258,19 +255,18 @@ public class SaleDraftValidatedNotificationListener {
             // seller's role travels on the event (draftsPromoted) — never inferred from the
             // Employee row (an owner may have one; an employee's row may be missing).
             boolean draftsPromoted = event.draftsPromoted();
-            String employeeName = employeeRepository.findByUserId(sale.getEmployeeId())
-                    .map(e -> e.getFirstName() + " " + e.getLastName())
-                    .orElseGet(() -> userRepository.findById(sale.getEmployeeId())
-                            .map(u -> u.getPhoneNumber())
+            String employeeName = employeeQuery.findByUserId(TenantContext.getCurrentTenant(), sale.employeeId())
+                    .map(e -> e.firstName() + " " + e.lastName())
+                    .orElseGet(() -> userQuery.findPhoneNumber(sale.employeeId())
                             .orElse("Employé inconnu"));
 
-            String storeName = storeRepository.findById(sale.getStoreId())
-                    .map(Store::name)
+            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), sale.storeId())
+                    .map(StoreView::name)
                     .orElse("Boutique");
 
-            String productNames = sale.getItems().stream()
-                    .filter(item -> event.originalDraftProductIds().contains(item.getProductId()))
-                    .map(item -> item.getProductName())
+            String productNames = sale.items().stream()
+                    .filter(item -> event.originalDraftProductIds().contains(item.productId()))
+                    .map(item -> item.productName())
                     .collect(Collectors.joining(", "));
 
             String title = draftsPromoted ? "🆕 Nouveaux produits activés" : "🆕 Produits brouillons vendus";
@@ -289,8 +285,8 @@ public class SaleDraftValidatedNotificationListener {
                             "storeId", event.storeId().toString())
             );
 
-            StockAlertChannel channel = tenantPreferencesRepository
-                    .findByCurrentTenant()
+            StockAlertChannel channel = preferencesQuery
+                    .find(TenantContext.getCurrentTenant())
                     .map(p -> p.stockAlertChannel())
                     .orElse(StockAlertChannel.PUSH);
 

@@ -6,6 +6,8 @@ import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.ValidateSaleService;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -131,6 +133,52 @@ class ValidateSaleServiceTest {
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof StockForcedZeroEvent);
+    }
+
+    // 12.2c: availability is read on the level that is decremented — the item's variant — as
+    // RecordSaleService does (previously the no-variant level was read, then the variant decremented).
+    private Sale pendingVariantSale(UUID variantId, UUID itemId) {
+        var items = List.of(new SaleItem(itemId, SALE_ID, PRODUCT_A, variantId, "Produit A — Rouge", 3000, 3000, 1));
+        return new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
+                PaymentMode.CASH, 3000, 0, SaleStatus.PENDING_VALIDATION, NOW, NOW, items);
+    }
+
+    @Test
+    void manualValidate_variantItem_checksAndDecrementsTheVariantLevel() {
+        UUID variantId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingVariantSale(variantId, itemId)));
+        when(stockQuery.availableQuantity(PRODUCT_A, variantId, STORE_ID)).thenReturn(1);
+        lenient().when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(0);
+
+        service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, null));
+
+        verify(stockQuery, never()).availableQuantity(PRODUCT_A, null, STORE_ID);
+        verify(stockCommand).recordMovement(argThat(m -> m.kind() == StockMovementKind.SALE
+                && PRODUCT_A.equals(m.productId()) && variantId.equals(m.variantId())
+                && m.quantityChange() == -1 && itemId.equals(m.movementId()) && !m.allowNegative()));
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).noneMatch(e -> e instanceof StockForcedZeroEvent);
+        assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof SaleCompletedEvent);
+    }
+
+    @Test
+    void manualValidate_variantItemWithoutVariantStock_isForcedToZeroWithoutDecrement() {
+        UUID variantId = UUID.randomUUID();
+        when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingVariantSale(variantId, UUID.randomUUID())));
+        when(stockQuery.availableQuantity(PRODUCT_A, variantId, STORE_ID)).thenReturn(0);
+        lenient().when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(5);
+
+        service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, null));
+
+        // Product-level stock 5 used to allow a -1 on the empty variant (INSUFFICIENT_STOCK
+        // from the inventory); now the variant level decides: forced to zero, nothing decremented.
+        verify(stockCommand, never()).recordMovement(any());
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+        assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof StockForcedZeroEvent f
+                && f.availableQuantity() == 0 && f.requestedQuantity() == 1);
     }
 
     @Test

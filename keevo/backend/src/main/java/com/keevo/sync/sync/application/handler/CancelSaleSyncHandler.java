@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase;
-import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
+import com.keevo.commerce.api.CancelSaleInput;
+import com.keevo.commerce.api.SaleCommandPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -16,10 +16,10 @@ import java.util.UUID;
 @Component
 public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
 
-    private final CancelPendingSaleUseCase cancelPendingSaleUseCase;
+    private final SaleCommandPort saleCommandPort;
 
-    public CancelSaleSyncHandler(CancelPendingSaleUseCase cancelPendingSaleUseCase) {
-        this.cancelPendingSaleUseCase = cancelPendingSaleUseCase;
+    public CancelSaleSyncHandler(SaleCommandPort saleCommandPort) {
+        this.saleCommandPort = saleCommandPort;
     }
 
     @Override
@@ -55,8 +55,8 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
         // (pendingOnly=true) so the status check and the cancellation are one atomic claim —
         // a sale validated concurrently is refused with FORBIDDEN too.
         UUID assignedStoreId = extractAssignedStoreId();
-        cancelPendingSaleUseCase.cancelPendingSale(
-                new CancelPendingSaleCommand(saleId, actorId, assignedStoreId, justification, true));
+        saleCommandPort.cancelSale(
+                new CancelSaleInput(saleId, actorId, assignedStoreId, justification, true));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 saleId.toString(), null);

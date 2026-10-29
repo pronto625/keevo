@@ -1,10 +1,10 @@
 package com.keevo.identity.employee.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;

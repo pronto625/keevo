@@ -1,5 +1,11 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.identity.api.Role;
+
+import com.keevo.identity.api.TenantStatus;
+
+import com.keevo.identity.api.PlanType;
+
 import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;

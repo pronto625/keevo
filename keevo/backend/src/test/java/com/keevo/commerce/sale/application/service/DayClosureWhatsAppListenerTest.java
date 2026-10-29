@@ -1,11 +1,12 @@
 package com.keevo.commerce.sale.application.service;
 
-import com.keevo.commerce.sale.domain.model.DayClosedEvent;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -48,7 +49,7 @@ class DayClosureWhatsAppListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new DayClosureWhatsAppListener(whatsAppPort, storeRepository, ownerRecipientResolver);
+        listener = new DayClosureWhatsAppListener(whatsAppPort, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver);
     }
 
     @AfterEach

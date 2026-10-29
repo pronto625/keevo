@@ -3,7 +3,7 @@ package com.keevo.commerce.sale.adapter.out.persistence.impl;
 import com.keevo.commerce.sale.adapter.out.persistence.entity.DayClosureJpaEntity;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.DayClosureSpringRepository;
 import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.api.DayClosureSummary;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import org.springframework.stereotype.Component;
 

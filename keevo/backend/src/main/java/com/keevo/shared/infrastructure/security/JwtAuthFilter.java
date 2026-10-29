@@ -1,7 +1,7 @@
 package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.identity.auth.domain.port.out.TokenRevocationPort;
+import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;

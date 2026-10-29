@@ -1,13 +1,14 @@
 package com.keevo.store.store.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.event.StoreReactivatedEvent;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.in.ReactivateStoreCommand;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
@@ -19,7 +20,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,7 +44,7 @@ class ReactivateStoreServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock TransactionLockPort transactionLock;
 
-    @InjectMocks ReactivateStoreService service;
+    ReactivateStoreService service;
 
     UUID storeId;
     UUID actorId;
@@ -53,6 +53,9 @@ class ReactivateStoreServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 12.2d: real subscription API adapters over the mocked repository / guard
+        service = new ReactivateStoreService(storeRepository, SubscriptionApiTestSupport.queryPort(subscriptionRepository),
+                SubscriptionApiTestSupport.limitPort(planLimitGuard), eventPublisher, transactionLock);
         TenantContext.setCurrentTenant("kv_abc123");
         storeId = UUID.randomUUID();
         actorId = UUID.randomUUID();

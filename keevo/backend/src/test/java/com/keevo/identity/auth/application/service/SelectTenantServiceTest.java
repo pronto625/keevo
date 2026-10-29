@@ -1,10 +1,10 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.in.SelectTenantCommand;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;

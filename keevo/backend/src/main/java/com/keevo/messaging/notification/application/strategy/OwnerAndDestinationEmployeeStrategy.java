@@ -1,9 +1,10 @@
 package com.keevo.messaging.notification.application.strategy;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.employee.domain.model.Employee;
-import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.identity.api.UserQueryPort;
+import com.keevo.identity.api.EmployeeView;
+import com.keevo.identity.api.EmployeeQueryPort;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,13 +24,13 @@ import java.util.stream.Collectors;
 @Component
 public class OwnerAndDestinationEmployeeStrategy implements TransferNotificationRecipientStrategy {
 
-    private final UserRepository userRepository;
-    private final EmployeeRepository employeeRepository;
+    private final UserQueryPort userQuery;
+    private final EmployeeQueryPort employeeQuery;
 
-    public OwnerAndDestinationEmployeeStrategy(UserRepository userRepository,
-                                               EmployeeRepository employeeRepository) {
-        this.userRepository = userRepository;
-        this.employeeRepository = employeeRepository;
+    public OwnerAndDestinationEmployeeStrategy(UserQueryPort userQuery,
+                                               EmployeeQueryPort employeeQuery) {
+        this.userQuery = userQuery;
+        this.employeeQuery = employeeQuery;
     }
 
     @Override
@@ -38,18 +39,14 @@ public class OwnerAndDestinationEmployeeStrategy implements TransferNotification
 
         // 1. All OWNER users of the tenant
         recipients.addAll(
-                userRepository.findOwnersByTenantSchemaName(event.tenantId())
-                        .stream()
-                        .map(user -> user.getId())
-                        .collect(Collectors.toList())
+                userQuery.findOwnerUserIds(event.tenantId())
         );
 
         // 2. All ACTIVE EMPLOYEE users assigned to the destination store
-        // (findByStoreId already filters by ACTIVE status via EmployeeRepositoryAdapter)
-        List<UUID> destinationEmployeeUserIds = employeeRepository
-                .findByStoreId(event.destinationStoreId())
+        // (findActiveByStoreId keeps ACTIVE employees only)
+        List<UUID> destinationEmployeeUserIds = employeeQuery.findActiveByStoreId(TenantContext.getCurrentTenant(), event.destinationStoreId())
                 .stream()
-                .map(Employee::getUserId)
+                .map(EmployeeView::userId)
                 .collect(Collectors.toList());
         recipients.addAll(destinationEmployeeUserIds);
 

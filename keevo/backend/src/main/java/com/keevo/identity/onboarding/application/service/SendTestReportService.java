@@ -1,13 +1,14 @@
 package com.keevo.identity.onboarding.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
+import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.reporting.report.application.service.DailyReportFormatter;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
-import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreView;
+import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -32,18 +33,18 @@ public class SendTestReportService implements SendTestReportUseCase {
     private final EndOfDayReportBuilder reportBuilder;
     private final DailyReportFormatter formatter;
     private final WhatsAppPort whatsAppPort;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
     public SendTestReportService(EndOfDayReportBuilder reportBuilder,
                                  DailyReportFormatter formatter,
                                  WhatsAppPort whatsAppPort,
-                                 StoreRepository storeRepository,
+                                 StoreQueryPort storeQuery,
                                  OwnerRecipientResolver ownerRecipientResolver) {
         this.reportBuilder = reportBuilder;
         this.formatter = formatter;
         this.whatsAppPort = whatsAppPort;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
@@ -63,12 +64,12 @@ public class SendTestReportService implements SendTestReportUseCase {
         }
 
         // Pick first active store (test report uses empty window)
-        List<Store> stores = storeRepository.findAllActive();
+        List<StoreView> stores = storeQuery.findAllActive(TenantContext.getCurrentTenant());
         if (stores.isEmpty()) {
             return new TestReportResult(false);
         }
 
-        Store store = stores.get(0);
+        StoreView store = stores.get(0);
         Instant now = Instant.now();
 
         try {

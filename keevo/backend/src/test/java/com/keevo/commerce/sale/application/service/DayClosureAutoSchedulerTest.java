@@ -1,22 +1,27 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.onboarding.domain.model.ReportChannel;
+import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.SectorType;
-import com.keevo.identity.onboarding.domain.model.StockAlertChannel;
+import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,8 +69,8 @@ class DayClosureAutoSchedulerTest {
         // Default: Monday 20:05 WAT
         Clock defaultClock = fixedClockAt(MONDAY_DATE, "20:05:00", WAT);
         scheduler = new DayClosureAutoScheduler(
-                tenantRepository, storeRepository, dayClosureRepository,
-                closeDayUseCase, tenantPreferencesRepository, defaultClock);
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository), dayClosureRepository,
+                closeDayUseCase, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), defaultClock);
     }
 
     // ── Existing tests adapted for Clock + TenantPreferencesRepository ──────
@@ -234,8 +239,8 @@ class DayClosureAutoSchedulerTest {
     void shouldNotFireEodBeforeConfiguredTime() {
         // Given: Monday 19:30 WAT + prefs eodReportTime="20:00:00"
         Clock earlyClock = fixedClockAt(MONDAY_DATE, "19:30:00", WAT);
-        scheduler = new DayClosureAutoScheduler(tenantRepository, storeRepository,
-                dayClosureRepository, closeDayUseCase, tenantPreferencesRepository, earlyClock);
+        scheduler = new DayClosureAutoScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository),
+                dayClosureRepository, closeDayUseCase, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), earlyClock);
 
         var tenant = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
         when(tenantRepository.findAll()).thenReturn(List.of(tenant));

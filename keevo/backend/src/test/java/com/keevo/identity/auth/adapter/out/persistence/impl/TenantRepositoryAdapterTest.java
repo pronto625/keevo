@@ -2,9 +2,9 @@ package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.TenantSpringRepository;
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

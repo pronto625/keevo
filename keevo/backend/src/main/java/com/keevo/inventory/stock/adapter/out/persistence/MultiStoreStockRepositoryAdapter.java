@@ -7,7 +7,7 @@ import com.keevo.inventory.stock.domain.model.StoreStockSummary;
 import com.keevo.inventory.stock.domain.port.out.MultiStoreStockRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;

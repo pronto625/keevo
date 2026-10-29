@@ -41,8 +41,9 @@ class ApplicationModulesBaselineTest {
      */
     static final Pattern MODULE_DEPENDENCY =
         Pattern.compile("^Module '([^']+)' depends on (?:module|named interface\\(s\\)) '([^']+)' via .* Allowed targets: (.*?)\\.?$", Pattern.DOTALL);
-    /** Modules whose public API is published (12.2a catalog/crm, 12.2b inventory): internals are off-limits. */
-    static final Set<String> PUBLISHED_API_MODULES = Set.of("catalog", "crm", "inventory");
+    /** Modules whose public API is published (12.2a catalog/crm, 12.2b inventory, 12.2c commerce, 12.2d identity/store/subscription): internals are off-limits. */
+    static final Set<String> PUBLISHED_API_MODULES =
+        Set.of("catalog", "crm", "inventory", "commerce", "identity", "store", "subscription");
 
     static final Pattern NON_EXPOSED_TYPE =
         Pattern.compile("^Module '([^']+)' depends on non-exposed type .* within module '([^']+)'.*", Pattern.DOTALL);
@@ -89,10 +90,10 @@ class ApplicationModulesBaselineTest {
         assertThat(messages.stream().filter(m -> isModuleDependency(m, false)).toList())
             .as("not-allowed module dependencies (undeclared target) — see " + VIOLATIONS_FILE)
             .isEmpty();
-        // 12.2a/12.2b pinned: no module but shared reaches into catalog/crm/inventory internals
+        // 12.2a–12.2d pinned: no module but shared reaches into a published module's internals
         // (a missing type-level @NamedInterface("events") on a new event lands here too).
         assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessToPublishedModule).toList())
-            .as("non-exposed access to catalog/crm/inventory internals (use their 'api'/'events') — see " + VIOLATIONS_FILE)
+            .as("non-exposed access to published-module internals (use their 'api'/'events') — see " + VIOLATIONS_FILE)
             .isEmpty();
     }
 

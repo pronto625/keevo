@@ -1,6 +1,6 @@
 package com.keevo.subscription.plan.adapter.out.persistence.impl;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.subscription.plan.adapter.out.persistence.entity.SubscriptionJpaEntity;
 import com.keevo.subscription.plan.adapter.out.persistence.jpa.SubscriptionSpringRepository;
 import com.keevo.subscription.plan.domain.model.Subscription;

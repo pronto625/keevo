@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
@@ -9,13 +10,12 @@ import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -38,11 +38,21 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class UserProfileServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private UserRepository userRepository;
     @Mock private EmployeeRepository employeeRepository;
     @Mock private StoreRepository storeRepository;
 
-    @InjectMocks
     private UserProfileService sut;
 
     private UUID userId;
@@ -52,6 +62,8 @@ class UserProfileServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 12.2d: the real store API adapter over the mocked repository
+        sut = new UserProfileService(userRepository, employeeRepository, StoreApiTestSupport.queryPort(storeRepository));
         userId   = UUID.randomUUID();
         storeId  = UUID.randomUUID();
         tenantId = "kv_test123";

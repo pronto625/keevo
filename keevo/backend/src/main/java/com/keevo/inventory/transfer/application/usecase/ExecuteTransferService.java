@@ -15,7 +15,7 @@ import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,7 +43,7 @@ import java.util.UUID;
 @Service
 public class ExecuteTransferService implements TransferStockUseCase {
 
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final StockLevelRepository stockLevelRepository;
     private final StockOperationService stockOperationService;
     private final StockTransferRepository transferRepository;
@@ -52,14 +52,14 @@ public class ExecuteTransferService implements TransferStockUseCase {
     private final TransactionLockPort transactionLock;
 
     public ExecuteTransferService(
-            StoreRepository storeRepository,
+            StoreQueryPort storeQuery,
             StockLevelRepository stockLevelRepository,
             StockOperationService stockOperationService,
             StockTransferRepository transferRepository,
             TransferValidationStrategy validationStrategy,
             ApplicationEventPublisher eventPublisher,
             TransactionLockPort transactionLock) {
-        this.storeRepository     = storeRepository;
+        this.storeQuery     = storeQuery;
         this.stockLevelRepository = stockLevelRepository;
         this.stockOperationService = stockOperationService;
         this.transferRepository  = transferRepository;
@@ -86,13 +86,13 @@ public class ExecuteTransferService implements TransferStockUseCase {
         }
 
         // 1. Assert source store exists
-        storeRepository.findById(command.sourceStoreId())
+        storeQuery.findById(TenantContext.getCurrentTenant(), command.sourceStoreId())
             .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
                 "Source store not found: " + command.sourceStoreId()));
 
         // 2. Assert destination store exists (unless same — validation will catch it)
         if (!command.sourceStoreId().equals(command.destinationStoreId())) {
-            storeRepository.findById(command.destinationStoreId())
+            storeQuery.findById(TenantContext.getCurrentTenant(), command.destinationStoreId())
                 .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
                     "Destination store not found: " + command.destinationStoreId()));
         }

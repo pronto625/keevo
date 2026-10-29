@@ -5,6 +5,8 @@ import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.SaleValidationCascadeService;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -99,6 +101,46 @@ class SaleValidationCascadeServiceTest {
         assertThat(completed.getItemsSnapshot())
                 .contains(PRODUCT_A.toString())
                 .contains(PRODUCT_B.toString());
+    }
+
+    // 12.2c: the cascade checks the level it decrements — the item's variant — as RecordSaleService.
+    private Sale pendingVariantSale(UUID variantId, UUID itemId) {
+        var items = List.of(new SaleItem(itemId, SALE_ID, PRODUCT_A, variantId, "Produit A — Rouge", 3000, 3000, 1));
+        return new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
+                PaymentMode.CASH, 3000, 0, SaleStatus.PENDING_VALIDATION, NOW, NOW, items);
+    }
+
+    @Test
+    void onProductActivated_variantItem_withVariantStock_validatesOnTheVariantLevel() {
+        UUID variantId = UUID.randomUUID();
+        UUID itemId = UUID.randomUUID();
+        when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pendingVariantSale(variantId, itemId)));
+        when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
+        when(stockQuery.availableQuantity(PRODUCT_A, variantId, STORE_ID)).thenReturn(1);
+        lenient().when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(0);
+
+        service.onProductActivated(PRODUCT_A, ACTOR_ID);
+
+        verify(stockQuery, never()).availableQuantity(PRODUCT_A, null, STORE_ID);
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
+        verify(stockCommand).recordMovement(argThat(m -> m.kind() == StockMovementKind.SALE
+                && variantId.equals(m.variantId()) && m.quantityChange() == -1 && itemId.equals(m.movementId())));
+    }
+
+    @Test
+    void onProductActivated_variantItem_withoutVariantStock_saleStaysPending() {
+        UUID variantId = UUID.randomUUID();
+        when(saleRepository.findPendingByProductId(PRODUCT_A))
+                .thenReturn(List.of(pendingVariantSale(variantId, UUID.randomUUID())));
+        when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
+        when(stockQuery.availableQuantity(PRODUCT_A, variantId, STORE_ID)).thenReturn(0);
+        lenient().when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(5);
+
+        service.onProductActivated(PRODUCT_A, ACTOR_ID);
+
+        verify(saleRepository, never()).updateStatusIfCurrent(any(), any(), any());
+        verifyNoInteractions(stockCommand);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 
     @Test

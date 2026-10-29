@@ -2,8 +2,8 @@ package com.keevo.admin.tenant.adapter.in.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
-import com.keevo.subscription.plan.adapter.in.rest.dto.ActivatePlanRequest;
-import com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase;
+import com.keevo.admin.tenant.adapter.in.rest.dto.ActivatePlanRequest;
+import com.keevo.subscription.api.PlanAdministrationPort;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,7 +44,7 @@ class AdminSubscriptionControllerTest {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
 
-    @MockitoBean ActivatePlanUseCase activatePlanUseCase;
+    @MockitoBean PlanAdministrationPort planAdministration;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -54,7 +54,7 @@ class AdminSubscriptionControllerTest {
     @DisplayName("POST /{tenantId}/activate with SUPER_ADMIN → 200")
     void activatePlan_withSuperAdminRole_returns200() throws Exception {
         setupFilterAs("ROLE_SUPER_ADMIN");
-        doNothing().when(activatePlanUseCase).execute(any());
+        doNothing().when(planAdministration).activatePlan(any());
 
         ActivatePlanRequest request = new ActivatePlanRequest(
                 "PREMIUM", Instant.now().plus(365, ChronoUnit.DAYS));
@@ -64,7 +64,7 @@ class AdminSubscriptionControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk());
 
-        verify(activatePlanUseCase).execute(any());
+        verify(planAdministration).activatePlan(any());
     }
 
     @Test
@@ -80,7 +80,7 @@ class AdminSubscriptionControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isForbidden()); // FORBIDDEN = 403 (authenticated but wrong role)
 
-        verify(activatePlanUseCase, never()).execute(any());
+        verify(planAdministration, never()).activatePlan(any());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -113,7 +113,7 @@ class AdminSubscriptionControllerTest {
                                 "PREMIUM", Instant.now().plus(365, ChronoUnit.DAYS)))))
                 .andExpect(status().isUnauthorized());
 
-        verifyNoInteractions(activatePlanUseCase);
+        verifyNoInteractions(planAdministration);
     }
 
     @Test
@@ -128,6 +128,6 @@ class AdminSubscriptionControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
 
-        verify(activatePlanUseCase, never()).execute(any());
+        verify(planAdministration, never()).activatePlan(any());
     }
 }

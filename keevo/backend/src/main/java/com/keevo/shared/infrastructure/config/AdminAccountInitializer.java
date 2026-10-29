@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.config;
 
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.adapter.out.persistence.entity.TenantJpaEntity;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;

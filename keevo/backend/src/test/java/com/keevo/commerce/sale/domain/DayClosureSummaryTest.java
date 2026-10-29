@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain;
 
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.api.DayClosureSummary;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;

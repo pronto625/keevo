@@ -28,7 +28,7 @@ import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
 import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
 import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
 import com.keevo.inventory.counting.domain.event.InventoryReportGeneratedEvent;
 import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;

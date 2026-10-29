@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
@@ -8,9 +9,9 @@ import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
-import com.keevo.identity.employee.domain.model.Employee;
-import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.EmployeeView;
+import com.keevo.identity.api.EmployeeQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -31,16 +32,16 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
     private final EndOfDayReportRepository reportRepository;
     private final WhatsAppPort whatsAppPort;
     private final OwnerRecipientResolver ownerRecipientResolver;
-    private final EmployeeRepository employeeRepository;
+    private final EmployeeQueryPort employeeQuery;
 
     public ReportHistoryService(EndOfDayReportRepository reportRepository,
                                  WhatsAppPort whatsAppPort,
                                  OwnerRecipientResolver ownerRecipientResolver,
-                                 EmployeeRepository employeeRepository) {
+                                 EmployeeQueryPort employeeQuery) {
         this.reportRepository = reportRepository;
         this.whatsAppPort = whatsAppPort;
         this.ownerRecipientResolver = ownerRecipientResolver;
-        this.employeeRepository = employeeRepository;
+        this.employeeQuery = employeeQuery;
     }
 
     @Override
@@ -61,8 +62,8 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
      */
     private UUID reportActorId(UUID actorId) {
         if (actorId == null) return null;
-        return employeeRepository.findById(actorId)
-                .map(Employee::getUserId)
+        return employeeQuery.findById(TenantContext.getCurrentTenant(), actorId)
+                .map(EmployeeView::userId)
                 .filter(java.util.Objects::nonNull)
                 .orElse(actorId);
     }

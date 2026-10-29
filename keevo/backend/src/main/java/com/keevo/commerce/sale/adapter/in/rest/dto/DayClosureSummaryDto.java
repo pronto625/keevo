@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.adapter.in.rest.dto;
 
-import com.keevo.commerce.sale.domain.model.DayClosureSummary;
+import com.keevo.commerce.api.DayClosureSummary;
 
 import java.time.Instant;
 import java.util.UUID;

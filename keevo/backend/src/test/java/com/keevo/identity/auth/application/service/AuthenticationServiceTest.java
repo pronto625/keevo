@@ -1,6 +1,6 @@
 package com.keevo.identity.auth.application.service;
 
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;

@@ -1,17 +1,18 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.identity.auth.domain.port.out.OwnerRecipientResolver;
-import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
+import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.EmployeeQueryPort;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.stereotype.Service;
 
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,29 +35,29 @@ public class DailyReportGenerator extends AbstractReportGenerator
 
     private final EndOfDayReportBuilder builder;
     private final DailyReportFormatter formatter;
-    private final StoreRepository storeRepository;
+    private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
-    private final EmployeeRepository employeeRepository;
+    private final EmployeeQueryPort employeeQuery;
 
     public DailyReportGenerator(EndOfDayReportRepository reportRepository,
                                  WhatsAppPort whatsAppPort,
                                  MultiStoreSummaryService multiStoreSummaryService,
                                  EndOfDayReportBuilder builder,
                                  DailyReportFormatter formatter,
-                                 StoreRepository storeRepository,
+                                 StoreQueryPort storeQuery,
                                  OwnerRecipientResolver ownerRecipientResolver,
-                                 EmployeeRepository employeeRepository) {
+                                 EmployeeQueryPort employeeQuery) {
         super(reportRepository, whatsAppPort, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
-        this.storeRepository = storeRepository;
+        this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
-        this.employeeRepository = employeeRepository;
+        this.employeeQuery = employeeQuery;
     }
 
     @Override
     protected EndOfDayReportData collectData(GenerateReportCommand command) {
-        String storeName = storeRepository.findById(command.storeId())
+        String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), command.storeId())
                 .map(s -> s.name())
                 .orElse("Boutique #" + command.storeId().toString().substring(0, 8));
 
@@ -94,9 +95,9 @@ public class DailyReportGenerator extends AbstractReportGenerator
      * reste accepté en repli pour les anciens appelants.
      */
     private String resolveEmployeeName(UUID actorId) {
-        return employeeRepository.findByUserId(actorId)
-                .or(() -> employeeRepository.findById(actorId))
-                .map(e -> java.util.stream.Stream.of(e.getFirstName(), e.getLastName())
+        return employeeQuery.findByUserId(TenantContext.getCurrentTenant(), actorId)
+                .or(() -> employeeQuery.findById(TenantContext.getCurrentTenant(), actorId))
+                .map(e -> java.util.stream.Stream.of(e.firstName(), e.lastName())
                         .filter(p -> p != null && !p.isBlank())
                         .map(String::trim)
                         .collect(java.util.stream.Collectors.joining(" ")))

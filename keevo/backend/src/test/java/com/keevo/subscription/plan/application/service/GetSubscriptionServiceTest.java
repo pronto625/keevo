@@ -1,11 +1,11 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
+import com.keevo.identity.api.PlanType;
 import com.keevo.subscription.plan.adapter.in.rest.dto.SubscriptionResponse;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
 import com.keevo.subscription.plan.domain.port.in.GetSubscriptionQuery;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.StoreCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import com.keevo.subscription.plan.domain.port.out.UserCountPort;
@@ -45,7 +45,7 @@ class GetSubscriptionServiceTest {
     void execute_freePlan_returnsLimitsAndCurrentCounts() {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeActiveSub()));
         when(storeCountPort.countActiveStores()).thenReturn(1);
-        when(productCountPort.countActiveProducts()).thenReturn(87);
+        when(productCountPort.countActiveProducts(any())).thenReturn(87);
         when(userCountPort.countEmployees()).thenReturn(2);
 
         SubscriptionResponse response = service.execute(new GetSubscriptionQuery("user-1"));
@@ -68,7 +68,7 @@ class GetSubscriptionServiceTest {
     void execute_premiumTrialPlan_returnsUnlimitedLimitsWithExpiry() {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumTrialSub()));
         when(storeCountPort.countActiveStores()).thenReturn(5);
-        when(productCountPort.countActiveProducts()).thenReturn(1200);
+        when(productCountPort.countActiveProducts(any())).thenReturn(1200);
         when(userCountPort.countEmployees()).thenReturn(10);
 
         SubscriptionResponse response = service.execute(new GetSubscriptionQuery("user-2"));
@@ -90,7 +90,7 @@ class GetSubscriptionServiceTest {
     void execute_premiumPlan_returnsUnlimitedLimits() {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSub()));
         when(storeCountPort.countActiveStores()).thenReturn(3);
-        when(productCountPort.countActiveProducts()).thenReturn(450);
+        when(productCountPort.countActiveProducts(any())).thenReturn(450);
         when(userCountPort.countEmployees()).thenReturn(8);
 
         SubscriptionResponse response = service.execute(new GetSubscriptionQuery("user-3"));

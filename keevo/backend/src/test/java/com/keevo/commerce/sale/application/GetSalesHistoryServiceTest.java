@@ -1,6 +1,8 @@
 package com.keevo.commerce.sale.application;
 
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase.SalesHistoryQuery;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;

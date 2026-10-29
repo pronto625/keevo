@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
@@ -12,7 +13,7 @@ import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.inventory.counting.domain.service.InventoryGapReportBuilder;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,16 +36,16 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
     private final InventorySessionRepository sessionRepo;
     private final InventoryCountRepository countRepo;
     private final ProductQueryPort productQuery; // 12.2a: catalog public API
-    private final StoreRepository storeRepo;
+    private final StoreQueryPort storeQuery;
 
     public GenerateGapReportService(InventorySessionRepository sessionRepo,
                                      InventoryCountRepository countRepo,
                                      ProductQueryPort productQuery,
-                                     StoreRepository storeRepo) {
+                                     StoreQueryPort storeQuery) {
         this.sessionRepo = sessionRepo;
         this.countRepo = countRepo;
         this.productQuery = productQuery;
-        this.storeRepo = storeRepo;
+        this.storeQuery = storeQuery;
     }
 
     @Override
@@ -64,7 +65,7 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
                 .collect(Collectors.toMap(ProductView::id, Function.identity()));
 
         // Step 4: Get store name
-        String storeName = storeRepo.findById(session.getStoreId())
+        String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), session.getStoreId())
                 .map(s -> s.name()).orElse("Boutique inconnue");
 
         // Step 5: Build report using Builder pattern

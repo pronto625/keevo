@@ -1,9 +1,10 @@
 package com.keevo.identity.employee.application.service;
 
-import com.keevo.identity.auth.domain.model.PlanType;
-import com.keevo.identity.auth.domain.model.Role;
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.identity.api.PlanType;
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
+import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
@@ -29,7 +30,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -52,6 +52,17 @@ import static org.mockito.Mockito.*;
 @DisplayName("CreateEmployeeService")
 class CreateEmployeeServiceTest {
 
+    // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12d() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock UserRepository userRepository;
     @Mock UserMembershipRepository membershipRepository;
     @Mock EmployeeRepository employeeRepository;
@@ -63,7 +74,7 @@ class CreateEmployeeServiceTest {
     @Mock PasswordEncoder passwordEncoder;
     @Mock TransactionLockPort transactionLock;
 
-    @InjectMocks CreateEmployeeService createEmployeeService;
+    CreateEmployeeService createEmployeeService;
 
     UUID actorId;
     UUID storeId;
@@ -71,6 +82,11 @@ class CreateEmployeeServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 12.2d: real subscription API adapters over the mocked repository / guard
+        createEmployeeService = new CreateEmployeeService(userRepository, membershipRepository, employeeRepository,
+                SubscriptionApiTestSupport.limitPort(planLimitGuard), employeeCountPort,
+                SubscriptionApiTestSupport.queryPort(subscriptionRepository), tenantRepository, passwordEncoder,
+                eventPublisher, transactionLock);
         actorId = UUID.randomUUID();
         storeId = UUID.randomUUID();
         premiumSubscription = mock(Subscription.class);

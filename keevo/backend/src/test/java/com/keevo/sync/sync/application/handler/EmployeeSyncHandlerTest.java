@@ -7,6 +7,8 @@ import com.keevo.identity.employee.domain.port.in.CreateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.in.DeactivateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.in.ReactivateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.in.ReassignStoreUseCase;
+import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -40,13 +42,17 @@ class EmployeeSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new EmployeeSyncHandler(createEmployee, reassignStore, deactivateEmployee, reactivateEmployee);
+        // 12.2d: the real identity employee API adapter over the mocked use cases
+        handler = new EmployeeSyncHandler(IdentityEmployeeApiTestSupport.commandPort(
+                createEmployee, reassignStore, deactivateEmployee, reactivateEmployee));
         SyncTestAuth.owner();
+        TenantContext.setCurrentTenant(TENANT_ID);
     }
 
     @AfterEach
     void tearDown() {
         SyncTestAuth.clear();
+        TenantContext.clear();
     }
 
     // Employee management is OWNER-only over REST; the sync push must not be a

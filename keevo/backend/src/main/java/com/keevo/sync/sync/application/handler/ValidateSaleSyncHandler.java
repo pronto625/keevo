@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
-import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
+import com.keevo.commerce.api.SaleCommandPort;
+import com.keevo.commerce.api.ValidateSaleInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -15,10 +15,10 @@ import java.util.stream.Collectors;
 @Component
 public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
 
-    private final ValidateSaleUseCase validateSaleUseCase;
+    private final SaleCommandPort saleCommandPort;
 
-    public ValidateSaleSyncHandler(ValidateSaleUseCase validateSaleUseCase) {
-        this.validateSaleUseCase = validateSaleUseCase;
+    public ValidateSaleSyncHandler(SaleCommandPort saleCommandPort) {
+        this.saleCommandPort = saleCommandPort;
     }
 
     @Override
@@ -60,8 +60,8 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
 
         try {
             UUID assignedStoreId = extractAssignedStoreId();
-            validateSaleUseCase.validateSale(
-                    new ValidateSaleCommand(saleId, actorId, assignedStoreId, justification, productIdRemappings, initialStockEntries));
+            saleCommandPort.validateSale(
+                    new ValidateSaleInput(saleId, actorId, assignedStoreId, justification, productIdRemappings, initialStockEntries));
         } catch (DomainException e) {
             // Idempotency: if the sale was already completed (e.g. cascade-validated after
             // PROMOTE_PRODUCT), treat the operation as successfully applied rather than rejected.

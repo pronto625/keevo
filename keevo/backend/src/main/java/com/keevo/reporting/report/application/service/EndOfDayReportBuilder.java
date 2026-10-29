@@ -3,7 +3,7 @@ package com.keevo.reporting.report.application.service;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.EmployeeEntry;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.TopProductEntry;
-import com.keevo.commerce.sale.domain.model.ClosureWindow;
+import com.keevo.commerce.api.ClosureWindow;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;

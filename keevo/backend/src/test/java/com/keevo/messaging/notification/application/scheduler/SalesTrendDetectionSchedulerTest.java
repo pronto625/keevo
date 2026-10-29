@@ -1,5 +1,7 @@
 package com.keevo.messaging.notification.application.scheduler;
 
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
@@ -7,7 +9,7 @@ import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -50,7 +52,7 @@ class SalesTrendDetectionSchedulerTest {
     void setUp() {
         scheduler = new SalesTrendDetectionScheduler(
                 jdbcTemplate, notificationPort, cooldownRepository,
-                tenantPreferencesRepository, storeRepository);
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), StoreApiTestSupport.queryPort(storeRepository));
     }
 
     private Store testStore() {

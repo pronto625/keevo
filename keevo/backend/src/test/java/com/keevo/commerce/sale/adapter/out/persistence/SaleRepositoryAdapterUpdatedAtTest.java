@@ -4,6 +4,8 @@ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
 import com.keevo.commerce.sale.adapter.out.persistence.impl.SaleRepositoryAdapter;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
 import com.keevo.commerce.sale.domain.model.*;
+import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.commerce.api.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;

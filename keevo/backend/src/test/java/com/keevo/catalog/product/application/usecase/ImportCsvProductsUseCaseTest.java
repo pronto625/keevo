@@ -1,5 +1,7 @@
 package com.keevo.catalog.product.application.usecase;
 
+import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
+import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.catalog.product.adapter.out.csv.ProductCsvRowFactory;
 import com.keevo.catalog.product.application.dto.CsvColumnMapping;
@@ -16,11 +18,11 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.model.StoreType;
+import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
-import com.keevo.identity.auth.domain.model.PlanType;
-import com.keevo.subscription.plan.domain.port.out.ProductCountPort;
+import com.keevo.identity.api.PlanType;
+import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -76,8 +78,8 @@ class ImportCsvProductsUseCaseTest {
         lenient().when(initialStockProvider.getIfAvailable()).thenReturn(initialStockPort);
         useCase = new ImportCsvProductsUseCase(
                 csvParser, rowFactory, createProductUseCase, productRepository,
-                initialStockProvider, defaultStorePort, storeRepository, productCountPort,
-                subscriptionRepository, planLimitGuard, categoryRepository, eventPublisher);
+                initialStockProvider, defaultStorePort, StoreApiTestSupport.queryPort(storeRepository), productCountPort,
+                SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), categoryRepository, eventPublisher);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ class ImportCsvProductsUseCaseTest {
         var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
-        when(productCountPort.countActiveProducts()).thenReturn(currentCount);
+        when(productCountPort.countActiveProducts(any())).thenReturn(currentCount);
         lenient().doNothing().when(planLimitGuard).checkProductLimit(any(), anyInt());
     }
 

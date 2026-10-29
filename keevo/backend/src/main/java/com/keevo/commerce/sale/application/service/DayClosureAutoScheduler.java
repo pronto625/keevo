@@ -3,16 +3,16 @@ package com.keevo.commerce.sale.application.service;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
-import com.keevo.identity.auth.domain.model.Tenant;
-import com.keevo.identity.auth.domain.model.TenantStatus;
-import com.keevo.identity.auth.domain.port.out.TenantRepository;
-import com.keevo.identity.onboarding.domain.model.TenantPreferences;
-import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.api.TenantView;
+import com.keevo.identity.api.TenantStatus;
+import com.keevo.identity.api.TenantQueryPort;
+import com.keevo.identity.api.TenantPreferencesView;
+import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.model.StoreType;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreType;
+import com.keevo.store.api.StoreQueryPort;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,36 +50,36 @@ public class DayClosureAutoScheduler {
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
     private static final LocalTime DEFAULT_EOD_TIME = LocalTime.of(20, 0);
 
-    private final TenantRepository tenantRepository;
-    private final StoreRepository storeRepository;
+    private final TenantQueryPort tenantQuery;
+    private final StoreQueryPort storeQuery;
     private final DayClosureRepository dayClosureRepository;
     private final CloseDayUseCase closeDayUseCase;
-    private final TenantPreferencesRepository tenantPreferencesRepository;
+    private final TenantPreferencesQueryPort preferencesQuery;
     private final Clock clock;
 
     /** Production constructor — Spring calls this; system clock is used. */
     @Autowired
-    public DayClosureAutoScheduler(TenantRepository tenantRepository,
-                                   StoreRepository storeRepository,
+    public DayClosureAutoScheduler(TenantQueryPort tenantQuery,
+                                   StoreQueryPort storeQuery,
                                    DayClosureRepository dayClosureRepository,
                                    CloseDayUseCase closeDayUseCase,
-                                   TenantPreferencesRepository tenantPreferencesRepository) {
-        this(tenantRepository, storeRepository, dayClosureRepository,
-             closeDayUseCase, tenantPreferencesRepository, Clock.systemDefaultZone());
+                                   TenantPreferencesQueryPort preferencesQuery) {
+        this(tenantQuery, storeQuery, dayClosureRepository,
+             closeDayUseCase, preferencesQuery, Clock.systemDefaultZone());
     }
 
     /** Package-private constructor for tests with an injected clock. */
-    DayClosureAutoScheduler(TenantRepository tenantRepository,
-                            StoreRepository storeRepository,
+    DayClosureAutoScheduler(TenantQueryPort tenantQuery,
+                            StoreQueryPort storeQuery,
                             DayClosureRepository dayClosureRepository,
                             CloseDayUseCase closeDayUseCase,
-                            TenantPreferencesRepository tenantPreferencesRepository,
+                            TenantPreferencesQueryPort preferencesQuery,
                             Clock clock) {
-        this.tenantRepository = tenantRepository;
-        this.storeRepository = storeRepository;
+        this.tenantQuery = tenantQuery;
+        this.storeQuery = storeQuery;
         this.dayClosureRepository = dayClosureRepository;
         this.closeDayUseCase = closeDayUseCase;
-        this.tenantPreferencesRepository = tenantPreferencesRepository;
+        this.preferencesQuery = preferencesQuery;
         this.clock = clock;
     }
 
@@ -95,16 +95,16 @@ public class DayClosureAutoScheduler {
         long startNanos    = System.nanoTime();
         int[] tenantCount  = {0};
 
-        tenantRepository.findAll().forEach(tenant -> {
-            if (tenant.getStatus() != TenantStatus.ACTIVE) {
+        tenantQuery.findAll().forEach(tenant -> {
+            if (tenant.status() != TenantStatus.ACTIVE) {
                 return;
             }
             tenantCount[0]++;
-            TenantContext.setCurrentTenant(tenant.getSchemaName());
+            TenantContext.setCurrentTenant(tenant.schemaName());
             try {
                 processTenant(tenant, todayWAT, nowWAT);
             } catch (Exception e) {
-                log.error("DayClosureAutoScheduler error for tenant={}: {}", tenant.getSchemaName(), e.getMessage(), e);
+                log.error("DayClosureAutoScheduler error for tenant={}: {}", tenant.schemaName(), e.getMessage(), e);
             } finally {
                 TenantContext.clear();
             }
@@ -115,14 +115,14 @@ public class DayClosureAutoScheduler {
                 tenantCount[0], (System.nanoTime() - startNanos) / 1_000_000);
     }
 
-    private void processTenant(Tenant tenant, LocalDate todayWAT, LocalTime nowWAT) {
-        TenantPreferences prefs = tenantPreferencesRepository.findByCurrentTenant().orElse(null);
+    private void processTenant(TenantView tenant, LocalDate todayWAT, LocalTime nowWAT) {
+        TenantPreferencesView prefs = preferencesQuery.find(TenantContext.getCurrentTenant()).orElse(null);
 
         boolean enabled     = prefs != null ? prefs.eodReportEnabled() : true;
         LocalTime triggerAt = prefs != null ? parseTime(prefs.eodReportTime()) : DEFAULT_EOD_TIME;
 
         if (!enabled) {
-            log.debug("EOD auto-close disabled for tenant={}", tenant.getSchemaName());
+            log.debug("EOD auto-close disabled for tenant={}", tenant.schemaName());
             return;
         }
         if (nowWAT.isBefore(triggerAt)) {
@@ -130,7 +130,7 @@ public class DayClosureAutoScheduler {
         }
 
         // closureDate = todayWAT (Story 13.3: closes the day that ends at configured time)
-        storeRepository.findAllActive().forEach(store -> {
+        storeQuery.findAllActive(TenantContext.getCurrentTenant()).forEach(store -> {
             // J21: a warehouse is a stock origin, not a point of sale (FR34) — no automatic
             // closure (nor « 0 vente » push). A sale ever recorded there is not lost: a later
             // closure covers every sale since the previous one (FR51 D1).
@@ -139,18 +139,18 @@ public class DayClosureAutoScheduler {
             }
             // v1s-16-22: each store in its own tenant schema, whatever a closure listener
             // left in the context (else closures land in public and the store is never closed).
-            TenantContext.setCurrentTenant(tenant.getSchemaName());
+            TenantContext.setCurrentTenant(tenant.schemaName());
             if (dayClosureRepository.existsByStoreIdAndDate(store.id(), todayWAT)) {
                 log.debug("Store {} already closed for {}", store.id(), todayWAT);
                 return;
             }
 
-            log.info("Auto-closing store {} for tenant {} at {} WAT", store.id(), tenant.getSchemaName(), nowWAT);
+            log.info("Auto-closing store {} for tenant {} at {} WAT", store.id(), tenant.schemaName(), nowWAT);
             try {
                 closeDayUseCase.closeDay(new CloseDayCommand(
                         store.id(),
                         SYSTEM_UUID,
-                        tenant.getSchemaName(),
+                        tenant.schemaName(),
                         true  // isAutomatic = true
                 ));
             } catch (DomainException e) {

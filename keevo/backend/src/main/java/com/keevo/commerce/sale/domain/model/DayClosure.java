@@ -1,5 +1,8 @@
 package com.keevo.commerce.sale.domain.model;
 
+import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.commerce.api.DayClosureView;
+
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -53,6 +56,11 @@ public class DayClosure {
 
     /** When the server recorded the closure; falls back to closedAt for rows predating the column. */
     public Instant getReceivedAt() { return receivedAt != null ? receivedAt : closedAt; }
+
+    /** The published read model of this closure (Story 12.2c); {@code receivedAt} with its fallback. */
+    public DayClosureView toView() {
+        return new DayClosureView(id, storeId, actorId, closedAt, getReceivedAt(), isAutomatic, summary);
+    }
 
     @Override
     public boolean equals(Object o) {

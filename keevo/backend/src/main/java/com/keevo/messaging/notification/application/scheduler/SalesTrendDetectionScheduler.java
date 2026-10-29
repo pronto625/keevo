@@ -1,14 +1,14 @@
 package com.keevo.messaging.notification.application.scheduler;
 
-import com.keevo.identity.onboarding.domain.model.TenantPreferences;
-import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.api.TenantPreferencesView;
+import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.messaging.notification.domain.model.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
 import com.keevo.messaging.notification.domain.port.out.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import com.keevo.store.store.domain.model.Store;
-import com.keevo.store.store.domain.port.out.StoreRepository;
+import com.keevo.store.api.StoreView;
+import com.keevo.store.api.StoreQueryPort;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,19 +49,19 @@ public class SalesTrendDetectionScheduler {
     private final JdbcTemplate jdbcTemplate;
     private final NotificationPort notificationPort;
     private final NotificationCooldownRepository cooldownRepository;
-    private final TenantPreferencesRepository tenantPreferencesRepository;
-    private final StoreRepository storeRepository;
+    private final TenantPreferencesQueryPort preferencesQuery;
+    private final StoreQueryPort storeQuery;
 
     public SalesTrendDetectionScheduler(JdbcTemplate jdbcTemplate,
                                         NotificationPort notificationPort,
                                         NotificationCooldownRepository cooldownRepository,
-                                        TenantPreferencesRepository tenantPreferencesRepository,
-                                        StoreRepository storeRepository) {
+                                        TenantPreferencesQueryPort preferencesQuery,
+                                        StoreQueryPort storeQuery) {
         this.jdbcTemplate = jdbcTemplate;
         this.notificationPort = notificationPort;
         this.cooldownRepository = cooldownRepository;
-        this.tenantPreferencesRepository = tenantPreferencesRepository;
-        this.storeRepository = storeRepository;
+        this.preferencesQuery = preferencesQuery;
+        this.storeQuery = storeQuery;
     }
 
     @Scheduled(cron = "0 0 * * * *", zone = "UTC")
@@ -89,16 +89,16 @@ public class SalesTrendDetectionScheduler {
             log.warn("[TREND] Tenant skipped (invalid schema name)");
             return;
         }
-        TenantPreferences prefs = tenantPreferencesRepository.findByCurrentTenant().orElse(null);
+        TenantPreferencesView prefs = preferencesQuery.find(TenantContext.getCurrentTenant()).orElse(null);
         if (prefs == null || !prefs.trendNotificationEnabled()) {
             log.debug("[TREND] Trend notifications disabled for tenant={}", schema);
             return;
         }
 
-        List<Store> stores = storeRepository.findAllActive();
+        List<StoreView> stores = storeQuery.findAllActive(TenantContext.getCurrentTenant());
         int currentHour = LocalTime.now(ZoneOffset.UTC).getHour();
 
-        for (Store store : stores) {
+        for (StoreView store : stores) {
             try {
                 analyzeStoreTrend(schema, store, currentHour);
             } catch (Exception e) {
@@ -108,7 +108,7 @@ public class SalesTrendDetectionScheduler {
         }
     }
 
-    private void analyzeStoreTrend(String schema, Store store, int currentHour) {
+    private void analyzeStoreTrend(String schema, StoreView store, int currentHour) {
         if (!TenantSchema.isValid(schema)) return; // processTenant() already skipped + logged it
         String qualifiedSales = "\"" + schema + "\".sales";
 

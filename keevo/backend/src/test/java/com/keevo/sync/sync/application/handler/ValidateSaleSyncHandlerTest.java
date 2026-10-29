@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleItem;
@@ -49,7 +50,8 @@ class ValidateSaleSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new ValidateSaleSyncHandler(validateSaleUseCase);
+        handler = new ValidateSaleSyncHandler(
+                CommerceSaleApiTestSupport.saleCommandPort(null, validateSaleUseCase, null));
     }
 
     @AfterEach
