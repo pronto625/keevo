@@ -4,8 +4,10 @@ import com.keevo.identity.api.PlanType;
 import com.keevo.identity.api.Role;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.TenantView;
+import com.keevo.identity.auth.application.service.TenantDeletionService;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -19,6 +21,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /** Story 12.2d — tenant / user adapters of {@code identity :: api} and the tenant guard. */
@@ -56,5 +61,36 @@ class IdentityAuthApiAdaptersTest {
         assertThat(adapter.findPhoneNumber(owner)).contains("+237690000001");
         assertThat(adapter.findPhoneNumber(UUID.randomUUID())).isEmpty();
         assertThat(adapter.findOwnerUserIds("kv_abc123")).containsExactly(owner);
+    }
+
+    @Test
+    void userQuery_membershipSchemas_inRepositoryOrder() {
+        UUID userId = UUID.randomUUID();
+        when(userRepository.findMembershipsWithTenantInfo(userId)).thenReturn(List.of(
+                new UserMembershipInfo("KV-AAA111", "Boutique A", "OWNER", "kv_aaa111"),
+                new UserMembershipInfo("KV-BBB222", "Boutique B", "EMPLOYEE", "kv_bbb222")));
+        var adapter = new UserQueryAdapter(userRepository);
+
+        assertThat(adapter.findMembershipSchemas(userId)).containsExactly("kv_aaa111", "kv_bbb222");
+    }
+
+    @Test
+    void tenantDeletion_delegatesToTheDailyRoutine() {
+        UUID tenantId = UUID.randomUUID();
+        TenantDeletionService service = mock(TenantDeletionService.class);
+        when(service.deleteNow(tenantId)).thenReturn(true, false);
+        var adapter = new TenantDeletionAdapter(service);
+
+        assertThat(adapter.deleteNow(tenantId)).isTrue();
+        assertThat(adapter.deleteNow(tenantId)).isFalse();
+    }
+
+    @Test
+    void tenantDeletion_nullIdFailsFast() {
+        TenantDeletionService service = mock(TenantDeletionService.class);
+        var adapter = new TenantDeletionAdapter(service);
+
+        assertThatThrownBy(() -> adapter.deleteNow(null)).isInstanceOf(NullPointerException.class);
+        verifyNoInteractions(service);
     }
 }

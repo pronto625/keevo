@@ -1,6 +1,6 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
-import com.keevo.shared.infrastructure.persistence.entity.StockLevelJpaEntity;
+import com.keevo.inventory.stock.adapter.out.persistence.entity.StockLevelJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

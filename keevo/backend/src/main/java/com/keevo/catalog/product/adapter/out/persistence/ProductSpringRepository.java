@@ -1,6 +1,6 @@
 package com.keevo.catalog.product.adapter.out.persistence;
 
-import com.keevo.shared.infrastructure.persistence.entity.ProductJpaEntity;
+import com.keevo.catalog.product.adapter.out.persistence.entity.ProductJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

@@ -29,6 +29,7 @@ import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
 import com.keevo.identity.auth.domain.model.PasswordResetEvent;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
 import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
@@ -82,7 +83,7 @@ class AuditEventListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new AuditEventListener(auditPort, objectMapper, userRepository);
+        listener = new AuditEventListener(auditPort, objectMapper, IdentityAuthApiTestSupport.userQueryPort(userRepository));
         TenantContext.clear(); // ensure clean thread state before each test
     }
 

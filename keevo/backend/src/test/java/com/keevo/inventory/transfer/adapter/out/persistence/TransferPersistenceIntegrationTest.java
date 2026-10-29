@@ -1,13 +1,14 @@
 package com.keevo.inventory.transfer.adapter.out.persistence;
 
-import com.keevo.inventory.transfer.domain.model.StockTransfer;
+import com.keevo.identity.auth.application.service.TenantFactory;
+import com.keevo.inventory.transfer.adapter.out.persistence.entity.StockTransferJpaEntity;
 import com.keevo.inventory.transfer.domain.model.StockTransfer.TransferStatus;
+import com.keevo.inventory.transfer.domain.model.StockTransfer;
 import com.keevo.inventory.transfer.domain.port.in.CompleteTransferCommand;
 import com.keevo.inventory.transfer.domain.port.in.CompleteTransferUseCase;
 import com.keevo.inventory.transfer.domain.port.in.TransferStockCommand;
 import com.keevo.inventory.transfer.domain.port.in.TransferStockUseCase;
 import com.keevo.inventory.transfer.domain.port.out.StockTransferRepository;
-import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.AuthDetails;

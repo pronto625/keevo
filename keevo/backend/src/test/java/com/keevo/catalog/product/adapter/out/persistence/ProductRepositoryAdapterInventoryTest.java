@@ -1,8 +1,8 @@
 package com.keevo.catalog.product.adapter.out.persistence;
 
+import com.keevo.catalog.product.adapter.out.persistence.entity.ProductJpaEntity;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.shared.infrastructure.persistence.entity.ProductJpaEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

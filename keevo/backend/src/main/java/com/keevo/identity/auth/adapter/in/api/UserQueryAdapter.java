@@ -2,6 +2,7 @@ package com.keevo.identity.auth.adapter.in.api;
 
 import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import org.springframework.stereotype.Component;
 
@@ -31,5 +32,12 @@ class UserQueryAdapter implements UserQueryPort {
     @Override
     public List<UUID> findOwnerUserIds(String tenantSchema) {
         return userRepository.findOwnersByTenantSchemaName(tenantSchema).stream().map(User::getId).toList();
+    }
+
+    @Override
+    public List<String> findMembershipSchemas(UUID userId) {
+        return userRepository.findMembershipsWithTenantInfo(userId).stream()
+                .map(UserMembershipInfo::schemaName)
+                .toList();
     }
 }

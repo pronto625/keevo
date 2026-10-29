@@ -1,7 +1,7 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
+import com.keevo.inventory.stock.adapter.out.persistence.entity.StockLevelJpaEntity;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
-import com.keevo.shared.infrastructure.persistence.entity.StockLevelJpaEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

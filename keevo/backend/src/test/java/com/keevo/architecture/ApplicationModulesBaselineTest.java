@@ -96,6 +96,30 @@ class ApplicationModulesBaselineTest {
         assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessToPublishedModule).toList())
             .as("non-exposed access to published-module internals (use their 'api'/'events') — see " + VIOLATIONS_FILE)
             .isEmpty();
+        // 12.2f pinned: shared (the future core) reaches no internals of the modules in its allow-list
+        // (it may use their listed named interfaces only — see shared/package-info); an edge to a module
+        // outside the list is reported as not-allowed and caught above.
+        assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessFromShared).toList())
+            .as("shared depends on another module's internals (move the code to its owner or use an 'api') — see "
+                + VIOLATIONS_FILE)
+            .isEmpty();
+    }
+
+    /**
+     * True for a non-exposed-type or internal-of-declared-module violation whose source is {@code shared}
+     * (Story 12.2f). Since shared has an explicit allow-list, Modulith reports internals of a listed module
+     * as "depends on module X ... Allowed targets" with X listed; a module outside the list is not-allowed.
+     */
+    static boolean isInternalAccessFromShared(String message) {
+        Matcher matcher = NON_EXPOSED_TYPE.matcher(message);
+        if (!matcher.matches()) {
+            if (!isModuleDependency(message, true)) {
+                return false;
+            }
+            matcher = MODULE_DEPENDENCY.matcher(message);
+            matcher.matches();
+        }
+        return "shared".equals(matcher.group(1));
     }
 
     /**

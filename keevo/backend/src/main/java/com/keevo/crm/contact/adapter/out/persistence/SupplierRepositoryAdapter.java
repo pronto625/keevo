@@ -1,9 +1,10 @@
 package com.keevo.crm.contact.adapter.out.persistence;
 
+import com.keevo.crm.contact.adapter.out.persistence.entity.ProductSupplierJpaEntity;
+import com.keevo.crm.contact.adapter.out.persistence.entity.SupplierJpaEntity;
+
 import com.keevo.crm.contact.domain.entity.Supplier;
 import com.keevo.crm.contact.domain.port.out.SupplierRepository;
-import com.keevo.shared.infrastructure.persistence.entity.ProductSupplierJpaEntity;
-import com.keevo.shared.infrastructure.persistence.entity.SupplierJpaEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 

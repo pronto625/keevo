@@ -1,6 +1,6 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
-import com.keevo.shared.infrastructure.persistence.entity.StockMovementJpaEntity;
+import com.keevo.inventory.stock.adapter.out.persistence.entity.StockMovementJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 

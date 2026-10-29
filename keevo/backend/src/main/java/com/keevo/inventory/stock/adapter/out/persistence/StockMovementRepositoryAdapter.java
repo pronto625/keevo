@@ -1,9 +1,9 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
+import com.keevo.inventory.stock.adapter.out.persistence.entity.StockMovementJpaEntity;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
 import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
-import com.keevo.shared.infrastructure.persistence.entity.StockMovementJpaEntity;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;

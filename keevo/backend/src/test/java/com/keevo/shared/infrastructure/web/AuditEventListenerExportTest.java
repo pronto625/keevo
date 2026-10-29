@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.reporting.export.domain.event.DataExportedEvent;
 import com.keevo.shared.application.port.AuditPort;
@@ -55,7 +56,7 @@ class AuditEventListenerExportTest {
         Instant from = Instant.parse("2026-10-01T00:00:00Z");
         Instant to = Instant.parse("2026-10-12T00:00:00Z");
 
-        new AuditEventListener(auditPort, objectMapper, userRepository).on(new DataExportedEvent(
+        new AuditEventListener(auditPort, objectMapper, IdentityAuthApiTestSupport.userQueryPort(userRepository)).on(new DataExportedEvent(
                 exportId, actor, "kv_abc123", "CSV", List.of("stores", "products"), List.of("Boutiques", "Produits"),
                 store, from, to, java.util.Map.of("action", "SALE_CREATED", "q", "riz"),
                 1234, "BACKGROUND", Instant.parse("2026-10-12T12:00:00Z")));
@@ -92,7 +93,7 @@ class AuditEventListenerExportTest {
     @DisplayName("all-stores, unbounded export → storeId / from / to null in valueAfter")
     void noFilters() throws Exception {
         UUID actor = UUID.randomUUID();
-        new AuditEventListener(auditPort, objectMapper, userRepository).on(new DataExportedEvent(
+        new AuditEventListener(auditPort, objectMapper, IdentityAuthApiTestSupport.userQueryPort(userRepository)).on(new DataExportedEvent(
                 UUID.randomUUID(), actor, "kv_abc123", "XLSX", List.of("stores"), List.of(), null, null, null,
                 3, "DIRECT", Instant.now()));
 

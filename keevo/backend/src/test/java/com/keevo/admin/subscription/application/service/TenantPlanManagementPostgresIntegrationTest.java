@@ -13,7 +13,7 @@ import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.shared.infrastructure.scheduling.PlanTypeRealignJob;
+import com.keevo.subscription.plan.adapter.in.bootstrap.PlanTypeRealignJob;
 import com.keevo.subscription.plan.adapter.out.persistence.impl.JdbcPlanChangeRecorder;
 import com.keevo.subscription.plan.application.service.ChangeTenantPlanService;
 import com.keevo.subscription.plan.application.service.PlanExpiryReminderService;
@@ -335,7 +335,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         Instant expires = AdminPlanService.endOfDayWat(LocalDate.of(2027, 4, 1));
         jdbc.update("UPDATE \"kv_pm9221\".subscriptions SET expires_at = ?", java.sql.Timestamp.from(expires));
         var tenantService = new com.keevo.admin.tenant.application.service.AdminTenantService(
-                jdbc, mock(com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler.class));
+                jdbc, mock(com.keevo.identity.api.TenantDeletionPort.class));
 
         var page = tenantService.execute(new com.keevo.admin.tenant.domain.port.in.ListTenantsQuery(
                 "Boutique KV-PM9221", null, null, null, null, null, null, 0, 25));

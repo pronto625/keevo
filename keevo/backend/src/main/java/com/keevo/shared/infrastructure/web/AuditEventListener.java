@@ -2,14 +2,13 @@ package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.auth.domain.model.AccountDeletionCancelledEvent;
 import com.keevo.identity.auth.domain.model.AccountDeletionRequestedEvent;
 import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
 import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
 import com.keevo.identity.auth.domain.model.PasswordResetEvent;
-import com.keevo.identity.auth.domain.model.UserMembershipInfo;
-import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
 import com.keevo.catalog.category.domain.event.CategoryActiveChangedEvent;
 import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
@@ -115,23 +114,23 @@ public class AuditEventListener {
 
     private final AuditPort auditPort;
     private final ObjectMapper objectMapper;
-    private final UserRepository userRepository;
+    private final UserQueryPort userQuery;
     private final AuditWriteContextResolver contextResolver;
 
     @Autowired
     public AuditEventListener(AuditPort auditPort, ObjectMapper objectMapper,
-                              UserRepository userRepository,
+                              UserQueryPort userQuery,
                               AuditWriteContextResolver contextResolver) {
         this.auditPort       = auditPort;
         this.objectMapper    = objectMapper;
-        this.userRepository  = userRepository;
+        this.userQuery       = userQuery;
         this.contextResolver = contextResolver;
     }
 
     /** Convenience for unit tests — uses a stateless resolver. */
     public AuditEventListener(AuditPort auditPort, ObjectMapper objectMapper,
-                              UserRepository userRepository) {
-        this(auditPort, objectMapper, userRepository, new AuditWriteContextResolver());
+                              UserQueryPort userQuery) {
+        this(auditPort, objectMapper, userQuery, new AuditWriteContextResolver());
     }
 
     // ── Identity ──────────────────────────────────────────────────────────────
@@ -771,19 +770,19 @@ public class AuditEventListener {
     }
 
     private void auditInEveryMembership(UUID userId, String action, String logName) {
-        List<UserMembershipInfo> memberships = userRepository.findMembershipsWithTenantInfo(userId);
-        for (UserMembershipInfo m : memberships) {
-            TenantContext.setCurrentTenant(m.schemaName());
+        List<String> schemas = userQuery.findMembershipSchemas(userId);
+        for (String schema : schemas) {
+            TenantContext.setCurrentTenant(schema);
             try {
-                write(userId, m.schemaName(), action, "User", userId,
+                write(userId, schema, action, "User", userId,
                         null, map("userId", userId.toString()), null, null, null, null);
-                log.info("AUDIT: {} userId={} schema={}", logName, userId, m.schemaName());
+                log.info("AUDIT: {} userId={} schema={}", logName, userId, schema);
             } catch (Exception e) {
                 // Best-effort audit per tenant — one tenant's audit failure must NOT
                 // skip remaining tenants nor propagate to the caller (which would roll
                 // back the outer @Transactional and fail the user's password reset).
                 log.error("AUDIT FAILED: {} userId={} schema={} error={}",
-                        logName, userId, m.schemaName(), e.getMessage(), e);
+                        logName, userId, schema, e.getMessage(), e);
             } finally {
                 TenantContext.clear();
             }

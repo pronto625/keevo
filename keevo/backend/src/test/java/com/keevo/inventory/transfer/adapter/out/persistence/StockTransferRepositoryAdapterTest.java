@@ -1,7 +1,8 @@
 package com.keevo.inventory.transfer.adapter.out.persistence;
 
-import com.keevo.inventory.transfer.domain.model.StockTransfer;
+import com.keevo.inventory.transfer.adapter.out.persistence.entity.StockTransferJpaEntity;
 import com.keevo.inventory.transfer.domain.model.StockTransfer.TransferStatus;
+import com.keevo.inventory.transfer.domain.model.StockTransfer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,8 +41,8 @@ class StockTransferRepositoryAdapterTest {
         adapter = new StockTransferRepositoryAdapter(springRepo);
     }
 
-    private com.keevo.shared.infrastructure.persistence.entity.StockTransferJpaEntity buildEntity() {
-        return new com.keevo.shared.infrastructure.persistence.entity.StockTransferJpaEntity(
+    private StockTransferJpaEntity buildEntity() {
+        return new StockTransferJpaEntity(
             UUID.randomUUID(), SRC_ID, DEST_ID, PROD_ID, null, 5, ACTOR_ID,
             Instant.now(), TransferStatus.COMPLETED, null
         );

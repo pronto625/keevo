@@ -1,6 +1,6 @@
 package com.keevo.crm.contact.adapter.out.persistence;
 
-import com.keevo.shared.infrastructure.persistence.entity.SupplierJpaEntity;
+import com.keevo.crm.contact.adapter.out.persistence.entity.SupplierJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;

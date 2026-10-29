@@ -1,9 +1,9 @@
 package com.keevo.catalog.product.adapter.out.persistence;
 
+import com.keevo.catalog.product.adapter.out.persistence.entity.ProductJpaEntity;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.shared.infrastructure.persistence.entity.ProductJpaEntity;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

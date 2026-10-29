@@ -2,6 +2,7 @@ package com.keevo.admin.tenant.application.service;
 
 import com.keevo.admin.tenant.domain.model.AdminTenantListItem;
 import com.keevo.admin.tenant.domain.port.in.ListTenantsQuery;
+import com.keevo.identity.api.TenantDeletionPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,13 +43,13 @@ class AdminTenantServiceTest {
     JdbcTemplate jdbcTemplate;
 
     @Mock
-    com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler accountDeletionScheduler;
+    TenantDeletionPort tenantDeletion;
 
     AdminTenantService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminTenantService(jdbcTemplate, accountDeletionScheduler);
+        service = new AdminTenantService(jdbcTemplate, tenantDeletion);
         // Stub the batched schema_name lookup (Story 11.5): every requested id → "kv_abc123"
         lenient().doAnswer(inv -> {
             RowCallbackHandler handler = inv.getArgument(1);
@@ -307,14 +308,14 @@ class AdminTenantServiceTest {
     void forceDelete_marksPendingThenDeletesNow() {
         UUID id = UUID.randomUUID();
         when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
-        when(accountDeletionScheduler.deleteNow(id)).thenReturn(true);
+        when(tenantDeletion.deleteNow(id)).thenReturn(true);
 
         service.forceDelete(id);
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        var order = inOrder(jdbcTemplate, accountDeletionScheduler);
+        var order = inOrder(jdbcTemplate, tenantDeletion);
         order.verify(jdbcTemplate).update(sql.capture(), eq(id));
-        order.verify(accountDeletionScheduler).deleteNow(id);
+        order.verify(tenantDeletion).deleteNow(id);
         assertThat(sql.getValue())
                 .contains("status = 'DELETION_PENDING', deletion_scheduled_at = now()")
                 .contains("status <> 'DELETED'")
@@ -331,7 +332,7 @@ class AdminTenantServiceTest {
         assertThatThrownBy(() -> service.forceDelete(id))
                 .isInstanceOf(DomainException.class)
                 .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("TENANT_NOT_FOUND"));
-        verifyNoInteractions(accountDeletionScheduler);
+        verifyNoInteractions(tenantDeletion);
     }
 
     @Test
@@ -339,7 +340,7 @@ class AdminTenantServiceTest {
     void forceDelete_routineSkipped_throwsDeletionNotPending() {
         UUID id = UUID.randomUUID();
         when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
-        when(accountDeletionScheduler.deleteNow(id)).thenReturn(false);
+        when(tenantDeletion.deleteNow(id)).thenReturn(false);
         when(jdbcTemplate.queryForObject(startsWith("SELECT status FROM public.tenants"), eq(String.class), eq(id)))
                 .thenReturn("ACTIVE");
 
@@ -353,13 +354,13 @@ class AdminTenantServiceTest {
     void forceDelete_concurrentlyDeletedByDailyRun_returnsNormally() {
         UUID id = UUID.randomUUID();
         when(jdbcTemplate.update(anyString(), eq(id))).thenReturn(1);
-        when(accountDeletionScheduler.deleteNow(id)).thenReturn(false);
+        when(tenantDeletion.deleteNow(id)).thenReturn(false);
         when(jdbcTemplate.queryForObject(startsWith("SELECT status FROM public.tenants"), eq(String.class), eq(id)))
                 .thenReturn("DELETED");
 
         service.forceDelete(id);
 
-        verify(accountDeletionScheduler).deleteNow(id);
+        verify(tenantDeletion).deleteNow(id);
     }
     // ── v1s-13-12 follow-up: invalid schema_name never interpolated ──────────
 

@@ -111,7 +111,7 @@ public class AccountDeletionService {
      *
      * <p>v1s-15-9: the write is one conditional UPDATE ({@link TenantRepository#cancelPendingDeletion})
      * instead of read-then-save, so it can never overwrite a DELETED tenant written by a concurrent
-     * {@code AccountDeletionScheduler} run, never reactivate a tenant whose schema is already
+     * {@code TenantDeletionService} run, never reactivate a tenant whose schema is already
      * dropped, and never cancel once the grace period is over (the tenant is then due for deletion).
      *
      * @param actorId   UUID of the authenticated OWNER cancelling deletion

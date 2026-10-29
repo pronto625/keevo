@@ -12,4 +12,11 @@ public interface UserQueryPort {
 
     /** User ids of the OWNER members of the tenant. */
     List<UUID> findOwnerUserIds(String tenantSchema);
+
+    /**
+     * Tenant schemas ({@code kv_xxxxxx}) of every membership of the user, as listed at login
+     * (Story 12.2f — cross-tenant audit of password reset events). Not tenant-scoped; empty if the
+     * user has no membership.
+     */
+    List<String> findMembershipSchemas(UUID userId);
 }

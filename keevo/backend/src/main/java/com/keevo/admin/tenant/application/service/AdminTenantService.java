@@ -5,11 +5,11 @@ import com.keevo.admin.TenantLastActivitySql;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.admin.tenant.domain.model.*;
 import com.keevo.admin.tenant.domain.port.in.*;
+import com.keevo.identity.api.TenantDeletionPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -75,11 +75,11 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             "NULLIF(TRIM(CONCAT_WS(' ', TRIM(e.first_name), TRIM(e.last_name))), '')";
 
     private final JdbcTemplate jdbc;
-    private final AccountDeletionScheduler accountDeletionScheduler;
+    private final TenantDeletionPort tenantDeletion;
 
-    public AdminTenantService(JdbcTemplate jdbcTemplate, AccountDeletionScheduler accountDeletionScheduler) {
+    public AdminTenantService(JdbcTemplate jdbcTemplate, TenantDeletionPort tenantDeletion) {
         this.jdbc = jdbcTemplate;
-        this.accountDeletionScheduler = accountDeletionScheduler;
+        this.tenantDeletion = tenantDeletion;
     }
 
     // ── ListTenantsUseCase ────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
                     "Tenant not found or already deleted: " + tenantId);
         }
-        if (!accountDeletionScheduler.deleteNow(tenantId)) {
+        if (!tenantDeletion.deleteNow(tenantId)) {
             // A concurrent daily run may have deleted it between the marker and the routine:
             // the admin's intent is fulfilled, so that is a success, not a conflict.
             String status = jdbc.queryForObject(

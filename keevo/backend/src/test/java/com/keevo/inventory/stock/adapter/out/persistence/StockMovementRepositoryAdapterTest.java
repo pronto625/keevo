@@ -1,8 +1,8 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
+import com.keevo.inventory.stock.adapter.out.persistence.entity.StockMovementJpaEntity;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
-import com.keevo.shared.infrastructure.persistence.entity.StockMovementJpaEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

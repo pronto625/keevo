@@ -90,4 +90,35 @@ class ModulithViolationClassifierTest {
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_SYNC)).isFalse();
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(MODULE_UNDECLARED)).isFalse();
     }
+
+    /** Real Modulith 1.4 messages, captured 2026-10-29 with a temporary probe class in shared (not committed). */
+    private static final String SHARED_ALLOWED = "Allowed targets: catalog :: events, commerce :: api, "
+        + "commerce :: events, crm :: events, identity :: api, identity :: events, inventory :: events, "
+        + "reporting :: events, store :: api, store :: events.";
+    private static final String SHARED_INTO_IDENTITY_INTERNAL =
+        "Module 'shared' depends on module 'identity' via com.keevo.shared.tmpprobe.TmpProbe -> "
+            + "com.keevo.identity.auth.domain.port.out.UserRepository. " + SHARED_ALLOWED;
+    private static final String SHARED_INTO_INVENTORY_INTERNAL =
+        "Module 'shared' depends on module 'inventory' via com.keevo.shared.tmpprobe.TmpProbe -> "
+            + "com.keevo.inventory.stock.domain.entity.StockLevel. " + SHARED_ALLOWED;
+    /** admin is not in shared's allow-list: Modulith reports it as a module dependency on an undeclared target. */
+    private static final String SHARED_INTO_ADMIN =
+        "Module 'shared' depends on module 'admin' via com.keevo.shared.tmpprobe.TmpProbe -> "
+            + "com.keevo.admin.alerts.domain.port.in.PurgeAlertAcksUseCase. " + SHARED_ALLOWED;
+
+    @Test
+    void internalAccessFromSharedIsFlaggedWhateverTheTarget() {
+        // pre-12.2f form (shared had no allow-list)
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(NON_EXPOSED_FROM_SHARED)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_IDENTITY_INTERNAL)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_INVENTORY_INTERNAL)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(NON_EXPOSED_INTO_INVENTORY)).isFalse();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(INTERNAL_OF_DECLARED_CATALOG)).isFalse();
+    }
+
+    @Test
+    void sharedIntoAModuleOutsideItsAllowListIsNotAllowed() {
+        assertThat(ApplicationModulesBaselineTest.isModuleDependency(SHARED_INTO_ADMIN, false)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_ADMIN)).isFalse();
+    }
 }

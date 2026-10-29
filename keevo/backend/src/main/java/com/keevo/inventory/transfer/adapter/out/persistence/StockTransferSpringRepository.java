@@ -1,7 +1,7 @@
 package com.keevo.inventory.transfer.adapter.out.persistence;
 
+import com.keevo.inventory.transfer.adapter.out.persistence.entity.StockTransferJpaEntity;
 import com.keevo.inventory.transfer.domain.model.StockTransfer.TransferStatus;
-import com.keevo.shared.infrastructure.persistence.entity.StockTransferJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;

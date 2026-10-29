@@ -1,8 +1,10 @@
 package com.keevo.identity.auth.adapter.in.api;
 
+import com.keevo.identity.api.TenantDeletionPort;
 import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.identity.api.TenantView;
 import com.keevo.identity.api.UserQueryPort;
+import com.keevo.identity.auth.application.service.TenantDeletionService;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
@@ -21,6 +23,11 @@ public final class IdentityAuthApiTestSupport {
 
     public static UserQueryPort userQueryPort(UserRepository userRepository) {
         return new UserQueryAdapter(userRepository);
+    }
+
+    /** The real {@code TenantDeletionPort} adapter over the given deletion routine (Story 12.2f). */
+    public static TenantDeletionPort tenantDeletionPort(TenantDeletionService tenantDeletionService) {
+        return new TenantDeletionAdapter(tenantDeletionService);
     }
 
     /** The published view of a tenant, mapped exactly as the adapter does. */

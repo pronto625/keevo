@@ -1,8 +1,8 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
+import com.keevo.inventory.stock.adapter.out.persistence.entity.StockLevelJpaEntity;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.shared.infrastructure.persistence.entity.StockLevelJpaEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 

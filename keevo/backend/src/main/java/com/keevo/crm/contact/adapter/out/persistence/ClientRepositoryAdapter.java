@@ -1,8 +1,8 @@
 package com.keevo.crm.contact.adapter.out.persistence;
 
+import com.keevo.crm.contact.adapter.out.persistence.entity.ClientJpaEntity;
 import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
-import com.keevo.shared.infrastructure.persistence.entity.ClientJpaEntity;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;

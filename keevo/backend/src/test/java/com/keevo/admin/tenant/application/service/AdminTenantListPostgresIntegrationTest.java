@@ -2,9 +2,9 @@ package com.keevo.admin.tenant.application.service;
 
 import com.keevo.admin.tenant.domain.model.AdminTenantListItem;
 import com.keevo.admin.tenant.domain.port.in.ListTenantsQuery;
+import com.keevo.identity.api.TenantDeletionPort;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.shared.infrastructure.scheduling.AccountDeletionScheduler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,7 +39,7 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     @Autowired TenantSchemaProvisioner provisioner;
     /** The Spring bean (with its proxies), so a transaction re-added on the read path would show. */
     @Autowired AdminTenantService springService;
-    @org.springframework.test.context.bean.override.mockito.MockitoBean AccountDeletionScheduler accountDeletionScheduler;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean TenantDeletionPort tenantDeletion;
 
     private final List<UUID> tenantIds = new ArrayList<>();
     private final List<String> schemas = new ArrayList<>();
@@ -66,7 +66,7 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
         // a second active store on B only: a mixed-up schema lookup would show
         jdbc.update("INSERT INTO \"" + schemaOf.get(b) + "\".stores (name, type, is_active) VALUES ('Boutique 2', 'STORE', true)");
 
-        AdminTenantService service = new AdminTenantService(jdbc, mock(AccountDeletionScheduler.class));
+        AdminTenantService service = new AdminTenantService(jdbc, mock(TenantDeletionPort.class));
         Page<AdminTenantListItem> page = service.execute(
                 new ListTenantsQuery(tag, null, null, null, null, null, null, 0, 25));
 
@@ -99,7 +99,7 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
                 + "VALUES (?, 'STOCK_THRESHOLD_BREACHED', ?, 'StockAlert', now() - interval '1 hour', ?, 'SYSTEM')",
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
 
-        AdminTenantService service = new AdminTenantService(jdbc, mock(AccountDeletionScheduler.class));
+        AdminTenantService service = new AdminTenantService(jdbc, mock(TenantDeletionPort.class));
         Page<AdminTenantListItem> page = service.execute(
                 new ListTenantsQuery(tag, "FREE", null, null, null, null, null, 0, 25));
         assertThat(page.getContent()).singleElement().satisfies(it -> {

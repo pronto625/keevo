@@ -1,7 +1,7 @@
 package com.keevo.crm.contact.adapter.out.persistence;
 
-import com.keevo.shared.infrastructure.persistence.entity.ProductSupplierJpaEntity;
-import com.keevo.shared.infrastructure.persistence.entity.ProductSupplierJpaEntity.ProductSupplierId;
+import com.keevo.crm.contact.adapter.out.persistence.entity.ProductSupplierJpaEntity.ProductSupplierId;
+import com.keevo.crm.contact.adapter.out.persistence.entity.ProductSupplierJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;

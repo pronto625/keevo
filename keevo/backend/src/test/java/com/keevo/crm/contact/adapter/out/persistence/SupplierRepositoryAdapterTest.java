@@ -1,8 +1,9 @@
 package com.keevo.crm.contact.adapter.out.persistence;
 
+import com.keevo.crm.contact.adapter.out.persistence.entity.ProductSupplierJpaEntity;
+import com.keevo.crm.contact.adapter.out.persistence.entity.SupplierJpaEntity;
+
 import com.keevo.crm.contact.domain.entity.Supplier;
-import com.keevo.shared.infrastructure.persistence.entity.ProductSupplierJpaEntity;
-import com.keevo.shared.infrastructure.persistence.entity.SupplierJpaEntity;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
