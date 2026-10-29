@@ -7,6 +7,7 @@ import com.keevo.admin.notification.domain.model.GlobalNotificationStatus;
 import com.keevo.admin.notification.domain.model.GlobalNotificationTarget;
 import com.keevo.admin.notification.domain.model.PushTargetTenant;
 import com.keevo.admin.notification.domain.model.PushTenantRef;
+import com.keevo.shared.infrastructure.persistence.GlobalTableStrayCopiesReporter;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
@@ -42,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class, JdbcGlobalNotificationRepository.class,
-        JdbcPushAudienceAdapter.class})
+        JdbcPushAudienceAdapter.class, GlobalTableStrayCopiesReporter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Global push SQL on PostgreSQL (Story 9-5)")
 class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest {
@@ -52,6 +53,7 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
     @Autowired JdbcGlobalNotificationRepository repository;
     @Autowired JdbcPushAudienceAdapter audience;
     @Autowired TenantSchemaSyncService schemaSync;
+    @Autowired GlobalTableStrayCopiesReporter strayCopies;
 
     private final List<UUID> tenantIds = new ArrayList<>();
     private final List<String> schemas = new ArrayList<>();
@@ -274,7 +276,46 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
         // explicit names: a table dropped from the global-only list by mistake would still be caught here
         assertThat(tables).doesNotContain("tenants", "tenant_payments", "tenant_plan_events", "plan_expiry_reminders",
                 "user_daily_activity", "platform_health_samples", "admin_alert_acks", "sync_silence_notices",
-                "global_notifications", "module_definitions", "tenant_modules");
+                "global_notifications", "module_definitions", "tenant_modules",
+                // Story 13.4 audit
+                "shedlock", "flyway_schema_history", "event_publication", "event_listener_receipt",
+                "refresh_tokens", "password_reset_tokens", "user_tenant_memberships", "user_sync_state", "feedback");
+        // tenant tables stay mirrored / provisioned
+        assertThat(tables).contains("users", "subscriptions", "stores", "products", "sales", "audit_log");
+    }
+
+    @Test
+    void strayCopiesOfGlobalTables_areCountedAndNeverDropped() throws Exception {
+        PushTargetTenant t = tenant("ACTIVE", "FREE");
+        PushTargetTenant u = tenant("ACTIVE", "FREE");
+        GlobalTableStrayCopiesReporter.StrayCopies none = new GlobalTableStrayCopiesReporter.StrayCopies(0, 0, 0);
+        GlobalTableStrayCopiesReporter.StrayCopies before = strayCopies.countStrayCopies().getOrDefault("shedlock", none);
+        // copies mirrored by an earlier version of the sync: one empty, one with a row (analysed → estimate > 0)
+        jdbc.execute("CREATE TABLE \"" + t.schemaName() + "\".shedlock (LIKE public.shedlock INCLUDING ALL)");
+        jdbc.execute("CREATE TABLE \"" + u.schemaName() + "\".shedlock (LIKE public.shedlock INCLUDING ALL)");
+        jdbc.update("INSERT INTO \"" + u.schemaName() + "\".shedlock (name, lock_until, locked_at, locked_by) "
+                + "VALUES ('x', now(), now(), 'test')");
+        jdbc.execute("ANALYZE \"" + u.schemaName() + "\".shedlock");
+        // a table with a global-only name outside tenant schemas is not counted
+        jdbc.execute("CREATE SCHEMA IF NOT EXISTS not_a_tenant");
+        try {
+            jdbc.execute("CREATE TABLE IF NOT EXISTS not_a_tenant.shedlock (LIKE public.shedlock INCLUDING ALL)");
+
+            GlobalTableStrayCopiesReporter.StrayCopies after = strayCopies.countStrayCopies().get("shedlock");
+            assertThat(after.copies()).isEqualTo(before.copies() + 2);
+            assertThat(after.nonEmpty()).isEqualTo(before.nonEmpty() + 1);
+
+            schemaSync.syncNow(t.schemaName());
+            assertThat(jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
+                    String.class, t.schemaName())).contains("shedlock");
+            assertThat(strayCopies.countStrayCopies().keySet()).isSubsetOf(TenantSchemaSyncService.globalOnlyTables());
+            // background report: completes, never throws
+            java.util.concurrent.CompletableFuture<Void> report = strayCopies.startReport();
+            report.get(30, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(report).isCompleted();
+        } finally {
+            jdbc.execute("DROP SCHEMA IF EXISTS not_a_tenant CASCADE"); // test database only
+        }
     }
 
     @Test

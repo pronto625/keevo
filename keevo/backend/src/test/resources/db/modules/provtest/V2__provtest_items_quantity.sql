@@ -1,0 +1,1 @@
+ALTER TABLE provtest_items ADD COLUMN quantity INT NOT NULL DEFAULT 0;

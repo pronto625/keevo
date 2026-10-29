@@ -129,6 +129,7 @@ Flyway.configure()
 - Historique **isolé par module** (`flyway_history_<moduleId>`) → activation/évolution indépendantes, pas de collision de versions entre modules.
 - À < 100 tenants, provisionner un module sur toute la base = boucle batch triviale.
 - **Désactivation** = on **ne supprime pas** les tables (rétention) ; on retire routes/permissions/handlers.
+- **Note d'implémentation (Story 13.4) :** le Flyway de module utilise `.baselineVersion("0")` en plus de la configuration ci-dessus. Un schéma tenant n'est jamais vide (tables du cœur) : avec la baseline par défaut de Flyway (`1`), le premier `migrate` poserait une baseline à 1 et sauterait silencieusement le `V1` du module. Avec `0`, tous les scripts à partir de `V1` s'appliquent ; la ligne de baseline est ignorée pour `provisioned_version`. Conséquence pour la conversion d'un module existant (13.9) : son `V1` s'exécute sur des tenants qui ont déjà ses tables → il doit être idempotent.
 
 ---
 

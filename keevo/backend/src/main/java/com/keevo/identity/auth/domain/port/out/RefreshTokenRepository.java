@@ -10,7 +10,8 @@ import java.util.UUID;
  * RefreshTokenRepository — Driven port for refresh token persistence.
  *
  * <p>Interface — implemented in the persistence adapter layer.
- * Tokens are stored in the per-tenant schema (refresh_tokens table).
+ * Tokens are stored in the global {@code public.refresh_tokens} table (one table for every tenant, rows carry
+ * {@code tenant_id}); it is never mirrored into tenant schemas (Story 13.4, global-only table).
  */
 public interface RefreshTokenRepository {
 

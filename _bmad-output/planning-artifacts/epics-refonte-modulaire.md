@@ -859,7 +859,7 @@ So that **chaque module gère son schéma de façon versionnée et isolée (MOD-
 - Idempotence + transaction par schéma ; à < 100 tenants, un endpoint « provisionner sur tous les tenants actifs » est un batch trivial.
 - TDD Testcontainers : activer → tables présentes dans le bon schéma ; ré-activer → no-op ; isolation entre 2 schémas.
 
-- [ ] [Deferred-from: review 13-1, 2026-10-29] `TenantSchemaSyncService` copies other global public tables into every tenant schema (`shedlock`, `event_publication`, `event_listener_receipt`, `flyway_schema_history`, `user_tenant_memberships`, `refresh_tokens`, …) — audit which are global, extend `GLOBAL_ONLY_TABLES`, decide cleanup of existing empty copies [tenant provisioning]
+- [x] [Deferred-from: review 13-1, 2026-10-29] `TenantSchemaSyncService` copies other global public tables into every tenant schema (`shedlock`, `event_publication`, `event_listener_receipt`, `flyway_schema_history`, `user_tenant_memberships`, `refresh_tokens`, …) — audit which are global, extend `GLOBAL_ONLY_TABLES`, decide cleanup of existing empty copies [tenant provisioning] — ✅ 13.4: audit of every `public` table; `GLOBAL_ONLY_TABLES` + `shedlock`, `flyway_schema_history`, `event_publication`, `event_listener_receipt`, `refresh_tokens`, `password_reset_tokens`, `user_tenant_memberships`, `user_sync_state`, `feedback` (all only accessed as `public.*`, no tenant DDL); existing copies kept and counted at boot (`GlobalTableStrayCopiesReporter`, INFO, no schema names); `GlobalNotificationPostgresIntegrationTest` explicit list + stray-copy test. Cleanup decision routed → 13-10
 
 ### Story 13.5 : `EntitlementService` + gating déclaratif
 
@@ -952,6 +952,8 @@ So that **je gère le catalogue de chaque tenant sans redéploiement (MOD-FR2, M
 
 - [ ] [Deferred-from: live test 12-7, 2026-10-29] **Blocking before any module can be DISABLED in prod**: while a sale is held (`MODULE_INACTIVE`), pulls overwrite the local views — the held sale disappears from « Mes Ventes » and the stock shows the server value (19 instead of 18) until the module is back; the cashier may think the sale is lost and re-enter it. Show held operations in the lists (badge « En attente — module non activé ») and keep local-only rows/stock deltas through pulls [Flutter sync / sales list]
 
+- [ ] [Deferred-from: spec 13-4, 2026-10-29] Activation calls `ModuleProvisioner.provision(schema, id)` for each plan step **after** writing its `tenant_modules` row (a paid module without a row → `IllegalStateException`); map `ModuleProvisioningException` to a French error without technical detail; Flyway's own INFO logs name the tenant schema (`Migrating schema "kv_…"`) — lower `org.flywaydb` to WARN in prod or accept; expose `provisionAll` for the super-admin console (16.4) [ModuleLifecycleService]
+
 - [ ] [Deferred-from: review 13-3, 2026-10-29] Call `planActivation` (and honour `blocked()`) **before** writing any `tenant_modules` row (spec-socle §10 step 1/2 order swapped — writing the target row first makes the plan empty and skips the cascade), then write/provision every step in `moduleIds()` order and evict the registry cache; check `ModuleRegistry.isKnownTenant` first; per-tenant lock or re-check inside the transaction against concurrent activations; responses/audit show French display names, not module ids [ModuleLifecycleService]
 
 ### Story 13.9 : Convertir 2 modules existants au contrat `KeevoModule`
@@ -978,6 +980,10 @@ So that **le socle est validé sur du réel avant le module pilote (MOD-FR1, MOD
 
 - [ ] [Deferred-from: spec 12-7, 2026-10-29] Relocate each `SyncOperationHandler` from `sync` into its owning module (registered through the `KeevoModule` contract), keeping the declared `moduleId()` [sync handlers]
 
+- [ ] [Deferred-from: spec 13-4, 2026-10-29] Converting a module whose tables already exist in tenant schemas: `ModuleProvisioner` baselines at version **0** (a tenant schema is never empty — Flyway's default baseline 1 would skip every V1), so a converted module's `V1` runs on tenants that already have its tables — write it idempotent (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, guarded constraints) or baseline existing tenants explicitly; then remove the module's tables from `TenantSchemaProvisioner` / `REQUIRED_TENANT_TABLES_DDL` [ModuleProvisioner / db/modules]
+
+- [ ] [Deferred-from: review 13-4, 2026-10-29] Module migration policy: cap manifest ids so `flyway_history_<id>` ≤ 63 chars (ID_MAX 48, checked at load); `core` provisioned version tracking; repair path for an edited applied script (`validateOnMigrate`) and `outOfOrder` hotfixes; when a module is converted stop `TenantSchemaSyncService` from mirroring its tables [ModuleProvisioner / loader]
+
 ### Story 13.10 : Appliquer le gating entitlement à TOUS les endpoints existants (classement Free/Premium)
 
 As a **plateforme**,
@@ -1003,6 +1009,8 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 - Free conserve : catalogue (plafond), POS/vente/clôture, stock de base, CRM basique, rapport EOD **fixe**. Premium : multi-store/transferts, counting, rapports avancés, profitabilité, exports, config rapports, alertes/notifs avancées.
 - S'appuie sur `EntitlementService` (13.5) + `PlanLimitGuard` (refonte 16.8) ; produire une **table de correspondance endpoint→entitlement** (doc + test).
 - Dépend de 13.5 ; à faire après la conversion des modules (13.9).
+
+
 
 ---
 
@@ -1413,6 +1421,8 @@ So that **je gère la commercialisation après paiement Mobile Money (MOD-FR16, 
 - Écran Next.js (réutilise patterns du dashboard) ; relie aux endpoints admin modules/bundles.
 - V1 : activation **super-admin only** (décision verrouillée) — débloque la monétisation FR78.
 
+- [ ] [Deferred-from: review 13-4, 2026-10-29] `provisionAll` cost on hundreds of tenants (fresh Flyway per tenant, classpath scans, history queries) — cache discovery per module, run as an async job with progress when exposed in the console [ModuleProvisioner]
+
 ### Story 16.5 : Migration des tenants existants (backfill `tenant_modules`)
 
 As a **plateforme**,
@@ -1438,6 +1448,10 @@ So that **la bascule au modèle modulaire ne casse aucun tenant (MOD-FR19, MOD-N
 - Mapping `plan courant → modules` : `PREMIUM`/`PREMIUM_TRIAL` → tous modules payants (trial avec `expires_at` = celui de la souscription actuelle pour les trials en cours) ; `FREE` → Core uniquement.
 - Provisioning des tables des modules activés (Epic 13.4) pour chaque tenant ; idempotent.
 - Dry-run obligatoire sur staging (Epic 10.5) ; rollback documenté.
+
+- [ ] [Deferred-from: spec 13-4, 2026-10-29] Remove `TenantSchemaSyncService` (runtime `public → tenant` copy) once every module is provisioned by `ModuleProvisioner` (after every module is converted — today only CRM/Reporting are planned in 13.9: this item also covers converting the remaining tenant DDL of catalog/inventory/commerce/sync/identity/store/… to `db/modules/<id>`, or recording a user decision to keep the sync as a permanent shim): drop the mirroring, keep only what `TenantSchemaMigrationRunner` still needs, update the security filter caller [tenant provisioning]
+
+- [ ] [Deferred-from: review 13-4, 2026-10-29] `provisionAll` on a free module materialises explicit ACTIVE/FREE rows for every tenant — take them into account in the backfill and in any later free→paid reclassification (16.8) [tenant_modules]
 
 ### Story 16.6 : Conformité RGPD — suppression compte/données (FR91)
 
@@ -1475,6 +1489,8 @@ So that **le risque de mise en production est maîtrisé (MOD-NFR12, fiabilité)
 **Implementation Notes:**
 - Stratégie canary (par tenant ou par instance) ; runbook (rollback Flyway, restauration backup).
 - HA/Redis restent différés tant que la charge ne le justifie pas (< 500 tenants).
+
+- [ ] [Deferred-from: spec 13-4, 2026-10-29] **Decision for the user:** stray copies of global-only tables in tenant schemas (dev: 331 schemas × `shedlock`, `flyway_schema_history`, `event_publication`, `event_listener_receipt`, `refresh_tokens`, `password_reset_tokens`, `user_tenant_memberships`, `user_sync_state`, `feedback`) are unused but kept (an update must not alter prod data). Choose: keep forever, or a one-shot reviewed cleanup (`DROP TABLE IF EXISTS` per tenant, empty-table check first, prod backup). Counts are logged at boot by `GlobalTableStrayCopiesReporter` [tenant schemas]
 
 ### Story 16.8 : Profils de plan & plafonds configurables (super-admin)
 

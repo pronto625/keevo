@@ -41,7 +41,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code tenant_payments}, {@code tenant_plan_events}, {@code plan_expiry_reminders},
  * {@code user_daily_activity}, {@code platform_health_samples}, {@code admin_alert_acks},
  * {@code sync_silence_notices}, {@code global_notifications}, {@code module_definitions},
- * {@code tenant_modules}.
+ * {@code tenant_modules}, and since Story 13.4 {@code shedlock}, {@code flyway_schema_history},
+ * {@code event_publication}, {@code event_listener_receipt}, {@code refresh_tokens},
+ * {@code password_reset_tokens}, {@code user_tenant_memberships}, {@code user_sync_state},
+ * {@code feedback}. Copies of those created by earlier versions are left in place (never dropped by an
+ * update) and counted at boot by {@link GlobalTableStrayCopiesReporter}.
  *
  * <p>Architecture: shared infrastructure — zero knowledge of business domain.
  */
@@ -68,7 +72,17 @@ public class TenantSchemaSyncService {
             // Story 9-5 (2/2) — global push notifications of the super admin (public only)
             "global_notifications",
             // Story 13.1 — module registry: global catalogue + per-tenant module state (public only)
-            "module_definitions", "tenant_modules");
+            "module_definitions", "tenant_modules",
+            // Story 13.4 — audit of every public table without a tenant counterpart (all accessed
+            // schema-qualified as public.*; tenant copies were dead stray copies, kept, never dropped):
+            // infrastructure — ShedLock (public.shedlock), public Flyway history, Spring Modulith outbox (V28)
+            "shedlock", "flyway_schema_history", "event_publication", "event_listener_receipt",
+            // identity — global auth (entities/SQL schema = public)
+            "refresh_tokens", "password_reset_tokens", "user_tenant_memberships",
+            // sync — device sync state (tenant_id = schema name, public.user_sync_state)
+            "user_sync_state",
+            // feedback — global inbox of the super admin (FeedbackJpaEntity schema = public)
+            "feedback");
 
     /** The public tables never mirrored into tenant schemas (read-only view, used by tests). */
     public static Set<String> globalOnlyTables() {

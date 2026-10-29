@@ -82,4 +82,25 @@ public final class TestModuleCatalogs {
                 loaded("eta", b, true, List.of("base"), List.of()),
                 loaded("base", b, true)));
     }
+
+    /**
+     * Story 13.4 — modules of the provisioner tests (migrations under {@code src/test/resources/db/modules/<id>/},
+     * "next release" scripts under {@code db/modules-next/<id>/}): {@code provtest} (V1+V2, next V3),
+     * {@code provbroken} (V1, next V2 invalid), {@code provbatch} (V1), {@code provpaid} (V1, paid) and
+     * {@code provempty} (no migrations), {@code provpartial} (V1+V2, next V3 invalid), {@code provmisnamed} (only a
+     * misnamed file) and {@code provmixed} (V1 + a misnamed V2). All free except {@code provpaid}.
+     */
+    public static ModuleCatalog provisioningCatalog() {
+        ModuleCategory b = ModuleCategory.BUSINESS;
+        return new ModuleCatalog(List.of(
+                loaded("core", ModuleCategory.CORE, true),
+                loaded("provtest", b, true),
+                loaded("provbroken", b, true),
+                loaded("provbatch", b, true),
+                loaded("provpaid", ModuleCategory.PREMIUM, false),
+                loaded("provempty", b, true),
+                loaded("provpartial", b, true),
+                loaded("provmisnamed", b, true),
+                loaded("provmixed", b, true)));
+    }
 }
