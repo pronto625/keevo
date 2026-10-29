@@ -245,8 +245,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 13: Moteur de Modularité — le Socle (Phase 3)
   # ─────────────────────────────────────────────────────────
-  epic-13: backlog
-  13-1-modele-donnees-registre-manifest-seed: backlog
+  epic-13: in-progress  # 2026-10-29 démarrage (refonte/modulaire)
+  13-1-modele-donnees-registre-manifest-seed: done  # 2026-10-29 done — V29 module_definitions + tenant_modules, 10 manifests keevo/modules, seed idempotent sans downgrade, fail-fast prouvé sur le jar ; 3 858 tests | 2026-10-29 bmad-build-auto (spec-13-1-registre-modules-manifest-seed.md)
   13-2-module-registry: backlog
   13-3-dependency-resolver: backlog
   13-4-module-provisioner-flyway-par-module: backlog

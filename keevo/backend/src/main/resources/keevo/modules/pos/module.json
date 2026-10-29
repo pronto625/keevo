@@ -1,0 +1,27 @@
+{
+  "id": "pos",
+  "version": "1.0.0",
+  "displayName": "Point de vente",
+  "category": "business",
+  "requires": [
+    "core",
+    "catalog",
+    "inventory"
+  ],
+  "enhances": [
+    "crm",
+    "reporting"
+  ],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.pos",
+  "free": true
+}

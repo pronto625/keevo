@@ -1,0 +1,22 @@
+{
+  "id": "admin",
+  "version": "1.0.0",
+  "displayName": "Administration de la plateforme",
+  "category": "platform",
+  "requires": [
+    "core"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.admin",
+  "free": true
+}

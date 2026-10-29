@@ -779,7 +779,7 @@ So that **la plateforme connaît les modules installés et leur état par tenant
 - Scan classpath des beans `KeevoModule` (ou ressources `module.json`) ; seed via `ApplicationRunner` idempotent.
 - TDD : Testcontainers (seed idempotent, relance = no-op) + unit (manifest invalide → exception).
 
-- [ ] [Deferred-from: review 12-6b, 2026-10-29] `RequiresGraphAcyclicityTest` manifest loading: glob `classpath*:**/module.json` (or the chosen manifest path), assert unique non-blank `id`, `requires` must be an array — else the cycle check silently sees one manifest / loses edges [architecture tests] — enable the test with the manifests
+- [x] [Deferred-from: review 12-6b, 2026-10-29] `RequiresGraphAcyclicityTest` manifest loading: glob `classpath*:**/module.json` (or the chosen manifest path), assert unique non-blank `id`, `requires` must be an array — else the cycle check silently sees one manifest / loses edges [architecture tests] — enable the test with the manifests — ✅ 13.1: enabled (no `@Disabled`), reads the manifests with the production `ModuleManifestLoader` (glob `classpath*:keevo/modules/*/module.json`, the one the boot seed uses — no second parser): unique non-blank ids, `requires` a JSON array of known ids, acyclic; + all glob matches loaded and exactly 10 manifests, none outside `src/main/resources/keevo/modules/<id>/` and none in test resources (`noManifestOutsideTheModulesDirectory`); `com.keevo.architecture.**` 28 tests, 0 failures, 0 skipped
 
 ### Story 13.2 : `ModuleRegistry`
 
@@ -799,6 +799,10 @@ So that **tout composant peut savoir si un module est actif pour un tenant (MOD-
 - Pas de Redis (différé) — DB suffit < 100 tenants.
 
 - [ ] [Deferred-from: review 12-6b, 2026-10-29] `spring-modulith-core` + ArchUnit ship in the prod boot jar via `spring-modulith-starter-jdbc` but are unused at runtime — decide (exclusion vs `spring-modulith-runtime` for the registry), verify with `dependency:tree` + boot smoke [pom.xml]
+
+- [ ] [Deferred-from: review 13-1, 2026-10-29] Rows of `module_definitions` whose manifest is no longer on the classpath (kept by the seed, WARN) must be treated as not installed by the registry (no activation, hidden from catalogue) [ModuleRegistry]
+
+- [ ] [Deferred-from: review 13-1, 2026-10-29] Expose the validated manifest set once as a bean (e.g. `ModuleCatalog`) consumed by the seeder, registry and resolver — no re-scan of the classpath per caller [shared.module]
 
 ### Story 13.3 : `DependencyResolver` (requires, cascade, cycles, blocage)
 
@@ -847,6 +851,8 @@ So that **chaque module gère son schéma de façon versionnée et isolée (MOD-
 - Idempotence + transaction par schéma ; à < 100 tenants, un endpoint « provisionner sur tous les tenants actifs » est un batch trivial.
 - TDD Testcontainers : activer → tables présentes dans le bon schéma ; ré-activer → no-op ; isolation entre 2 schémas.
 
+- [ ] [Deferred-from: review 13-1, 2026-10-29] `TenantSchemaSyncService` copies other global public tables into every tenant schema (`shedlock`, `event_publication`, `event_listener_receipt`, `flyway_schema_history`, `user_tenant_memberships`, `refresh_tokens`, …) — audit which are global, extend `GLOBAL_ONLY_TABLES`, decide cleanup of existing empty copies [tenant provisioning]
+
 ### Story 13.5 : `EntitlementService` + gating déclaratif
 
 As a **développeur plateforme**,
@@ -887,6 +893,8 @@ So that **un module utilise une fonction d'un autre si présent, sinon dégrade 
 **Implementation Notes:**
 - `CapabilityRegistry.provide/find` (spec §6) ; résolution **tenant-aware** (ne retourne que si le fournisseur est actif pour ce tenant).
 - Les interfaces `*Port` vivent dans l'`api` du fournisseur ; le consommateur dépend de cette `api` uniquement (autorisé par `verify()`).
+
+- [ ] [Deferred-from: review 13-1, 2026-10-29] Validate the `needs` entries format (`Port` / `Port?`) and that `provides` names are unique across manifests [ModuleManifestLoader]
 
 ### Story 13.7 : `ExtensionRegistry` (points d'extension / slots)
 
@@ -947,6 +955,8 @@ So that **le socle est validé sur du réel avant le module pilote (MOD-FR1, MOD
 **Implementation Notes:**
 - Choisis car peu couplés et représentatifs (un *provides*, un *consumes*).
 - Valide bout-en-bout : provisioning, gating, capability, events, lifecycle — avant Epic 14.
+
+- [ ] [Deferred-from: review 13-1, 2026-10-29] `ModuleManifest` canonical constructor is public — Java-built manifests (`KeevoModule.manifest()`) would bypass the loader's invariants; keep JSON as the single source or move validation into the record [shared.module]
 
 ### Story 13.10 : Appliquer le gating entitlement à TOUS les endpoints existants (classement Free/Premium)
 
@@ -1153,6 +1163,8 @@ So that **un module désactivé n'est pas accessible (MOD-FR18, MOD-FR14 fronten
 **Implementation Notes:**
 - Registre de routes par module ; `go_router` `redirect`/`routes` conditionnés par `entitlementsProvider`.
 - Guard : `module inactif` → home ou écran « module non activé » (CTA upgrade).
+
+- [ ] [Deferred-from: review 13-1, 2026-10-29] Validate manifest `routes` format (leading `/`, go_router syntax) when routing consumes them [ModuleManifestLoader]
 
 ### Story 15.3 : `ExtensionSlot` + lazy loading
 

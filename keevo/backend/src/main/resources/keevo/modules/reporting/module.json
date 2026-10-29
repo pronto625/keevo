@@ -1,0 +1,26 @@
+{
+  "id": "reporting",
+  "version": "1.0.0",
+  "displayName": "Rapports",
+  "category": "business",
+  "requires": [
+    "core"
+  ],
+  "enhances": [
+    "pos",
+    "inventory",
+    "catalog"
+  ],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.reporting",
+  "free": true
+}

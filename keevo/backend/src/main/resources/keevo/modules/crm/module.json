@@ -1,0 +1,24 @@
+{
+  "id": "crm",
+  "version": "1.0.0",
+  "displayName": "Clients et fournisseurs",
+  "category": "business",
+  "requires": [
+    "core"
+  ],
+  "enhances": [
+    "pos"
+  ],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.crm",
+  "free": true
+}

@@ -1,0 +1,25 @@
+{
+  "id": "inventory",
+  "version": "1.0.0",
+  "displayName": "Stock et inventaire",
+  "category": "business",
+  "requires": [
+    "core",
+    "catalog"
+  ],
+  "enhances": [
+    "reporting"
+  ],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.inventory",
+  "free": true
+}

@@ -1,0 +1,24 @@
+{
+  "id": "catalog",
+  "version": "1.0.0",
+  "displayName": "Catalogue",
+  "category": "business",
+  "requires": [
+    "core"
+  ],
+  "enhances": [
+    "reporting"
+  ],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.catalog",
+  "free": true
+}

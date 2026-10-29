@@ -1,0 +1,22 @@
+{
+  "id": "store",
+  "version": "1.0.0",
+  "displayName": "Boutiques",
+  "category": "business",
+  "requires": [
+    "core"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.store",
+  "free": true
+}

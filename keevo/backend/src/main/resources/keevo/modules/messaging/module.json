@@ -1,0 +1,26 @@
+{
+  "id": "messaging",
+  "version": "1.0.0",
+  "displayName": "Messagerie et notifications",
+  "category": "business",
+  "requires": [
+    "core"
+  ],
+  "enhances": [
+    "reporting",
+    "pos",
+    "inventory"
+  ],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.messaging",
+  "free": true
+}

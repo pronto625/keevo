@@ -1,0 +1,20 @@
+{
+  "id": "core",
+  "version": "1.0.0",
+  "displayName": "Socle",
+  "category": "core",
+  "requires": [],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.core",
+  "free": true
+}

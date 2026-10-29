@@ -1,0 +1,22 @@
+{
+  "id": "sync",
+  "version": "1.0.0",
+  "displayName": "Synchronisation hors ligne",
+  "category": "core",
+  "requires": [
+    "core"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.sync",
+  "free": true
+}
