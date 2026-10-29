@@ -32,9 +32,54 @@ public final class TestModuleCatalogs {
     }
 
     public static LoadedModuleManifest loaded(String id, ModuleCategory category, boolean free) {
-        List<String> requires = id.equals(ModuleManifest.CORE_ID) ? List.of() : List.of(ModuleManifest.CORE_ID);
-        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, category, requires, List.of(), List.of(),
+        return loaded(id, category, free, List.of(), List.of());
+    }
+
+    /**
+     * Story 13.3 — a manifest with extra hard dependencies ({@code core} is added for every non-core module) and
+     * soft ones ({@code enhances}).
+     */
+    public static LoadedModuleManifest loaded(String id, ModuleCategory category, boolean free,
+                                              List<String> requires, List<String> enhances) {
+        List<String> all = new ArrayList<>();
+        if (!id.equals(ModuleManifest.CORE_ID)) {
+            all.add(ModuleManifest.CORE_ID);
+        }
+        all.addAll(requires);
+        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, category, all, enhances, List.of(),
                 List.of(), List.of(), List.of(), null, List.of(), List.of(), "module." + id, free);
         return new LoadedModuleManifest("test:" + id, manifest, "{}");
+    }
+
+    /**
+     * Story 13.3 — a dependency graph for resolver tests (every module also requires {@code core}):
+     * <ul>
+     *   <li>{@code x} requires {@code catalog} + {@code inventory}; {@code inventory} requires {@code catalog};</li>
+     *   <li>{@code alpha} → {@code beta} → {@code gamma} (multi-level);</li>
+     *   <li>{@code buyer} requires the paid {@code paid};</li>
+     *   <li>{@code helper} only enhances {@code beta} (no constraint);</li>
+     *   <li>{@code solo} requires nothing but core;</li>
+     *   <li>diamond: {@code top} requires {@code [zeta, eta]} (reverse order on purpose), both require {@code base}.</li>
+     * </ul>
+     * Every module is free except {@code paid}.
+     */
+    public static ModuleCatalog dependencyCatalog() {
+        ModuleCategory b = ModuleCategory.BUSINESS;
+        return new ModuleCatalog(List.of(
+                loaded("x", b, true, List.of("inventory", "catalog"), List.of()), // unsorted on purpose
+                loaded("core", ModuleCategory.CORE, true),
+                loaded("inventory", b, true, List.of("catalog"), List.of()),
+                loaded("catalog", b, true),
+                loaded("alpha", b, true, List.of("beta"), List.of()),
+                loaded("beta", b, true, List.of("gamma"), List.of()),
+                loaded("gamma", b, true),
+                loaded("paid", ModuleCategory.PREMIUM, false),
+                loaded("buyer", b, true, List.of("paid"), List.of()),
+                loaded("helper", b, true, List.of(), List.of("beta")),
+                loaded("solo", b, true),
+                loaded("top", b, true, List.of("zeta", "eta"), List.of()),
+                loaded("zeta", b, true, List.of("base"), List.of()),
+                loaded("eta", b, true, List.of("base"), List.of()),
+                loaded("base", b, true)));
     }
 }

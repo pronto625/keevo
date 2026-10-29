@@ -9,7 +9,9 @@
  *
  * <p>Since Story 13.2 the validated set is held once by {@code shared.module.application.ModuleCatalog}, and
  * {@link com.keevo.shared.module.ModuleRegistry} answers which modules are installed and which are active for a
- * tenant ({@code public.tenant_modules}, {@link com.keevo.shared.module.TenantModuleStatus}). The
- * {@code DependencyResolver}, activation and entitlement gating come with Stories 13.3+.
+ * tenant ({@code public.tenant_modules}, {@link com.keevo.shared.module.TenantModuleStatus}). Since
+ * Story 13.3 {@link com.keevo.shared.module.DependencyResolver} plans activations (missing {@code requires} first,
+ * each step checked by {@link com.keevo.shared.module.ModuleActivationEligibility}) and checks deactivations
+ * (blocked by active dependents); activation itself and real entitlement come with Stories 13.5+.
  */
 package com.keevo.shared.module;

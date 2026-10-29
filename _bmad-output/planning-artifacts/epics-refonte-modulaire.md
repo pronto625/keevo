@@ -835,7 +835,7 @@ So that **on n'atteint jamais un état incohérent (MOD-FR4, MOD-FR5, MOD-FR6)**
 - `enhances`/`needs` n'imposent **aucune** contrainte (opportuniste).
 - TDD exhaustif : cascade multi-niveaux, cycle, blocage, requires déjà actifs.
 
-- [ ] [Deferred-from: review 13-2, 2026-10-29] `checkDeactivation` must compute dependents from `ModuleRegistry.activeModules` (free modules without a row are active), never from raw `tenant_modules` rows [DependencyResolver]
+- [x] [Deferred-from: review 13-2, 2026-10-29] `checkDeactivation` must compute dependents from `ModuleRegistry.activeModules` (free modules without a row are active), never from raw `tenant_modules` rows [DependencyResolver] — ✅ 13.3: `DependencyResolverService.checkDeactivation` filters the transitive `requires` dependents by `ModuleRegistry.activeModules(tenantSchema)` only (no DB access of its own); `DependencyResolverServiceTest.inactiveDependentsDoNotBlock`/`deactivateTransitive`, and `DependencyResolverBootIntegrationTest` on the real registry (tenant without rows for `catalog`/`inventory` → treated active; `pos` DISABLED row → not a dependent)
 
 ### Story 13.4 : `ModuleProvisioner` — Flyway par module dans le schéma tenant
 
@@ -883,6 +883,8 @@ So that **l'accès est refusé proprement si le module n'est pas souscrit (MOD-F
 - TDD slice : 402/403 si non entitled, OK sinon ; combinable avec `@RequiresPermission`.
 
 - [ ] [Deferred-from: review 13-2, 2026-10-29] Single source of truth between `ModuleRegistry.isActive` and `EntitlementService`: extend `TenantModuleStatePort` with `expires_at`/`grace_until`/`tier`, EXPIRED in grace = read-only, keep the free-without-row rule shared; decide SUSPENDED / DELETION_PENDING tenants [entitlement]
+
+- [ ] [Deferred-from: review 13-3, 2026-10-29] Replace `FreeModulesOnlyEligibility` (plain `@Component` — a second `ModuleActivationEligibility` bean breaks the context): delete it or make the 13.5 bean the only one, update `DependencyResolverBootIntegrationTest`; enrich `Eligibility` (reason, TRIAL vs ACTIVE, read-only grace) and define the contract for a throwing/null port [entitlement]
 
 ### Story 13.6 : `CapabilityRegistry` (intégration synchrone optionnelle)
 
@@ -949,6 +951,8 @@ So that **je gère le catalogue de chaque tenant sans redéploiement (MOD-FR2, M
 - [ ] [Deferred-from: review 13-2, 2026-10-29] Deactivation must upsert a `DISABLED` row (+ `disabled_at`) — deleting the row re-activates a free module; evict the registry request cache (`ModuleRegistry.evict(schema)`) after every write; resolve the schema from the tenant UUID of the admin API [ModuleLifecycleService]
 
 - [ ] [Deferred-from: live test 12-7, 2026-10-29] **Blocking before any module can be DISABLED in prod**: while a sale is held (`MODULE_INACTIVE`), pulls overwrite the local views — the held sale disappears from « Mes Ventes » and the stock shows the server value (19 instead of 18) until the module is back; the cashier may think the sale is lost and re-enter it. Show held operations in the lists (badge « En attente — module non activé ») and keep local-only rows/stock deltas through pulls [Flutter sync / sales list]
+
+- [ ] [Deferred-from: review 13-3, 2026-10-29] Call `planActivation` (and honour `blocked()`) **before** writing any `tenant_modules` row (spec-socle §10 step 1/2 order swapped — writing the target row first makes the plan empty and skips the cascade), then write/provision every step in `moduleIds()` order and evict the registry cache; check `ModuleRegistry.isKnownTenant` first; per-tenant lock or re-check inside the transaction against concurrent activations; responses/audit show French display names, not module ids [ModuleLifecycleService]
 
 ### Story 13.9 : Convertir 2 modules existants au contrat `KeevoModule`
 
@@ -1370,6 +1374,8 @@ So that **le client peut choisir juste une partie ou un pack (MOD-FR12)**.
 **Implementation Notes:**
 - `bundle_definitions` (ou config) = `{ bundleId → [moduleId...] }` ; application = boucle d'activation (Epic 13.8).
 - Moteur **100 % à-la-carte** sous le capot (décision D1).
+
+- [ ] [Deferred-from: review 13-3, 2026-10-29] Bundles need one plan for a set of modules (`planActivation(schema, Set<String>)` over the union of closures, one topological order) instead of planning module by module [DependencyResolver]
 
 ### Story 16.3 : Claim JWT `modules` + gating offline
 
