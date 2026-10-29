@@ -18,9 +18,7 @@ import java.util.Optional;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.messaging.notification.adapter.in.api.DraftValidationApiTestSupport;
-import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
-import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.shared.event.catalog.product.DraftProductValidatedEvent;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.mockito.MockedStatic;
 import org.springframework.context.ApplicationEventPublisher;
@@ -36,9 +34,6 @@ class UpdateProductUseCaseTest {
     private ProductRepository productRepository;
     
     @Mock
-    private DraftNotificationRepository draftNotificationRepository;
-    
-    @Mock
     private ApplicationEventPublisher eventPublisher;
     
     @Mock
@@ -48,8 +43,7 @@ class UpdateProductUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new UpdateProductUseCase(productRepository,
-                DraftValidationApiTestSupport.commandPort(draftNotificationRepository), eventPublisher, objectMapper);
+        useCase = new UpdateProductUseCase(productRepository, eventPublisher, objectMapper);
     }
 
     // Device test: a price-only PATCH answered 404 « Produit introuvable ».
@@ -165,7 +159,6 @@ class UpdateProductUseCaseTest {
 
             when(productRepository.findById(productId)).thenReturn(Optional.of(draftProduct));
             when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-            when(draftNotificationRepository.findByProductId(productId)).thenReturn(Optional.empty());
 
             var result = useCase.execute(dto);
 
@@ -209,16 +202,14 @@ class UpdateProductUseCaseTest {
                     productId, "Article", null, "KEV-ACK001", categoryId,
                     3000, null, null, null, actorId, "OWNER");
 
-            var pending = DraftPendingValidation.create(productId, "Article", actorId,
-                    UUID.nameUUIDFromBytes("kv_test".getBytes()));
-
             when(productRepository.findById(productId)).thenReturn(Optional.of(draftProduct));
             when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-            when(draftNotificationRepository.findByProductId(productId)).thenReturn(Optional.of(pending));
 
             useCase.execute(dto);
 
-            verify(draftNotificationRepository).saveUpdated(argThat(DraftPendingValidation::isAcknowledged));
+            // 12.6a: messaging acknowledges the pending record on this event (DraftValidationTrackingListenerTest)
+            verify(eventPublisher).publishEvent((Object) argThat(e -> e instanceof DraftProductValidatedEvent v
+                    && v.productId().equals(productId) && v.actorId().equals(actorId) && v.tenantId().equals("kv_test")));
         }
     }
 }

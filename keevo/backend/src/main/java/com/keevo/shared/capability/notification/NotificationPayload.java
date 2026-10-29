@@ -1,4 +1,4 @@
-package com.keevo.messaging.api;
+package com.keevo.shared.capability.notification;
 
 import java.util.Map;
 

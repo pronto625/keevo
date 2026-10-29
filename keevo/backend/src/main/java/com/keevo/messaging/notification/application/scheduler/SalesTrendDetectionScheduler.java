@@ -2,9 +2,9 @@ package com.keevo.messaging.notification.application.scheduler;
 
 import com.keevo.identity.api.TenantPreferencesView;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
-import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.store.api.StoreView;
@@ -47,18 +47,18 @@ public class SalesTrendDetectionScheduler {
             "SELECT schema_name FROM public.tenants WHERE status = 'ACTIVE'";
 
     private final JdbcTemplate jdbcTemplate;
-    private final NotificationPort notificationPort;
+    private final PushNotifier pushNotifier;
     private final NotificationCooldownRepository cooldownRepository;
     private final TenantPreferencesQueryPort preferencesQuery;
     private final StoreQueryPort storeQuery;
 
     public SalesTrendDetectionScheduler(JdbcTemplate jdbcTemplate,
-                                        NotificationPort notificationPort,
+                                        PushNotifier pushNotifier,
                                         NotificationCooldownRepository cooldownRepository,
                                         TenantPreferencesQueryPort preferencesQuery,
                                         StoreQueryPort storeQuery) {
         this.jdbcTemplate = jdbcTemplate;
-        this.notificationPort = notificationPort;
+        this.pushNotifier = pushNotifier;
         this.cooldownRepository = cooldownRepository;
         this.preferencesQuery = preferencesQuery;
         this.storeQuery = storeQuery;
@@ -170,7 +170,7 @@ public class SalesTrendDetectionScheduler {
                     )
             );
             try {
-                notificationPort.notifyOwners(schema, payload);
+                pushNotifier.notifyOwners(schema, payload);
             } finally {
                 TenantContext.setCurrentTenant(schema); // FCM clears context; restore for next store
             }
@@ -195,7 +195,7 @@ public class SalesTrendDetectionScheduler {
                     )
             );
             try {
-                notificationPort.notifyOwners(schema, payload);
+                pushNotifier.notifyOwners(schema, payload);
             } finally {
                 TenantContext.setCurrentTenant(schema); // FCM clears context; restore for next store
             }

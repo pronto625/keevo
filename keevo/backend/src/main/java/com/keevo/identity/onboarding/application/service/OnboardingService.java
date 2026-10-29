@@ -3,11 +3,11 @@ package com.keevo.identity.onboarding.application.service;
 import com.keevo.shared.event.catalog.onboarding.SectorKind;
 import com.keevo.identity.onboarding.application.factory.SectorTemplateFactory;
 import com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent;
+import com.keevo.shared.event.catalog.onboarding.TenantOnboardedEvent;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingCommand;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingUseCase;
 import com.keevo.identity.onboarding.domain.port.in.OnboardingResult;
-import com.keevo.catalog.api.CategoryCommandPort;
 import com.keevo.identity.onboarding.domain.port.out.OnboardingStoreRepository;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.identity.onboarding.domain.service.SectorTemplateStrategy;
@@ -27,31 +27,28 @@ import java.util.UUID;
  * <p>Orchestrates:
  * <ol>
  *   <li>Sector template resolution (Strategy + Factory)</li>
- *   <li>Category bulk-seeding in tenant schema</li>
+ *   <li>Category bulk-seeding in tenant schema — by the catalog, on {@link TenantOnboardedEvent} (12.6a)</li>
  *   <li>Store name update</li>
  *   <li>Tenant preferences seeded with defaults</li>
  *   <li>Domain event publication (Observer — AuditEventListener)</li>
  * </ol>
  *
- * <p>All DB operations execute in a single {@code @Transactional} boundary.
- * No partial state upon failure.
+ * <p>All DB operations execute in a single {@code @Transactional} boundary — the catalog's category seeding
+ * included (synchronous {@code BEFORE_COMMIT} listener). No partial state upon failure.
  */
 @Service
 public class OnboardingService implements CompleteOnboardingUseCase {
 
-    private final CategoryCommandPort categoryCommand; // 12.2a: catalog public API
     private final TenantPreferencesRepository tenantPreferencesRepository;
     private final OnboardingStoreRepository storeRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final SectorTemplateFactory sectorTemplateFactory;
 
     public OnboardingService(
-            CategoryCommandPort categoryCommand,
             TenantPreferencesRepository tenantPreferencesRepository,
             OnboardingStoreRepository storeRepository,
             ApplicationEventPublisher eventPublisher,
             SectorTemplateFactory sectorTemplateFactory) {
-        this.categoryCommand = categoryCommand;
         this.tenantPreferencesRepository = tenantPreferencesRepository;
         this.storeRepository = storeRepository;
         this.eventPublisher = eventPublisher;
@@ -72,9 +69,20 @@ public class OnboardingService implements CompleteOnboardingUseCase {
         // 1. Resolve sector template strategy
         SectorTemplateStrategy strategy = sectorTemplateFactory.create(command.sectorType());
 
-        // 2-3. Seed the template's root categories (active, non-custom) through the catalog API
+        // 2-3. The template's root categories (active, non-custom) are seeded by the catalog on
+        // TenantOnboardedEvent (12.6a), before this transaction commits. The value reported is the number of
+        // template categories requested (the event drops null / blank names); onboarding runs once per tenant
+        // (guarded above), so on this first onboarding it equals the rows created.
         Instant now = Instant.now();
-        int seededCategories = categoryCommand.seedTemplateCategories(TenantContext.getCurrentTenant(), strategy.getDefaultCategories());
+        TenantOnboardedEvent onboarded = new TenantOnboardedEvent(
+            tenantId,
+            command.sectorType() == null ? null : SectorKind.valueOf(command.sectorType().name()),
+            strategy.getDefaultCategories(),
+            command.actorId(),
+            now
+        );
+        int seededCategories = onboarded.templateCategories().size(); // template categories requested
+        eventPublisher.publishEvent(onboarded);
 
         // 4. Update store name from default "Ma Boutique" to merchant's choice
         storeRepository.updateStoreName(command.storeName());

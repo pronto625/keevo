@@ -3,16 +3,15 @@ package com.keevo.messaging.notification.application.listener;
 import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.event.DeliverOnce;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.event.EventListener;
 import org.springframework.modulith.events.ApplicationModuleListener;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -38,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * single notification if only one event occurred, or one consolidated recap
  * if several did.
  *
- * <p>GoF: Observer — async {@code @EventListener}, best-effort (no rollback).
+ * <p>GoF: Observer — durable module listeners (12.4 / 12.6a: async, after commit), best-effort (no rollback).
  */
 @Component
 public class ProductCreationNotificationListener {
@@ -49,8 +48,8 @@ public class ProductCreationNotificationListener {
     private static final String TYPE_EMPLOYEE_PRODUCT_CREATED_BATCH = "EMPLOYEE_PRODUCT_CREATED_BATCH";
     private static final long DEFAULT_WINDOW_MIN = 5;
 
-    private final NotificationPort notificationPort;
-    private final WhatsAppPort whatsAppPort;
+    private final PushNotifier pushNotifier;
+    private final WhatsAppSender whatsAppSender;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final long windowMin;
     private final Clock clock;
@@ -60,23 +59,23 @@ public class ProductCreationNotificationListener {
 
     @Autowired
     public ProductCreationNotificationListener(
-            NotificationPort notificationPort,
-            WhatsAppPort whatsAppPort,
+            PushNotifier pushNotifier,
+            WhatsAppSender whatsAppSender,
             OwnerRecipientResolver ownerRecipientResolver,
             @Value("${keevo.notification.employee-action-window-min:" + DEFAULT_WINDOW_MIN + "}")
             long windowMin) {
-        this(notificationPort, whatsAppPort, ownerRecipientResolver, windowMin, Clock.systemUTC());
+        this(pushNotifier, whatsAppSender, ownerRecipientResolver, windowMin, Clock.systemUTC());
     }
 
     /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
     ProductCreationNotificationListener(
-            NotificationPort notificationPort,
-            WhatsAppPort whatsAppPort,
+            PushNotifier pushNotifier,
+            WhatsAppSender whatsAppSender,
             OwnerRecipientResolver ownerRecipientResolver,
             long windowMin,
             Clock clock) {
-        this.notificationPort = notificationPort;
-        this.whatsAppPort = whatsAppPort;
+        this.pushNotifier = pushNotifier;
+        this.whatsAppSender = whatsAppSender;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.windowMin = windowMin;
         this.clock = clock;
@@ -158,8 +157,10 @@ public class ProductCreationNotificationListener {
 
     // ── CSV import (Story 2.4 AC9 — preserved) ─────────────────────────
 
-    @Async
-    @EventListener
+    // Story 12.6a: durable module listener (async, after commit; the publisher wraps the event in its own
+    // transaction). @DeliverOnce: a replay never sends the push twice; a send failure stays logged.
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onCsvImportCompleted(CsvImportCompletedEvent event) {
         log.info("[CSV] Import completed: {} product(s) by {} in tenant {}",
                 event.importedCount(), event.actorId(), event.tenantId());
@@ -174,7 +175,7 @@ public class ProductCreationNotificationListener {
             String body = displayName(event.actorName()) + " a importé " + event.importedCount()
                     + " produit(s) en brouillon via CSV — Validez-les dans votre catalogue";
 
-            notificationPort.notifyOwners(event.tenantId(), NotificationPayload.of(
+            pushNotifier.notifyOwners(event.tenantId(), NotificationPayload.of(
                     "CSV_IMPORT_DRAFTS_PENDING",
                     "🔶 Import CSV — produits en attente",
                     body,
@@ -247,7 +248,7 @@ public class ProductCreationNotificationListener {
         Exception waError = null;
 
         try {
-            notificationPort.notifyOwners(tenantId, payload);
+            pushNotifier.notifyOwners(tenantId, payload);
         } catch (Exception e) {
             pushError = e;
         }
@@ -255,7 +256,7 @@ public class ProductCreationNotificationListener {
         String ownerPhone = resolveOwnerPhone(tenantId);
         if (ownerPhone != null) {
             try {
-                whatsAppPort.sendReport(ownerPhone, whatsAppBody);
+                whatsAppSender.sendReport(ownerPhone, whatsAppBody);
             } catch (Exception e) {
                 waError = e;
             }

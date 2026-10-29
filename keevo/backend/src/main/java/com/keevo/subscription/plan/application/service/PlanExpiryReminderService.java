@@ -2,7 +2,7 @@ package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.PlanType;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.subscription.plan.domain.port.in.SendPlanExpiryRemindersUseCase;
@@ -64,14 +64,14 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
     private record Expiry(PlanType plan, LocalDate date) {}
 
     private final JdbcTemplate jdbc;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final Clock clock;
 
-    public PlanExpiryReminderService(JdbcTemplate jdbc, WhatsAppPort whatsAppPort,
+    public PlanExpiryReminderService(JdbcTemplate jdbc, WhatsAppSender whatsAppSender,
                                      OwnerRecipientResolver ownerRecipientResolver, Clock clock) {
         this.jdbc = jdbc;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.clock = clock;
     }
@@ -146,7 +146,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
             String text = expiry.plan() == PlanType.PREMIUM_TRIAL
                     ? PlanWhatsAppMessages.trialReminder(expiry.date())
                     : PlanWhatsAppMessages.reminder(expiry.date());
-            whatsAppPort.sendReport(phone.get(), text);
+            whatsAppSender.sendReport(phone.get(), text);
             log.info("Plan expiry reminder ({} d) sent for tenant {}", threshold, tenantId);
             return true;
         } catch (RuntimeException e) {

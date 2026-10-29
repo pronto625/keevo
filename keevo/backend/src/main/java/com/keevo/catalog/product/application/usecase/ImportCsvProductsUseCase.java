@@ -16,15 +16,17 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
-import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
 import com.keevo.subscription.api.ProductCountPort;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.io.InputStream;
 import java.time.Instant;
@@ -59,20 +61,22 @@ public class ImportCsvProductsUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(ImportCsvProductsUseCase.class);
 
-    private final CsvParserPort           csvParser;
-    private final ProductCsvRowFactory    rowFactory;
-    private final CreateProductUseCase    createProductUseCase;
-    private final ProductRepository       productRepository;
+    private final CsvParserPort             csvParser;
+    private final ProductCsvRowFactory      rowFactory;
+    private final CreateProductUseCase      createProductUseCase;
+    private final ProductRepository         productRepository;
     // 12.2b: implemented by inventory; optional — catalog must start without inventory
     private final ObjectProvider<InitialStockPort> initialStockPort;
-    private final AtomicBoolean            missingStockPortLogged = new AtomicBoolean();
-    private final DefaultStorePort        defaultStorePort;
-    private final StoreQueryPort         storeQuery;
-    private final ProductCountPort        productCountPort;
-    private final SubscriptionQueryPort  subscriptionQuery;
-    private final PlanLimitPort          planLimit;
-    private final CategoryRepository      categoryRepository;
+    private final AtomicBoolean             missingStockPortLogged = new AtomicBoolean();
+    private final DefaultStorePort          defaultStorePort;
+    private final StoreQueryPort            storeQuery;
+    private final ProductCountPort          productCountPort;
+    private final TenantPlanQuery           tenantPlanQuery;
+    private final PlanLimitCheck            planLimit;
+    private final CategoryRepository        categoryRepository;
     private final ApplicationEventPublisher eventPublisher;
+    // 12.6a: the completion event is consumed by an after-commit module listener — published in its own tx
+    private final TransactionTemplate       completionTx;
 
     public ImportCsvProductsUseCase(
             CsvParserPort csvParser,
@@ -83,22 +87,24 @@ public class ImportCsvProductsUseCase {
             DefaultStorePort defaultStorePort,
             StoreQueryPort storeQuery,
             ProductCountPort productCountPort,
-            SubscriptionQueryPort subscriptionQuery,
-            PlanLimitPort planLimit,
+            TenantPlanQuery tenantPlanQuery,
+            PlanLimitCheck planLimit,
             CategoryRepository categoryRepository,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            PlatformTransactionManager transactionManager) {
         this.csvParser             = csvParser;
         this.rowFactory            = rowFactory;
         this.createProductUseCase  = createProductUseCase;
         this.productRepository     = productRepository;
         this.initialStockPort      = initialStockPort;
         this.defaultStorePort      = defaultStorePort;
-        this.storeQuery       = storeQuery;
+        this.storeQuery            = storeQuery;
         this.productCountPort      = productCountPort;
-        this.subscriptionQuery = subscriptionQuery;
-        this.planLimit        = planLimit;
+        this.tenantPlanQuery       = tenantPlanQuery;
+        this.planLimit             = planLimit;
         this.categoryRepository    = categoryRepository;
         this.eventPublisher        = eventPublisher;
+        this.completionTx          = new TransactionTemplate(transactionManager);
     }
 
     /**
@@ -144,7 +150,7 @@ public class ImportCsvProductsUseCase {
 
         // ── 3. Determine remaining product capacity ──────────────────────────
         int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
-        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
+        var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif trouvé"));
 
@@ -245,14 +251,24 @@ public class ImportCsvProductsUseCase {
         // ── 7. Batch notification event ────────────────────────────────────────
         ImportResult result = builder.build();
         if (result.getImported() > 0) {
-            eventPublisher.publishEvent(new CsvImportCompletedEvent(
+            // 12.6a: the import loop has no transaction of its own (rows commit one by one); the
+            // completion event gets a short one so the registry records it and the after-commit
+            // notification listener fires (an @ApplicationModuleListener ignores non-transactional events).
+            var completed = new CsvImportCompletedEvent(
                     result.getImported(),
                     tenantId,
                     command.actorId(),
                     command.actorName(),
                     command.actorRole(),
                     Instant.now()
-            ));
+            );
+            try {
+                completionTx.executeWithoutResult(status -> eventPublisher.publishEvent(completed));
+            } catch (RuntimeException e) {
+                // The rows are already committed: the import result stands, only the notification is lost.
+                log.warn("CSV import: completion event not published ({} imported, tenant {}): {}",
+                        result.getImported(), tenantId, e.getMessage());
+            }
         }
 
         log.info("CSV import completed: {} imported, {} skipped, limitReached={}",

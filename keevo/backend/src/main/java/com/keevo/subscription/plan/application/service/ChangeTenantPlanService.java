@@ -7,7 +7,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanUseCase;
 import com.keevo.subscription.api.CurrentPlan;
-import com.keevo.subscription.api.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;

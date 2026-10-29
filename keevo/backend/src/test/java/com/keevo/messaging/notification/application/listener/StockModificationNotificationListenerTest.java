@@ -3,9 +3,9 @@ package com.keevo.messaging.notification.application.listener;
 import com.keevo.shared.event.catalog.stock.MovementKind;
 import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +44,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("StockModificationNotificationListener")
 class StockModificationNotificationListenerTest {
 
-    @Mock private NotificationPort notificationPort;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private PushNotifier pushNotifier;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private MutableClock clock;
@@ -62,7 +62,7 @@ class StockModificationNotificationListenerTest {
     void setUp() {
         clock = new MutableClock(NOW);
         listener = new StockModificationNotificationListener(
-                notificationPort, whatsAppPort, ownerRecipientResolver, WINDOW_MIN, clock);
+                pushNotifier, whatsAppSender, ownerRecipientResolver, WINDOW_MIN, clock);
     }
 
     private void advancePastWindow() {
@@ -84,7 +84,7 @@ class StockModificationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload payload = captor.getValue();
         // J16 — deep link to an existing app route (product form).
         assertThat(payload.deepLink()).isEqualTo("/products/" + PRODUCT_ID + "/edit");
@@ -110,7 +110,7 @@ class StockModificationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload payload = captor.getValue();
         assertThat(payload.type()).isEqualTo("EMPLOYEE_STOCK_MODIFIED");
         assertThat(payload.body()).contains("50 → 45");
@@ -131,7 +131,7 @@ class StockModificationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().body()).contains(PRODUCT_ID.toString().substring(0, 8));
     }
 
@@ -149,7 +149,7 @@ class StockModificationNotificationListenerTest {
         advancePastWindow();
         listener.flushExpiredWindows();
 
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
     }
 
     // ── 7.4 shouldSkipSaleDecrementEvents ────────────────────────────────
@@ -166,7 +166,7 @@ class StockModificationNotificationListenerTest {
         advancePastWindow();
         listener.flushExpiredWindows();
 
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
     }
 
     // ── 7.5 shouldSendBatchedRecapWhenEmployeeModifiesMultipleStocksInWindow ──
@@ -189,13 +189,13 @@ class StockModificationNotificationListenerTest {
 
         // Window not yet expired — no dispatch yet
         listener.flushExpiredWindows();
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
 
         advancePastWindow();
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload batchPayload = captor.getValue();
         assertThat(batchPayload.type()).isEqualTo("EMPLOYEE_STOCK_MODIFIED_BATCH");
         assertThat(batchPayload.body()).contains("2 modification(s)");
@@ -208,7 +208,7 @@ class StockModificationNotificationListenerTest {
     @Test
     @DisplayName("should not throw when notification fails (best-effort)")
     void shouldNotRollbackStockModificationWhenNotificationFails() {
-        doThrow(new RuntimeException("FCM down")).when(notificationPort)
+        doThrow(new RuntimeException("FCM down")).when(pushNotifier)
                 .notifyOwners(anyString(), any());
 
         StockAdjustedEvent event = new StockAdjustedEvent(
@@ -221,7 +221,7 @@ class StockModificationNotificationListenerTest {
 
         assertThatCode(() -> listener.flushExpiredWindows()).doesNotThrowAnyException();
 
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), any());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), any());
     }
 
     // ── Story 13.9: batch-window eviction ───────────────────────────────
@@ -244,7 +244,7 @@ class StockModificationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         assertThat(listener.openWindowCount()).isZero();
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), any());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), any());
     }
 
     @Test
@@ -257,7 +257,7 @@ class StockModificationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().metadata()).containsEntry("count", "2");
         assertThat(listener.openWindowCount()).isZero();
     }
@@ -271,13 +271,13 @@ class StockModificationNotificationListenerTest {
             @Override public Clock withZone(ZoneId zone) { return this; }
             @Override public Instant instant() { return racingClock.get(); }
         };
-        var racing = new StockModificationNotificationListener(notificationPort, whatsAppPort, ownerRecipientResolver, WINDOW_MIN, movingClock);
+        var racing = new StockModificationNotificationListener(pushNotifier, whatsAppSender, ownerRecipientResolver, WINDOW_MIN, movingClock);
         var delivered = new java.util.concurrent.atomic.AtomicInteger();
         org.mockito.Mockito.doAnswer(inv -> {
             NotificationPayload p = inv.getArgument(1);
             delivered.addAndGet(Integer.parseInt(p.metadata().getOrDefault("count", "1")));
             return null;
-        }).when(notificationPort).notifyOwners(eq(TENANT_ID), any());
+        }).when(pushNotifier).notifyOwners(eq(TENANT_ID), any());
 
         int total = 2_000;
         var done = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -341,6 +341,6 @@ class StockModificationNotificationListenerTest {
 
         listener.flushExpiredWindows();
 
-        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
+        verify(whatsAppSender).sendReport(eq("+237600000001"), anyString());
     }
 }

@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.adapter.out.persistence.impl.OwnerRecipientResolverAdapter;
 import com.keevo.identity.api.Role;
@@ -59,7 +59,7 @@ class WeeklyReportGeneratorTest {
     }
 
     @Mock private EndOfDayReportRepository reportRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private MultiStoreSummaryService multiStoreSummaryService;
     @Mock private WeeklyReportBuilder builder;
     @Mock private WeeklyReportFormatter formatter;
@@ -78,7 +78,7 @@ class WeeklyReportGeneratorTest {
     @BeforeEach
     void setUp() {
         generator = new WeeklyReportGenerator(
-                reportRepository, whatsAppPort, multiStoreSummaryService,
+                reportRepository, whatsAppSender, multiStoreSummaryService,
                 builder, formatter, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver, transactionLock,
                 transactionManager);
         storeId = UUID.randomUUID();
@@ -145,7 +145,7 @@ class WeeklyReportGeneratorTest {
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
-        verify(whatsAppPort).sendReport(eq("+237600072001"), anyString());
+        verify(whatsAppSender).sendReport(eq("+237600072001"), anyString());
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
     }
 
@@ -163,7 +163,7 @@ class WeeklyReportGeneratorTest {
 
         EndOfDayReport report = generator.generateWeeklyReport(inAppCommand);
 
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
     }
 
@@ -174,7 +174,7 @@ class WeeklyReportGeneratorTest {
                 .thenReturn(sampleWeeklyData());
         when(formatter.format(any(WeeklyReportData.class))).thenReturn("📅 Rapport");
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+237600072001"));
-        doThrow(new RuntimeException("WhatsApp unreachable")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("WhatsApp unreachable")).when(whatsAppSender).sendReport(anyString(), anyString());
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
@@ -204,7 +204,7 @@ class WeeklyReportGeneratorTest {
 
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
     }
 
@@ -262,7 +262,7 @@ class WeeklyReportGeneratorTest {
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(
                 new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
         WeeklyReportGenerator realResolverGenerator = new WeeklyReportGenerator(
-                reportRepository, whatsAppPort, multiStoreSummaryService,
+                reportRepository, whatsAppSender, multiStoreSummaryService,
                 builder, formatter, StoreApiTestSupport.queryPort(storeRepository), new OwnerRecipientResolverAdapter(userRepository),
                 transactionLock, transactionManager);
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
@@ -273,7 +273,7 @@ class WeeklyReportGeneratorTest {
         EndOfDayReport report = realResolverGenerator.generateWeeklyReport(command);
 
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
-        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(whatsAppSender, never()).sendReport(anyString(), anyString());
     }
 
     // ── v1s-13-13: scheduler vs manual trigger ─────────────────────────────────
@@ -311,7 +311,7 @@ class WeeklyReportGeneratorTest {
         assertThat(report).isSameAs(existing);
         verify(transactionLock).lock("weekly-report:" + storeId + ":" + SUNDAY);
         verify(reportRepository, never()).save(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -336,14 +336,14 @@ class WeeklyReportGeneratorTest {
         try {
             EndOfDayReport report = generator.generateWeeklyReport(command);
 
-            verifyNoInteractions(whatsAppPort);
+            verifyNoInteractions(whatsAppSender);
             verifyNoInteractions(multiStoreSummaryService);
             assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.PENDING);
 
             org.springframework.transaction.support.TransactionSynchronizationManager.getSynchronizations()
                     .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit);
 
-            verify(whatsAppPort).sendReport(eq("+237600072001"), anyString());
+            verify(whatsAppSender).sendReport(eq("+237600072001"), anyString());
             verify(multiStoreSummaryService).checkAndGenerateCombinedSummary(any());
             // Each deferred action runs in its own REQUIRES_NEW transaction (committed).
             verify(transactionManager, times(2)).getTransaction(argThat(d ->
@@ -375,7 +375,7 @@ class WeeklyReportGeneratorTest {
                             .forEach(org.springframework.transaction.support.TransactionSynchronization::afterCommit))
                     .doesNotThrowAnyException();
 
-            verify(whatsAppPort).sendReport(eq("+237600072001"), anyString());
+            verify(whatsAppSender).sendReport(eq("+237600072001"), anyString());
             // The multi-store step, registered after delivery, still runs.
             verify(multiStoreSummaryService).checkAndGenerateCombinedSummary(any());
         } finally {
@@ -398,7 +398,7 @@ class WeeklyReportGeneratorTest {
                     .forEach(s -> s.afterCompletion(
                             org.springframework.transaction.support.TransactionSynchronization.STATUS_ROLLED_BACK));
 
-            verifyNoInteractions(whatsAppPort);
+            verifyNoInteractions(whatsAppSender);
             verifyNoInteractions(multiStoreSummaryService);
         } finally {
             org.springframework.transaction.support.TransactionSynchronizationManager.clearSynchronization();

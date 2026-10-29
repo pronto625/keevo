@@ -2,8 +2,8 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 import com.keevo.messaging.notification.application.strategy.TransferNotificationRecipientStrategy;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
 import org.slf4j.Logger;
@@ -44,13 +44,13 @@ public class TransferCreatedNotificationListener {
     private static final Logger log = LoggerFactory.getLogger(TransferCreatedNotificationListener.class);
 
     private final TransferNotificationRecipientStrategy recipientStrategy;
-    private final NotificationPort notificationPort;
+    private final PushNotifier pushNotifier;
 
     public TransferCreatedNotificationListener(
             TransferNotificationRecipientStrategy recipientStrategy,
-            NotificationPort notificationPort) {
+            PushNotifier pushNotifier) {
         this.recipientStrategy = recipientStrategy;
-        this.notificationPort = notificationPort;
+        this.pushNotifier = pushNotifier;
     }
 
     /**
@@ -82,7 +82,7 @@ public class TransferCreatedNotificationListener {
             );
 
             try {
-                notificationPort.notifyUsers(event.tenantId(), recipients, payload);
+                pushNotifier.notifyUsers(event.tenantId(), recipients, payload);
             } catch (RuntimeException e) {
                 // Story 12.4 (R2): rethrown — the publication stays incomplete and is retried
                 log.warn("[TRANSFER-CREATED] Push failed for transfer={}: {} — will be retried",

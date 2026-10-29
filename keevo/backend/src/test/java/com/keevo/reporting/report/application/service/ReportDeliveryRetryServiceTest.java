@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.api.TenantStatus;import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -33,7 +33,7 @@ import static org.mockito.Mockito.*;
 class ReportDeliveryRetryServiceTest {
 
     @Mock private EndOfDayReportRepository reportRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private TenantRepository tenantRepository;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
@@ -42,7 +42,7 @@ class ReportDeliveryRetryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReportDeliveryRetryService(reportRepository, whatsAppPort, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), ownerRecipientResolver);
+        service = new ReportDeliveryRetryService(reportRepository, whatsAppSender, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), ownerRecipientResolver);
         activeTenant = mock(Tenant.class);
         lenient().when(activeTenant.getStatus()).thenReturn(TenantStatus.ACTIVE);
         lenient().when(activeTenant.getSchemaName()).thenReturn("kv_test01");
@@ -69,7 +69,7 @@ class ReportDeliveryRetryServiceTest {
     void retryFailedDeliveries_whenNoFailedReports_shouldNotCallWhatsApp() {
         when(reportRepository.findPendingRetries(anyInt())).thenReturn(List.of());
         service.retryFailedDeliveries();
-        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(whatsAppSender, never()).sendReport(anyString(), anyString());
     }
 
     @Test
@@ -84,7 +84,7 @@ class ReportDeliveryRetryServiceTest {
     void retryFailedDeliveries_whenDeliveryFails_shouldMarkFailed() {
         EndOfDayReport report = failedReport(1);
         when(reportRepository.findPendingRetries(anyInt())).thenReturn(List.of(report));
-        doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("net error")).when(whatsAppSender).sendReport(anyString(), anyString());
         service.retryFailedDeliveries();
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.FAILED);
     }
@@ -93,7 +93,7 @@ class ReportDeliveryRetryServiceTest {
     void retryFailedDeliveries_whenMaxAttemptsReached_shouldMarkInAppOnly() {
         EndOfDayReport report = failedReport(ReportDeliveryRetryService.MAX_ATTEMPTS - 1);
         when(reportRepository.findPendingRetries(anyInt())).thenReturn(List.of(report));
-        doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("net error")).when(whatsAppSender).sendReport(anyString(), anyString());
         service.retryFailedDeliveries();
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
     }

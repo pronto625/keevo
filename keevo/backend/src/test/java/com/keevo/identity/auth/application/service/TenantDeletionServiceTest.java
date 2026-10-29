@@ -8,7 +8,7 @@ import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,7 +55,7 @@ class TenantDeletionServiceTest {
 
     @Mock private TenantRepository tenantRepository;
     @Mock private UserRepository userRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private TenantSchemaProvisioner schemaProvisioner;
     @Mock private JdbcTemplate jdbcTemplate;
     @Mock private PlatformTransactionManager transactionManager;
@@ -70,7 +70,7 @@ class TenantDeletionServiceTest {
     void setUp() {
         Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T03:00:00Z"), ZoneOffset.UTC);
         scheduler = new TenantDeletionService(tenantRepository, userRepository,
-                whatsAppPort, schemaProvisioner, jdbcTemplate, transactionManager, fixedClock);
+                whatsAppSender, schemaProvisioner, jdbcTemplate, transactionManager, fixedClock);
         tenantId = UUID.randomUUID();
         schemaName = "kv_abc123";
         when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> inv.getArgument(0));
@@ -114,14 +114,14 @@ class TenantDeletionServiceTest {
 
         scheduler.executeDeletions();
 
-        InOrder order = inOrder(jdbcTemplate, schemaProvisioner, tenantRepository, transactionManager, whatsAppPort);
+        InOrder order = inOrder(jdbcTemplate, schemaProvisioner, tenantRepository, transactionManager, whatsAppSender);
         order.verify(jdbcTemplate).queryForList(LOCK_TENANT_SQL, tenantId);
         order.verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
         order.verify(jdbcTemplate).update(startsWith(MEMBERSHIP_DELETE), any(Object.class));
         order.verify(tenantRepository).save(argThat(t ->
                 t.getStatus() == TenantStatus.DELETED && t.getDeletionScheduledAt() == null));
         order.verify(transactionManager).commit(any());
-        order.verify(whatsAppPort).sendReport(eq("+243812345678"), anyString());
+        order.verify(whatsAppSender).sendReport(eq("+243812345678"), anyString());
         verify(transactionManager, never()).rollback(any());
     }
 
@@ -140,15 +140,15 @@ class TenantDeletionServiceTest {
         when(userRepository.findById(ownerB)).thenReturn(Optional.of(new User(ownerB, "+243822222222", "hash",
                 Role.OWNER, true, Instant.now().minus(60, ChronoUnit.DAYS))));
         doThrow(new RuntimeException("provider down"))
-                .when(whatsAppPort).sendReport(eq("+243811111111"), anyString());
+                .when(whatsAppSender).sendReport(eq("+243811111111"), anyString());
 
         assertThat(scheduler.deleteNow(tenantId)).isTrue();
 
         verify(tenantRepository).save(argThat(t -> t.getStatus() == TenantStatus.DELETED));
         verify(transactionManager, times(1)).commit(any());
         verify(transactionManager, never()).rollback(any());
-        verify(whatsAppPort).sendReport(eq("+243811111111"), anyString());
-        verify(whatsAppPort).sendReport(eq("+243822222222"), anyString());
+        verify(whatsAppSender).sendReport(eq("+243811111111"), anyString());
+        verify(whatsAppSender).sendReport(eq("+243822222222"), anyString());
     }
 
     // ── Due-tenant query (v1s-15-9) ───────────────────────────────────────────
@@ -176,11 +176,11 @@ class TenantDeletionServiceTest {
 
         assertThat(scheduler.deleteNow(tenantId)).isTrue();
 
-        InOrder order = inOrder(schemaProvisioner, tenantRepository, transactionManager, whatsAppPort);
+        InOrder order = inOrder(schemaProvisioner, tenantRepository, transactionManager, whatsAppSender);
         order.verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
         order.verify(tenantRepository).save(argThat(t -> t.getStatus() == TenantStatus.DELETED));
         order.verify(transactionManager).commit(any());
-        order.verify(whatsAppPort).sendReport(eq("+243812345678"), anyString());
+        order.verify(whatsAppSender).sendReport(eq("+243812345678"), anyString());
     }
 
     @Test
@@ -192,7 +192,7 @@ class TenantDeletionServiceTest {
 
         verify(schemaProvisioner, never()).dropSchemaForDeletion(anyString());
         verify(tenantRepository, never()).save(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -206,7 +206,7 @@ class TenantDeletionServiceTest {
 
         verify(transactionManager).rollback(any());
         verify(tenantRepository, never()).save(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     // ── Multi-tenant user preservation ───────────────────────────────────────
@@ -246,7 +246,7 @@ class TenantDeletionServiceTest {
         verify(tenantRepository, never()).save(any());
         verify(transactionManager).rollback(any());
         verify(transactionManager, never()).commit(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -264,7 +264,7 @@ class TenantDeletionServiceTest {
         verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
         verify(tenantRepository, never()).save(any());
         verify(transactionManager).rollback(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
 
         // Next daily run: still DELETION_PENDING (rolled back) → completes
         scheduler.executeDeletions();
@@ -272,7 +272,7 @@ class TenantDeletionServiceTest {
         verify(schemaProvisioner, times(2)).dropSchemaForDeletion(schemaName); // DROP IF EXISTS: no-op
         verify(tenantRepository, times(1)).save(argThat(t -> t.getStatus() == TenantStatus.DELETED));
         verify(transactionManager, times(1)).commit(any());
-        verify(whatsAppPort, times(1)).sendReport(eq("+243812345678"), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq("+243812345678"), anyString());
     }
 
     @Test
@@ -292,8 +292,8 @@ class TenantDeletionServiceTest {
         verify(tenantRepository, never()).save(argThat(t -> t.getId().equals(a.getId())));
         verify(transactionManager, times(1)).rollback(any());
         verify(transactionManager, times(1)).commit(any());
-        verify(whatsAppPort).sendReport(eq("+243800000002"), anyString());
-        verify(whatsAppPort, never()).sendReport(eq("+243800000001"), anyString());
+        verify(whatsAppSender).sendReport(eq("+243800000002"), anyString());
+        verify(whatsAppSender, never()).sendReport(eq("+243800000001"), anyString());
     }
 
     @Test
@@ -308,7 +308,7 @@ class TenantDeletionServiceTest {
         verify(schemaProvisioner, never()).dropSchemaForDeletion(anyString());
         verify(jdbcTemplate, never()).update(anyString(), any(Object.class));
         verify(tenantRepository, never()).save(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -323,14 +323,14 @@ class TenantDeletionServiceTest {
         verify(schemaProvisioner, never()).dropSchemaForDeletion(anyString());
         verify(jdbcTemplate, never()).update(anyString(), any(Object.class));
         verify(tenantRepository, never()).save(any());
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     // ── Stored files (epic 8: « uploaded photos ») ───────────────────────────
 
     private TenantDeletionService schedulerWithPurgers(TenantFilesPurger... purgers) {
         Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T03:00:00Z"), ZoneOffset.UTC);
-        return new TenantDeletionService(tenantRepository, userRepository, whatsAppPort,
+        return new TenantDeletionService(tenantRepository, userRepository, whatsAppSender,
                 schemaProvisioner, jdbcTemplate, transactionManager, fixedClock, List.of(purgers));
     }
 
@@ -363,7 +363,7 @@ class TenantDeletionServiceTest {
         assertThat(withPurgers.deleteNow(tenantId)).isTrue();
 
         verify(other).purgeTenant(schemaName);
-        verify(whatsAppPort).sendReport(eq("+243812345678"), anyString());
+        verify(whatsAppSender).sendReport(eq("+243812345678"), anyString());
     }
 
     @Test

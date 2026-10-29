@@ -7,9 +7,9 @@ import com.keevo.admin.notification.domain.model.GlobalPushSentEvent;
 import com.keevo.admin.notification.domain.model.PushTargetTenant;
 import com.keevo.admin.notification.domain.port.out.GlobalNotificationRepository;
 import com.keevo.admin.notification.domain.port.out.PushAudiencePort;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.PushSendResult;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushSendResult;
+import com.keevo.shared.capability.notification.PushNotifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,7 +56,7 @@ class GlobalNotificationDispatcherTest {
 
     @Mock GlobalNotificationRepository repository;
     @Mock PushAudiencePort audience;
-    @Mock NotificationPort notificationPort;
+    @Mock PushNotifier pushNotifier;
     @Mock ApplicationEventPublisher events;
 
     GlobalNotificationDispatcher dispatcher;
@@ -64,7 +64,7 @@ class GlobalNotificationDispatcherTest {
 
     @BeforeEach
     void setUp() {
-        dispatcher = new GlobalNotificationDispatcher(repository, audience, notificationPort, events,
+        dispatcher = new GlobalNotificationDispatcher(repository, audience, pushNotifier, events,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(repository.failStuck(any(), any())).thenReturn(List.of());
     }
@@ -82,7 +82,7 @@ class GlobalNotificationDispatcherTest {
     void nothingDue_noSend() {
         when(repository.claimDue(NOW)).thenReturn(List.of());
         assertThat(dispatcher.dispatchDue()).isZero();
-        verifyNoInteractions(notificationPort, audience, events);
+        verifyNoInteractions(pushNotifier, audience, events);
     }
 
     @Test
@@ -104,20 +104,20 @@ class GlobalNotificationDispatcherTest {
         PushTargetTenant b = tenant("kv_bbbbbb");
         PushTargetTenant c = tenant("kv_cccccc");
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.ALL, null)).thenReturn(List.of(a, b, c));
         when(audience.deviceTokens(a)).thenReturn(List.of("a1", "a2"));
         when(audience.deviceTokens(b)).thenReturn(List.of("b1", "b2", "b3"));
         when(audience.deviceTokens(c)).thenReturn(List.of());
-        when(notificationPort.sendToTokens(eq("kv_aaaaaa"), eq(List.of("a1", "a2")), any()))
+        when(pushNotifier.sendToTokens(eq("kv_aaaaaa"), eq(List.of("a1", "a2")), any()))
                 .thenReturn(new PushSendResult(2, 0, 1, 0));
-        when(notificationPort.sendToTokens(eq("kv_bbbbbb"), eq(List.of("b1", "b2", "b3")), any()))
+        when(pushNotifier.sendToTokens(eq("kv_bbbbbb"), eq(List.of("b1", "b2", "b3")), any()))
                 .thenReturn(new PushSendResult(2, 1, 1, 0));
 
         assertThat(dispatcher.dispatchDue()).isEqualTo(1);
 
         verify(repository).complete(n.id(), true, null, 5, 4, 1, NOW);
-        verify(notificationPort, never()).sendToTokens(eq("kv_cccccc"), anyList(), any());
+        verify(pushNotifier, never()).sendToTokens(eq("kv_cccccc"), anyList(), any());
         ArgumentCaptor<GlobalPushSentEvent> event = ArgumentCaptor.forClass(GlobalPushSentEvent.class);
         verify(events).publishEvent(event.capture());
         assertThat(event.getValue()).isEqualTo(
@@ -130,13 +130,13 @@ class GlobalNotificationDispatcherTest {
         PushTargetTenant a = tenant("kv_aaaaaa");
         PushTargetTenant b = tenant("kv_bbbbbb");
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.ALL, null)).thenReturn(List.of(a, b));
         when(audience.deviceTokens(a)).thenReturn(List.of("shared", "a1"));
         when(audience.deviceTokens(b)).thenReturn(List.of("shared", "b1"));
-        when(notificationPort.sendToTokens(eq("kv_aaaaaa"), eq(List.of("shared", "a1")), any()))
+        when(pushNotifier.sendToTokens(eq("kv_aaaaaa"), eq(List.of("shared", "a1")), any()))
                 .thenReturn(new PushSendResult(2, 0, 1, 0));
-        when(notificationPort.sendToTokens(eq("kv_bbbbbb"), eq(List.of("b1")), any()))
+        when(pushNotifier.sendToTokens(eq("kv_bbbbbb"), eq(List.of("b1")), any()))
                 .thenReturn(new PushSendResult(1, 0, 1, 0));
 
         dispatcher.dispatchDue();
@@ -161,10 +161,10 @@ class GlobalNotificationDispatcherTest {
         GlobalNotification n = due(GlobalNotificationTarget.PREMIUM, null);
         PushTargetTenant p = tenant("kv_pppppp");
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.PREMIUM, null)).thenReturn(List.of(p));
         when(audience.deviceTokens(p)).thenReturn(List.of("p1"));
-        when(notificationPort.sendToTokens(eq("kv_pppppp"), eq(List.of("p1")), any()))
+        when(pushNotifier.sendToTokens(eq("kv_pppppp"), eq(List.of("p1")), any()))
                 .thenReturn(new PushSendResult(1, 0, 1, 0));
 
         dispatcher.dispatchDue();
@@ -176,13 +176,13 @@ class GlobalNotificationDispatcherTest {
     void fcmNotConfigured_failedPushUnavailable() {
         GlobalNotification n = due(GlobalNotificationTarget.ALL, null);
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(false);
+        when(pushNotifier.isPushAvailable()).thenReturn(false);
 
         dispatcher.dispatchDue();
 
         verify(repository).complete(n.id(), false, PUSH_UNAVAILABLE, 0, 0, 0, NOW);
         verifyNoInteractions(audience, events);
-        verify(notificationPort, never()).sendToTokens(anyString(), anyList(), any());
+        verify(pushNotifier, never()).sendToTokens(anyString(), anyList(), any());
     }
 
     @Test
@@ -190,10 +190,10 @@ class GlobalNotificationDispatcherTest {
         GlobalNotification n = due(GlobalNotificationTarget.ALL, null);
         PushTargetTenant a = tenant("kv_aaaaaa");
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.ALL, null)).thenReturn(List.of(a));
         when(audience.deviceTokens(a)).thenReturn(List.of("a1", "a2"));
-        when(notificationPort.sendToTokens(eq("kv_aaaaaa"), anyList(), any()))
+        when(pushNotifier.sendToTokens(eq("kv_aaaaaa"), anyList(), any()))
                 .thenReturn(new PushSendResult(0, 2, 1, 1));
 
         dispatcher.dispatchDue();
@@ -206,7 +206,7 @@ class GlobalNotificationDispatcherTest {
     void emptyAudience_failedNoRecipient() {
         GlobalNotification n = due(GlobalNotificationTarget.FREE, null);
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.FREE, null)).thenReturn(List.of());
 
         dispatcher.dispatchDue();
@@ -222,12 +222,12 @@ class GlobalNotificationDispatcherTest {
         PushTargetTenant broken = tenant("kv_bbbbbb");
         PushTargetTenant c = tenant("kv_cccccc");
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.ALL, null)).thenReturn(List.of(a, broken, c));
         when(audience.deviceTokens(a)).thenReturn(List.of("a1"));
         when(audience.deviceTokens(broken)).thenThrow(new BadSqlGrammarException("x", "y", new SQLException()));
         when(audience.deviceTokens(c)).thenReturn(List.of("c1"));
-        when(notificationPort.sendToTokens(anyString(), anyList(), any())).thenReturn(new PushSendResult(1, 0, 1, 0));
+        when(pushNotifier.sendToTokens(anyString(), anyList(), any())).thenReturn(new PushSendResult(1, 0, 1, 0));
 
         dispatcher.dispatchDue();
 
@@ -241,10 +241,10 @@ class GlobalNotificationDispatcherTest {
         PushTargetTenant a = tenant("kv_aaaaaa");
         PushTargetTenant b = tenant("kv_bbbbbb");
         when(repository.claimDue(NOW)).thenReturn(List.of(broken, next));
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.ALL, null)).thenReturn(List.of(a, b));
         when(audience.deviceTokens(a)).thenReturn(List.of("a1", "a2"));
-        when(notificationPort.sendToTokens(eq("kv_aaaaaa"), anyList(), any())).thenReturn(new PushSendResult(2, 0, 1, 0));
+        when(pushNotifier.sendToTokens(eq("kv_aaaaaa"), anyList(), any())).thenReturn(new PushSendResult(2, 0, 1, 0));
         when(audience.deviceTokens(b)).thenThrow(new DataAccessResourceFailureException("down"));
         when(audience.targetTenants(GlobalNotificationTarget.FREE, null)).thenReturn(List.of());
 
@@ -258,7 +258,7 @@ class GlobalNotificationDispatcherTest {
     void completeFailing_doesNotStopTheRun() {
         GlobalNotification n = due(GlobalNotificationTarget.ALL, null);
         when(repository.claimDue(NOW)).thenReturn(List.of(n));
-        when(notificationPort.isPushAvailable()).thenReturn(false);
+        when(pushNotifier.isPushAvailable()).thenReturn(false);
         doThrow(new DataAccessResourceFailureException("down")).when(repository)
                 .complete(any(), anyBoolean(), any(), anyInt(), anyInt(), anyInt(), any());
 
@@ -269,7 +269,7 @@ class GlobalNotificationDispatcherTest {
     void claimIsTheOnlyWayToSend_secondRunFindsNothing() {
         GlobalNotification n = due(GlobalNotificationTarget.FREE, null);
         when(repository.claimDue(NOW)).thenReturn(List.of(n), List.of());
-        when(notificationPort.isPushAvailable()).thenReturn(true);
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
         when(audience.targetTenants(GlobalNotificationTarget.FREE, null)).thenReturn(List.of());
 
         dispatcher.dispatchDue();

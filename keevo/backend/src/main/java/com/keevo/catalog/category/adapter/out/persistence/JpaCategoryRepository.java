@@ -118,6 +118,15 @@ public class JpaCategoryRepository implements CategoryRepository {
     }
 
     @Override
+    public java.util.Set<String> findExistingRootNamesIgnoreCase(java.util.Collection<String> names) {
+        if (names == null || names.isEmpty()) {
+            return java.util.Set.of();
+        }
+        List<String> lower = names.stream().map(n -> n.trim().toLowerCase(java.util.Locale.ROOT)).distinct().toList();
+        return new java.util.HashSet<>(jpaRepository.findExistingRootNamesLower(lower));
+    }
+
+    @Override
     public Optional<Category> findByNameAndParentId(String name, UUID parentId) {
         return jpaRepository.findByNameIgnoreCaseAndParentId(name, parentId).stream()
             .findFirst()

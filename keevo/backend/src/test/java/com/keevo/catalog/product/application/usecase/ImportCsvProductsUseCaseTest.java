@@ -29,6 +29,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -68,6 +69,7 @@ class ImportCsvProductsUseCaseTest {
     @Mock private PlanLimitGuard          planLimitGuard;
     @Mock private CategoryRepository      categoryRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
 
     private ImportCsvProductsUseCase useCase;
     private final UUID actorId = UUID.randomUUID();
@@ -79,7 +81,8 @@ class ImportCsvProductsUseCaseTest {
         useCase = new ImportCsvProductsUseCase(
                 csvParser, rowFactory, createProductUseCase, productRepository,
                 initialStockProvider, defaultStorePort, StoreApiTestSupport.queryPort(storeRepository), productCountPort,
-                SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), categoryRepository, eventPublisher);
+                SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), categoryRepository, eventPublisher,
+                transactionManager);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -271,6 +274,50 @@ class ImportCsvProductsUseCaseTest {
             boolean csvEventPublished = eventCaptor.getAllValues().stream()
                     .anyMatch(e -> e instanceof CsvImportCompletedEvent);
             assertTrue(csvEventPublished, "CsvImportCompletedEvent doit être émis après la boucle");
+        }
+    }
+
+    private void stubOneImportedRow() {
+        stubPlan(500, 0);
+        when(defaultStorePort.getDefaultStoreId()).thenReturn(storeId);
+        when(categoryRepository.findAllActive()).thenReturn(List.of());
+        var row = Map.of("nom", "Produit", "prix_vente", "1000");
+        when(csvParser.parse(any())).thenReturn(List.of(row));
+        var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 0, actorId);
+        when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
+        when(productRepository.existsByName("Produit")).thenReturn(false);
+        when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
+    }
+
+    @Test
+    @DisplayName("12.6a: completion event published inside its own transaction (begin → publish → commit)")
+    void completionEvent_publishedInsideItsOwnTransaction() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubOneImportedRow();
+
+            useCase.execute(ownerCommand(1));
+
+            InOrder order = inOrder(transactionManager, eventPublisher);
+            order.verify(transactionManager).getTransaction(any());
+            order.verify(eventPublisher).publishEvent((Object) argThat(e -> e instanceof CsvImportCompletedEvent));
+            order.verify(transactionManager).commit(any());
+        }
+    }
+
+    @Test
+    @DisplayName("12.6a: completion transaction fails after the rows committed → import result still returned")
+    void completionTransactionFailure_importResultStillReturned() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubOneImportedRow();
+            when(transactionManager.getTransaction(any()))
+                    .thenThrow(new org.springframework.transaction.CannotCreateTransactionException("db down (test)"));
+
+            var result = useCase.execute(ownerCommand(1));
+
+            assertEquals(1, result.getImported());
+            verify(eventPublisher, never()).publishEvent((Object) argThat(e -> e instanceof CsvImportCompletedEvent));
         }
     }
 

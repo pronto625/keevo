@@ -3,7 +3,7 @@ package com.keevo.subscription.plan.application.service;
 import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.identity.api.PlanType;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
 import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
@@ -30,7 +30,7 @@ class PlanWhatsAppNotificationListenerTest {
     private static final String PHONE = "+237600000001";
     private static final UUID TENANT = UUID.randomUUID();
 
-    @Mock WhatsAppPort whatsApp;
+    @Mock WhatsAppSender whatsApp;
     @Mock OwnerRecipientResolver resolver;
     @InjectMocks PlanWhatsAppNotificationListener listener;
 

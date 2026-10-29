@@ -2,11 +2,11 @@ package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import com.keevo.subscription.api.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsUseCase;
-import com.keevo.subscription.api.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

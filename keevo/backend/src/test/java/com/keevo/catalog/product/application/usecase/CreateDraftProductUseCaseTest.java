@@ -7,9 +7,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.messaging.notification.adapter.in.api.DraftValidationApiTestSupport;
-import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
-import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.shared.event.catalog.product.DraftProductPendingEvent;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
@@ -54,7 +52,6 @@ class CreateDraftProductUseCaseTest {
     }
 
     @Mock private ProductRepository           productRepository;
-    @Mock private DraftNotificationRepository draftRepository;
     @Mock private ProductCountPort            productCountPort;
     @Mock private SubscriptionRepository      subscriptionRepository;
     @Mock private PlanLimitGuard              planLimitGuard;
@@ -68,7 +65,7 @@ class CreateDraftProductUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new CreateDraftProductUseCase(
-                productRepository, DraftValidationApiTestSupport.commandPort(draftRepository), productCountPort,
+                productRepository, productCountPort,
                 SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), eventPublisher, transactionLock);
     }
 
@@ -106,7 +103,6 @@ class CreateDraftProductUseCaseTest {
             stubPlan();
             when(productRepository.existsByName("Chapeau")).thenReturn(false);
             when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-            doNothing().when(draftRepository).save(any());
 
             Product result = useCase.execute(ownerCmd("Chapeau"));
 
@@ -142,14 +138,19 @@ class CreateDraftProductUseCaseTest {
             stubPlan();
             when(productRepository.existsByName("Casquette")).thenReturn(false);
             when(productRepository.save(any())).thenReturn(fakeSaved("Casquette"));
-            doNothing().when(draftRepository).save(any());
 
             useCase.execute(ownerCmd("Casquette"));
 
+            // 12.6a: the pending-draft record first (messaging, synchronous), then the progressive-creation event
             ArgumentCaptor<Object> cap = ArgumentCaptor.forClass(Object.class);
-            verify(eventPublisher).publishEvent(cap.capture());
-            assertInstanceOf(ProductCreatedProgressivelyEvent.class, cap.getValue());
-            var event = (ProductCreatedProgressivelyEvent) cap.getValue();
+            verify(eventPublisher, times(2)).publishEvent(cap.capture());
+            assertInstanceOf(DraftProductPendingEvent.class, cap.getAllValues().get(0));
+            var pending = (DraftProductPendingEvent) cap.getAllValues().get(0);
+            assertEquals("Casquette", pending.productName());
+            assertEquals("kv_test", pending.tenantId());
+            assertNotNull(pending.productId());
+            assertInstanceOf(ProductCreatedProgressivelyEvent.class, cap.getAllValues().get(1));
+            var event = (ProductCreatedProgressivelyEvent) cap.getAllValues().get(1);
             assertEquals("DRAFT", event.initialStatus());
         }
     }
@@ -162,7 +163,6 @@ class CreateDraftProductUseCaseTest {
             stubPlan();
             when(productRepository.existsByName("Article A")).thenReturn(false);
             when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-            doNothing().when(draftRepository).save(any());
 
             assertDoesNotThrow(() -> useCase.execute(ownerCmd("Article A")));
         }
@@ -176,7 +176,6 @@ class CreateDraftProductUseCaseTest {
             stubPlan(); // plan limit applies to all roles
             when(productRepository.existsByName("Article B")).thenReturn(false);
             when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-            doNothing().when(draftRepository).save(any());
 
             assertDoesNotThrow(() -> useCase.execute(employeeCmd("Article B")));
         }
@@ -207,7 +206,6 @@ class CreateDraftProductUseCaseTest {
             stubPlan();
             when(productRepository.existsByName("Article Lock")).thenReturn(false);
             when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-            lenient().doNothing().when(draftRepository).save(any());
 
             useCase.execute(ownerCmd("Article Lock"));
 

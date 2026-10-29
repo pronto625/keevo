@@ -5,9 +5,9 @@ import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSup
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
-import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -38,7 +38,7 @@ import static org.mockito.Mockito.*;
 class SalesTrendDetectionSchedulerTest {
 
     @Mock private JdbcTemplate jdbcTemplate;
-    @Mock private NotificationPort notificationPort;
+    @Mock private PushNotifier pushNotifier;
     @Mock private NotificationCooldownRepository cooldownRepository;
     @Mock private TenantPreferencesRepository tenantPreferencesRepository;
     @Mock private StoreRepository storeRepository;
@@ -51,7 +51,7 @@ class SalesTrendDetectionSchedulerTest {
     @BeforeEach
     void setUp() {
         scheduler = new SalesTrendDetectionScheduler(
-                jdbcTemplate, notificationPort, cooldownRepository,
+                jdbcTemplate, pushNotifier, cooldownRepository,
                 IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), StoreApiTestSupport.queryPort(storeRepository));
     }
 
@@ -98,7 +98,7 @@ class SalesTrendDetectionSchedulerTest {
 
         scheduler.detectTrends();
 
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
     }
 
     // ── AC3/AC4: Drop > 40% → negative trend notification ───────────────────
@@ -120,7 +120,7 @@ class SalesTrendDetectionSchedulerTest {
         scheduler.detectTrends();
 
         ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(SCHEMA), cap.capture());
+        verify(pushNotifier).notifyOwners(eq(SCHEMA), cap.capture());
         assertEquals("TREND_DOWN", cap.getValue().type());
         assertTrue(cap.getValue().body().contains("Cosmos"));
     }
@@ -144,7 +144,7 @@ class SalesTrendDetectionSchedulerTest {
         scheduler.detectTrends();
 
         ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(SCHEMA), cap.capture());
+        verify(pushNotifier).notifyOwners(eq(SCHEMA), cap.capture());
         assertEquals("TREND_UP", cap.getValue().type());
         assertTrue(cap.getValue().body().contains("20 vente(s)"));
     }
@@ -159,7 +159,7 @@ class SalesTrendDetectionSchedulerTest {
 
         scheduler.detectTrends();
 
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
         verifyNoInteractions(cooldownRepository);
     }
 
@@ -181,7 +181,7 @@ class SalesTrendDetectionSchedulerTest {
 
         scheduler.detectTrends();
 
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
     }
 
     // ── AC3: avg < 1 → skip (avoid noise on new tenants) ────────────────────
@@ -199,7 +199,7 @@ class SalesTrendDetectionSchedulerTest {
 
         scheduler.detectTrends();
 
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
     }
 
     // ── AC3: Exception for one tenant → continues others ─────────────────────

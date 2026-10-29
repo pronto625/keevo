@@ -723,6 +723,8 @@ So that **les invariants spécifiques Keevo sont garantis en CI (MOD-NFR2/3)**.
 
 - [ ] [Deferred-from: review 12-3/12-4, 2026-10-29] Four `@Async @EventListener` notification listeners fire before commit and are not durable (`DayClosureNotificationListener` push, `StockAlertNotificationListener`, `StockModificationNotificationListener`, `ProductCreationNotificationListener.onCsvImportCompleted`) — move to after-commit module listeners (timing change: no push for rolled-back actions) [messaging/notification/application/listener]
 
+- [ ] [Deferred-from: review 12-6a, 2026-10-29] Rule: publishers of events consumed only by after-commit module listeners (`DayClosedEvent`, `StockThresholdBreachedEvent`, `StockAdjustedEvent`, `CsvImportCompletedEvent`…) must publish inside a transaction — ArchUnit/registry test, else the notification is silently dropped [architecture tests] — 12-6b
+
 ### Story 12.7 : Rendre le moteur de synchronisation « module-aware »
 
 As a **développeur plateforme**,

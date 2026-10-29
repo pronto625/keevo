@@ -17,8 +17,8 @@ import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -40,20 +40,20 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
     private final StoreRepository storeRepository;
     private final UpdateStoreUseCase updateStoreUseCase;
     private final DeactivateStoreUseCase deactivateStoreUseCase;
-    private final SubscriptionQueryPort subscriptionQuery;
-    private final PlanLimitPort planLimit;
+    private final TenantPlanQuery tenantPlanQuery;
+    private final PlanLimitCheck planLimit;
     private final TransactionLockPort transactionLock;
 
     StoreApiAdapter(StoreRepository storeRepository,
                     UpdateStoreUseCase updateStoreUseCase,
                     DeactivateStoreUseCase deactivateStoreUseCase,
-                    SubscriptionQueryPort subscriptionQuery,
-                    PlanLimitPort planLimit,
+                    TenantPlanQuery tenantPlanQuery,
+                    PlanLimitCheck planLimit,
                     TransactionLockPort transactionLock) {
         this.storeRepository = storeRepository;
         this.updateStoreUseCase = updateStoreUseCase;
         this.deactivateStoreUseCase = deactivateStoreUseCase;
-        this.subscriptionQuery = subscriptionQuery;
+        this.tenantPlanQuery = tenantPlanQuery;
         this.planLimit = planLimit;
         this.transactionLock = transactionLock;
     }
@@ -100,7 +100,7 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
         }
         StoreType type = in.type() != null ? in.type() : StoreType.STORE;
 
-        var plan = subscriptionQuery.findCurrentPlan(tenantSchema)
+        var plan = tenantPlanQuery.findCurrentPlan(tenantSchema)
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif"));
         planLimit.checkStoreLimit(plan, storeRepository.countActive());

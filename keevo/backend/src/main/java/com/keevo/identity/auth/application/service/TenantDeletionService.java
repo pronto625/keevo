@@ -4,7 +4,7 @@ import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.slf4j.Logger;
@@ -60,7 +60,7 @@ public class TenantDeletionService {
 
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final TenantSchemaProvisioner schemaProvisioner;
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transactionTemplate;
@@ -72,31 +72,31 @@ public class TenantDeletionService {
     @org.springframework.beans.factory.annotation.Autowired
     public TenantDeletionService(TenantRepository tenantRepository,
                                      UserRepository userRepository,
-                                     WhatsAppPort whatsAppPort,
+                                     WhatsAppSender whatsAppSender,
                                      TenantSchemaProvisioner schemaProvisioner,
                                      JdbcTemplate jdbcTemplate,
                                      PlatformTransactionManager transactionManager,
                                      List<TenantFilesPurger> filePurgers) {
-        this(tenantRepository, userRepository, whatsAppPort, schemaProvisioner,
+        this(tenantRepository, userRepository, whatsAppSender, schemaProvisioner,
              jdbcTemplate, transactionManager, Clock.systemUTC(), filePurgers);
     }
 
     /** Test constructor — injectable clock. */
     public TenantDeletionService(TenantRepository tenantRepository,
                                      UserRepository userRepository,
-                                     WhatsAppPort whatsAppPort,
+                                     WhatsAppSender whatsAppSender,
                                      TenantSchemaProvisioner schemaProvisioner,
                                      JdbcTemplate jdbcTemplate,
                                      PlatformTransactionManager transactionManager,
                                      Clock clock) {
-        this(tenantRepository, userRepository, whatsAppPort, schemaProvisioner,
+        this(tenantRepository, userRepository, whatsAppSender, schemaProvisioner,
              jdbcTemplate, transactionManager, clock, List.of());
     }
 
     /** Full constructor — injectable clock and file purgers. */
     public TenantDeletionService(TenantRepository tenantRepository,
                                      UserRepository userRepository,
-                                     WhatsAppPort whatsAppPort,
+                                     WhatsAppSender whatsAppSender,
                                      TenantSchemaProvisioner schemaProvisioner,
                                      JdbcTemplate jdbcTemplate,
                                      PlatformTransactionManager transactionManager,
@@ -105,7 +105,7 @@ public class TenantDeletionService {
         this.filePurgers = filePurgers != null ? List.copyOf(filePurgers) : List.of();
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.schemaProvisioner = schemaProvisioner;
         this.jdbcTemplate = jdbcTemplate;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -293,7 +293,7 @@ public class TenantDeletionService {
     private void sendFinalWhatsApp(UUID tenantId, List<String> ownerPhones) {
         for (String phone : ownerPhones) {
             try {
-                whatsAppPort.sendReport(phone, FINAL_WHATSAPP_MESSAGE);
+                whatsAppSender.sendReport(phone, FINAL_WHATSAPP_MESSAGE);
             } catch (Exception e) {
                 // Non-blocking — the deletion is already committed
                 log.error("[TenantDeletionService] Failed to send final WhatsApp for tenant {}: {}",

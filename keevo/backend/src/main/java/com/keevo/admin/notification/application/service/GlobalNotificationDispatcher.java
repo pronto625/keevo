@@ -7,9 +7,9 @@ import com.keevo.admin.notification.domain.model.PushTargetTenant;
 import com.keevo.admin.notification.domain.port.in.DispatchGlobalNotificationsUseCase;
 import com.keevo.admin.notification.domain.port.out.GlobalNotificationRepository;
 import com.keevo.admin.notification.domain.port.out.PushAudiencePort;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.PushSendResult;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushSendResult;
+import com.keevo.shared.capability.notification.PushNotifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -35,7 +35,7 @@ import java.util.Set;
  * SENDING in one {@code UPDATE … RETURNING}, on top of the scheduler's ShedLock) so two instances never
  * send a row twice. Audience: every distinct device token of the targeted companies (a token registered
  * in several companies is sent once, cleaned up in the schema it was first seen in), sent per company
- * through {@link NotificationPort#sendToTokens} (FCM multicast in chunks of 500).
+ * through {@link PushNotifier#sendToTokens} (FCM multicast in chunks of 500).
  *
  * <p>Outcomes (all with {@code sent_at}): SENT with the FCM counts; FAILED with PUSH_UNAVAILABLE (FCM not
  * configured), NO_RECIPIENT (no device), ALL_CHUNKS_FAILED (every chunk threw) or INTERRUPTED (database
@@ -53,16 +53,16 @@ public class GlobalNotificationDispatcher implements DispatchGlobalNotifications
 
     private final GlobalNotificationRepository repository;
     private final PushAudiencePort audience;
-    private final NotificationPort notificationPort;
+    private final PushNotifier pushNotifier;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
     public GlobalNotificationDispatcher(GlobalNotificationRepository repository, PushAudiencePort audience,
-                                        NotificationPort notificationPort, ApplicationEventPublisher events,
+                                        PushNotifier pushNotifier, ApplicationEventPublisher events,
                                         Clock clock) {
         this.repository = repository;
         this.audience = audience;
-        this.notificationPort = notificationPort;
+        this.pushNotifier = pushNotifier;
         this.events = events;
         this.clock = clock;
     }
@@ -88,7 +88,7 @@ public class GlobalNotificationDispatcher implements DispatchGlobalNotifications
     }
 
     private void send(GlobalNotification n) {
-        if (!notificationPort.isPushAvailable()) {
+        if (!pushNotifier.isPushAvailable()) {
             fail(n, GlobalNotificationFailureReason.PUSH_UNAVAILABLE, 0, PushSendResult.EMPTY);
             return;
         }
@@ -105,7 +105,7 @@ public class GlobalNotificationDispatcher implements DispatchGlobalNotifications
                     }
                     if (tokens.isEmpty()) continue;
                     recipients += tokens.size();
-                    total = total.plus(notificationPort.sendToTokens(tenant.schemaName(), tokens, payload));
+                    total = total.plus(pushNotifier.sendToTokens(tenant.schemaName(), tokens, payload));
                 } catch (DataAccessResourceFailureException | TransientDataAccessException
                          | RecoverableDataAccessException e) {
                     throw e; // outage: end the row below with what was sent so far

@@ -81,6 +81,7 @@ class ApplicationModulesBaselineTest {
         Files.createDirectories(VIOLATIONS_FILE.getParent());
 
         if (!violations.hasViolations()) {
+            // 12.6a: 0 violations of any kind (cycles included)
             Files.writeString(VIOLATIONS_FILE, "✓ No module violations detected.\n");
             return;
         }
@@ -111,6 +112,12 @@ class ApplicationModulesBaselineTest {
         assertThat(messages.stream().filter(m -> isTwoModuleCycle(m, "messaging", "catalog")
                 || isTwoModuleCycle(m, "messaging", "commerce")).toList())
             .as("two-module cycle messaging <-> catalog/commerce (consume catalogue events, not producer types) — see "
+                + VIOLATIONS_FILE)
+            .isEmpty();
+        // 12.6a pinned: zero module cycles (capabilities in shared.capability.*, onboarding seeding and draft
+        // tracking via catalogue events). A new cycle fails here; verify() itself becomes blocking in 12.6b.
+        assertThat(messages.stream().filter(m -> m.startsWith("Cycle detected")).toList())
+            .as("module cycles (move the contract to a core capability or use a catalogue event) — see "
                 + VIOLATIONS_FILE)
             .isEmpty();
     }

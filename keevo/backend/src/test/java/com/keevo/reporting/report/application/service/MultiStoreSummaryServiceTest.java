@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -45,7 +45,7 @@ class MultiStoreSummaryServiceTest {
 
     @Mock private EndOfDayReportRepository reportRepository;
     @Mock private StoreRepository storeRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private DailyReportFormatter formatter;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
@@ -55,7 +55,7 @@ class MultiStoreSummaryServiceTest {
     @BeforeEach
     void setUp() {
         service = new MultiStoreSummaryService(reportRepository, StoreApiTestSupport.queryPort(storeRepository),
-                whatsAppPort, formatter, ownerRecipientResolver);
+                whatsAppSender, formatter, ownerRecipientResolver);
         command = new GenerateReportCommand(UUID.randomUUID(), UUID.randomUUID(),
                 "kv_test01", false, Instant.now(), null);
     }
@@ -126,7 +126,7 @@ class MultiStoreSummaryServiceTest {
 
         service.checkAndGenerateCombinedSummary(command);
 
-        verify(whatsAppPort, times(1)).sendReport(anyString(), anyString());
+        verify(whatsAppSender, times(1)).sendReport(anyString(), anyString());
     }
 
     @Test
@@ -139,7 +139,7 @@ class MultiStoreSummaryServiceTest {
                 .thenReturn(List.of(stubReport(UUID.randomUUID(), "A", 50000, 3)));
         when(formatter.formatCombinedSummary(anyString(), any(), anyInt(), anyInt())).thenReturn("Résumé");
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+237600000999"));
-        doThrow(new RuntimeException("WhatsApp error")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("WhatsApp error")).when(whatsAppSender).sendReport(anyString(), anyString());
 
         service.checkAndGenerateCombinedSummary(command);
 

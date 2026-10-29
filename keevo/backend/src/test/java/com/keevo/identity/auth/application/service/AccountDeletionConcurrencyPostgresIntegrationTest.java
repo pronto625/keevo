@@ -5,7 +5,7 @@ import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -68,7 +68,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
     @Autowired AccountDeletionService accountDeletionService;
     @Autowired AdminTenantService adminTenantService;
 
-    private final WhatsAppPort whatsAppPort = mock(WhatsAppPort.class);
+    private final WhatsAppSender whatsAppSender = mock(WhatsAppSender.class);
 
     @AfterEach
     void clearTenantContext() {
@@ -106,7 +106,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
     }
 
     private TenantDeletionService scheduler(TenantSchemaProvisioner provisioner, Clock clock) {
-        return new TenantDeletionService(tenantRepository, userRepository, whatsAppPort,
+        return new TenantDeletionService(tenantRepository, userRepository, whatsAppSender,
                 provisioner, jdbc, transactionManager, clock);
     }
 
@@ -210,7 +210,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
                     .satisfies(e -> assertThat(domainCode(e.getCause())).isEqualTo("DELETION_NOT_PENDING"));
 
             assertFullyDeleted(seed);
-            verify(whatsAppPort, times(1)).sendReport(eq(seed.phone()), anyString());
+            verify(whatsAppSender, times(1)).sendReport(eq(seed.phone()), anyString());
         } finally {
             releaseDrop.countDown();
             pool.shutdownNow();
@@ -290,7 +290,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
         assertThat(scheduler.runTenantDeletion(seed.tenantId(), true)).isTrue();
 
         assertFullyDeleted(seed);
-        verify(whatsAppPort, times(1)).sendReport(eq(seed.phone()), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq(seed.phone()), anyString());
     }
 
     // ── Row 4: owner cancel after the grace period ────────────────────────────────────────────────
@@ -329,7 +329,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
 
         assertFullyDeleted(seed);
         assertThat(scheduledAt(seed.tenantId())).isNull();
-        verify(whatsAppPort, times(1)).sendReport(eq(seed.phone()), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq(seed.phone()), anyString());
     }
 
     @Test
@@ -350,7 +350,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
         assertThat(scheduledAt(seed.tenantId()).toInstant()).isBeforeOrEqualTo(Instant.now());
         assertThat(schemaExists(seed.schema())).isTrue();
         assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isEqualTo(1);
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
 
         // Grace period over: the owner can no longer cancel it.
         assertThatThrownBy(() -> accountDeletionService.cancelDeletion(seed.ownerId(), seed.schema()))

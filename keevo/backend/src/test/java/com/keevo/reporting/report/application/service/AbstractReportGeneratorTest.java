@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -34,7 +34,7 @@ import static org.mockito.Mockito.*;
 class AbstractReportGeneratorTest {
 
     @Mock private EndOfDayReportRepository reportRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private MultiStoreSummaryService multiStoreSummaryService;
 
     private TestableReportGenerator generator;
@@ -49,7 +49,7 @@ class AbstractReportGeneratorTest {
         boolean collectDataCalled = false;
         boolean formatContentCalled = false;
 
-        TestableReportGenerator(EndOfDayReportRepository repo, WhatsAppPort wp,
+        TestableReportGenerator(EndOfDayReportRepository repo, WhatsAppSender wp,
                                  MultiStoreSummaryService ms, EndOfDayReportData data) {
             super(repo, wp, ms);
             this.dataToReturn = data;
@@ -84,7 +84,7 @@ class AbstractReportGeneratorTest {
                 List.of(new EndOfDayReportData.EmployeeEntry("Alice", 7, 100000)),
                 2, 1, 5000, null
         );
-        generator = new TestableReportGenerator(reportRepository, whatsAppPort, multiStoreSummaryService, data);
+        generator = new TestableReportGenerator(reportRepository, whatsAppSender, multiStoreSummaryService, data);
         command = new GenerateReportCommand(
                 UUID.randomUUID(), UUID.randomUUID(), "kv_test01", false, Instant.now(), null
         );
@@ -111,12 +111,12 @@ class AbstractReportGeneratorTest {
     @Test
     void generateReport_shouldDeliverViaWhatsApp() {
         generator.generateReport(command);
-        verify(whatsAppPort, times(1)).sendReport(eq("+243999000000"), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq("+243999000000"), anyString());
     }
 
     @Test
     void generateReport_whenDeliverySucceeds_shouldMarkSent() {
-        // whatsAppPort does not throw → delivery succeeds
+        // whatsAppSender does not throw → delivery succeeds
         ArgumentCaptor<EndOfDayReport> captor = ArgumentCaptor.forClass(EndOfDayReport.class);
         generator.generateReport(command);
         verify(reportRepository, atLeast(2)).save(captor.capture());
@@ -126,7 +126,7 @@ class AbstractReportGeneratorTest {
 
     @Test
     void generateReport_whenDeliveryFails_shouldMarkFailed() {
-        doThrow(new RuntimeException("WhatsApp error")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("WhatsApp error")).when(whatsAppSender).sendReport(anyString(), anyString());
         ArgumentCaptor<EndOfDayReport> captor = ArgumentCaptor.forClass(EndOfDayReport.class);
         generator.generateReport(command);
         verify(reportRepository, atLeast(2)).save(captor.capture());
@@ -162,7 +162,7 @@ class AbstractReportGeneratorTest {
         generator.generateReport(inAppCommand);
 
         // Then — WhatsApp MUST NOT be called
-        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(whatsAppSender, never()).sendReport(anyString(), anyString());
         verify(reportRepository, atLeast(1)).save(any(EndOfDayReport.class));
     }
 
@@ -178,7 +178,7 @@ class AbstractReportGeneratorTest {
         generator.generateReport(whatsAppCommand);
 
         // Then — WhatsApp MUST be called exactly once
-        verify(whatsAppPort, times(1)).sendReport(eq("+243999000000"), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq("+243999000000"), anyString());
     }
 
     @Test
@@ -192,6 +192,6 @@ class AbstractReportGeneratorTest {
         generator.generateReport(nullChannelCommand);
 
         // Then — should default to WhatsApp delivery
-        verify(whatsAppPort, times(1)).sendReport(eq("+243999000000"), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq("+243999000000"), anyString());
     }
 }

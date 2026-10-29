@@ -10,9 +10,9 @@ import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.api.EmployeeQueryPort;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
@@ -52,8 +52,8 @@ public class SaleDraftValidatedNotificationListener {
     private final UserQueryPort userQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final TenantPreferencesQueryPort preferencesQuery;
-    private final NotificationPort notificationPort;
-    private final WhatsAppPort whatsAppPort;
+    private final PushNotifier pushNotifier;
+    private final WhatsAppSender whatsAppSender;
 
     public SaleDraftValidatedNotificationListener(
             SaleQueryPort saleQueryPort,
@@ -62,16 +62,16 @@ public class SaleDraftValidatedNotificationListener {
             UserQueryPort userQuery,
             OwnerRecipientResolver ownerRecipientResolver,
             TenantPreferencesQueryPort preferencesQuery,
-            NotificationPort notificationPort,
-            WhatsAppPort whatsAppPort) {
+            PushNotifier pushNotifier,
+            WhatsAppSender whatsAppSender) {
         this.saleQueryPort = saleQueryPort;
         this.employeeQuery = employeeQuery;
         this.storeQuery = storeQuery;
         this.userQuery = userQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.preferencesQuery = preferencesQuery;
-        this.notificationPort = notificationPort;
-        this.whatsAppPort = whatsAppPort;
+        this.pushNotifier = pushNotifier;
+        this.whatsAppSender = whatsAppSender;
     }
 
     /**
@@ -131,7 +131,7 @@ public class SaleDraftValidatedNotificationListener {
             DeliveryFailedException failure = null;
             if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
                 try {
-                    notificationPort.notifyOwners(event.tenantId(), payload);
+                    pushNotifier.notifyOwners(event.tenantId(), payload);
                 } catch (Exception e) {
                     log.warn("[SALE-VALIDATED] Push failed for sale={}: {}", event.saleId(), e.getMessage());
                     failure = new DeliveryFailedException("push send failed", e);
@@ -144,7 +144,7 @@ public class SaleDraftValidatedNotificationListener {
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
-                        whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
+                        whatsAppSender.sendReport(ownerPhone, title + "\n" + body);
                     } catch (Exception e) {
                         log.warn("[SALE-VALIDATED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
                         failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
@@ -218,7 +218,7 @@ public class SaleDraftValidatedNotificationListener {
             DeliveryFailedException failure = null;
             if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
                 try {
-                    notificationPort.notifyOwners(event.tenantId(), payload);
+                    pushNotifier.notifyOwners(event.tenantId(), payload);
                 } catch (Exception e) {
                     log.warn("[SALE-PENDING] Push failed for sale={}: {}", event.saleId(), e.getMessage());
                     failure = new DeliveryFailedException("push send failed", e);
@@ -230,7 +230,7 @@ public class SaleDraftValidatedNotificationListener {
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
-                        whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
+                        whatsAppSender.sendReport(ownerPhone, title + "\n" + body);
                     } catch (Exception e) {
                         log.warn("[SALE-PENDING] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
                         failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
@@ -312,7 +312,7 @@ public class SaleDraftValidatedNotificationListener {
             DeliveryFailedException failure = null;
             if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
                 try {
-                    notificationPort.notifyOwners(event.tenantId(), payload);
+                    pushNotifier.notifyOwners(event.tenantId(), payload);
                 } catch (Exception e) {
                     log.warn("[SALE-DRAFT-UPGRADED] Push failed for sale={}: {}", event.saleId(), e.getMessage());
                     failure = new DeliveryFailedException("push send failed", e);
@@ -324,7 +324,7 @@ public class SaleDraftValidatedNotificationListener {
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
-                        whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
+                        whatsAppSender.sendReport(ownerPhone, title + "\n" + body);
                     } catch (Exception e) {
                         log.warn("[SALE-DRAFT-UPGRADED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
                         failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));

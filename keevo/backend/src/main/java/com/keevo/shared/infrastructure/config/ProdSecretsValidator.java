@@ -181,7 +181,7 @@ public class ProdSecretsValidator {
 
     private void validateWhatsAppProvider() {
         // No trim: the adapters' @ConditionalOnProperty compare the raw value (case-insensitive),
-        // so an empty or padded value would leave no WhatsAppPort adapter — reject it here.
+        // so an empty or padded value would leave no WhatsAppSender adapter — reject it here.
         String provider = whatsappProvider == null ? PROVIDER_NOOP : whatsappProvider.toLowerCase(Locale.ROOT);
         switch (provider) {
             case PROVIDER_NOOP -> log.warn("[FailFast] KEEVO_WHATSAPP_PROVIDER is noop — "

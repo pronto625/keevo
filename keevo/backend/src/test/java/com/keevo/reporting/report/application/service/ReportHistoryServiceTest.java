@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -49,7 +49,7 @@ class ReportHistoryServiceTest {
     }
 
     @Mock private EndOfDayReportRepository reportRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
     @Mock private com.keevo.identity.employee.domain.port.out.EmployeeRepository employeeRepository;
 
@@ -60,7 +60,7 @@ class ReportHistoryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new ReportHistoryService(reportRepository, whatsAppPort, ownerRecipientResolver,
+        service = new ReportHistoryService(reportRepository, whatsAppSender, ownerRecipientResolver,
                 IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         reportId = UUID.randomUUID();
         tenantId = "kv_test01";
@@ -195,7 +195,7 @@ class ReportHistoryServiceTest {
 
         // Two saves: one after resetForResend(), one after markSent()
         verify(reportRepository, times(2)).save(any(EndOfDayReport.class));
-        verify(whatsAppPort).sendReport("+237600000001", "Contenu");
+        verify(whatsAppSender).sendReport("+237600000001", "Contenu");
         assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
         assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
     }
@@ -208,7 +208,7 @@ class ReportHistoryServiceTest {
     void resendReport_whenWhatsAppFails_marksFailedSavesAndThrowsDeliveryException() {
         when(reportRepository.findById(reportId)).thenReturn(Optional.of(sampleReport));
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(tenantId)).thenReturn(Optional.of("+237600000001"));
-        doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("net error")).when(whatsAppSender).sendReport(anyString(), anyString());
 
         DomainException ex = assertThrows(DomainException.class,
                 () -> service.resendReport(new ResendReportCommand(reportId, tenantId)));
@@ -240,7 +240,7 @@ class ReportHistoryServiceTest {
                 () -> service.resendReport(new ResendReportCommand(reportId, tenantId)));
 
         assertThat(ex.getErrorCode()).isEqualTo(ErrorCode.WHATSAPP_DELIVERY_FAILED);
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
         verify(reportRepository, never()).save(any());
         assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.FAILED);
         assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
@@ -258,7 +258,7 @@ class ReportHistoryServiceTest {
 
         service.resendReport(new ResendReportCommand(reportId, tenantId));
 
-        verify(whatsAppPort).sendReport("+237600000001", "Contenu");
+        verify(whatsAppSender).sendReport("+237600000001", "Contenu");
         assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
         assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
     }
@@ -273,7 +273,7 @@ class ReportHistoryServiceTest {
 
         service.resendReport(new ResendReportCommand(reportId, tenantId));
 
-        verify(whatsAppPort).sendReport("+237600000001", "Contenu");
+        verify(whatsAppSender).sendReport("+237600000001", "Contenu");
         assertThat(sampleReport.getDeliveryAttempts()).isEqualTo(1);
         assertThat(sampleReport.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
     }

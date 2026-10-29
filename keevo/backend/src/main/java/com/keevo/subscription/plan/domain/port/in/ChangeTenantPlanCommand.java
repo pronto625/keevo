@@ -1,7 +1,7 @@
 package com.keevo.subscription.plan.domain.port.in;
 
 import com.keevo.identity.api.PlanType;
-import com.keevo.subscription.api.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
 
 import java.time.Instant;
 import java.util.UUID;

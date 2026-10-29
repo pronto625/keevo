@@ -10,17 +10,14 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
 /** Story 12.2a — the catalog category ports delegate to the repository / use cases and map faithfully. */
@@ -55,7 +52,7 @@ class CategoryApiAdaptersTest {
     @BeforeEach
     void setUp() {
         query = new CategoryQueryAdapter(categoryRepository);
-        command = new CategoryCommandAdapter(createCategory, toggleCategory, renameCategory, categoryRepository);
+        command = new CategoryCommandAdapter(createCategory, toggleCategory, renameCategory);
     }
 
     private static Category category(boolean active) {
@@ -88,50 +85,6 @@ class CategoryApiAdaptersTest {
         assertThat(command.createWithId(TENANT, ID, "Boissons", PARENT, ACTOR).isActive()).isTrue();
         assertThat(command.toggleActive(TENANT, ID, ACTOR).isActive()).isFalse();
         assertThat(command.rename(TENANT, ID, "Jus", ACTOR).name()).isEqualTo("Jus");
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void seedTemplateCategories_persistsActiveRootTemplateCategoriesWithGeneratedIds() {
-        when(categoryRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
-
-        int created = command.seedTemplateCategories(TenantContext.getCurrentTenant(), List.of("Robes", "Pagnes", "Chaussures"));
-
-        assertThat(created).isEqualTo(3);
-        ArgumentCaptor<List<Category>> captor = ArgumentCaptor.forClass(List.class);
-        verify(categoryRepository).saveAll(captor.capture());
-        List<Category> seeded = captor.getValue();
-        assertThat(seeded).extracting(Category::name).containsExactly("Robes", "Pagnes", "Chaussures");
-        // ids deliberately null so Hibernate persists (not merges) and generates them
-        assertThat(seeded).allSatisfy(c -> {
-            assertThat(c.id()).isNull();
-            assertThat(c.parentId()).isNull();
-            assertThat(c.isActive()).isTrue();
-            assertThat(c.isCustom()).isFalse();
-            assertThat(c.createdAt()).isNotNull();
-        });
-    }
-
-    @Test
-    @SuppressWarnings("unchecked")
-    void seedTemplateCategories_skipsNullAndBlankNames() {
-        when(categoryRepository.saveAll(anyList())).thenAnswer(inv -> inv.getArgument(0));
-        List<String> names = new java.util.ArrayList<>(List.of("Robes", " "));
-        names.add(null);
-        names.add("Pagnes");
-
-        int created = command.seedTemplateCategories(TenantContext.getCurrentTenant(), names);
-
-        assertThat(created).isEqualTo(2);
-        ArgumentCaptor<List<Category>> captor = ArgumentCaptor.forClass(List.class);
-        verify(categoryRepository).saveAll(captor.capture());
-        assertThat(captor.getValue()).extracting(Category::name).containsExactly("Robes", "Pagnes");
-    }
-
-    @Test
-    void seedTemplateCategories_nullList_createsNothing() {
-        assertThat(command.seedTemplateCategories(TenantContext.getCurrentTenant(), null)).isZero();
-        verifyNoInteractions(categoryRepository);
     }
 
     // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast

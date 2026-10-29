@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.commerce.api.ClosureWindow;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
@@ -57,7 +57,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
     private final TransactionTemplate afterCommitTx;
 
     public WeeklyReportGenerator(EndOfDayReportRepository reportRepository,
-                                  WhatsAppPort whatsAppPort,
+                                  WhatsAppSender whatsAppSender,
                                   MultiStoreSummaryService multiStoreSummaryService,
                                   WeeklyReportBuilder builder,
                                   WeeklyReportFormatter formatter,
@@ -65,7 +65,7 @@ public class WeeklyReportGenerator extends AbstractReportGenerator
                                   OwnerRecipientResolver ownerRecipientResolver,
                                   TransactionLockPort transactionLock,
                                   PlatformTransactionManager transactionManager) {
-        super(reportRepository, whatsAppPort, multiStoreSummaryService);
+        super(reportRepository, whatsAppSender, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
         this.storeQuery = storeQuery;

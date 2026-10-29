@@ -1,4 +1,4 @@
-package com.keevo.subscription.api;
+package com.keevo.shared.capability.entitlement;
 
 import com.keevo.identity.api.PlanType;
 

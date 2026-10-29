@@ -2,7 +2,7 @@ package com.keevo.messaging.whatsapp.adapter.out.external;
 
 import com.keevo.messaging.notification.adapter.out.config.TwilioProperties;
 import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -25,7 +25,7 @@ import java.util.Base64;
  */
 @Component
 @ConditionalOnProperty(name = "keevo.whatsapp.provider", havingValue = "twilio")
-public class TwilioWhatsAppAdapter implements WhatsAppPort {
+public class TwilioWhatsAppAdapter implements WhatsAppSender {
 
     private static final Logger log = LoggerFactory.getLogger(TwilioWhatsAppAdapter.class);
     private static final String TWILIO_MESSAGES_URL =

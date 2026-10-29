@@ -10,7 +10,7 @@ import com.keevo.admin.subscription.domain.port.in.DowngradeToFreeCommand;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.TokenRevocationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.subscription.plan.adapter.in.bootstrap.PlanTypeRealignJob;
@@ -201,7 +201,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         LocalDate today = LocalDate.now(clock.withZone(com.keevo.shared.domain.time.KeevoZones.WAT));
         jdbc.update("UPDATE \"kv_pm9205\".subscriptions SET plan_type = 'PREMIUM', expires_at = ?",
                 java.sql.Timestamp.from(AdminPlanService.endOfDayWat(today.plusDays(7))));
-        WhatsAppPort whatsApp = mock(WhatsAppPort.class);
+        WhatsAppSender whatsApp = mock(WhatsAppSender.class);
         OwnerRecipientResolver resolver = mock(OwnerRecipientResolver.class);
         when(resolver.resolveOwnerWhatsAppPhone("kv_pm9205")).thenReturn(Optional.of("+237690009205"));
         PlanExpiryReminderService service = new PlanExpiryReminderService(jdbc, whatsApp, resolver, clock);

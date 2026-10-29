@@ -7,7 +7,7 @@ import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.EmployeeView;
 import com.keevo.identity.api.EmployeeQueryPort;
@@ -30,16 +30,16 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
     private static final Logger log = LoggerFactory.getLogger(ReportHistoryService.class);
 
     private final EndOfDayReportRepository reportRepository;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final EmployeeQueryPort employeeQuery;
 
     public ReportHistoryService(EndOfDayReportRepository reportRepository,
-                                 WhatsAppPort whatsAppPort,
+                                 WhatsAppSender whatsAppSender,
                                  OwnerRecipientResolver ownerRecipientResolver,
                                  EmployeeQueryPort employeeQuery) {
         this.reportRepository = reportRepository;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.employeeQuery = employeeQuery;
     }
@@ -96,7 +96,7 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
         reportRepository.save(report);
 
         try {
-            whatsAppPort.sendReport(ownerPhone, report.getContent());
+            whatsAppSender.sendReport(ownerPhone, report.getContent());
             report.incrementAttempt();
             report.markSent();
             reportRepository.save(report);

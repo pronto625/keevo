@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.TenantView;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.TenantQueryPort;
@@ -31,15 +31,15 @@ public class ReportDeliveryRetryService {
     static final int MAX_ATTEMPTS = 3;
 
     private final EndOfDayReportRepository reportRepository;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final TenantQueryPort tenantQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
     public ReportDeliveryRetryService(EndOfDayReportRepository reportRepository,
-                                       WhatsAppPort whatsAppPort,
+                                       WhatsAppSender whatsAppSender,
                                        TenantQueryPort tenantQuery,
                                        OwnerRecipientResolver ownerRecipientResolver) {
         this.reportRepository = reportRepository;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.tenantQuery = tenantQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
     }
@@ -77,7 +77,7 @@ public class ReportDeliveryRetryService {
 
         for (EndOfDayReport report : pendingRetries) {
             try {
-                whatsAppPort.sendReport(ownerPhone, report.getContent());
+                whatsAppSender.sendReport(ownerPhone, report.getContent());
                 report.markSent();
                 log.info("Retry succeeded for reportId={}", report.getId());
             } catch (Exception e) {

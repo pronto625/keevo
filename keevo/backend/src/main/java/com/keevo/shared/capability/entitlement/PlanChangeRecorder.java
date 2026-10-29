@@ -1,7 +1,6 @@
-package com.keevo.subscription.api;
+package com.keevo.shared.capability.entitlement;
 
 import com.keevo.identity.api.PlanType;
-import com.keevo.subscription.api.PlanChangeCause;
 
 import java.util.UUID;
 

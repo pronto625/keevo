@@ -1,10 +1,10 @@
 package com.keevo.messaging.notification.adapter.out;
 
 import com.keevo.messaging.notification.domain.model.DeviceToken;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.PushSendResult;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushSendResult;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.google.firebase.messaging.*;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @Component
 @Primary
 @ConditionalOnProperty(name = "keevo.fcm.enabled", havingValue = "true")
-public class FcmNotificationAdapter implements NotificationPort {
+public class FcmNotificationAdapter implements PushNotifier {
 
     private static final Logger log = LoggerFactory.getLogger(FcmNotificationAdapter.class);
 

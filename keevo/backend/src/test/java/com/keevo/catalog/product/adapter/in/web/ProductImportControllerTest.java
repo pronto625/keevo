@@ -7,8 +7,6 @@ import com.keevo.catalog.product.application.usecase.GenerateCsvTemplateUseCase;
 import com.keevo.catalog.product.application.usecase.ImportCsvProductsUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.messaging.notification.adapter.in.api.DraftValidationApiTestSupport;
-import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -57,7 +55,6 @@ class ProductImportControllerTest {
     @Mock private ImportCsvProductsUseCase     importUseCase;
     @Mock private CreateDraftProductUseCase    draftUseCase;
     @Mock private GenerateCsvTemplateUseCase   templateUseCase;
-    @Mock private DraftNotificationRepository draftRepository;
 
     private ProductImportController controller;
 
@@ -70,8 +67,7 @@ class ProductImportControllerTest {
         // Production binds the tenant in JwtAuthFilter; the drafts counter port requires it (12.2e).
         TenantContext.setCurrentTenant("kv_test01");
         controller = new ProductImportController(
-                importUseCase, draftUseCase, templateUseCase,
-                DraftValidationApiTestSupport.queryPort(draftRepository), objectMapper);
+                importUseCase, draftUseCase, templateUseCase, objectMapper);
 
         mockMvc = MockMvcBuilders
                 .standaloneSetup(controller)
@@ -227,30 +223,6 @@ class ProductImportControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
                 .andExpect(status().isConflict());
-    }
-
-    // ── AC6: Pending drafts counter ───────────────────────────────────────────
-
-    @Test
-    @DisplayName("GET /drafts/count → 200 with count for OWNER")
-    void shouldReturn200WithPendingDraftsCountForOwner() throws Exception {
-        authenticateAs("OWNER");
-        when(draftRepository.countPending()).thenReturn(3L);
-
-        mockMvc.perform(get("/api/v1/products/drafts/count"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").value(3));
-    }
-
-    @Test
-    @DisplayName("GET /drafts/count → 403 FORBIDDEN for an EMPLOYEE, counter never read")
-    void shouldReturn403WhenGetPendingCountThrowsForbidden() throws Exception {
-        authenticateAs("EMPLOYEE");
-
-        mockMvc.perform(get("/api/v1/products/drafts/count"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
-        verifyNoInteractions(draftRepository);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

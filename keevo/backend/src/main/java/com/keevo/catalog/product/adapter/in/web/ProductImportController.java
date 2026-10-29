@@ -1,7 +1,6 @@
 package com.keevo.catalog.product.adapter.in.web;
 
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -13,7 +12,6 @@ import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
 import com.keevo.catalog.product.application.usecase.GenerateCsvTemplateUseCase;
 import com.keevo.catalog.product.application.usecase.ImportCsvProductsUseCase;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
-import com.keevo.messaging.api.DraftValidationQueryPort;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
@@ -35,8 +33,10 @@ import java.util.UUID;
  *   <li>{@code GET  /api/v1/products/import/template} — download CSV template (AC1)</li>
  *   <li>{@code POST /api/v1/products/import}          — multipart upload, returns ImportResult (AC2–AC4, AC8)</li>
  *   <li>{@code POST /api/v1/products/draft}           — create DRAFT product (AC5)</li>
- *   <li>{@code GET  /api/v1/products/drafts/count}    — badge counter for owner (AC6)</li>
  * </ul>
+ *
+ * <p>The owner's pending-drafts badge counter ({@code GET /api/v1/products/drafts/count}, AC6) is served by
+ * messaging's {@code PendingDraftsCountController} since 12.6a.
  *
  * <p>RBAC is enforced inside the use cases (not via {@code @PreAuthorize}) to align with
  * the established project convention (see story 1.4 post-mortem notes).
@@ -50,19 +50,16 @@ public class ProductImportController {
     private final ImportCsvProductsUseCase    importUseCase;
     private final CreateDraftProductUseCase   draftUseCase;
     private final GenerateCsvTemplateUseCase  templateUseCase;
-    private final DraftValidationQueryPort    draftValidationQuery;
     private final ObjectMapper                objectMapper;
 
     public ProductImportController(
             ImportCsvProductsUseCase importUseCase,
             CreateDraftProductUseCase draftUseCase,
             GenerateCsvTemplateUseCase templateUseCase,
-            DraftValidationQueryPort draftValidationQuery,
             ObjectMapper objectMapper) {
         this.importUseCase      = importUseCase;
         this.draftUseCase       = draftUseCase;
         this.templateUseCase    = templateUseCase;
-        this.draftValidationQuery = draftValidationQuery;
         this.objectMapper       = objectMapper;
     }
 
@@ -180,24 +177,6 @@ public class ProductImportController {
         var saved = draftUseCase.execute(command);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(saved)));
-    }
-
-    // ── AC6: Pending drafts counter ────────────────────────────────────────────
-
-    /**
-     * GET /api/v1/products/drafts/count
-     * Returns the number of unacknowledged DRAFT products for the current tenant.
-     * Used by the owner's UI badge counter.
-     */
-    @GetMapping("/drafts/count")
-    public ResponseEntity<ApiResponseWrapper<Long>> getPendingDraftsCount() {
-        // OWNER-only (Story 2.4 AC10): employees receive HTTP 403.
-        if (!"OWNER".equals(extractRole())) {
-            throw new DomainException(ErrorCode.FORBIDDEN,
-                    "Seul le propriétaire peut consulter le compteur de brouillons");
-        }
-        long count = draftValidationQuery.countPending(TenantContext.getCurrentTenant());
-        return ResponseEntity.ok(ApiResponseWrapper.ok(count));
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────── 

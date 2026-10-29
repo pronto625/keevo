@@ -4,7 +4,7 @@ import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.admin.subscription.domain.model.TenantReactivatedEvent;
 import com.keevo.admin.subscription.domain.model.TenantSuspendedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,7 +28,7 @@ class TenantStatusWhatsAppNotificationListenerTest {
     private static final String PHONE = "+237600000001";
     private static final UUID TENANT = UUID.randomUUID();
 
-    @Mock WhatsAppPort whatsApp;
+    @Mock WhatsAppSender whatsApp;
     @Mock OwnerRecipientResolver resolver;
     @InjectMocks TenantStatusWhatsAppNotificationListener listener;
 

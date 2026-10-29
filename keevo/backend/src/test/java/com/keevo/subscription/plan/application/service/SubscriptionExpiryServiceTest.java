@@ -1,10 +1,10 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.PlanType;
-import com.keevo.subscription.api.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
-import com.keevo.subscription.api.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

@@ -2,7 +2,7 @@ package com.keevo.messaging.whatsapp.adapter.out.external;
 
 import com.keevo.messaging.notification.adapter.out.config.WassenderProperties;
 import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -19,7 +19,7 @@ import org.springframework.web.client.RestTemplate;
  */
 @Component
 @ConditionalOnProperty(name = "keevo.whatsapp.provider", havingValue = "wassender")
-public class WassenderWhatsAppAdapter implements WhatsAppPort {
+public class WassenderWhatsAppAdapter implements WhatsAppSender {
 
     private static final Logger log = LoggerFactory.getLogger(WassenderWhatsAppAdapter.class);
 

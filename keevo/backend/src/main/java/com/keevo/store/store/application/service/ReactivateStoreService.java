@@ -9,8 +9,8 @@ import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.in.ReactivateStoreCommand;
 import com.keevo.store.store.domain.port.in.ReactivateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,19 +28,19 @@ import java.time.Instant;
 public class ReactivateStoreService implements ReactivateStoreUseCase {
 
     private final StoreRepository storeRepository;
-    private final SubscriptionQueryPort subscriptionQuery;
-    private final PlanLimitPort planLimit;
+    private final TenantPlanQuery tenantPlanQuery;
+    private final PlanLimitCheck planLimit;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort transactionLock;
 
     public ReactivateStoreService(
             StoreRepository storeRepository,
-            SubscriptionQueryPort subscriptionQuery,
-            PlanLimitPort planLimit,
+            TenantPlanQuery tenantPlanQuery,
+            PlanLimitCheck planLimit,
             ApplicationEventPublisher eventPublisher,
             TransactionLockPort transactionLock) {
         this.storeRepository = storeRepository;
-        this.subscriptionQuery = subscriptionQuery;
+        this.tenantPlanQuery = tenantPlanQuery;
         this.planLimit = planLimit;
         this.eventPublisher = eventPublisher;
         this.transactionLock = transactionLock;
@@ -58,7 +58,7 @@ public class ReactivateStoreService implements ReactivateStoreUseCase {
 
         // Même verrou que CreateStoreService / CREATE_STORE : count → save sérialisés par tenant.
         transactionLock.lock("store-limit:" + TenantContext.getCurrentTenant());
-        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
+        var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif"));
         planLimit.checkStoreLimit(plan, storeRepository.countActive());

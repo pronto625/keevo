@@ -85,6 +85,12 @@ public interface CategoryRepository {
     Optional<Category> findByNameAndParentId(String name, UUID parentId);
 
     /**
+     * Story 12.6a — which of {@code names} already exist as root categories, compared trimmed and
+     * case-insensitively; returned lower-cased ({@link java.util.Locale#ROOT}) and trimmed. One query.
+     */
+    java.util.Set<String> findExistingRootNamesIgnoreCase(java.util.Collection<String> names);
+
+    /**
      * Deactivate a category (soft-delete — preserves record for audit integrity).
      *
      * <p>Unlike {@link #toggleActive} this always sets {@code isActive = false}.

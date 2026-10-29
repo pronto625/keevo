@@ -1,4 +1,4 @@
-package com.keevo.subscription.api;
+package com.keevo.shared.capability.entitlement;
 
 /**
  * PlanChangeCause — why a tenant's plan changed (Story 9-2), stored in

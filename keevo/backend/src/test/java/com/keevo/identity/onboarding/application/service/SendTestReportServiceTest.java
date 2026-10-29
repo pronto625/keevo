@@ -2,7 +2,7 @@ package com.keevo.identity.onboarding.application.service;
 
 import com.keevo.reporting.report.adapter.in.api.DailyReportTextApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.reporting.report.application.service.DailyReportFormatter;
@@ -50,7 +50,7 @@ class SendTestReportServiceTest {
 
     @Mock private EndOfDayReportBuilder endOfDayReportBuilder;
     @Mock private DailyReportFormatter dailyReportFormatter;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private StoreRepository storeRepository;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
@@ -68,7 +68,7 @@ class SendTestReportServiceTest {
     void setUp() {
         // 12.2d: the real store API adapter over the mocked repository
         service = new SendTestReportService(
-                DailyReportTextApiTestSupport.port(endOfDayReportBuilder, dailyReportFormatter), whatsAppPort,
+                DailyReportTextApiTestSupport.port(endOfDayReportBuilder, dailyReportFormatter), whatsAppSender,
                 StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver);
         store = new Store(STORE_ID, "Boutique Test", StoreType.STORE, "Kinshasa", null, true, Instant.now(), Instant.now());
 
@@ -80,7 +80,7 @@ class SendTestReportServiceTest {
         );
 
         // WhatsApp is "configured" by default in service tests
-        when(whatsAppPort.isConfigured()).thenReturn(true);
+        when(whatsAppSender.isConfigured()).thenReturn(true);
     }
 
     @Test
@@ -99,7 +99,7 @@ class SendTestReportServiceTest {
         // Then
         assertThat(result.testSent()).isTrue();
         ArgumentCaptor<String> contentCaptor = ArgumentCaptor.forClass(String.class);
-        verify(whatsAppPort).sendReport(eq(OWNER_PHONE), contentCaptor.capture());
+        verify(whatsAppSender).sendReport(eq(OWNER_PHONE), contentCaptor.capture());
         assertThat(contentCaptor.getValue()).contains("[TEST]");
         assertThat(contentCaptor.getValue()).contains(FORMATTED_CONTENT);
     }
@@ -119,7 +119,7 @@ class SendTestReportServiceTest {
 
         // Then — no assertion needed: SendTestReportService has no reportRepository
         //        dependency, so persistence is architecturally impossible.
-        verify(whatsAppPort).sendReport(eq(OWNER_PHONE), anyString());
+        verify(whatsAppSender).sendReport(eq(OWNER_PHONE), anyString());
     }
 
     @Test
@@ -131,7 +131,7 @@ class SendTestReportServiceTest {
         when(dailyReportFormatter.format(reportData)).thenReturn(FORMATTED_CONTENT);
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID))
                 .thenReturn(Optional.of(OWNER_PHONE));
-        doThrow(new RuntimeException("WhatsApp unavailable")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("WhatsApp unavailable")).when(whatsAppSender).sendReport(anyString(), anyString());
 
         // When
         SendTestReportUseCase.TestReportResult result = service.sendTestReport(TENANT_ID);
@@ -150,7 +150,7 @@ class SendTestReportServiceTest {
 
         // Then
         assertThat(result.testSent()).isFalse();
-        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(whatsAppSender, never()).sendReport(anyString(), anyString());
     }
 
     // 12.2e: the report is built for the tenantId argument; a mismatch with the bound tenant is a
@@ -164,7 +164,7 @@ class SendTestReportServiceTest {
         SendTestReportUseCase.TestReportResult result = service.sendTestReport("kv_other1");
 
         assertThat(result.testSent()).isFalse();
-        verify(whatsAppPort, never()).sendReport(any(), any());
+        verify(whatsAppSender, never()).sendReport(any(), any());
         verifyNoInteractions(endOfDayReportBuilder, dailyReportFormatter);
     }
 }

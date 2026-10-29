@@ -3,9 +3,9 @@ package com.keevo.subscription.plan.adapter.in.api;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.PlanView;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.PlanView;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
@@ -14,12 +14,12 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 
 /**
- * Implements {@link SubscriptionQueryPort} and {@link PlanLimitPort} (Story 12.2d) over the
+ * Implements {@link TenantPlanQuery} and {@link PlanLimitCheck} (Story 12.2d) over the
  * tenant-bound {@link SubscriptionRepository} and {@link PlanLimitGuard}. No transaction of its own:
  * the check runs in the caller's transaction, before its guarded write.
  */
 @Component
-class SubscriptionPlanAdapter implements SubscriptionQueryPort, PlanLimitPort {
+class SubscriptionPlanAdapter implements TenantPlanQuery, PlanLimitCheck {
 
     private final SubscriptionRepository subscriptionRepository;
     private final PlanLimitGuard planLimitGuard;

@@ -8,8 +8,8 @@ import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 
 /**
  * Test-only access to the package-private {@code store :: api} adapter (Story 12.2d), for tests of
@@ -28,10 +28,10 @@ public final class StoreApiTestSupport {
     public static StoreCommandPort commandPort(StoreRepository storeRepository,
                                                UpdateStoreUseCase update,
                                                DeactivateStoreUseCase deactivate,
-                                               SubscriptionQueryPort subscriptionQuery,
-                                               PlanLimitPort planLimit,
+                                               TenantPlanQuery tenantPlanQuery,
+                                               PlanLimitCheck planLimit,
                                                TransactionLockPort transactionLock) {
-        return new StoreApiAdapter(storeRepository, update, deactivate, subscriptionQuery, planLimit,
+        return new StoreApiAdapter(storeRepository, update, deactivate, tenantPlanQuery, planLimit,
                 transactionLock);
     }
 

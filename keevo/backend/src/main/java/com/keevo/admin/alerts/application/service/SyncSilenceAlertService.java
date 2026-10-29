@@ -5,7 +5,7 @@ import com.keevo.admin.alerts.domain.port.in.SendSyncSilenceNoticesUseCase;
 import com.keevo.admin.alerts.domain.port.out.AlertSourcesPort;
 import com.keevo.admin.alerts.domain.port.out.SyncSilenceNoticeRepository;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -41,16 +41,16 @@ public class SyncSilenceAlertService implements SendSyncSilenceNoticesUseCase {
     private final AlertSourcesPort sources;
     private final SyncSilenceNoticeRepository notices;
     private final OwnerRecipientResolver ownerRecipientResolver;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final Clock clock;
 
     public SyncSilenceAlertService(AlertSourcesPort sources, SyncSilenceNoticeRepository notices,
-                                   OwnerRecipientResolver ownerRecipientResolver, WhatsAppPort whatsAppPort,
+                                   OwnerRecipientResolver ownerRecipientResolver, WhatsAppSender whatsAppSender,
                                    Clock clock) {
         this.sources = sources;
         this.notices = notices;
         this.ownerRecipientResolver = ownerRecipientResolver;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.clock = clock;
     }
 
@@ -61,7 +61,7 @@ public class SyncSilenceAlertService implements SendSyncSilenceNoticesUseCase {
 
     @Override
     public int execute() {
-        if (!whatsAppPort.isConfigured()) {
+        if (!whatsAppSender.isConfigured()) {
             log.info("SyncSilenceAlertService: WhatsApp not configured — no notice sent or recorded");
             return 0;
         }
@@ -96,7 +96,7 @@ public class SyncSilenceAlertService implements SendSyncSilenceNoticesUseCase {
         long days = ChronoUnit.DAYS.between(tenant.lastPushAt().atZone(AdminAlertService.WAT).toLocalDate(), today);
         notices.recordNotice(tenant.tenantId(), now, tenant.lastPushAt()); // claim before sending
         try {
-            whatsAppPort.sendReport(phone.get(), message(days));
+            whatsAppSender.sendReport(phone.get(), message(days));
         } catch (RuntimeException e) {
             log.warn("Sync silence notice failed for company {} — retried next run: {}",
                     tenant.tenantId(), e.getClass().getSimpleName());

@@ -25,4 +25,9 @@ public interface CategoryJpaRepository extends JpaRepository<CategoryJpaEntity, 
             + " AND (:parentId IS NULL AND c.parentId IS NULL OR c.parentId = :parentId)"
             + " ORDER BY c.isActive DESC, c.createdAt ASC, c.id ASC")
     List<CategoryJpaEntity> findByNameIgnoreCaseAndParentId(String name, UUID parentId);
+
+    /** Story 12.6a — lower-cased, trimmed names of the root categories among {@code lowerNames} (one query). */
+    @Query("SELECT DISTINCT LOWER(TRIM(c.name)) FROM CategoryJpaEntity c"
+            + " WHERE c.parentId IS NULL AND LOWER(TRIM(c.name)) IN :lowerNames")
+    List<String> findExistingRootNamesLower(java.util.Collection<String> lowerNames);
 }

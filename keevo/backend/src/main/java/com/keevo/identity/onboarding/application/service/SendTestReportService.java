@@ -1,6 +1,6 @@
 package com.keevo.identity.onboarding.application.service;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.DailyReportTextPort;
 import com.keevo.identity.api.DailyReportTextRequest;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -31,23 +31,23 @@ public class SendTestReportService implements SendTestReportUseCase {
     private static final String TEST_PREFIX = "🧪 [TEST] ";
 
     private final DailyReportTextPort dailyReportText;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
     public SendTestReportService(DailyReportTextPort dailyReportText,
-                                 WhatsAppPort whatsAppPort,
+                                 WhatsAppSender whatsAppSender,
                                  StoreQueryPort storeQuery,
                                  OwnerRecipientResolver ownerRecipientResolver) {
         this.dailyReportText = dailyReportText;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
     @Override
     public TestReportResult sendTestReport(String tenantId) {
-        if (!whatsAppPort.isConfigured()) {
+        if (!whatsAppSender.isConfigured()) {
             // WhatsApp not configured (check KEEVO_WHATSAPP_PROVIDER, WASSENDER_API_URL, etc.)
             return new TestReportResult(false);
         }
@@ -74,7 +74,7 @@ public class SendTestReportService implements SendTestReportUseCase {
                 tenantId,
                 new DailyReportTextRequest(store.id(), store.name(), now, now,
                         LocalDate.now(), LocalTime.now(), false));
-            whatsAppPort.sendReport(ownerPhone, reportText);
+            whatsAppSender.sendReport(ownerPhone, reportText);
             return new TestReportResult(true);
         } catch (IllegalStateException | DomainException e) {
             // Tenant guard (tenantId ≠ bound tenant) or invalid report request — a programming error,

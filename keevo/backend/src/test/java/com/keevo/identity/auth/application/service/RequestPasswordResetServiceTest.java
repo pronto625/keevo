@@ -7,7 +7,7 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.in.RequestPasswordResetCommand;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,7 +40,7 @@ class RequestPasswordResetServiceTest {
     @Mock UserRepository userRepository;
     @Mock PasswordResetTokenRepository passwordResetTokenRepository;
     @Mock PasswordEncoder passwordEncoder;
-    @Mock WhatsAppPort whatsAppPort;
+    @Mock WhatsAppSender whatsAppSender;
     @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks RequestPasswordResetService service;
@@ -73,7 +73,7 @@ class RequestPasswordResetServiceTest {
         // Verify previous tokens were invalidated
         verify(passwordResetTokenRepository).invalidateActiveTokensForUser(userId);
         // Verify WhatsApp was called
-        verify(whatsAppPort).sendOtp(eq(phoneNumber), anyString());
+        verify(whatsAppSender).sendOtp(eq(phoneNumber), anyString());
         // Verify event was published
         ArgumentCaptor<PasswordResetRequestedEvent> eventCaptor =
                 ArgumentCaptor.forClass(PasswordResetRequestedEvent.class);
@@ -91,7 +91,7 @@ class RequestPasswordResetServiceTest {
 
         // No token saved, no WhatsApp, no event
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(whatsAppPort, never()).sendOtp(anyString(), anyString());
+        verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -120,7 +120,7 @@ class RequestPasswordResetServiceTest {
         // No lookups, no token, no WhatsApp, no event
         verify(userRepository, never()).findByPhoneNumber(anyString());
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(whatsAppPort, never()).sendOtp(anyString(), anyString());
+        verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -134,7 +134,7 @@ class RequestPasswordResetServiceTest {
 
         verify(userRepository, never()).findByPhoneNumber(anyString());
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(whatsAppPort, never()).sendOtp(anyString(), anyString());
+        verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
     }
 
     @Test
@@ -182,11 +182,11 @@ class RequestPasswordResetServiceTest {
             service.execute(new RequestPasswordResetCommand(phoneNumber));
 
             verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
-            verify(whatsAppPort, never()).sendOtp(anyString(), anyString());
+            verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
 
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
-            verify(whatsAppPort).sendOtp(eq(phoneNumber), matches("\\d{6}"));
+            verify(whatsAppSender).sendOtp(eq(phoneNumber), matches("\\d{6}"));
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
@@ -198,7 +198,7 @@ class RequestPasswordResetServiceTest {
         when(rateLimiter.tryAcquire(phoneNumber)).thenReturn(true);
         when(userRepository.findByPhoneNumber(phoneNumber)).thenReturn(Optional.of(user));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$bcryptHash");
-        doThrow(new RuntimeException("provider down")).when(whatsAppPort).sendOtp(anyString(), anyString());
+        doThrow(new RuntimeException("provider down")).when(whatsAppSender).sendOtp(anyString(), anyString());
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -208,7 +208,7 @@ class RequestPasswordResetServiceTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
-        verify(whatsAppPort).sendOtp(eq(phoneNumber), anyString());
+        verify(whatsAppSender).sendOtp(eq(phoneNumber), anyString());
         verify(eventPublisher).publishEvent(any(PasswordResetRequestedEvent.class));
     }
 
@@ -224,6 +224,6 @@ class RequestPasswordResetServiceTest {
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
         verify(passwordResetTokenRepository).save(tokenCaptor.capture());
         assertThat(tokenCaptor.getValue().phoneNumber()).isEqualTo(phoneNumber);
-        verify(whatsAppPort).sendOtp(eq(phoneNumber), anyString());
+        verify(whatsAppSender).sendOtp(eq(phoneNumber), anyString());
     }
 }

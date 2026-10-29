@@ -1,6 +1,7 @@
 package com.keevo.subscription.api;
 
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 

@@ -1,11 +1,12 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.event.ModuleListenerTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosureSummary;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -30,15 +31,17 @@ class DayClosureNotificationListenerTest {
     private static final String TENANT = "kv_test";
     private static final UUID STORE_ID = UUID.randomUUID();
 
-    private NotificationPort notificationPort;
+    private PushNotifier pushNotifier;
     private StoreRepository storeRepository;
     private DayClosureNotificationListener listener;
 
     @BeforeEach
     void setUp() {
-        notificationPort = mock(NotificationPort.class);
+        pushNotifier = mock(PushNotifier.class);
         storeRepository = mock(StoreRepository.class);
-        listener = new DayClosureNotificationListener(notificationPort, StoreApiTestSupport.queryPort(storeRepository));
+        // 12.6a: module listener — wrapped like the application context does (tenant bound from the event)
+        listener = ModuleListenerTestSupport.bound(
+                new DayClosureNotificationListener(pushNotifier, StoreApiTestSupport.queryPort(storeRepository)));
     }
 
     @AfterEach
@@ -59,7 +62,7 @@ class DayClosureNotificationListenerTest {
 
     private NotificationPayload pushed() {
         var captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT), captor.capture());
         return captor.getValue();
     }
 
@@ -90,7 +93,7 @@ class DayClosureNotificationListenerTest {
 
         listener.onDayClosed(event(true, 0, 0));
 
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
     }
 
     @Test
@@ -99,7 +102,7 @@ class DayClosureNotificationListenerTest {
 
         listener.onDayClosed(event(false, 1, 500));
 
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
     }
 
     @Test

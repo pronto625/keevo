@@ -1,9 +1,9 @@
-package com.keevo.subscription.api;
+package com.keevo.shared.capability.entitlement;
 
 import java.util.Optional;
 
-/** Read access to the tenant's subscription for other modules (Story 12.2d). */
-public interface SubscriptionQueryPort {
+/** Read access to the tenant's subscription for other modules (Story 12.2d; core capability since 12.6a, formerly {@code subscription.api.SubscriptionQueryPort}, implemented by subscription). */
+public interface TenantPlanQuery {
 
     /**
      * The tenant's subscription row as {@code SubscriptionRepository#findActivePlan()} has always
@@ -13,7 +13,7 @@ public interface SubscriptionQueryPort {
      * treat it as FREE).
      *
      * <p>{@link PlanView#active()} {@code false} (SUSPENDED / EXPIRED status) does not change the plan
-     * limits: {@link PlanLimitPort} checks the plan type only; callers that care (exports' premium
+     * limits: {@link PlanLimitCheck} checks the plan type only; callers that care (exports' premium
      * check) test {@code active()} themselves.
      */
     Optional<PlanView> findCurrentPlan(String tenantSchema);

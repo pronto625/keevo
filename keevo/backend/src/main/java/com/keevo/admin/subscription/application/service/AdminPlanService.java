@@ -17,7 +17,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import static com.keevo.shared.domain.time.KeevoZones.WAT;
-import com.keevo.subscription.api.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
 import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
 import com.keevo.subscription.api.ChangePlanInput;

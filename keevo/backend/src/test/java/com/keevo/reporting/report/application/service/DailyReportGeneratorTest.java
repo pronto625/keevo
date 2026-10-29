@@ -3,7 +3,7 @@ package com.keevo.reporting.report.application.service;
 import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.commerce.api.ClosureWindow;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.adapter.out.persistence.impl.OwnerRecipientResolverAdapter;
 import com.keevo.identity.api.Role;
@@ -56,7 +56,7 @@ class DailyReportGeneratorTest {
     }
 
     @Mock private EndOfDayReportRepository reportRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private MultiStoreSummaryService multiStoreSummaryService;
     @Mock private EndOfDayReportBuilder builder;
     @Mock private DailyReportFormatter formatter;
@@ -72,7 +72,7 @@ class DailyReportGeneratorTest {
     @BeforeEach
     void setUp() {
         generator = new DailyReportGenerator(
-                reportRepository, whatsAppPort, multiStoreSummaryService,
+                reportRepository, whatsAppSender, multiStoreSummaryService,
                 builder, formatter, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver, IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         storeId = UUID.randomUUID();
         actorId = UUID.randomUUID();
@@ -177,7 +177,7 @@ class DailyReportGeneratorTest {
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_test01")).thenReturn(Optional.of("+243812345678"));
 
         generator.generateReport(command);
-        verify(whatsAppPort, times(1)).sendReport(eq("+243812345678"), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq("+243812345678"), anyString());
     }
 
     @Test
@@ -189,7 +189,7 @@ class DailyReportGeneratorTest {
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -220,7 +220,7 @@ class DailyReportGeneratorTest {
         when(builder.build(any(), any(ClosureWindow.class), anyString(), any(), any(), anyBoolean())).thenReturn(sampleData());
         when(formatter.format(any())).thenReturn("Rapport");
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(anyString())).thenReturn(Optional.of("+243812345678"));
-        doThrow(new RuntimeException("net error")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("net error")).when(whatsAppSender).sendReport(anyString(), anyString());
 
         EndOfDayReport report = generator.generateReport(command);
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.FAILED);
@@ -233,7 +233,7 @@ class DailyReportGeneratorTest {
         when(userRepository.findOwnerByTenantSchemaName("kv_test01")).thenReturn(Optional.of(
                 new User(UUID.randomUUID(), "   ", "hash", Role.OWNER, true, Instant.now())));
         DailyReportGenerator realResolverGenerator = new DailyReportGenerator(
-                reportRepository, whatsAppPort, multiStoreSummaryService,
+                reportRepository, whatsAppSender, multiStoreSummaryService,
                 builder, formatter, StoreApiTestSupport.queryPort(storeRepository),
                 new OwnerRecipientResolverAdapter(userRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
@@ -243,6 +243,6 @@ class DailyReportGeneratorTest {
         EndOfDayReport report = realResolverGenerator.generateReport(command);
 
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.IN_APP_ONLY);
-        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(whatsAppSender, never()).sendReport(anyString(), anyString());
     }
 }

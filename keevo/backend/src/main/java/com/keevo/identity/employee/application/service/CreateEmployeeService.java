@@ -18,8 +18,8 @@ import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -39,9 +39,9 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     private final UserRepository userRepository;
     private final UserMembershipRepository membershipRepository;
     private final EmployeeRepository employeeRepository;
-    private final PlanLimitPort planLimit;
+    private final PlanLimitCheck planLimit;
     private final EmployeeCountPort employeeCountPort;
-    private final SubscriptionQueryPort subscriptionQuery;
+    private final TenantPlanQuery tenantPlanQuery;
     private final TenantRepository tenantRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
@@ -50,9 +50,9 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     public CreateEmployeeService(UserRepository userRepository,
                                   UserMembershipRepository membershipRepository,
                                   EmployeeRepository employeeRepository,
-                                  PlanLimitPort planLimit,
+                                  PlanLimitCheck planLimit,
                                   EmployeeCountPort employeeCountPort,
-                                  SubscriptionQueryPort subscriptionQuery,
+                                  TenantPlanQuery tenantPlanQuery,
                                   TenantRepository tenantRepository,
                                   PasswordEncoder passwordEncoder,
                                   ApplicationEventPublisher eventPublisher,
@@ -62,7 +62,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         this.employeeRepository = employeeRepository;
         this.planLimit = planLimit;
         this.employeeCountPort = employeeCountPort;
-        this.subscriptionQuery = subscriptionQuery;
+        this.tenantPlanQuery = tenantPlanQuery;
         this.tenantRepository = tenantRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
@@ -88,7 +88,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         // creates at max−1 cannot both pass (the JdbcTemplate count sees the winner's commit,
         // which happens before the lock is released).
         transactionLock.lock("employee-limit:" + TenantContext.getCurrentTenant());
-        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
+        var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
         int currentCount = employeeCountPort.countActiveEmployees();
         planLimit.checkEmployeeLimit(plan, currentCount);

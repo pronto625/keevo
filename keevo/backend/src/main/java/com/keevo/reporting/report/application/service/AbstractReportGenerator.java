@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
@@ -24,14 +24,14 @@ public abstract class AbstractReportGenerator {
     private static final Logger log = LoggerFactory.getLogger(AbstractReportGenerator.class);
 
     protected final EndOfDayReportRepository reportRepository;
-    protected final WhatsAppPort whatsAppPort;
+    protected final WhatsAppSender whatsAppSender;
     protected final MultiStoreSummaryService multiStoreSummaryService;
 
     protected AbstractReportGenerator(EndOfDayReportRepository reportRepository,
-                                      WhatsAppPort whatsAppPort,
+                                      WhatsAppSender whatsAppSender,
                                       MultiStoreSummaryService multiStoreSummaryService) {
         this.reportRepository = reportRepository;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.multiStoreSummaryService = multiStoreSummaryService;
     }
 
@@ -118,7 +118,7 @@ public abstract class AbstractReportGenerator {
             return;
         }
         try {
-            whatsAppPort.sendReport(ownerPhone, report.getContent());
+            whatsAppSender.sendReport(ownerPhone, report.getContent());
             report.markSent();
             reportRepository.save(report);
             log.info("Report delivered via WhatsApp: reportId={}", report.getId());

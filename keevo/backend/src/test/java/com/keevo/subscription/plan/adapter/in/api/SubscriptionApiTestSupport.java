@@ -1,9 +1,9 @@
 package com.keevo.subscription.plan.adapter.in.api;
 
 import com.keevo.subscription.api.PlanAdministrationPort;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.PlanView;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.PlanView;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase;
@@ -19,12 +19,12 @@ public final class SubscriptionApiTestSupport {
     private SubscriptionApiTestSupport() {}
 
     /** The real query adapter over the given repository. */
-    public static SubscriptionQueryPort queryPort(SubscriptionRepository subscriptionRepository) {
+    public static TenantPlanQuery queryPort(SubscriptionRepository subscriptionRepository) {
         return new SubscriptionPlanAdapter(subscriptionRepository, null);
     }
 
     /** The real limit adapter over the given guard (real or mock). */
-    public static PlanLimitPort limitPort(PlanLimitGuard planLimitGuard) {
+    public static PlanLimitCheck limitPort(PlanLimitGuard planLimitGuard) {
         return new SubscriptionPlanAdapter(null, planLimitGuard);
     }
 

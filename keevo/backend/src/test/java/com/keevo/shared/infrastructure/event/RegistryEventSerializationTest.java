@@ -6,7 +6,11 @@ import com.keevo.admin.subscription.domain.model.TenantSuspendedEvent;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
 import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
+import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.stock.MovementKind;
+import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
@@ -92,6 +96,11 @@ class RegistryEventSerializationTest {
         f.put(TenantReactivatedEvent.class, new TenantReactivatedEvent(A, B, TENANT, T0));
         f.put(SaleCompletedEvent.class, new SaleCompletedEvent(A, B, TENANT, C, 54000, 500,
                 "[{\"productId\":\"p-1\",\"qty\":2}]", T0));
+        // 12.6a: the four notification listeners converted to module listeners
+        f.put(StockThresholdBreachedEvent.class, new StockThresholdBreachedEvent(A, "Savon", B, 3, 5, C, TENANT, T0));
+        f.put(StockAdjustedEvent.class, new StockAdjustedEvent(A, null, B, MovementKind.ADJUSTMENT, 10, -2, 8, C,
+                "casse", TENANT, "EMPLOYEE", "Awa", "Akwa", "Riz 5kg", T0, "Bonamoussadi"));
+        f.put(CsvImportCompletedEvent.class, new CsvImportCompletedEvent(7, TENANT, A, "Awa", "EMPLOYEE", T0));
         return f;
     }
 

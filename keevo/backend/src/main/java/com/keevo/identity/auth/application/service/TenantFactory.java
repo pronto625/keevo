@@ -5,8 +5,8 @@ import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.subscription.api.PlanChangeCause;
-import com.keevo.subscription.api.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;

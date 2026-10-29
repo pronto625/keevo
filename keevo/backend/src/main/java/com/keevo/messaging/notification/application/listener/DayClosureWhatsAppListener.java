@@ -5,7 +5,7 @@ import com.keevo.messaging.notification.application.strategy.ClosureReportStrate
 import com.keevo.messaging.notification.application.strategy.ManualReportStrategy;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -23,7 +23,7 @@ import java.util.Optional;
  * DayClosureWhatsAppListener — GoF Observer pattern, listens to DayClosedEvent.
  * Story 4.4 — Clôture Journalière & Historique des Ventes
  * Story 12.3 — Moved from commerce to messaging with its report strategies: it consumes the catalogue
- * {@link DayClosedEvent} and sends through messaging's {@link WhatsAppPort}, so commerce no longer
+ * {@link DayClosedEvent} and sends through the core notification capability {@link WhatsAppSender} (implemented by messaging), so commerce no longer
  * depends on messaging. Same bean condition, same phase, same texts.
  *
  * <p>Builds and sends WhatsApp report to the closing tenant's owner using ClosureReportStrategy.
@@ -52,16 +52,16 @@ public class DayClosureWhatsAppListener {
 
     private static final Logger log = LoggerFactory.getLogger(DayClosureWhatsAppListener.class);
 
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final ClosureReportStrategy manualReportStrategy;
     private final ClosureReportStrategy autoReportStrategy;
 
-    public DayClosureWhatsAppListener(WhatsAppPort whatsAppPort,
+    public DayClosureWhatsAppListener(WhatsAppSender whatsAppSender,
                                       StoreQueryPort storeQuery,
                                       OwnerRecipientResolver ownerRecipientResolver) {
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.manualReportStrategy = new ManualReportStrategy();
@@ -97,7 +97,7 @@ public class DayClosureWhatsAppListener {
             String report = strategy.buildReport(event, storeName, employeeName);
 
             try {
-                whatsAppPort.sendReport(ownerPhone.get(), report);
+                whatsAppSender.sendReport(ownerPhone.get(), report);
             } catch (RuntimeException e) {
                 throw new DeliveryFailedException("Day-closure WhatsApp report send failed", e);
             }

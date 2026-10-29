@@ -1,4 +1,4 @@
-package com.keevo.messaging.api;
+package com.keevo.shared.capability.notification;
 
 
 import java.util.List;
@@ -10,11 +10,11 @@ import java.util.UUID;
  * <p>Implementations are best-effort: callers MUST handle exceptions independently
  * and MUST NOT roll back their own transaction if notification delivery fails.
  *
- * <p>Published in {@code messaging :: api} (Story 12.2e); the implementations stay internal to
+ * <p>Core capability (Story 12.6a, formerly {@code messaging.api.NotificationPort}); the implementations stay internal to
  * messaging: {@code FcmNotificationAdapter} is the {@code @Primary} implementation when FCM is
  * enabled (Story 8.0); otherwise {@code LoggingNotificationAdapter} (logs only) is the one wired.
  */
-public interface NotificationPort {
+public interface PushNotifier {
 
     /**
      * Notify all OWNER-role users of the given tenant.

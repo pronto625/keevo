@@ -12,6 +12,9 @@ import java.util.UUID;
  * consumed by {@link com.keevo.shared.infrastructure.web.AuditEventListener}.
  *
  * <p>Pure Java record — immutable, no framework dependencies.
+ *
+ * <p>{@code categoriesCreated}: template categories requested (12.6a — seeded by the catalog on
+ * {@link TenantOnboardedEvent}); on the first (and only) onboarding of a tenant it equals the rows created.
  */
 public record OnboardingCompletedEvent(
         String tenantId,

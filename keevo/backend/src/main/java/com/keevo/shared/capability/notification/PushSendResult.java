@@ -1,4 +1,4 @@
-package com.keevo.messaging.api;
+package com.keevo.shared.capability.notification;
 
 /**
  * PushSendResult — outcome of a counted multicast send (Story 9-5, global push).

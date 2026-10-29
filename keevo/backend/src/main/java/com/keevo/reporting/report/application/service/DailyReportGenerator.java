@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.EmployeeQueryPort;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -39,14 +39,14 @@ public class DailyReportGenerator extends AbstractReportGenerator
     private final EmployeeQueryPort employeeQuery;
 
     public DailyReportGenerator(EndOfDayReportRepository reportRepository,
-                                 WhatsAppPort whatsAppPort,
+                                 WhatsAppSender whatsAppSender,
                                  MultiStoreSummaryService multiStoreSummaryService,
                                  EndOfDayReportBuilder builder,
                                  DailyReportFormatter formatter,
                                  StoreQueryPort storeQuery,
                                  OwnerRecipientResolver ownerRecipientResolver,
                                  EmployeeQueryPort employeeQuery) {
-        super(reportRepository, whatsAppPort, multiStoreSummaryService);
+        super(reportRepository, whatsAppSender, multiStoreSummaryService);
         this.builder = builder;
         this.formatter = formatter;
         this.storeQuery = storeQuery;

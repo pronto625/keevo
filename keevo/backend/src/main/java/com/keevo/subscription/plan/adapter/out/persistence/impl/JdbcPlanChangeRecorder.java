@@ -1,8 +1,8 @@
 package com.keevo.subscription.plan.adapter.out.persistence.impl;
 
 import com.keevo.identity.api.PlanType;
-import com.keevo.subscription.api.PlanChangeCause;
-import com.keevo.subscription.api.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 

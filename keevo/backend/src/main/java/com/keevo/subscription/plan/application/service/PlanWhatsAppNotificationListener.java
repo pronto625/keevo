@@ -1,7 +1,7 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
@@ -39,12 +39,12 @@ public class PlanWhatsAppNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(PlanWhatsAppNotificationListener.class);
 
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
-    public PlanWhatsAppNotificationListener(WhatsAppPort whatsAppPort,
+    public PlanWhatsAppNotificationListener(WhatsAppSender whatsAppSender,
                                             OwnerRecipientResolver ownerRecipientResolver) {
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.ownerRecipientResolver = ownerRecipientResolver;
     }
 
@@ -81,7 +81,7 @@ public class PlanWhatsAppNotificationListener {
             return;
         }
         try {
-            whatsAppPort.sendReport(phone.get(), text);
+            whatsAppSender.sendReport(phone.get(), text);
         } catch (RuntimeException e) {
             // Story 12.4 (R2): rethrown — the publication stays incomplete and is retried
             log.warn("Plan {} WhatsApp failed for tenant {}: {}: {} — will be retried",

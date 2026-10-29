@@ -3,7 +3,7 @@ package com.keevo.identity.auth.application.service;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.junit.jupiter.api.DisplayName;
@@ -44,7 +44,7 @@ import static org.mockito.Mockito.*;
  * <p>The scheduler is instantiated from the context's production beans rather than called through
  * the Spring bean: the bean is wrapped by the ShedLock proxy ({@code lockAtLeastFor = PT1M}), which
  * would silently skip the second call and make "a second run is a no-op" vacuous. The
- * {@link WhatsAppPort} is a Mockito mock so the "sent once, after commit" contract is observable.
+ * {@link WhatsAppSender} is a Mockito mock so the "sent once, after commit" contract is observable.
  */
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("TenantDeletionService on PostgreSQL (Story v1s-15-11)")
@@ -61,10 +61,10 @@ class TenantDeletionServicePostgresIntegrationTest extends FullContextIntegratio
 
     private static final int TIMEOUT_SECONDS = 30;
 
-    private final WhatsAppPort whatsAppPort = mock(WhatsAppPort.class);
+    private final WhatsAppSender whatsAppSender = mock(WhatsAppSender.class);
 
     private TenantDeletionService scheduler(JdbcTemplate jdbcTemplate) {
-        return new TenantDeletionService(tenantRepository, userRepository, whatsAppPort,
+        return new TenantDeletionService(tenantRepository, userRepository, whatsAppSender,
                 schemaProvisioner, jdbcTemplate, transactionManager, Clock.systemUTC());
     }
 
@@ -124,13 +124,13 @@ class TenantDeletionServicePostgresIntegrationTest extends FullContextIntegratio
         assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", seed.ownerId())).isZero();
         assertThat(count("SELECT count(*) FROM public.device_tokens WHERE user_id = ?", seed.ownerId())).isZero();
 
-        verify(whatsAppPort, times(1)).sendReport(eq(seed.phone()), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq(seed.phone()), anyString());
 
         scheduler.executeDeletions(); // DELETED is never re-selected
 
         assertThat(status(seed.tenantId())).isEqualTo("DELETED");
         assertThat(schemaExists(seed.schema())).isFalse();
-        verify(whatsAppPort, times(1)).sendReport(eq(seed.phone()), anyString()); // not re-sent
+        verify(whatsAppSender, times(1)).sendReport(eq(seed.phone()), anyString()); // not re-sent
     }
 
     @Test
@@ -182,7 +182,7 @@ class TenantDeletionServicePostgresIntegrationTest extends FullContextIntegratio
         assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", seed.ownerId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.refresh_tokens WHERE tenant_id = ?", seed.schema())).isEqualTo(1);
-        verify(whatsAppPort, never()).sendReport(eq(seed.phone()), anyString()); // rolled back: no final message
+        verify(whatsAppSender, never()).sendReport(eq(seed.phone()), anyString()); // rolled back: no final message
 
         scheduler.executeDeletions(); // DROP IF EXISTS is a no-op, the rest now commits
 
@@ -190,7 +190,7 @@ class TenantDeletionServicePostgresIntegrationTest extends FullContextIntegratio
         assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.users WHERE id = ?", seed.ownerId())).isZero();
         assertThat(count("SELECT count(*) FROM public.refresh_tokens WHERE tenant_id = ?", seed.schema())).isZero();
-        verify(whatsAppPort, times(1)).sendReport(eq(seed.phone()), anyString());
+        verify(whatsAppSender, times(1)).sendReport(eq(seed.phone()), anyString());
     }
 
     @Test
@@ -246,7 +246,7 @@ class TenantDeletionServicePostgresIntegrationTest extends FullContextIntegratio
             assertThat(status(seed.tenantId())).isEqualTo("ACTIVE");
             assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isEqualTo(1);
             // Scoped to the seeded tenant: a leftover expired tenant in the shared DB may be processed too
-            verify(whatsAppPort, never()).sendReport(eq(seed.phone()), anyString());
+            verify(whatsAppSender, never()).sendReport(eq(seed.phone()), anyString());
         } finally {
             commitCancel.countDown();
             pool.shutdownNow();

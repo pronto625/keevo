@@ -3,9 +3,9 @@ package com.keevo.messaging.notification.application.listener;
 import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,8 +44,8 @@ import static org.mockito.Mockito.when;
 @DisplayName("ProductCreationNotificationListener")
 class ProductCreationNotificationListenerTest {
 
-    @Mock private NotificationPort notificationPort;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private PushNotifier pushNotifier;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
     private MutableClock clock;
@@ -61,7 +61,7 @@ class ProductCreationNotificationListenerTest {
     void setUp() {
         clock = new MutableClock(NOW);
         listener = new ProductCreationNotificationListener(
-                notificationPort, whatsAppPort, ownerRecipientResolver, WINDOW_MIN, clock);
+                pushNotifier, whatsAppSender, ownerRecipientResolver, WINDOW_MIN, clock);
     }
 
     private void advancePastWindow() {
@@ -82,7 +82,7 @@ class ProductCreationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload payload = captor.getValue();
         assertThat(payload.type()).isEqualTo("EMPLOYEE_PRODUCT_CREATED");
         assertThat(payload.body()).contains("Loïc");
@@ -110,7 +110,7 @@ class ProductCreationNotificationListenerTest {
         advancePastWindow();
         listener.flushExpiredWindows();
 
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
     }
 
     // ── 6.4 shouldSendBatchedRecapWhenEmployeeCreatesMultipleProductsInWindow ──
@@ -131,14 +131,14 @@ class ProductCreationNotificationListenerTest {
 
         // Window not yet expired — no dispatch yet
         listener.flushExpiredWindows();
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
 
         advancePastWindow();
         listener.flushExpiredWindows();
 
         // Exactly ONE consolidated notification for both events — not one per event
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload batchPayload = captor.getValue();
         assertThat(batchPayload.type()).isEqualTo("EMPLOYEE_PRODUCT_CREATED_BATCH");
         assertThat(batchPayload.body()).contains("2 produits");
@@ -159,7 +159,7 @@ class ProductCreationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().type()).isEqualTo("EMPLOYEE_PRODUCT_CREATED");
     }
 
@@ -184,7 +184,7 @@ class ProductCreationNotificationListenerTest {
 
         // Two separate windows → two separate single notifications, never merged
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort, org.mockito.Mockito.times(2))
+        verify(pushNotifier, org.mockito.Mockito.times(2))
                 .notifyOwners(eq(TENANT_ID), captor.capture());
         assertThat(captor.getAllValues()).allMatch(p -> p.type().equals("EMPLOYEE_PRODUCT_CREATED"));
     }
@@ -194,7 +194,7 @@ class ProductCreationNotificationListenerTest {
     @Test
     @DisplayName("should not throw when notification fails (best-effort)")
     void shouldNotRollbackProductCreationWhenNotificationFails() {
-        doThrow(new RuntimeException("FCM down")).when(notificationPort)
+        doThrow(new RuntimeException("FCM down")).when(pushNotifier)
                 .notifyOwners(anyString(), any());
 
         ProductCreatedEvent event = new ProductCreatedEvent(
@@ -207,7 +207,7 @@ class ProductCreationNotificationListenerTest {
         // Must not throw
         assertThatCode(() -> listener.flushExpiredWindows()).doesNotThrowAnyException();
 
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), any());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), any());
     }
 
     // ── 6.7 shouldNotDoubleNotifyOnCsvImport ──────────────────────────────
@@ -222,7 +222,7 @@ class ProductCreationNotificationListenerTest {
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
         // CSV import always sends 1 consolidated notification, never per-product
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         NotificationPayload payload = captor.getValue();
         assertThat(payload.type()).isEqualTo("CSV_IMPORT_DRAFTS_PENDING");
         assertThat(payload.body()).contains("42");
@@ -235,7 +235,7 @@ class ProductCreationNotificationListenerTest {
         listener.onCsvImportCompleted(new CsvImportCompletedEvent(
                 2, TENANT_ID, ACTOR_ID, "Simon", "OWNER", NOW));
 
-        verify(notificationPort, never()).notifyOwners(anyString(), any());
+        verify(pushNotifier, never()).notifyOwners(anyString(), any());
     }
 
     @Test
@@ -245,7 +245,7 @@ class ProductCreationNotificationListenerTest {
                 2, TENANT_ID, ACTOR_ID, ACTOR_ID.toString(), "EMPLOYEE", NOW));
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().body())
                 .doesNotContain(ACTOR_ID.toString())
                 .startsWith("Un membre de l'équipe a importé 2 produit(s)");
@@ -257,7 +257,7 @@ class ProductCreationNotificationListenerTest {
     @Test
     @DisplayName("should not throw when CSV import notification fails (best-effort)")
     void shouldNotRollbackOnCsvImportNotificationFailure() {
-        doThrow(new RuntimeException("Network error")).when(notificationPort).notifyOwners(any(), any());
+        doThrow(new RuntimeException("Network error")).when(pushNotifier).notifyOwners(any(), any());
 
         CsvImportCompletedEvent csvEvent = new CsvImportCompletedEvent(
                 5, TENANT_ID, ACTOR_ID, "Loïc", "EMPLOYEE", NOW);
@@ -285,7 +285,7 @@ class ProductCreationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         assertThat(listener.openWindowCount()).isZero();
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), any());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), any());
     }
 
     @Test
@@ -298,7 +298,7 @@ class ProductCreationNotificationListenerTest {
         listener.flushExpiredWindows();
 
         ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), captor.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().metadata()).containsEntry("count", "2");
         assertThat(listener.openWindowCount()).isZero();
     }
@@ -312,13 +312,13 @@ class ProductCreationNotificationListenerTest {
             @Override public Clock withZone(ZoneId zone) { return this; }
             @Override public Instant instant() { return racingClock.get(); }
         };
-        var racing = new ProductCreationNotificationListener(notificationPort, whatsAppPort, ownerRecipientResolver, WINDOW_MIN, movingClock);
+        var racing = new ProductCreationNotificationListener(pushNotifier, whatsAppSender, ownerRecipientResolver, WINDOW_MIN, movingClock);
         var delivered = new java.util.concurrent.atomic.AtomicInteger();
         org.mockito.Mockito.doAnswer(inv -> {
             NotificationPayload p = inv.getArgument(1);
             delivered.addAndGet(Integer.parseInt(p.metadata().getOrDefault("count", "1")));
             return null;
-        }).when(notificationPort).notifyOwners(eq(TENANT_ID), any());
+        }).when(pushNotifier).notifyOwners(eq(TENANT_ID), any());
 
         int total = 2_000;
         var done = new java.util.concurrent.atomic.AtomicBoolean(false);
@@ -381,7 +381,7 @@ class ProductCreationNotificationListenerTest {
 
         listener.flushExpiredWindows();
 
-        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
+        verify(whatsAppSender).sendReport(eq("+237600000001"), anyString());
     }
     @Test
     @DisplayName("v1s-13-9 follow-up / 12.4: product-created notification is a durable after-commit module listener")

@@ -1,8 +1,8 @@
 package com.keevo.messaging.notification.adapter.out;
 
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.PushSendResult;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushSendResult;
+import com.keevo.shared.capability.notification.PushNotifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,7 +19,7 @@ import java.util.UUID;
  */
 @Component
 @ConditionalOnProperty(name = "keevo.fcm.enabled", havingValue = "false", matchIfMissing = true)
-public class LoggingNotificationAdapter implements NotificationPort {
+public class LoggingNotificationAdapter implements PushNotifier {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingNotificationAdapter.class);
 

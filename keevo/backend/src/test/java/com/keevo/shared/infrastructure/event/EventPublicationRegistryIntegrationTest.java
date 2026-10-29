@@ -200,6 +200,49 @@ class EventPublicationRegistryIntegrationTest extends FullContextIntegrationTest
         assertThat(TenantContext.getCurrentTenant()).as("publisher thread untouched").isNull();
     }
 
+    /** Publication rows of the real stock-alert listener for one product (Story 12.6a). */
+    private List<Map<String, Object>> stockAlertPublications(UUID productId) {
+        return jdbc().queryForList("SELECT listener_id, completion_date FROM public.event_publication "
+                + "WHERE listener_id LIKE ? AND serialized_event LIKE ?",
+                "%StockAlertNotificationListener.onStockThresholdBreached%", "%" + productId + "%");
+    }
+
+    private static com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent stockAlert(UUID productId) {
+        return new com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent(productId, "Savon",
+                UUID.randomUUID(), 2, 5, UUID.randomUUID(), "kv_evta01", Instant.now());
+    }
+
+    @Test
+    @DisplayName("12.6a: stock alert is an after-commit module listener — commit → recorded + delivered; rollback → nothing")
+    void stockAlertListener_afterCommitOnly() throws InterruptedException {
+        UUID committed = UUID.randomUUID();
+        publisher.publish(stockAlert(committed));
+        await().atMost(WAIT).untilAsserted(() -> assertThat(stockAlertPublications(committed))
+                .hasSize(1)
+                .allSatisfy(row -> assertThat(row.get("completion_date")).isNotNull()));
+
+        UUID rolledBack = UUID.randomUUID();
+        assertThatThrownBy(() -> publisher.publishThenFail(stockAlert(rolledBack)))
+                .isInstanceOf(IllegalStateException.class);
+        TimeUnit.MILLISECONDS.sleep(1500);
+        // no publication row = the listener was never scheduled (before 12.6a it ran @Async before commit)
+        assertThat(stockAlertPublications(rolledBack)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("12.6a: CSV import completion → onCsvImportCompleted publication recorded and completed")
+    void csvImportCompletedListener_recordedAndCompleted() {
+        UUID actor = UUID.randomUUID();
+        publisher.publish(new com.keevo.shared.event.catalog.product.CsvImportCompletedEvent(
+                3, "kv_evta01", actor, "Awa", "EMPLOYEE", Instant.now()));
+
+        await().atMost(WAIT).untilAsserted(() -> assertThat(jdbc().queryForList(
+                "SELECT completion_date FROM public.event_publication WHERE listener_id LIKE ? AND serialized_event LIKE ?",
+                "%ProductCreationNotificationListener.onCsvImportCompleted%", "%" + actor + "%"))
+                .hasSize(1)
+                .allSatisfy(row -> assertThat(row.get("completion_date")).isNotNull()));
+    }
+
     @Test
     @DisplayName("rollback: business error after publish → no publication row, no listener call")
     void rollback() throws InterruptedException {

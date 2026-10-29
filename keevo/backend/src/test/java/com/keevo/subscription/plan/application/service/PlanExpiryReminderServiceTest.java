@@ -1,7 +1,7 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,7 +44,7 @@ class PlanExpiryReminderServiceTest {
     private static final String PHONE = "+237600000001";
 
     @Mock JdbcTemplate jdbc;
-    @Mock WhatsAppPort whatsApp;
+    @Mock WhatsAppSender whatsApp;
     @Mock OwnerRecipientResolver resolver;
 
     PlanExpiryReminderService service;

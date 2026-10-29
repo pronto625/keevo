@@ -1,7 +1,7 @@
 package com.keevo.reporting.export.application.service;
 
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportJobStatus;
@@ -47,7 +47,7 @@ public class ExportJobRunner {
     private final ExportStreamingWriter writer;
     private final ExportDatasetRegistry datasetRegistry;
     private final ExportRendererRegistry rendererRegistry;
-    private final NotificationPort notificationPort;
+    private final PushNotifier pushNotifier;
     private final Duration retention;
     private final Clock clock;
 
@@ -57,7 +57,7 @@ public class ExportJobRunner {
                            ExportStreamingWriter writer,
                            ExportDatasetRegistry datasetRegistry,
                            ExportRendererRegistry rendererRegistry,
-                           NotificationPort notificationPort,
+                           PushNotifier pushNotifier,
                            ExportProperties properties,
                            Clock clock) {
         this.jobRepository = jobRepository;
@@ -65,7 +65,7 @@ public class ExportJobRunner {
         this.writer = writer;
         this.datasetRegistry = datasetRegistry;
         this.rendererRegistry = rendererRegistry;
-        this.notificationPort = notificationPort;
+        this.pushNotifier = pushNotifier;
         this.retention = properties.getRetention();
         this.clock = clock;
     }
@@ -163,7 +163,7 @@ public class ExportJobRunner {
                 : NotificationPayload.of(TYPE_FAILED, "Échec de l'export",
                         "Votre export n'a pas pu être généré. Veuillez réessayer.", deepLink, metadata);
         try {
-            notificationPort.notifyOwners(tenantSchema, payload);
+            pushNotifier.notifyOwners(tenantSchema, payload);
         } catch (RuntimeException e) {
             log.warn("EXPORT_NOTIFY_FAILED jobId={} tenant={} error={}", job.getId(), tenantSchema, e.getMessage());
         } finally {

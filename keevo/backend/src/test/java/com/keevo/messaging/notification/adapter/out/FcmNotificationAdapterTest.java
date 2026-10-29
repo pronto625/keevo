@@ -2,8 +2,8 @@ package com.keevo.messaging.notification.adapter.out;
 
 import com.keevo.messaging.notification.domain.model.DeviceToken;
 import com.keevo.messaging.notification.domain.model.DevicePlatform;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.PushSendResult;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushSendResult;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
 import com.google.firebase.messaging.*;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

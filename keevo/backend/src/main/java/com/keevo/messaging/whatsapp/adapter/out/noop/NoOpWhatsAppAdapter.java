@@ -1,13 +1,13 @@
 package com.keevo.messaging.whatsapp.adapter.out.noop;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
- * NoOpWhatsAppAdapter — Stub implementation of WhatsAppPort for dev/test.
+ * NoOpWhatsAppAdapter — Stub implementation of WhatsAppSender for dev/test.
  * Story 4.4 — Created | Story 8.0 — Moved to messaging domain, conditional loading.
  *
  * <p>Active when keevo.whatsapp.provider is "noop" or not set (matchIfMissing=true).
@@ -15,7 +15,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @ConditionalOnProperty(name = "keevo.whatsapp.provider", havingValue = "noop", matchIfMissing = true)
-public class NoOpWhatsAppAdapter implements WhatsAppPort {
+public class NoOpWhatsAppAdapter implements WhatsAppSender {
 
     private static final Logger log = LoggerFactory.getLogger(NoOpWhatsAppAdapter.class);
 

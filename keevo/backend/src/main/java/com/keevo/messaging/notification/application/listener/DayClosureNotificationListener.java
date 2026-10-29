@@ -2,16 +2,15 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosureSummary;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.event.DeliverOnce;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
 
 import java.util.Locale;
@@ -24,6 +23,10 @@ import java.util.Optional;
  *
  * <p>Async best-effort: closure must NOT fail due to a notification error.
  *
+ * <p>Story 12.6a: durable module listener (async, <b>after commit</b>, registry publication; tenant bound from
+ * the event) — no push for a closure whose transaction rolled back. {@code @DeliverOnce}: a registry replay
+ * never sends the push twice. A send failure stays logged (best-effort, unchanged).
+ *
  * <p>Story 8.0 — FCM Push Notifications.
  *
  * <p>J21 (device test): the body names the store and uses XAF (A14). No push for a
@@ -35,17 +38,17 @@ public class DayClosureNotificationListener {
 
     private static final Logger log = LoggerFactory.getLogger(DayClosureNotificationListener.class);
 
-    private final NotificationPort notificationPort;
+    private final PushNotifier pushNotifier;
     private final StoreQueryPort storeQuery;
 
-    public DayClosureNotificationListener(NotificationPort notificationPort,
+    public DayClosureNotificationListener(PushNotifier pushNotifier,
                                           StoreQueryPort storeQuery) {
-        this.notificationPort = notificationPort;
+        this.pushNotifier = pushNotifier;
         this.storeQuery = storeQuery;
     }
 
-    @Async
-    @EventListener
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onDayClosed(DayClosedEvent event) {
         log.info("[FCM-CLOSURE] DayClosedEvent received: closureId={} storeId={} tenantId={} isAutomatic={}",
                 event.closureId(), event.storeId(), event.tenantId(), event.isAutomatic());
@@ -69,7 +72,7 @@ public class DayClosureNotificationListener {
                     storeName, mode, s.totalSales(), amount(s.totalRevenue()),
                     amount(s.cashAmount()), amount(s.momoAmount()));
 
-            notificationPort.notifyOwners(event.tenantId(), NotificationPayload.of(
+            pushNotifier.notifyOwners(event.tenantId(), NotificationPayload.of(
                     "DAY_CLOSED",
                     "📊 Clôture journalière",
                     body,
@@ -90,21 +93,13 @@ public class DayClosureNotificationListener {
         }
     }
 
-    /** Store lookup in the closure's tenant schema (async thread: no tenant context yet). */
+    /** Store lookup in the closure's tenant schema (bound by the module-listener interceptor, 12.4). */
     private Optional<StoreView> findStore(DayClosedEvent event) {
-        String previous = TenantContext.getCurrentTenant();
         try {
-            TenantContext.setCurrentTenant(event.tenantId());
-            return storeQuery.findById(TenantContext.getCurrentTenant(), event.storeId());
+            return storeQuery.findById(event.tenantId(), event.storeId());
         } catch (Exception e) {
             log.warn("[FCM-CLOSURE] Store lookup failed for storeId={}: {}", event.storeId(), e.getMessage());
             return Optional.empty();
-        } finally {
-            if (previous != null) {
-                TenantContext.setCurrentTenant(previous);
-            } else {
-                TenantContext.clear();
-            }
         }
     }
 

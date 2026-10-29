@@ -7,7 +7,7 @@ import com.keevo.identity.auth.domain.port.in.RequestPasswordResetCommand;
 import com.keevo.identity.auth.domain.port.in.RequestPasswordResetUseCase;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.PhoneNumbers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +40,7 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final ApplicationEventPublisher eventPublisher;
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -48,13 +48,13 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
                                         UserRepository userRepository,
                                         PasswordResetTokenRepository passwordResetTokenRepository,
                                         PasswordEncoder passwordEncoder,
-                                        WhatsAppPort whatsAppPort,
+                                        WhatsAppSender whatsAppSender,
                                         ApplicationEventPublisher eventPublisher) {
         this.rateLimiter = rateLimiter;
         this.userRepository = userRepository;
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.passwordEncoder = passwordEncoder;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.eventPublisher = eventPublisher;
     }
 
@@ -105,7 +105,7 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
         final UUID userId = user.getId();
         Runnable send = () -> {
             try {
-                whatsAppPort.sendOtp(phone, code);
+                whatsAppSender.sendOtp(phone, code);
                 log.info("forgot-password: OTP generated and sent for userId={}", userId);
             } catch (RuntimeException e) {
                 // Exception class only: provider messages (e.g. Twilio "The 'To' number +… is

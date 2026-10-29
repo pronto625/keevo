@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.adapter.in.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,7 +32,7 @@ class MessagingStatusControllerTest {
     }
 
     @Mock
-    private WhatsAppPort whatsAppPort;
+    private WhatsAppSender whatsAppSender;
 
     private MessagingStatusController controller;
 
@@ -40,8 +40,8 @@ class MessagingStatusControllerTest {
 
     @BeforeEach
     void setUp() {
-        when(whatsAppPort.isConfigured()).thenReturn(false);
-        controller = new MessagingStatusController("noop", false, whatsAppPort);
+        when(whatsAppSender.isConfigured()).thenReturn(false);
+        controller = new MessagingStatusController("noop", false, whatsAppSender);
         mockMvc = MockMvcBuilders.standaloneSetup(controller).build();
     }
 

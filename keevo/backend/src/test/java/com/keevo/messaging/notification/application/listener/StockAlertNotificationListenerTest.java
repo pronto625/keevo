@@ -1,6 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
+import com.keevo.shared.infrastructure.event.ModuleListenerTestSupport;
 import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
 import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -8,10 +9,10 @@ import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
-import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -42,14 +43,16 @@ import static org.mockito.Mockito.*;
 @DisplayName("StockAlertNotificationListener")
 class StockAlertNotificationListenerTest {
 
-    @Mock private NotificationPort notificationPort;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private PushNotifier pushNotifier;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private NotificationCooldownRepository cooldownRepository;
     @Mock private TenantPreferencesRepository tenantPreferencesRepository;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
     @Mock private StoreRepository storeRepository;
 
     private StockAlertNotificationListener listener;
+
+    private StockAlertNotificationListener raw;
 
     private static final UUID PRODUCT_ID = UUID.randomUUID();
     private static final UUID STORE_ID = UUID.randomUUID();
@@ -61,9 +64,11 @@ class StockAlertNotificationListenerTest {
     @BeforeEach
     void setUp() {
         clock = new MutableClock(Instant.parse("2026-10-11T10:00:00Z"));
-        listener = new StockAlertNotificationListener(
-                notificationPort, whatsAppPort, cooldownRepository,
+        raw = new StockAlertNotificationListener(
+                pushNotifier, whatsAppSender, cooldownRepository,
                 IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), ownerRecipientResolver, StoreApiTestSupport.queryPort(storeRepository), clock);
+        // 12.6a: module listener — wrapped like the application context does (tenant bound from the event)
+        listener = ModuleListenerTestSupport.bound(raw);
     }
 
     private StockThresholdBreachedEvent event() {
@@ -123,7 +128,7 @@ class StockAlertNotificationListenerTest {
         listener.onStockThresholdBreached(event());
 
         ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT_ID), cap.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), cap.capture());
         NotificationPayload payload = cap.getValue();
         assertEquals("STOCK_ALERT", payload.type());
         assertTrue(payload.body().contains("Savon Palmolive"));
@@ -143,8 +148,8 @@ class StockAlertNotificationListenerTest {
 
         listener.onStockThresholdBreached(event());
 
-        verifyNoInteractions(notificationPort);
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(pushNotifier);
+        verifyNoInteractions(whatsAppSender);
     }
 
     // ── AC1: Cooldown active → skip ──────────────────────────────────────────
@@ -158,38 +163,42 @@ class StockAlertNotificationListenerTest {
 
         listener.onStockThresholdBreached(event());
 
-        verifyNoInteractions(notificationPort);
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(pushNotifier);
+        verifyNoInteractions(whatsAppSender);
         // Cooldown left unchanged: no separate upsert
         verify(cooldownRepository, never()).upsertCooldown(any(), any(), any());
     }
 
-    // ── AC1: Push fails → logs WARN, does not throw ──────────────────────────
+    // ── AC1: Push fails → WhatsApp still attempted, then the failure is rethrown (12.4 R2, 12.6a) ──────
 
     @Test
-    @DisplayName("push fails → logs warn, does not throw")
-    void onStockThresholdBreached_pushFails_logsWarnDoesNotThrow() {
+    @DisplayName("push fails → WhatsApp still sent, DeliveryFailedException rethrown (publication retried)")
+    void onStockThresholdBreached_pushFails_rethrowsAfterBothChannels() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
-        doThrow(new RuntimeException("FCM timeout")).when(notificationPort).notifyOwners(any(), any());
+        doThrow(new RuntimeException("FCM timeout")).when(pushNotifier).notifyOwners(any(), any());
 
-        assertDoesNotThrow(() -> listener.onStockThresholdBreached(event()));
+        assertThrows(com.keevo.shared.event.DeliveryFailedException.class,
+                () -> listener.onStockThresholdBreached(event()));
+        verify(whatsAppSender).sendReport(eq(OWNER_PHONE), any());
     }
 
-    // ── AC1: WhatsApp fails → logs warn, does not throw ──────────────────────
+    // ── AC1: WhatsApp fails → push still sent, then the failure is rethrown (12.4 R2, 12.6a) ───────────
 
     @Test
-    @DisplayName("whatsApp fails → logs warn, does not throw")
-    void onStockThresholdBreached_whatsAppFails_logsWarnDoesNotThrow() {
+    @DisplayName("whatsApp fails → push still sent, DeliveryFailedException rethrown (publication retried)")
+    void onStockThresholdBreached_whatsAppFails_rethrowsAfterBothChannels() {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothChannelPrefs()));
         when(cooldownRepository.tryAcquireCooldown(any(), any(), any(), any())).thenReturn(true);
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(testStore()));
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of(OWNER_PHONE));
-        doThrow(new RuntimeException("WA fail")).when(whatsAppPort).sendReport(any(), any());
+        doThrow(new RuntimeException("WA fail")).when(whatsAppSender).sendReport(any(), any());
 
-        assertDoesNotThrow(() -> listener.onStockThresholdBreached(event()));
+        assertThrows(com.keevo.shared.event.DeliveryFailedException.class,
+                () -> listener.onStockThresholdBreached(event()));
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), any());
     }
 
     // ── AC1: Upserts cooldown after dispatch ─────────────────────────────────
@@ -224,7 +233,7 @@ class StockAlertNotificationListenerTest {
 
         // Each call should produce an individual STOCK_ALERT notification
         ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort, times(3)).notifyOwners(eq(TENANT_ID), cap.capture());
+        verify(pushNotifier, times(3)).notifyOwners(eq(TENANT_ID), cap.capture());
         cap.getAllValues().forEach(p -> assertEquals("STOCK_ALERT", p.type()));
     }
 
@@ -245,7 +254,7 @@ class StockAlertNotificationListenerTest {
 
         // 3 individual + 1 batch
         ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort, atLeast(4)).notifyOwners(eq(TENANT_ID), cap.capture());
+        verify(pushNotifier, atLeast(4)).notifyOwners(eq(TENANT_ID), cap.capture());
 
         boolean hasBatch = cap.getAllValues().stream()
                 .anyMatch(p -> "STOCK_ALERT_BATCH".equals(p.type()));
@@ -261,8 +270,8 @@ class StockAlertNotificationListenerTest {
 
         listener.onStockThresholdBreached(event());
 
-        verifyNoInteractions(notificationPort);
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(pushNotifier);
+        verifyNoInteractions(whatsAppSender);
     }
 
     // ── Story 13.9: cooldown TOCTOU + batch-window eviction ──────────────────
@@ -280,7 +289,7 @@ class StockAlertNotificationListenerTest {
         listener.onStockThresholdBreached(event());
         listener.onStockThresholdBreached(event());
 
-        verify(notificationPort, times(1)).notifyOwners(eq(TENANT_ID), any());
+        verify(pushNotifier, times(1)).notifyOwners(eq(TENANT_ID), any());
     }
 
     @Test
@@ -292,7 +301,7 @@ class StockAlertNotificationListenerTest {
         assertDoesNotThrow(() -> listener.onStockThresholdBreached(event()));
 
         verify(cooldownRepository, never()).tryAcquireCooldown(any(), any(), any(), any());
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
     }
 
     @Test
@@ -305,15 +314,15 @@ class StockAlertNotificationListenerTest {
 
         listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
         listener.onStockThresholdBreached(event(UUID.randomUUID(), UUID.randomUUID()));
-        assertEquals(2, listener.openWindowCount());
+        assertEquals(2, raw.openWindowCount());
 
         clock.advance(Duration.ofSeconds(30));
-        listener.evictExpiredWindows();
-        assertEquals(2, listener.openWindowCount(), "windows still inside the 60 s batch window are kept");
+        raw.evictExpiredWindows();
+        assertEquals(2, raw.openWindowCount(), "windows still inside the 60 s batch window are kept");
 
         clock.advance(Duration.ofSeconds(31));
-        listener.evictExpiredWindows();
-        assertEquals(0, listener.openWindowCount());
+        raw.evictExpiredWindows();
+        assertEquals(0, raw.openWindowCount());
     }
 
     @Test
@@ -328,14 +337,14 @@ class StockAlertNotificationListenerTest {
             listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
         }
         clock.advance(Duration.ofSeconds(61));
-        listener.evictExpiredWindows();
-        assertEquals(0, listener.openWindowCount());
+        raw.evictExpiredWindows();
+        assertEquals(0, raw.openWindowCount());
 
         listener.onStockThresholdBreached(event(UUID.randomUUID(), STORE_ID));
 
-        assertEquals(1, listener.openWindowCount());
+        assertEquals(1, raw.openWindowCount());
         ArgumentCaptor<NotificationPayload> cap = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort, times(4)).notifyOwners(eq(TENANT_ID), cap.capture());
+        verify(pushNotifier, times(4)).notifyOwners(eq(TENANT_ID), cap.capture());
         cap.getAllValues().forEach(p -> assertEquals("STOCK_ALERT", p.type()));
     }
 
@@ -365,6 +374,6 @@ class StockAlertNotificationListenerTest {
 
         listener.onStockThresholdBreached(event());
 
-        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
+        verify(whatsAppSender).sendReport(eq("+237600000001"), anyString());
     }
 }

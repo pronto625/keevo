@@ -6,7 +6,7 @@ package com.keevo.subscription.api;
  * the subscription usage screen.
  *
  * <p>Declared here so that subscription never depends on catalog; product-creating modules read the
- * count through it as well before checking {@link PlanLimitPort#checkProductLimit}.
+ * count through it as well before checking {@link com.keevo.shared.capability.entitlement.PlanLimitCheck#checkProductLimit}.
  */
 public interface ProductCountPort {
 

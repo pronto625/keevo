@@ -11,7 +11,7 @@ import com.keevo.admin.subscription.domain.port.out.TenantPaymentRepository;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.subscription.api.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
 import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;

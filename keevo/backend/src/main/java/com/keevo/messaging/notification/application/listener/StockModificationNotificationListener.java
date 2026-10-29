@@ -3,15 +3,14 @@ package com.keevo.messaging.notification.application.listener;
 import com.keevo.shared.event.catalog.stock.MovementKind;
 import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -36,7 +35,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * single notification if only one event occurred, or one consolidated recap
  * if several did.
  *
- * <p>GoF: Observer — async {@code @EventListener}, best-effort (no rollback).
+ * <p>GoF: Observer — async listener, best-effort (no rollback).
+ *
+ * <p>Story 12.6a: module listener (async, <b>after commit</b>, registry publication) — a stock change whose
+ * transaction rolled back is never counted. No receipt: the handler only adds the event to the batch window.
+ *
+ * <p><b>The notifications are not durable</b> (pre-existing batching, unchanged): the window lives in memory
+ * and is sent by the periodic sweep. The event's publication completes as soon as it joined the window, so a
+ * restart before the sweep loses those notifications (the registry has nothing left to replay); a send failure
+ * in the sweep is only logged.
  *
  * <p>Story 14.10.
  */
@@ -49,8 +56,8 @@ public class StockModificationNotificationListener {
     private static final String TYPE_EMPLOYEE_STOCK_MODIFIED_BATCH = "EMPLOYEE_STOCK_MODIFIED_BATCH";
     private static final long DEFAULT_WINDOW_MIN = 5;
 
-    private final NotificationPort notificationPort;
-    private final WhatsAppPort whatsAppPort;
+    private final PushNotifier pushNotifier;
+    private final WhatsAppSender whatsAppSender;
     private final OwnerRecipientResolver ownerRecipientResolver;
     private final long windowMin;
     private final Clock clock;
@@ -59,30 +66,29 @@ public class StockModificationNotificationListener {
 
     @Autowired
     public StockModificationNotificationListener(
-            NotificationPort notificationPort,
-            WhatsAppPort whatsAppPort,
+            PushNotifier pushNotifier,
+            WhatsAppSender whatsAppSender,
             OwnerRecipientResolver ownerRecipientResolver,
             @Value("${keevo.notification.employee-action-window-min:" + DEFAULT_WINDOW_MIN + "}")
             long windowMin) {
-        this(notificationPort, whatsAppPort, ownerRecipientResolver, windowMin, Clock.systemUTC());
+        this(pushNotifier, whatsAppSender, ownerRecipientResolver, windowMin, Clock.systemUTC());
     }
 
     /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
     StockModificationNotificationListener(
-            NotificationPort notificationPort,
-            WhatsAppPort whatsAppPort,
+            PushNotifier pushNotifier,
+            WhatsAppSender whatsAppSender,
             OwnerRecipientResolver ownerRecipientResolver,
             long windowMin,
             Clock clock) {
-        this.notificationPort = notificationPort;
-        this.whatsAppPort = whatsAppPort;
+        this.pushNotifier = pushNotifier;
+        this.whatsAppSender = whatsAppSender;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.windowMin = windowMin;
         this.clock = clock;
     }
 
-    @Async
-    @EventListener
+    @ApplicationModuleListener
     public void onStockAdjusted(StockAdjustedEvent event) {
         // Skip if not EMPLOYEE
         if (!"EMPLOYEE".equals(event.actorRole())) {
@@ -211,7 +217,7 @@ public class StockModificationNotificationListener {
         Exception waError = null;
 
         try {
-            notificationPort.notifyOwners(tenantId, payload);
+            pushNotifier.notifyOwners(tenantId, payload);
         } catch (Exception e) {
             pushError = e;
         }
@@ -219,7 +225,7 @@ public class StockModificationNotificationListener {
         String ownerPhone = resolveOwnerPhone(tenantId);
         if (ownerPhone != null) {
             try {
-                whatsAppPort.sendReport(ownerPhone, whatsAppBody);
+                whatsAppSender.sendReport(ownerPhone, whatsAppBody);
             } catch (Exception e) {
                 waError = e;
             }

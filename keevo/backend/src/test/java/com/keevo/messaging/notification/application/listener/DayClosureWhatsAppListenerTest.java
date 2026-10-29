@@ -6,7 +6,7 @@ import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -44,7 +44,7 @@ class DayClosureWhatsAppListenerTest {
     private static final String OWNER_PHONE = "+237600000001";
     private static final UUID STORE_ID = UUID.randomUUID();
 
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private StoreRepository storeRepository;
     @Mock private OwnerRecipientResolver ownerRecipientResolver;
 
@@ -54,7 +54,7 @@ class DayClosureWhatsAppListenerTest {
     void setUp() {
         // Story 12.4: wrapped in the production interceptor (@DeliverOnce receipts; the listener binds its tenant).
         listener = ModuleListenerTestSupport.bound(
-                new DayClosureWhatsAppListener(whatsAppPort, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver));
+                new DayClosureWhatsAppListener(whatsAppSender, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver));
     }
 
     @AfterEach
@@ -86,8 +86,8 @@ class DayClosureWhatsAppListenerTest {
         listener.onDayClosed(event(TENANT));
 
         ArgumentCaptor<String> report = ArgumentCaptor.forClass(String.class);
-        verify(whatsAppPort, times(1)).sendReport(eq(OWNER_PHONE), report.capture());
-        verifyNoMoreInteractions(whatsAppPort);
+        verify(whatsAppSender, times(1)).sendReport(eq(OWNER_PHONE), report.capture());
+        verifyNoMoreInteractions(whatsAppSender);
         assertThat(report.getValue()).contains("Boutique Akwa");
     }
 
@@ -98,7 +98,7 @@ class DayClosureWhatsAppListenerTest {
 
         listener.onDayClosed(event(TENANT));
 
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -106,14 +106,14 @@ class DayClosureWhatsAppListenerTest {
         listener.onDayClosed(event(null));
 
         // The resolver yields empty for a null tenant (OwnerRecipientResolverAdapterTest); nothing else runs.
-        verifyNoInteractions(storeRepository, whatsAppPort);
+        verifyNoInteractions(storeRepository, whatsAppSender);
     }
 
     @Test
     void blankTenant_noSend() {
         listener.onDayClosed(event("  "));
 
-        verifyNoInteractions(storeRepository, whatsAppPort);
+        verifyNoInteractions(storeRepository, whatsAppSender);
     }
 
     @Test
@@ -126,8 +126,8 @@ class DayClosureWhatsAppListenerTest {
 
             listener.onDayClosed(event(TENANT));
 
-            verify(whatsAppPort).sendReport(eq(OWNER_PHONE), anyString());
-            verify(whatsAppPort, never()).sendReport(eq("+243000000000"), anyString());
+            verify(whatsAppSender).sendReport(eq(OWNER_PHONE), anyString());
+            verify(whatsAppSender, never()).sendReport(eq("+243000000000"), anyString());
         } finally {
             if (previous == null) {
                 System.clearProperty("keevo.owner.whatsapp");
@@ -143,14 +143,14 @@ class DayClosureWhatsAppListenerTest {
 
         assertDoesNotThrow(() -> listener.onDayClosed(event(TENANT)));
 
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
     void sendReportThrows_propagatesForRetry_tenantRestored() {
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of(OWNER_PHONE));
         storeNamed("Boutique Akwa");
-        doThrow(new RuntimeException("wa down")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("wa down")).when(whatsAppSender).sendReport(anyString(), anyString());
         TenantContext.setCurrentTenant("kv_other");
 
         // Story 12.4 (R2): after commit, so it never reaches CloseDayService; the registry retries it
@@ -166,7 +166,7 @@ class DayClosureWhatsAppListenerTest {
 
         assertDoesNotThrow(() -> listener.onDayClosed(event(TENANT)));
 
-        verifyNoInteractions(whatsAppPort);
+        verifyNoInteractions(whatsAppSender);
     }
 
     @Test
@@ -221,7 +221,7 @@ class DayClosureWhatsAppListenerTest {
         listener.onDayClosed(event(TENANT, true));
 
         ArgumentCaptor<String> report = ArgumentCaptor.forClass(String.class);
-        verify(whatsAppPort).sendReport(eq(OWNER_PHONE), report.capture());
+        verify(whatsAppSender).sendReport(eq(OWNER_PHONE), report.capture());
         assertThat(report.getValue()).contains("Boutique Akwa");
     }
 
@@ -233,7 +233,7 @@ class DayClosureWhatsAppListenerTest {
         listener.onDayClosed(event(TENANT));
 
         ArgumentCaptor<String> report = ArgumentCaptor.forClass(String.class);
-        verify(whatsAppPort).sendReport(eq(OWNER_PHONE), report.capture());
+        verify(whatsAppSender).sendReport(eq(OWNER_PHONE), report.capture());
         assertThat(report.getValue()).contains("Boutique #" + STORE_ID.toString().substring(0, 8));
     }
 }

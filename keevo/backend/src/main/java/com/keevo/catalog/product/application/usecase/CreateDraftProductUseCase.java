@@ -4,15 +4,14 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.messaging.api.DraftValidationCommandPort;
-import com.keevo.messaging.api.PendingDraftInput;
+import com.keevo.shared.event.catalog.product.DraftProductPendingEvent;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.subscription.api.PlanLimitPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
 import com.keevo.subscription.api.ProductCountPort;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,26 +40,23 @@ public class CreateDraftProductUseCase {
     private static final String SKU_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     private final ProductRepository         productRepository;
-    private final DraftValidationCommandPort draftValidation;
     private final ProductCountPort          productCountPort;
-    private final SubscriptionQueryPort    subscriptionQuery;
-    private final PlanLimitPort            planLimit;
+    private final TenantPlanQuery           tenantPlanQuery;
+    private final PlanLimitCheck            planLimit;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort       transactionLock;
 
     public CreateDraftProductUseCase(
             ProductRepository productRepository,
-            DraftValidationCommandPort draftValidation,
             ProductCountPort productCountPort,
-            SubscriptionQueryPort subscriptionQuery,
-            PlanLimitPort planLimit,
+            TenantPlanQuery tenantPlanQuery,
+            PlanLimitCheck planLimit,
             ApplicationEventPublisher eventPublisher,
             TransactionLockPort transactionLock) {
         this.productRepository     = productRepository;
-        this.draftValidation       = draftValidation;
         this.productCountPort      = productCountPort;
-        this.subscriptionQuery = subscriptionQuery;
-        this.planLimit        = planLimit;
+        this.tenantPlanQuery       = tenantPlanQuery;
+        this.planLimit             = planLimit;
         this.eventPublisher        = eventPublisher;
         this.transactionLock       = transactionLock;
     }
@@ -115,7 +111,7 @@ public class CreateDraftProductUseCase {
 
         // Plan limit check — all roles (DRAFT products count toward the tenant limit)
         int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
-        var plan = subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
+        var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif"));
         planLimit.checkProductLimit(plan, currentCount);
@@ -143,9 +139,10 @@ public class CreateDraftProductUseCase {
         var saved = productRepository.save(draft);
         String tenantId = TenantContext.getCurrentTenant();
 
-        // Track draft for badge counter (EMPLOYEE drafts need owner notification)
-        draftValidation.recordPending(tenantId,
-                new PendingDraftInput(saved.getId(), saved.getName(), command.actorId()));
+        // Track draft for badge counter (EMPLOYEE drafts need owner notification) — 12.6a: recorded by
+        // messaging's synchronous listener, in this transaction
+        eventPublisher.publishEvent(new DraftProductPendingEvent(
+                saved.getId(), saved.getName(), command.actorId(), tenantId, Instant.now()));
 
         // Domain event → DraftProductNotificationListener will push notification
         eventPublisher.publishEvent(new ProductCreatedProgressivelyEvent(

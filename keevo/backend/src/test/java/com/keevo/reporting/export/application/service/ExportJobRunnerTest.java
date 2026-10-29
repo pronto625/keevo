@@ -1,7 +1,7 @@
 package com.keevo.reporting.export.application.service;
 
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.reporting.export.SyntheticExportProvider;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.adapter.out.render.CsvExportRenderer;
@@ -48,7 +48,7 @@ class ExportJobRunnerTest {
     @TempDir Path root;
 
     private final InMemoryExportJobRepository repository = new InMemoryExportJobRepository();
-    private final NotificationPort notificationPort = mock(NotificationPort.class);
+    private final PushNotifier pushNotifier = mock(PushNotifier.class);
     private final List<String> tenantsSeenByProvider = new ArrayList<>();
     private LocalDiskExportFileStorage storage;
 
@@ -68,7 +68,7 @@ class ExportJobRunnerTest {
         return new ExportJobRunner(repository, storage, new ExportStreamingWriter(1000),
                 new ExportDatasetRegistry(List.of(providers)),
                 new ExportRendererRegistry(List.of(new CsvExportRenderer(), new XlsxExportRenderer())),
-                notificationPort, new ExportProperties(), Clock.fixed(NOW, ZoneOffset.UTC));
+                pushNotifier, new ExportProperties(), Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     private ExportJob pending(ExportFormat format, String... datasets) {
@@ -112,7 +112,7 @@ class ExportJobRunnerTest {
         assertThat(partFiles()).isEmpty();
 
         ArgumentCaptor<NotificationPayload> payload = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT), payload.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT), payload.capture());
         assertThat(payload.getValue().type()).isEqualTo("EXPORT_READY");
         assertThat(payload.getValue().deepLink()).isEqualTo("/exports/" + job.getId());
         assertThat(payload.getValue().metadata()).containsEntry("jobId", job.getId().toString());
@@ -139,7 +139,7 @@ class ExportJobRunnerTest {
         assertThat(failed.getCompletedAt()).isEqualTo(NOW);
         assertThat(allFiles()).isEmpty();
         ArgumentCaptor<NotificationPayload> payload = ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyOwners(eq(TENANT), payload.capture());
+        verify(pushNotifier).notifyOwners(eq(TENANT), payload.capture());
         assertThat(payload.getValue().type()).isEqualTo("EXPORT_FAILED");
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
@@ -158,7 +158,7 @@ class ExportJobRunnerTest {
     @DisplayName("job not found in the tenant → nothing pushed, context cleared")
     void missingJob() {
         runner(new SyntheticExportProvider("sales", "Ventes", 1)).run(TENANT, UUID.randomUUID());
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
@@ -171,7 +171,7 @@ class ExportJobRunnerTest {
         runner(new SyntheticExportProvider("sales", "Ventes", 1)).run(TENANT, job.getId());
         assertThat(repository.findById(job.getId()).orElseThrow().getStatus()).isEqualTo(ExportJobStatus.RUNNING);
         assertThat(allFiles()).isEmpty();
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
@@ -197,7 +197,7 @@ class ExportJobRunnerTest {
         assertThat(after.getStatus()).isEqualTo(ExportJobStatus.FAILED);
         assertThat(after.getErrorCode()).isEqualTo("EXPORT_INTERRUPTED");
         assertThat(allFiles()).isEmpty();
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 

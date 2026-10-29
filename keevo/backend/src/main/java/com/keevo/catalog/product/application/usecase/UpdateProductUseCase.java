@@ -5,7 +5,7 @@ import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.shared.event.catalog.product.ProductActivatedEvent;
 import com.keevo.shared.event.catalog.product.ProductUpdatedEvent;
-import com.keevo.messaging.api.DraftValidationCommandPort;
+import com.keevo.shared.event.catalog.product.DraftProductValidatedEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -22,23 +22,20 @@ import java.util.UUID;
  *
  * <p>Story 2.4 (AC6): if the product is currently in DRAFT status and the caller
  * is an OWNER, the status is promoted to ACTIVE. Only OWNERs may promote a draft.
- * The corresponding pending draft record ({@link DraftValidationCommandPort})
- * is acknowledged so it disappears from the badge counter.
+ * The corresponding pending draft record is acknowledged so it disappears from the badge counter
+ * (12.6a: by messaging, on {@link DraftProductValidatedEvent}).
  */
 @Service
 public class UpdateProductUseCase {
 
     private final ProductRepository           productRepository;
-    private final DraftValidationCommandPort draftValidation;
     private final ApplicationEventPublisher   eventPublisher;
     private final ObjectMapper                objectMapper;
 
     public UpdateProductUseCase(ProductRepository productRepository,
-                                DraftValidationCommandPort draftValidation,
                                 ApplicationEventPublisher eventPublisher,
                                 ObjectMapper objectMapper) {
         this.productRepository = productRepository;
-        this.draftValidation   = draftValidation;
         this.eventPublisher    = eventPublisher;
         this.objectMapper      = objectMapper;
     }
@@ -125,7 +122,8 @@ public class UpdateProductUseCase {
 
         // Acknowledge draft notification so the badge counter decrements (AC6)
         if (isPromotion) {
-            draftValidation.acknowledge(tenantId, saved.getId());
+            eventPublisher.publishEvent(new DraftProductValidatedEvent(
+                    saved.getId(), dto.actorId(), tenantId, Instant.now()));
 
             // Story 4.3 — publish ProductActivatedEvent for cascade auto-validation
             eventPublisher.publishEvent(new ProductActivatedEvent(

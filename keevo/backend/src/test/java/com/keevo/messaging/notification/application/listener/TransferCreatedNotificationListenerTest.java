@@ -11,8 +11,8 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.messaging.notification.application.strategy.OwnerAndDestinationEmployeeStrategy;
-import com.keevo.messaging.api.NotificationPayload;
-import com.keevo.messaging.api.NotificationPort;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,7 +45,7 @@ class TransferCreatedNotificationListenerTest {
 
     @Mock private UserRepository userRepository;
     @Mock private EmployeeRepository employeeRepository;
-    @Mock private NotificationPort notificationPort;
+    @Mock private PushNotifier pushNotifier;
 
     private TransferCreatedNotificationListener listener;
 
@@ -66,7 +66,7 @@ class TransferCreatedNotificationListenerTest {
         // Story 12.4: wrapped in the production module-listener interceptor (tenant bound from the event).
         listener = ModuleListenerTestSupport.bound(new TransferCreatedNotificationListener(
                 new OwnerAndDestinationEmployeeStrategy(IdentityAuthApiTestSupport.userQueryPort(userRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository)),
-                notificationPort));
+                pushNotifier));
     }
 
     private TransferCreatedEvent makeEvent() {
@@ -97,7 +97,7 @@ class TransferCreatedNotificationListenerTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<UUID>> recipientsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(notificationPort).notifyUsers(eq(TENANT_ID), recipientsCaptor.capture(), any());
+        verify(pushNotifier).notifyUsers(eq(TENANT_ID), recipientsCaptor.capture(), any());
         assertThat(recipientsCaptor.getValue()).containsExactly(OWNER_USER_ID);
     }
 
@@ -113,7 +113,7 @@ class TransferCreatedNotificationListenerTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<UUID>> recipientsCaptor = ArgumentCaptor.forClass(List.class);
-        verify(notificationPort).notifyUsers(eq(TENANT_ID), recipientsCaptor.capture(), any());
+        verify(pushNotifier).notifyUsers(eq(TENANT_ID), recipientsCaptor.capture(), any());
 
         List<UUID> recipients = recipientsCaptor.getValue();
         assertThat(recipients).contains(OWNER_USER_ID, EMP_USER_ID_1, EMP_USER_ID_2);
@@ -135,7 +135,7 @@ class TransferCreatedNotificationListenerTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<UUID>> captor = ArgumentCaptor.forClass(List.class);
-        verify(notificationPort).notifyUsers(eq(TENANT_ID), captor.capture(), any());
+        verify(pushNotifier).notifyUsers(eq(TENANT_ID), captor.capture(), any());
         assertThat(captor.getValue()).containsExactly(OWNER_USER_ID); // deduplicated
     }
 
@@ -147,7 +147,7 @@ class TransferCreatedNotificationListenerTest {
 
         listener.onTransferCreated(makeEvent());
 
-        verifyNoInteractions(notificationPort);
+        verifyNoInteractions(pushNotifier);
     }
 
     // ── AC7 tests ──────────────────────────────────────────────────────────────
@@ -163,7 +163,7 @@ class TransferCreatedNotificationListenerTest {
 
         ArgumentCaptor<NotificationPayload> payloadCaptor =
                 ArgumentCaptor.forClass(NotificationPayload.class);
-        verify(notificationPort).notifyUsers(any(), any(), payloadCaptor.capture());
+        verify(pushNotifier).notifyUsers(any(), any(), payloadCaptor.capture());
 
         assertThat(payloadCaptor.getValue().deepLink()).isEqualTo("/stock/transfers");
     }
@@ -175,7 +175,7 @@ class TransferCreatedNotificationListenerTest {
                 .thenReturn(List.of(owner()));
         when(employeeRepository.findByStoreId(DEST_STORE_ID)).thenReturn(List.of());
         doThrow(new RuntimeException("FCM unavailable"))
-                .when(notificationPort).notifyUsers(any(), any(), any());
+                .when(pushNotifier).notifyUsers(any(), any(), any());
 
         // Story 12.4 (R2): the send failure reaches the registry → incomplete publication, receipt released
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onTransferCreated(makeEvent()))

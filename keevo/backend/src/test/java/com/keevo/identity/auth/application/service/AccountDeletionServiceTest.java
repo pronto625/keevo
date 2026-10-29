@@ -8,7 +8,7 @@ import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,7 +33,7 @@ import static org.mockito.Mockito.*;
  * AccountDeletionServiceTest — Unit tests for {@link AccountDeletionService}.
  *
  * <p>Mocks {@link TenantRepository}, {@link UserRepository},
- * {@link WhatsAppPort}, and {@link ApplicationEventPublisher}.
+ * {@link WhatsAppSender}, and {@link ApplicationEventPublisher}.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AccountDeletionService")
@@ -41,7 +41,7 @@ class AccountDeletionServiceTest {
 
     @Mock private TenantRepository tenantRepository;
     @Mock private UserRepository userRepository;
-    @Mock private WhatsAppPort whatsAppPort;
+    @Mock private WhatsAppSender whatsAppSender;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private AccountDeletionService service;
@@ -54,7 +54,7 @@ class AccountDeletionServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountDeletionService(tenantRepository, userRepository,
-                whatsAppPort, eventPublisher);
+                whatsAppSender, eventPublisher);
         tenantId = UUID.randomUUID();
         actorId = UUID.randomUUID();
         schemaName = "kv_abc123";
@@ -110,7 +110,7 @@ class AccountDeletionServiceTest {
                 .isEqualTo(ErrorCode.ACCOUNT_SUSPENDED.name());
 
         verify(tenantRepository, never()).save(any());
-        verifyNoInteractions(eventPublisher, whatsAppPort);
+        verifyNoInteractions(eventPublisher, whatsAppSender);
     }
 
     @Test
@@ -124,7 +124,7 @@ class AccountDeletionServiceTest {
 
         service.requestDeletion(actorId, schemaName);
 
-        verify(whatsAppPort).sendReport(eq("+243812345678"), anyString());
+        verify(whatsAppSender).sendReport(eq("+243812345678"), anyString());
     }
 
     @Test
@@ -135,7 +135,7 @@ class AccountDeletionServiceTest {
         when(userRepository.findById(actorId)).thenReturn(
                 Optional.of(new User(actorId, "+243812345678", "hash",
                         Role.OWNER, true, Instant.now())));
-        doThrow(new RuntimeException("WhatsApp down")).when(whatsAppPort).sendReport(anyString(), anyString());
+        doThrow(new RuntimeException("WhatsApp down")).when(whatsAppSender).sendReport(anyString(), anyString());
 
         // Should NOT throw
         assertThatNoException().isThrownBy(() -> service.requestDeletion(actorId, schemaName));
@@ -159,7 +159,7 @@ class AccountDeletionServiceTest {
         verify(tenantRepository, never()).save(any());
 
         verify(eventPublisher).publishEvent(any(AccountDeletionCancelledEvent.class));
-        verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+        verify(whatsAppSender, never()).sendReport(anyString(), anyString());
     }
 
     @Test

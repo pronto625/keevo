@@ -15,9 +15,9 @@ import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.subscription.api.PlanLimitPort;
-import com.keevo.subscription.api.PlanView;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.PlanView;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,8 +47,8 @@ class StoreApiAdapterTest {
     @Mock private StoreRepository storeRepository;
     @Mock private UpdateStoreUseCase updateStoreUseCase;
     @Mock private DeactivateStoreUseCase deactivateStoreUseCase;
-    @Mock private SubscriptionQueryPort subscriptionQuery;
-    @Mock private PlanLimitPort planLimit;
+    @Mock private TenantPlanQuery tenantPlanQuery;
+    @Mock private PlanLimitCheck planLimit;
     @Mock private TransactionLockPort transactionLock;
 
     private StoreApiAdapter adapter;
@@ -56,7 +56,7 @@ class StoreApiAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new StoreApiAdapter(storeRepository, updateStoreUseCase, deactivateStoreUseCase,
-                subscriptionQuery, planLimit, transactionLock);
+                tenantPlanQuery, planLimit, transactionLock);
         TenantContext.setCurrentTenant(TENANT);
     }
 
@@ -108,7 +108,7 @@ class StoreApiAdapterTest {
     @Test
     void createWithId_checksPlanBeforeSaving_defaultsToStore_trimsName() {
         UUID id = UUID.randomUUID();
-        when(subscriptionQuery.findCurrentPlan(TENANT)).thenReturn(Optional.of(FREE));
+        when(tenantPlanQuery.findCurrentPlan(TENANT)).thenReturn(Optional.of(FREE));
         when(storeRepository.countActive()).thenReturn(0);
 
         boolean created = adapter.createWithId(TENANT,
@@ -140,12 +140,12 @@ class StoreApiAdapterTest {
         order.verify(transactionLock).lock("store-limit:" + TENANT);
         order.verify(storeRepository).findById(id);
         verify(storeRepository, never()).save(any());
-        verifyNoInteractions(subscriptionQuery, planLimit);
+        verifyNoInteractions(tenantPlanQuery, planLimit);
     }
 
     @Test
     void createWithId_planLimitReached_nothingSaved() {
-        when(subscriptionQuery.findCurrentPlan(TENANT)).thenReturn(Optional.of(FREE));
+        when(tenantPlanQuery.findCurrentPlan(TENANT)).thenReturn(Optional.of(FREE));
         when(storeRepository.countActive()).thenReturn(1);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached"))
                 .when(planLimit).checkStoreLimit(FREE, 1);
@@ -159,7 +159,7 @@ class StoreApiAdapterTest {
 
     @Test
     void createWithId_noSubscription_subscriptionNotFound() {
-        when(subscriptionQuery.findCurrentPlan(TENANT)).thenReturn(Optional.empty());
+        when(tenantPlanQuery.findCurrentPlan(TENANT)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> adapter.createWithId(TENANT,
                 new CreateStoreWithIdInput(UUID.randomUUID(), "Boutique", null, null, null)))
@@ -170,7 +170,7 @@ class StoreApiAdapterTest {
 
     @Test
     void createWithId_secondWarehouse_refused() {
-        when(subscriptionQuery.findCurrentPlan(TENANT)).thenReturn(Optional.of(FREE));
+        when(tenantPlanQuery.findCurrentPlan(TENANT)).thenReturn(Optional.of(FREE));
         when(storeRepository.existsWarehouse()).thenReturn(true);
 
         assertThatThrownBy(() -> adapter.createWithId(TENANT,

@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -30,18 +30,18 @@ public class MultiStoreSummaryService {
 
     private final EndOfDayReportRepository reportRepository;
     private final StoreQueryPort storeQuery;
-    private final WhatsAppPort whatsAppPort;
+    private final WhatsAppSender whatsAppSender;
     private final DailyReportFormatter formatter;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
     public MultiStoreSummaryService(EndOfDayReportRepository reportRepository,
                                     StoreQueryPort storeQuery,
-                                    WhatsAppPort whatsAppPort,
+                                    WhatsAppSender whatsAppSender,
                                     DailyReportFormatter formatter,
                                     OwnerRecipientResolver ownerRecipientResolver) {
         this.reportRepository = reportRepository;
         this.storeQuery = storeQuery;
-        this.whatsAppPort = whatsAppPort;
+        this.whatsAppSender = whatsAppSender;
         this.formatter = formatter;
         this.ownerRecipientResolver = ownerRecipientResolver;
     }
@@ -105,7 +105,7 @@ public class MultiStoreSummaryService {
                 .ifPresentOrElse(
                         ownerPhone -> {
                             try {
-                                whatsAppPort.sendReport(ownerPhone, combinedContent);
+                                whatsAppSender.sendReport(ownerPhone, combinedContent);
                                 combined.markSent();
                             } catch (Exception e) {
                                 log.warn("Multi-store summary WhatsApp delivery failed: {}", e.getMessage());

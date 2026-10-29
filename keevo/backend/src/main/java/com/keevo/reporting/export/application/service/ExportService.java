@@ -22,8 +22,8 @@ import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.infrastructure.export.ExportValues;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.subscription.api.PlanView;
-import com.keevo.subscription.api.SubscriptionQueryPort;
+import com.keevo.shared.capability.entitlement.PlanView;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -78,7 +78,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     private final ExportFileStorage storage;
     private final ExportRateLimiter rateLimiter;
     private final ExportLinkSigner linkSigner;
-    private final SubscriptionQueryPort subscriptionQuery;
+    private final TenantPlanQuery tenantPlanQuery;
     private final ApplicationEventPublisher eventPublisher;
     private final TenantQueryPort tenantQuery;
     private final Executor exportExecutor;
@@ -94,7 +94,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
                          ExportFileStorage storage,
                          ExportRateLimiter rateLimiter,
                          ExportLinkSigner linkSigner,
-                         SubscriptionQueryPort subscriptionQuery,
+                         TenantPlanQuery tenantPlanQuery,
                          ApplicationEventPublisher eventPublisher,
                          TenantQueryPort tenantQuery,
                          @Qualifier(ExportExecutorConfig.EXPORT_EXECUTOR) Executor exportExecutor,
@@ -108,7 +108,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         this.storage = storage;
         this.rateLimiter = rateLimiter;
         this.linkSigner = linkSigner;
-        this.subscriptionQuery = subscriptionQuery;
+        this.tenantPlanQuery = tenantPlanQuery;
         this.eventPublisher = eventPublisher;
         this.tenantQuery = tenantQuery;
         this.exportExecutor = exportExecutor;
@@ -248,7 +248,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     }
 
     private boolean isPremium() {
-        return subscriptionQuery.findCurrentPlan(TenantContext.getCurrentTenant())
+        return tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .map(ExportService::isActivePremium)
                 .orElse(false); // no subscription row ⇒ FREE
     }

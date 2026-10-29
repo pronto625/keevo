@@ -1,11 +1,13 @@
 package com.keevo.catalog.api;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
  * Write access to the catalog's categories for other modules. Each operation keeps the audit
  * events and transactional behaviour of the corresponding catalog use case.
+ *
+ * <p>Story 12.6a: onboarding template seeding is no longer a call — the catalog seeds on
+ * {@code TenantOnboardedEvent} ({@code TenantOnboardedCategorySeeder}).
  */
 public interface CategoryCommandPort {
 
@@ -17,15 +19,4 @@ public interface CategoryCommandPort {
 
     CategoryView rename(String tenantSchema, UUID categoryId, String name, UUID actorId);
 
-    /**
-     * Seeds the given root categories (active, non-custom) — onboarding sector template.
-     * Null or blank names are skipped.
-     *
-     * <p>Same behaviour as the pre-12.2a onboarding code: it emits <b>no</b>
-     * {@code CategoryCreatedEvent} and is <b>not idempotent</b> — calling it twice creates the
-     * categories twice; the caller (onboarding) runs it once per tenant.
-     *
-     * @return the number of categories created
-     */
-    int seedTemplateCategories(String tenantSchema, List<String> names);
 }

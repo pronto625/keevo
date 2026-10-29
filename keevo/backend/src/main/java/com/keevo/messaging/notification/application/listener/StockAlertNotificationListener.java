@@ -5,17 +5,17 @@ import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.api.TenantPreferencesView;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
-import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
-import com.keevo.messaging.api.NotificationPort;
-import com.keevo.messaging.api.WhatsAppPort;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.WhatsAppSender;
+import com.keevo.shared.event.DeliverOnce;
+import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -37,6 +37,19 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>Async best-effort: stock operations MUST NOT fail due to notification errors.
  *
+ * <p>Story 12.6a: durable module listener (async, <b>after commit</b>, registry publication; tenant bound from
+ * the event by the module-listener interceptor) — no alert for a stock change whose transaction rolled back.
+ * {@code @DeliverOnce}: a registry replay never re-sends (the 4 h cooldown would also skip it).
+ *
+ * <p><b>Individual alert</b> (sent from the handler): a provider failure is rethrown as
+ * {@link DeliveryFailedException} once both channels were attempted (12.4 ruling R2) — the publication stays
+ * incomplete and is retried; the listener transaction rolls back, releasing the cooldown (a partial failure may
+ * repeat the channel that succeeded).
+ *
+ * <p><b>Batched alerts are not durable</b> (pre-existing batching, unchanged): the batch window lives in
+ * memory. The publication of an event that only joined a window completes (and its receipt is recorded) before
+ * the batch is sent, so a restart loses the batched alerts not yet sent; a batch send failure is only logged.
+ *
  * <p>Story 8.1 — Alertes Stock Critique & Tendances de Ventes.
  */
 @Component
@@ -49,8 +62,8 @@ public class StockAlertNotificationListener {
     private static final int BATCH_THRESHOLD = 4;
     private static final Duration BATCH_WINDOW_DURATION = Duration.ofSeconds(60);
 
-    private final NotificationPort notificationPort;
-    private final WhatsAppPort whatsAppPort;
+    private final PushNotifier pushNotifier;
+    private final WhatsAppSender whatsAppSender;
     private final NotificationCooldownRepository cooldownRepository;
     private final TenantPreferencesQueryPort preferencesQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
@@ -60,43 +73,41 @@ public class StockAlertNotificationListener {
     private final ConcurrentHashMap<String, BatchWindow> batchWindows = new ConcurrentHashMap<>();
 
     @Autowired
-    public StockAlertNotificationListener(NotificationPort notificationPort,
-                                          WhatsAppPort whatsAppPort,
+    public StockAlertNotificationListener(PushNotifier pushNotifier,
+                                          WhatsAppSender whatsAppSender,
                                           NotificationCooldownRepository cooldownRepository,
                                           TenantPreferencesQueryPort preferencesQuery,
                                           OwnerRecipientResolver ownerRecipientResolver,
                                           StoreQueryPort storeQuery) {
-        this(notificationPort, whatsAppPort, cooldownRepository, preferencesQuery,
+        this(pushNotifier, whatsAppSender, cooldownRepository, preferencesQuery,
              ownerRecipientResolver, storeQuery, Clock.systemUTC());
     }
 
     /** Test-only constructor — injects a controllable {@link Clock} instead of the real one. */
-    StockAlertNotificationListener(NotificationPort notificationPort,
-                                   WhatsAppPort whatsAppPort,
+    StockAlertNotificationListener(PushNotifier pushNotifier,
+                                   WhatsAppSender whatsAppSender,
                                    NotificationCooldownRepository cooldownRepository,
                                    TenantPreferencesQueryPort preferencesQuery,
                                    OwnerRecipientResolver ownerRecipientResolver,
                                    StoreQueryPort storeQuery,
                                    Clock clock) {
         this.clock = clock;
-        this.notificationPort = notificationPort;
-        this.whatsAppPort = whatsAppPort;
+        this.pushNotifier = pushNotifier;
+        this.whatsAppSender = whatsAppSender;
         this.cooldownRepository = cooldownRepository;
         this.preferencesQuery = preferencesQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
         this.storeQuery = storeQuery;
     }
 
-    @Async
-    @EventListener
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onStockThresholdBreached(StockThresholdBreachedEvent event) {
         log.info("[STOCK-ALERT] Threshold breached: product={} store={} qty={} threshold={}",
                 event.productId(), event.storeId(), event.currentQuantity(), event.threshold());
         try {
-            TenantContext.setCurrentTenant(event.tenantId());
-
             // AC1: check preferences
-            TenantPreferencesView prefs = preferencesQuery.find(TenantContext.getCurrentTenant()).orElse(null);
+            TenantPreferencesView prefs = preferencesQuery.find(event.tenantId()).orElse(null);
             if (prefs == null || !prefs.stockAlertEnabled()) {
                 log.debug("[STOCK-ALERT] Stock alerts disabled for tenant={}", event.tenantId());
                 return;
@@ -106,7 +117,7 @@ public class StockAlertNotificationListener {
                     ? prefs.stockAlertChannel()
                     : StockAlertChannel.PUSH;
 
-            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), event.storeId())
+            String storeName = storeQuery.findById(event.tenantId(), event.storeId())
                     .map(s -> s.name())
                     .orElse("Boutique");
 
@@ -154,11 +165,11 @@ public class StockAlertNotificationListener {
                 dispatchIndividual(event, storeName, ownerPhone, channel);
             }
 
+        } catch (DeliveryFailedException e) {
+            throw e; // immediate send failed: publication stays incomplete, retried (12.4 R2)
         } catch (Exception e) {
             log.warn("[STOCK-ALERT] Failed to notify for product={} store={}: {}",
                     event.productId(), event.storeId(), e.getMessage());
-        } finally {
-            TenantContext.clear();
         }
     }
 
@@ -208,7 +219,7 @@ public class StockAlertNotificationListener {
 
         if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
             try {
-                notificationPort.notifyOwners(event.tenantId(), payload);
+                pushNotifier.notifyOwners(event.tenantId(), payload);
             } catch (Exception e) {
                 pushError = e;
             }
@@ -217,7 +228,7 @@ public class StockAlertNotificationListener {
         if ((channel == StockAlertChannel.WHATSAPP || channel == StockAlertChannel.BOTH)
                 && ownerPhone != null) {
             try {
-                whatsAppPort.sendReport(ownerPhone, body);
+                whatsAppSender.sendReport(ownerPhone, body);
             } catch (Exception e) {
                 waError = e;
             }
@@ -232,6 +243,18 @@ public class StockAlertNotificationListener {
         } else if (waError != null) {
             log.warn("[STOCK-ALERT] WhatsApp failed for product={} store={}: {}",
                     event.productId(), event.storeId(), waError.getMessage());
+        }
+        // 12.4 R2 (12.6a): both channels were attempted; rethrow the first failure (the other suppressed) so
+        // the publication stays incomplete and the receipt is released. The listener transaction rolls back,
+        // so the cooldown taken above is released too and the retry can send.
+        if (pushError != null || waError != null) {
+            DeliveryFailedException failure = new DeliveryFailedException(
+                    pushError != null ? "push send failed" : "WhatsApp send failed",
+                    pushError != null ? pushError : waError);
+            if (pushError != null && waError != null) {
+                failure.addSuppressed(new DeliveryFailedException("WhatsApp send failed", waError));
+            }
+            throw failure;
         }
     }
 
@@ -257,7 +280,7 @@ public class StockAlertNotificationListener {
 
         if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
             try {
-                notificationPort.notifyOwners(tenantId, payload);
+                pushNotifier.notifyOwners(tenantId, payload);
             } catch (Exception e) {
                 pushError = e;
             }
@@ -273,7 +296,7 @@ public class StockAlertNotificationListener {
                             .append(e.currentQuantity()).append(" unité(s) (seuil : ")
                             .append(e.threshold()).append(")\n");
                 }
-                whatsAppPort.sendReport(ownerPhone, waMessage.toString());
+                whatsAppSender.sendReport(ownerPhone, waMessage.toString());
             } catch (Exception e) {
                 waError = e;
             }
