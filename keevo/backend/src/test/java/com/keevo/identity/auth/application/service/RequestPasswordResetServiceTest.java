@@ -7,7 +7,7 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.in.RequestPasswordResetCommand;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

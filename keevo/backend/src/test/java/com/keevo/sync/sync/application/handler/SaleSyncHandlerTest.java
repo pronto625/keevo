@@ -33,7 +33,7 @@ class SaleSyncHandlerTest {
     // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
     @org.junit.jupiter.api.BeforeEach
     void bindTenantContext() {
-        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
     }
 
     @org.junit.jupiter.api.AfterEach

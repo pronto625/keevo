@@ -9,6 +9,7 @@ import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -25,6 +26,17 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class DayClosureApiAdapterTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     private final CloseDayUseCase closeDay = mock(CloseDayUseCase.class);
     private final DayClosureRepository repository = mock(DayClosureRepository.class);
@@ -45,7 +57,7 @@ class DayClosureApiAdapterTest {
         UUID closureId = UUID.randomUUID();
         when(closeDay.closeDay(any())).thenReturn(closure(closureId, RECEIVED_AT));
 
-        DayClosureView view = adapter.closeDay(new CloseDayInput(STORE, ACTOR, "kv_test", false, closureId, CLOSED_AT));
+        DayClosureView view = adapter.closeDay(TenantContext.getCurrentTenant(), new CloseDayInput(STORE, ACTOR, false, closureId, CLOSED_AT));
 
         verify(closeDay).closeDay(new CloseDayCommand(STORE, ACTOR, "kv_test", false, closureId, CLOSED_AT));
         assertThat(view).isEqualTo(new DayClosureView(closureId, STORE, ACTOR, CLOSED_AT, RECEIVED_AT, true, SUMMARY));
@@ -55,14 +67,14 @@ class DayClosureApiAdapterTest {
     void closeDay_alreadyClosed_propagatesTheDomainError() {
         when(closeDay.closeDay(any())).thenThrow(new DomainException(ErrorCode.DAY_ALREADY_CLOSED, "closed"));
 
-        assertThatThrownBy(() -> adapter.closeDay(new CloseDayInput(STORE, ACTOR, "kv_test", false, null, null)))
+        assertThatThrownBy(() -> adapter.closeDay(TenantContext.getCurrentTenant(), new CloseDayInput(STORE, ACTOR, false, null, null)))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.DAY_ALREADY_CLOSED);
     }
 
     @Test
     void closeDayInput_withoutStore_isAValidationError() {
-        assertThatThrownBy(() -> new CloseDayInput(null, ACTOR, "kv_test", false, null, null))
+        assertThatThrownBy(() -> new CloseDayInput(null, ACTOR, false, null, null))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
     }
@@ -75,9 +87,23 @@ class DayClosureApiAdapterTest {
         when(repository.findByStoreIdAndDate(STORE, day)).thenReturn(List.of(closure(id, RECEIVED_AT)));
         when(repository.findPreviousForStore(STORE, CLOSED_AT)).thenReturn(Optional.empty());
 
-        assertThat(adapter.findById(id)).map(DayClosureView::receivedAt).contains(CLOSED_AT);
-        assertThat(adapter.findByStoreAndDate(STORE, day))
+        assertThat(adapter.findById(TenantContext.getCurrentTenant(), id)).map(DayClosureView::receivedAt).contains(CLOSED_AT);
+        assertThat(adapter.findByStoreAndDate(TenantContext.getCurrentTenant(), STORE, day))
                 .containsExactly(new DayClosureView(id, STORE, ACTOR, CLOSED_AT, RECEIVED_AT, true, SUMMARY));
-        assertThat(adapter.findPreviousForStore(STORE, CLOSED_AT)).isEmpty();
+        assertThat(adapter.findPreviousForStore(TenantContext.getCurrentTenant(), STORE, CLOSED_AT)).isEmpty();
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.findById("kv_other1", java.util.UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.findById(null, java.util.UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.closeDay("kv_other1", new CloseDayInput(STORE, ACTOR, false, null, null)))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.closeDay(null, new CloseDayInput(STORE, ACTOR, false, null, null)))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(closeDay, repository);
     }
 }

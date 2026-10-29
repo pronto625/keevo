@@ -6,8 +6,8 @@ import java.util.UUID;
 /** Read access to the crm's suppliers for other modules. */
 public interface SupplierQueryPort {
 
-    boolean existsById(UUID supplierId);
+    boolean existsById(String tenantSchema, UUID supplierId);
 
     /** The supplier linked to a product (with all its product ids), empty when none is linked. */
-    Optional<SupplierView> findByProductId(UUID productId);
+    Optional<SupplierView> findByProductId(String tenantSchema, UUID productId);
 }

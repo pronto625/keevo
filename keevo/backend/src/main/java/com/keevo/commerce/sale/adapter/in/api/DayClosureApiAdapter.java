@@ -8,6 +8,7 @@ import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -32,24 +33,28 @@ class DayClosureApiAdapter implements DayClosureCommandPort, DayClosureQueryPort
     }
 
     @Override
-    public DayClosureView closeDay(CloseDayInput in) {
+    public DayClosureView closeDay(String tenantSchema, CloseDayInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         return closeDayUseCase.closeDay(new CloseDayCommand(
-                in.storeId(), in.actorId(), in.tenantId(), in.automatic(), in.closureId(), in.closedAt()))
+                in.storeId(), in.actorId(), tenantSchema, in.automatic(), in.closureId(), in.closedAt()))
                 .toView();
     }
 
     @Override
-    public Optional<DayClosureView> findById(UUID closureId) {
+    public Optional<DayClosureView> findById(String tenantSchema, UUID closureId) {
+        TenantContext.requireCurrent(tenantSchema);
         return dayClosureRepository.findById(closureId).map(DayClosure::toView);
     }
 
     @Override
-    public List<DayClosureView> findByStoreAndDate(UUID storeId, LocalDate date) {
+    public List<DayClosureView> findByStoreAndDate(String tenantSchema, UUID storeId, LocalDate date) {
+        TenantContext.requireCurrent(tenantSchema);
         return dayClosureRepository.findByStoreIdAndDate(storeId, date).stream().map(DayClosure::toView).toList();
     }
 
     @Override
-    public Optional<DayClosureView> findPreviousForStore(UUID storeId, Instant before) {
+    public Optional<DayClosureView> findPreviousForStore(String tenantSchema, UUID storeId, Instant before) {
+        TenantContext.requireCurrent(tenantSchema);
         return dayClosureRepository.findPreviousForStore(storeId, before).map(DayClosure::toView);
     }
 }

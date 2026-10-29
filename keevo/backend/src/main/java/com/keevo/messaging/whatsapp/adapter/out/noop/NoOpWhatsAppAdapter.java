@@ -1,6 +1,6 @@
 package com.keevo.messaging.whatsapp.adapter.out.noop;
 
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

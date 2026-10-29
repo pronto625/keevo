@@ -6,7 +6,7 @@ import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

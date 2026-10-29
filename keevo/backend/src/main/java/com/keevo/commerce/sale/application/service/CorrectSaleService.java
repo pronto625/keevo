@@ -110,7 +110,7 @@ public class CorrectSaleService implements CorrectSaleUseCase {
             UUID movementId = command.correctionId() != null
                     ? DeterministicIds.saleCorrectionMovementId(command.correctionId(), before.getId())
                     : null;
-            stockCommand.recordMovement(new StockMovementInput(
+            stockCommand.recordMovement(TenantContext.getCurrentTenant(), new StockMovementInput(
                     before.getProductId(), before.getVariantId(), sale.getStoreId(),
                     StockMovementKind.ADJUSTMENT, -(after.getQuantity() - before.getQuantity()),
                     command.actorId(), "Correction vente " + sale.getId(),

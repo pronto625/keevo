@@ -1,5 +1,6 @@
 package com.keevo.admin.subscription.application.service;
 
+import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.admin.subscription.adapter.out.persistence.JdbcTenantPaymentRepository;
 import com.keevo.admin.subscription.domain.model.PaymentMethod;
@@ -9,8 +10,7 @@ import com.keevo.admin.subscription.domain.port.in.DowngradeToFreeCommand;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.TokenRevocationPort;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
-import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.infrastructure.scheduling.PlanTypeRealignJob;

@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.adapter.in.web;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,17 @@ import java.util.Optional;
  */
 @ExtendWith(MockitoExtension.class)
 class ProductControllerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock
     private CreateProductUseCase createProductUseCase;
@@ -391,7 +403,7 @@ class ProductControllerTest {
         UUID productId = UUID.randomUUID();
         UUID supplierId = UUID.randomUUID();
         UUID otherProductId = UUID.randomUUID();
-        when(supplierQueryPort.findByProductId(productId)).thenReturn(Optional.of(
+        when(supplierQueryPort.findByProductId(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(
                 new com.keevo.crm.api.SupplierView(supplierId, "Distributeur SA", "+237690000099",
                         "contact@distrib.cm", false, List.of(productId, otherProductId),
                         Instant.parse("2026-01-01T10:00:00Z"), Instant.parse("2026-01-02T10:00:00Z"))));
@@ -413,7 +425,7 @@ class ProductControllerTest {
     @DisplayName("GET /api/v1/products/{id}/supplier returns 404 SUPPLIER_NOT_FOUND when none is linked")
     void get_product_supplier_returns_404_when_none_linked() throws Exception {
         UUID productId = UUID.randomUUID();
-        when(supplierQueryPort.findByProductId(productId)).thenReturn(Optional.empty());
+        when(supplierQueryPort.findByProductId(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.empty());
 
         mockMvc.perform(get("/api/v1/products/{id}/supplier", productId))
                 .andExpect(status().isNotFound())

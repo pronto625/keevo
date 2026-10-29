@@ -1,7 +1,7 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;

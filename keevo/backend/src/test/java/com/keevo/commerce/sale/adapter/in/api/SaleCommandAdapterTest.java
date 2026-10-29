@@ -17,6 +17,7 @@ import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,6 +38,17 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 class SaleCommandAdapterTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     private final RecordSaleUseCase record = mock(RecordSaleUseCase.class);
     private final ValidateSaleUseCase validate = mock(ValidateSaleUseCase.class);
@@ -60,7 +72,7 @@ class SaleCommandAdapterTest {
         UUID variant = UUID.randomUUID();
         Instant occurredAt = Instant.parse("2026-10-29T10:00:00Z");
 
-        adapter.recordSale(new RecordSaleInput(SALE, ACTOR, STORE, client, SalePaymentMode.MOBILE_MONEY, "MM-42",
+        adapter.recordSale(TenantContext.getCurrentTenant(), new RecordSaleInput(SALE, ACTOR, STORE, client, SalePaymentMode.MOBILE_MONEY, "MM-42",
                 500, SaleState.PENDING_VALIDATION,
                 List.of(new SaleLineInput(item, product, variant, "Pagne", 3000, 2500, 2)), occurredAt, true));
 
@@ -73,7 +85,7 @@ class SaleCommandAdapterTest {
 
     @Test
     void recordSale_nullRequestedStatus_staysNull() {
-        adapter.recordSale(new RecordSaleInput(SALE, ACTOR, STORE, null, SalePaymentMode.CASH, null, 0, null,
+        adapter.recordSale(TenantContext.getCurrentTenant(), new RecordSaleInput(SALE, ACTOR, STORE, null, SalePaymentMode.CASH, null, 0, null,
                 List.of(), null, false));
 
         var captor = ArgumentCaptor.forClass(RecordSaleCommand.class);
@@ -86,7 +98,7 @@ class SaleCommandAdapterTest {
     void recordSale_insufficientStock_propagatesTheDomainError() {
         doThrow(new DomainException(ErrorCode.INSUFFICIENT_STOCK, "short")).when(record).recordSale(any());
 
-        assertThatThrownBy(() -> adapter.recordSale(new RecordSaleInput(SALE, ACTOR, STORE, null,
+        assertThatThrownBy(() -> adapter.recordSale(TenantContext.getCurrentTenant(), new RecordSaleInput(SALE, ACTOR, STORE, null,
                 SalePaymentMode.CASH, null, 0, null, List.of(), null, false)))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INSUFFICIENT_STOCK);
@@ -98,7 +110,7 @@ class SaleCommandAdapterTest {
         Map<UUID, UUID> remap = Map.of(UUID.randomUUID(), UUID.randomUUID());
         Map<UUID, Integer> initial = Map.of(UUID.randomUUID(), 3);
 
-        adapter.validateSale(new ValidateSaleInput(SALE, ACTOR, assigned, "justification", remap, initial));
+        adapter.validateSale(TenantContext.getCurrentTenant(), new ValidateSaleInput(SALE, ACTOR, assigned, "justification", remap, initial));
 
         verify(validate).validateSale(new ValidateSaleCommand(SALE, ACTOR, assigned, "justification", remap, initial));
     }
@@ -107,7 +119,7 @@ class SaleCommandAdapterTest {
     void cancelSale_passesEveryFieldToTheUseCase() {
         UUID assigned = UUID.randomUUID();
 
-        adapter.cancelSale(new CancelSaleInput(SALE, ACTOR, assigned, "erreur de saisie", true));
+        adapter.cancelSale(TenantContext.getCurrentTenant(), new CancelSaleInput(SALE, ACTOR, assigned, "erreur de saisie", true));
 
         verify(cancel).cancelPendingSale(new CancelPendingSaleCommand(SALE, ACTOR, assigned, "erreur de saisie", true));
     }
@@ -150,5 +162,15 @@ class SaleCommandAdapterTest {
     private static void assertValidationError(org.assertj.core.api.ThrowableAssert.ThrowingCallable call) {
         assertThatThrownBy(call).isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.cancelSale("kv_other1", new CancelSaleInput(SALE, ACTOR, null, null, true)))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.cancelSale(null, new CancelSaleInput(SALE, ACTOR, null, null, true)))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(record, validate, cancel);
     }
 }

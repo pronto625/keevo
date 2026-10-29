@@ -17,9 +17,9 @@ import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.SectorType;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.NotificationPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.out.StoreRepository;
 import org.junit.jupiter.api.BeforeEach;

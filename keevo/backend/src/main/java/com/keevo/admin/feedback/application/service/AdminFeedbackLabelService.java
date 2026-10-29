@@ -1,7 +1,7 @@
 package com.keevo.admin.feedback.application.service;
 
 import com.keevo.admin.AdminLabels;
-import com.keevo.feedback.feedback.domain.model.Feedback;
+import com.keevo.feedback.api.FeedbackView;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,10 +59,10 @@ public class AdminFeedbackLabelService {
      * Labels keyed by feedback id, for every feedback of the list. Deliberately NOT
      * {@code @Transactional}: a broken company schema must not abort (25P02) the next ones.
      */
-    public Map<UUID, FeedbackLabels> labels(Collection<Feedback> feedback) {
+    public Map<UUID, FeedbackLabels> labels(Collection<FeedbackView> feedback) {
         if (feedback.isEmpty()) return Map.of();
 
-        Set<String> schemas = feedback.stream().map(Feedback::getTenantId)
+        Set<String> schemas = feedback.stream().map(FeedbackView::tenantSchema)
                 .filter(TenantSchema::isValid)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
@@ -93,9 +93,9 @@ public class AdminFeedbackLabelService {
             }
 
             Map<String, Set<UUID>> usersBySchema = new LinkedHashMap<>();
-            for (Feedback f : feedback) {
-                if (tenantNames.containsKey(f.getTenantId())) {
-                    usersBySchema.computeIfAbsent(f.getTenantId(), k -> new LinkedHashSet<>()).add(f.getUserId());
+            for (FeedbackView f : feedback) {
+                if (tenantNames.containsKey(f.tenantSchema())) {
+                    usersBySchema.computeIfAbsent(f.tenantSchema(), k -> new LinkedHashSet<>()).add(f.userId());
                 }
             }
             usersBySchema.forEach((schema, users) ->
@@ -103,18 +103,18 @@ public class AdminFeedbackLabelService {
         }
 
         Map<UUID, FeedbackLabels> out = new HashMap<>();
-        for (Feedback f : feedback) {
-            String schema = f.getTenantId();
+        for (FeedbackView f : feedback) {
+            String schema = f.tenantSchema();
             String tenantName = tenantNames.get(schema);
             if (tenantName == null) {
-                out.put(f.getId(), new FeedbackLabels(DELETED_TENANT, UNKNOWN_USER));
+                out.put(f.id(), new FeedbackLabels(DELETED_TENANT, UNKNOWN_USER));
                 continue;
             }
-            String name = employeeNames.getOrDefault(schema, Map.of()).get(f.getUserId());
+            String name = employeeNames.getOrDefault(schema, Map.of()).get(f.userId());
             String user = name != null ? name
-                    : owners.getOrDefault(schema, Set.of()).contains(f.getUserId()) ? OWNER
+                    : owners.getOrDefault(schema, Set.of()).contains(f.userId()) ? OWNER
                     : UNKNOWN_USER;
-            out.put(f.getId(), new FeedbackLabels(tenantName, user));
+            out.put(f.id(), new FeedbackLabels(tenantName, user));
         }
         return out;
     }

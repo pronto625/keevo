@@ -10,5 +10,5 @@ public interface StockQueryPort {
      *
      * @param variantId null → the simple-product (no variant) level
      */
-    int availableQuantity(UUID productId, UUID variantId, UUID storeId);
+    int availableQuantity(String tenantSchema, UUID productId, UUID variantId, UUID storeId);
 }

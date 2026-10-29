@@ -8,6 +8,7 @@ import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityUseCase
 import com.keevo.inventory.stock.domain.port.out.MultiStoreStockRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,7 +37,7 @@ public class GetCrossStoreAvailabilityService implements GetCrossStoreAvailabili
     @Override
     @Transactional(readOnly = true)
     public Result execute(GetCrossStoreAvailabilityQuery query) {
-        ProductView product = productQuery.findById(query.productId())
+        ProductView product = productQuery.findById(TenantContext.getCurrentTenant(), query.productId())
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + query.productId()));
 

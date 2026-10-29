@@ -7,8 +7,8 @@ import java.util.UUID;
 public interface CountingQueryPort {
 
     /** Store of a session, empty when the session does not exist. */
-    Optional<UUID> findSessionStoreId(UUID sessionId);
+    Optional<UUID> findSessionStoreId(String tenantSchema, UUID sessionId);
 
     /** True when the session exists and is already VALIDATED. */
-    boolean isSessionValidated(UUID sessionId);
+    boolean isSessionValidated(String tenantSchema, UUID sessionId);
 }

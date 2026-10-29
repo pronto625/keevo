@@ -4,6 +4,7 @@ import com.keevo.inventory.api.TransferCommandPort;
 import com.keevo.inventory.api.TransferInput;
 import com.keevo.inventory.transfer.domain.port.in.TransferStockCommand;
 import com.keevo.inventory.transfer.domain.port.in.TransferStockUseCase;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -22,7 +23,8 @@ class TransferCommandAdapter implements TransferCommandPort {
     }
 
     @Override
-    public UUID transfer(TransferInput in) {
+    public UUID transfer(String tenantSchema, TransferInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         return transferStockUseCase.execute(new TransferStockCommand(
                 in.sourceStoreId(), in.destinationStoreId(), in.productId(), in.variantId(),
                 in.quantity(), in.actorId(), in.notes(), in.clientId())).getId();

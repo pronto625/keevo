@@ -41,6 +41,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class StockControllerTest {
 
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();

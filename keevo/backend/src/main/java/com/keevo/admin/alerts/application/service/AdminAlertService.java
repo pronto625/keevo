@@ -17,7 +17,7 @@ import com.keevo.admin.platform.domain.model.SystemHealth;
 import com.keevo.admin.platform.domain.port.in.GetSystemHealthUseCase;
 import com.keevo.admin.subscription.domain.model.PlanAlert;
 import com.keevo.admin.subscription.domain.port.in.ListPlanAlertsUseCase;
-import com.keevo.feedback.feedback.domain.port.in.HandleFeedbackUseCase;
+import com.keevo.feedback.api.FeedbackInboxPort;
 import com.keevo.identity.api.AccountDeletionPolicy;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -101,7 +101,7 @@ public class AdminAlertService implements ListAdminAlertsUseCase, HandleAdminAle
     private final AlertAckRepository acks;
     private final ListPlanAlertsUseCase planAlerts;
     private final GetSystemHealthUseCase health;
-    private final HandleFeedbackUseCase handleFeedback;
+    private final FeedbackInboxPort feedbackInbox;
     private final Clock clock;
 
     private final ReentrantLock feedLock = new ReentrantLock();
@@ -110,12 +110,12 @@ public class AdminAlertService implements ListAdminAlertsUseCase, HandleAdminAle
 
     public AdminAlertService(AlertSourcesPort sources, AlertAckRepository acks,
                              ListPlanAlertsUseCase planAlerts, GetSystemHealthUseCase health,
-                             HandleFeedbackUseCase handleFeedback, Clock clock) {
+                             FeedbackInboxPort feedbackInbox, Clock clock) {
         this.sources = sources;
         this.acks = acks;
         this.planAlerts = planAlerts;
         this.health = health;
-        this.handleFeedback = handleFeedback;
+        this.feedbackInbox = feedbackInbox;
         this.clock = clock;
     }
 
@@ -158,7 +158,7 @@ public class AdminAlertService implements ListAdminAlertsUseCase, HandleAdminAle
             return;
         }
         try {
-            handleFeedback.markHandled(id, actorId);
+            feedbackInbox.markHandled(id, actorId);
         } catch (DomainException e) {
             log.warn("Alerts: feedback of a handled alert not found ({})", e.getErrorCode());
         }

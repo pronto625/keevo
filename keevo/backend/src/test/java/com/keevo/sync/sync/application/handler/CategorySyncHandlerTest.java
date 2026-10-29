@@ -5,6 +5,7 @@ import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.catalog.api.CategoryView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -25,6 +26,17 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CategorySyncHandlerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private CategoryQueryPort categoryQuery;
     @Mock private CategoryCommandPort categoryCommand;
@@ -54,7 +66,7 @@ class CategorySyncHandlerTest {
     @Test
     void handle_createCategory_createsViaUseCaseWithClientProvidedUUID() {
         var catId = UUID.randomUUID();
-        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
+        when(categoryQuery.findById(TENANT_ID, catId)).thenReturn(Optional.empty());
         when(categoryCommand.createWithId(any(), any(), any(), any(), any()))
                 .thenReturn(sampleCategory(catId, "Électronique", true));
 
@@ -65,14 +77,14 @@ class CategorySyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(catId.toString());
-        verify(categoryCommand).createWithId(catId, "Électronique", null, ACTOR_ID, TENANT_ID);
+        verify(categoryCommand).createWithId(TENANT_ID, catId, "Électronique", null, ACTOR_ID);
     }
 
     @Test
     void handle_createCategory_withParentId_passesParentToUseCase() {
         var parentId = UUID.randomUUID();
         var catId = UUID.randomUUID();
-        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
+        when(categoryQuery.findById(TENANT_ID, catId)).thenReturn(Optional.empty());
         when(categoryCommand.createWithId(any(), any(), any(), any(), any()))
                 .thenReturn(sampleCategory(catId, "Sous-catégorie", true));
 
@@ -83,13 +95,13 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(categoryCommand).createWithId(catId, "Sous-catégorie", parentId, ACTOR_ID, TENANT_ID);
+        verify(categoryCommand).createWithId(TENANT_ID, catId, "Sous-catégorie", parentId, ACTOR_ID);
     }
 
     @Test
     void handle_createCategory_idempotent_skipsWhenCategoryAlreadyExists() {
         var catId = UUID.randomUUID();
-        when(categoryQuery.findById(catId)).thenReturn(Optional.of(sampleCategory(catId, "Électronique", true)));
+        when(categoryQuery.findById(TENANT_ID, catId)).thenReturn(Optional.of(sampleCategory(catId, "Électronique", true)));
 
         var op = new SyncOperation("op-3", "CREATE_CATEGORY", catId.toString(),
                 Map.of("id", catId.toString(), "name", "Électronique"), Instant.now());
@@ -104,8 +116,8 @@ class CategorySyncHandlerTest {
     void handle_createCategory_dedupByNameAndParent_returnsExistingId_noCreate() {
         var catId = UUID.randomUUID();
         var existingId = UUID.randomUUID();
-        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
-        when(categoryQuery.findByNameAndParentId("Électronique", null))
+        when(categoryQuery.findById(TENANT_ID, catId)).thenReturn(Optional.empty());
+        when(categoryQuery.findByNameAndParentId(TENANT_ID, "Électronique", null))
                 .thenReturn(Optional.of(sampleCategory(existingId, "Électronique", true)));
 
         var op = new SyncOperation("op-3b", "CREATE_CATEGORY", catId.toString(),
@@ -147,9 +159,9 @@ class CategorySyncHandlerTest {
     void handle_toggleCategory_whenCurrentDiffersFromTarget_callsToggle() {
         var catId = UUID.randomUUID();
         // Current: active=true, target: isActive=false → toggle needed
-        when(categoryQuery.findById(catId))
+        when(categoryQuery.findById(TENANT_ID, catId))
                 .thenReturn(Optional.of(sampleCategory(catId, "Vêtements", true)));
-        when(categoryCommand.toggleActive(catId, ACTOR_ID, TENANT_ID)).thenReturn(sampleCategory(catId, "Vêtements", false));
+        when(categoryCommand.toggleActive(TENANT_ID, catId, ACTOR_ID)).thenReturn(sampleCategory(catId, "Vêtements", false));
 
         var op = new SyncOperation("op-6", "TOGGLE_CATEGORY", catId.toString(),
                 Map.of("categoryId", catId.toString(), "isActive", false), Instant.now());
@@ -157,14 +169,14 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(categoryCommand).toggleActive(catId, ACTOR_ID, TENANT_ID);
+        verify(categoryCommand).toggleActive(TENANT_ID, catId, ACTOR_ID);
     }
 
     @Test
     void handle_toggleCategory_whenAlreadyInTargetState_noToggle() {
         var catId = UUID.randomUUID();
         // Current: active=true, target: isActive=true → no-op
-        when(categoryQuery.findById(catId))
+        when(categoryQuery.findById(TENANT_ID, catId))
                 .thenReturn(Optional.of(sampleCategory(catId, "Vêtements", true)));
 
         var op = new SyncOperation("op-7", "TOGGLE_CATEGORY", catId.toString(),
@@ -179,7 +191,7 @@ class CategorySyncHandlerTest {
     @Test
     void handle_toggleCategory_categoryNotFound_returnsApplied() {
         var catId = UUID.randomUUID();
-        when(categoryQuery.findById(catId)).thenReturn(Optional.empty());
+        when(categoryQuery.findById(TENANT_ID, catId)).thenReturn(Optional.empty());
 
         var op = new SyncOperation("op-8", "TOGGLE_CATEGORY", catId.toString(),
                 Map.of("categoryId", catId.toString(), "isActive", false), Instant.now());
@@ -226,7 +238,7 @@ class CategorySyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(categoryCommand).rename(eq(catId), any(), eq(ACTOR_ID), eq(TENANT_ID));
+        verify(categoryCommand).rename(eq(TENANT_ID), eq(catId), any(), eq(ACTOR_ID));
     }
 
     @Test

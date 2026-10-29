@@ -3,7 +3,7 @@ package com.keevo.catalog.product.adapter.in.web;
 import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
 import com.keevo.catalog.product.application.usecase.GenerateCsvTemplateUseCase;
 import com.keevo.catalog.product.application.usecase.ImportCsvProductsUseCase;
-import com.keevo.messaging.notification.application.usecase.GetPendingDraftsCountUseCase;
+import com.keevo.messaging.api.DraftValidationQueryPort;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import com.keevo.shared.infrastructure.security.SecurityConfig;
 import jakarta.servlet.FilterChain;
@@ -49,7 +49,7 @@ class ProductImportControllerSecurityTest {
     @MockitoBean ImportCsvProductsUseCase importUseCase;
     @MockitoBean CreateDraftProductUseCase draftUseCase;
     @MockitoBean GenerateCsvTemplateUseCase templateUseCase;
-    @MockitoBean GetPendingDraftsCountUseCase pendingCountUseCase;
+    @MockitoBean DraftValidationQueryPort pendingCountUseCase;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     @AfterEach
@@ -84,13 +84,13 @@ class ProductImportControllerSecurityTest {
     @DisplayName("OWNER GET /drafts/count → 200")
     void owner_draftsCount_returns200() throws Exception {
         filterAs(List.of(new SimpleGrantedAuthority("ROLE_OWNER")));
-        when(pendingCountUseCase.execute("OWNER")).thenReturn(2L);
+        when(pendingCountUseCase.countPending(org.mockito.ArgumentMatchers.any())).thenReturn(2L);
 
         mockMvc.perform(get("/api/v1/products/drafts/count"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").value(2));
 
-        verify(pendingCountUseCase).execute("OWNER");
+        verify(pendingCountUseCase).countPending(org.mockito.ArgumentMatchers.any());
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

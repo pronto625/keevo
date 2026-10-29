@@ -1,5 +1,7 @@
 package com.keevo.reporting.report.adapter.in.rest;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.commerce.api.DayClosureQueryPort;
 import com.keevo.commerce.api.DayClosureView;
@@ -18,9 +20,7 @@ import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase.ReportH
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.reporting.report.domain.port.in.ResendReportUseCase.ResendReportCommand;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.store.api.StoreQueryPort;
 import io.swagger.v3.oas.annotations.Operation;
@@ -157,7 +157,7 @@ public class ReportController {
         String tenantId = TenantContext.getCurrentTenant();
         LocalDate targetDate = date != null ? LocalDate.parse(date) : LocalDate.now(WAT);
 
-        java.util.List<DayClosureView> closures = dayClosureQueryPort.findByStoreAndDate(storeId, targetDate);
+        java.util.List<DayClosureView> closures = dayClosureQueryPort.findByStoreAndDate(TenantContext.getCurrentTenant(), storeId, targetDate);
         if (closures.isEmpty()) {
             throw new DomainException(ErrorCode.NOT_FOUND,
                     "Aucune clôture trouvée pour storeId=" + storeId + " date=" + targetDate);

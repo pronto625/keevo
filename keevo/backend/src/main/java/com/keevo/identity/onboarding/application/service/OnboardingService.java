@@ -73,7 +73,7 @@ public class OnboardingService implements CompleteOnboardingUseCase {
 
         // 2-3. Seed the template's root categories (active, non-custom) through the catalog API
         Instant now = Instant.now();
-        int seededCategories = categoryCommand.seedTemplateCategories(strategy.getDefaultCategories());
+        int seededCategories = categoryCommand.seedTemplateCategories(TenantContext.getCurrentTenant(), strategy.getDefaultCategories());
 
         // 4. Update store name from default "Ma Boutique" to merchant's choice
         storeRepository.updateStoreName(command.storeName());

@@ -5,7 +5,7 @@ import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;

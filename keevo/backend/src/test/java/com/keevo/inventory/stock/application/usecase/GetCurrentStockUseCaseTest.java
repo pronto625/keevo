@@ -9,6 +9,7 @@ import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,6 +31,17 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class GetCurrentStockUseCaseTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private ProductQueryPort productQuery;
     @Mock private StockLevelRepository stockLevelRepository;
@@ -56,7 +68,7 @@ class GetCurrentStockUseCaseTest {
         ProductView product = makeProduct(5);
         List<StockLevel> levels = List.of(makeLevel(10));
 
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(product));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(product));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(levels);
 
         GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
@@ -68,7 +80,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void should_throw_PRODUCT_NOT_FOUND_when_product_absent() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.empty());
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> useCase.execute(PRODUCT_ID))
             .isInstanceOf(DomainException.class)
@@ -80,7 +92,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void should_return_empty_levels_when_product_never_stocked() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(makeProduct(0)));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(0)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of());
 
         GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
@@ -90,7 +102,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void isLowInAnyStore_should_return_false_when_threshold_is_zero() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(makeProduct(0)));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(0)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of(makeLevel(0)));
 
         GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
@@ -100,7 +112,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void isLowInAnyStore_should_return_true_when_quantity_at_threshold() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of(makeLevel(5)));
 
         GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
@@ -110,7 +122,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void isLowInAnyStore_should_return_true_when_quantity_below_threshold() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(makeProduct(10)));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(10)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(List.of(makeLevel(3)));
 
         GetCurrentStockUseCase.StockSnapshot result = useCase.execute(PRODUCT_ID);
@@ -120,7 +132,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void isLowInAnyStore_should_return_false_when_all_quantities_above_threshold() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(
             List.of(makeLevel(6), makeLevel(20)));
 
@@ -131,7 +143,7 @@ class GetCurrentStockUseCaseTest {
 
     @Test
     void isLowInAnyStore_should_return_true_when_at_least_one_store_is_low() {
-        when(productQuery.findById(PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(makeProduct(5)));
         when(stockLevelRepository.findAllByProduct(PRODUCT_ID)).thenReturn(
             List.of(makeLevel(20), makeLevel(2))); // one above, one below
 

@@ -6,6 +6,8 @@ import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -23,6 +25,8 @@ import java.util.UUID;
  */
 public abstract class AbstractSyncOperationHandler implements SyncOperationHandler {
 
+    private static final Logger log = LoggerFactory.getLogger(AbstractSyncOperationHandler.class);
+
     @Override
     public final SyncOperationResult handle(SyncOperation op, UUID actorId, String tenantId) {
         try {
@@ -33,6 +37,9 @@ public abstract class AbstractSyncOperationHandler implements SyncOperationHandl
         } catch (IllegalArgumentException e) {
             return new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null, e.getMessage());
         } catch (Exception e) {
+            // 12.2e: e.g. an IllegalStateException from TenantContext.requireCurrent (tenant claim ≠ bound
+            // tenant) — the device still sees INTERNAL_ERROR, the cause is kept in the server log.
+            log.error("[sync] operation {} ({}) failed unexpectedly", op.operationId(), op.operationType(), e);
             return new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null, "INTERNAL_ERROR");
         }
     }

@@ -2,8 +2,8 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.commerce.sale.domain.event.DayClosedEvent;
 import com.keevo.commerce.api.DayClosureSummary;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreType;

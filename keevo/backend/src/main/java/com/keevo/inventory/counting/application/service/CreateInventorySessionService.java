@@ -74,7 +74,7 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
         // 3. Validate categories if PARTIAL scope
         if (command.scope() == InventoryScope.PARTIAL && command.categoryIds() != null) {
             for (UUID catId : command.categoryIds()) {
-                categoryQuery.findById(catId)
+                categoryQuery.findById(TenantContext.getCurrentTenant(), catId)
                         .orElseThrow(() -> new DomainException(ErrorCode.INVENTORY_INVALID_CATEGORIES,
                                 "Category not found: " + catId));
             }

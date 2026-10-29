@@ -9,6 +9,7 @@ import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -21,6 +22,17 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class SaleQueryAdapterTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     private final SaleRepository repository = mock(SaleRepository.class);
     private final SaleQueryAdapter adapter = new SaleQueryAdapter(repository);
@@ -41,7 +53,7 @@ class SaleQueryAdapterTest {
                 List.of(new SaleItem(itemId, saleId, product, variant, "Pagne", 3000, 3000, 2)));
         when(repository.findById(saleId)).thenReturn(Optional.of(sale));
 
-        assertThat(adapter.findById(saleId)).contains(new SaleView(saleId, store, employee, client,
+        assertThat(adapter.findById(TenantContext.getCurrentTenant(), saleId)).contains(new SaleView(saleId, store, employee, client,
                 SalePaymentMode.MOBILE_MONEY, SaleState.PENDING_VALIDATION, 5500, 500, occurred, created,
                 List.of(new SaleItemView(itemId, product, variant, "Pagne", 3000, 3000, 2))));
     }
@@ -51,6 +63,16 @@ class SaleQueryAdapterTest {
         UUID saleId = UUID.randomUUID();
         when(repository.findById(saleId)).thenReturn(Optional.empty());
 
-        assertThat(adapter.findById(saleId)).isEmpty();
+        assertThat(adapter.findById(TenantContext.getCurrentTenant(), saleId)).isEmpty();
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.findById("kv_other1", java.util.UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.findById(null, java.util.UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(repository);
     }
 }

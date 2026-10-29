@@ -3,6 +3,7 @@ package com.keevo.catalog.category.adapter.in.api;
 import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.catalog.api.CategoryView;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -19,12 +20,14 @@ class CategoryQueryAdapter implements CategoryQueryPort {
     }
 
     @Override
-    public Optional<CategoryView> findById(UUID categoryId) {
+    public Optional<CategoryView> findById(String tenantSchema, UUID categoryId) {
+        TenantContext.requireCurrent(tenantSchema);
         return categoryRepository.findById(categoryId).map(CategoryViews::of);
     }
 
     @Override
-    public Optional<CategoryView> findByNameAndParentId(String name, UUID parentId) {
+    public Optional<CategoryView> findByNameAndParentId(String tenantSchema, String name, UUID parentId) {
+        TenantContext.requireCurrent(tenantSchema);
         return categoryRepository.findByNameAndParentId(name, parentId).map(CategoryViews::of);
     }
 }

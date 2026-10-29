@@ -40,7 +40,7 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
 
         return switch (operation.operationType()) {
             case "UPDATE_CLIENT" -> {
-                var client = clientCommand.update(new UpdateClientInput(
+                var client = clientCommand.update(tenantId, new UpdateClientInput(
                         clientId,
                         (String) p.get("name"),
                         (String) p.get("phone"),
@@ -51,13 +51,13 @@ public class ClientSyncHandler extends AbstractSyncOperationHandler {
                         client.id().toString(), null);
             }
             case "ARCHIVE_CLIENT" -> {
-                clientCommand.archive(clientId, actorId, tenantId);
+                clientCommand.archive(tenantId, clientId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         clientId.toString(), null);
             }
             case "UNARCHIVE_CLIENT" -> {
                 // Same access rules as ARCHIVE_CLIENT (no role restriction).
-                clientCommand.unarchive(clientId, actorId, tenantId);
+                clientCommand.unarchive(tenantId, clientId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         clientId.toString(), null);
             }

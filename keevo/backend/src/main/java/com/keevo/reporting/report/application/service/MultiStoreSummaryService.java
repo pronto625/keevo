@@ -1,12 +1,12 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

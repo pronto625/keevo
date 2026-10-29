@@ -1,16 +1,17 @@
 package com.keevo.catalog.product.application.usecase;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.messaging.notification.adapter.in.api.DraftValidationApiTestSupport;
 import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
 import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
 import com.keevo.shared.application.port.TransactionLockPort;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.identity.api.PlanType;
 import com.keevo.subscription.api.ProductCountPort;
@@ -67,7 +68,7 @@ class CreateDraftProductUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new CreateDraftProductUseCase(
-                productRepository, draftRepository, productCountPort,
+                productRepository, DraftValidationApiTestSupport.commandPort(draftRepository), productCountPort,
                 SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), eventPublisher, transactionLock);
     }
 

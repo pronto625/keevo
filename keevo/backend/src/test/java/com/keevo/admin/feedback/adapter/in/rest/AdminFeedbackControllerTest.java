@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService;
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService.FeedbackLabels;
+import com.keevo.feedback.feedback.adapter.in.api.FeedbackApiTestSupport;
 import com.keevo.feedback.feedback.domain.model.Feedback;
 import com.keevo.feedback.feedback.domain.port.in.HandleFeedbackUseCase;
 import com.keevo.shared.domain.exception.DomainException;
@@ -83,7 +84,8 @@ class AdminFeedbackControllerTest {
      * {@link GlobalExceptionHandler} maps to 403.
      */
     private Object securedController() {
-        ProxyFactory factory = new ProxyFactory(new AdminFeedbackController(listFeedbackUseCase, handleFeedbackUseCase, labelService));
+        ProxyFactory factory = new ProxyFactory(new AdminFeedbackController(
+                FeedbackApiTestSupport.inboxPort(listFeedbackUseCase, handleFeedbackUseCase), labelService));
         factory.setProxyTargetClass(true);
         factory.addAdvisor(AuthorizationManagerBeforeMethodInterceptor.preAuthorize());
         return factory.getProxy();
@@ -168,7 +170,7 @@ class AdminFeedbackControllerTest {
                 "1.4.2", "android", "/pos", Instant.parse("2026-10-12T09:00:00Z"), "HIGH");
         when(listFeedbackUseCase.list(new ListFeedbackQuery(0, 20, null, null, "BUG", null)))
                 .thenReturn(new PageImpl<>(List.of(feedback), PageRequest.of(0, 20), 1));
-        when(labelService.labels(List.of(feedback)))
+        when(labelService.labels(List.of(FeedbackApiTestSupport.view(feedback))))
                 .thenReturn(java.util.Map.of(id, new FeedbackLabels("Boutique Awa", "Awa Diallo")));
 
         mockMvc.perform(get("/api/v1/admin/feedback?type=BUG&handled=all"))

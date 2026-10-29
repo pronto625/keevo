@@ -2,8 +2,8 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
 import com.keevo.messaging.notification.application.strategy.TransferNotificationRecipientStrategy;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

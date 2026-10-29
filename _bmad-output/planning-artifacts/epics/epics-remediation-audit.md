@@ -1311,6 +1311,14 @@ Scope: in landscape with the soft keyboard open, the onboarding "Comment s'appel
 
 **AC (interim):** Given the app in landscape with the keyboard open, when the owner reaches any onboarding step, then no overflow stripe appears and the primary button stays reachable.
 
+## Story 16.25: Écran « Abonnement » — compteur de produits à 0 — **[A]**
+
+Scope: on the owner's subscription screen (« Utilisation »), « Produits » shows 0 while the tenant has 2 active products; the backend `GET /api/v1/subscription/me` returns `currentProducts: 2`, and the screen issues no call to it (counter computed locally). Seen during the 2026-10-29 live run of the refactor (app untouched by the refactor, so pre-existing V1).
+
+- [ ] [Deferred-from: live device run 12-2e, 2026-10-29] Subscription usage « Produits » counter shows 0 [keevo/app/lib/features/subscription] — compare with `/subscription/me`; decide local vs server source
+
+**AC (interim):** Given a tenant with N active products, when the owner opens the subscription screen, then « Produits » shows N.
+
 ## Story 18.1: Socle du module export (backend) — **[C]**
 
 As an owner, I want to export my data as CSV or Excel, so that I can use it outside Keevo.

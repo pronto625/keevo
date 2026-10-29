@@ -58,9 +58,9 @@ public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
         if (productId.equals(movementId)) movementId = null;
 
         if ("RECORD_STOCK_ENTRY".equals(operation.operationType())) {
-            stockCommand.recordEntry(productId, variantId, storeId, quantity, actorId, notes, movementId);
+            stockCommand.recordEntry(tenantId, productId, variantId, storeId, quantity, actorId, notes, movementId);
         } else {
-            stockCommand.adjustTo(productId, variantId, storeId, quantity, actorId, notes, movementId);
+            stockCommand.adjustTo(tenantId, productId, variantId, storeId, quantity, actorId, notes, movementId);
         }
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED, null, null);

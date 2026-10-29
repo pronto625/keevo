@@ -4,6 +4,7 @@ import com.keevo.catalog.api.InitialStockPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.inventory.api.StockMovementInput;
 import com.keevo.inventory.api.StockMovementKind;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -24,8 +25,9 @@ class CatalogInitialStockAdapter implements InitialStockPort {
     }
 
     @Override
-    public void recordInitialStock(UUID productId, UUID storeId, int quantity, UUID actorId, String notes) {
-        stockCommandPort.recordMovement(new StockMovementInput(
+    public void recordInitialStock(String tenantSchema, UUID productId, UUID storeId, int quantity, UUID actorId, String notes) {
+        TenantContext.requireCurrent(tenantSchema);
+        stockCommandPort.recordMovement(tenantSchema, new StockMovementInput(
                 productId, null, storeId, StockMovementKind.STOCK_ENTRY, quantity, actorId, notes));
     }
 }

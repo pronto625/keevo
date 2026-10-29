@@ -13,5 +13,5 @@ public interface DayClosureCommandPort {
      * @return the recorded closure
      * @throws com.keevo.shared.domain.exception.DomainException DAY_ALREADY_CLOSED
      */
-    DayClosureView closeDay(CloseDayInput input);
+    DayClosureView closeDay(String tenantSchema, CloseDayInput input);
 }

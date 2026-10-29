@@ -4,6 +4,7 @@ import com.keevo.crm.api.ClientCommandPort;
 import com.keevo.crm.api.ClientView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class ClientSyncHandlerTest {
 
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private ClientCommandPort clientCommand;
 
     private ClientSyncHandler handler;
@@ -38,7 +50,7 @@ class ClientSyncHandlerTest {
     @Test
     void handle_updateClient_delegatesToUpdateClientPort() {
         var clientId = UUID.randomUUID();
-        when(clientCommand.update(any())).thenReturn(
+        when(clientCommand.update(any(), any())).thenReturn(
                 new ClientView(clientId, "Updated Name", "+237600000001", null, null, false, Instant.now(), Instant.now()));
 
         var op = new SyncOperation("op-1", "UPDATE_CLIENT", clientId.toString(),
@@ -48,7 +60,7 @@ class ClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(clientCommand).update(any());
+        verify(clientCommand).update(eq(TENANT_ID), any());
     }
 
     @Test
@@ -60,7 +72,7 @@ class ClientSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(clientCommand).archive(any(), any(), any());
+        verify(clientCommand).archive(eq(TENANT_ID), any(), any());
     }
 
     @Test
@@ -71,7 +83,7 @@ class ClientSyncHandlerTest {
                 Instant.now());
 
         doThrow(new DomainException(ErrorCode.CLIENT_NOT_FOUND))
-                .when(clientCommand).update(any());
+                .when(clientCommand).update(any(), any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
@@ -94,7 +106,7 @@ class ClientSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(clientId.toString());
-        verify(clientCommand).unarchive(clientId, ACTOR_ID, TENANT_ID);
+        verify(clientCommand).unarchive(TENANT_ID, clientId, ACTOR_ID);
         verify(clientCommand, never()).archive(any(), any(), any());
     }
 

@@ -7,6 +7,7 @@ import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
@@ -38,13 +39,14 @@ public class PartialScopeResolver implements InventoryScopeResolver {
     @Override
     public List<InventoryProductRow> resolveProducts(UUID storeId, List<UUID> categoryIds,
                                                       List<InventoryCount> existingCounts) {
+        String tenantSchema = TenantContext.getCurrentTenant();
         if (categoryIds == null || categoryIds.isEmpty()) return List.of();
 
-        List<ProductView> products = productQuery.findByCategoryIds(categoryIds);
+        List<ProductView> products = productQuery.findByCategoryIds(tenantSchema, categoryIds);
         if (products.isEmpty()) return List.of();
 
         List<StockLevel> stockLevels = stockLevelRepository.findAllByStoreId(storeId);
-        Map<UUID, String> photoUrls = productQuery.findPhotoUrlsByIds(
+        Map<UUID, String> photoUrls = productQuery.findPhotoUrlsByIds(tenantSchema,
                 products.stream().map(ProductView::id).toList());
 
         return InventoryRowsAssembler.assemble(products, stockLevels, photoUrls, existingCounts);

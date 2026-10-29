@@ -14,5 +14,5 @@ public interface TransferCommandPort {
      * @return the id of the created (or replayed) transfer
      * @throws com.keevo.shared.domain.exception.DomainException on any transfer rule violation
      */
-    UUID transfer(TransferInput input);
+    UUID transfer(String tenantSchema, TransferInput input);
 }

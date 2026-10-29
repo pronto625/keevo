@@ -1,5 +1,7 @@
 package com.keevo.inventory.stock.domain.service;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.inventory.stock.domain.entity.MovementType;
@@ -9,9 +11,7 @@ import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
 import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -127,7 +127,7 @@ public class StockOperationService {
                                           UUID movementId, boolean allowNegative,
                                           UUID counterpartStoreId) {
         // 1. Load product (for name + threshold)
-        var product = productQuery.findById(productId)
+        var product = productQuery.findById(TenantContext.getCurrentTenant(), productId)
                 .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
                         "Product not found: " + productId));
 

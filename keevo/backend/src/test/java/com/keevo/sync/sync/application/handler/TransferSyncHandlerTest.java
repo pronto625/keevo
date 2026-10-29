@@ -4,6 +4,7 @@ import com.keevo.inventory.api.TransferCommandPort;
 import com.keevo.inventory.api.TransferInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -32,6 +33,17 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class TransferSyncHandlerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private TransferCommandPort transferCommand;
 
@@ -83,12 +95,12 @@ class TransferSyncHandlerTest {
         // OWNER is never scoped: any source store of the tenant is APPLIED.
         authenticateAsOwner();
         var transferId = UUID.randomUUID();
-        when(transferCommand.transfer(any())).thenReturn(transferId);
+        when(transferCommand.transfer(any(), any())).thenReturn(transferId);
 
         var result = handler.handle(buildOp(), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(transferCommand).transfer(any());
+        verify(transferCommand).transfer(eq(TENANT_ID), any());
     }
 
     // ── Story v1s-12-11 — EMPLOYEE transfers only from their assigned store ──
@@ -97,12 +109,12 @@ class TransferSyncHandlerTest {
     void handle_employeeOwnStore_applied() {
         UUID storeA = UUID.randomUUID();
         authenticateAsEmployee(storeA);
-        when(transferCommand.transfer(any())).thenReturn(UUID.randomUUID());
+        when(transferCommand.transfer(any(), any())).thenReturn(UUID.randomUUID());
 
         var result = handler.handle(buildOp(storeA.toString()), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(transferCommand).transfer(any());
+        verify(transferCommand).transfer(eq(TENANT_ID), any());
     }
 
     @Test
@@ -113,7 +125,7 @@ class TransferSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(transferCommand, never()).transfer(any());
+        verify(transferCommand, never()).transfer(any(), any());
     }
 
     @Test
@@ -127,7 +139,7 @@ class TransferSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(transferCommand, never()).transfer(any());
+        verify(transferCommand, never()).transfer(any(), any());
     }
 
     @Test
@@ -137,7 +149,7 @@ class TransferSyncHandlerTest {
         var result = handler.handle(buildOp("not-a-uuid"), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
-        verify(transferCommand, never()).transfer(any());
+        verify(transferCommand, never()).transfer(any(), any());
     }
 
     @Test
@@ -146,7 +158,7 @@ class TransferSyncHandlerTest {
         var op = buildOp();
 
         doThrow(new DomainException(ErrorCode.INSUFFICIENT_STOCK))
-                .when(transferCommand).transfer(any());
+                .when(transferCommand).transfer(any(), any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
@@ -166,12 +178,12 @@ class TransferSyncHandlerTest {
         // instead of minting a new server-side UUID — prevents a phantom duplicate on pull.
         authenticateAsOwner();
         var op = buildOp();
-        when(transferCommand.transfer(any())).thenReturn(UUID.randomUUID());
+        when(transferCommand.transfer(any(), any())).thenReturn(UUID.randomUUID());
 
         handler.handle(op, ACTOR_ID, TENANT_ID);
 
         ArgumentCaptor<TransferInput> captor = ArgumentCaptor.forClass(TransferInput.class);
-        verify(transferCommand).transfer(captor.capture());
+        verify(transferCommand).transfer(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().clientId()).isEqualTo(UUID.fromString(op.entityId()));
     }
 

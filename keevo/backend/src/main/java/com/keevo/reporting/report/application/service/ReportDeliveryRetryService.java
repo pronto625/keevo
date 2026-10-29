@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.TenantView;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.TenantQueryPort;

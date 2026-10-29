@@ -53,7 +53,7 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
         // CREATE_PRODUCT). Without this, the pull-merge INSERT ... ON CONFLICT(id) inserts a
         // duplicate row instead of updating the original offline record.
         UUID clientId = operation.entityId() != null ? UUID.fromString(operation.entityId()) : null;
-        UUID transferId = transferCommand.transfer(new TransferInput(
+        UUID transferId = transferCommand.transfer(tenantId, new TransferInput(
                 sourceStoreId,
                 UUID.fromString((String) p.get("destinationStoreId")),
                 UUID.fromString((String) p.get("productId")),

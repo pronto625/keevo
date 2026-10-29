@@ -6,6 +6,7 @@ import com.keevo.crm.api.ClientView;
 import com.keevo.crm.api.CreateClientInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,6 +26,17 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CreateClientSyncHandlerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private ClientQueryPort clientQuery;
     @Mock private ClientCommandPort clientCommand;
@@ -47,8 +59,8 @@ class CreateClientSyncHandlerTest {
     @Test
     void handle_createClient_savesWithClientProvidedUUID() {
         var clientId = UUID.randomUUID();
-        when(clientQuery.existsById(clientId)).thenReturn(false);
-        when(clientCommand.createWithId(any())).thenReturn(sampleClient(clientId));
+        when(clientQuery.existsById(TENANT_ID, clientId)).thenReturn(false);
+        when(clientCommand.createWithId(any(), any())).thenReturn(sampleClient(clientId));
 
         var op = new SyncOperation("op-1", "CREATE_CLIENT", clientId.toString(),
                 Map.of("id", clientId.toString(), "name", "Alice Dupont", "phone", "+237690000001",
@@ -61,7 +73,7 @@ class CreateClientSyncHandlerTest {
         assertThat(result.serverEntityId()).isEqualTo(clientId.toString());
         // Created with the exact client-provided UUID (idempotency).
         var captor = ArgumentCaptor.forClass(CreateClientInput.class);
-        verify(clientCommand).createWithId(captor.capture());
+        verify(clientCommand).createWithId(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue())
                 .isEqualTo(new CreateClientInput(clientId, "Alice Dupont", "+237690000001", null, "VIP"));
     }
@@ -69,7 +81,7 @@ class CreateClientSyncHandlerTest {
     @Test
     void handle_createClient_idempotent_skipsWhenClientAlreadyExists() {
         var clientId = UUID.randomUUID();
-        when(clientQuery.existsById(clientId)).thenReturn(true);
+        when(clientQuery.existsById(TENANT_ID, clientId)).thenReturn(true);
 
         var op = new SyncOperation("op-2", "CREATE_CLIENT", clientId.toString(),
                 Map.of("id", clientId.toString(), "name", "Alice Dupont", "phone", "+237690000001"),
@@ -109,8 +121,8 @@ class CreateClientSyncHandlerTest {
     void handle_createClient_invalidPhone_returnsRejected() {
         // The crm rejects a non-E.164 phone with VALIDATION_ERROR.
         var clientId = UUID.randomUUID();
-        when(clientQuery.existsById(clientId)).thenReturn(false);
-        when(clientCommand.createWithId(any()))
+        when(clientQuery.existsById(TENANT_ID, clientId)).thenReturn(false);
+        when(clientCommand.createWithId(any(), any()))
                 .thenThrow(new DomainException(ErrorCode.VALIDATION_ERROR, "Phone must be E.164 format"));
 
         var op = new SyncOperation("op-5", "CREATE_CLIENT", clientId.toString(),

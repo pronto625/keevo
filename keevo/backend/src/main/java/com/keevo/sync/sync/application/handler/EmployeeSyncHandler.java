@@ -1,7 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.identity.api.CreateEmployeeInput;
 import com.keevo.identity.api.EmployeeCommandPort;
@@ -44,7 +43,7 @@ public class EmployeeSyncHandler extends AbstractSyncOperationHandler {
 
         return switch (operation.operationType()) {
             case "CREATE_EMPLOYEE" -> {
-                UUID employeeId = employeeCommand.create(TenantContext.getCurrentTenant(), new CreateEmployeeInput(
+                UUID employeeId = employeeCommand.create(tenantId, new CreateEmployeeInput(
                         actorId,
                         (String) p.get("phoneNumber"),
                         (String) p.get("firstName"),
@@ -56,19 +55,19 @@ public class EmployeeSyncHandler extends AbstractSyncOperationHandler {
             case "REASSIGN_EMPLOYEE" -> {
                 UUID employeeId = UUID.fromString((String) p.get("employeeId"));
                 UUID newStoreId = UUID.fromString((String) p.get("newStoreId"));
-                employeeCommand.reassignStore(TenantContext.getCurrentTenant(), actorId, employeeId, newStoreId);
+                employeeCommand.reassignStore(tenantId, actorId, employeeId, newStoreId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         employeeId.toString(), null);
             }
             case "DEACTIVATE_EMPLOYEE" -> {
                 UUID employeeId = UUID.fromString((String) p.get("employeeId"));
-                employeeCommand.deactivate(TenantContext.getCurrentTenant(), actorId, employeeId);
+                employeeCommand.deactivate(tenantId, actorId, employeeId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         employeeId.toString(), null);
             }
             case "REACTIVATE_EMPLOYEE" -> {
                 UUID employeeId = UUID.fromString((String) p.get("employeeId"));
-                employeeCommand.reactivate(TenantContext.getCurrentTenant(), actorId, employeeId);
+                employeeCommand.reactivate(tenantId, actorId, employeeId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         employeeId.toString(), null);
             }

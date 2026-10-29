@@ -1,7 +1,7 @@
 package com.keevo.admin.feedback.application.service;
 
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService.FeedbackLabels;
-import com.keevo.feedback.feedback.domain.model.Feedback;
+import com.keevo.feedback.api.FeedbackView;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import org.junit.jupiter.api.AfterEach;
@@ -66,25 +66,25 @@ class AdminFeedbackLabelServicePostgresIntegrationTest extends PostgresIntegrati
         jdbc.update("INSERT INTO kv_kfb002.employees (user_id, store_id, first_name, last_name) VALUES (?, ?, 'Moussa', ' Kane ')",
                 employee, storeId);
 
-        Feedback fromBroken = feedback("kv_kfb001", brokenOwner);   // first: its schema error must not spread
-        Feedback fromEmployee = feedback("kv_kfb002", employee);
-        Feedback fromOwner = feedback("kv_kfb002", owner);
-        Feedback fromStranger = feedback("kv_kfb002", UUID.randomUUID());
-        Feedback fromDeleted = feedback("kv_kfb003", UUID.randomUUID());
+        FeedbackView fromBroken = feedback("kv_kfb001", brokenOwner);   // first: its schema error must not spread
+        FeedbackView fromEmployee = feedback("kv_kfb002", employee);
+        FeedbackView fromOwner = feedback("kv_kfb002", owner);
+        FeedbackView fromStranger = feedback("kv_kfb002", UUID.randomUUID());
+        FeedbackView fromDeleted = feedback("kv_kfb003", UUID.randomUUID());
 
         Map<UUID, FeedbackLabels> labels = service.labels(
                 List.of(fromBroken, fromEmployee, fromOwner, fromStranger, fromDeleted));
 
-        assertThat(labels.get(fromBroken.getId())).isEqualTo(new FeedbackLabels("Boutique cassée", "Propriétaire"));
-        assertThat(labels.get(fromEmployee.getId())).isEqualTo(new FeedbackLabels("Boutique Awa", "Moussa Kane"));
-        assertThat(labels.get(fromOwner.getId())).isEqualTo(new FeedbackLabels("Boutique Awa", "Propriétaire"));
-        assertThat(labels.get(fromStranger.getId())).isEqualTo(new FeedbackLabels("Boutique Awa", "Utilisateur inconnu"));
-        assertThat(labels.get(fromDeleted.getId()).tenantName()).isEqualTo("Entreprise supprimée");
+        assertThat(labels.get(fromBroken.id())).isEqualTo(new FeedbackLabels("Boutique cassée", "Propriétaire"));
+        assertThat(labels.get(fromEmployee.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Moussa Kane"));
+        assertThat(labels.get(fromOwner.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Propriétaire"));
+        assertThat(labels.get(fromStranger.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Utilisateur inconnu"));
+        assertThat(labels.get(fromDeleted.id()).tenantName()).isEqualTo("Entreprise supprimée");
     }
 
-    private static Feedback feedback(String schema, UUID user) {
-        return new Feedback(UUID.randomUUID(), "BUG", "Le scanner plante", schema, user,
-                "1.0", "android", "/pos", Instant.now(), "NORMAL");
+    private static FeedbackView feedback(String schema, UUID user) {
+        return new FeedbackView(UUID.randomUUID(), "BUG", "Le scanner plante", schema, user,
+                "1.0", "android", "/pos", Instant.now(), "NORMAL", null, null);
     }
 
     private UUID tenant(String schema, String name, String status) {

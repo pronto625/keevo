@@ -1,4 +1,4 @@
-package com.keevo.messaging.notification.domain.model;
+package com.keevo.messaging.api;
 
 import java.util.Map;
 

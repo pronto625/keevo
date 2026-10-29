@@ -13,10 +13,10 @@ import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -56,6 +56,13 @@ class ProductCommandAdapterTest {
     void setUp() {
         adapter = new ProductCommandAdapter(createProduct, updateProduct, archiveProduct,
                 unarchiveProduct, createDraftProduct, productRepository, eventPublisher);
+        // 12.2e: the adapter requires an explicit, current tenant schema
+        TenantContext.setCurrentTenant("kv_test");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        TenantContext.clear();
     }
 
     private static Product product(ProductStatus status, int threshold) {
@@ -67,7 +74,7 @@ class ProductCommandAdapterTest {
     void create_mapsInputOntoCreateProductDto_withClientIdAndNoThreshold() {
         when(createProduct.execute(any())).thenReturn(product(ProductStatus.ACTIVE, 0));
 
-        var view = adapter.create(new CreateProductInput(ID, "Sac", "cuir", "KEV-SAC001", CATEGORY,
+        var view = adapter.create(TenantContext.getCurrentTenant(), new CreateProductInput(ID, "Sac", "cuir", "KEV-SAC001", CATEGORY,
                 4000, 2500, 100, 3, ACTOR));
 
         var captor = ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
@@ -83,7 +90,7 @@ class ProductCommandAdapterTest {
     void update_mapsInputOntoUpdateProductDto_keepingTheActorRole() {
         when(updateProduct.execute(any())).thenReturn(product(ProductStatus.ACTIVE, 0));
 
-        adapter.update(new UpdateProductInput(ID, "Sac", null, null, CATEGORY, 4500, null, null, null,
+        adapter.update(TenantContext.getCurrentTenant(), new UpdateProductInput(ID, "Sac", null, null, CATEGORY, 4500, null, null, null,
                 ACTOR, "EMPLOYEE"));
 
         verify(updateProduct).execute(new UpdateProductUseCase.UpdateProductDto(
@@ -92,8 +99,8 @@ class ProductCommandAdapterTest {
 
     @Test
     void archive_and_unarchive_delegate() {
-        adapter.archive(ID, ACTOR);
-        adapter.unarchive(ID, ACTOR);
+        adapter.archive(TenantContext.getCurrentTenant(), ID, ACTOR);
+        adapter.unarchive(TenantContext.getCurrentTenant(), ID, ACTOR);
 
         verify(archiveProduct).execute(new ArchiveProductUseCase.ArchiveProductDto(ID, ACTOR));
         verify(unarchiveProduct).execute(new UnarchiveProductUseCase.UnarchiveProductDto(ID, ACTOR));
@@ -103,7 +110,7 @@ class ProductCommandAdapterTest {
     void createDraft_mapsInputOntoCreateDraftCommand() {
         when(createDraftProduct.execute(any())).thenReturn(product(ProductStatus.DRAFT, 0));
 
-        var view = adapter.createDraft(new CreateDraftProductInput(ID, "Sac", null, CATEGORY, 4000,
+        var view = adapter.createDraft(TenantContext.getCurrentTenant(), new CreateDraftProductInput(ID, "Sac", null, CATEGORY, 4000,
                 null, null, ACTOR, "EMPLOYEE", "Sync"));
 
         verify(createDraftProduct).execute(new CreateDraftProductUseCase.CreateDraftCommand(
@@ -116,7 +123,7 @@ class ProductCommandAdapterTest {
         when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         Instant now = Instant.now();
 
-        var view = adapter.register(new RegisterProductInput(ID, "Sac", "KEV-SAC001", CATEGORY, 4000, now,
+        var view = adapter.register(TenantContext.getCurrentTenant(), new RegisterProductInput(ID, "Sac", "KEV-SAC001", CATEGORY, 4000, now,
                 ACTOR, null, null, null));
 
         var captor = ArgumentCaptor.forClass(Product.class);
@@ -137,7 +144,7 @@ class ProductCommandAdapterTest {
         when(productRepository.findById(ID)).thenReturn(Optional.of(product(ProductStatus.ACTIVE, 2)));
         when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        var view = adapter.changeMinimumThreshold(ID, 9);
+        var view = adapter.changeMinimumThreshold(TenantContext.getCurrentTenant(), ID, 9);
 
         assertThat(view.minimumThreshold()).isEqualTo(9);
         verify(productRepository).save(argThat(p -> p.getMinimumThreshold() == 9 && ID.equals(p.getId())));
@@ -147,7 +154,7 @@ class ProductCommandAdapterTest {
     void changeMinimumThreshold_unknownProduct_isProductNotFound() {
         when(productRepository.findById(ID)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adapter.changeMinimumThreshold(ID, 9))
+        assertThatThrownBy(() -> adapter.changeMinimumThreshold(TenantContext.getCurrentTenant(), ID, 9))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).getErrorCode()).isEqualTo(ErrorCode.PRODUCT_NOT_FOUND));
         verify(productRepository, never()).save(any());
@@ -160,7 +167,7 @@ class ProductCommandAdapterTest {
         Instant now = Instant.now();
         TenantContext.setCurrentTenant("kv_test");
         try {
-            adapter.register(new RegisterProductInput(ID, "Sac", "KEV-SAC001", CATEGORY, 4000, now,
+            adapter.register(TenantContext.getCurrentTenant(), new RegisterProductInput(ID, "Sac", "KEV-SAC001", CATEGORY, 4000, now,
                     ACTOR, "EMPLOYEE", "Awa", "Boutique Akwa"));
         } finally {
             TenantContext.clear();
@@ -168,5 +175,15 @@ class ProductCommandAdapterTest {
 
         verify(eventPublisher).publishEvent(new ProductCreatedEvent(
                 ID, "Sac", "KEV-SAC001", "kv_test", ACTOR, "EMPLOYEE", "Awa", "Boutique Akwa", now));
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive("kv_other1", ID, ACTOR))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive(null, ID, ACTOR))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(archiveProduct, productRepository);
     }
 }

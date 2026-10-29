@@ -1,5 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.api.ProductCommandPort;
@@ -16,9 +18,7 @@ import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.application.port.TransactionLockPort;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.subscription.api.ProductCountPort;
@@ -106,8 +106,8 @@ class QuickAddProductServiceTest {
     @DisplayName("Happy path — creates product + stock level + inventory count atomically")
     void execute_happyPath_createsAllThreeEntities() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Robe Wax L")).thenReturn(false);
-        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Robe Wax L")).thenReturn(false);
+        when(productCommand.register(any(), any())).thenAnswer(inv -> registered(inv.getArgument(1)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -130,7 +130,7 @@ class QuickAddProductServiceTest {
         assertThat(result.inventoryCount().getTheoretical()).isZero();
         assertThat(result.inventoryCount().getPhysical()).isEqualTo(5);
 
-        verify(productCommand).register(any());
+        verify(productCommand).register(any(), any());
         verify(stockLevelRepository).save(any(StockLevel.class));
         verify(countRepository).save(any(InventoryCount.class));
     }
@@ -139,7 +139,7 @@ class QuickAddProductServiceTest {
     @DisplayName("Dedup blocks creation when product name already exists")
     void execute_duplicateName_throwsProductNameAlreadyExists() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Robe Wax L")).thenReturn(true);
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Robe Wax L")).thenReturn(true);
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Robe Wax L", CATEGORY_ID, 5, null, ACTOR_ID);
 
@@ -148,7 +148,7 @@ class QuickAddProductServiceTest {
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
                         .isEqualTo(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS.name()));
 
-        verify(productCommand, never()).register(any());
+        verify(productCommand, never()).register(any(), any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());
     }
@@ -187,8 +187,8 @@ class QuickAddProductServiceTest {
     @DisplayName("Name is trimmed before dedup check and product creation")
     void execute_nameWithSpaces_isTrimmed() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Chapeau")).thenReturn(false);
-        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Chapeau")).thenReturn(false);
+        when(productCommand.register(any(), any())).thenAnswer(inv -> registered(inv.getArgument(1)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -196,15 +196,15 @@ class QuickAddProductServiceTest {
         QuickAddProductResult result = service.execute(cmd);
 
         assertThat(result.product().name()).isEqualTo("Chapeau");
-        verify(productQuery).existsByName("Chapeau");
+        verify(productQuery).existsByName(TenantContext.getCurrentTenant(), "Chapeau");
     }
 
     @Test
     @DisplayName("Registers the product with its actor context (catalog publishes ProductCreatedEvent) and publishes InventoryCountSavedEvent")
     void execute_happyPath_publishesBothEvents() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Sac")).thenReturn(false);
-        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Sac")).thenReturn(false);
+        when(productCommand.register(any(), any())).thenAnswer(inv -> registered(inv.getArgument(1)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -213,7 +213,7 @@ class QuickAddProductServiceTest {
 
         // 12.2b: ProductCreatedEvent is the catalog's — published by register, fed by these fields
         ArgumentCaptor<RegisterProductInput> registerCaptor = ArgumentCaptor.forClass(RegisterProductInput.class);
-        verify(productCommand).register(registerCaptor.capture());
+        verify(productCommand).register(any(), registerCaptor.capture());
         assertThat(registerCaptor.getValue().name()).isEqualTo("Sac");
         assertThat(registerCaptor.getValue().actorId()).isEqualTo(ACTOR_ID);
 
@@ -234,15 +234,15 @@ class QuickAddProductServiceTest {
     /** The register input carries the ProductCreatedEvent's actor context (12.2b). */
     private RegisterProductInput quickAddAndCaptureProductEvent() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Pagne")).thenReturn(false);
-        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Pagne")).thenReturn(false);
+        when(productCommand.register(any(), any())).thenAnswer(inv -> registered(inv.getArgument(1)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
         service.execute(new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID));
 
         ArgumentCaptor<RegisterProductInput> captor = ArgumentCaptor.forClass(RegisterProductInput.class);
-        verify(productCommand).register(captor.capture());
+        verify(productCommand).register(any(), captor.capture());
         return captor.getValue();
     }
 
@@ -286,8 +286,8 @@ class QuickAddProductServiceTest {
     @DisplayName("v1s-14-13 — lock → session → name check → count/guard → save, in that order")
     void execute_takesLockFirst_thenChecksLimitBeforeSave() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Pagne")).thenReturn(false);
-        when(productCommand.register(any())).thenAnswer(inv -> registered(inv.getArgument(0)));
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Pagne")).thenReturn(false);
+        when(productCommand.register(any(), any())).thenAnswer(inv -> registered(inv.getArgument(1)));
         when(stockLevelRepository.save(any(StockLevel.class))).thenAnswer(inv -> inv.getArgument(0));
         when(countRepository.save(any(InventoryCount.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -297,18 +297,18 @@ class QuickAddProductServiceTest {
                 productCountPort, subscriptionRepository, planLimitGuard);
         order.verify(transactionLock).lock("product-limit:" + TENANT);
         order.verify(sessionRepository).findById(SESSION_ID);
-        order.verify(productQuery).existsByName("Pagne");
+        order.verify(productQuery).existsByName(TenantContext.getCurrentTenant(), "Pagne");
         order.verify(productCountPort).countActiveProducts(any());
         order.verify(subscriptionRepository).findActivePlan();
         order.verify(planLimitGuard).checkProductLimit(PlanType.FREE, 499);
-        order.verify(productCommand).register(any());
+        order.verify(productCommand).register(any(), any());
     }
 
     @Test
     @DisplayName("v1s-14-13 — at the cap → PLAN_LIMIT_EXCEEDED, nothing written, no event")
     void execute_atCap_throwsPlanLimitExceeded_writesNothing() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Pagne")).thenReturn(false);
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Pagne")).thenReturn(false);
         when(productCountPort.countActiveProducts(any())).thenReturn(500);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
                 .when(planLimitGuard).checkProductLimit(PlanType.FREE, 500);
@@ -320,7 +320,7 @@ class QuickAddProductServiceTest {
                         .isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED.name()));
 
         verify(transactionLock).lock("product-limit:" + TENANT);
-        verify(productCommand, never()).register(any());
+        verify(productCommand, never()).register(any(), any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());
         verifyNoInteractions(eventPublisher);
@@ -330,7 +330,7 @@ class QuickAddProductServiceTest {
     @DisplayName("v1s-14-13 — no active subscription → SUBSCRIPTION_NOT_FOUND, nothing written")
     void execute_noSubscription_throwsSubscriptionNotFound() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Pagne")).thenReturn(false);
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Pagne")).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.empty());
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
@@ -340,7 +340,7 @@ class QuickAddProductServiceTest {
                         .isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND.name()));
 
         verify(planLimitGuard, never()).checkProductLimit(any(), anyInt());
-        verify(productCommand, never()).register(any());
+        verify(productCommand, never()).register(any(), any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());
         verifyNoInteractions(eventPublisher);
@@ -350,7 +350,7 @@ class QuickAddProductServiceTest {
     @DisplayName("v1s-14-13 — name taken → PRODUCT_NAME_ALREADY_EXISTS before any count, guard not called")
     void execute_nameTakenAtCap_dedupWins() {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
-        when(productQuery.existsByName("Pagne")).thenReturn(true);
+        when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Pagne")).thenReturn(true);
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
         assertThatThrownBy(() -> service.execute(cmd))
@@ -360,7 +360,7 @@ class QuickAddProductServiceTest {
 
         verify(transactionLock).lock("product-limit:" + TENANT);
         verifyNoInteractions(planLimitGuard, productCountPort);
-        verify(productCommand, never()).register(any());
+        verify(productCommand, never()).register(any(), any());
     }
 
     @Test

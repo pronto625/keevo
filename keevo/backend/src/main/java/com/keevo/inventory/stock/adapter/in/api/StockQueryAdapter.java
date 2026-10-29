@@ -3,6 +3,7 @@ package com.keevo.inventory.stock.adapter.in.api;
 import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -21,7 +22,8 @@ class StockQueryAdapter implements StockQueryPort {
     }
 
     @Override
-    public int availableQuantity(UUID productId, UUID variantId, UUID storeId) {
+    public int availableQuantity(String tenantSchema, UUID productId, UUID variantId, UUID storeId) {
+        TenantContext.requireCurrent(tenantSchema);
         var level = variantId != null
                 ? stockLevelRepository.findByProductVariantAndStore(productId, variantId, storeId)
                 : stockLevelRepository.findByProductAndStore(productId, storeId);

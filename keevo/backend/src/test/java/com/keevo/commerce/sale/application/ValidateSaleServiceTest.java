@@ -94,14 +94,14 @@ class ValidateSaleServiceTest {
     @Test
     void manualValidate_withJustification_transitionsToCompleted() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
-        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(20);
-        when(stockQuery.availableQuantity(PRODUCT_B, null, STORE_ID)).thenReturn(10);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(20);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_B, null, STORE_ID)).thenReturn(10);
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID,
                 "Client fidèle, produit confirmé par fournisseur"));
 
         verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
-        verify(stockCommand, times(2)).recordMovement(argThat(m -> java.util.Objects.equals(m.storeId(), STORE_ID)
+        verify(stockCommand, times(2)).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.storeId(), STORE_ID)
                 && java.util.Objects.equals(m.actorId(), ACTOR_ID)
                 && !m.allowNegative()));
 
@@ -122,8 +122,8 @@ class ValidateSaleServiceTest {
     void manualValidate_insufficientStock_forcesToZero_emitsStockForcedZeroEvent() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
         // Product A: have 1, need 2 → force to 0
-        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(1);
-        when(stockQuery.availableQuantity(PRODUCT_B, null, STORE_ID)).thenReturn(10);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(1);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_B, null, STORE_ID)).thenReturn(10);
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID,
                 "Validation forcée malgré stock insuffisant"));
@@ -148,13 +148,13 @@ class ValidateSaleServiceTest {
         UUID variantId = UUID.randomUUID();
         UUID itemId = UUID.randomUUID();
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingVariantSale(variantId, itemId)));
-        when(stockQuery.availableQuantity(PRODUCT_A, variantId, STORE_ID)).thenReturn(1);
-        lenient().when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(0);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, variantId, STORE_ID)).thenReturn(1);
+        lenient().when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(0);
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, null));
 
-        verify(stockQuery, never()).availableQuantity(PRODUCT_A, null, STORE_ID);
-        verify(stockCommand).recordMovement(argThat(m -> m.kind() == StockMovementKind.SALE
+        verify(stockQuery, never()).availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID);
+        verify(stockCommand).recordMovement(any(), argThat(m -> m.kind() == StockMovementKind.SALE
                 && PRODUCT_A.equals(m.productId()) && variantId.equals(m.variantId())
                 && m.quantityChange() == -1 && itemId.equals(m.movementId()) && !m.allowNegative()));
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
@@ -167,14 +167,14 @@ class ValidateSaleServiceTest {
     void manualValidate_variantItemWithoutVariantStock_isForcedToZeroWithoutDecrement() {
         UUID variantId = UUID.randomUUID();
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingVariantSale(variantId, UUID.randomUUID())));
-        when(stockQuery.availableQuantity(PRODUCT_A, variantId, STORE_ID)).thenReturn(0);
-        lenient().when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(5);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, variantId, STORE_ID)).thenReturn(0);
+        lenient().when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(5);
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, null));
 
         // Product-level stock 5 used to allow a -1 on the empty variant (INSUFFICIENT_STOCK
         // from the inventory); now the variant level decides: forced to zero, nothing decremented.
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         var eventCaptor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getAllValues()).anyMatch(e -> e instanceof StockForcedZeroEvent f
@@ -184,8 +184,8 @@ class ValidateSaleServiceTest {
     @Test
     void manualValidate_withoutJustification_succeeds() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
-        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(20);
-        when(stockQuery.availableQuantity(PRODUCT_B, null, STORE_ID)).thenReturn(10);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(20);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_B, null, STORE_ID)).thenReturn(10);
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, null));
 
@@ -270,7 +270,7 @@ class ValidateSaleServiceTest {
         // completedSale() has exactly 1 item, quantity=1 → recordOperation called once,
         // delta must be POSITIVE (restoration), not negative.
         // v1s-13-13: deterministic movement id (same on the device) → one history row after pull.
-        verify(stockCommand, times(1)).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+        verify(stockCommand, times(1)).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
                 && java.util.Objects.equals(m.storeId(), STORE_ID)
                 && java.util.Objects.equals(m.kind(), StockMovementKind.SALE_CANCELLED)
                 && m.quantityChange() == 1
@@ -342,8 +342,8 @@ class ValidateSaleServiceTest {
     @Test
     void validateSale_employeeOwnStore_succeeds() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pendingSale()));
-        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(20);
-        when(stockQuery.availableQuantity(PRODUCT_B, null, STORE_ID)).thenReturn(10);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(20);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_B, null, STORE_ID)).thenReturn(10);
 
         // employee assigned to the SAME store as the sale → succeeds
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, STORE_ID,
@@ -537,13 +537,13 @@ class ValidateSaleServiceTest {
     void validateSale_saleMovementIdsAreSaleItemIds() {
         Sale pending = pendingSale();
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(pending));
-        when(stockQuery.availableQuantity(PRODUCT_A, null, STORE_ID)).thenReturn(20);
-        when(stockQuery.availableQuantity(PRODUCT_B, null, STORE_ID)).thenReturn(10);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(20);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_B, null, STORE_ID)).thenReturn(10);
 
         service.validateSale(new ValidateSaleCommand(SALE_ID, ACTOR_ID, JUSTIF));
 
         for (SaleItem item : pending.getItems()) {
-            verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), item.getProductId())
+            verify(stockCommand).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.productId(), item.getProductId())
                 && java.util.Objects.equals(m.storeId(), STORE_ID)
                 && java.util.Objects.equals(m.kind(), StockMovementKind.SALE)
                 && m.quantityChange() == -item.getQuantity()

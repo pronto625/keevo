@@ -10,9 +10,9 @@ import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.api.EmployeeQueryPort;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.NotificationPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
@@ -80,7 +80,7 @@ public class SaleDraftValidatedNotificationListener {
         try {
             TenantContext.setCurrentTenant(event.tenantId());
 
-            SaleView sale = saleQueryPort.findById(event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(TenantContext.getCurrentTenant(), event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-VALIDATED] Sale {} not found — skipping notification", event.saleId());
                 return;
@@ -164,7 +164,7 @@ public class SaleDraftValidatedNotificationListener {
         try {
             TenantContext.setCurrentTenant(event.tenantId());
 
-            SaleView sale = saleQueryPort.findById(event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(TenantContext.getCurrentTenant(), event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-PENDING] Sale {} not found — skipping notification", event.saleId());
                 return;
@@ -244,7 +244,7 @@ public class SaleDraftValidatedNotificationListener {
         try {
             TenantContext.setCurrentTenant(event.tenantId());
 
-            SaleView sale = saleQueryPort.findById(event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(TenantContext.getCurrentTenant(), event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-DRAFT-UPGRADED] Sale {} not found — skipping notification", event.saleId());
                 return;

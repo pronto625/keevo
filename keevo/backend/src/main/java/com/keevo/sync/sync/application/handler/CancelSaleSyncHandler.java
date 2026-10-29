@@ -55,7 +55,7 @@ public class CancelSaleSyncHandler extends AbstractSyncOperationHandler {
         // (pendingOnly=true) so the status check and the cancellation are one atomic claim —
         // a sale validated concurrently is refused with FORBIDDEN too.
         UUID assignedStoreId = extractAssignedStoreId();
-        saleCommandPort.cancelSale(
+        saleCommandPort.cancelSale(tenantId,
                 new CancelSaleInput(saleId, actorId, assignedStoreId, justification, true));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,

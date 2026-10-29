@@ -1,6 +1,5 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.port.in.GetReportHistoryUseCase;
@@ -8,10 +7,11 @@ import com.keevo.reporting.report.domain.port.in.ResendReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.EmployeeView;
 import com.keevo.identity.api.EmployeeQueryPort;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;

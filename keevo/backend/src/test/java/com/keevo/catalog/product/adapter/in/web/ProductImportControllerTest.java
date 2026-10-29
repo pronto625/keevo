@@ -7,16 +7,17 @@ import com.keevo.catalog.product.application.usecase.GenerateCsvTemplateUseCase;
 import com.keevo.catalog.product.application.usecase.ImportCsvProductsUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.messaging.notification.application.usecase.GetPendingDraftsCountUseCase;
+import com.keevo.messaging.notification.adapter.in.api.DraftValidationApiTestSupport;
+import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -49,14 +51,14 @@ class ProductImportControllerTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+        TenantContext.clear();
     }
 
     @Mock private ImportCsvProductsUseCase     importUseCase;
     @Mock private CreateDraftProductUseCase    draftUseCase;
     @Mock private GenerateCsvTemplateUseCase   templateUseCase;
-    @Mock private GetPendingDraftsCountUseCase pendingCountUseCase;
+    @Mock private DraftNotificationRepository draftRepository;
 
-    @InjectMocks
     private ProductImportController controller;
 
     private MockMvc mockMvc;
@@ -65,13 +67,11 @@ class ProductImportControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders
-                .standaloneSetup(controller)
-                .setControllerAdvice(new GlobalExceptionHandler())
-                .build();
-
+        // Production binds the tenant in JwtAuthFilter; the drafts counter port requires it (12.2e).
+        TenantContext.setCurrentTenant("kv_test01");
         controller = new ProductImportController(
-                importUseCase, draftUseCase, templateUseCase, pendingCountUseCase, objectMapper);
+                importUseCase, draftUseCase, templateUseCase,
+                DraftValidationApiTestSupport.queryPort(draftRepository), objectMapper);
 
         mockMvc = MockMvcBuilders
                 .standaloneSetup(controller)
@@ -235,7 +235,7 @@ class ProductImportControllerTest {
     @DisplayName("GET /drafts/count → 200 with count for OWNER")
     void shouldReturn200WithPendingDraftsCountForOwner() throws Exception {
         authenticateAs("OWNER");
-        when(pendingCountUseCase.execute("OWNER")).thenReturn(3L);
+        when(draftRepository.countPending()).thenReturn(3L);
 
         mockMvc.perform(get("/api/v1/products/drafts/count"))
                 .andExpect(status().isOk())
@@ -243,16 +243,14 @@ class ProductImportControllerTest {
     }
 
     @Test
-    @DisplayName("GET /drafts/count → 403 when use case throws FORBIDDEN (EMPLOYEE role)")
+    @DisplayName("GET /drafts/count → 403 FORBIDDEN for an EMPLOYEE, counter never read")
     void shouldReturn403WhenGetPendingCountThrowsForbidden() throws Exception {
         authenticateAs("EMPLOYEE");
 
-        when(pendingCountUseCase.execute("EMPLOYEE"))
-                .thenThrow(new DomainException(ErrorCode.FORBIDDEN,
-                        "Seul le propriétaire peut consulter les brouillons en attente"));
-
         mockMvc.perform(get("/api/v1/products/drafts/count"))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+        verifyNoInteractions(draftRepository);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

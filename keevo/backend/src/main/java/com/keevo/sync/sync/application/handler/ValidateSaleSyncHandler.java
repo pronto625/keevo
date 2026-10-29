@@ -60,7 +60,7 @@ public class ValidateSaleSyncHandler extends AbstractSyncOperationHandler {
 
         try {
             UUID assignedStoreId = extractAssignedStoreId();
-            saleCommandPort.validateSale(
+            saleCommandPort.validateSale(tenantId,
                     new ValidateSaleInput(saleId, actorId, assignedStoreId, justification, productIdRemappings, initialStockEntries));
         } catch (DomainException e) {
             // Idempotency: if the sale was already completed (e.g. cascade-validated after

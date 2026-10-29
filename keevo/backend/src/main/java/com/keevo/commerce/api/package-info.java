@@ -10,6 +10,13 @@
  * or a closure, commit or roll back together. Other modules
  * depend on {@code "commerce :: api"} (and {@code "commerce :: events"}), never on commerce
  * internals.
+ *
+ * <p><b>Tenant convention (12.2d, aligned here in 12.2e):</b> every method takes the tenant schema
+ * explicitly as its first {@code String tenantSchema} parameter; it must be the schema of the current
+ * tenant context ({@code TenantContext.requireCurrent}): null, blank or another schema fails fast
+ * ({@link IllegalStateException}). The parameter is only checked: the repositories behind the
+ * adapters keep reading the bound tenant. Callers pass the tenant they act for (sync handlers: their
+ * {@code tenantId} argument; others: {@code TenantContext.getCurrentTenant()}).
  */
 @org.springframework.modulith.NamedInterface("api")
 package com.keevo.commerce.api;

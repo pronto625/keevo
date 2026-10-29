@@ -14,11 +14,11 @@ public interface ClientCommandPort {
      *
      * @throws com.keevo.shared.domain.exception.DomainException VALIDATION_ERROR on invalid fields
      */
-    ClientView createWithId(CreateClientInput input);
+    ClientView createWithId(String tenantSchema, CreateClientInput input);
 
-    ClientView update(UpdateClientInput input);
+    ClientView update(String tenantSchema, UpdateClientInput input);
 
-    void archive(UUID clientId, UUID actorId, String tenantId);
+    void archive(String tenantSchema, UUID clientId, UUID actorId);
 
-    void unarchive(UUID clientId, UUID actorId, String tenantId);
+    void unarchive(String tenantSchema, UUID clientId, UUID actorId);
 }

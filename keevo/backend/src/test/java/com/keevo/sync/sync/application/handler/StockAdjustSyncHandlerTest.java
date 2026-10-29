@@ -87,7 +87,7 @@ class StockAdjustSyncHandlerTest {
         authenticateAsOwner();
         var result = handler.handle(stockAdjustOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(stockCommand).adjustTo(any(), any(), any(), anyInt(), any(), any(), any());
+        verify(stockCommand).adjustTo(eq(TENANT_ID), any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -95,7 +95,7 @@ class StockAdjustSyncHandlerTest {
         authenticateAsEmployee(STORE_ID);
         var result = handler.handle(stockAdjustOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(stockCommand).adjustTo(any(), any(), any(), anyInt(), any(), any(), any());
+        verify(stockCommand).adjustTo(eq(TENANT_ID), any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -105,7 +105,7 @@ class StockAdjustSyncHandlerTest {
         var result = handler.handle(stockAdjustOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(stockCommand, never()).adjustTo(any(), any(), any(), anyInt(), any(), any(), any());
+        verify(stockCommand, never()).adjustTo(any(), any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -113,7 +113,7 @@ class StockAdjustSyncHandlerTest {
         authenticateAsEmployee(STORE_ID);
         var result = handler.handle(stockEntryOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(stockCommand).recordEntry(any(), any(), any(), anyInt(), any(), any(), any());
+        verify(stockCommand).recordEntry(eq(TENANT_ID), any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -123,7 +123,7 @@ class StockAdjustSyncHandlerTest {
         var result = handler.handle(stockEntryOp(STORE_ID), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("FORBIDDEN");
-        verify(stockCommand, never()).recordEntry(any(), any(), any(), anyInt(), any(), any(), any());
+        verify(stockCommand, never()).recordEntry(any(), any(), any(), any(), anyInt(), any(), any(), any());
     }
 
     @Test
@@ -132,7 +132,7 @@ class StockAdjustSyncHandlerTest {
         var op = stockAdjustOp(STORE_ID);
 
         doThrow(new DomainException(ErrorCode.INSUFFICIENT_STOCK))
-                .when(stockCommand).adjustTo(any(), any(), any(), anyInt(), any(), any(), any());
+                .when(stockCommand).adjustTo(any(), any(), any(), any(), anyInt(), any(), any(), any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
@@ -147,7 +147,7 @@ class StockAdjustSyncHandlerTest {
 
         handler.handle(op, ACTOR_ID, TENANT_ID);
 
-        verify(stockCommand).adjustTo(any(), any(), any(), anyInt(), any(), any(),
+        verify(stockCommand).adjustTo(eq(TENANT_ID), any(), any(), any(), anyInt(), any(), any(),
                 eq(UUID.fromString(op.entityId())));
     }
 
@@ -158,7 +158,7 @@ class StockAdjustSyncHandlerTest {
 
         handler.handle(op, ACTOR_ID, TENANT_ID);
 
-        verify(stockCommand).recordEntry(any(), any(), any(), anyInt(), any(), any(),
+        verify(stockCommand).recordEntry(eq(TENANT_ID), any(), any(), any(), anyInt(), any(), any(),
                 eq(UUID.fromString(op.entityId())));
     }
 
@@ -173,7 +173,7 @@ class StockAdjustSyncHandlerTest {
 
         handler.handle(op, ACTOR_ID, TENANT_ID);
 
-        verify(stockCommand).recordEntry(any(), any(), any(), anyInt(), any(), any(), isNull());
+        verify(stockCommand).recordEntry(eq(TENANT_ID), any(), any(), any(), anyInt(), any(), any(), isNull());
     }
 
     @Test
@@ -220,6 +220,6 @@ class StockAdjustSyncHandlerTest {
         authenticateAsOwner();
         var result = handler.handle(adjustWithQuantity(5.0), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(stockCommand).adjustTo(any(), any(), eq(STORE_ID), eq(5), eq(ACTOR_ID), any(), any());
+        verify(stockCommand).adjustTo(eq(TENANT_ID), any(), any(), eq(STORE_ID), eq(5), eq(ACTOR_ID), any(), any());
     }
 }

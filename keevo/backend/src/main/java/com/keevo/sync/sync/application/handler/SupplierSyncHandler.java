@@ -40,7 +40,7 @@ public class SupplierSyncHandler extends AbstractSyncOperationHandler {
 
         return switch (operation.operationType()) {
             case "UPDATE_SUPPLIER" -> {
-                var supplier = supplierCommand.update(new UpdateSupplierInput(
+                var supplier = supplierCommand.update(tenantId, new UpdateSupplierInput(
                         supplierId,
                         (String) p.get("name"),
                         (String) p.get("phone"),
@@ -51,13 +51,13 @@ public class SupplierSyncHandler extends AbstractSyncOperationHandler {
                         supplier.id().toString(), null);
             }
             case "ARCHIVE_SUPPLIER" -> {
-                supplierCommand.archive(supplierId, actorId, tenantId);
+                supplierCommand.archive(tenantId, supplierId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         supplierId.toString(), null);
             }
             case "UNARCHIVE_SUPPLIER" -> {
                 // Same access rules as ARCHIVE_SUPPLIER (no role restriction).
-                supplierCommand.unarchive(supplierId, actorId, tenantId);
+                supplierCommand.unarchive(tenantId, supplierId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         supplierId.toString(), null);
             }

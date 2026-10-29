@@ -3,10 +3,9 @@ package com.keevo.admin.feedback.adapter.in.rest;
 import com.keevo.admin.AdminLabels;
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService;
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService.FeedbackLabels;
-import com.keevo.feedback.feedback.domain.model.Feedback;
-import com.keevo.feedback.feedback.domain.port.in.HandleFeedbackUseCase;
-import com.keevo.feedback.feedback.domain.port.in.ListFeedbackUseCase;
-import com.keevo.feedback.feedback.domain.port.in.ListFeedbackUseCase.ListFeedbackQuery;
+import com.keevo.feedback.api.FeedbackInboxPort;
+import com.keevo.feedback.api.FeedbackListQuery;
+import com.keevo.feedback.api.FeedbackView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -43,15 +42,12 @@ public class AdminFeedbackController {
     private static final Set<String> TYPES = Set.of("SUGGESTION", "BUG", "PRAISE");
     private static final int SCREEN_CONTEXT_MAX = 200;
 
-    private final ListFeedbackUseCase listFeedbackUseCase;
-    private final HandleFeedbackUseCase handleFeedbackUseCase;
+    private final FeedbackInboxPort feedbackInbox;
     private final AdminFeedbackLabelService labelService;
 
-    public AdminFeedbackController(ListFeedbackUseCase listFeedbackUseCase,
-                                   HandleFeedbackUseCase handleFeedbackUseCase,
+    public AdminFeedbackController(FeedbackInboxPort feedbackInbox,
                                    AdminFeedbackLabelService labelService) {
-        this.listFeedbackUseCase = listFeedbackUseCase;
-        this.handleFeedbackUseCase = handleFeedbackUseCase;
+        this.feedbackInbox = feedbackInbox;
         this.labelService = labelService;
     }
 
@@ -71,13 +67,13 @@ public class AdminFeedbackController {
 
         CurrentActor.requireSuperAdmin();
 
-        Page<Feedback> result = listFeedbackUseCase.list(new ListFeedbackQuery(
+        Page<FeedbackView> result = feedbackInbox.list(new FeedbackListQuery(
                 page, size, normalizePriority(priority), normalizeScreenContext(screenContext),
                 normalizeType(type), parseHandled(handled)));
 
         Map<UUID, FeedbackLabels> labels = labelService.labels(result.getContent());
         List<AdminFeedbackDto> dtos = result.getContent().stream()
-                .map(f -> AdminFeedbackDto.from(f, labels.get(f.getId())))
+                .map(f -> AdminFeedbackDto.from(f, labels.get(f.id())))
                 .toList();
 
         return ResponseEntity.ok(ApiResponseWrapper.paginated(dtos,
@@ -96,7 +92,7 @@ public class AdminFeedbackController {
             @RequestParam(required = false) String type,
             @RequestParam(defaultValue = "false") String handled) {
         CurrentActor.requireSuperAdmin();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(listFeedbackUseCase.count(new ListFeedbackQuery(
+        return ResponseEntity.ok(ApiResponseWrapper.ok(feedbackInbox.count(new FeedbackListQuery(
                 0, 1, normalizePriority(priority), normalizeScreenContext(screenContext),
                 normalizeType(type), parseHandled(handled)))));
     }
@@ -105,7 +101,7 @@ public class AdminFeedbackController {
     @PostMapping("/{id}/handle")
     public ResponseEntity<ApiResponseWrapper<AdminFeedbackDto>> handle(@PathVariable UUID id) {
         CurrentActor.requireSuperAdmin();
-        Feedback updated = handleFeedbackUseCase.markHandled(id, CurrentActor.actorId());
+        FeedbackView updated = feedbackInbox.markHandled(id, CurrentActor.actorId());
         return ResponseEntity.ok(ApiResponseWrapper.ok(withLabels(updated)));
     }
 
@@ -113,7 +109,7 @@ public class AdminFeedbackController {
     @PostMapping("/{id}/unhandle")
     public ResponseEntity<ApiResponseWrapper<AdminFeedbackDto>> unhandle(@PathVariable UUID id) {
         CurrentActor.requireSuperAdmin();
-        Feedback updated = handleFeedbackUseCase.markUnhandled(id, CurrentActor.actorId());
+        FeedbackView updated = feedbackInbox.markUnhandled(id, CurrentActor.actorId());
         return ResponseEntity.ok(ApiResponseWrapper.ok(withLabels(updated)));
     }
 
@@ -121,12 +117,12 @@ public class AdminFeedbackController {
      * Labels after a state change that is already committed: a label failure must not turn the
      * successful action into a 500 — the DTO then carries the fallback labels.
      */
-    private AdminFeedbackDto withLabels(Feedback f) {
+    private AdminFeedbackDto withLabels(FeedbackView f) {
         FeedbackLabels labels = null;
         try {
-            labels = labelService.labels(List.of(f)).get(f.getId());
+            labels = labelService.labels(List.of(f)).get(f.id());
         } catch (RuntimeException e) {
-            log.warn("Feedback {}: labels unavailable after the action ({})", f.getId(), e.getClass().getSimpleName());
+            log.warn("Feedback {}: labels unavailable after the action ({})", f.id(), e.getClass().getSimpleName());
         }
         return AdminFeedbackDto.from(f, labels);
     }
@@ -186,15 +182,15 @@ public class AdminFeedbackController {
             String tenantName, String userLabel,
             boolean handled, String handledAt
     ) {
-        public static AdminFeedbackDto from(Feedback f, FeedbackLabels labels) {
+        public static AdminFeedbackDto from(FeedbackView f, FeedbackLabels labels) {
             return new AdminFeedbackDto(
-                    f.getId(), f.getType(), f.getDescription(),
-                    f.getAppVersion(), f.getPlatform(), f.getScreenContext(),
-                    f.getSubmittedAt().toString(), f.getPriority(),
+                    f.id(), f.type(), f.description(),
+                    f.appVersion(), f.platform(), f.screenContext(),
+                    f.submittedAt().toString(), f.priority(),
                     labels != null ? labels.tenantName() : AdminLabels.DELETED_TENANT,
                     labels != null ? labels.userLabel() : AdminLabels.UNKNOWN_USER,
-                    f.isHandled(),
-                    f.getHandledAt() != null ? f.getHandledAt().toString() : null
+                    f.handled(),
+                    f.handledAt() != null ? f.handledAt().toString() : null
             );
         }
     }

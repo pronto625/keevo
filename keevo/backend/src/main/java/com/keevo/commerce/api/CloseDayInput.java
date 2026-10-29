@@ -7,9 +7,10 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * Closure of a store's day requested by another module (Story 12.2c — the sync push).
+ * Closure of a store's day requested by another module (Story 12.2c — the sync push). The tenant
+ * is the {@code tenantSchema} of {@link DayClosureCommandPort#closeDay} (12.2e), which must be the
+ * bound tenant.
  *
- * @param tenantId  tenant schema name
  * @param automatic true when triggered by the scheduler
  * @param closureId client-generated id (offline device) — null → server generates
  * @param closedAt  when the closure was made on the device — null → now; it decides which day is
@@ -18,7 +19,6 @@ import java.util.UUID;
 public record CloseDayInput(
         UUID storeId,
         UUID actorId,
-        String tenantId,
         boolean automatic,
         UUID closureId,
         Instant closedAt

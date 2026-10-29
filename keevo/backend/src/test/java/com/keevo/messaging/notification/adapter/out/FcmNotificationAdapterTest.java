@@ -2,11 +2,11 @@ package com.keevo.messaging.notification.adapter.out;
 
 import com.keevo.messaging.notification.domain.model.DeviceToken;
 import com.keevo.messaging.notification.domain.model.DevicePlatform;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.model.PushSendResult;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.PushSendResult;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.google.firebase.messaging.*;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

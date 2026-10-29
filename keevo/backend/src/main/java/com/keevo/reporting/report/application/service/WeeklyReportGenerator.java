@@ -1,8 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.commerce.api.ClosureWindow;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
@@ -14,6 +13,7 @@ import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateWeeklyReportUseCase;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.application.port.TransactionLockPort;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

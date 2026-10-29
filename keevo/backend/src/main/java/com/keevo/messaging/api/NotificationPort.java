@@ -1,7 +1,5 @@
-package com.keevo.messaging.notification.domain.port.out;
+package com.keevo.messaging.api;
 
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.model.PushSendResult;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,9 +10,9 @@ import java.util.UUID;
  * <p>Implementations are best-effort: callers MUST handle exceptions independently
  * and MUST NOT roll back their own transaction if notification delivery fails.
  *
- * <p>Only {@link com.keevo.messaging.notification.adapter.out.LoggingNotificationAdapter}
- * is wired (as {@code @Primary}) for Story 2.4.
- * {@code FcmNotificationAdapter} arrives in Epic 8.1 and replaces it via {@code @Primary}.
+ * <p>Published in {@code messaging :: api} (Story 12.2e); the implementations stay internal to
+ * messaging: {@code FcmNotificationAdapter} is the {@code @Primary} implementation when FCM is
+ * enabled (Story 8.0); otherwise {@code LoggingNotificationAdapter} (logs only) is the one wired.
  */
 public interface NotificationPort {
 

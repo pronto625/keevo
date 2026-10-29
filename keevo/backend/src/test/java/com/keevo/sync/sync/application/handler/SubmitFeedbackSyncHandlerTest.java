@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.feedback.feedback.adapter.in.api.FeedbackApiTestSupport;
 import com.keevo.feedback.feedback.domain.model.Feedback;
 import com.keevo.feedback.feedback.domain.port.in.SubmitFeedbackUseCase;
 import com.keevo.sync.sync.domain.model.SyncOperation;
@@ -33,7 +34,7 @@ class SubmitFeedbackSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new SubmitFeedbackSyncHandler(submitFeedbackUseCase);
+        handler = new SubmitFeedbackSyncHandler(FeedbackApiTestSupport.submissionPort(submitFeedbackUseCase));
     }
 
     @Test

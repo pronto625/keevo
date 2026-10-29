@@ -10,6 +10,7 @@ import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
 import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
 import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -38,12 +39,14 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
     }
 
     @Override
-    public boolean existsById(UUID clientId) {
+    public boolean existsById(String tenantSchema, UUID clientId) {
+        TenantContext.requireCurrent(tenantSchema);
         return clientRepository.findById(clientId).isPresent();
     }
 
     @Override
-    public ClientView createWithId(CreateClientInput in) {
+    public ClientView createWithId(String tenantSchema, CreateClientInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Instant now = Instant.now();
         Client client = new Client(in.id(), in.name(), in.phone(), in.email(), in.notes(),
                 false, now, now);
@@ -51,18 +54,21 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
     }
 
     @Override
-    public ClientView update(UpdateClientInput in) {
+    public ClientView update(String tenantSchema, UpdateClientInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         return ContactViews.of(updateClient.execute(new UpdateClientUseCase.UpdateClientCommand(
                 in.clientId(), in.name(), in.phone(), in.email(), in.notes(), in.actorId())));
     }
 
     @Override
-    public void archive(UUID clientId, UUID actorId, String tenantId) {
-        archiveClient.execute(clientId, actorId, tenantId);
+    public void archive(String tenantSchema, UUID clientId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        archiveClient.execute(clientId, actorId, tenantSchema);
     }
 
     @Override
-    public void unarchive(UUID clientId, UUID actorId, String tenantId) {
-        unarchiveClient.execute(clientId, actorId, tenantId);
+    public void unarchive(String tenantSchema, UUID clientId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        unarchiveClient.execute(clientId, actorId, tenantSchema);
     }
 }

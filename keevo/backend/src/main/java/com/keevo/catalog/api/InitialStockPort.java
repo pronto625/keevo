@@ -17,5 +17,5 @@ public interface InitialStockPort {
      *
      * @throws com.keevo.shared.domain.exception.DomainException PRODUCT_NOT_FOUND
      */
-    void recordInitialStock(UUID productId, UUID storeId, int quantity, UUID actorId, String notes);
+    void recordInitialStock(String tenantSchema, UUID productId, UUID storeId, int quantity, UUID actorId, String notes);
 }

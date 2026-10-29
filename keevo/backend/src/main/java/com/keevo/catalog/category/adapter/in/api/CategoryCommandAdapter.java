@@ -7,6 +7,7 @@ import com.keevo.catalog.category.application.usecase.RenameCategoryUseCase;
 import com.keevo.catalog.category.application.usecase.ToggleCategoryUseCase;
 import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -36,23 +37,27 @@ class CategoryCommandAdapter implements CategoryCommandPort {
     }
 
     @Override
-    public CategoryView createWithId(UUID categoryId, String name, UUID parentId, UUID actorId, String tenantId) {
-        return CategoryViews.of(createCategory.createWithId(categoryId, name, parentId, actorId, tenantId));
+    public CategoryView createWithId(String tenantSchema, UUID categoryId, String name, UUID parentId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return CategoryViews.of(createCategory.createWithId(categoryId, name, parentId, actorId, tenantSchema));
     }
 
     @Override
-    public CategoryView toggleActive(UUID categoryId, UUID actorId, String tenantId) {
-        return CategoryViews.of(toggleCategory.execute(categoryId, actorId, tenantId));
+    public CategoryView toggleActive(String tenantSchema, UUID categoryId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return CategoryViews.of(toggleCategory.execute(categoryId, actorId, tenantSchema));
     }
 
     @Override
-    public CategoryView rename(UUID categoryId, String name, UUID actorId, String tenantId) {
+    public CategoryView rename(String tenantSchema, UUID categoryId, String name, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
         return CategoryViews.of(renameCategory.execute(
-                categoryId, new RenameCategoryUseCase.RenameCategoryDto(name), actorId, tenantId));
+                categoryId, new RenameCategoryUseCase.RenameCategoryDto(name), actorId, tenantSchema));
     }
 
     @Override
-    public int seedTemplateCategories(List<String> names) {
+    public int seedTemplateCategories(String tenantSchema, List<String> names) {
+        TenantContext.requireCurrent(tenantSchema);
         if (names == null) {
             return 0;
         }

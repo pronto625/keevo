@@ -1,6 +1,6 @@
 package com.keevo.messaging.notification.adapter.in.rest;
 
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

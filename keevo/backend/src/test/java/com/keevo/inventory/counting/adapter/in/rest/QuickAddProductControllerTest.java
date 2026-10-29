@@ -12,8 +12,8 @@ import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.model.QuickAddProductResult;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
-import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
@@ -45,6 +45,17 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 @DisplayName("QuickAddProductController — POST /quick-add endpoint")
 class QuickAddProductControllerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private GetCountingProductsUseCase getCountingProductsUseCase;
     @Mock private SaveInventoryCountUseCase saveInventoryCountUseCase;

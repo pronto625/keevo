@@ -2,9 +2,9 @@ package com.keevo.messaging.notification.application.scheduler;
 
 import com.keevo.identity.api.TenantPreferencesView;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
+import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
+import com.keevo.messaging.api.NotificationPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.store.api.StoreView;

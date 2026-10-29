@@ -1,6 +1,5 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.commerce.api.CloseDayInput;
 import com.keevo.commerce.api.DayClosureCommandPort;
 import com.keevo.commerce.api.DayClosureView;
@@ -50,7 +49,7 @@ public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
         }
         // v1s-16-15: a closure for a store the server does not know is refused (quarantined
         // on the device, logged in sync_error_log) instead of being stored as an orphan.
-        if (storeQuery.findById(TenantContext.getCurrentTenant(), storeId).isEmpty()) {
+        if (storeQuery.findById(tenantId, storeId).isEmpty()) {
             throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
 
@@ -60,8 +59,8 @@ public class DayClosureSyncHandler extends AbstractSyncOperationHandler {
         if (closureId == null) closureId = parseUuid(operation.entityId());
         Instant closedAt = resolveClientTime(p.get("closedAt"), operation.clientTimestamp());
 
-        DayClosureView closure = dayClosureCommandPort.closeDay(
-                new CloseDayInput(storeId, actorId, tenantId, false, closureId, closedAt));
+        DayClosureView closure = dayClosureCommandPort.closeDay(tenantId,
+                new CloseDayInput(storeId, actorId, false, closureId, closedAt));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 closure.id().toString(), null);

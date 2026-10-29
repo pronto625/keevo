@@ -7,6 +7,7 @@ import com.keevo.inventory.stock.application.usecase.AdjustStockUseCase;
 import com.keevo.inventory.stock.application.usecase.RecordStockEntryUseCase;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -32,7 +33,8 @@ class StockCommandAdapter implements StockCommandPort {
     }
 
     @Override
-    public void recordMovement(StockMovementInput in) {
+    public void recordMovement(String tenantSchema, StockMovementInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         stockOperationService.recordOperation(
                 in.productId(), in.variantId(), in.storeId(),
                 toMovementType(in.kind()), in.quantityChange(),
@@ -40,14 +42,16 @@ class StockCommandAdapter implements StockCommandPort {
     }
 
     @Override
-    public void adjustTo(UUID productId, UUID variantId, UUID storeId, int newQuantity,
+    public void adjustTo(String tenantSchema, UUID productId, UUID variantId, UUID storeId, int newQuantity,
                          UUID actorId, String notes, UUID movementId) {
+        TenantContext.requireCurrent(tenantSchema);
         adjustStockUseCase.execute(productId, variantId, storeId, newQuantity, actorId, notes, movementId);
     }
 
     @Override
-    public void recordEntry(UUID productId, UUID variantId, UUID storeId, int quantity,
+    public void recordEntry(String tenantSchema, UUID productId, UUID variantId, UUID storeId, int quantity,
                             UUID actorId, String notes, UUID movementId) {
+        TenantContext.requireCurrent(tenantSchema);
         recordStockEntryUseCase.execute(productId, variantId, storeId, quantity, actorId, notes, movementId);
     }
 

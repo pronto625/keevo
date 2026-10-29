@@ -8,6 +8,7 @@ import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +30,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class StockCommandAdapterTest {
 
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private StockOperationService stockOperationService;
     @Mock private AdjustStockUseCase adjustStockUseCase;
     @Mock private RecordStockEntryUseCase recordStockEntryUseCase;
@@ -48,7 +60,7 @@ class StockCommandAdapterTest {
 
     @Test
     void recordMovement_passesEveryFieldToTheStockService() {
-        adapter.recordMovement(new StockMovementInput(PRODUCT, VARIANT, STORE, StockMovementKind.SALE,
+        adapter.recordMovement(TenantContext.getCurrentTenant(), new StockMovementInput(PRODUCT, VARIANT, STORE, StockMovementKind.SALE,
                 -2, ACTOR, "Vente 1", MOVEMENT, true));
 
         verify(stockOperationService).recordOperation(PRODUCT, VARIANT, STORE, MovementType.SALE,
@@ -57,7 +69,7 @@ class StockCommandAdapterTest {
 
     @Test
     void recordMovement_onlineConstructor_serverIdAndNegativeStockRefused() {
-        adapter.recordMovement(new StockMovementInput(PRODUCT, null, STORE, StockMovementKind.STOCK_ENTRY,
+        adapter.recordMovement(TenantContext.getCurrentTenant(), new StockMovementInput(PRODUCT, null, STORE, StockMovementKind.STOCK_ENTRY,
                 5, ACTOR, "Import CSV ligne 2"));
 
         verify(stockOperationService).recordOperation(PRODUCT, null, STORE, MovementType.STOCK_ENTRY,
@@ -76,7 +88,7 @@ class StockCommandAdapterTest {
                 .when(stockOperationService).recordOperation(any(), any(), any(), any(), anyInt(),
                         any(), any(), any(), anyBoolean());
 
-        assertThatThrownBy(() -> adapter.recordMovement(new StockMovementInput(PRODUCT, null, STORE,
+        assertThatThrownBy(() -> adapter.recordMovement(TenantContext.getCurrentTenant(), new StockMovementInput(PRODUCT, null, STORE,
                 StockMovementKind.SALE, -30, ACTOR, "Vente")))
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getDomainCode()).isEqualTo(ErrorCode.INSUFFICIENT_STOCK.name()));
@@ -84,7 +96,7 @@ class StockCommandAdapterTest {
 
     @Test
     void adjustTo_delegatesToTheAdjustUseCase() {
-        adapter.adjustTo(PRODUCT, VARIANT, STORE, 12, ACTOR, "Casse", MOVEMENT);
+        adapter.adjustTo(TenantContext.getCurrentTenant(), PRODUCT, VARIANT, STORE, 12, ACTOR, "Casse", MOVEMENT);
 
         verify(adjustStockUseCase).execute(PRODUCT, VARIANT, STORE, 12, ACTOR, "Casse", MOVEMENT);
         verifyNoInteractions(stockOperationService, recordStockEntryUseCase);
@@ -92,7 +104,7 @@ class StockCommandAdapterTest {
 
     @Test
     void recordEntry_delegatesToTheEntryUseCase() {
-        adapter.recordEntry(PRODUCT, null, STORE, 7, ACTOR, "Livraison", null);
+        adapter.recordEntry(TenantContext.getCurrentTenant(), PRODUCT, null, STORE, 7, ACTOR, "Livraison", null);
 
         verify(recordStockEntryUseCase).execute(PRODUCT, null, STORE, 7, ACTOR, "Livraison", null);
         verifyNoInteractions(stockOperationService, adjustStockUseCase);
@@ -104,5 +116,15 @@ class StockCommandAdapterTest {
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getDomainCode()).isEqualTo(ErrorCode.VALIDATION_ERROR.name()));
         verifyNoInteractions(stockOperationService);
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.adjustTo("kv_other1", java.util.UUID.randomUUID(), null, java.util.UUID.randomUUID(), 3, java.util.UUID.randomUUID(), null, null))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.adjustTo(null, java.util.UUID.randomUUID(), null, java.util.UUID.randomUUID(), 3, java.util.UUID.randomUUID(), null, null))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(stockOperationService, adjustStockUseCase, recordStockEntryUseCase);
     }
 }

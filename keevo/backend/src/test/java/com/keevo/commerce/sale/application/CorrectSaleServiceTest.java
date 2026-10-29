@@ -78,7 +78,7 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 2)));
 
-        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+        verify(stockCommand).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
                 && java.util.Objects.equals(m.storeId(), STORE_ID)
                 && java.util.Objects.equals(m.kind(), StockMovementKind.ADJUSTMENT)
                 && m.quantityChange() == 3
@@ -105,7 +105,7 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 2), correctionId));
 
-        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+        verify(stockCommand).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
                 && java.util.Objects.equals(m.storeId(), STORE_ID)
                 && java.util.Objects.equals(m.kind(), StockMovementKind.ADJUSTMENT)
                 && m.quantityChange() == 3
@@ -121,7 +121,7 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 5)));
 
-        verify(stockCommand).recordMovement(argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
+        verify(stockCommand).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.productId(), PRODUCT_A)
                 && java.util.Objects.equals(m.storeId(), STORE_ID)
                 && java.util.Objects.equals(m.kind(), StockMovementKind.ADJUSTMENT)
                 && m.quantityChange() == -3
@@ -138,7 +138,7 @@ class CorrectSaleServiceTest {
     void correctSale_increaseBeyondAvailable_throwsInsufficientStock() {
         when(saleRepository.findById(SALE_ID)).thenReturn(Optional.of(completedSale(2, 0)));
         doThrow(new DomainException(com.keevo.shared.domain.exception.ErrorCode.INSUFFICIENT_STOCK, "insufficient"))
-                .when(stockCommand).recordMovement(any());
+                .when(stockCommand).recordMovement(any(), any());
 
         assertThatThrownBy(() -> service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(itemId, 100))))
@@ -158,7 +158,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of(UUID.randomUUID(), 2))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -170,7 +170,7 @@ class CorrectSaleServiceTest {
                 "   ", Map.of(itemId, 2))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -182,7 +182,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of(itemId, 0))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -205,7 +205,7 @@ class CorrectSaleServiceTest {
         service.correctSale(new CorrectSaleCommand(SALE_ID, ACTOR_ID, null,
                 JUSTIFICATION, Map.of(UUID.randomUUID(), 9)));
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         var captor = ArgumentCaptor.forClass(Sale.class);
         verify(saleRepository).save(captor.capture());
         assertThat(captor.getValue().getItems().get(0).getQuantity()).isEqualTo(5);
@@ -219,7 +219,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, null)))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -231,7 +231,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of())))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         verify(saleRepository, never()).save(any());
     }
 
@@ -244,7 +244,7 @@ class CorrectSaleServiceTest {
                 JUSTIFICATION, Map.of(itemId, 2))))
                 .isInstanceOf(DomainException.class);
 
-        verify(stockCommand, never()).recordMovement(any());
+        verify(stockCommand, never()).recordMovement(any(), any());
         verify(saleRepository, never()).save(any());
     }
 

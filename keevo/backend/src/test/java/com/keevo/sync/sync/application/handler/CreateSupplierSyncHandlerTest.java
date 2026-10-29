@@ -6,6 +6,7 @@ import com.keevo.crm.api.SupplierQueryPort;
 import com.keevo.crm.api.SupplierView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +27,17 @@ import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CreateSupplierSyncHandlerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private SupplierQueryPort supplierQuery;
     @Mock private SupplierCommandPort supplierCommand;
@@ -48,8 +60,8 @@ class CreateSupplierSyncHandlerTest {
     @Test
     void handle_createSupplier_savesWithClientProvidedUUID() {
         var supplierId = UUID.randomUUID();
-        when(supplierQuery.existsById(supplierId)).thenReturn(false);
-        when(supplierCommand.createWithId(any())).thenReturn(sampleSupplier(supplierId));
+        when(supplierQuery.existsById(TENANT_ID, supplierId)).thenReturn(false);
+        when(supplierCommand.createWithId(any(), any())).thenReturn(sampleSupplier(supplierId));
 
         var op = new SyncOperation("op-1", "CREATE_SUPPLIER", supplierId.toString(),
                 Map.of("id", supplierId.toString(), "name", "Distributeur SA", "phone", "+237690000099"),
@@ -60,7 +72,7 @@ class CreateSupplierSyncHandlerTest {
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(supplierId.toString());
         var captor = ArgumentCaptor.forClass(CreateSupplierInput.class);
-        verify(supplierCommand).createWithId(captor.capture());
+        verify(supplierCommand).createWithId(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().id()).isEqualTo(supplierId);
         assertThat(captor.getValue().productIds()).isEmpty();
     }
@@ -70,8 +82,8 @@ class CreateSupplierSyncHandlerTest {
         var supplierId = UUID.randomUUID();
         var prodId1 = UUID.randomUUID();
         var prodId2 = UUID.randomUUID();
-        when(supplierQuery.existsById(supplierId)).thenReturn(false);
-        when(supplierCommand.createWithId(any())).thenReturn(sampleSupplier(supplierId));
+        when(supplierQuery.existsById(TENANT_ID, supplierId)).thenReturn(false);
+        when(supplierCommand.createWithId(any(), any())).thenReturn(sampleSupplier(supplierId));
 
         var op = new SyncOperation("op-2", "CREATE_SUPPLIER", supplierId.toString(),
                 Map.of("id", supplierId.toString(), "name", "Fournisseur X", "phone", "+237690000099",
@@ -82,14 +94,14 @@ class CreateSupplierSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         var captor = ArgumentCaptor.forClass(CreateSupplierInput.class);
-        verify(supplierCommand).createWithId(captor.capture());
+        verify(supplierCommand).createWithId(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().productIds()).containsExactly(prodId1, prodId2);
     }
 
     @Test
     void handle_createSupplier_idempotent_skipsWhenAlreadyExists() {
         var supplierId = UUID.randomUUID();
-        when(supplierQuery.existsById(supplierId)).thenReturn(true);
+        when(supplierQuery.existsById(TENANT_ID, supplierId)).thenReturn(true);
 
         var op = new SyncOperation("op-3", "CREATE_SUPPLIER", supplierId.toString(),
                 Map.of("id", supplierId.toString(), "name", "Distributeur SA", "phone", "+237690000099"),
@@ -116,8 +128,8 @@ class CreateSupplierSyncHandlerTest {
     @Test
     void handle_createSupplier_invalidPhone_returnsRejected() {
         var supplierId = UUID.randomUUID();
-        when(supplierQuery.existsById(supplierId)).thenReturn(false);
-        when(supplierCommand.createWithId(any()))
+        when(supplierQuery.existsById(TENANT_ID, supplierId)).thenReturn(false);
+        when(supplierCommand.createWithId(any(), any()))
                 .thenThrow(new DomainException(ErrorCode.VALIDATION_ERROR, "Phone must be E.164 format"));
 
         var op = new SyncOperation("op-5", "CREATE_SUPPLIER", supplierId.toString(),

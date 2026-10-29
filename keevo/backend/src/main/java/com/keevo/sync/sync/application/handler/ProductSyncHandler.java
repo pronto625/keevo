@@ -49,9 +49,9 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 // so subsequent offline ops (RECORD_STOCK_ENTRY, CREATE_SALE, ...) that
                 // reference this product by its local id keep resolving after push.
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
-                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId);
+                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId);
                 if (merged != null) yield merged;
-                var product = productCommand.create(new CreateProductInput(
+                var product = productCommand.create(tenantId, new CreateProductInput(
                         clientId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -67,7 +67,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
             }
             case "UPDATE_PRODUCT" -> {
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                var product = productCommand.update(new UpdateProductInput(
+                var product = productCommand.update(tenantId, new UpdateProductInput(
                         productId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -84,13 +84,13 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
             }
             case "ARCHIVE_PRODUCT" -> {
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                productCommand.archive(productId, actorId);
+                productCommand.archive(tenantId, productId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         productId.toString(), null);
             }
             case "UNARCHIVE_PRODUCT" -> {
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                productCommand.unarchive(productId, actorId);
+                productCommand.unarchive(tenantId, productId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         productId.toString(), null);
             }
@@ -98,9 +98,9 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 // Create draft with the client-specified UUID so subsequent ops (CREATE_SALE,
                 // VALIDATE_SALE) can reference the same ID without remapping.
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
-                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId);
+                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId);
                 if (merged != null) yield merged;
-                var draft = productCommand.createDraft(new CreateDraftProductInput(
+                var draft = productCommand.createDraft(tenantId, new CreateDraftProductInput(
                         clientId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -123,7 +123,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                             "Seul le propriétaire peut valider un produit en brouillon");
                 }
                 UUID productId = UUID.fromString((String) p.get("productId"));
-                var promoted = productCommand.update(new UpdateProductInput(
+                var promoted = productCommand.update(tenantId, new UpdateProductInput(
                         productId,
                         (String) p.get("name"),
                         (String) p.get("description"),
@@ -151,9 +151,10 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
      * on the existing product. Checked BEFORE calling the @Transactional use cases: letting them throw
      * PRODUCT_NAME_ALREADY_EXISTS would mark the surrounding sync transaction rollback-only.
      */
-    private SyncOperationResult mergeIntoExistingByName(SyncOperation operation, String name, UUID clientId) {
+    private SyncOperationResult mergeIntoExistingByName(SyncOperation operation, String name, UUID clientId,
+                                                         String tenantId) {
         if (name == null || name.isBlank()) return null;
-        var existing = productQuery.findByName(name);
+        var existing = productQuery.findByName(tenantId, name);
         if (existing.isEmpty() || existing.get().id().equals(clientId)) return null;
         String targetId = existing.get().id().toString();
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,

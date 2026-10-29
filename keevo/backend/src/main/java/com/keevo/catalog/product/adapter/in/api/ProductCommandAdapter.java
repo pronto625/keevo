@@ -56,7 +56,8 @@ class ProductCommandAdapter implements ProductCommandPort {
     }
 
     @Override
-    public ProductView create(CreateProductInput in) {
+    public ProductView create(String tenantSchema, CreateProductInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Product created = createProduct.execute(new CreateProductUseCase.CreateProductDto(
                 in.name(), in.description(), in.sku(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(), in.stockQuantity(),
@@ -65,7 +66,8 @@ class ProductCommandAdapter implements ProductCommandPort {
     }
 
     @Override
-    public ProductView update(UpdateProductInput in) {
+    public ProductView update(String tenantSchema, UpdateProductInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Product updated = updateProduct.execute(new UpdateProductUseCase.UpdateProductDto(
                 in.productId(), in.name(), in.description(), in.sku(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(), in.stockQuantity(),
@@ -74,17 +76,20 @@ class ProductCommandAdapter implements ProductCommandPort {
     }
 
     @Override
-    public void archive(UUID productId, UUID actorId) {
+    public void archive(String tenantSchema, UUID productId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
         archiveProduct.execute(new ArchiveProductUseCase.ArchiveProductDto(productId, actorId));
     }
 
     @Override
-    public void unarchive(UUID productId, UUID actorId) {
+    public void unarchive(String tenantSchema, UUID productId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
         unarchiveProduct.execute(new UnarchiveProductUseCase.UnarchiveProductDto(productId, actorId));
     }
 
     @Override
-    public ProductView createDraft(CreateDraftProductInput in) {
+    public ProductView createDraft(String tenantSchema, CreateDraftProductInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Product draft = createDraftProduct.execute(new CreateDraftProductUseCase.CreateDraftCommand(
                 in.id(), in.name(), in.description(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(),
@@ -93,7 +98,8 @@ class ProductCommandAdapter implements ProductCommandPort {
     }
 
     @Override
-    public ProductView register(RegisterProductInput in) {
+    public ProductView register(String tenantSchema, RegisterProductInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Product product = new Product(
                 in.id(), in.name(), null, in.sku(),
                 in.categoryId(), in.price(), 0, 0,
@@ -110,7 +116,8 @@ class ProductCommandAdapter implements ProductCommandPort {
     }
 
     @Override
-    public ProductView changeMinimumThreshold(UUID productId, int threshold) {
+    public ProductView changeMinimumThreshold(String tenantSchema, UUID productId, int threshold) {
+        TenantContext.requireCurrent(tenantSchema);
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + productId));

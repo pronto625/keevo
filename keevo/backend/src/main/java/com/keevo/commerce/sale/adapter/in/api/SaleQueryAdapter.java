@@ -3,6 +3,7 @@ package com.keevo.commerce.sale.adapter.in.api;
 import com.keevo.commerce.api.SaleQueryPort;
 import com.keevo.commerce.api.SaleView;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -19,7 +20,8 @@ class SaleQueryAdapter implements SaleQueryPort {
     }
 
     @Override
-    public Optional<SaleView> findById(UUID saleId) {
+    public Optional<SaleView> findById(String tenantSchema, UUID saleId) {
+        TenantContext.requireCurrent(tenantSchema);
         return saleRepository.findById(saleId).map(SaleViews::of);
     }
 }

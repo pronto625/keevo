@@ -1,7 +1,8 @@
 package com.keevo.identity.onboarding.application.service;
 
+import com.keevo.reporting.report.adapter.in.api.DailyReportTextApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.reporting.report.application.service.DailyReportFormatter;
@@ -39,7 +40,7 @@ class SendTestReportServiceTest {
     // 12.2d: the store / identity / subscription API adapters require an explicit, current tenant schema
     @org.junit.jupiter.api.BeforeEach
     void bindTenantContext() {
-        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
     }
 
     @org.junit.jupiter.api.AfterEach
@@ -66,7 +67,8 @@ class SendTestReportServiceTest {
     @BeforeEach
     void setUp() {
         // 12.2d: the real store API adapter over the mocked repository
-        service = new SendTestReportService(endOfDayReportBuilder, dailyReportFormatter, whatsAppPort,
+        service = new SendTestReportService(
+                DailyReportTextApiTestSupport.port(endOfDayReportBuilder, dailyReportFormatter), whatsAppPort,
                 StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver);
         store = new Store(STORE_ID, "Boutique Test", StoreType.STORE, "Kinshasa", null, true, Instant.now(), Instant.now());
 
@@ -149,5 +151,20 @@ class SendTestReportServiceTest {
         // Then
         assertThat(result.testSent()).isFalse();
         verify(whatsAppPort, never()).sendReport(anyString(), anyString());
+    }
+
+    // 12.2e: the report is built for the tenantId argument; a mismatch with the bound tenant is a
+    // programming error — not sent, no WhatsApp, the builder never runs.
+    @Test
+    void sendTestReport_tenantArgumentNotTheBoundTenant_notSent() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+        when(storeRepository.findAllActive()).thenReturn(List.of(store));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_other1")).thenReturn(Optional.of(OWNER_PHONE));
+
+        SendTestReportUseCase.TestReportResult result = service.sendTestReport("kv_other1");
+
+        assertThat(result.testSent()).isFalse();
+        verify(whatsAppPort, never()).sendReport(any(), any());
+        verifyNoInteractions(endOfDayReportBuilder, dailyReportFormatter);
     }
 }

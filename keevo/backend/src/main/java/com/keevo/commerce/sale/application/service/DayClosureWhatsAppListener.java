@@ -2,7 +2,7 @@ package com.keevo.commerce.sale.application.service;
 
 import com.keevo.commerce.sale.domain.event.DayClosedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;

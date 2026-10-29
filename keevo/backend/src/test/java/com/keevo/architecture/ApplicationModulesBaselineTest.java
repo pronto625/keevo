@@ -41,9 +41,10 @@ class ApplicationModulesBaselineTest {
      */
     static final Pattern MODULE_DEPENDENCY =
         Pattern.compile("^Module '([^']+)' depends on (?:module|named interface\\(s\\)) '([^']+)' via .* Allowed targets: (.*?)\\.?$", Pattern.DOTALL);
-    /** Modules whose public API is published (12.2a catalog/crm, 12.2b inventory, 12.2c commerce, 12.2d identity/store/subscription): internals are off-limits. */
+    /** Modules whose public API is published (12.2a catalog/crm, 12.2b inventory, 12.2c commerce, 12.2d identity/store/subscription, 12.2e messaging/reporting/feedback): internals are off-limits. Only shared, sync and admin (consumers) are unpinned. */
     static final Set<String> PUBLISHED_API_MODULES =
-        Set.of("catalog", "crm", "inventory", "commerce", "identity", "store", "subscription");
+        Set.of("catalog", "crm", "inventory", "commerce", "identity", "store", "subscription",
+            "messaging", "reporting", "feedback");
 
     static final Pattern NON_EXPOSED_TYPE =
         Pattern.compile("^Module '([^']+)' depends on non-exposed type .* within module '([^']+)'.*", Pattern.DOTALL);
@@ -74,7 +75,7 @@ class ApplicationModulesBaselineTest {
     void verifyModuleBoundaries_warningModeOnly() throws IOException {
         ApplicationModules modules = ApplicationModules.of(KeevoApplication.class);
 
-        // Warning mode — captures violations without failing (blocking from 12.2e)
+        // Warning mode — captures violations without failing (blocking at the end of 12.6)
         Violations violations = modules.detectViolations();
         Files.createDirectories(VIOLATIONS_FILE.getParent());
 
@@ -85,7 +86,7 @@ class ApplicationModulesBaselineTest {
 
         List<String> messages = violations.getMessages();
         Files.writeString(VIOLATIONS_FILE, buildReport(messages));
-        // Cycles and non-exposed stay warning-only (blocking from 12.2e); the allow-lists are pinned:
+        // Cycles and non-exposed stay warning-only (blocking at the end of 12.6); the allow-lists are pinned:
         // a new undeclared module edge must be declared (or removed), never pass silently.
         assertThat(messages.stream().filter(m -> isModuleDependency(m, false)).toList())
             .as("not-allowed module dependencies (undeclared target) — see " + VIOLATIONS_FILE)
@@ -132,7 +133,7 @@ class ApplicationModulesBaselineTest {
         sb.append("  not-allowed (target module not declared): ").append(notAllowed.size()).append('\n');
         sb.append("  other: ").append(other).append('\n');
         sb.append("Run: ApplicationModules.of(KeevoApplication.class).detectViolations()\n");
-        sb.append("Status: NON-BLOCKING (becomes blocking in Epic 12.2e)\n\n");
+        sb.append("Status: NON-BLOCKING (becomes blocking at the end of 12.6)\n\n");
 
         appendCounts(sb, "Not-allowed violations by source module", notAllowed, MODULE_DEPENDENCY, m -> m.group(1));
         appendCounts(sb, "Not-allowed violations by edge (source -> target)", notAllowed, MODULE_DEPENDENCY,

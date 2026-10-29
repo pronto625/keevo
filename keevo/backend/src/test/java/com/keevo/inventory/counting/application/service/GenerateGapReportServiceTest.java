@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
@@ -10,7 +11,6 @@ import com.keevo.inventory.counting.domain.model.*;
 import com.keevo.inventory.counting.domain.port.in.GenerateGapReportQuery;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -27,6 +27,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.when;
 
@@ -72,7 +73,7 @@ class GenerateGapReportServiceTest {
                 InventoryCount.create(SESSION_ID, PRODUCT_B_ID, null, "Shortage", null, 10, 5, ACTOR_ID),
                 InventoryCount.create(SESSION_ID, PRODUCT_C_ID, null, "Surplus", null, 5, 8, ACTOR_ID)
         ));
-        when(productQuery.findAllByIds(anyList())).thenReturn(List.of(
+        when(productQuery.findAllByIds(any(), anyList())).thenReturn(List.of(
                 product(PRODUCT_A_ID, "Concordant", 5000),
                 product(PRODUCT_B_ID, "Shortage", 5000),
                 product(PRODUCT_C_ID, "Surplus", 3000)
@@ -103,7 +104,7 @@ class GenerateGapReportServiceTest {
     void execute_emptyCounts_shouldReturnEmptyReport() {
         when(sessionRepo.findById(SESSION_ID)).thenReturn(Optional.of(createSession()));
         when(countRepo.findBySessionId(SESSION_ID)).thenReturn(List.of());
-        when(productQuery.findAllByIds(anyList())).thenReturn(List.of());
+        when(productQuery.findAllByIds(any(), anyList())).thenReturn(List.of());
         when(storeRepo.findById(STORE_ID)).thenReturn(Optional.of(store()));
 
         InventoryGapReport report = service.execute(new GenerateGapReportQuery(SESSION_ID, ACTOR_ID));
@@ -120,7 +121,7 @@ class GenerateGapReportServiceTest {
                 "Uncounted", null, 10, null, null, null, Instant.now());
         InventoryCount counted = InventoryCount.create(SESSION_ID, PRODUCT_B_ID, null, "Counted", null, 10, 10, ACTOR_ID);
         when(countRepo.findBySessionId(SESSION_ID)).thenReturn(List.of(uncounted, counted));
-        when(productQuery.findAllByIds(anyList())).thenReturn(List.of(product(PRODUCT_B_ID, "Counted", 3000)));
+        when(productQuery.findAllByIds(any(), anyList())).thenReturn(List.of(product(PRODUCT_B_ID, "Counted", 3000)));
         when(storeRepo.findById(STORE_ID)).thenReturn(Optional.of(store()));
 
         InventoryGapReport report = service.execute(new GenerateGapReportQuery(SESSION_ID, ACTOR_ID));
@@ -134,7 +135,7 @@ class GenerateGapReportServiceTest {
         when(countRepo.findBySessionId(SESSION_ID)).thenReturn(List.of(
                 InventoryCount.create(SESSION_ID, PRODUCT_A_ID, null, "FreeProduct", null, 10, 5, ACTOR_ID)
         ));
-        when(productQuery.findAllByIds(anyList())).thenReturn(List.of(product(PRODUCT_A_ID, "FreeProduct", 0)));
+        when(productQuery.findAllByIds(any(), anyList())).thenReturn(List.of(product(PRODUCT_A_ID, "FreeProduct", 0)));
         when(storeRepo.findById(STORE_ID)).thenReturn(Optional.of(store()));
 
         InventoryGapReport report = service.execute(new GenerateGapReportQuery(SESSION_ID, ACTOR_ID));

@@ -11,6 +11,7 @@ import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountCommand;
 import com.keevo.inventory.counting.domain.port.in.SaveInventoryCountUseCase;
 import com.keevo.inventory.counting.domain.port.in.ValidateInventoryCommand;
 import com.keevo.inventory.counting.domain.port.in.ValidateInventoryUseCase;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -35,14 +36,16 @@ class CountingCommandAdapter implements CountingCommandPort {
     }
 
     @Override
-    public UUID openSession(OpenCountingSessionInput in) {
+    public UUID openSession(String tenantSchema, OpenCountingSessionInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         return createSession.execute(new CreateInventorySessionCommand(
                 in.sessionId(), in.storeId(), InventoryScope.valueOf(in.scope().name()),
                 in.categoryIds(), in.actorId())).getId();
     }
 
     @Override
-    public UUID saveCount(SaveCountInput in) {
+    public UUID saveCount(String tenantSchema, SaveCountInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         return saveCount.execute(new SaveInventoryCountCommand(
                 in.sessionId(), in.productId(), in.variantId(),
                 in.productName(), in.variantLabel(),
@@ -50,7 +53,8 @@ class CountingCommandAdapter implements CountingCommandPort {
     }
 
     @Override
-    public UUID validate(ValidateCountingInput in) {
+    public UUID validate(String tenantSchema, ValidateCountingInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         return validateInventory.execute(
                 new ValidateInventoryCommand(in.sessionId(), in.actorId(), in.movementIds())).sessionId();
     }

@@ -5,7 +5,7 @@ import com.keevo.admin.alerts.domain.port.in.SendSyncSilenceNoticesUseCase;
 import com.keevo.admin.alerts.domain.port.out.AlertSourcesPort;
 import com.keevo.admin.alerts.domain.port.out.SyncSilenceNoticeRepository;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessResourceFailureException;

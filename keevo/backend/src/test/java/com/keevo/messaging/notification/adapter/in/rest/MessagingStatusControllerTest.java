@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.adapter.in.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

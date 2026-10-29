@@ -70,7 +70,7 @@ public class InventorySessionSyncHandler extends AbstractSyncOperationHandler {
         // replay of an existing id is a no-op inside the use case (no 2nd row/event); store
         // existence, single-active-session and category rules surface as DomainException →
         // REJECTED with their error code.
-        UUID openedId = countingCommand.openSession(
+        UUID openedId = countingCommand.openSession(tenantId,
                 new OpenCountingSessionInput(sessionId, storeId, scope, categoryIds, actorId));
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,

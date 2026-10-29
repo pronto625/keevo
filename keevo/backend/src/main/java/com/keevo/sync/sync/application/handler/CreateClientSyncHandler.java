@@ -58,12 +58,12 @@ public class CreateClientSyncHandler extends AbstractSyncOperationHandler {
         UUID clientId = UUID.fromString((String) p.get("id"));
 
         // Idempotency: if already synced, return APPLIED without duplicate insert.
-        if (clientQuery.existsById(clientId)) {
+        if (clientQuery.existsById(tenantId, clientId)) {
             return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                     clientId.toString(), null);
         }
 
-        ClientView saved = clientCommand.createWithId(new CreateClientInput(
+        ClientView saved = clientCommand.createWithId(tenantId, new CreateClientInput(
                 clientId,
                 (String) p.get("name"),
                 (String) p.get("phone"),

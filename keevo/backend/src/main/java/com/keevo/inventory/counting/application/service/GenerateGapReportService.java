@@ -1,6 +1,5 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.catalog.api.ProductView;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
@@ -13,6 +12,7 @@ import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.inventory.counting.domain.service.InventoryGapReportBuilder;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,7 +61,7 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
         // Step 3: Load product details for price enrichment
         List<UUID> productIds = counts.stream()
                 .map(InventoryCount::getProductId).distinct().toList();
-        Map<UUID, ProductView> productsMap = productQuery.findAllByIds(productIds).stream()
+        Map<UUID, ProductView> productsMap = productQuery.findAllByIds(TenantContext.getCurrentTenant(), productIds).stream()
                 .collect(Collectors.toMap(ProductView::id, Function.identity()));
 
         // Step 4: Get store name

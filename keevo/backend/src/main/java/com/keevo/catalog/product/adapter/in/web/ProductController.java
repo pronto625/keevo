@@ -186,7 +186,7 @@ public class ProductController {
     @GetMapping("/{productId}/supplier")
     public ResponseEntity<ApiResponseWrapper<ProductSupplierResponseDto>> getProductSupplier(
             @PathVariable UUID productId) {
-        return supplierQueryPort.findByProductId(productId)
+        return supplierQueryPort.findByProductId(TenantContext.getCurrentTenant(), productId)
                 .map(supplier -> ResponseEntity.ok(
                         ApiResponseWrapper.ok(ProductSupplierResponseDto.from(supplier))))
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)

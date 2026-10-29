@@ -209,7 +209,7 @@ public class ImportCsvProductsUseCase {
                 }
                 if (stockPort != null) {
                     // 12.2b: STOCK_ENTRY movement recorded by inventory (catalog-owned required port)
-                    stockPort.recordInitialStock(
+                    stockPort.recordInitialStock(TenantContext.getCurrentTenant(),
                             saved.getId(),
                             storeId,
                             dto.stockQuantity(),

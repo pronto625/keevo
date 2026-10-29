@@ -1,12 +1,12 @@
 package com.keevo.messaging.notification.adapter.out;
 
 import com.keevo.messaging.notification.domain.model.DeviceToken;
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.model.PushSendResult;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.PushSendResult;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.messaging.api.NotificationPort;
 import com.google.firebase.messaging.*;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;

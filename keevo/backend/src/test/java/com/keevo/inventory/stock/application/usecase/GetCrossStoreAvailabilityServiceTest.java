@@ -10,6 +10,7 @@ import com.keevo.inventory.stock.domain.port.in.GetCrossStoreAvailabilityUseCase
 import com.keevo.inventory.stock.domain.port.out.MultiStoreStockRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,17 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class GetCrossStoreAvailabilityServiceTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private ProductQueryPort productQuery;
     @Mock private MultiStoreStockRepository multiStoreStockRepository;
@@ -56,7 +68,7 @@ class GetCrossStoreAvailabilityServiceTest {
     void execute_shouldReturnAvailabilityEntries_whenProductExists() {
         var product = sampleProduct();
         var entries = List.of(sampleEntry(storeId1, 10), sampleEntry(storeId2, 0));
-        when(productQuery.findById(productId)).thenReturn(Optional.of(product));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(product));
         when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(entries);
 
         GetCrossStoreAvailabilityUseCase.Result result =
@@ -69,7 +81,7 @@ class GetCrossStoreAvailabilityServiceTest {
 
     @Test
     void execute_shouldThrowProductNotFound_whenProductIdUnknown() {
-        when(productQuery.findById(productId)).thenReturn(Optional.empty());
+        when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.execute(new GetCrossStoreAvailabilityQuery(productId)))
                 .isInstanceOf(DomainException.class)
@@ -81,7 +93,7 @@ class GetCrossStoreAvailabilityServiceTest {
 
     @Test
     void execute_shouldReturnEmptyList_whenNoStockLevelsExist() {
-        when(productQuery.findById(productId)).thenReturn(Optional.of(sampleProduct()));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(sampleProduct()));
         when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(List.of());
 
         GetCrossStoreAvailabilityUseCase.Result result =
@@ -92,12 +104,12 @@ class GetCrossStoreAvailabilityServiceTest {
 
     @Test
     void execute_shouldDelegateToRepository_withCorrectProductId() {
-        when(productQuery.findById(productId)).thenReturn(Optional.of(sampleProduct()));
+        when(productQuery.findById(TenantContext.getCurrentTenant(), productId)).thenReturn(Optional.of(sampleProduct()));
         when(multiStoreStockRepository.getProductAvailability(productId)).thenReturn(List.of());
 
         service.execute(new GetCrossStoreAvailabilityQuery(productId));
 
-        verify(productQuery).findById(productId);
+        verify(productQuery).findById(TenantContext.getCurrentTenant(), productId);
         verify(multiStoreStockRepository).getProductAvailability(productId);
     }
 }

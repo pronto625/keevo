@@ -1,12 +1,12 @@
 package com.keevo.identity.onboarding.application.service;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
+import com.keevo.identity.api.DailyReportTextPort;
+import com.keevo.identity.api.DailyReportTextRequest;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
-import com.keevo.reporting.report.application.service.DailyReportFormatter;
-import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
-import com.keevo.reporting.report.domain.model.EndOfDayReportData;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
@@ -30,19 +30,16 @@ public class SendTestReportService implements SendTestReportUseCase {
     private static final Logger log = LoggerFactory.getLogger(SendTestReportService.class);
     private static final String TEST_PREFIX = "🧪 [TEST] ";
 
-    private final EndOfDayReportBuilder reportBuilder;
-    private final DailyReportFormatter formatter;
+    private final DailyReportTextPort dailyReportText;
     private final WhatsAppPort whatsAppPort;
     private final StoreQueryPort storeQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
 
-    public SendTestReportService(EndOfDayReportBuilder reportBuilder,
-                                 DailyReportFormatter formatter,
+    public SendTestReportService(DailyReportTextPort dailyReportText,
                                  WhatsAppPort whatsAppPort,
                                  StoreQueryPort storeQuery,
                                  OwnerRecipientResolver ownerRecipientResolver) {
-        this.reportBuilder = reportBuilder;
-        this.formatter = formatter;
+        this.dailyReportText = dailyReportText;
         this.whatsAppPort = whatsAppPort;
         this.storeQuery = storeQuery;
         this.ownerRecipientResolver = ownerRecipientResolver;
@@ -73,13 +70,17 @@ public class SendTestReportService implements SendTestReportUseCase {
         Instant now = Instant.now();
 
         try {
-            EndOfDayReportData data = reportBuilder.build(
-                store.id(), now, now,
-                store.name(), LocalDate.now(), LocalTime.now(), false
-            );
-            String reportText = TEST_PREFIX + formatter.format(data);
+            String reportText = TEST_PREFIX + dailyReportText.dailyReportText(
+                tenantId,
+                new DailyReportTextRequest(store.id(), store.name(), now, now,
+                        LocalDate.now(), LocalTime.now(), false));
             whatsAppPort.sendReport(ownerPhone, reportText);
             return new TestReportResult(true);
+        } catch (IllegalStateException | DomainException e) {
+            // Tenant guard (tenantId ≠ bound tenant) or invalid report request — a programming error,
+            // not a delivery failure: logged as such, result unchanged (not sent).
+            log.error("[report-test] test report not built for tenant {}", tenantId, e);
+            return new TestReportResult(false);
         } catch (Exception e) {
             log.warn("[report-test] WhatsApp delivery failed for owner {} — {}", ownerPhone, e.getMessage());
             return new TestReportResult(false);

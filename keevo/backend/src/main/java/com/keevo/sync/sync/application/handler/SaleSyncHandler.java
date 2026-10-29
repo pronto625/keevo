@@ -1,6 +1,5 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.commerce.api.RecordSaleInput;
@@ -64,7 +63,7 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
         // v1s-16-15: sales.store_id has no FK — a sale for a store the server does not
         // know (rolled back offline creation) would be stored as an orphan. Refused so the
         // device quarantines it and the payload lands in sync_error_log.
-        if (storeQuery.findById(TenantContext.getCurrentTenant(), storeId).isEmpty()) {
+        if (storeQuery.findById(tenantId, storeId).isEmpty()) {
             throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
@@ -86,7 +85,7 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
                 requireIntegralInt(item.get("quantity"), "quantity")
         )).toList();
 
-        saleCommandPort.recordSale(new RecordSaleInput(
+        saleCommandPort.recordSale(tenantId, new RecordSaleInput(
                 saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef,
                 discountAmount, requestedStatus, saleItems,
                 resolveClientTime(p.get("occurredAt"), operation.clientTimestamp()),

@@ -5,5 +5,5 @@ import java.util.UUID;
 /** Read access to the crm's clients for other modules. */
 public interface ClientQueryPort {
 
-    boolean existsById(UUID clientId);
+    boolean existsById(String tenantSchema, UUID clientId);
 }

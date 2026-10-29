@@ -58,7 +58,7 @@ public class CreateSupplierSyncHandler extends AbstractSyncOperationHandler {
         UUID supplierId = UUID.fromString((String) p.get("id"));
 
         // Idempotency: if already synced, return APPLIED without duplicate insert.
-        if (supplierQuery.existsById(supplierId)) {
+        if (supplierQuery.existsById(tenantId, supplierId)) {
             return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                     supplierId.toString(), null);
         }
@@ -69,7 +69,7 @@ public class CreateSupplierSyncHandler extends AbstractSyncOperationHandler {
         List<UUID> productIds = rawIds != null
                 ? rawIds.stream().map(UUID::fromString).toList()
                 : List.of();
-        SupplierView saved = supplierCommand.createWithId(new CreateSupplierInput(
+        SupplierView saved = supplierCommand.createWithId(tenantId, new CreateSupplierInput(
                 supplierId,
                 (String) p.get("name"),
                 (String) p.get("phone"),

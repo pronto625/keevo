@@ -1,5 +1,7 @@
 package com.keevo.catalog.product.application.usecase;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
@@ -14,9 +16,7 @@ import com.keevo.catalog.product.domain.port.out.DefaultStorePort;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.api.InitialStockPort;
 import org.springframework.beans.factory.ObjectProvider;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -293,7 +293,7 @@ class ImportCsvProductsUseCaseTest {
 
             useCase.execute(ownerCommandForStore(activeStoreId));
 
-            verify(initialStockPort).recordInitialStock(
+            verify(initialStockPort).recordInitialStock(any(), 
                     any(), eq(activeStoreId), eq(5), eq(actorId), anyString());
             verifyNoInteractions(defaultStorePort);
         }

@@ -576,6 +576,9 @@ As a **architecte**, I want **des `api` pour les modules transverses très dépe
 
 ### Story 12.2e : API publiques `reporting`/`messaging`/`sync` + activation `verify()` BLOQUANT
 
+*(2026-10-29, décision déléguée — spec-12-2e) : le passage de `verify()` en BLOQUANT est déplacé à la fin de 12.6, après 12.2f (extraction du core) et 12.3/12.4 — impossible tant que 107 cycles et les violations `shared → X` subsistent. 12.2e = API publiques messaging/reporting/feedback + convention tenant unique.*
+
+
 As a **architecte**, I want **finaliser les dernières `api` et passer `verify()` en build bloquant**, So that **toute régression de frontière casse désormais la CI (MOD-NFR3, MOD-NFR8)**.
 **Acceptance Criteria:**
 **Given** tous les modules dotés de leur `api`
@@ -601,6 +604,8 @@ Scope: `shared` (future `core`) still references ~400 internal types of business
 
 - [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] identity ↔ subscription cycle (identity checks plan limits and records plan-change events; subscription reads tenants and `PlanType`) — split tenant vs plan ownership [identity/auth, subscription/plan]
 - [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] `StoreCountAdapter` / `UserCountAdapter` (subscription) read store/identity tables over JDBC — move counts to the owning modules as `subscription.api` SPI implementations, like `ProductCountAdapter`/`EmployeeCountAdapter` [subscription/plan/adapter/out]
+
+- [ ] [Deferred-from: review 12-2e, 2026-10-29] `messaging.api.NotificationPort` keeps a historical `tenantId` and no `requireCurrent` guard — align with the published-port tenant convention [messaging/api/NotificationPort.java]
 
 ### Story 12.3 : Migrer les events vers le registre Spring Modulith + catalogue partagé
 
@@ -630,6 +635,8 @@ So that **la livraison est fiable/atomique (outbox) et les modules sont découpl
 **Items (routed 2026-10-28 from refonte-journal-incoherences.md):**
 - [ ] [Deferred-from: journal A3, 2026-10-28] Bump spring-modulith-bom 1.4.0 → latest 1.4.x patch [keevo/backend/pom.xml:36] — 1.4.x is the Boot 3.5 line; do not move to 2.x (Boot 4)
 - [ ] [Deferred-from: journal A4, 2026-10-28] Choose `spring.modulith.events.completion-mode` (UPDATE + purge job vs ARCHIVE vs DELETE) [application.yml] — decide with 12.4 retention needs
+
+- [ ] [Deferred-from: review 12-2e, 2026-10-29] Draft tracking: catalog calls `messaging.api.DraftValidationCommandPort` synchronously; messaging could consume `ProductCreatedProgressivelyEvent` / `ProductActivatedEvent` instead, removing the catalog → messaging edge (and a catalog ↔ messaging cycle) [catalog/product/application/usecase, messaging/notification]
 
 ### Story 12.4 : Intégrer le registre d'events avec le schema-per-tenant
 
@@ -683,6 +690,8 @@ So that **la structure reflète les vraies frontières de modules (MOD-NFR8, dé
 - Migrations Flyway inchangées (tables identiques) ; pur refactor de code.
 
 ### Story 12.6 : Règles ArchUnit complémentaires (graphe `requires`, capabilities, schéma)
+
+*(2026-10-29) : reçoit l'activation BLOQUANTE de `verify()` (cycles + non exposés), après 12.2f et 12.3/12.4 — cf. note 12.2e.*
 
 As a **architecte**,
 I want **des règles ArchUnit pour ce que Spring Modulith ne couvre pas**,

@@ -10,8 +10,8 @@ import com.keevo.commerce.sale.domain.event.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -57,8 +57,9 @@ public class SaleValidationCascadeService {
 
     public void onProductActivated(UUID productId, UUID actorId) {
         List<Sale> pendingSales = saleRepository.findPendingByProductId(productId);
+        String tenantId = TenantContext.getCurrentTenant();
         for (Sale sale : pendingSales) {
-            attemptCascadeValidation(sale, productId, actorId);
+            attemptCascadeValidation(sale, productId, actorId, tenantId);
         }
     }
 
@@ -69,12 +70,13 @@ public class SaleValidationCascadeService {
 
     public void onStockChanged(UUID productId, UUID storeId, UUID actorId) {
         List<Sale> pendingSales = saleRepository.findPendingByProductId(productId);
+        String tenantId = TenantContext.getCurrentTenant();
         for (Sale sale : pendingSales) {
-            attemptCascadeValidation(sale, productId, actorId);
+            attemptCascadeValidation(sale, productId, actorId, tenantId);
         }
     }
 
-    private boolean attemptCascadeValidation(Sale sale, UUID triggerProductId, UUID actorId) {
+    private boolean attemptCascadeValidation(Sale sale, UUID triggerProductId, UUID actorId, String tenantId) {
         // Check all products in the sale are ACTIVE
         for (SaleItem item : sale.getItems()) {
             String status = productStatusPort.getProductStatus(item.getProductId());
@@ -86,7 +88,7 @@ public class SaleValidationCascadeService {
         // Check stock for ALL products (including the trigger product), on the level that is
         // decremented below — the item's variant, null for a simple product (Story 12.2c).
         for (SaleItem item : sale.getItems()) {
-            int available = stockQuery.availableQuantity(item.getProductId(), item.getVariantId(), sale.getStoreId());
+            int available = stockQuery.availableQuantity(tenantId, item.getProductId(), item.getVariantId(), sale.getStoreId());
             if (available <= 0) {
                 log.warn("Vente #{} en attente : le produit '{}' n'a pas de stock",
                         sale.getId().toString().substring(0, 8), item.getProductName());
@@ -104,7 +106,7 @@ public class SaleValidationCascadeService {
 
         // Decrement stock for ALL items
         for (SaleItem item : sale.getItems()) {
-            stockCommand.recordMovement(new StockMovementInput(
+            stockCommand.recordMovement(tenantId, new StockMovementInput(
                     item.getProductId(),
                     item.getVariantId(),
                     sale.getStoreId(),
@@ -117,8 +119,6 @@ public class SaleValidationCascadeService {
                     false
             ));
         }
-
-        String tenantId = TenantContext.getCurrentTenant();
         Instant now = Instant.now();
 
         eventPublisher.publishEvent(new SaleCompletedEvent(

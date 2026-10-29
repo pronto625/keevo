@@ -1,5 +1,7 @@
 package com.keevo.catalog.product.application.usecase;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,11 +18,10 @@ import java.util.Optional;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.messaging.notification.adapter.in.api.DraftValidationApiTestSupport;
 import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
 import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.mockito.MockedStatic;
 import org.springframework.context.ApplicationEventPublisher;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -47,7 +48,8 @@ class UpdateProductUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new UpdateProductUseCase(productRepository, draftNotificationRepository, eventPublisher, objectMapper);
+        useCase = new UpdateProductUseCase(productRepository,
+                DraftValidationApiTestSupport.commandPort(draftNotificationRepository), eventPublisher, objectMapper);
     }
 
     // Device test: a price-only PATCH answered 404 « Produit introuvable ».

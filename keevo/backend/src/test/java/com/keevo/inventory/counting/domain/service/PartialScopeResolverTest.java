@@ -9,6 +9,7 @@ import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.counting.domain.model.InventoryProductRow;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 @DisplayName("PartialScopeResolver — PARTIAL scope product resolution")
 class PartialScopeResolverTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private StockLevelRepository stockLevelRepository;
     @Mock private ProductQueryPort productQuery;
@@ -71,8 +83,8 @@ class PartialScopeResolverTest {
 
         var productA = CatalogProductApiTestSupport.view(new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
                 CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
-        when(productQuery.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
-        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findByCategoryIds(TenantContext.getCurrentTenant(), List.of(CATEGORY_A))).thenReturn(List.of(productA));
+        when(productQuery.findPhotoUrlsByIds(any(), anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 
@@ -86,8 +98,8 @@ class PartialScopeResolverTest {
         when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
         var productA = CatalogProductApiTestSupport.view(new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
                 CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
-        when(productQuery.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of(productA));
-        when(productQuery.findPhotoUrlsByIds(anyList())).thenReturn(Map.of());
+        when(productQuery.findByCategoryIds(TenantContext.getCurrentTenant(), List.of(CATEGORY_A))).thenReturn(List.of(productA));
+        when(productQuery.findPhotoUrlsByIds(any(), anyList())).thenReturn(Map.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 
@@ -99,7 +111,7 @@ class PartialScopeResolverTest {
 
     @Test
     void resolveProducts_shouldReturnEmptyWhenCategoryHasNoActiveProduct() {
-        when(productQuery.findByCategoryIds(List.of(CATEGORY_A))).thenReturn(List.of());
+        when(productQuery.findByCategoryIds(TenantContext.getCurrentTenant(), List.of(CATEGORY_A))).thenReturn(List.of());
 
         List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
 

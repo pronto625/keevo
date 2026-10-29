@@ -1,14 +1,14 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.commerce.sale.domain.event.DayClosedEvent;
 import com.keevo.commerce.api.DayClosureSummary;
 import com.keevo.identity.api.OwnerRecipientResolver;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,6 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;

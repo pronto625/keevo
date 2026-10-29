@@ -1,8 +1,8 @@
 package com.keevo.messaging.notification.adapter.out;
 
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.model.PushSendResult;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.PushSendResult;
+import com.keevo.messaging.api.NotificationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;

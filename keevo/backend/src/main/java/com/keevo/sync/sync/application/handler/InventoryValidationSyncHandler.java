@@ -71,12 +71,12 @@ public class InventoryValidationSyncHandler extends AbstractSyncOperationHandler
         UUID sessionId = UUID.fromString((String) operation.payload().get("sessionId"));
 
         // Idempotency guard: if session already VALIDATED, skip
-        if (countingQuery.isSessionValidated(sessionId)) {
+        if (countingQuery.isSessionValidated(tenantId, sessionId)) {
             return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                     sessionId.toString(), null);
         }
 
-        UUID validatedId = countingCommand.validate(
+        UUID validatedId = countingCommand.validate(tenantId,
                 new ValidateCountingInput(sessionId, actorId, movementIds(operation.payload())));
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 validatedId.toString(), null);

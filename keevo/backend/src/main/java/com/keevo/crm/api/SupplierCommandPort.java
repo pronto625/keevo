@@ -15,12 +15,12 @@ public interface SupplierCommandPort {
      * @return the created supplier; its {@code productIds} are the requested links
      * @throws com.keevo.shared.domain.exception.DomainException VALIDATION_ERROR on invalid fields
      */
-    SupplierView createWithId(CreateSupplierInput input);
+    SupplierView createWithId(String tenantSchema, CreateSupplierInput input);
 
     /** @return the updated supplier; {@code productIds} echoes the input (empty when the links were kept) */
-    SupplierView update(UpdateSupplierInput input);
+    SupplierView update(String tenantSchema, UpdateSupplierInput input);
 
-    void archive(UUID supplierId, UUID actorId, String tenantId);
+    void archive(String tenantSchema, UUID supplierId, UUID actorId);
 
-    void unarchive(UUID supplierId, UUID actorId, String tenantId);
+    void unarchive(String tenantSchema, UUID supplierId, UUID actorId);
 }

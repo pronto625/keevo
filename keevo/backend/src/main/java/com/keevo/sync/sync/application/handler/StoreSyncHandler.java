@@ -1,7 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.api.StoreCommandPort;
 import com.keevo.store.api.StoreQueryPort;
@@ -60,7 +59,7 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
 
         Map<String, Object> p = operation.payload();
         UUID storeId = UUID.fromString((String) p.get("storeId"));
-        var current = storeQuery.findById(TenantContext.getCurrentTenant(), storeId);
+        var current = storeQuery.findById(tenantId, storeId);
 
         return switch (operation.operationType()) {
             case "UPDATE_STORE" -> {
@@ -75,7 +74,7 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             storeId.toString(), null);
                 }
-                var store = storeCommand.update(TenantContext.getCurrentTenant(), new UpdateStoreInput(
+                var store = storeCommand.update(tenantId, new UpdateStoreInput(
                         storeId,
                         name,
                         address,
@@ -89,7 +88,7 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             storeId.toString(), null);
                 }
-                storeCommand.deactivate(TenantContext.getCurrentTenant(), storeId, actorId);
+                storeCommand.deactivate(tenantId, storeId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         storeId.toString(), null);
             }

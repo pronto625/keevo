@@ -4,8 +4,8 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.event.ProductCreatedProgressivelyEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.messaging.notification.domain.model.DraftPendingValidation;
-import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.messaging.api.DraftValidationCommandPort;
+import com.keevo.messaging.api.PendingDraftInput;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -42,7 +41,7 @@ public class CreateDraftProductUseCase {
     private static final String SKU_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     private final ProductRepository         productRepository;
-    private final DraftNotificationRepository draftRepository;
+    private final DraftValidationCommandPort draftValidation;
     private final ProductCountPort          productCountPort;
     private final SubscriptionQueryPort    subscriptionQuery;
     private final PlanLimitPort            planLimit;
@@ -51,14 +50,14 @@ public class CreateDraftProductUseCase {
 
     public CreateDraftProductUseCase(
             ProductRepository productRepository,
-            DraftNotificationRepository draftRepository,
+            DraftValidationCommandPort draftValidation,
             ProductCountPort productCountPort,
             SubscriptionQueryPort subscriptionQuery,
             PlanLimitPort planLimit,
             ApplicationEventPublisher eventPublisher,
             TransactionLockPort transactionLock) {
         this.productRepository     = productRepository;
-        this.draftRepository       = draftRepository;
+        this.draftValidation       = draftValidation;
         this.productCountPort      = productCountPort;
         this.subscriptionQuery = subscriptionQuery;
         this.planLimit        = planLimit;
@@ -144,15 +143,9 @@ public class CreateDraftProductUseCase {
         var saved = productRepository.save(draft);
         String tenantId = TenantContext.getCurrentTenant();
 
-        // Derive a deterministic UUID from the tenant schema name so the tracking record
-        // carries a meaningful tenant identifier instead of a nil UUID.
-        UUID tenantUuid = UUID.nameUUIDFromBytes(tenantId.getBytes(StandardCharsets.UTF_8));
-
         // Track draft for badge counter (EMPLOYEE drafts need owner notification)
-        var pending = DraftPendingValidation.create(
-                saved.getId(), saved.getName(), command.actorId(),
-                tenantUuid);
-        draftRepository.save(pending);
+        draftValidation.recordPending(tenantId,
+                new PendingDraftInput(saved.getId(), saved.getName(), command.actorId()));
 
         // Domain event → DraftProductNotificationListener will push notification
         eventPublisher.publishEvent(new ProductCreatedProgressivelyEvent(

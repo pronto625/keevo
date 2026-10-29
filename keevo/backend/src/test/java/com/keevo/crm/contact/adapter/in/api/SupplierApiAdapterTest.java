@@ -11,6 +11,7 @@ import com.keevo.crm.contact.application.usecase.UpdateSupplierUseCase;
 import com.keevo.crm.contact.domain.entity.Supplier;
 import com.keevo.crm.contact.domain.port.out.SupplierRepository;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,6 +32,17 @@ import static org.mockito.Mockito.*;
 /** Story 12.2a — the crm supplier ports delegate to the repository / use cases and map faithfully. */
 @ExtendWith(MockitoExtension.class)
 class SupplierApiAdapterTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private SupplierRepository supplierRepository;
     @Mock private GetSupplierByProductUseCase getSupplierByProduct;
@@ -64,8 +76,8 @@ class SupplierApiAdapterTest {
         UUID unknown = UUID.randomUUID();
         when(supplierRepository.findById(unknown)).thenReturn(Optional.empty());
 
-        assertThat(adapter.existsById(ID)).isTrue();
-        assertThat(adapter.existsById(unknown)).isFalse();
+        assertThat(adapter.existsById(TenantContext.getCurrentTenant(), ID)).isTrue();
+        assertThat(adapter.existsById(TenantContext.getCurrentTenant(), unknown)).isFalse();
     }
 
     @Test
@@ -75,7 +87,7 @@ class SupplierApiAdapterTest {
         when(getSupplierProfile.execute(ID))
                 .thenReturn(new GetSupplierProfileUseCase.SupplierProfileResult(supplier(), List.of(PRODUCT, other)));
 
-        assertThat(adapter.findByProductId(PRODUCT)).contains(new SupplierView(ID, "Distributeur SA",
+        assertThat(adapter.findByProductId(TenantContext.getCurrentTenant(), PRODUCT)).contains(new SupplierView(ID, "Distributeur SA",
                 "+237690000099", "d@s.cm", false, List.of(PRODUCT, other), T0, T0));
     }
 
@@ -83,7 +95,7 @@ class SupplierApiAdapterTest {
     void findByProductId_noLinkedSupplier_isEmpty_withoutProfileLookup() {
         when(getSupplierByProduct.execute(PRODUCT)).thenReturn(Optional.empty());
 
-        assertThat(adapter.findByProductId(PRODUCT)).isEmpty();
+        assertThat(adapter.findByProductId(TenantContext.getCurrentTenant(), PRODUCT)).isEmpty();
         verifyNoInteractions(getSupplierProfile);
     }
 
@@ -91,7 +103,7 @@ class SupplierApiAdapterTest {
     void createWithId_savesThenLinksTheProducts() {
         when(supplierRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        SupplierView view = adapter.createWithId(
+        SupplierView view = adapter.createWithId(TenantContext.getCurrentTenant(), 
                 new CreateSupplierInput(ID, "Distributeur SA", "+237690000099", null, List.of(PRODUCT)));
 
         InOrder order = inOrder(supplierRepository);
@@ -104,15 +116,15 @@ class SupplierApiAdapterTest {
     void createWithId_withoutProducts_linksNothing() {
         when(supplierRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        adapter.createWithId(new CreateSupplierInput(ID, "Distributeur SA", "+237690000099", null, null));
-        adapter.createWithId(new CreateSupplierInput(ID, "Distributeur SA", "+237690000099", null, List.of()));
+        adapter.createWithId(TenantContext.getCurrentTenant(), new CreateSupplierInput(ID, "Distributeur SA", "+237690000099", null, null));
+        adapter.createWithId(TenantContext.getCurrentTenant(), new CreateSupplierInput(ID, "Distributeur SA", "+237690000099", null, List.of()));
 
         verify(supplierRepository, never()).linkProducts(any(), any());
     }
 
     @Test
     void createWithId_invalidPhone_isRejected_andNothingIsSaved() {
-        assertThatThrownBy(() -> adapter.createWithId(new CreateSupplierInput(ID, "X", "notE164", null, null)))
+        assertThatThrownBy(() -> adapter.createWithId(TenantContext.getCurrentTenant(), new CreateSupplierInput(ID, "X", "notE164", null, null)))
                 .isInstanceOf(DomainException.class);
         verifyNoInteractions(supplierRepository);
     }
@@ -122,7 +134,7 @@ class SupplierApiAdapterTest {
         when(updateSupplier.execute(any())).thenReturn(supplier());
         List<UUID> links = List.of(PRODUCT);
 
-        SupplierView view = adapter.update(new UpdateSupplierInput(ID, "Distributeur SA", "+237690000099", null, links, ACTOR));
+        SupplierView view = adapter.update(TenantContext.getCurrentTenant(), new UpdateSupplierInput(ID, "Distributeur SA", "+237690000099", null, links, ACTOR));
 
         verify(updateSupplier).execute(new UpdateSupplierUseCase.UpdateSupplierCommand(
                 ID, "Distributeur SA", "+237690000099", null, links, ACTOR));
@@ -137,7 +149,7 @@ class SupplierApiAdapterTest {
         when(getSupplierProfile.execute(ID))
                 .thenReturn(new GetSupplierProfileUseCase.SupplierProfileResult(supplier(), List.of(PRODUCT, other)));
 
-        SupplierView view = adapter.update(new UpdateSupplierInput(ID, "Distributeur SA", "+237690000099", null, null, ACTOR));
+        SupplierView view = adapter.update(TenantContext.getCurrentTenant(), new UpdateSupplierInput(ID, "Distributeur SA", "+237690000099", null, null, ACTOR));
 
         assertThat(view.productIds()).containsExactly(PRODUCT, other);
     }
@@ -149,10 +161,24 @@ class SupplierApiAdapterTest {
 
     @Test
     void archive_and_unarchive_delegate() {
-        adapter.archive(ID, ACTOR, TENANT);
-        adapter.unarchive(ID, ACTOR, TENANT);
+        adapter.archive(TENANT, ID, ACTOR);
+        adapter.unarchive(TENANT, ID, ACTOR);
 
         verify(archiveSupplier).execute(ID, ACTOR, TENANT);
         verify(unarchiveSupplier).execute(ID, ACTOR, TENANT);
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.existsById("kv_other1", ID))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.existsById(null, ID))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive("kv_other1", ID, ACTOR))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive(null, ID, ACTOR))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(supplierRepository, archiveSupplier);
     }
 }

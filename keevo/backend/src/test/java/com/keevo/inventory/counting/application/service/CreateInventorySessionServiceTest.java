@@ -1,5 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.catalog.api.CategoryView;
@@ -9,7 +11,6 @@ import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionCommand;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -107,7 +108,7 @@ class CreateInventorySessionServiceTest {
         when(storeRepository.findById(STORE_ID)).thenReturn(Optional.of(STORE));
         when(sessionRepository.findActiveByStoreId(STORE_ID)).thenReturn(Optional.empty());
         UUID invalidCatId = UUID.randomUUID();
-        when(categoryQuery.findById(invalidCatId)).thenReturn(Optional.empty());
+        when(categoryQuery.findById(TenantContext.getCurrentTenant(), invalidCatId)).thenReturn(Optional.empty());
 
         var cmd = new CreateInventorySessionCommand(STORE_ID, InventoryScope.PARTIAL, List.of(invalidCatId), ACTOR_ID);
         assertThatThrownBy(() -> service.execute(cmd))
@@ -126,7 +127,7 @@ class CreateInventorySessionServiceTest {
         var result = service.execute(cmd);
 
         assertThat(result.getCategoryIds()).isNull();
-        verify(categoryQuery, never()).findById(any());
+        verify(categoryQuery, never()).findById(any(), any());
     }
 
     @Test
@@ -150,7 +151,7 @@ class CreateInventorySessionServiceTest {
         when(sessionRepository.findActiveByStoreId(STORE_ID)).thenReturn(Optional.empty());
         when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         UUID catId = UUID.randomUUID();
-        when(categoryQuery.findById(catId)).thenReturn(Optional.of(
+        when(categoryQuery.findById(TenantContext.getCurrentTenant(), catId)).thenReturn(Optional.of(
                 new CategoryView(catId, "Test", null, true, false, Instant.now(), Instant.now())));
 
         var cmd = new CreateInventorySessionCommand(STORE_ID, InventoryScope.PARTIAL, List.of(catId), ACTOR_ID);

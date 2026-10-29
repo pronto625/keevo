@@ -2,6 +2,7 @@ package com.keevo.commerce.sale.adapter.out.persistence.impl;
 
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
@@ -21,6 +22,6 @@ public class ProductStatusPortAdapter implements ProductStatusPort {
 
     @Override
     public String getProductStatus(UUID productId) {
-        return productQuery.findStatusName(productId).orElse("UNKNOWN");
+        return productQuery.findStatusName(TenantContext.getCurrentTenant(), productId).orElse("UNKNOWN");
     }
 }

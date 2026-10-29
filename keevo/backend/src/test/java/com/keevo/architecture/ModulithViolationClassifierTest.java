@@ -59,9 +59,18 @@ class ModulithViolationClassifierTest {
     private static final String NON_EXPOSED_INTO_STORE =
         "Module 'commerce' depends on non-exposed type com.keevo.store.store.domain.model.Store "
             + "within module 'store'!";
-    /** messaging publishes no API yet (12.2e): its internals are not pinned. */
+    /** sync is a consumer only and publishes no API (12.2e): its internals are not pinned. */
+    private static final String NON_EXPOSED_INTO_REPORTING =
+        "Module 'identity' depends on non-exposed type com.keevo.reporting.report.application.service.DailyReportFormatter "
+            + "within module 'reporting'!";
+    private static final String INTERNAL_OF_DECLARED_FEEDBACK =
+        "Module 'admin' depends on module 'feedback' via com.keevo.admin.A -> com.keevo.feedback.feedback.domain.model.Feedback. "
+            + "Allowed targets: feedback :: api, shared.";
+    private static final String NON_EXPOSED_INTO_SYNC =
+        "Module 'commerce' depends on non-exposed type com.keevo.sync.sync.domain.model.SyncOperation "
+            + "within module 'sync'!";
     private static final String NON_EXPOSED_INTO_MESSAGING =
-        "Module 'commerce' depends on non-exposed type com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort "
+        "Module 'commerce' depends on non-exposed type com.keevo.messaging.notification.domain.model.DeviceToken "
             + "within module 'messaging'!";
     private static final String INTERNAL_OF_DECLARED_CATALOG =
         "Module 'sync' depends on module 'catalog' via com.keevo.sync.A -> com.keevo.catalog.product.domain.entity.Product. "
@@ -74,7 +83,11 @@ class ModulithViolationClassifierTest {
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_FROM_SHARED)).isFalse();
         // store's API is published since 12.2d
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_STORE)).isTrue();
-        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_MESSAGING)).isFalse();
+        // messaging, reporting and feedback are published since 12.2e
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_MESSAGING)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_REPORTING)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(INTERNAL_OF_DECLARED_FEEDBACK)).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(NON_EXPOSED_INTO_SYNC)).isFalse();
         assertThat(ApplicationModulesBaselineTest.isInternalAccessToPublishedModule(MODULE_UNDECLARED)).isFalse();
     }
 }

@@ -16,7 +16,7 @@ public interface StockCommandPort {
      * @throws com.keevo.shared.domain.exception.DomainException PRODUCT_NOT_FOUND, or
      *         INSUFFICIENT_STOCK when the level would go negative and {@code allowNegative} is false
      */
-    void recordMovement(StockMovementInput input);
+    void recordMovement(String tenantSchema, StockMovementInput input);
 
     /**
      * Sets the absolute quantity of a product in a store (ADJUSTMENT movement of the delta).
@@ -24,7 +24,7 @@ public interface StockCommandPort {
      * @param movementId client-generated movement id, null → server generates
      * @throws com.keevo.shared.domain.exception.DomainException VALIDATION_ERROR if negative
      */
-    void adjustTo(UUID productId, UUID variantId, UUID storeId, int newQuantity,
+    void adjustTo(String tenantSchema, UUID productId, UUID variantId, UUID storeId, int newQuantity,
                   UUID actorId, String notes, UUID movementId);
 
     /**
@@ -33,6 +33,6 @@ public interface StockCommandPort {
      * @param movementId client-generated movement id, null → server generates
      * @throws IllegalArgumentException if {@code quantity <= 0}
      */
-    void recordEntry(UUID productId, UUID variantId, UUID storeId, int quantity,
+    void recordEntry(String tenantSchema, UUID productId, UUID variantId, UUID storeId, int quantity,
                      UUID actorId, String notes, UUID movementId);
 }

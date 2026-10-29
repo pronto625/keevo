@@ -14,7 +14,7 @@ import com.keevo.admin.platform.domain.model.SystemHealthFixtures;
 import com.keevo.admin.platform.domain.port.in.GetSystemHealthUseCase;
 import com.keevo.admin.subscription.domain.model.PlanAlert;
 import com.keevo.admin.subscription.domain.port.in.ListPlanAlertsUseCase;
-import com.keevo.feedback.feedback.domain.port.in.HandleFeedbackUseCase;
+import com.keevo.feedback.api.FeedbackInboxPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,7 +65,7 @@ class AdminAlertServiceTest {
     @Mock AlertAckRepository acks;
     @Mock ListPlanAlertsUseCase planAlerts;
     @Mock GetSystemHealthUseCase health;
-    @Mock HandleFeedbackUseCase handleFeedback;
+    @Mock FeedbackInboxPort feedbackInbox;
 
     MutableClock clock;
     AdminAlertService service;
@@ -73,7 +73,7 @@ class AdminAlertServiceTest {
     @BeforeEach
     void setUp() {
         clock = new MutableClock(NOW);
-        service = new AdminAlertService(sources, acks, planAlerts, health, handleFeedback, clock);
+        service = new AdminAlertService(sources, acks, planAlerts, health, feedbackInbox, clock);
         lenient().when(health.recentHealth()).thenReturn(SystemHealthFixtures.healthy(NOW).build());
         lenient().when(sources.unhandledHighFeedbackSince(any())).thenReturn(List.of());
         lenient().when(sources.deletionPending()).thenReturn(List.of());
@@ -350,17 +350,17 @@ class AdminAlertServiceTest {
     void markHandled() {
         UUID actor = UUID.randomUUID();
         service.markHandled("feedback:" + F1, actor);
-        verify(handleFeedback).markHandled(F1, actor);
+        verify(feedbackInbox).markHandled(F1, actor);
         verify(acks).markHandled("feedback:" + F1, NOW, actor);
 
         service.markHandled("health:error-rate", actor);
-        verify(handleFeedback, times(1)).markHandled(any(), any());
+        verify(feedbackInbox, times(1)).markHandled(any(), any());
     }
 
     @Test
     @DisplayName("feedback already gone: still acked, 204")
     void markHandledFeedbackGone() {
-        doThrow(new DomainException(ErrorCode.NOT_FOUND, "gone")).when(handleFeedback).markHandled(any(), any());
+        doThrow(new DomainException(ErrorCode.NOT_FOUND, "gone")).when(feedbackInbox).markHandled(any(), any());
         UUID actor = UUID.randomUUID();
         service.markHandled("feedback:" + F1, actor);
         verify(acks).markHandled("feedback:" + F1, NOW, actor);
@@ -374,7 +374,7 @@ class AdminAlertServiceTest {
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
         assertThatThrownBy(() -> service.markHandled("a" + ":b".repeat(150), actor)).isInstanceOf(DomainException.class);
-        verifyNoInteractions(acks, handleFeedback);
+        verifyNoInteractions(acks, feedbackInbox);
     }
 
     @Test

@@ -2,7 +2,6 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.CreateStoreWithIdInput;
 import com.keevo.store.api.StoreCommandPort;
 import com.keevo.store.api.StoreType;
@@ -72,7 +71,7 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
 
         // Lock, idempotency (existing id → APPLIED, no duplicate), plan-limit and warehouse checks, then
         // the insert — all in the store module (12.2d), inside SyncPushService's per-op transaction.
-        storeCommand.createWithId(TenantContext.getCurrentTenant(), new CreateStoreWithIdInput(
+        storeCommand.createWithId(tenantId, new CreateStoreWithIdInput(
                 storeId,
                 (String) p.get("name"),
                 type,

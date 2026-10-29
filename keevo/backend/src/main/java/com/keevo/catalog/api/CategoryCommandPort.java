@@ -10,12 +10,12 @@ import java.util.UUID;
 public interface CategoryCommandPort {
 
     /** Creates a category with a caller-assigned id (offline sync). */
-    CategoryView createWithId(UUID categoryId, String name, UUID parentId, UUID actorId, String tenantId);
+    CategoryView createWithId(String tenantSchema, UUID categoryId, String name, UUID parentId, UUID actorId);
 
     /** Flips the active flag. @throws com.keevo.shared.domain.exception.DomainException CATEGORY_NOT_FOUND */
-    CategoryView toggleActive(UUID categoryId, UUID actorId, String tenantId);
+    CategoryView toggleActive(String tenantSchema, UUID categoryId, UUID actorId);
 
-    CategoryView rename(UUID categoryId, String name, UUID actorId, String tenantId);
+    CategoryView rename(String tenantSchema, UUID categoryId, String name, UUID actorId);
 
     /**
      * Seeds the given root categories (active, non-custom) — onboarding sector template.
@@ -27,5 +27,5 @@ public interface CategoryCommandPort {
      *
      * @return the number of categories created
      */
-    int seedTemplateCategories(List<String> names);
+    int seedTemplateCategories(String tenantSchema, List<String> names);
 }

@@ -34,6 +34,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CancelSaleSyncHandlerTest {
 
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private CancelPendingSaleUseCase cancelPendingSaleUseCase;
 
     private CancelSaleSyncHandler handler;

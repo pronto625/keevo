@@ -1,7 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.DeliveryStatus;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;

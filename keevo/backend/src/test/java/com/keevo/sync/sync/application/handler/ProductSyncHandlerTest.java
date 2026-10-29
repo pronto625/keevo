@@ -9,6 +9,7 @@ import com.keevo.catalog.api.ProductView;
 import com.keevo.catalog.api.UpdateProductInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -24,6 +25,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
@@ -31,6 +33,17 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class ProductSyncHandlerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private ProductCommandPort productCommand;
     @Mock private ProductQueryPort productQuery;
@@ -63,12 +76,12 @@ class ProductSyncHandlerTest {
         var op = new SyncOperation("op-1", "CREATE_PRODUCT", productId.toString(),
                 Map.of("name", "Test Product", "price", 5000), Instant.now());
 
-        when(productCommand.create(any())).thenReturn(dummyProduct(productId, "Test Product"));
+        when(productCommand.create(any(), any())).thenReturn(dummyProduct(productId, "Test Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(productCommand).create(any());
+        verify(productCommand).create(eq(TENANT_ID), any());
     }
 
     @Test
@@ -80,13 +93,13 @@ class ProductSyncHandlerTest {
         var op = new SyncOperation("op-1", "CREATE_PRODUCT", localId.toString(),
                 Map.of("id", localId.toString(), "name", "Test Product", "price", 5000), Instant.now());
 
-        when(productCommand.create(any())).thenReturn(dummyProduct(localId, "Test Product"));
+        when(productCommand.create(any(), any())).thenReturn(dummyProduct(localId, "Test Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         var captor = org.mockito.ArgumentCaptor.forClass(CreateProductInput.class);
-        verify(productCommand).create(captor.capture());
+        verify(productCommand).create(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().id()).isEqualTo(localId);
     }
 
@@ -97,12 +110,12 @@ class ProductSyncHandlerTest {
                 Map.of("name", "Updated Product", "price", 6000, "productId", productId.toString()),
                 Instant.now());
 
-        when(productCommand.update(any())).thenReturn(dummyProduct(productId, "Updated Product"));
+        when(productCommand.update(any(), any())).thenReturn(dummyProduct(productId, "Updated Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(productCommand).update(any());
+        verify(productCommand).update(eq(TENANT_ID), any());
     }
 
     @Test
@@ -114,7 +127,7 @@ class ProductSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(productCommand).archive(any(), any());
+        verify(productCommand).archive(eq(TENANT_ID), any(), any());
     }
 
     @Test
@@ -126,7 +139,7 @@ class ProductSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(productCommand).unarchive(any(), any());
+        verify(productCommand).unarchive(eq(TENANT_ID), any(), any());
     }
 
     @Test
@@ -135,12 +148,12 @@ class ProductSyncHandlerTest {
         var op = new SyncOperation("op-1", "PROMOTE_PRODUCT", productId.toString(),
                 Map.of("productId", productId.toString(), "name", "Promoted Product", "price", 5000), Instant.now());
 
-        when(productCommand.update(any())).thenReturn(dummyProduct(productId, "Promoted Product"));
+        when(productCommand.update(any(), any())).thenReturn(dummyProduct(productId, "Promoted Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(productCommand).update(any());
+        verify(productCommand).update(eq(TENANT_ID), any());
     }
 
     @Test
@@ -157,7 +170,7 @@ class ProductSyncHandlerTest {
         var op = new SyncOperation("op-1", "CREATE_PRODUCT", localId.toString(),
                 Map.of("id", localId.toString(), "name", "Pantalon jean PP T75", "price", 5000), Instant.now());
 
-        when(productQuery.findByName("Pantalon jean PP T75"))
+        when(productQuery.findByName(TENANT_ID, "Pantalon jean PP T75"))
                 .thenReturn(java.util.Optional.of(dummyProduct(existingId, "pantalon jean pp t75")));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
@@ -165,7 +178,7 @@ class ProductSyncHandlerTest {
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(existingId.toString());
         assertThat(result.reason()).isEqualTo("MERGED_INTO:" + existingId);
-        verify(productCommand, never()).create(any());
+        verify(productCommand, never()).create(any(), any());
     }
 
     @Test
@@ -174,15 +187,15 @@ class ProductSyncHandlerTest {
         var op = new SyncOperation("op-1", "CREATE_PRODUCT", productId.toString(),
                 Map.of("id", productId.toString(), "name", "Test Product"), Instant.now());
 
-        when(productQuery.findByName("Test Product"))
+        when(productQuery.findByName(TENANT_ID, "Test Product"))
                 .thenReturn(java.util.Optional.of(dummyProduct(productId, "Test Product")));
-        when(productCommand.create(any())).thenReturn(dummyProduct(productId, "Test Product"));
+        when(productCommand.create(any(), any())).thenReturn(dummyProduct(productId, "Test Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.reason()).isNull();
-        verify(productCommand).create(any());
+        verify(productCommand).create(eq(TENANT_ID), any());
     }
 
     // ── v1s-12-10: real actor role / OWNER-only promotion ───────────────────
@@ -206,13 +219,13 @@ class ProductSyncHandlerTest {
     @Test
     void handle_promoteProduct_byOwner_passesOwnerRole() {
         var productId = UUID.randomUUID();
-        when(productCommand.update(any())).thenReturn(dummyProduct(productId, "Promoted Product"));
+        when(productCommand.update(any(), any())).thenReturn(dummyProduct(productId, "Promoted Product"));
 
         var result = handler.handle(promoteOp(productId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         var captor = org.mockito.ArgumentCaptor.forClass(UpdateProductInput.class);
-        verify(productCommand).update(captor.capture());
+        verify(productCommand).update(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().actorRole()).isEqualTo("OWNER");
     }
 
@@ -237,20 +250,20 @@ class ProductSyncHandlerTest {
     void handle_updateProduct_byEmployee_passesEmployeeRole() {
         SyncTestAuth.employee(UUID.randomUUID());
         var productId = UUID.randomUUID();
-        when(productCommand.update(any())).thenReturn(dummyProduct(productId, "Updated Product"));
+        when(productCommand.update(any(), any())).thenReturn(dummyProduct(productId, "Updated Product"));
 
         var result = handler.handle(updateOp(productId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         var captor = org.mockito.ArgumentCaptor.forClass(UpdateProductInput.class);
-        verify(productCommand).update(captor.capture());
+        verify(productCommand).update(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
     }
 
     @Test
     void handle_updateDraftProduct_byEmployee_useCaseGuardSurfacesAsForbidden() {
         SyncTestAuth.employee(UUID.randomUUID());
-        when(productCommand.update(any())).thenThrow(new DomainException(ErrorCode.FORBIDDEN,
+        when(productCommand.update(any(), any())).thenThrow(new DomainException(ErrorCode.FORBIDDEN,
                 "Seul le propriétaire peut valider un produit en brouillon"));
 
         var result = handler.handle(updateOp(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
@@ -266,7 +279,7 @@ class ProductSyncHandlerTest {
         var productId = UUID.randomUUID();
         var op = new SyncOperation("op-1", "CREATE_PRODUCT", productId.toString(),
                 Map.of("id", productId.toString(), "name", "Test Product", "price", 5000), Instant.now());
-        when(productCommand.create(any())).thenThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED,
+        when(productCommand.create(any(), any())).thenThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED,
                 "limit", Map.of("entity", "products")));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
@@ -278,12 +291,12 @@ class ProductSyncHandlerTest {
     @Test
     void handle_updateProduct_byOwner_passesOwnerRole() {
         var productId = UUID.randomUUID();
-        when(productCommand.update(any())).thenReturn(dummyProduct(productId, "Updated Product"));
+        when(productCommand.update(any(), any())).thenReturn(dummyProduct(productId, "Updated Product"));
 
         handler.handle(updateOp(productId), ACTOR_ID, TENANT_ID);
 
         var captor = org.mockito.ArgumentCaptor.forClass(UpdateProductInput.class);
-        verify(productCommand).update(captor.capture());
+        verify(productCommand).update(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().actorRole()).isEqualTo("OWNER");
     }
 
@@ -291,8 +304,8 @@ class ProductSyncHandlerTest {
     void handle_createDraftProduct_byEmployee_passesEmployeeRole() {
         SyncTestAuth.employee(UUID.randomUUID());
         var draftId = UUID.randomUUID();
-        when(productQuery.findByName("Brouillon")).thenReturn(java.util.Optional.empty());
-        when(productCommand.createDraft(any())).thenReturn(dummyProduct(draftId, "Brouillon"));
+        when(productQuery.findByName(TENANT_ID, "Brouillon")).thenReturn(java.util.Optional.empty());
+        when(productCommand.createDraft(any(), any())).thenReturn(dummyProduct(draftId, "Brouillon"));
 
         var op = new SyncOperation("op-d", "CREATE_DRAFT_PRODUCT", draftId.toString(),
                 Map.of("id", draftId.toString(), "name", "Brouillon"), Instant.now());
@@ -300,7 +313,7 @@ class ProductSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         var captor = org.mockito.ArgumentCaptor.forClass(CreateDraftProductInput.class);
-        verify(productCommand).createDraft(captor.capture());
+        verify(productCommand).createDraft(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().actorRole()).isEqualTo("EMPLOYEE");
     }
 
@@ -335,7 +348,7 @@ class ProductSyncHandlerTest {
     @Test
     void handle_createDraftProduct_fractionalPriceVente_isRejectedNotTruncated() {
         var draftId = UUID.randomUUID();
-        when(productQuery.findByName("Brouillon")).thenReturn(java.util.Optional.empty());
+        when(productQuery.findByName(TENANT_ID, "Brouillon")).thenReturn(java.util.Optional.empty());
         var op = new SyncOperation("op-int", "CREATE_DRAFT_PRODUCT", draftId.toString(),
                 Map.of("id", draftId.toString(), "name", "Brouillon", "priceVente", 1.5), Instant.now());
 
@@ -368,7 +381,7 @@ class ProductSyncHandlerTest {
         var productId = UUID.randomUUID();
         var op = new SyncOperation("op-int", "CREATE_PRODUCT", productId.toString(),
                 Map.of("name", "Test Product", "price", 5000.0), Instant.now());
-        when(productCommand.create(any())).thenReturn(dummyProduct(productId, "Test Product"));
+        when(productCommand.create(any(), any())).thenReturn(dummyProduct(productId, "Test Product"));
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 

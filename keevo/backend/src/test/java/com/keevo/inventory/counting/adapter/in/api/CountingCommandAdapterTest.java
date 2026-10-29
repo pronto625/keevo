@@ -17,6 +17,7 @@ import com.keevo.inventory.counting.domain.port.in.ValidateInventoryCommand;
 import com.keevo.inventory.counting.domain.port.in.ValidateInventoryUseCase;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +39,17 @@ import static org.mockito.Mockito.*;
 /** Story 12.2b — the counting command port maps API inputs onto the existing counting ports. */
 @ExtendWith(MockitoExtension.class)
 class CountingCommandAdapterTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("kv_test01");
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private CreateInventorySessionUseCase createSession;
     @Mock private SaveInventoryCountUseCase saveCount;
@@ -62,7 +74,7 @@ class CountingCommandAdapterTest {
         when(createSession.execute(any())).thenReturn(
                 InventorySession.create(SESSION, STORE, internal, categories, ACTOR));
 
-        UUID id = adapter.openSession(new OpenCountingSessionInput(SESSION, STORE, scope, categories, ACTOR));
+        UUID id = adapter.openSession(TenantContext.getCurrentTenant(), new OpenCountingSessionInput(SESSION, STORE, scope, categories, ACTOR));
 
         assertThat(id).isEqualTo(SESSION);
         verify(createSession).execute(new CreateInventorySessionCommand(SESSION, STORE, internal, categories, ACTOR));
@@ -75,7 +87,7 @@ class CountingCommandAdapterTest {
         when(saveCount.execute(any())).thenReturn(
                 InventoryCount.create(countId, SESSION, product, null, "Savon", null, 50, 47, ACTOR));
 
-        UUID id = adapter.saveCount(new SaveCountInput(SESSION, product, null, "Savon", null, 50, 47, ACTOR, countId));
+        UUID id = adapter.saveCount(TenantContext.getCurrentTenant(), new SaveCountInput(SESSION, product, null, "Savon", null, 50, 47, ACTOR, countId));
 
         assertThat(id).isEqualTo(countId);
         verify(saveCount).execute(new SaveInventoryCountCommand(
@@ -88,7 +100,7 @@ class CountingCommandAdapterTest {
         when(validateInventory.execute(any())).thenReturn(
                 new ValidateInventoryResult(SESSION, 1, InventorySessionStatus.VALIDATED, Instant.now()));
 
-        UUID id = adapter.validate(new ValidateCountingInput(SESSION, ACTOR, movementIds));
+        UUID id = adapter.validate(TenantContext.getCurrentTenant(), new ValidateCountingInput(SESSION, ACTOR, movementIds));
 
         assertThat(id).isEqualTo(SESSION);
         verify(validateInventory).execute(new ValidateInventoryCommand(SESSION, ACTOR, movementIds));
@@ -105,5 +117,15 @@ class CountingCommandAdapterTest {
                 .isInstanceOfSatisfying(DomainException.class,
                         e -> assertThat(e.getDomainCode()).isEqualTo(ErrorCode.VALIDATION_ERROR.name()));
         verifyNoInteractions(createSession);
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.validate("kv_other1", new ValidateCountingInput(SESSION, ACTOR, null)))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.validate(null, new ValidateCountingInput(SESSION, ACTOR, null)))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(createSession, saveCount, validateInventory);
     }
 }

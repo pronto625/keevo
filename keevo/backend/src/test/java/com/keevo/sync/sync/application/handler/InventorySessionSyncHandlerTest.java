@@ -5,6 +5,7 @@ import com.keevo.inventory.api.CountingScope;
 import com.keevo.inventory.api.OpenCountingSessionInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
@@ -29,6 +30,17 @@ import static org.mockito.Mockito.*;
  */
 @ExtendWith(MockitoExtension.class)
 class InventorySessionSyncHandlerTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private CountingCommandPort useCase;
 
@@ -58,8 +70,8 @@ class InventorySessionSyncHandlerTest {
     }
 
     private void useCaseEchoes() {
-        when(useCase.openSession(any())).thenAnswer(inv -> {
-            OpenCountingSessionInput in = inv.getArgument(0);
+        when(useCase.openSession(any(), any())).thenAnswer(inv -> {
+            OpenCountingSessionInput in = inv.getArgument(1);
             return in.sessionId();
         });
     }
@@ -91,7 +103,7 @@ class InventorySessionSyncHandlerTest {
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(sessionId.toString());
         var captor = ArgumentCaptor.forClass(OpenCountingSessionInput.class);
-        verify(useCase).openSession(captor.capture());
+        verify(useCase).openSession(eq(TENANT_ID), captor.capture());
         assertThat(captor.getValue().sessionId()).isEqualTo(sessionId);
         assertThat(captor.getValue().storeId()).isEqualTo(STORE_A);
         assertThat(captor.getValue().scope()).isEqualTo(CountingScope.FULL);
@@ -107,7 +119,7 @@ class InventorySessionSyncHandlerTest {
         var result = handler.handle(createOp(sessionId, STORE_C), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(useCase).openSession(any());
+        verify(useCase).openSession(eq(TENANT_ID), any());
     }
 
     @Test
@@ -127,7 +139,7 @@ class InventorySessionSyncHandlerTest {
     @Test
     void activeSessionConflict_isRejectedAlreadyActive() {
         SyncTestAuth.owner();
-        when(useCase.openSession(any())).thenThrow(new DomainException(
+        when(useCase.openSession(any(), any())).thenThrow(new DomainException(
                 ErrorCode.INVENTORY_SESSION_ALREADY_ACTIVE, "Active session exists for store"));
 
         var result = handler.handle(createOp(UUID.randomUUID(), STORE_C), ACTOR_ID, TENANT_ID);
@@ -139,7 +151,7 @@ class InventorySessionSyncHandlerTest {
     @Test
     void unknownStore_isRejectedStoreNotFound() {
         SyncTestAuth.owner();
-        when(useCase.openSession(any())).thenThrow(new DomainException(
+        when(useCase.openSession(any(), any())).thenThrow(new DomainException(
                 ErrorCode.INVENTORY_STORE_NOT_FOUND, "Store not found"));
 
         var result = handler.handle(createOp(UUID.randomUUID(), STORE_C), ACTOR_ID, TENANT_ID);

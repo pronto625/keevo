@@ -3,7 +3,7 @@ package com.keevo.messaging.whatsapp.adapter.out.external;
 import com.keevo.messaging.notification.adapter.out.config.TwilioProperties;
 import com.keevo.messaging.notification.adapter.out.config.WassenderProperties;
 import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;

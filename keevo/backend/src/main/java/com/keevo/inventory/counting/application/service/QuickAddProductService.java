@@ -1,5 +1,7 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreQueryPort;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.catalog.api.ProductCommandPort;
@@ -18,9 +20,7 @@ import com.keevo.inventory.counting.domain.port.in.QuickAddProductUseCase;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.application.port.TransactionLockPort;
-import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.subscription.api.PlanLimitPort;
 import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.api.SubscriptionQueryPort;
@@ -102,7 +102,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
 
         // 2. Deduplication check (case-insensitive via repository)
         String trimmedName = cmd.name().trim();
-        if (productQuery.existsByName(trimmedName)) {
+        if (productQuery.existsByName(TenantContext.getCurrentTenant(), trimmedName)) {
             throw new DomainException(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS,
                     "Un produit avec le nom '" + trimmedName + "' existe déjà");
         }
@@ -145,7 +145,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
                 log.warn("[QUICKADD] Store-name lookup failed for storeId={}: {}", session.getStoreId(), e.getMessage());
             }
         }
-        ProductView savedProduct = productCommand.register(new RegisterProductInput(
+        ProductView savedProduct = productCommand.register(TenantContext.getCurrentTenant(), new RegisterProductInput(
                 UUID.randomUUID(), trimmedName, sku, cmd.categoryId(), price, now,
                 cmd.actorId(), actorRole, actorName, storeName));
 
@@ -184,7 +184,7 @@ public class QuickAddProductService implements QuickAddProductUseCase {
                 sb.append(chars.charAt(random.nextInt(chars.length())));
             }
             String sku = sb.toString();
-            if (!productQuery.existsBySku(sku)) {
+            if (!productQuery.existsBySku(TenantContext.getCurrentTenant(), sku)) {
                 return sku;
             }
         }

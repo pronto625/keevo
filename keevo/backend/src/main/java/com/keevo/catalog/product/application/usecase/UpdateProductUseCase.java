@@ -5,13 +5,12 @@ import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
 import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
-import com.keevo.messaging.notification.domain.port.out.DraftNotificationRepository;
+import com.keevo.messaging.api.DraftValidationCommandPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -23,23 +22,23 @@ import java.util.UUID;
  *
  * <p>Story 2.4 (AC6): if the product is currently in DRAFT status and the caller
  * is an OWNER, the status is promoted to ACTIVE. Only OWNERs may promote a draft.
- * The corresponding {@link com.keevo.messaging.notification.domain.model.DraftPendingValidation}
- * record is acknowledged so it disappears from the badge counter.
+ * The corresponding pending draft record ({@link DraftValidationCommandPort})
+ * is acknowledged so it disappears from the badge counter.
  */
 @Service
 public class UpdateProductUseCase {
 
     private final ProductRepository           productRepository;
-    private final DraftNotificationRepository draftRepository;
+    private final DraftValidationCommandPort draftValidation;
     private final ApplicationEventPublisher   eventPublisher;
     private final ObjectMapper                objectMapper;
 
     public UpdateProductUseCase(ProductRepository productRepository,
-                                DraftNotificationRepository draftRepository,
+                                DraftValidationCommandPort draftValidation,
                                 ApplicationEventPublisher eventPublisher,
                                 ObjectMapper objectMapper) {
         this.productRepository = productRepository;
-        this.draftRepository   = draftRepository;
+        this.draftValidation   = draftValidation;
         this.eventPublisher    = eventPublisher;
         this.objectMapper      = objectMapper;
     }
@@ -126,10 +125,7 @@ public class UpdateProductUseCase {
 
         // Acknowledge draft notification so the badge counter decrements (AC6)
         if (isPromotion) {
-            draftRepository.findByProductId(saved.getId()).ifPresent(draft -> {
-                draft.acknowledge();
-                draftRepository.saveUpdated(draft);
-            });
+            draftValidation.acknowledge(tenantId, saved.getId());
 
             // Story 4.3 — publish ProductActivatedEvent for cascade auto-validation
             eventPublisher.publishEvent(new ProductActivatedEvent(

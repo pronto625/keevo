@@ -6,6 +6,7 @@ import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -56,7 +57,7 @@ public class GetCurrentStockUseCase {
      */
     @Transactional(readOnly = true)
     public StockSnapshot execute(UUID productId) {
-        ProductView product = productQuery.findById(productId)
+        ProductView product = productQuery.findById(TenantContext.getCurrentTenant(), productId)
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + productId));
 

@@ -4,6 +4,7 @@ import com.keevo.crm.api.SupplierCommandPort;
 import com.keevo.crm.api.SupplierView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +24,17 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class SupplierSyncHandlerTest {
 
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT_ID);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
+
     @Mock private SupplierCommandPort supplierCommand;
 
     private SupplierSyncHandler handler;
@@ -38,7 +50,7 @@ class SupplierSyncHandlerTest {
     @Test
     void handle_updateSupplier_delegatesToUpdateSupplierPort() {
         var supplierId = UUID.randomUUID();
-        when(supplierCommand.update(any())).thenReturn(
+        when(supplierCommand.update(any(), any())).thenReturn(
                 new SupplierView(supplierId, "Updated Supplier", "+237600000001", null, false, java.util.List.of(), Instant.now(), Instant.now()));
 
         var op = new SyncOperation("op-1", "UPDATE_SUPPLIER", supplierId.toString(),
@@ -48,7 +60,7 @@ class SupplierSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(supplierCommand).update(any());
+        verify(supplierCommand).update(eq(TENANT_ID), any());
     }
 
     @Test
@@ -60,7 +72,7 @@ class SupplierSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(supplierCommand).archive(any(), any(), any());
+        verify(supplierCommand).archive(eq(TENANT_ID), any(), any());
     }
 
     @Test
@@ -71,7 +83,7 @@ class SupplierSyncHandlerTest {
                 Instant.now());
 
         doThrow(new DomainException(ErrorCode.SUPPLIER_NOT_FOUND))
-                .when(supplierCommand).update(any());
+                .when(supplierCommand).update(any(), any());
 
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
@@ -94,7 +106,7 @@ class SupplierSyncHandlerTest {
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         assertThat(result.serverEntityId()).isEqualTo(supplierId.toString());
-        verify(supplierCommand).unarchive(supplierId, ACTOR_ID, TENANT_ID);
+        verify(supplierCommand).unarchive(TENANT_ID, supplierId, ACTOR_ID);
         verify(supplierCommand, never()).archive(any(), any(), any());
     }
 

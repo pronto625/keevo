@@ -54,6 +54,7 @@ public class RecordSaleService implements RecordSaleUseCase {
 
     @Override
     public void recordSale(RecordSaleCommand command) {
+        String tenantSchema = TenantContext.getCurrentTenant();
         // Idempotency guard — duplicate saleId is a no-op
         if (saleRepository.existsById(command.saleId())) {
             return;
@@ -66,7 +67,7 @@ public class RecordSaleService implements RecordSaleUseCase {
         if (!isPending && !command.allowNegativeStock()) {
             // Stock availability check for each item (only for COMPLETED sales)
             for (var item : command.items()) {
-                int available = getAvailableStock(item.productId(), item.variantId(), command.storeId());
+                int available = getAvailableStock(tenantSchema, item.productId(), item.variantId(), command.storeId());
                 if (available < item.quantity()) {
                     throw new DomainException(ErrorCode.INSUFFICIENT_STOCK,
                             "Stock insuffisant pour " + item.productName()
@@ -87,7 +88,7 @@ public class RecordSaleService implements RecordSaleUseCase {
             // sides, so the device's pull upserts its own movement row instead of adding a
             // second one. itemId null → server-generated.
             for (var item : command.items()) {
-                stockCommand.recordMovement(new StockMovementInput(
+                stockCommand.recordMovement(tenantSchema, new StockMovementInput(
                         item.productId(),
                         item.variantId(),
                         command.storeId(),
@@ -110,7 +111,7 @@ public class RecordSaleService implements RecordSaleUseCase {
                             item.catalogueUnitPrice(),
                             item.appliedUnitPrice(),
                             command.actorId(),
-                            TenantContext.getCurrentTenant(),
+                            tenantSchema,
                             Instant.now()
                     ));
                 }
@@ -120,7 +121,7 @@ public class RecordSaleService implements RecordSaleUseCase {
             eventPublisher.publishEvent(new SaleCompletedEvent(
                     sale.getId(),
                     command.actorId(),
-                    TenantContext.getCurrentTenant(),
+                    tenantSchema,
                     command.storeId(),
                     sale.getTotalAmount(),
                     sale.getDiscountAmount(),
@@ -138,14 +139,14 @@ public class RecordSaleService implements RecordSaleUseCase {
                     command.actorId(),
                     draftProductIds,
                     sale.getTotalAmount(),
-                    TenantContext.getCurrentTenant(),
+                    tenantSchema,
                     sale.getOccurredAt()
             ));
         }
     }
 
-    private int getAvailableStock(UUID productId, UUID variantId, UUID storeId) {
-        return stockQuery.availableQuantity(productId, variantId, storeId);
+    private int getAvailableStock(String tenantSchema, UUID productId, UUID variantId, UUID storeId) {
+        return stockQuery.availableQuantity(tenantSchema, productId, variantId, storeId);
     }
 
     private String serializeItems(RecordSaleCommand command) {

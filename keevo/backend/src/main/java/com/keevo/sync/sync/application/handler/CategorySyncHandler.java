@@ -77,7 +77,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
             case "CREATE_CATEGORY" -> {
                 UUID clientId = UUID.fromString((String) p.get("id"));
                 // Idempotency: skip if already exists with this UUID.
-                if (categoryQuery.findById(clientId).isPresent()) {
+                if (categoryQuery.findById(tenantId, clientId).isPresent()) {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             clientId.toString(), null);
                 }
@@ -87,13 +87,13 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                         : null;
                 // G3: dedup by name+parentId — if a category with the same name already exists,
                 // return its ID as APPLIED to prevent duplicates from multiple offline devices.
-                var existingByName = categoryQuery.findByNameAndParentId(name, parentId);
+                var existingByName = categoryQuery.findByNameAndParentId(tenantId, name, parentId);
                 if (existingByName.isPresent()) {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             existingByName.get().id().toString(), null);
                 }
                 // v1s-14-15: a genuinely new category goes through the use case (audit CATEGORY_CREATED).
-                CategoryView saved = categoryCommand.createWithId(clientId, name, parentId, actorId, tenantId);
+                CategoryView saved = categoryCommand.createWithId(tenantId, clientId, name, parentId, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         saved.id().toString(), null);
             }
@@ -107,7 +107,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                 UUID categoryId = UUID.fromString((String) p.get("categoryId"));
                 boolean targetActive = (boolean) p.get("isActive");
                 // Set-based: only toggle if current state differs from the target.
-                var existing = categoryQuery.findById(categoryId);
+                var existing = categoryQuery.findById(tenantId, categoryId);
                 if (existing.isEmpty()) {
                     // Category not found — idempotent no-op.
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
@@ -115,7 +115,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
                 }
                 CategoryView current = existing.get();
                 CategoryView result = (current.isActive() != targetActive)
-                        ? categoryCommand.toggleActive(categoryId, actorId, tenantId)
+                        ? categoryCommand.toggleActive(tenantId, categoryId, actorId)
                         : current;
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         result.id().toString(), null);
@@ -123,7 +123,7 @@ public class CategorySyncHandler extends AbstractSyncOperationHandler {
             case "RENAME_CATEGORY" -> {
                 UUID categoryId = UUID.fromString((String) p.get("categoryId"));
                 String name = (String) p.get("name");
-                var category = categoryCommand.rename(categoryId, name, actorId, tenantId);
+                var category = categoryCommand.rename(tenantId, categoryId, name, actorId);
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         category.id().toString(), null);
             }

@@ -7,6 +7,7 @@ import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
 import com.keevo.shared.application.port.export.ExportFilter;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -54,7 +55,7 @@ public class EndOfDayPdfModel {
                 row -> rows.add(new String[]{row.text("id"), row.text("store")}));
         List<ClosureSection> sections = new ArrayList<>();
         for (String[] r : rows) {
-            closureQueryPort.findById(UUID.fromString(r[0]))
+            closureQueryPort.findById(TenantContext.getCurrentTenant(), UUID.fromString(r[0]))
                     .map(c -> section(c, r[1]))
                     .ifPresent(sections::add);
         }
@@ -66,7 +67,7 @@ public class EndOfDayPdfModel {
 
     /** Figures of one closure, exactly as its end-of-day report. */
     EndOfDayReportData report(DayClosureView closure, String storeName) {
-        Optional<DayClosureView> previous = closureQueryPort.findPreviousForStore(closure.storeId(),
+        Optional<DayClosureView> previous = closureQueryPort.findPreviousForStore(TenantContext.getCurrentTenant(), closure.storeId(),
                 closure.closedAt());
         ClosureWindow window = ClosureWindow.forClosure(closure, previous);
         Instant closedAt = closure.closedAt();

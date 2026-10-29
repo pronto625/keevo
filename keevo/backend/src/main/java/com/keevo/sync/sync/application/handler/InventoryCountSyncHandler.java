@@ -58,7 +58,7 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
         // Unknown session → left to the use case (existing not-found error).
         UUID assignedStoreId = extractAssignedStoreId();
         if (assignedStoreId != null) {
-            countingQuery.findSessionStoreId(sessionId).ifPresent(sessionStoreId -> {
+            countingQuery.findSessionStoreId(tenantId, sessionId).ifPresent(sessionStoreId -> {
                 if (!assignedStoreId.equals(sessionStoreId)) {
                     throw new DomainException(ErrorCode.FORBIDDEN,
                             "Vous ne pouvez compter que dans un inventaire de votre boutique");
@@ -80,7 +80,7 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
                 theoretical, physical, actorId,
                 parseUuid(operation.entityId()));
 
-        UUID savedId = countingCommand.saveCount(input);
+        UUID savedId = countingCommand.saveCount(tenantId, input);
 
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 savedId.toString(), null);

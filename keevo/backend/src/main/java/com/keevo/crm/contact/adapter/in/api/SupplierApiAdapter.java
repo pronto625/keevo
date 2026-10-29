@@ -12,6 +12,7 @@ import com.keevo.crm.contact.application.usecase.UnarchiveSupplierUseCase;
 import com.keevo.crm.contact.application.usecase.UpdateSupplierUseCase;
 import com.keevo.crm.contact.domain.entity.Supplier;
 import com.keevo.crm.contact.domain.port.out.SupplierRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -48,12 +49,14 @@ class SupplierApiAdapter implements SupplierQueryPort, SupplierCommandPort {
     }
 
     @Override
-    public boolean existsById(UUID supplierId) {
+    public boolean existsById(String tenantSchema, UUID supplierId) {
+        TenantContext.requireCurrent(tenantSchema);
         return supplierRepository.findById(supplierId).isPresent();
     }
 
     @Override
-    public Optional<SupplierView> findByProductId(UUID productId) {
+    public Optional<SupplierView> findByProductId(String tenantSchema, UUID productId) {
+        TenantContext.requireCurrent(tenantSchema);
         return getSupplierByProduct.execute(productId)
                 .map(supplier -> {
                     var profile = getSupplierProfile.execute(supplier.id());
@@ -62,7 +65,8 @@ class SupplierApiAdapter implements SupplierQueryPort, SupplierCommandPort {
     }
 
     @Override
-    public SupplierView createWithId(CreateSupplierInput in) {
+    public SupplierView createWithId(String tenantSchema, CreateSupplierInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Instant now = Instant.now();
         Supplier saved = supplierRepository.save(
                 new Supplier(in.id(), in.name(), in.phone(), in.email(), false, now, now));
@@ -74,7 +78,8 @@ class SupplierApiAdapter implements SupplierQueryPort, SupplierCommandPort {
     }
 
     @Override
-    public SupplierView update(UpdateSupplierInput in) {
+    public SupplierView update(String tenantSchema, UpdateSupplierInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         Supplier updated = updateSupplier.execute(new UpdateSupplierUseCase.UpdateSupplierCommand(
                 in.supplierId(), in.name(), in.phone(), in.email(), in.productIds(), in.actorId()));
         // null productIds = links kept: report the real links (same source as the supplier profile)
@@ -85,12 +90,14 @@ class SupplierApiAdapter implements SupplierQueryPort, SupplierCommandPort {
     }
 
     @Override
-    public void archive(UUID supplierId, UUID actorId, String tenantId) {
-        archiveSupplier.execute(supplierId, actorId, tenantId);
+    public void archive(String tenantSchema, UUID supplierId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        archiveSupplier.execute(supplierId, actorId, tenantSchema);
     }
 
     @Override
-    public void unarchive(UUID supplierId, UUID actorId, String tenantId) {
-        unarchiveSupplier.execute(supplierId, actorId, tenantId);
+    public void unarchive(String tenantSchema, UUID supplierId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        unarchiveSupplier.execute(supplierId, actorId, tenantSchema);
     }
 }

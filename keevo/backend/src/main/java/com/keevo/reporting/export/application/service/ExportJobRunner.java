@@ -1,7 +1,7 @@
 package com.keevo.reporting.export.application.service;
 
-import com.keevo.messaging.notification.domain.model.NotificationPayload;
-import com.keevo.messaging.notification.domain.port.out.NotificationPort;
+import com.keevo.messaging.api.NotificationPayload;
+import com.keevo.messaging.api.NotificationPort;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportJobStatus;

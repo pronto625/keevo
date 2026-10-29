@@ -52,12 +52,12 @@ public class SetStockThresholdUseCase {
             throw new IllegalArgumentException("Threshold cannot be negative");
         }
 
-        ProductView product = productQuery.findById(productId)
+        ProductView product = productQuery.findById(TenantContext.getCurrentTenant(), productId)
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + productId));
 
         int previous = product.minimumThreshold();
-        ProductView saved = productCommand.changeMinimumThreshold(productId, threshold);
+        ProductView saved = productCommand.changeMinimumThreshold(TenantContext.getCurrentTenant(), productId, threshold);
 
         if (previous != threshold) {
             eventPublisher.publishEvent(new StockThresholdChangedEvent(

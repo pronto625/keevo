@@ -70,7 +70,7 @@ class OnboardingServiceTest {
     void should_create_correct_number_of_categories_for_CLOTHING() {
         SectorTemplateStrategy clothingStrategy = new ClothingTemplateStrategy();
         when(sectorTemplateFactory.create(SectorType.CLOTHING)).thenReturn(clothingStrategy);
-        when(categoryCommand.seedTemplateCategories(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+        when(categoryCommand.seedTemplateCategories(any(), anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(1)).size());
         when(tenantPreferencesRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -80,7 +80,7 @@ class OnboardingServiceTest {
 
             OnboardingResult result = onboardingService.complete(command);
 
-            verify(categoryCommand).seedTemplateCategories(argThat(names -> names.size() == 13));
+            verify(categoryCommand).seedTemplateCategories(any(), argThat(names -> names.size() == 13));
             assertThat(result.categoriesCreated()).isEqualTo(13);
             assertThat(result.storeName()).isEqualTo("Boutique Céleste");
         }
@@ -90,7 +90,7 @@ class OnboardingServiceTest {
     @DisplayName("should update store name")
     void should_update_store_name() {
         when(sectorTemplateFactory.create(any())).thenReturn(new ClothingTemplateStrategy());
-        when(categoryCommand.seedTemplateCategories(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+        when(categoryCommand.seedTemplateCategories(any(), anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(1)).size());
         when(tenantPreferencesRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -109,7 +109,7 @@ class OnboardingServiceTest {
     @DisplayName("should save tenant preferences with defaults")
     void should_save_tenant_preferences_with_defaults() {
         when(sectorTemplateFactory.create(any())).thenReturn(new ClothingTemplateStrategy());
-        when(categoryCommand.seedTemplateCategories(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+        when(categoryCommand.seedTemplateCategories(any(), anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(1)).size());
         when(tenantPreferencesRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -129,7 +129,7 @@ class OnboardingServiceTest {
     @DisplayName("should publish OnboardingCompletedEvent")
     void should_publish_OnboardingCompletedEvent() {
         when(sectorTemplateFactory.create(any())).thenReturn(new ClothingTemplateStrategy());
-        when(categoryCommand.seedTemplateCategories(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+        when(categoryCommand.seedTemplateCategories(any(), anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(1)).size());
         when(tenantPreferencesRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -151,7 +151,7 @@ class OnboardingServiceTest {
         // Field values of the seeded categories (null ids, active, non-custom) are covered by
         // CategoryApiAdaptersTest since 12.2a.
         when(sectorTemplateFactory.create(any())).thenReturn(new ClothingTemplateStrategy());
-        when(categoryCommand.seedTemplateCategories(anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(0)).size());
+        when(categoryCommand.seedTemplateCategories(any(), anyList())).thenAnswer(inv -> ((List<?>) inv.getArgument(1)).size());
         when(tenantPreferencesRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
@@ -160,7 +160,7 @@ class OnboardingServiceTest {
 
             onboardingService.complete(command);
 
-            verify(categoryCommand).seedTemplateCategories(
+            verify(categoryCommand).seedTemplateCategories(any(), 
                     argThat(names -> !names.isEmpty() && names.stream().distinct().count() == names.size()));
         }
     }

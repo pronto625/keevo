@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.handler;
 
-import com.keevo.feedback.feedback.domain.model.Feedback;
-import com.keevo.feedback.feedback.domain.port.in.SubmitFeedbackUseCase;
+import com.keevo.feedback.api.FeedbackSubmissionPort;
+import com.keevo.feedback.api.SubmitFeedbackInput;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;
 import com.keevo.sync.sync.domain.model.SyncOperationStatus;
@@ -14,17 +14,18 @@ import java.util.UUID;
 /**
  * SubmitFeedbackSyncHandler — Offline sync handler for SUBMIT_FEEDBACK operations (Story 14.5, FR92).
  *
- * <p>Delegates to {@link SubmitFeedbackUseCase} (same service as the REST endpoint).
+ * <p>Delegates to the published {@link FeedbackSubmissionPort} of the feedback module (Story 12.2e),
+ * which checks the submitting tenant against the bound one.
  * The use case generates its own UUID — no pre-assigned device UUID needed for idempotency
  * since each submission is a new unique entry (no overwrite risk).
  */
 @Component
 public class SubmitFeedbackSyncHandler extends AbstractSyncOperationHandler {
 
-    private final SubmitFeedbackUseCase submitFeedbackUseCase;
+    private final FeedbackSubmissionPort feedbackSubmission;
 
-    public SubmitFeedbackSyncHandler(SubmitFeedbackUseCase submitFeedbackUseCase) {
-        this.submitFeedbackUseCase = submitFeedbackUseCase;
+    public SubmitFeedbackSyncHandler(FeedbackSubmissionPort feedbackSubmission) {
+        this.feedbackSubmission = feedbackSubmission;
     }
 
     @Override
@@ -47,7 +48,7 @@ public class SubmitFeedbackSyncHandler extends AbstractSyncOperationHandler {
     protected SyncOperationResult apply(SyncOperation operation, UUID actorId, String tenantId) {
         Map<String, Object> p = operation.payload();
 
-        var command = new SubmitFeedbackUseCase.SubmitFeedbackCommand(
+        var input = new SubmitFeedbackInput(
                 String.valueOf(p.get("type")),
                 String.valueOf(p.get("description")),
                 p.get("appVersion") != null ? String.valueOf(p.get("appVersion")) : null,
@@ -57,8 +58,8 @@ public class SubmitFeedbackSyncHandler extends AbstractSyncOperationHandler {
                 actorId
         );
 
-        Feedback saved = submitFeedbackUseCase.submit(command);
+        UUID savedId = feedbackSubmission.submit(input);
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                saved.getId().toString(), null);
+                savedId.toString(), null);
     }
 }

@@ -10,6 +10,7 @@ import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +30,17 @@ import static org.mockito.Mockito.*;
 /** Story 12.2a — the crm client ports delegate to the repository / use cases and map faithfully. */
 @ExtendWith(MockitoExtension.class)
 class ClientApiAdapterTest {
+
+    // 12.2e: the catalog / crm / inventory / commerce API adapters require an explicit, current tenant schema
+    @org.junit.jupiter.api.BeforeEach
+    void bindTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant(TENANT);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void clearTenantContext12e() {
+        com.keevo.shared.infrastructure.persistence.TenantContext.clear();
+    }
 
     @Mock private ClientRepository clientRepository;
     @Mock private UpdateClientUseCase updateClient;
@@ -55,15 +67,15 @@ class ClientApiAdapterTest {
         UUID unknown = UUID.randomUUID();
         when(clientRepository.findById(unknown)).thenReturn(Optional.empty());
 
-        assertThat(adapter.existsById(ID)).isTrue();
-        assertThat(adapter.existsById(unknown)).isFalse();
+        assertThat(adapter.existsById(TenantContext.getCurrentTenant(), ID)).isTrue();
+        assertThat(adapter.existsById(TenantContext.getCurrentTenant(), unknown)).isFalse();
     }
 
     @Test
     void createWithId_savesANonArchivedClientWithTheGivenId() {
         when(clientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        ClientView view = adapter.createWithId(new CreateClientInput(ID, "Alice", "+237690000001", "a@b.cm", "VIP"));
+        ClientView view = adapter.createWithId(TenantContext.getCurrentTenant(), new CreateClientInput(ID, "Alice", "+237690000001", "a@b.cm", "VIP"));
 
         var captor = ArgumentCaptor.forClass(Client.class);
         verify(clientRepository).save(captor.capture());
@@ -77,7 +89,7 @@ class ClientApiAdapterTest {
 
     @Test
     void createWithId_invalidPhone_isValidationError_andNothingIsSaved() {
-        assertThatThrownBy(() -> adapter.createWithId(new CreateClientInput(ID, "Bob", "invalid", null, null)))
+        assertThatThrownBy(() -> adapter.createWithId(TenantContext.getCurrentTenant(), new CreateClientInput(ID, "Bob", "invalid", null, null)))
                 .isInstanceOf(DomainException.class)
                 .satisfies(ex -> assertThat(((DomainException) ex).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
         verify(clientRepository, never()).save(any());
@@ -88,7 +100,7 @@ class ClientApiAdapterTest {
         when(updateClient.execute(any())).thenReturn(
                 new Client(ID, "Alice B", "+237690000002", null, "n", false, T0, T0));
 
-        ClientView view = adapter.update(new UpdateClientInput(ID, "Alice B", "+237690000002", null, "n", ACTOR));
+        ClientView view = adapter.update(TenantContext.getCurrentTenant(), new UpdateClientInput(ID, "Alice B", "+237690000002", null, "n", ACTOR));
 
         verify(updateClient).execute(new UpdateClientUseCase.UpdateClientCommand(
                 ID, "Alice B", "+237690000002", null, "n", ACTOR));
@@ -97,10 +109,24 @@ class ClientApiAdapterTest {
 
     @Test
     void archive_and_unarchive_delegate() {
-        adapter.archive(ID, ACTOR, TENANT);
-        adapter.unarchive(ID, ACTOR, TENANT);
+        adapter.archive(TENANT, ID, ACTOR);
+        adapter.unarchive(TENANT, ID, ACTOR);
 
         verify(archiveClient).execute(ID, ACTOR, TENANT);
         verify(unarchiveClient).execute(ID, ACTOR, TENANT);
+    }
+
+    // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast
+    @org.junit.jupiter.api.Test
+    void tenantGuard_otherOrMissingSchemaFailsFast() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.existsById("kv_other1", ID))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.existsById(null, ID))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive("kv_other1", ID, ACTOR))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive(null, ID, ACTOR))
+                .isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(clientRepository, archiveClient);
     }
 }

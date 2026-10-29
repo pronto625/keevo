@@ -12,11 +12,11 @@ public interface CountingCommandPort {
      * @return the id of the opened (or replayed) session
      * @throws com.keevo.shared.domain.exception.DomainException store/active-session/category rules
      */
-    UUID openSession(OpenCountingSessionInput input);
+    UUID openSession(String tenantSchema, OpenCountingSessionInput input);
 
     /** @return the id of the saved count line */
-    UUID saveCount(SaveCountInput input);
+    UUID saveCount(String tenantSchema, SaveCountInput input);
 
     /** @return the id of the validated session */
-    UUID validate(ValidateCountingInput input);
+    UUID validate(String tenantSchema, ValidateCountingInput input);
 }

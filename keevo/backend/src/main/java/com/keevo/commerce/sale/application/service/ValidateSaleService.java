@@ -62,6 +62,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
 
     @Override
     public void validateSale(ValidateSaleCommand command) {
+        String tenantId = TenantContext.getCurrentTenant();
         // Step 0: Apply product-ID remappings (draft → promoted) before loading
         if (command.productIdRemappings() != null && !command.productIdRemappings().isEmpty()) {
             saleRepository.remapItemProductIds(command.saleId(), command.productIdRemappings());
@@ -90,15 +91,13 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 UUID productId = entry.getKey();
                 int qty = entry.getValue();
                 if (qty > 0) {
-                    stockCommand.recordMovement(new StockMovementInput(
+                    stockCommand.recordMovement(tenantId, new StockMovementInput(
                             productId, null, sale.getStoreId(),
                             StockMovementKind.STOCK_ENTRY, qty,
                             actorId, "Stock initial à la validation du brouillon"));
                 }
             }
         }
-
-        String tenantId = TenantContext.getCurrentTenant();
         Instant now = Instant.now();
 
         List<UUID> forcedProducts = new ArrayList<>();
@@ -107,7 +106,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         // level that is decremented (the item's variant, null for a simple product), as
         // RecordSaleService does (Story 12.2c; previously the no-variant level was read).
         for (SaleItem item : sale.getItems()) {
-            int available = stockQuery.availableQuantity(item.getProductId(), item.getVariantId(), sale.getStoreId());
+            int available = stockQuery.availableQuantity(tenantId, item.getProductId(), item.getVariantId(), sale.getStoreId());
 
             int effectiveDecrement = Math.min(available, item.getQuantity());
 
@@ -121,7 +120,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
             }
 
             if (effectiveDecrement > 0) {
-                stockCommand.recordMovement(new StockMovementInput(
+                stockCommand.recordMovement(tenantId, new StockMovementInput(
                         item.getProductId(),
                         item.getVariantId(),
                         sale.getStoreId(),
@@ -149,8 +148,8 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
 
     @Override
     public void cancelPendingSale(CancelPendingSaleCommand command) {
-        Sale sale = loadSale(command.saleId());
         String tenantId = TenantContext.getCurrentTenant();
+        Sale sale = loadSale(command.saleId());
 
         switch (sale.getStatus()) {
             case CANCELLED -> throw new DomainException(ErrorCode.SALE_ALREADY_CANCELLED,
@@ -186,7 +185,7 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
                 for (SaleItem item : sale.getItems()) {
                     // v1s-13-13: deterministic id (same on the device), so the pull does not
                     // add a second SALE_CANCELLED row to the history.
-                    stockCommand.recordMovement(new StockMovementInput(
+                    stockCommand.recordMovement(tenantId, new StockMovementInput(
                             item.getProductId(), item.getVariantId(), sale.getStoreId(),
                             StockMovementKind.SALE_CANCELLED, item.getQuantity(),
                             command.actorId(), "Annulation vente " + sale.getId(),

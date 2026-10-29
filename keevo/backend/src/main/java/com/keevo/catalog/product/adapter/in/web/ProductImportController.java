@@ -1,5 +1,7 @@
 package com.keevo.catalog.product.adapter.in.web;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,8 +13,7 @@ import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
 import com.keevo.catalog.product.application.usecase.GenerateCsvTemplateUseCase;
 import com.keevo.catalog.product.application.usecase.ImportCsvProductsUseCase;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
-import com.keevo.messaging.notification.application.usecase.GetPendingDraftsCountUseCase;
-import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.messaging.api.DraftValidationQueryPort;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import jakarta.validation.Valid;
@@ -49,19 +50,19 @@ public class ProductImportController {
     private final ImportCsvProductsUseCase    importUseCase;
     private final CreateDraftProductUseCase   draftUseCase;
     private final GenerateCsvTemplateUseCase  templateUseCase;
-    private final GetPendingDraftsCountUseCase pendingCountUseCase;
+    private final DraftValidationQueryPort    draftValidationQuery;
     private final ObjectMapper                objectMapper;
 
     public ProductImportController(
             ImportCsvProductsUseCase importUseCase,
             CreateDraftProductUseCase draftUseCase,
             GenerateCsvTemplateUseCase templateUseCase,
-            GetPendingDraftsCountUseCase pendingCountUseCase,
+            DraftValidationQueryPort draftValidationQuery,
             ObjectMapper objectMapper) {
         this.importUseCase      = importUseCase;
         this.draftUseCase       = draftUseCase;
         this.templateUseCase    = templateUseCase;
-        this.pendingCountUseCase = pendingCountUseCase;
+        this.draftValidationQuery = draftValidationQuery;
         this.objectMapper       = objectMapper;
     }
 
@@ -190,8 +191,12 @@ public class ProductImportController {
      */
     @GetMapping("/drafts/count")
     public ResponseEntity<ApiResponseWrapper<Long>> getPendingDraftsCount() {
-        String actorRole = extractRole();
-        long count = pendingCountUseCase.execute(actorRole);
+        // OWNER-only (Story 2.4 AC10): employees receive HTTP 403.
+        if (!"OWNER".equals(extractRole())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Seul le propriétaire peut consulter le compteur de brouillons");
+        }
+        long count = draftValidationQuery.countPending(TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(count));
     }
 

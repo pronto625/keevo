@@ -11,6 +11,7 @@ import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleComman
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 /**
@@ -34,7 +35,8 @@ class SaleCommandAdapter implements SaleCommandPort {
     }
 
     @Override
-    public void recordSale(RecordSaleInput in) {
+    public void recordSale(String tenantSchema, RecordSaleInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         var items = in.items().stream().map(l -> new SaleItemCommand(
                 l.itemId(), l.productId(), l.variantId(), l.productName(),
                 l.catalogueUnitPrice(), l.appliedUnitPrice(), l.quantity())).toList();
@@ -45,14 +47,16 @@ class SaleCommandAdapter implements SaleCommandPort {
     }
 
     @Override
-    public void validateSale(ValidateSaleInput in) {
+    public void validateSale(String tenantSchema, ValidateSaleInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         validateSaleUseCase.validateSale(new ValidateSaleCommand(
                 in.saleId(), in.actorId(), in.assignedStoreId(), in.justification(),
                 in.productIdRemappings(), in.initialStockEntries()));
     }
 
     @Override
-    public void cancelSale(CancelSaleInput in) {
+    public void cancelSale(String tenantSchema, CancelSaleInput in) {
+        TenantContext.requireCurrent(tenantSchema);
         cancelPendingSaleUseCase.cancelPendingSale(new CancelPendingSaleCommand(
                 in.saleId(), in.actorId(), in.assignedStoreId(), in.justification(), in.pendingOnly()));
     }

@@ -14,7 +14,7 @@ public interface SaleCommandPort {
      * @throws com.keevo.shared.domain.exception.DomainException e.g. INSUFFICIENT_STOCK when
      *         {@code allowNegativeStock} is false and a line exceeds the available stock
      */
-    void recordSale(RecordSaleInput input);
+    void recordSale(String tenantSchema, RecordSaleInput input);
 
     /**
      * Force-validates a PENDING_VALIDATION sale.
@@ -22,7 +22,7 @@ public interface SaleCommandPort {
      * @throws com.keevo.shared.domain.exception.DomainException SALE_NOT_FOUND, SALE_NOT_PENDING,
      *         FORBIDDEN (store scope), VALIDATION_ERROR (justification)
      */
-    void validateSale(ValidateSaleInput input);
+    void validateSale(String tenantSchema, ValidateSaleInput input);
 
     /**
      * Cancels a sale (pending, or completed with stock restoration unless {@code pendingOnly}).
@@ -30,5 +30,5 @@ public interface SaleCommandPort {
      * @throws com.keevo.shared.domain.exception.DomainException SALE_NOT_FOUND, SALE_ALREADY_CANCELLED,
      *         FORBIDDEN
      */
-    void cancelSale(CancelSaleInput input);
+    void cancelSale(String tenantSchema, CancelSaleInput input);
 }

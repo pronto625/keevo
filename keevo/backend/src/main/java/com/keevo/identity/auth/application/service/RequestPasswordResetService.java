@@ -7,7 +7,7 @@ import com.keevo.identity.auth.domain.port.in.RequestPasswordResetCommand;
 import com.keevo.identity.auth.domain.port.in.RequestPasswordResetUseCase;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppPort;
+import com.keevo.messaging.api.WhatsAppPort;
 import com.keevo.shared.domain.PhoneNumbers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

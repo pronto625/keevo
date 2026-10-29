@@ -1,7 +1,7 @@
 package com.keevo.admin.feedback.application.service;
 
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService.FeedbackLabels;
-import com.keevo.feedback.feedback.domain.model.Feedback;
+import com.keevo.feedback.api.FeedbackView;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,45 +61,45 @@ class AdminFeedbackLabelServiceTest {
         }).when(jdbc).query(contains(fragment), any(RowCallbackHandler.class), any(Object[].class));
     }
 
-    private static Feedback feedback(String schema, UUID user) {
-        return new Feedback(UUID.randomUUID(), "BUG", "Le scanner plante", schema, user,
-                "1.0", "android", "/pos", Instant.now(), "NORMAL");
+    private static FeedbackView feedback(String schema, UUID user) {
+        return new FeedbackView(UUID.randomUUID(), "BUG", "Le scanner plante", schema, user,
+                "1.0", "android", "/pos", Instant.now(), "NORMAL", null, null);
     }
 
     @Test
     void labels_tenantNameAndUser() {
-        Feedback byEmployee = feedback("kv_abc123", employee);
-        Feedback byOwner = feedback("kv_abc123", owner);
-        Feedback byStranger = feedback("kv_abc123", stranger);
+        FeedbackView byEmployee = feedback("kv_abc123", employee);
+        FeedbackView byOwner = feedback("kv_abc123", owner);
+        FeedbackView byStranger = feedback("kv_abc123", stranger);
 
         Map<UUID, FeedbackLabels> labels = service.labels(List.of(byEmployee, byOwner, byStranger));
 
-        assertThat(labels.get(byEmployee.getId())).isEqualTo(new FeedbackLabels("Boutique Awa", "Awa Diallo"));
-        assertThat(labels.get(byOwner.getId())).isEqualTo(new FeedbackLabels("Boutique Awa", "Propriétaire"));
-        assertThat(labels.get(byStranger.getId()).userLabel()).isEqualTo("Utilisateur inconnu");
+        assertThat(labels.get(byEmployee.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Awa Diallo"));
+        assertThat(labels.get(byOwner.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Propriétaire"));
+        assertThat(labels.get(byStranger.id()).userLabel()).isEqualTo("Utilisateur inconnu");
         // one employees query for the one schema of the page
         verify(jdbc, times(1)).query(contains(".employees"), any(RowCallbackHandler.class), any(Object[].class));
     }
 
     @Test
     void labels_deletedOrUnknownTenant_isEntrepriseSupprimee() {
-        Feedback gone = feedback("kv_zzz999", employee);
-        Feedback invalid = feedback("not-a-schema", employee);
+        FeedbackView gone = feedback("kv_zzz999", employee);
+        FeedbackView invalid = feedback("not-a-schema", employee);
 
         Map<UUID, FeedbackLabels> labels = service.labels(List.of(gone, invalid));
 
-        assertThat(labels.get(gone.getId()).tenantName()).isEqualTo("Entreprise supprimée");
-        assertThat(labels.get(invalid.getId()).tenantName()).isEqualTo("Entreprise supprimée");
+        assertThat(labels.get(gone.id()).tenantName()).isEqualTo("Entreprise supprimée");
+        assertThat(labels.get(invalid.id()).tenantName()).isEqualTo("Entreprise supprimée");
         verify(jdbc, never()).query(contains("not-a-schema"), any(RowCallbackHandler.class), any(Object[].class));
     }
 
     @Test
     void labels_schemaErrorKeepsTenantName_connectionFailureRethrown() {
-        Feedback f = feedback("kv_abc123", employee);
+        FeedbackView f = feedback("kv_abc123", employee);
         doThrow(new BadSqlGrammarException("x", "sql", new SQLException("relation does not exist")))
                 .when(jdbc).query(contains(".employees"), any(RowCallbackHandler.class), any(Object[].class));
 
-        assertThat(service.labels(List.of(f)).get(f.getId()))
+        assertThat(service.labels(List.of(f)).get(f.id()))
                 .isEqualTo(new FeedbackLabels("Boutique Awa", "Utilisateur inconnu"));
 
         doThrow(new CannotGetJdbcConnectionException("pool exhausted"))

@@ -4,6 +4,7 @@ import com.keevo.inventory.api.CountingQueryPort;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -23,12 +24,14 @@ class CountingQueryAdapter implements CountingQueryPort {
     }
 
     @Override
-    public Optional<UUID> findSessionStoreId(UUID sessionId) {
+    public Optional<UUID> findSessionStoreId(String tenantSchema, UUID sessionId) {
+        TenantContext.requireCurrent(tenantSchema);
         return sessionRepository.findById(sessionId).map(InventorySession::getStoreId);
     }
 
     @Override
-    public boolean isSessionValidated(UUID sessionId) {
+    public boolean isSessionValidated(String tenantSchema, UUID sessionId) {
+        TenantContext.requireCurrent(tenantSchema);
         return sessionRepository.findById(sessionId)
                 .map(s -> s.getStatus() == InventorySessionStatus.VALIDATED)
                 .orElse(false);
