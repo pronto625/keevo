@@ -148,8 +148,8 @@ class UpdateReportPreferencesServiceTest {
             ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
             verify(eventPublisher, atLeastOnce()).publishEvent(captor.capture());
             var audit = captor.getAllValues().stream()
-                    .filter(com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent.class::isInstance)
-                    .map(com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent.class::cast)
+                    .filter(com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent.class::isInstance)
+                    .map(com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent.class::cast)
                     .findFirst().orElseThrow();
             assertThat(audit.after()).containsOnlyKeys("eodReportTime");
             assertThat(audit.after().get("eodReportTime")).isEqualTo("22:00");
@@ -178,7 +178,7 @@ class UpdateReportPreferencesServiceTest {
             service.update(cmd);
 
             verify(eventPublisher, never()).publishEvent(
-                    any(com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent.class));
+                    any(com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent.class));
         }
     }
 

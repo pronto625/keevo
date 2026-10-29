@@ -1,7 +1,7 @@
 package com.keevo.inventory.counting.adapter.in.rest;
 
 import com.keevo.inventory.counting.adapter.in.rest.dto.InventoryGapReportResponseDto;
-import com.keevo.inventory.counting.domain.event.InventoryReportGeneratedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryReportGeneratedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryGapReport;
 import com.keevo.inventory.counting.domain.port.in.GenerateGapReportQuery;
 import com.keevo.inventory.counting.domain.port.in.GenerateGapReportUseCase;

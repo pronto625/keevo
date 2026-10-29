@@ -13,13 +13,15 @@ import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
@@ -97,7 +99,14 @@ class ProductCommandAdapter implements ProductCommandPort {
         return ProductViews.of(draft);
     }
 
+    /**
+     * Story 12.4: MANDATORY — the {@link ProductCreatedEvent} it publishes feeds an after-commit module
+     * listener without fallback execution: published outside a transaction, the notification would never run
+     * (and its registry row would only be replayed at the next restart). The caller's transaction
+     * ({@code QuickAddProductService}) is required.
+     */
     @Override
+    @Transactional(propagation = Propagation.MANDATORY)
     public ProductView register(String tenantSchema, RegisterProductInput in) {
         TenantContext.requireCurrent(tenantSchema);
         Product product = new Product(

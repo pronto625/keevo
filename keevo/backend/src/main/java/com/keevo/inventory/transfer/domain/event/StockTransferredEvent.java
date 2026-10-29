@@ -10,7 +10,6 @@ import java.util.UUID;
  * audit log entry without coupling the domain service to the audit module.
  * Story 3.3.
  */
-@org.springframework.modulith.NamedInterface("events") // 12.2b: merged into "inventory :: events" (see package-info)
 public record StockTransferredEvent(
     UUID transferId,
     UUID sourceStoreId,

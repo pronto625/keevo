@@ -1,12 +1,13 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.infrastructure.event.ModuleListenerTestSupport;
 import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
 import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
 import com.keevo.commerce.sale.domain.model.Sale;
-import com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent;
+import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -37,6 +38,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -71,9 +73,10 @@ class SaleDraftValidatedNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new SaleDraftValidatedNotificationListener(
+        // Story 12.4: wrapped in the production module-listener interceptor (tenant bound from the event).
+        listener = ModuleListenerTestSupport.bound(new SaleDraftValidatedNotificationListener(
                 CommerceSaleApiTestSupport.saleQueryPort(saleRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository),
-                StoreApiTestSupport.queryPort(storeRepository), IdentityAuthApiTestSupport.userQueryPort(userRepository), ownerRecipientResolver, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), notificationPort, whatsAppPort);
+                StoreApiTestSupport.queryPort(storeRepository), IdentityAuthApiTestSupport.userQueryPort(userRepository), ownerRecipientResolver, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), notificationPort, whatsAppPort));
 
         SaleItem item = mock(SaleItem.class);
         when(item.getProductId()).thenReturn(draftId);
@@ -167,5 +170,41 @@ class SaleDraftValidatedNotificationListenerTest {
         fire(true);
 
         verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
+    }
+
+    /** Story 12.4 (R2) — both channels attempted, then the provider failure propagates and the receipt is released. */
+    @Test
+    void sendFailures_propagate_bothChannelsAttempted_receiptReleased() {
+        var defaults = TenantPreferences.withDefaults(
+                UUID.randomUUID(), SectorType.FOOD_GROCERY, "20:00:00", true, Instant.now());
+        var bothPrefs = new TenantPreferences(
+                defaults.id(), defaults.sectorType(), defaults.eodReportTime(), true, defaults.createdAt(),
+                defaults.eodReportEnabled(), defaults.eodReportChannel(),
+                defaults.weeklyReportEnabled(), defaults.weeklyReportDay(),
+                defaults.weeklyReportTime(), defaults.weeklyReportChannel(),
+                defaults.inventoryReportEnabled(), defaults.inventoryReportChannel(),
+                StockAlertChannel.BOTH, defaults.trendNotificationEnabled());
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(bothPrefs));
+        when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT)).thenReturn(Optional.of("+237600000001"));
+        when(employeeRepository.findByUserId(sellerId)).thenReturn(Optional.empty());
+        when(userRepository.findById(sellerId)).thenReturn(Optional.empty());
+        doThrow(new RuntimeException("fcm down")).when(notificationPort).notifyOwners(any(), any());
+        doThrow(new RuntimeException("wa down")).when(whatsAppPort).sendReport(any(), any());
+
+        var receipts = mock(com.keevo.shared.infrastructure.event.EventListenerReceipts.class);
+        when(receipts.tryAcquire(anyString(), anyString())).thenReturn(true);
+        var guarded = ModuleListenerTestSupport.bound(new SaleDraftValidatedNotificationListener(
+                CommerceSaleApiTestSupport.saleQueryPort(saleRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository),
+                StoreApiTestSupport.queryPort(storeRepository), IdentityAuthApiTestSupport.userQueryPort(userRepository),
+                ownerRecipientResolver, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                notificationPort, whatsAppPort), receipts);
+
+        assertThatThrownBy(() -> guarded.onSaleDraftProductsUpgraded(new SaleDraftProductsUpgradedEvent(
+                saleId, storeId, sellerId, List.of(draftId), 5000, TENANT, Instant.now(), true)))
+                .isInstanceOf(com.keevo.shared.event.DeliveryFailedException.class)
+                .hasRootCauseMessage("fcm down")
+                .satisfies(e -> assertThat(e.getSuppressed()).hasSize(1));
+        verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
+        verify(receipts).release(anyString(), anyString());
     }
 }

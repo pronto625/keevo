@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain;
 
-import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

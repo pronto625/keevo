@@ -1,16 +1,15 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
+import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 import com.keevo.messaging.notification.application.strategy.TransferNotificationRecipientStrategy;
 import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.api.NotificationPort;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.event.DeliverOnce;
+import com.keevo.shared.event.DeliveryFailedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionalEventListener;
-import org.springframework.transaction.event.TransactionPhase;
 
 import java.util.List;
 import java.util.Map;
@@ -30,6 +29,12 @@ import java.util.UUID;
  * </ul>
  *
  * <p>Async best-effort — transfer operations MUST NOT fail due to notification errors.
+ *
+ * <p>Story 12.4: durable module listener (async, after commit, publication registry); the tenant is
+ * bound from the event by the module-listener interceptor (the recipient strategy reads tenant-bound
+ * repositories). {@link DeliverOnce}: a replay never pushes the transfer twice. A provider failure on the
+ * send is rethrown as {@link DeliveryFailedException} (ruling R2) so the publication is retried; recipient
+ * resolution failures / no recipient stay best-effort (logged).
  *
  * Story HF-2 AC2, AC7.
  */
@@ -53,14 +58,12 @@ public class TransferCreatedNotificationListener {
      * AC2: recipients = all OWNER users + all EMPLOYEE users of destination store.
      * AC7: deep link is router-valid (/stock/transfers).
      */
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onTransferCreated(TransferCreatedEvent event) {
         log.info("[TRANSFER-CREATED] transfer={} dest={} tenant={}",
                 event.transferId(), event.destinationStoreId(), event.tenantId());
         try {
-            TenantContext.setCurrentTenant(event.tenantId());
-
             List<UUID> recipients = recipientStrategy.resolveRecipients(event);
             if (recipients.isEmpty()) {
                 log.debug("[TRANSFER-CREATED] No recipients resolved for tenant={}", event.tenantId());
@@ -78,13 +81,20 @@ public class TransferCreatedNotificationListener {
                     )
             );
 
-            notificationPort.notifyUsers(event.tenantId(), recipients, payload);
+            try {
+                notificationPort.notifyUsers(event.tenantId(), recipients, payload);
+            } catch (RuntimeException e) {
+                // Story 12.4 (R2): rethrown — the publication stays incomplete and is retried
+                log.warn("[TRANSFER-CREATED] Push failed for transfer={}: {} — will be retried",
+                        event.transferId(), e.getMessage());
+                throw new DeliveryFailedException("transfer push send failed", e);
+            }
 
+        } catch (DeliveryFailedException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("[TRANSFER-CREATED] Notification failed for transfer={}: {}",
                     event.transferId(), e.getMessage());
-        } finally {
-            TenantContext.clear();
         }
     }
 }

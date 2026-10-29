@@ -1,7 +1,8 @@
 package com.keevo.identity.onboarding.application.service;
 
+import com.keevo.shared.event.catalog.onboarding.SectorKind;
 import com.keevo.identity.onboarding.application.factory.SectorTemplateFactory;
-import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
+import com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingCommand;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingUseCase;
@@ -93,7 +94,7 @@ public class OnboardingService implements CompleteOnboardingUseCase {
         // 6. Publish domain event (Observer → AuditEventListener)
         eventPublisher.publishEvent(new OnboardingCompletedEvent(
             tenantId,
-            command.sectorType(),
+            command.sectorType() == null ? null : SectorKind.valueOf(command.sectorType().name()),
             command.storeName(),
             seededCategories,
             command.actorId(),

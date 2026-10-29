@@ -718,6 +718,11 @@ So that **les invariants spécifiques Keevo sont garantis en CI (MOD-NFR2/3)**.
 
 **AC (interim):** every routed item above is resolved or explicitly rejected with a reason, in addition to the epic's own ACs.
 
+**Items (routed 2026-10-29 from 12.3):**
+- [ ] [Deferred-from: 12.3 implementation, 2026-10-29] identity ↔ messaging cycle (API-only: identity → `messaging.api.WhatsAppPort` for OTP/account deletion/test report; messaging → identity query ports) — core-owned notification port implemented by messaging, or recipient data carried by events [identity/*, messaging/notification] — must be gone before verify() becomes blocking
+
+- [ ] [Deferred-from: review 12-3/12-4, 2026-10-29] Four `@Async @EventListener` notification listeners fire before commit and are not durable (`DayClosureNotificationListener` push, `StockAlertNotificationListener`, `StockModificationNotificationListener`, `ProductCreationNotificationListener.onCsvImportCompleted`) — move to after-commit module listeners (timing change: no push for rolled-back actions) [messaging/notification/application/listener]
+
 ### Story 12.7 : Rendre le moteur de synchronisation « module-aware »
 
 As a **développeur plateforme**,

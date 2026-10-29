@@ -1,0 +1,20 @@
+package com.keevo.shared.event.catalog.counting;
+
+import com.keevo.shared.event.catalog.DomainEvent;
+
+import java.time.Instant;
+import java.util.UUID;
+
+/**
+ * Domain event published after successful inventory validation.
+ * GoF Observer — audit handler reacts without coupling.
+ * Story 6.4.
+ */
+public record InventoryValidatedEvent(
+        UUID sessionId,
+        UUID actorId,
+        int adjustmentCount,
+        String tenantId,
+        Instant occurredAt,
+        UUID storeId          // v1s-18-6: store the action happened in (audit store_id)
+) implements DomainEvent {}

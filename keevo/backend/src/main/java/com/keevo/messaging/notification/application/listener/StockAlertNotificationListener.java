@@ -1,6 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.api.TenantPreferencesView;

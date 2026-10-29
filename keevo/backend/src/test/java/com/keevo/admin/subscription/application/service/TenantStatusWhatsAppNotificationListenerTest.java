@@ -1,5 +1,6 @@
 package com.keevo.admin.subscription.application.service;
 
+import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.admin.subscription.domain.model.TenantReactivatedEvent;
 import com.keevo.admin.subscription.domain.model.TenantSuspendedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -62,12 +63,19 @@ class TenantStatusWhatsAppNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("WhatsApp or resolver failure → logged, never propagated")
-    void failures_swallowed() {
+    @DisplayName("12.4 R2: WhatsApp down → DeliveryFailedException (retried); resolver failure → logged, skipped")
+    void failures() throws Exception {
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
         doThrow(new RuntimeException("down")).when(whatsApp).sendReport(anyString(), anyString());
-        assertThatCode(() -> listener.onSuspended(new TenantSuspendedEvent(UUID.randomUUID(), TENANT, SCHEMA,
-                "fraude", Instant.now()))).doesNotThrowAnyException();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onSuspended(new TenantSuspendedEvent(
+                UUID.randomUUID(), TENANT, SCHEMA, "fraude", Instant.now())))
+                .isInstanceOf(DeliveryFailedException.class).hasRootCauseMessage("down");
+        org.assertj.core.api.Assertions.assertThat(TenantStatusWhatsAppNotificationListener.class
+                .getMethod("onSuspended", TenantSuspendedEvent.class)
+                .isAnnotationPresent(com.keevo.shared.event.DeliverOnce.class)).isTrue();
+        org.assertj.core.api.Assertions.assertThat(TenantStatusWhatsAppNotificationListener.class
+                .getMethod("onReactivated", TenantReactivatedEvent.class)
+                .isAnnotationPresent(com.keevo.shared.event.DeliverOnce.class)).isTrue();
 
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenThrow(new RuntimeException("db"));
         assertThatCode(() -> listener.onReactivated(new TenantReactivatedEvent(UUID.randomUUID(), TENANT, SCHEMA,

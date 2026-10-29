@@ -1,7 +1,7 @@
 package com.keevo.commerce.sale.domain;
 
 import com.keevo.commerce.sale.domain.model.DayClosure;
-import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;

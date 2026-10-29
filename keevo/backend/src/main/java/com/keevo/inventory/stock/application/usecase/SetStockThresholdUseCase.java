@@ -3,7 +3,7 @@ package com.keevo.inventory.stock.application.usecase;
 import com.keevo.catalog.api.ProductCommandPort;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.catalog.api.ProductView;
-import com.keevo.inventory.stock.domain.event.StockThresholdChangedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

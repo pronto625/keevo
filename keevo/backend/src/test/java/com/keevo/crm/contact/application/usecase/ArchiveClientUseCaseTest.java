@@ -1,7 +1,7 @@
 package com.keevo.crm.contact.application.usecase;
 
 import com.keevo.crm.contact.domain.entity.Client;
-import com.keevo.crm.contact.domain.event.ClientArchivedEvent;
+import com.keevo.shared.event.catalog.contact.ClientArchivedEvent;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import org.junit.jupiter.api.DisplayName;

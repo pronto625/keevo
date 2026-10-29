@@ -2,7 +2,7 @@ package com.keevo.inventory.transfer.application.usecase;
 
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.transfer.domain.event.StockTransferredEvent;
-import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
+import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 import com.keevo.inventory.transfer.domain.model.StockTransfer;
 import com.keevo.inventory.transfer.domain.model.StockTransfer.TransferStatus;
 import com.keevo.inventory.transfer.domain.port.in.TransferStockCommand;

@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
+import com.keevo.shared.event.catalog.stock.MovementKind;
+import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.api.NotificationPort;
@@ -90,8 +90,8 @@ public class StockModificationNotificationListener {
             return;
         }
         // Skip SALE and TRANSFER movements (D2)
-        if (event.movementType() != MovementType.STOCK_ENTRY
-                && event.movementType() != MovementType.ADJUSTMENT) {
+        if (event.movementType() != MovementKind.STOCK_ENTRY
+                && event.movementType() != MovementKind.ADJUSTMENT) {
             log.debug("[STOCK-NOTIF] Skipping — movementType={} not in scope", event.movementType());
             return;
         }
@@ -159,7 +159,7 @@ public class StockModificationNotificationListener {
         String productName = productLabel(event);
         String storeLabel = event.storeName() != null ? " (" + event.storeName() + ")" : "";
         String body;
-        if (event.movementType() == MovementType.STOCK_ENTRY) {
+        if (event.movementType() == MovementKind.STOCK_ENTRY) {
             body = event.actorName() + " a ajouté " + event.quantityChange()
                     + " unité(s) à « " + productName + " »" + storeLabel + ".";
         } else {

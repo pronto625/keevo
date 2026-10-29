@@ -23,3 +23,8 @@ keevo:
     enabled: false
   product-photo:
     storage-dir: ${java.io.tmpdir}/keevo-test-product-photos
+
+# Story 12.4 — the shared test database outlives every cached context: a context start must not replay
+# the incomplete publications left by other test classes. Replay is covered explicitly
+# (EventPublicationRegistryIntegrationTest resubmits through IncompleteEventPublications).
+spring.modulith.events.republish-outstanding-events-on-restart: false

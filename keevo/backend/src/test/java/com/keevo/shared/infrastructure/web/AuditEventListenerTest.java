@@ -1,22 +1,22 @@
 package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
-import com.keevo.crm.contact.domain.event.ClientCreatedEvent;
-import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
-import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.commerce.sale.domain.event.DayClosedEvent;
-import com.keevo.commerce.api.DayClosureSummary;
-import com.keevo.commerce.sale.domain.event.SaleCorrectedEvent;
-import com.keevo.commerce.sale.domain.event.SaleCancelledEvent;
-import com.keevo.commerce.sale.domain.event.SaleCompletedEvent;
-import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
-import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
-import com.keevo.inventory.counting.domain.model.InventoryScope;
+import com.keevo.shared.event.catalog.category.CategoryCreatedEvent;
+import com.keevo.shared.event.catalog.contact.ClientCreatedEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
+import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
+import com.keevo.shared.event.catalog.stock.MovementKind;
+import com.keevo.shared.event.catalog.sale.DayClosedEvent;
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
+import com.keevo.shared.event.catalog.sale.SaleCorrectedEvent;
+import com.keevo.shared.event.catalog.sale.SaleCancelledEvent;
+import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
+import com.keevo.shared.event.catalog.counting.InventorySessionCreatedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryValidatedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryScopeKind;
 import com.keevo.shared.application.port.AuditContext;
 import com.keevo.shared.infrastructure.security.AuthDetails;
-import com.keevo.store.store.domain.event.StoreUpdatedEvent;
+import com.keevo.shared.event.catalog.store.StoreUpdatedEvent;
 import org.junit.jupiter.api.Nested;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -24,18 +24,18 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
-import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
-import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
-import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
-import com.keevo.identity.auth.domain.model.PasswordResetEvent;
+import com.keevo.shared.event.catalog.auth.UserAuthenticatedEvent;
+import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
+import com.keevo.shared.event.catalog.auth.PasswordResetRequestedEvent;
+import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
-import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
-import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
-import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
-import com.keevo.identity.onboarding.domain.model.SectorType;
+import com.keevo.shared.event.catalog.employee.EmployeePasswordSetByOwnerEvent;
+import com.keevo.shared.event.catalog.employee.EmployeeRoleChangedEvent;
+import com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent;
+import com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent;
+import com.keevo.shared.event.catalog.onboarding.SectorKind;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.AfterEach;
@@ -210,7 +210,7 @@ class AuditEventListenerTest {
     void onOnboardingCompleted_callsAuditPort() {
         UUID actorId = UUID.randomUUID();
         OnboardingCompletedEvent event = new OnboardingCompletedEvent(
-                "kv_aaa111", SectorType.CLOTHING, "Ma Boutique", 5, actorId, Instant.now());
+                "kv_aaa111", SectorKind.CLOTHING, "Ma Boutique", 5, actorId, Instant.now());
 
         listener.on(event);
 
@@ -227,7 +227,7 @@ class AuditEventListenerTest {
 
         UUID actorId = UUID.randomUUID();
         OnboardingCompletedEvent event = new OnboardingCompletedEvent(
-                "kv_aaa111", SectorType.CLOTHING, "Ma Boutique", 5, actorId, Instant.now());
+                "kv_aaa111", SectorKind.CLOTHING, "Ma Boutique", 5, actorId, Instant.now());
 
         listener.on(event);
 
@@ -461,7 +461,7 @@ class AuditEventListenerTest {
         void stockAdjusted_splitsValuesAndContext() throws Exception {
             UUID storeId = UUID.randomUUID();
             UUID productId = UUID.randomUUID();
-            listener.on(new StockAdjustedEvent(productId, null, storeId, MovementType.STOCK_ENTRY, 4, 6, 10,
+            listener.on(new StockAdjustedEvent(productId, null, storeId, MovementKind.STOCK_ENTRY, 4, 6, 10,
                     actorId, "arrivage", "kv_abc123", "OWNER", "Moussa", "Boutique A", "Pagne wax", Instant.now()));
 
             AuditPort.AuditEntry e = captureEntry();
@@ -482,7 +482,7 @@ class AuditEventListenerTest {
         @DisplayName("v1s-16-23: TRANSFER_OUT → metadata destinationStoreName; TRANSFER_IN → sourceStoreName")
         void stockAdjusted_transferCarriesCounterpartStoreName() throws Exception {
             UUID storeId = UUID.randomUUID();
-            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, storeId, MovementType.TRANSFER_OUT, 10, -3, 7,
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, storeId, MovementKind.TRANSFER_OUT, 10, -3, 7,
                     actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique A", "Pagne wax", Instant.now(),
                     "Boutique B"));
             var meta = objectMapper.readTree(captureEntry().metadataJson());
@@ -490,7 +490,7 @@ class AuditEventListenerTest {
             assertThat(meta.has("sourceStoreName")).isFalse();
 
             org.mockito.Mockito.clearInvocations(auditPort);
-            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, storeId, MovementType.TRANSFER_IN, 0, 3, 3,
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, storeId, MovementKind.TRANSFER_IN, 0, 3, 3,
                     actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique B", "Pagne wax", Instant.now(),
                     "Boutique A"));
             meta = objectMapper.readTree(captureEntry().metadataJson());
@@ -501,7 +501,7 @@ class AuditEventListenerTest {
         @Test
         @DisplayName("v1s-16-23: transfer without counterpart name → no Vers/Depuis key")
         void stockAdjusted_transferWithoutCounterpart_noKey() throws Exception {
-            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, UUID.randomUUID(), MovementType.TRANSFER_OUT,
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, UUID.randomUUID(), MovementKind.TRANSFER_OUT,
                     10, -3, 7, actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique A", "Pagne wax", Instant.now()));
             var meta = objectMapper.readTree(captureEntry().metadataJson());
             assertThat(meta.has("destinationStoreName")).isFalse();
@@ -561,7 +561,7 @@ class AuditEventListenerTest {
         @DisplayName("J7 StoreReactivated → STORE_REACTIVATED, store column + label = the store")
         void storeReactivated() {
             UUID storeId = UUID.randomUUID();
-            listener.on(new com.keevo.store.store.domain.event.StoreReactivatedEvent(
+            listener.on(new com.keevo.shared.event.catalog.store.StoreReactivatedEvent(
                     storeId, "Boutique Akwa", actorId, "kv_abc123", Instant.now()));
 
             AuditPort.AuditEntry e = captureEntry();
@@ -574,7 +574,7 @@ class AuditEventListenerTest {
         @DisplayName("J10 ProductUnarchived → PRODUCT_UNARCHIVED, label = product name")
         void productUnarchived() throws Exception {
             UUID productId = UUID.randomUUID();
-            listener.on(new com.keevo.catalog.product.domain.event.ProductUnarchivedEvent(
+            listener.on(new com.keevo.shared.event.catalog.product.ProductUnarchivedEvent(
                     productId, "Riz 5kg", "KEV-AAA", "kv_abc123", actorId, Instant.now()));
 
             AuditPort.AuditEntry e = captureEntry();
@@ -589,7 +589,7 @@ class AuditEventListenerTest {
         @DisplayName("J10 StockThresholdChanged → STOCK_THRESHOLD_UPDATED, before/after threshold")
         void stockThresholdChanged() throws Exception {
             UUID productId = UUID.randomUUID();
-            listener.on(new com.keevo.inventory.stock.domain.event.StockThresholdChangedEvent(
+            listener.on(new com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent(
                     productId, "Riz 5kg", 5, 12, actorId, "kv_abc123", Instant.now()));
 
             AuditPort.AuditEntry e = captureEntry();
@@ -603,7 +603,7 @@ class AuditEventListenerTest {
         @DisplayName("J10 ReportPreferencesUpdated → REPORT_PREFERENCES_UPDATED, label in French")
         void reportPreferencesUpdated() throws Exception {
             UUID prefsId = UUID.randomUUID();
-            listener.on(new com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent(
+            listener.on(new com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent(
                     prefsId, java.util.Map.of("eodReportTime", "20:00"),
                     java.util.Map.of("eodReportTime", "22:00"), actorId, "kv_abc123", Instant.now()));
 
@@ -627,7 +627,7 @@ class AuditEventListenerTest {
         @Test
         @DisplayName("InventorySessionCreated → store column = session store")
         void inventorySessionCreated_store() {
-            listener.on(new InventorySessionCreatedEvent(UUID.randomUUID(), STORE, InventoryScope.FULL,
+            listener.on(new InventorySessionCreatedEvent(UUID.randomUUID(), STORE, InventoryScopeKind.FULL,
                     actorId, "kv_abc123", Instant.now()));
             assertThat(captureEntry().storeId()).isEqualTo(STORE);
         }
@@ -654,7 +654,7 @@ class AuditEventListenerTest {
             var auth = new UsernamePasswordAuthenticationToken(
                     UUID.randomUUID(), null, List.of(new SimpleGrantedAuthority("ROLE_OWNER")));
             SecurityContextHolder.getContext().setAuthentication(auth); // no firstName → "Le propriétaire"
-            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, STORE, MovementType.ADJUSTMENT, 4, -1, 3,
+            listener.on(new StockAdjustedEvent(UUID.randomUUID(), null, STORE, MovementKind.ADJUSTMENT, 4, -1, 3,
                     actorId, null, "kv_abc123", "OWNER", "Moussa", "Boutique A", "Pagne wax", Instant.now()));
 
             assertThat(objectMapper.readTree(captureEntry().metadataJson()).get("actorLabel").asText())

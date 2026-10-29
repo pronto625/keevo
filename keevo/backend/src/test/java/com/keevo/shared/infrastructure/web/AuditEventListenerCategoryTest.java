@@ -1,9 +1,9 @@
 package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.catalog.category.domain.event.CategoryActiveChangedEvent;
-import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
-import com.keevo.catalog.category.domain.event.CategoryRenamedEvent;
+import com.keevo.shared.event.catalog.category.CategoryActiveChangedEvent;
+import com.keevo.shared.event.catalog.category.CategoryCreatedEvent;
+import com.keevo.shared.event.catalog.category.CategoryRenamedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

@@ -3,7 +3,7 @@ package com.keevo.store.store.application.service;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.event.StoreUpdatedEvent;
+import com.keevo.shared.event.catalog.store.StoreUpdatedEvent;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;

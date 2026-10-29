@@ -4,7 +4,7 @@ import com.keevo.shared.domain.PasswordLimits;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
-import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
+import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.in.RegisterUserCommand;
 import com.keevo.identity.auth.domain.port.in.RegisterUserUseCase;

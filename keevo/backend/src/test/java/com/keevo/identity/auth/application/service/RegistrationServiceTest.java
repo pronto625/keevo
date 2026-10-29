@@ -10,7 +10,7 @@ import com.keevo.identity.auth.domain.port.in.RegistrationResult;
 import com.keevo.identity.auth.domain.port.out.TenantSchemaPort;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
+import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.identity.auth.domain.model.AuthTokens;

@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.reporting.export.domain.event.DataExportedEvent;
+import com.keevo.shared.event.catalog.export.DataExportedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;

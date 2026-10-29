@@ -5,7 +5,7 @@ import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.SaleValidationCascadeService;
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.out.ProductStatusPort;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;

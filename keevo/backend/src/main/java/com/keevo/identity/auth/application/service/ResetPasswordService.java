@@ -1,6 +1,6 @@
 package com.keevo.identity.auth.application.service;
 
-import com.keevo.identity.auth.domain.model.PasswordResetEvent;
+import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
 import com.keevo.identity.auth.domain.model.PasswordResetToken;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.in.ResetPasswordCommand;

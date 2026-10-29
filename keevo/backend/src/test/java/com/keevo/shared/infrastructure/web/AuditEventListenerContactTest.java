@@ -1,12 +1,12 @@
 package com.keevo.shared.infrastructure.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.crm.contact.domain.event.ClientArchivedEvent;
-import com.keevo.crm.contact.domain.event.ClientCreatedEvent;
-import com.keevo.crm.contact.domain.event.ClientUnarchivedEvent;
-import com.keevo.crm.contact.domain.event.SupplierArchivedEvent;
-import com.keevo.crm.contact.domain.event.SupplierCreatedEvent;
-import com.keevo.crm.contact.domain.event.SupplierUnarchivedEvent;
+import com.keevo.shared.event.catalog.contact.ClientArchivedEvent;
+import com.keevo.shared.event.catalog.contact.ClientCreatedEvent;
+import com.keevo.shared.event.catalog.contact.ClientUnarchivedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierArchivedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierCreatedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierUnarchivedEvent;
 import com.keevo.shared.application.port.AuditPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -139,7 +139,7 @@ class AuditEventListenerContactTest {
     @Test
     @DisplayName("on(SupplierUpdatedEvent) records SUPPLIER_UPDATED with the changed fields")
     void on_supplierUpdated_records_audit() {
-        listener.on(new com.keevo.crm.contact.domain.event.SupplierUpdatedEvent(
+        listener.on(new com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent(
                 SUPPLIER_ID, "Fournisseur SA",
                 java.util.Map.of("phone", "+237600000001"), java.util.Map.of("phone", "+237600000002"),
                 ACTOR_ID, TENANT, NOW));
@@ -151,7 +151,7 @@ class AuditEventListenerContactTest {
     @Test
     @DisplayName("on(SupplierProductsChangedEvent) records SUPPLIER_PRODUCTS_UPDATED with counts only")
     void on_supplierProductsChanged_records_audit() {
-        listener.on(new com.keevo.crm.contact.domain.event.SupplierProductsChangedEvent(
+        listener.on(new com.keevo.shared.event.catalog.contact.SupplierProductsChangedEvent(
                 SUPPLIER_ID, "Fournisseur SA", 2, 3, 2, 1, ACTOR_ID, TENANT, NOW));
 
         verify(auditPort).record(entry(ACTOR_ID, TENANT, "SUPPLIER_PRODUCTS_UPDATED", "Supplier", SUPPLIER_ID,

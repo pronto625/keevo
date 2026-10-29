@@ -1,6 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
-import com.keevo.commerce.sale.domain.event.DayClosedEvent;
+import com.keevo.commerce.api.ClosureWindow;
+import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
@@ -48,6 +49,11 @@ public class EndOfDayReportListener {
      * same request thread. Running synchronously ensures the report is always persisted before
      * the HTTP response returns — no data loss on JVM restart.
      *
+     * <p>Story 12.4 (orchestrator ruling R1): stays synchronous; the Spring Modulith registry records
+     * the publication with the closure, so a crash between commit and report generation is replayed
+     * (restart / scheduled resubmission). Replay-safe: each report is generated in its own transaction
+     * and skipped when one already exists for (store, date, type, actor).
+     *
      * <p>WhatsApp delivery is best-effort (try/catch inside deliverReport): if it fails the
      * report stays PENDING and can be resent later.
      */
@@ -85,7 +91,7 @@ public class EndOfDayReportListener {
             generateReportUseCase.generateReport(storeCommand);
 
             // 2. Generate one personal report per employee with sales in this window
-            List<UUID> employeeIds = builder.getDistinctEmployeeIds(event.storeId(), event.window());
+            List<UUID> employeeIds = builder.getDistinctEmployeeIds(event.storeId(), ClosureWindow.of(event));
 
             for (UUID employeeId : employeeIds) {
                 try {

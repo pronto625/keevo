@@ -1,5 +1,7 @@
 package com.keevo.commerce.api;
 
+import com.keevo.shared.event.catalog.sale.DayClosedEvent;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -52,6 +54,15 @@ public record ClosureWindow(Instant start, Instant end, Instant lateFrom, Instan
      * single-operation, well under a second).
      */
     public static final Duration COMMIT_SAFETY_MARGIN = Duration.ofSeconds(5);
+
+    /**
+     * The sales a {@link DayClosedEvent} covers (Story 12.3: the catalogue event carries the window
+     * bounds only; this replaces its former {@code window()} accessor, same values).
+     */
+    public static ClosureWindow of(DayClosedEvent event) {
+        Objects.requireNonNull(event, "event must not be null");
+        return new ClosureWindow(event.windowStart(), event.windowEnd(), event.lateFrom(), event.receivedUntil());
+    }
 
     /** The arrival limit ({@code receivedUntil}) of a closure/report generated at {@code now}. */
     public static Instant receivedLimit(Instant now) {

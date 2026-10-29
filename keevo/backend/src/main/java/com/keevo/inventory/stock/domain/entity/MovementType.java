@@ -10,7 +10,6 @@ package com.keevo.inventory.stock.domain.entity;
  * <p>ADJUSTMENT: manual correction — shrinkage, breakage, inventory reconciliation.
  * <p>SALE_CANCELLED: stock restored by cancelling a COMPLETED sale (Story 13.5).
  */
-@org.springframework.modulith.NamedInterface("events") // 12.2b: carried by StockAdjustedEvent, merged into "inventory :: events"
 public enum MovementType {
     SALE,
     STOCK_ENTRY,

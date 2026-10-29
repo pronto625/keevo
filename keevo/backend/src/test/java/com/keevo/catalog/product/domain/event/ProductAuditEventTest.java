@@ -1,5 +1,11 @@
 package com.keevo.catalog.product.domain.event;
 
+import com.keevo.shared.event.catalog.product.ProductArchivedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductPhotoUpdatedEvent;
+import com.keevo.shared.event.catalog.product.ProductUpdatedEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;

@@ -1,5 +1,6 @@
 package com.keevo.inventory.stock.domain.service;
 
+import com.keevo.shared.event.catalog.stock.MovementKind;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -7,8 +8,8 @@ import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.entity.StockMovement;
-import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
-import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
+import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -201,7 +202,7 @@ public class StockOperationService {
         }
         eventPublisher.publishEvent(new StockAdjustedEvent(
             productId, variantId, storeId,
-            movementType,
+            movementType == null ? null : MovementKind.valueOf(movementType.name()),
             quantityBefore, quantityChange, quantityAfter,
             actorId, notes,
             tenantId,

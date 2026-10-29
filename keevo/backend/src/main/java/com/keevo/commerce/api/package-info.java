@@ -8,7 +8,7 @@
  * {@code @Transactional} REQUIRED: a port call joins the caller's transaction when there is one
  * (the sync push's per-op transaction) and opens one otherwise, so a sale and its stock movements,
  * or a closure, commit or roll back together. Other modules
- * depend on {@code "commerce :: api"} (and {@code "commerce :: events"}), never on commerce
+ * depend on {@code "commerce :: api"} (its events: {@code shared.event.catalog}, Story 12.3), never on commerce
  * internals.
  *
  * <p><b>Tenant convention (12.2d, aligned here in 12.2e):</b> every method takes the tenant schema

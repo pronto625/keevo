@@ -108,7 +108,7 @@ class SetStockThresholdUseCaseTest {
         useCase.execute(PRODUCT_ID, 12, ACTOR_ID);
 
         var captor = org.mockito.ArgumentCaptor.forClass(
-                com.keevo.inventory.stock.domain.event.StockThresholdChangedEvent.class);
+                com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().previousThreshold()).isEqualTo(5);
         assertThat(captor.getValue().newThreshold()).isEqualTo(12);

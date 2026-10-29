@@ -6,7 +6,7 @@ import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.event.StoreReactivatedEvent;
+import com.keevo.shared.event.catalog.store.StoreReactivatedEvent;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.in.ReactivateStoreCommand;

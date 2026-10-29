@@ -5,7 +5,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.catalog.api.CategoryView;
-import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
+import com.keevo.shared.event.catalog.counting.InventorySessionCreatedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;

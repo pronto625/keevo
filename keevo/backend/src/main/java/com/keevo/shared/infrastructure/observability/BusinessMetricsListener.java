@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.observability;
 
-import com.keevo.commerce.sale.domain.event.SaleCompletedEvent;
+import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
@@ -25,6 +25,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
  *
  * <p>Cardinality: {@code tenant} = tenant schema name, bounded (&lt; 100 tenants). No per-user,
  * per-sale or per-product tag.
+ *
+ * <p>Story 12.4: as an after-commit listener it is recorded by the Spring Modulith publication registry
+ * (not converted, no receipt). A crash between the sale commit and the counter update leaves the publication
+ * incomplete and the replay counts it once more — possible double count after a crash, accepted (low:
+ * in-process counters, reset on restart anyway).
  */
 @Component
 public class BusinessMetricsListener {

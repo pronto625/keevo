@@ -2,7 +2,7 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
-import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.api.StockAlertChannel;

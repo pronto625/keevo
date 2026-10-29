@@ -171,7 +171,7 @@ class SetEmployeePasswordServiceTest {
         service.execute(new SetEmployeePasswordCommand(actorId, employeeId, "NewPass1"));
 
         verify(eventPublisher).publishEvent(
-                any(com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent.class));
+                any(com.keevo.shared.event.catalog.employee.EmployeePasswordSetByOwnerEvent.class));
     }
 
     @Test

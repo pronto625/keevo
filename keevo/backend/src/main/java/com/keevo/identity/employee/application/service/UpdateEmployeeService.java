@@ -3,7 +3,7 @@ package com.keevo.identity.employee.application.service;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
+import com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.UpdateEmployeeCommand;
 import com.keevo.identity.employee.domain.port.in.UpdateEmployeeUseCase;

@@ -1,11 +1,7 @@
 /**
- * Transfer domain events of the {@code inventory} module, part of the {@code "inventory :: events"}
- * named interface (Story 12.2b).
+ * Transfer domain events internal to the {@code inventory} module.
  *
- * <p>Each event type carries {@code @NamedInterface("events")} itself instead of this package:
- * Spring Modulith 1.4 does not merge two <em>package-level</em> named interfaces sharing a name,
- * whereas type-level declarations are merged into the package-level one of
- * {@code inventory.stock.domain.event}. A new event added here must carry the annotation too.
- * Relocation to the shared event catalogue is Story 12.3.
+ * <p>Story 12.3: the events consumed outside this module moved to {@code com.keevo.shared.event.catalog};
+ * the ones left here are only used inside the module, so the package is internal (no named interface).
  */
 package com.keevo.inventory.transfer.domain.event;

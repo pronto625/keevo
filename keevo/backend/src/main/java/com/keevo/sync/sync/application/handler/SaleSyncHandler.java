@@ -7,7 +7,7 @@ import com.keevo.commerce.api.SaleCommandPort;
 import com.keevo.commerce.api.SaleLineInput;
 import com.keevo.commerce.api.SalePaymentMode;
 import com.keevo.commerce.api.SaleState;
-import com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent;
+import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.store.api.StoreQueryPort;
 import com.keevo.sync.sync.domain.model.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncOperationResult;

@@ -1,7 +1,7 @@
 package com.keevo.commerce.sale.application;
 
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;
@@ -261,7 +261,7 @@ class CloseDayServiceTest {
         assertThat(event.receivedUntil()).isBetween(
                 event.windowEnd().minus(ClosureWindow.COMMIT_SAFETY_MARGIN),
                 Instant.now().minus(ClosureWindow.COMMIT_SAFETY_MARGIN));
-        verify(saleRepository).findForClosure(STORE_ID, event.window());
+        verify(saleRepository).findForClosure(STORE_ID, ClosureWindow.of(event));
     }
 
     // v1s-18-3 — the « Fin de journée » PDF recomputes a closure's window afterwards with
@@ -279,7 +279,7 @@ class CloseDayServiceTest {
 
             var saved = ArgumentCaptor.forClass(DayClosure.class);
             verify(dayClosureRepository).save(saved.capture());
-            assertThat(ClosureWindow.forClosure(saved.getValue().toView(), previous.map(DayClosure::toView))).isEqualTo(event.window());
+            assertThat(ClosureWindow.forClosure(saved.getValue().toView(), previous.map(DayClosure::toView))).isEqualTo(ClosureWindow.of(event));
         }
     }
 
@@ -394,7 +394,7 @@ class CloseDayServiceTest {
         DayClosure closure = fixedClockService().closeDay(new CloseDayCommand(STORE_ID, ACTOR_ID, TENANT_ID, true));
         var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
-        ClosureWindow window = eventCaptor.getValue().window();
+        ClosureWindow window = ClosureWindow.of(eventCaptor.getValue());
         assertThat(window.receivedUntil()).isEqualTo(FIXED_NOW.minusSeconds(5));
 
         Instant lagging = FIXED_NOW.minusSeconds(1);
@@ -457,7 +457,7 @@ class CloseDayServiceTest {
 
         var eventCaptor = ArgumentCaptor.forClass(DayClosedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());
-        ClosureWindow window = eventCaptor.getValue().window();
+        ClosureWindow window = ClosureWindow.of(eventCaptor.getValue());
         ClosureWindow previousWindow = new ClosureWindow(
                 previousClosedAt.minus(java.time.Duration.ofDays(1)), previousClosedAt, null, previousClosedAt);
 

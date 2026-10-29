@@ -6,7 +6,7 @@ import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.reporting.export.adapter.out.config.ExportExecutorConfig;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
-import com.keevo.reporting.export.domain.event.DataExportedEvent;
+import com.keevo.shared.event.catalog.export.DataExportedEvent;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportJobStatus;
 import com.keevo.reporting.export.domain.model.ExportRequest;

@@ -1,13 +1,13 @@
 package com.keevo.commerce.sale.application;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
 import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.RecordSaleService;
 import com.keevo.commerce.sale.domain.model.PaymentMode;
-import com.keevo.commerce.sale.domain.event.SaleCompletedEvent;
-import com.keevo.commerce.sale.domain.event.SalePendingValidationEvent;
+import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
+import com.keevo.shared.event.catalog.sale.SalePendingValidationEvent;
 import com.keevo.commerce.sale.domain.model.SaleStatus;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;

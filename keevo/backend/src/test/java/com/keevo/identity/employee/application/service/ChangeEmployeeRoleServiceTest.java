@@ -221,7 +221,7 @@ class ChangeEmployeeRoleServiceTest {
 
         service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "OWNER"));
 
-        verify(eventPublisher).publishEvent(any(com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent.class));
+        verify(eventPublisher).publishEvent(any(com.keevo.shared.event.catalog.employee.EmployeeRoleChangedEvent.class));
     }
 
     // ── Story 13.9: anti-lockout TOCTOU (two owners demote each other) ──────────

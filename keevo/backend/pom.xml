@@ -33,7 +33,8 @@
             <dependency>
                 <groupId>org.springframework.modulith</groupId>
                 <artifactId>spring-modulith-bom</artifactId>
-                <version>1.4.0</version>
+                <!-- Story 12.4: latest 1.4.x patch (1.4 line = Boot 3.5; 2.x targets Boot 4) -->
+                <version>1.4.14</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -205,6 +206,13 @@
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-api</artifactId>
+        </dependency>
+
+        <!-- Story 12.4: Spring Modulith Event Publication Registry (JDBC outbox, table public.event_publication,
+             created by Flyway — schema initialization disabled in application.yml) -->
+        <dependency>
+            <groupId>org.springframework.modulith</groupId>
+            <artifactId>spring-modulith-starter-jdbc</artifactId>
         </dependency>
 
         <!-- Story 10.6: Spring Modulith — module verification + documentation -->

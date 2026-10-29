@@ -7,7 +7,7 @@
  * services and repositories; they carry no transaction of their own, so a plan read and a limit
  * check run in the caller's transaction, before its guarded write. {@code PlanAdministrationPort}
  * documents its own propagation (activation REQUIRES_NEW; plan read / change MANDATORY). Other modules depend on
- * {@code "subscription :: api"} (and {@code "subscription :: events"}), never on subscription
+ * {@code "subscription :: api"} (its events: {@code shared.event.catalog}, Story 12.3), never on subscription
  * internals.
  *
  * <p>{@link com.keevo.subscription.api.ProductCountPort} works the other way round — <em>required</em>

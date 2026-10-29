@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.strategy;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
+import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.api.EmployeeView;
 import com.keevo.identity.api.EmployeeQueryPort;

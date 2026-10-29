@@ -6,7 +6,7 @@ import com.keevo.catalog.product.adapter.out.csv.validator.CsvValidationExceptio
 import com.keevo.catalog.product.application.dto.CsvColumnMapping;
 import com.keevo.catalog.product.application.dto.CsvRowError;
 import com.keevo.catalog.product.application.dto.ImportResult;
-import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
+import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.catalog.product.domain.event.ProductImportedFromCsvEvent;
 import com.keevo.catalog.product.domain.port.out.CsvParserPort;
 import com.keevo.catalog.product.domain.port.out.DefaultStorePort;

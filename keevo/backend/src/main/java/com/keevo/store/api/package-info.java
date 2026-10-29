@@ -5,8 +5,7 @@
  * internal, package-private adapters ({@code store.store.adapter.in.api}) delegating to the
  * existing use cases and repository; they carry no transaction of their own. Every call — reads,
  * {@code createWithId} and the update / deactivate use cases (REQUIRED) — joins the caller's
- * transaction. Other modules depend on {@code "store :: api"} (and
- * {@code "store :: events"}), never on store internals.
+ * transaction. Other modules depend on {@code "store :: api"} (its events: {@code shared.event.catalog}, Story 12.3), never on store internals.
  *
  * <p><b>Tenant convention (12.2d):</b> every tenant-scoped method takes the tenant schema
  * explicitly as its first {@code String tenantSchema} parameter; it must be the schema of the

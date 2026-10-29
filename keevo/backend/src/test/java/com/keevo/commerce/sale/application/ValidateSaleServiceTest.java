@@ -6,7 +6,7 @@ import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.commerce.sale.application.service.ValidateSaleService;
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CancelPendingSaleUseCase.CancelPendingSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCommand;

@@ -207,8 +207,8 @@ class UpdateEmployeeServiceTest {
                 "Jean", "Dupont", "+237699999999", null);
         service.execute(cmd);
 
-        ArgumentCaptor<com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent> captor =
-                ArgumentCaptor.forClass(com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent.class);
+        ArgumentCaptor<com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent> captor =
+                ArgumentCaptor.forClass(com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().fieldsChanged()).contains("firstName", "lastName", "phoneNumber");
     }

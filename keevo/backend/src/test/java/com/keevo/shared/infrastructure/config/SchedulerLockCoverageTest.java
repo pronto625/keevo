@@ -1,5 +1,7 @@
 package com.keevo.shared.infrastructure.config;
 
+import com.keevo.shared.infrastructure.event.EventPublicationPurgeJob;
+import com.keevo.shared.infrastructure.event.EventPublicationResubmissionJob;
 import com.keevo.reporting.export.application.service.ExportPurgeScheduler;
 import com.keevo.commerce.sale.application.service.DayClosureAutoScheduler;
 import com.keevo.identity.auth.application.service.AuthTokenCleanupJob;
@@ -72,7 +74,9 @@ class SchedulerLockCoverageTest {
             Map.entry(SyncSilenceAlertScheduler.class, Duration.ofDays(1)), // 9-5
             // 9-5 (2/2): every minute, but lockAtMostFor 10 min for large broadcasts (claim is atomic anyway)
             Map.entry(GlobalNotificationScheduler.class, Duration.ofMinutes(15)),
-            Map.entry(GlobalNotificationPurgeJob.class, Duration.ofDays(1))); // 9-5 (2/2)
+            Map.entry(GlobalNotificationPurgeJob.class, Duration.ofDays(1)), // 9-5 (2/2)
+            Map.entry(EventPublicationPurgeJob.class, Duration.ofDays(1)), // 12.4
+            Map.entry(EventPublicationResubmissionJob.class, Duration.ofMinutes(10))); // 12.4
 
     /**
      * Per-instance sweeps: must run on every instance → never locked. Includes the 11.2 sync-lag

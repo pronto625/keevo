@@ -1,7 +1,7 @@
 package com.keevo.commerce.sale.adapter.in.api;
 
 import com.keevo.commerce.api.CloseDayInput;
-import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.commerce.api.DayClosureView;
 import com.keevo.commerce.sale.domain.model.DayClosure;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;

@@ -1,8 +1,8 @@
 package com.keevo.catalog.category.application.usecase;
 
-import com.keevo.catalog.category.domain.event.CategoryActiveChangedEvent;
-import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
-import com.keevo.catalog.category.domain.event.CategoryRenamedEvent;
+import com.keevo.shared.event.catalog.category.CategoryActiveChangedEvent;
+import com.keevo.shared.event.catalog.category.CategoryCreatedEvent;
+import com.keevo.shared.event.catalog.category.CategoryRenamedEvent;
 import com.keevo.catalog.category.domain.model.Category;
 import com.keevo.catalog.category.domain.port.out.CategoryRepository;
 import com.keevo.shared.domain.exception.DomainException;

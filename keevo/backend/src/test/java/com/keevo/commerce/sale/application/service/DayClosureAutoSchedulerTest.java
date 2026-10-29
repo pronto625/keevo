@@ -1,10 +1,11 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase.CloseDayCommand;

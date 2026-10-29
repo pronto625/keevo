@@ -1,10 +1,11 @@
 package com.keevo.subscription.plan.application.service;
 
+import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.identity.api.PlanType;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.api.WhatsAppPort;
-import com.keevo.subscription.plan.domain.model.event.PlanActivatedEvent;
-import com.keevo.subscription.plan.domain.model.event.PlanDowngradedEvent;
+import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
+import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -89,13 +90,29 @@ class PlanWhatsAppNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("WhatsApp down → exception swallowed (the admin action already committed)")
-    void sendFailure_swallowed() {
+    @DisplayName("12.4 R2: WhatsApp down → DeliveryFailedException (publication stays incomplete, retried)")
+    void sendFailure_propagatesForRetry() {
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
         doThrow(new RuntimeException("down")).when(whatsApp).sendReport(anyString(), anyString());
 
-        assertThatCode(() -> listener.onDowngraded(new PlanDowngradedEvent(UUID.randomUUID(), TENANT, SCHEMA,
-                PlanType.PREMIUM, null, Instant.now()))).doesNotThrowAnyException();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onDowngraded(new PlanDowngradedEvent(
+                UUID.randomUUID(), TENANT, SCHEMA, PlanType.PREMIUM, null, Instant.now())))
+                .isInstanceOf(DeliveryFailedException.class).hasRootCauseMessage("down");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onExpired(new PlanExpiredEvent(
+                TENANT, SCHEMA, PlanType.PREMIUM, Instant.now())))
+                .isInstanceOf(DeliveryFailedException.class);
+    }
+
+    @Test
+    @DisplayName("12.4: the three senders are @DeliverOnce")
+    void sendersAreDeliverOnce() throws Exception {
+        for (var m : java.util.List.of(
+                PlanWhatsAppNotificationListener.class.getMethod("onActivated", com.keevo.shared.event.catalog.plan.PlanActivatedEvent.class),
+                PlanWhatsAppNotificationListener.class.getMethod("onDowngraded", PlanDowngradedEvent.class),
+                PlanWhatsAppNotificationListener.class.getMethod("onExpired", PlanExpiredEvent.class))) {
+            org.assertj.core.api.Assertions.assertThat(m.isAnnotationPresent(com.keevo.shared.event.DeliverOnce.class))
+                    .as(m.getName()).isTrue();
+        }
     }
 
     @Test

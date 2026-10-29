@@ -1,8 +1,9 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.infrastructure.event.ModuleListenerTestSupport;
 import com.keevo.identity.employee.adapter.in.api.IdentityEmployeeApiTestSupport;
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
-import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
+import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.api.Role;
@@ -62,9 +63,10 @@ class TransferCreatedNotificationListenerTest {
     void setUp() {
         // Inject real OwnerAndDestinationEmployeeStrategy with mocked repos so all AC2
         // recipient-logic tests remain valid while the listener delegates to the strategy.
-        listener = new TransferCreatedNotificationListener(
+        // Story 12.4: wrapped in the production module-listener interceptor (tenant bound from the event).
+        listener = ModuleListenerTestSupport.bound(new TransferCreatedNotificationListener(
                 new OwnerAndDestinationEmployeeStrategy(IdentityAuthApiTestSupport.userQueryPort(userRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository)),
-                notificationPort);
+                notificationPort));
     }
 
     private TransferCreatedEvent makeEvent() {
@@ -167,16 +169,17 @@ class TransferCreatedNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("AC7 — notification is best-effort (no exception propagation)")
-    void onTransferCreated_doesNotPropagateException() {
+    @DisplayName("12.4 R2 — a push provider failure propagates (publication retried); lookups stay best-effort")
+    void onTransferCreated_sendFailurePropagates() {
         when(userRepository.findOwnersByTenantSchemaName(TENANT_ID))
                 .thenReturn(List.of(owner()));
         when(employeeRepository.findByStoreId(DEST_STORE_ID)).thenReturn(List.of());
         doThrow(new RuntimeException("FCM unavailable"))
                 .when(notificationPort).notifyUsers(any(), any(), any());
 
-        // Must not throw — notification failures are best-effort
-        org.junit.jupiter.api.Assertions.assertDoesNotThrow(
-                () -> listener.onTransferCreated(makeEvent()));
+        // Story 12.4 (R2): the send failure reaches the registry → incomplete publication, receipt released
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> listener.onTransferCreated(makeEvent()))
+                .isInstanceOf(com.keevo.shared.event.DeliveryFailedException.class)
+                .hasRootCauseMessage("FCM unavailable");
     }
 }

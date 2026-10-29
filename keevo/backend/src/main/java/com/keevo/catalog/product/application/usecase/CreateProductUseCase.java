@@ -3,7 +3,7 @@ package com.keevo.catalog.product.application.usecase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;

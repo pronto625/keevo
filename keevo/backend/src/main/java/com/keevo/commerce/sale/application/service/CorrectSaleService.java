@@ -5,7 +5,7 @@ import com.keevo.inventory.api.StockMovementInput;
 import com.keevo.inventory.api.StockMovementKind;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CorrectSaleUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;

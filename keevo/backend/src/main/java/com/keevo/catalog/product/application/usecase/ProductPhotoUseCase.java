@@ -3,7 +3,7 @@ package com.keevo.catalog.product.application.usecase;
 import com.keevo.catalog.product.adapter.out.config.ProductPhotoProperties;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.event.ProductPhotoUpdatedEvent;
+import com.keevo.shared.event.catalog.product.ProductPhotoUpdatedEvent;
 import com.keevo.catalog.product.domain.port.out.ProductPhotoNormalizer;
 import com.keevo.catalog.product.domain.port.out.ProductPhotoNormalizer.NormalizedPhoto;
 import com.keevo.catalog.product.domain.port.out.ProductPhotoStorage;

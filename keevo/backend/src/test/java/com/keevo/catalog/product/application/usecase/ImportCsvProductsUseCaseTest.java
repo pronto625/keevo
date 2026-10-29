@@ -10,7 +10,7 @@ import com.keevo.catalog.product.application.dto.CsvColumnMapping;
 import com.keevo.catalog.product.application.dto.ImportResult;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
+import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.catalog.product.domain.port.out.CsvParserPort;
 import com.keevo.catalog.product.domain.port.out.DefaultStorePort;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;

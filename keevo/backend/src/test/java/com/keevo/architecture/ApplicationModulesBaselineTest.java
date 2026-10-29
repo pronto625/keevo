@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -92,9 +93,11 @@ class ApplicationModulesBaselineTest {
             .as("not-allowed module dependencies (undeclared target) — see " + VIOLATIONS_FILE)
             .isEmpty();
         // 12.2a–12.2d pinned: no module but shared reaches into a published module's internals
-        // (a missing type-level @NamedInterface("events") on a new event lands here too).
+        // (12.3: an event consumed outside its producer but left in the producer instead of
+        // shared.event.catalog lands here too).
         assertThat(messages.stream().filter(ApplicationModulesBaselineTest::isInternalAccessToPublishedModule).toList())
-            .as("non-exposed access to published-module internals (use their 'api'/'events') — see " + VIOLATIONS_FILE)
+            .as("non-exposed access to published-module internals (use their 'api' or shared.event.catalog) — see "
+                + VIOLATIONS_FILE)
             .isEmpty();
         // 12.2f pinned: shared (the future core) reaches no internals of the modules in its allow-list
         // (it may use their listed named interfaces only — see shared/package-info); an edge to a module
@@ -103,6 +106,31 @@ class ApplicationModulesBaselineTest {
             .as("shared depends on another module's internals (move the code to its owner or use an 'api') — see "
                 + VIOLATIONS_FILE)
             .isEmpty();
+        // 12.3 pinned: with the event contracts in shared.event.catalog, messaging no longer forms a
+        // two-module cycle with catalog or commerce.
+        assertThat(messages.stream().filter(m -> isTwoModuleCycle(m, "messaging", "catalog")
+                || isTwoModuleCycle(m, "messaging", "commerce")).toList())
+            .as("two-module cycle messaging <-> catalog/commerce (consume catalogue events, not producer types) — see "
+                + VIOLATIONS_FILE)
+            .isEmpty();
+    }
+
+    private static final Pattern CYCLE_SLICE = Pattern.compile("Slice (\\w+)");
+
+    /** True for a "Cycle detected" message whose slices are exactly {a, b} (Story 12.3). */
+    static boolean isTwoModuleCycle(String message, String a, String b) {
+        if (!message.startsWith("Cycle detected:")) {
+            return false;
+        }
+        int details = message.indexOf("1. Dependencies of");
+        Matcher matcher = CYCLE_SLICE.matcher(details < 0 ? message : message.substring(0, details));
+        Set<String> slices = new LinkedHashSet<>();
+        int count = 0;
+        while (matcher.find()) {
+            slices.add(matcher.group(1));
+            count++;
+        }
+        return count == 3 && slices.equals(Set.of(a, b));
     }
 
     /**

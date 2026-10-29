@@ -8,7 +8,7 @@ import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
+import com.keevo.shared.event.catalog.employee.EmployeeRoleChangedEvent;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleCommand;
 import com.keevo.identity.employee.domain.port.in.ChangeEmployeeRoleUseCase;

@@ -1,10 +1,11 @@
 package com.keevo.store.store.application.service;
 
+import com.keevo.shared.event.catalog.store.StoreKind;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.store.store.domain.event.StoreCreatedEvent;
+import com.keevo.shared.event.catalog.store.StoreCreatedEvent;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreFactory;
 import com.keevo.store.api.StoreType;
@@ -76,7 +77,7 @@ public class CreateStoreService implements CreateStoreUseCase {
 
         // 5. Publish audit event
         eventPublisher.publishEvent(new StoreCreatedEvent(
-                saved.id(), saved.name(), saved.type(),
+                saved.id(), saved.name(), saved.type() == null ? null : StoreKind.valueOf(saved.type().name()),
                 command.actorId(), TenantContext.getCurrentTenant(), Instant.now()));
 
         return saved;

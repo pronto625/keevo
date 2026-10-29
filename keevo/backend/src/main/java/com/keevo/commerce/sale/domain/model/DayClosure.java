@@ -1,6 +1,6 @@
 package com.keevo.commerce.sale.domain.model;
 
-import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.commerce.api.DayClosureView;
 
 import java.time.Instant;

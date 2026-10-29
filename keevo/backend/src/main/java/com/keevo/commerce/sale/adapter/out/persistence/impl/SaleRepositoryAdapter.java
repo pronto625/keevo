@@ -4,7 +4,7 @@ import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleItemJpaEntity;
 import com.keevo.commerce.sale.adapter.out.persistence.entity.SaleJpaEntity;
 import com.keevo.commerce.sale.adapter.out.persistence.jpa.SaleSpringRepository;
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import org.springframework.data.domain.Page;

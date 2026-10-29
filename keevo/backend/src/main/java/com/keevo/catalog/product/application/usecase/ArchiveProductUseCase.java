@@ -1,7 +1,7 @@
 package com.keevo.catalog.product.application.usecase;
 
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
-import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
+import com.keevo.shared.event.catalog.product.ProductArchivedEvent;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;

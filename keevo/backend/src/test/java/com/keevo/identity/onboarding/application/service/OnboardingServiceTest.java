@@ -1,8 +1,9 @@
 package com.keevo.identity.onboarding.application.service;
 
+import com.keevo.shared.event.catalog.onboarding.SectorKind;
 import com.keevo.identity.onboarding.application.factory.SectorTemplateFactory;
 import com.keevo.identity.onboarding.application.strategy.ClothingTemplateStrategy;
-import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
+import com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingCommand;
@@ -140,7 +141,7 @@ class OnboardingServiceTest {
 
             verify(eventPublisher).publishEvent((Object) argThat(evt ->
                 evt instanceof OnboardingCompletedEvent e
-                    && e.sectorType() == SectorType.FOOD_GROCERY
+                    && e.sectorType() == SectorKind.FOOD_GROCERY
                     && e.storeName().equals("Mon Épicerie")));
         }
     }

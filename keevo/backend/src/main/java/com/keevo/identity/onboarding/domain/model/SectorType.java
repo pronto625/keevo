@@ -8,7 +8,6 @@ package com.keevo.identity.onboarding.domain.model;
  *
  * <p>Pure Java — NO Spring/framework imports.
  */
-@org.springframework.modulith.NamedInterface("events") // 12.2f: carried by OnboardingCompletedEvent, merged into "identity :: events"
 public enum SectorType {
 
     /** 👗 Vêtements & Shopping */

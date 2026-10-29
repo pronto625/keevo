@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.api.NotificationPort;
@@ -384,15 +384,17 @@ class ProductCreationNotificationListenerTest {
         verify(whatsAppPort).sendReport(eq("+237600000001"), anyString());
     }
     @Test
-    @DisplayName("v1s-13-9 follow-up: product-created notification runs AFTER_COMMIT (fallback for non-tx publishers)")
+    @DisplayName("v1s-13-9 follow-up / 12.4: product-created notification is a durable after-commit module listener")
     void onProductCreated_isAfterCommitListener() throws Exception {
         var m = ProductCreationNotificationListener.class.getMethod("onProductCreated",
-                com.keevo.catalog.product.domain.event.ProductCreatedEvent.class);
-        var ann = m.getAnnotation(org.springframework.transaction.event.TransactionalEventListener.class);
+                com.keevo.shared.event.catalog.product.ProductCreatedEvent.class);
+        org.assertj.core.api.Assertions.assertThat(
+                m.isAnnotationPresent(org.springframework.modulith.events.ApplicationModuleListener.class)).isTrue();
+        var ann = org.springframework.core.annotation.AnnotatedElementUtils.findMergedAnnotation(m,
+                org.springframework.transaction.event.TransactionalEventListener.class);
         org.assertj.core.api.Assertions.assertThat(ann).isNotNull();
         org.assertj.core.api.Assertions.assertThat(ann.phase())
                 .isEqualTo(org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT);
-        org.assertj.core.api.Assertions.assertThat(ann.fallbackExecution()).isTrue();
         org.assertj.core.api.Assertions.assertThat(
                 m.isAnnotationPresent(org.springframework.context.event.EventListener.class)).isFalse();
     }

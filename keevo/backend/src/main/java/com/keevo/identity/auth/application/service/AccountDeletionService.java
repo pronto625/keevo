@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.shared.event.catalog.auth.AccountDeletionCancelledEvent;
+import com.keevo.shared.event.catalog.auth.AccountDeletionRequestedEvent;
 import com.keevo.identity.api.AccountDeletionPolicy;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.*;

@@ -63,6 +63,24 @@ spring:
     default-schema: public
     locations: classpath:db/migration
 
+  # Story 12.4 — Spring Modulith Event Publication Registry (transactional outbox of the
+  # after-commit listeners). The table lives in public and is created by Flyway (V28): the tenant
+  # connection provider switches search_path, so the registry must always qualify it.
+  modulith:
+    # spring-modulith-moments comes with the starter and is ON by default: it adds @EnableScheduling
+    # (bypassing keevo.scheduling.enabled) and hourly/daily time events nobody consumes. Off.
+    moments:
+      enabled: false
+    events:
+      jdbc:
+        schema: public
+        schema-initialization:
+          enabled: false
+      # incomplete publications (listener crashed / app stopped before it ran) are replayed at boot
+      republish-outstanding-events-on-restart: true
+      # completed rows are kept for inspection and purged after 7 days (EventPublicationPurgeJob)
+      completion-mode: update
+
   # Security
   security:
     require-ssl: false  # true in prod

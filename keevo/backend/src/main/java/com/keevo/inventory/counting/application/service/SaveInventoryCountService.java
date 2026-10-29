@@ -1,6 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryCountSavedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;

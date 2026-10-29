@@ -10,7 +10,7 @@ import com.keevo.catalog.api.ProductView;
 import com.keevo.catalog.api.RegisterProductInput;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryCountSavedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;

@@ -1,6 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
-import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;
+import com.keevo.shared.event.catalog.counting.InventorySessionCancelledEvent;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.model.InventorySessionStatus;

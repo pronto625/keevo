@@ -1,7 +1,7 @@
 package com.keevo.crm.contact.application.usecase;
 
 import com.keevo.crm.contact.domain.entity.Supplier;
-import com.keevo.crm.contact.domain.event.SupplierCreatedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierCreatedEvent;
 import com.keevo.crm.contact.domain.port.out.SupplierRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;

@@ -103,11 +103,11 @@ class UpdateSupplierUseCaseTest {
 
         var captor = org.mockito.ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher, org.mockito.Mockito.times(2)).publishEvent(captor.capture());
-        var info = (com.keevo.crm.contact.domain.event.SupplierUpdatedEvent) captor.getAllValues().get(0);
+        var info = (com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent) captor.getAllValues().get(0);
         assertThat(info.after()).containsOnlyKeys("phone");
         assertThat(info.before().get("phone")).isEqualTo("+22670000010");
         assertThat(info.supplierName()).isEqualTo("Acme");
-        var links = (com.keevo.crm.contact.domain.event.SupplierProductsChangedEvent) captor.getAllValues().get(1);
+        var links = (com.keevo.shared.event.catalog.contact.SupplierProductsChangedEvent) captor.getAllValues().get(1);
         assertThat(links.previousCount()).isEqualTo(2);
         assertThat(links.newCount()).isEqualTo(3);
         assertThat(links.added()).isEqualTo(2);

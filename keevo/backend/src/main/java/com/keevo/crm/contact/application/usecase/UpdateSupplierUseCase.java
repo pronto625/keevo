@@ -1,8 +1,8 @@
 package com.keevo.crm.contact.application.usecase;
 
 import com.keevo.crm.contact.domain.entity.Supplier;
-import com.keevo.crm.contact.domain.event.SupplierProductsChangedEvent;
-import com.keevo.crm.contact.domain.event.SupplierUpdatedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierProductsChangedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent;
 import com.keevo.crm.contact.domain.port.out.SupplierRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;

@@ -12,7 +12,7 @@ import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.context.ApplicationEventPublisher;
@@ -185,5 +185,22 @@ class ProductCommandAdapterTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.archive(null, ID, ACTOR))
                 .isInstanceOf(IllegalStateException.class);
         org.mockito.Mockito.verifyNoInteractions(archiveProduct, productRepository);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("12.4: register publishes ProductCreatedEvent → requires the caller's transaction (MANDATORY)")
+    void register_outsideATransaction_isRefused() {
+        var factory = new org.springframework.aop.framework.ProxyFactory(adapter);
+        factory.setProxyTargetClass(true);
+        factory.addAdvice(new org.springframework.transaction.interceptor.TransactionInterceptor(
+                (org.springframework.transaction.TransactionManager) new org.springframework.jdbc.datasource
+                        .DataSourceTransactionManager(mock(javax.sql.DataSource.class)),
+                new org.springframework.transaction.annotation.AnnotationTransactionAttributeSource(false)));
+        ProductCommandAdapter proxied = (ProductCommandAdapter) factory.getProxy();
+
+        assertThatThrownBy(() -> proxied.register(TenantContext.getCurrentTenant(), new RegisterProductInput(
+                ID, "Sac", "KEV-SAC001", CATEGORY, 4000, Instant.now(), ACTOR, null, null, null)))
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+        verifyNoInteractions(productRepository, eventPublisher);
     }
 }

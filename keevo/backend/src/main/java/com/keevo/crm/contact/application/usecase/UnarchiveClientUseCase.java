@@ -1,6 +1,6 @@
 package com.keevo.crm.contact.application.usecase;
 
-import com.keevo.crm.contact.domain.event.ClientUnarchivedEvent;
+import com.keevo.shared.event.catalog.contact.ClientUnarchivedEvent;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;

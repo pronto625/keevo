@@ -11,7 +11,7 @@ import com.keevo.catalog.api.ProductView;
 import com.keevo.catalog.api.RegisterProductInput;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
-import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryCountSavedEvent;
 import com.keevo.inventory.counting.domain.model.*;
 import com.keevo.inventory.counting.domain.port.in.QuickAddProductCommand;
 import com.keevo.inventory.counting.domain.port.out.InventoryCountRepository;

@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.catalog.product.domain.event.CsvImportCompletedEvent;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.api.NotificationPort;
@@ -11,8 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
-import org.springframework.transaction.event.TransactionPhase;
-import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -86,10 +85,12 @@ public class ProductCreationNotificationListener {
     // ── ACTIVE product (Story 14.10) ────────────────────────────────────
 
     // v1s-13-9 follow-up: CreateProductUseCase is now @Transactional, so the event is published
-    // before commit — notify only once the product is committed (fallbackExecution keeps
-    // non-transactional publishers working).
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    // before commit — notify only once the product is committed.
+    // Story 12.4: durable module listener (async, after commit, registry publication). Both publishers
+    // (CreateProductUseCase, ProductCommandAdapter.register via QuickAddProductService) are transactional.
+    // Replay-safe without a receipt: the handler only adds the event to an in-memory batch window — a
+    // replay after a restart (the window died with the process) yields exactly one notification.
+    @ApplicationModuleListener
     public void onProductCreated(ProductCreatedEvent event) {
         if (!"EMPLOYEE".equals(event.actorRole())) {
             log.debug("[PRODUCT-NOTIF] Skipping — actor is not EMPLOYEE (role={})", event.actorRole());

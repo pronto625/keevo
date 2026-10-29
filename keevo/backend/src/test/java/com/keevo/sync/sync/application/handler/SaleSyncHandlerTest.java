@@ -256,9 +256,9 @@ class SaleSyncHandlerTest {
                 Instant.now());
     }
 
-    private com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent publishedDraftEvent() {
+    private com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent publishedDraftEvent() {
         var captor = org.mockito.ArgumentCaptor.forClass(
-                com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent.class);
+                com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         return captor.getValue();
     }

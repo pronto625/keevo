@@ -1319,6 +1319,14 @@ Scope: on the owner's subscription screen (« Utilisation »), « Produits » sh
 
 **AC (interim):** Given a tenant with N active products, when the owner opens the subscription screen, then « Produits » shows N.
 
+## Story 16.26: Stock initial dès la création d'un produit — **[A]**
+
+Scope (user request 2026-10-29, live run): the owner must be able to enter the initial stock (quantity, store = active store) directly in the « Nouveau produit » form. Today the form has no stock field — the « Gestion du stock » section only appears when editing an existing product — while CSV import (« Quantité initiale ») and draft products at checkout already support an initial stock, and the REST create already accepts `stockQuantity`. Offline-first: the initial stock must go through the same local movement + sync path as other stock entries (no direct REST).
+
+- [ ] [Deferred-from: user request during live device run, 2026-10-29] Initial stock field in the product creation form [keevo/app/lib/features/catalog/presentation/page/product_form_page.dart:640] — STOCK_ENTRY movement for the active store, applied in the same local transaction as the product creation, synced like other stock entries
+
+**AC (interim):** Given the owner creates a product with an initial quantity Q, when the product is saved (online or offline), then the catalogue shows stock Q for the active store, a STOCK_ENTRY movement exists, and after sync the server stock level is Q.
+
 ## Story 18.1: Socle du module export (backend) — **[C]**
 
 As an owner, I want to export my data as CSV or Excel, so that I can use it outside Keevo.

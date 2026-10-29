@@ -1,7 +1,7 @@
 package com.keevo.messaging.notification.application.listener;
 
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
+import com.keevo.shared.event.catalog.stock.MovementKind;
+import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.api.NotificationPort;
@@ -75,7 +75,7 @@ class StockModificationNotificationListenerTest {
     @DisplayName("should notify owner when employee enters stock (STOCK_ENTRY)")
     void shouldNotifyOwnerWhenEmployeeEntersStock() {
         StockAdjustedEvent event = new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY,
+                PRODUCT_ID, null, STORE_ID, MovementKind.STOCK_ENTRY,
                 0, 10, 10, ACTOR_ID, "Livraison", TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget", NOW);
 
@@ -101,7 +101,7 @@ class StockModificationNotificationListenerTest {
     @DisplayName("should notify owner when employee adjusts stock (ADJUSTMENT)")
     void shouldNotifyOwnerWhenEmployeeAdjustsStock() {
         StockAdjustedEvent event = new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.ADJUSTMENT,
+                PRODUCT_ID, null, STORE_ID, MovementKind.ADJUSTMENT,
                 50, -5, 45, ACTOR_ID, "Ajustement", TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget", NOW);
 
@@ -122,7 +122,7 @@ class StockModificationNotificationListenerTest {
     @DisplayName("should fall back to a truncated product id when productName is absent")
     void shouldFallBackToTruncatedProductIdWhenProductNameMissing() {
         StockAdjustedEvent event = new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY,
+                PRODUCT_ID, null, STORE_ID, MovementKind.STOCK_ENTRY,
                 0, 10, 10, ACTOR_ID, "Livraison", TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", null, NOW);
 
@@ -141,7 +141,7 @@ class StockModificationNotificationListenerTest {
     @DisplayName("should skip notification when owner modifies stock")
     void shouldSkipNotificationWhenOwnerModifiesStock() {
         StockAdjustedEvent event = new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY,
+                PRODUCT_ID, null, STORE_ID, MovementKind.STOCK_ENTRY,
                 0, 10, 10, ACTOR_ID, null, TENANT_ID,
                 "OWNER", "Simon", "Boutique A", "Widget", NOW);
 
@@ -158,7 +158,7 @@ class StockModificationNotificationListenerTest {
     @DisplayName("should skip SALE movement events (not in scope D2)")
     void shouldSkipSaleDecrementEvents() {
         StockAdjustedEvent event = new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.SALE,
+                PRODUCT_ID, null, STORE_ID, MovementKind.SALE,
                 10, -1, 9, ACTOR_ID, null, TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget", NOW);
 
@@ -175,11 +175,11 @@ class StockModificationNotificationListenerTest {
     @DisplayName("should send exactly one batched recap when employee modifies multiple stocks in window")
     void shouldSendBatchedRecapWhenEmployeeModifiesMultipleStocksInWindow() {
         StockAdjustedEvent event1 = new StockAdjustedEvent(
-                UUID.randomUUID(), null, STORE_ID, MovementType.STOCK_ENTRY,
+                UUID.randomUUID(), null, STORE_ID, MovementKind.STOCK_ENTRY,
                 0, 5, 5, ACTOR_ID, null, TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget A", NOW);
         StockAdjustedEvent event2 = new StockAdjustedEvent(
-                UUID.randomUUID(), null, STORE_ID, MovementType.ADJUSTMENT,
+                UUID.randomUUID(), null, STORE_ID, MovementKind.ADJUSTMENT,
                 10, -2, 8, ACTOR_ID, "Correction", TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget B", NOW.plusSeconds(30));
 
@@ -212,7 +212,7 @@ class StockModificationNotificationListenerTest {
                 .notifyOwners(anyString(), any());
 
         StockAdjustedEvent event = new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY,
+                PRODUCT_ID, null, STORE_ID, MovementKind.STOCK_ENTRY,
                 0, 10, 10, ACTOR_ID, "Livraison", TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget", NOW);
 
@@ -227,7 +227,7 @@ class StockModificationNotificationListenerTest {
     // ── Story 13.9: batch-window eviction ───────────────────────────────
 
     private StockAdjustedEvent eventNo(int i) {
-        return new StockAdjustedEvent(UUID.randomUUID(), null, STORE_ID, MovementType.STOCK_ENTRY, 0, 1, 1, ACTOR_ID, "Livraison", TENANT_ID, "EMPLOYEE", "Loïc", "Boutique A", "Widget " + i, NOW);
+        return new StockAdjustedEvent(UUID.randomUUID(), null, STORE_ID, MovementKind.STOCK_ENTRY, 0, 1, 1, ACTOR_ID, "Livraison", TENANT_ID, "EMPLOYEE", "Loïc", "Boutique A", "Widget " + i, NOW);
     }
 
     @Test
@@ -334,7 +334,7 @@ class StockModificationNotificationListenerTest {
     void flush_sendsWhatsAppToResolvedOwnerPhone() {
         when(ownerRecipientResolver.resolveOwnerWhatsAppPhone(TENANT_ID)).thenReturn(Optional.of("+237600000001"));
         listener.onStockAdjusted(new StockAdjustedEvent(
-                PRODUCT_ID, null, STORE_ID, MovementType.STOCK_ENTRY,
+                PRODUCT_ID, null, STORE_ID, MovementKind.STOCK_ENTRY,
                 0, 10, 10, ACTOR_ID, "Livraison", TENANT_ID,
                 "EMPLOYEE", "Loïc", "Boutique A", "Widget", NOW));
         advancePastWindow();

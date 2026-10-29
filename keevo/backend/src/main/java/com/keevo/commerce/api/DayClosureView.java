@@ -1,5 +1,7 @@
 package com.keevo.commerce.api;
 
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
+
 import java.time.Instant;
 import java.util.UUID;
 

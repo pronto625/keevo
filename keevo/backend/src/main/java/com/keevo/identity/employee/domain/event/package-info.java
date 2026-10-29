@@ -1,11 +1,7 @@
 /**
- * Identity domain events, published to other modules as {@code "identity :: events"} (Story 12.2d).
+ * Employee domain events internal to the {@code identity} module.
  *
- * <p>The account / registration events of {@code identity.auth.domain.model} and the onboarding
- * events of {@code identity.onboarding.domain.model} live next to their models: each carries a
- * type-level {@code @NamedInterface("events")}, which Spring Modulith 1.4 merges into this
- * package-level interface (two package-level declarations would not be merged — see 12.2a). A new
- * event in one of those packages must carry the annotation too.
+ * <p>Story 12.3: the events consumed outside this module moved to {@code com.keevo.shared.event.catalog};
+ * the ones left here are only used inside the module, so the package is internal (no named interface).
  */
-@org.springframework.modulith.NamedInterface("events")
 package com.keevo.identity.employee.domain.event;

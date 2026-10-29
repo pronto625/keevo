@@ -1,7 +1,8 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.event.catalog.counting.InventoryScopeKind;
 import com.keevo.catalog.api.CategoryQueryPort;
-import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
+import com.keevo.shared.event.catalog.counting.InventorySessionCreatedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryScope;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.CreateInventorySessionCommand;
@@ -89,7 +90,8 @@ public class CreateInventorySessionService implements CreateInventorySessionUseC
 
         // 6. Publish event
         eventPublisher.publishEvent(new InventorySessionCreatedEvent(
-                saved.getId(), saved.getStoreId(), saved.getScope(),
+                saved.getId(), saved.getStoreId(),
+                saved.getScope() == null ? null : InventoryScopeKind.valueOf(saved.getScope().name()),
                 command.actorId(), TenantContext.getCurrentTenant(), Instant.now()));
 
         return saved;

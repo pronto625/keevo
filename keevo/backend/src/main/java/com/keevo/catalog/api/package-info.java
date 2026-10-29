@@ -3,7 +3,7 @@
  *
  * <p>Only query/command ports, immutable records and API enums live here. Implementations are
  * internal adapters ({@code catalog.*.adapter.in.api}) delegating to the existing use cases and
- * repositories. Other modules depend on {@code "catalog :: api"} (and {@code "catalog :: events"}),
+ * repositories. Other modules depend on {@code "catalog :: api"} (its events: {@code shared.event.catalog}, Story 12.3),
  * never on catalog internals.
  *
  * <p>{@link com.keevo.catalog.api.InitialStockPort} works the other way round: a port

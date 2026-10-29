@@ -1,8 +1,8 @@
 package com.keevo.reporting.report.application.service;
 
 import com.keevo.identity.onboarding.adapter.in.api.IdentityOnboardingApiTestSupport;
-import com.keevo.commerce.sale.domain.event.DayClosedEvent;
-import com.keevo.commerce.api.DayClosureSummary;
+import com.keevo.shared.event.catalog.sale.DayClosedEvent;
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;

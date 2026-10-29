@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.observability;
 
-import com.keevo.commerce.sale.domain.event.SaleCompletedEvent;
+import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.prometheusmetrics.PrometheusConfig;

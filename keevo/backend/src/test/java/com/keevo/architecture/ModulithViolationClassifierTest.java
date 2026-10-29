@@ -121,4 +121,26 @@ class ModulithViolationClassifierTest {
         assertThat(ApplicationModulesBaselineTest.isModuleDependency(SHARED_INTO_ADMIN, false)).isTrue();
         assertThat(ApplicationModulesBaselineTest.isInternalAccessFromShared(SHARED_INTO_ADMIN)).isFalse();
     }
+
+    /** Real Modulith 1.4 cycle messages (shape of target/modulith-violations.txt, 12.2f and 12.3 runs). */
+    private static final String CYCLE_CATALOG_MESSAGING = "Cycle detected: Slice catalog -> \n"
+        + "                Slice messaging -> \n"
+        + "                Slice catalog\n"
+        + "  1. Dependencies of Slice catalog\n"
+        + "    - Field <com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase.draftValidation> ...\n"
+        + "  2. Dependencies of Slice messaging\n";
+    private static final String CYCLE_THROUGH_COMMERCE = "Cycle detected: Slice identity -> \n"
+        + "                Slice messaging -> \n"
+        + "                Slice commerce -> \n"
+        + "                Slice identity\n"
+        + "  1. Dependencies of Slice identity\n";
+
+    @Test
+    void twoModuleCyclesAreRecognisedByTheirSlices() {
+        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(CYCLE_CATALOG_MESSAGING, "messaging", "catalog")).isTrue();
+        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(CYCLE_CATALOG_MESSAGING, "messaging", "commerce")).isFalse();
+        // a longer cycle through both modules is not a two-module cycle
+        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(CYCLE_THROUGH_COMMERCE, "messaging", "commerce")).isFalse();
+        assertThat(ApplicationModulesBaselineTest.isTwoModuleCycle(MODULE_UNDECLARED, "messaging", "catalog")).isFalse();
+    }
 }

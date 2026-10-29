@@ -5,7 +5,7 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
-import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
+import com.keevo.shared.event.catalog.employee.EmployeePasswordSetByOwnerEvent;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.in.SetEmployeePasswordCommand;
 import com.keevo.identity.employee.domain.port.in.SetEmployeePasswordUseCase;

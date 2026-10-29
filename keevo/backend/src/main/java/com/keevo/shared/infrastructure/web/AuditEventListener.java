@@ -3,50 +3,50 @@ package com.keevo.shared.infrastructure.web;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.api.UserQueryPort;
-import com.keevo.identity.auth.domain.model.AccountDeletionCancelledEvent;
-import com.keevo.identity.auth.domain.model.AccountDeletionRequestedEvent;
-import com.keevo.identity.auth.domain.model.UserAuthenticatedEvent;
-import com.keevo.identity.auth.domain.model.UserRegisteredEvent;
-import com.keevo.identity.auth.domain.model.PasswordResetRequestedEvent;
-import com.keevo.identity.auth.domain.model.PasswordResetEvent;
-import com.keevo.identity.onboarding.domain.model.OnboardingCompletedEvent;
-import com.keevo.catalog.category.domain.event.CategoryActiveChangedEvent;
-import com.keevo.catalog.category.domain.event.CategoryCreatedEvent;
-import com.keevo.catalog.category.domain.event.CategoryRenamedEvent;
-import com.keevo.crm.contact.domain.event.ClientArchivedEvent;
-import com.keevo.crm.contact.domain.event.ClientUnarchivedEvent;
-import com.keevo.crm.contact.domain.event.ClientCreatedEvent;
-import com.keevo.crm.contact.domain.event.SupplierArchivedEvent;
-import com.keevo.crm.contact.domain.event.SupplierUnarchivedEvent;
-import com.keevo.crm.contact.domain.event.SupplierCreatedEvent;
-import com.keevo.catalog.product.domain.event.ProductCreatedEvent;
-import com.keevo.catalog.product.domain.event.ProductUpdatedEvent;
-import com.keevo.catalog.product.domain.event.ProductArchivedEvent;
-import com.keevo.catalog.product.domain.event.ProductActivatedEvent;
-import com.keevo.catalog.product.domain.event.SalePriceOverriddenEvent;
-import com.keevo.inventory.stock.domain.entity.MovementType;
-import com.keevo.inventory.stock.domain.event.StockAdjustedEvent;
-import com.keevo.inventory.stock.domain.event.StockThresholdBreachedEvent;
-import com.keevo.commerce.sale.domain.event.*;
-import com.keevo.inventory.counting.domain.event.InventoryCountSavedEvent;
-import com.keevo.inventory.counting.domain.event.InventoryReportGeneratedEvent;
-import com.keevo.inventory.counting.domain.event.InventorySessionCancelledEvent;
-import com.keevo.inventory.counting.domain.event.InventorySessionCreatedEvent;
-import com.keevo.inventory.counting.domain.event.InventoryValidatedEvent;
-import com.keevo.reporting.export.domain.event.DataExportedEvent;
-import com.keevo.store.store.domain.event.StoreCreatedEvent;
-import com.keevo.store.store.domain.event.StoreDeactivatedEvent;
-import com.keevo.store.store.domain.event.StoreReactivatedEvent;
-import com.keevo.catalog.product.domain.event.ProductUnarchivedEvent;
-import com.keevo.catalog.product.domain.event.ProductPhotoUpdatedEvent;
-import com.keevo.inventory.stock.domain.event.StockThresholdChangedEvent;
-import com.keevo.crm.contact.domain.event.SupplierUpdatedEvent;
-import com.keevo.crm.contact.domain.event.SupplierProductsChangedEvent;
-import com.keevo.identity.onboarding.domain.model.ReportPreferencesUpdatedEvent;
-import com.keevo.store.store.domain.event.StoreUpdatedEvent;
-import com.keevo.identity.employee.domain.event.EmployeeUpdatedEvent;
-import com.keevo.identity.employee.domain.event.EmployeeRoleChangedEvent;
-import com.keevo.identity.employee.domain.event.EmployeePasswordSetByOwnerEvent;
+import com.keevo.shared.event.catalog.auth.AccountDeletionCancelledEvent;
+import com.keevo.shared.event.catalog.auth.AccountDeletionRequestedEvent;
+import com.keevo.shared.event.catalog.auth.UserAuthenticatedEvent;
+import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
+import com.keevo.shared.event.catalog.auth.PasswordResetRequestedEvent;
+import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
+import com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent;
+import com.keevo.shared.event.catalog.category.CategoryActiveChangedEvent;
+import com.keevo.shared.event.catalog.category.CategoryCreatedEvent;
+import com.keevo.shared.event.catalog.category.CategoryRenamedEvent;
+import com.keevo.shared.event.catalog.contact.ClientArchivedEvent;
+import com.keevo.shared.event.catalog.contact.ClientUnarchivedEvent;
+import com.keevo.shared.event.catalog.contact.ClientCreatedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierArchivedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierUnarchivedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductUpdatedEvent;
+import com.keevo.shared.event.catalog.product.ProductArchivedEvent;
+import com.keevo.shared.event.catalog.product.ProductActivatedEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
+import com.keevo.shared.event.catalog.stock.MovementKind;
+import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
+import com.keevo.shared.event.catalog.sale.*;
+import com.keevo.shared.event.catalog.counting.InventoryCountSavedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryReportGeneratedEvent;
+import com.keevo.shared.event.catalog.counting.InventorySessionCancelledEvent;
+import com.keevo.shared.event.catalog.counting.InventorySessionCreatedEvent;
+import com.keevo.shared.event.catalog.counting.InventoryValidatedEvent;
+import com.keevo.shared.event.catalog.export.DataExportedEvent;
+import com.keevo.shared.event.catalog.store.StoreCreatedEvent;
+import com.keevo.shared.event.catalog.store.StoreDeactivatedEvent;
+import com.keevo.shared.event.catalog.store.StoreReactivatedEvent;
+import com.keevo.shared.event.catalog.product.ProductUnarchivedEvent;
+import com.keevo.shared.event.catalog.product.ProductPhotoUpdatedEvent;
+import com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent;
+import com.keevo.shared.event.catalog.contact.SupplierProductsChangedEvent;
+import com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent;
+import com.keevo.shared.event.catalog.store.StoreUpdatedEvent;
+import com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent;
+import com.keevo.shared.event.catalog.employee.EmployeeRoleChangedEvent;
+import com.keevo.shared.event.catalog.employee.EmployeePasswordSetByOwnerEvent;
 import com.keevo.shared.application.port.AuditPort;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
@@ -299,9 +299,9 @@ public class AuditEventListener {
                         "variantId", str(event.variantId()),
                         "notes", event.notes(),
                         // v1s-16-23: where the goods went / came from (null → dropped by writeRaw)
-                        "destinationStoreName", event.movementType() == MovementType.TRANSFER_OUT
+                        "destinationStoreName", event.movementType() == MovementKind.TRANSFER_OUT
                                 ? event.counterpartStoreName() : null,
-                        "sourceStoreName", event.movementType() == MovementType.TRANSFER_IN
+                        "sourceStoreName", event.movementType() == MovementKind.TRANSFER_IN
                                 ? event.counterpartStoreName() : null),
                 event.actorName());
         log.info("AUDIT: stock_adjusted productId={} type={} before={} change={} after={} tenantId={}",

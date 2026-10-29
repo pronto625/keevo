@@ -2,9 +2,9 @@ package com.keevo.messaging.notification.application.listener;
 
 import com.keevo.commerce.api.SaleQueryPort;
 import com.keevo.commerce.api.SaleView;
-import com.keevo.commerce.sale.domain.event.SaleDraftProductsUpgradedEvent;
-import com.keevo.commerce.sale.domain.event.SaleManuallyValidatedEvent;
-import com.keevo.commerce.sale.domain.event.SalePendingValidationEvent;
+import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
+import com.keevo.shared.event.catalog.sale.SaleManuallyValidatedEvent;
+import com.keevo.shared.event.catalog.sale.SalePendingValidationEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.api.EmployeeQueryPort;
@@ -13,15 +13,14 @@ import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.messaging.api.NotificationPayload;
 import com.keevo.messaging.api.NotificationPort;
 import com.keevo.messaging.api.WhatsAppPort;
-import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Async;
+import com.keevo.shared.event.DeliverOnce;
+import com.keevo.shared.event.DeliveryFailedException;
+import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionalEventListener;
-import org.springframework.transaction.event.TransactionPhase;
 
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -34,6 +33,13 @@ import java.util.stream.Collectors;
  * <p>Notification body includes: employee name, store name, product names.
  *
  * <p>Async best-effort — sale operations MUST NOT fail due to notification errors.
+ *
+ * <p>Story 12.4: durable module listeners (async, after commit, publication registry). The tenant is
+ * bound from the event by the module-listener interceptor. {@link DeliverOnce}: a replayed publication
+ * never sends the push / WhatsApp twice (receipt per listener and event). Ruling R2: a provider failure
+ * on a send is rethrown as {@link DeliveryFailedException} once both channels were attempted, so the
+ * publication stays incomplete and is retried (the receipt is released; on a partial failure the retry may
+ * repeat the channel that succeeded). Missing sale / owner phone / disabled channel → return normally.
  */
 @Component
 public class SaleDraftValidatedNotificationListener {
@@ -72,28 +78,28 @@ public class SaleDraftValidatedNotificationListener {
      * Fires after an owner manually validates a pending sale.
      * Sends push + WhatsApp notification to the owner with employee, store and product details.
      */
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onSaleManuallyValidated(SaleManuallyValidatedEvent event) {
         log.info("[SALE-VALIDATED] sale={} actor={} tenant={}",
                 event.saleId(), event.actorId(), event.tenantId());
         try {
-            TenantContext.setCurrentTenant(event.tenantId());
+            String tenant = event.tenantId();
 
-            SaleView sale = saleQueryPort.findById(TenantContext.getCurrentTenant(), event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(tenant, event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-VALIDATED] Sale {} not found — skipping notification", event.saleId());
                 return;
             }
 
             // Resolve employee display name
-            String employeeName = employeeQuery.findByUserId(TenantContext.getCurrentTenant(), sale.employeeId())
+            String employeeName = employeeQuery.findByUserId(tenant, sale.employeeId())
                     .map(e -> e.firstName() + " " + e.lastName())
                     .orElseGet(() -> userQuery.findPhoneNumber(sale.employeeId())
                             .orElse("Employé inconnu"));
 
             // Resolve store name
-            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), sale.storeId())
+            String storeName = storeQuery.findById(tenant, sale.storeId())
                     .map(StoreView::name)
                     .orElse("Boutique");
 
@@ -116,18 +122,19 @@ public class SaleDraftValidatedNotificationListener {
             );
 
             // Resolve channel preference (falls back to PUSH if prefs not found)
-            // TenantContext already set above so findByCurrentTenant() resolves correctly.
             StockAlertChannel channel = preferencesQuery
-                    .find(TenantContext.getCurrentTenant())
+                    .find(tenant)
                     .map(p -> p.stockAlertChannel())
                     .orElse(StockAlertChannel.PUSH);
 
             // ── Push notification ────────────────────────────────────────────
+            DeliveryFailedException failure = null;
             if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
                 try {
                     notificationPort.notifyOwners(event.tenantId(), payload);
                 } catch (Exception e) {
                     log.warn("[SALE-VALIDATED] Push failed for sale={}: {}", event.saleId(), e.getMessage());
+                    failure = new DeliveryFailedException("push send failed", e);
                 }
             }
 
@@ -140,15 +147,20 @@ public class SaleDraftValidatedNotificationListener {
                         whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
                     } catch (Exception e) {
                         log.warn("[SALE-VALIDATED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
+                        failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
                     }
                 }
             }
+            // Story 12.4 (R2): a provider failure is retried by the registry (receipt released)
+            if (failure != null) {
+                throw failure;
+            }
 
+        } catch (DeliveryFailedException e) {
+            throw e;
         } catch (Exception e) {
             // Best-effort — sale validation MUST NOT fail due to notification errors
             log.warn("[SALE-VALIDATED] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
-        } finally {
-            TenantContext.clear();
         }
     }
 
@@ -156,26 +168,26 @@ public class SaleDraftValidatedNotificationListener {
      * Fires when an employee submits a sale containing draft products (PENDING_VALIDATION).
      * Notifies the owner so they can review and validate the pending sale.
      */
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onSalePendingValidation(SalePendingValidationEvent event) {
         log.info("[SALE-PENDING] sale={} actor={} tenant={}",
                 event.saleId(), event.actorId(), event.tenantId());
         try {
-            TenantContext.setCurrentTenant(event.tenantId());
+            String tenant = event.tenantId();
 
-            SaleView sale = saleQueryPort.findById(TenantContext.getCurrentTenant(), event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(tenant, event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-PENDING] Sale {} not found — skipping notification", event.saleId());
                 return;
             }
 
-            String employeeName = employeeQuery.findByUserId(TenantContext.getCurrentTenant(), sale.employeeId())
+            String employeeName = employeeQuery.findByUserId(tenant, sale.employeeId())
                     .map(e -> e.firstName() + " " + e.lastName())
                     .orElseGet(() -> userQuery.findPhoneNumber(sale.employeeId())
                             .orElse("Employé inconnu"));
 
-            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), sale.storeId())
+            String storeName = storeQuery.findById(tenant, sale.storeId())
                     .map(StoreView::name)
                     .orElse("Boutique");
 
@@ -199,15 +211,17 @@ public class SaleDraftValidatedNotificationListener {
             );
 
             StockAlertChannel channel = preferencesQuery
-                    .find(TenantContext.getCurrentTenant())
+                    .find(tenant)
                     .map(p -> p.stockAlertChannel())
                     .orElse(StockAlertChannel.PUSH);
 
+            DeliveryFailedException failure = null;
             if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
                 try {
                     notificationPort.notifyOwners(event.tenantId(), payload);
                 } catch (Exception e) {
                     log.warn("[SALE-PENDING] Push failed for sale={}: {}", event.saleId(), e.getMessage());
+                    failure = new DeliveryFailedException("push send failed", e);
                 }
             }
 
@@ -219,14 +233,19 @@ public class SaleDraftValidatedNotificationListener {
                         whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
                     } catch (Exception e) {
                         log.warn("[SALE-PENDING] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
+                        failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
                     }
                 }
             }
+            // Story 12.4 (R2): a provider failure is retried by the registry (receipt released)
+            if (failure != null) {
+                throw failure;
+            }
 
+        } catch (DeliveryFailedException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("[SALE-PENDING] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
-        } finally {
-            TenantContext.clear();
         }
     }
 
@@ -236,15 +255,15 @@ public class SaleDraftValidatedNotificationListener {
      * Notifies the owner: {@code draftsPromoted} (OWNER seller) → products were activated;
      * otherwise (EMPLOYEE seller, v1s-12-10) → drafts were sold and await validation.
      */
-    @Async
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @ApplicationModuleListener
+    @DeliverOnce
     public void onSaleDraftProductsUpgraded(SaleDraftProductsUpgradedEvent event) {
         log.info("[SALE-DRAFT-UPGRADED] sale={} actor={} tenant={}",
                 event.saleId(), event.actorId(), event.tenantId());
         try {
-            TenantContext.setCurrentTenant(event.tenantId());
+            String tenant = event.tenantId();
 
-            SaleView sale = saleQueryPort.findById(TenantContext.getCurrentTenant(), event.saleId()).orElse(null);
+            SaleView sale = saleQueryPort.findById(tenant, event.saleId()).orElse(null);
             if (sale == null) {
                 log.warn("[SALE-DRAFT-UPGRADED] Sale {} not found — skipping notification", event.saleId());
                 return;
@@ -255,12 +274,12 @@ public class SaleDraftValidatedNotificationListener {
             // seller's role travels on the event (draftsPromoted) — never inferred from the
             // Employee row (an owner may have one; an employee's row may be missing).
             boolean draftsPromoted = event.draftsPromoted();
-            String employeeName = employeeQuery.findByUserId(TenantContext.getCurrentTenant(), sale.employeeId())
+            String employeeName = employeeQuery.findByUserId(tenant, sale.employeeId())
                     .map(e -> e.firstName() + " " + e.lastName())
                     .orElseGet(() -> userQuery.findPhoneNumber(sale.employeeId())
                             .orElse("Employé inconnu"));
 
-            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), sale.storeId())
+            String storeName = storeQuery.findById(tenant, sale.storeId())
                     .map(StoreView::name)
                     .orElse("Boutique");
 
@@ -286,15 +305,17 @@ public class SaleDraftValidatedNotificationListener {
             );
 
             StockAlertChannel channel = preferencesQuery
-                    .find(TenantContext.getCurrentTenant())
+                    .find(tenant)
                     .map(p -> p.stockAlertChannel())
                     .orElse(StockAlertChannel.PUSH);
 
+            DeliveryFailedException failure = null;
             if (channel == StockAlertChannel.PUSH || channel == StockAlertChannel.BOTH) {
                 try {
                     notificationPort.notifyOwners(event.tenantId(), payload);
                 } catch (Exception e) {
                     log.warn("[SALE-DRAFT-UPGRADED] Push failed for sale={}: {}", event.saleId(), e.getMessage());
+                    failure = new DeliveryFailedException("push send failed", e);
                 }
             }
 
@@ -306,14 +327,27 @@ public class SaleDraftValidatedNotificationListener {
                         whatsAppPort.sendReport(ownerPhone, title + "\n" + body);
                     } catch (Exception e) {
                         log.warn("[SALE-DRAFT-UPGRADED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
+                        failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
                     }
                 }
             }
+            // Story 12.4 (R2): a provider failure is retried by the registry (receipt released)
+            if (failure != null) {
+                throw failure;
+            }
 
+        } catch (DeliveryFailedException e) {
+            throw e;
         } catch (Exception e) {
             log.warn("[SALE-DRAFT-UPGRADED] Unexpected error for sale={}: {}", event.saleId(), e.getMessage());
-        } finally {
-            TenantContext.clear();
         }
+    }
+
+    private static DeliveryFailedException addFailure(DeliveryFailedException first, DeliveryFailedException next) {
+        if (first == null) {
+            return next;
+        }
+        first.addSuppressed(next);
+        return first;
     }
 }

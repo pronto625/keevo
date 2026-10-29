@@ -1,6 +1,6 @@
 package com.keevo.messaging.notification.application.strategy;
 
-import com.keevo.inventory.transfer.domain.event.TransferCreatedEvent;
+import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 
 import java.util.List;
 import java.util.UUID;

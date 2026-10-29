@@ -3,7 +3,7 @@
  *
  * <p>Only query/command ports and immutable records live here. Implementations are internal
  * adapters ({@code crm.contact.adapter.in.api}) delegating to the existing use cases and
- * repositories. Other modules depend on {@code "crm :: api"} (and {@code "crm :: events"}).
+ * repositories. Other modules depend on {@code "crm :: api"} (its events: {@code shared.event.catalog}, Story 12.3).
  *
  * <p><b>Tenant convention (12.2d, aligned here in 12.2e):</b> every method takes the tenant schema
  * explicitly as its first {@code String tenantSchema} parameter; it must be the schema of the current

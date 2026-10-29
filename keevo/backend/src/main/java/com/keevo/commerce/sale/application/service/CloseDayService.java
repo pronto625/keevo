@@ -1,7 +1,8 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.commerce.sale.domain.model.*;
-import com.keevo.commerce.sale.domain.event.*;
+import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.CloseDayUseCase;
 import com.keevo.commerce.sale.domain.port.out.DayClosureRepository;
