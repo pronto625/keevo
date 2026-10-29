@@ -103,4 +103,15 @@ public final class TestModuleCatalogs {
                 loaded("provmisnamed", b, true),
                 loaded("provmixed", b, true)));
     }
+
+    /**
+     * Story 13.6 — a business module manifest (free, requires {@code core}) declaring capability {@code provides}
+     * and {@code needs}.
+     */
+    public static LoadedModuleManifest withCapabilities(String id, List<String> provides, List<String> needs) {
+        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, ModuleCategory.BUSINESS,
+                List.of(ModuleManifest.CORE_ID), List.of(), List.of(), List.of(), provides, needs, null, List.of(),
+                List.of(), "module." + id, true);
+        return new LoadedModuleManifest("test:" + id, manifest, "{}");
+    }
 }

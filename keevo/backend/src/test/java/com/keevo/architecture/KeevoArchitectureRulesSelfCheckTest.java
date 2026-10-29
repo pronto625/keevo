@@ -40,6 +40,12 @@ class KeevoArchitectureRulesSelfCheckTest {
     }
 
     @Test
+    void capabilityInjectionRuleFlagsFieldAndConstructorButNotTheRegistryUser() {
+        assertThat(KeevoArchitectureRules.violations(Rule.CAPABILITY_INJECTION, fixtures))
+            .containsOnlyKeys(FIXTURES + "CapabilityFieldConsumer", FIXTURES + "CapabilityConstructorConsumer");
+    }
+
+    @Test
     void persistenceRuleFlagsEveryPersistenceTypeOutsideTheAdapter() {
         // fixtures outside com.keevo: never seen by Boot/JPA scanning
         JavaClasses outside = new ClassFileImporter().importPackages("archfixture");

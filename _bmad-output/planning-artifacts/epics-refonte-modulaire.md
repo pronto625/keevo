@@ -906,7 +906,7 @@ So that **un module utilise une fonction d'un autre si présent, sinon dégrade 
 - `CapabilityRegistry.provide/find` (spec §6) ; résolution **tenant-aware** (ne retourne que si le fournisseur est actif pour ce tenant).
 - Les interfaces `*Port` vivent dans l'`api` du fournisseur ; le consommateur dépend de cette `api` uniquement (autorisé par `verify()`).
 
-- [ ] [Deferred-from: review 13-1, 2026-10-29] Validate the `needs` entries format (`Port` / `Port?`) and that `provides` names are unique across manifests [ModuleManifestLoader]
+- [x] [Deferred-from: review 13-1, 2026-10-29] Validate the `needs` entries format (`Port` / `Port?`) and that `provides` names are unique across manifests [ModuleManifestLoader] — ✅ 13.6: `ModuleManifestLoader.NEEDS_PATTERN` `^[A-Z][A-Za-z0-9]*Port\??$` per entry, `provides` unique across manifests, hard need (no `?`) provided within the consumer's transitive `requires` closure; the `CapabilityRegistry` cross-checks `provides` ↔ `@ProvidesCapability` beans at boot — `ModuleManifestLoaderTest.needsFormat/providesUnique/hardNeeds`, `CapabilityRegistryServiceTest`
 
 ### Story 13.7 : `ExtensionRegistry` (points d'extension / slots)
 
@@ -1088,10 +1088,12 @@ So that **la facturation s'enrichit automatiquement sans l'imposer (MOD-FR9)**.
 **Then** je saisis le client en texte libre (mode dégradé, aucune erreur)
 
 **Implementation Notes:**
-- Consommer `ClientLookupPort` (fourni par CRM en Story 13.9) via `CapabilityRegistry` (Optional).
+- Consommer `ClientLookupPort` (fourni par CRM depuis la Story 13.6) via `CapabilityRegistry` (Optional).
 - Aucun import du module CRM hors de son `api` (vérifié par `verify()`).
 
 - [ ] [Deferred-from: live test 12-7, 2026-10-29] `POST /api/v1/sales` with an unknown `clientId` → FK `sales_client_id_fkey` at commit → HTTP 500; resolve through the optional `ClientLookupPort` capability (commerce must not hard-depend on `crm`) → clean domain error; align `SaleSyncHandler` (today `crm.api.ClientQueryPort`) on the same capability [commerce / sync]
+
+- [ ] [Deferred-from: review 13-6, 2026-10-29] Migrating consumers to `ClientLookupPort`: commerce `allowedDependencies` += `crm :: api` (interface only); declare `needs: ["ClientLookupPort?"]` in the pos manifest; decide the `clientId` policy when the capability is absent (`sales_client_id_fkey` is itself a commerce→crm schema link — reject vs drop, and whether `clients`/the FK exist when crm was never provisioned); client picker needs a search method (extend the port + bump crm) or stays on gated crm REST; consumers must not swallow provider exceptions; first write capability must call `assertWritable` (READ_ONLY provider) [commerce / sync / crm]
 
 ### Story 14.4 : Bridge POS → Facturation (facture auto sur vente)
 

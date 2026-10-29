@@ -44,11 +44,15 @@ import java.util.regex.Pattern;
  *       ({@code core} for the module {@code core}); list fields are arrays of distinct non-blank strings,
  *       {@code requires}/{@code enhances} entries are module ids, a module neither enhances itself nor lists the
  *       same id in both; {@code free} is a boolean; {@code entitlement} matches {@link #ENTITLEMENT_PATTERN}
- *       (default {@code module.<id>});</li>
+ *       (default {@code module.<id>}); {@code provides} entries match {@link #PROVIDES_PATTERN} and {@code needs} entries
+ *       {@link #NEEDS_PATTERN} (a capability simple name, {@code ?} suffix = optional need), no name both hard and
+ *       optional — Story 13.6;</li>
  *   <li>across the files that parsed (always checked, even when another file is invalid): unique ids and
  *       entitlements; exactly one {@code core} module, which requires nothing; every other module requires
  *       {@code core}; every {@code requires} entry is a known module; the {@code requires} graph is acyclic
- *       (every cycle is listed, one per strongly connected component).</li>
+ *       (every cycle is listed, one per strongly connected component); {@code provides} names are unique across
+ *       manifests; a hard {@code needs} entry (no {@code ?}) is provided by a module of the consumer's transitive
+ *       {@code requires} closure (Story 13.6 — an optional need may be absent: WARN when nobody provides it).</li>
  * </ul>
  * Unknown {@code enhances} ids are allowed (a soft dependency may target a module that is not installed) and
  * only logged at WARN. Unknown keys are logged at WARN (typo detection) and dropped: the stored JSON
@@ -67,6 +71,12 @@ public final class ModuleManifestLoader {
 
     /** Entitlement key syntax. */
     public static final Pattern ENTITLEMENT_PATTERN = Pattern.compile("^module\\.[a-z0-9-]+$");
+
+    /** {@code needs} entry syntax: a capability simple name ending in {@code Port}, {@code ?} = optional. */
+    public static final Pattern NEEDS_PATTERN = Pattern.compile("^[A-Z][A-Za-z0-9]*Port\\??$");
+
+    /** {@code provides} entry syntax: a capability simple name ending in {@code Port}. */
+    public static final Pattern PROVIDES_PATTERN = Pattern.compile("^[A-Z][A-Za-z0-9]*Port$");
 
     static final Pattern SEMVER = Pattern.compile("^(0|[1-9]\\d{0,5})\\.(0|[1-9]\\d{0,5})\\.(0|[1-9]\\d{0,5})$");
     static final int DISPLAY_NAME_MAX = 100;
@@ -224,6 +234,20 @@ public final class ModuleManifestLoader {
                 if (!isModuleId(ref)) {
                     problems.add(at + ": field '" + field + "' entry '" + ref + "' is not a valid module id");
                 }
+            }
+        }
+        for (String provided : lists.get("provides")) {
+            if (!PROVIDES_PATTERN.matcher(provided).matches()) {
+                problems.add(at + ": field 'provides' entry '" + provided + "' must match "
+                        + PROVIDES_PATTERN.pattern() + " (a capability name ending in 'Port')");
+            }
+        }
+        for (String need : lists.get("needs")) {
+            if (!NEEDS_PATTERN.matcher(need).matches()) {
+                problems.add(at + ": field 'needs' entry '" + need + "' must match " + NEEDS_PATTERN.pattern()
+                        + " (a capability name ending in 'Port', '?' suffix for an optional need)");
+            } else if (!need.endsWith("?") && lists.get("needs").contains(need + "?")) {
+                problems.add(at + ": field 'needs' lists '" + need + "' both as a hard and an optional need");
             }
         }
         if (id != null && lists.get("enhances").contains(id)) {
@@ -420,6 +444,61 @@ public final class ModuleManifestLoader {
         for (List<String> cycle : findRequiresCycles(graph)) {
             problems.add("cycle in the 'requires' graph: " + String.join(" -> ", cycle));
         }
+        validateCapabilities(byId, graph, problems);
+    }
+
+    /** Story 13.6 — unique {@code provides} names; hard {@code needs} met within the {@code requires} closure. */
+    private static void validateCapabilities(Map<String, LoadedModuleManifest> byId, Map<String, List<String>> graph,
+                                             List<String> problems) {
+        Map<String, LoadedModuleManifest> providers = new HashMap<>();
+        for (LoadedModuleManifest m : byId.values()) {
+            for (String provided : m.manifest().provides()) {
+                LoadedModuleManifest previous = providers.putIfAbsent(provided, m);
+                if (previous != null) {
+                    problems.add("capability '" + provided + "' provided by two modules: '"
+                            + previous.manifest().id() + "' (" + previous.location() + ") and '"
+                            + m.manifest().id() + "' (" + m.location() + ")");
+                }
+            }
+        }
+        for (LoadedModuleManifest m : byId.values()) {
+            ModuleManifest manifest = m.manifest();
+            Set<String> closure = null;
+            for (String need : manifest.needs()) {
+                if (need.endsWith("?")) { // optional: resolved at runtime, may be absent
+                    String name = need.substring(0, need.length() - 1);
+                    if (!providers.containsKey(name)) {
+                        log.warn("Module manifest {}: module '{}' optionally needs '{}', which no installed module "
+                                + "provides (always absent)", m.location(), manifest.id(), name);
+                    }
+                    continue;
+                }
+                if (closure == null) {
+                    closure = requiresClosure(manifest.id(), graph);
+                }
+                LoadedModuleManifest provider = providers.get(need);
+                if (provider == null || !closure.contains(provider.manifest().id())) {
+                    problems.add(m.location() + ": field 'needs' — module '" + manifest.id() + "' needs '" + need
+                            + "' (hard need, no '?') but no module of its 'requires' closure " + closure
+                            + " provides it" + (provider == null ? " (no installed module provides it)"
+                            : " (provided by '" + provider.manifest().id() + "': add it to 'requires' or "
+                            + "mark the need optional '" + need + "?')"));
+                }
+            }
+        }
+    }
+
+    /** Modules reachable through {@code requires} from {@code id} (excluding {@code id}), sorted. */
+    private static Set<String> requiresClosure(String id, Map<String, List<String>> graph) {
+        Set<String> seen = new HashSet<>();
+        Deque<String> todo = new ArrayDeque<>(graph.getOrDefault(id, List.of()));
+        while (!todo.isEmpty()) {
+            String next = todo.pop();
+            if (!next.equals(id) && seen.add(next)) {
+                todo.addAll(graph.getOrDefault(next, List.of()));
+            }
+        }
+        return new java.util.TreeSet<>(seen);
     }
 
     private static Optional<List<String>> visit(String node, Map<String, List<String>> graph,

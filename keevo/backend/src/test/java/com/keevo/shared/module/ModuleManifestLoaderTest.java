@@ -287,6 +287,90 @@ class ModuleManifestLoaderTest {
     }
 
     @Test
+    @DisplayName("13.6 — 'needs' entries: capability name ending in Port, optional '?' suffix")
+    void needsFormat() {
+        assertThat(ModuleManifestLoader.load(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")),
+                src("pos", module("pos", "[\"core\",\"crm\"]",
+                        ",\"needs\":[\"ClientLookupPort\",\"InvoiceLookupPort?\"]"))))).hasSize(3);
+        for (String bad : List.of("clientLookupPort", "ClientLookup", "Client-LookupPort", "ClientLookupPort??",
+                "?ClientLookupPort", "Port")) {
+            assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]",
+                    ",\"needs\":[\"" + bad + "\"]")))))
+                    .as(bad).anySatisfy(p -> assertThat(p).contains(loc("pos"), "'needs' entry '" + bad + "'"));
+        }
+    }
+
+    @Test
+    @DisplayName("13.6 — a 'provides' name is unique across manifests")
+    void providesUnique() {
+        assertThat(problemsOf(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")),
+                src("pos", module("pos", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")))))
+                .singleElement().asString()
+                .contains("capability 'ClientLookupPort' provided by two modules: 'crm'", "'pos'", loc("pos"));
+    }
+
+    @Test
+    @DisplayName("13.6 — a hard need is provided within the 'requires' closure (transitively); an optional one may be absent")
+    void hardNeeds() {
+        // transitive: pos requires sales, sales requires crm, crm provides
+        assertThat(ModuleManifestLoader.load(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")),
+                src("sales", module("sales", "[\"core\",\"crm\"]")),
+                src("pos", module("pos", "[\"core\",\"sales\"]", ",\"needs\":[\"ClientLookupPort\"]"))))).hasSize(4);
+        // provided, but outside the closure
+        assertThat(problemsOf(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")),
+                src("pos", module("pos", "[\"core\"]", ",\"needs\":[\"ClientLookupPort\"]")))))
+                .singleElement().asString()
+                .contains(loc("pos"), "module 'pos' needs 'ClientLookupPort'", "provided by 'crm'");
+        // provided by nobody
+        assertThat(problemsOf(withCore(
+                src("pos", module("pos", "[\"core\"]", ",\"needs\":[\"XPort\"]")))))
+                .singleElement().asString().contains("needs 'XPort'", "no installed module provides it");
+        // a module's own capability does not satisfy its hard need
+        assertThat(problemsOf(withCore(src("pos", module("pos", "[\"core\"]",
+                ",\"provides\":[\"XPort\"],\"needs\":[\"XPort\"]")))))
+                .singleElement().asString().contains("needs 'XPort'");
+        // optional need absent: OK, WARN only
+        assertThat(ModuleManifestLoader.load(withCore(
+                src("pos", module("pos", "[\"core\"]", ",\"needs\":[\"XPort?\"]"))))).hasSize(2);
+        assertThat(warnings()).anySatisfy(w -> assertThat(w).contains("module 'pos' optionally needs 'XPort'",
+                "no installed module provides"));
+    }
+
+    @Test
+    @DisplayName("13.6 — no optional-need WARN when someone provides it")
+    void optionalNeedProvided() {
+        ModuleManifestLoader.load(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")),
+                src("pos", module("pos", "[\"core\"]", ",\"needs\":[\"ClientLookupPort?\"]"))));
+        assertThat(warnings()).noneSatisfy(w -> assertThat(w).contains("optionally needs"));
+    }
+
+    @Test
+    @DisplayName("13.6 — 'provides' entries: capability name ending in Port")
+    void providesFormat() {
+        for (String bad : List.of("clientLookupPort", "ClientLookup", "ClientLookupPort?", "Client-LookupPort", "Port")) {
+            assertThat(problemsOf(withCore(src("crm", module("crm", "[\"core\"]",
+                    ",\"provides\":[\"" + bad + "\"]")))))
+                    .as(bad).anySatisfy(p -> assertThat(p).contains(loc("crm"), "'provides' entry '" + bad + "'"));
+        }
+    }
+
+    @Test
+    @DisplayName("13.6 — the same name cannot be both a hard and an optional need")
+    void hardAndOptionalNeed() {
+        assertThat(problemsOf(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"provides\":[\"ClientLookupPort\"]")),
+                src("pos", module("pos", "[\"core\",\"crm\"]",
+                        ",\"needs\":[\"ClientLookupPort?\",\"ClientLookupPort\"]")))))
+                .singleElement().asString()
+                .contains(loc("pos"), "lists 'ClientLookupPort' both as a hard and an optional need");
+    }
+
+    @Test
     @DisplayName("every problem of the set is reported at once, in the exception message")
     void allProblemsInOneMessage() {
         assertThatThrownBy(() -> ModuleManifestLoader.load(withCore(src("pos", module("sale", "[\"core\"]")),

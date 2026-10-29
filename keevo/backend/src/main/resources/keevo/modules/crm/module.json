@@ -1,6 +1,6 @@
 {
   "id": "crm",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Clients et fournisseurs",
   "category": "business",
   "requires": [
@@ -11,7 +11,9 @@
   ],
   "publishes": [],
   "consumes": [],
-  "provides": [],
+  "provides": [
+    "ClientLookupPort"
+  ],
   "needs": [],
   "extensionPoints": {
     "declares": [],

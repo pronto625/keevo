@@ -56,7 +56,10 @@ final class KeevoArchitectureRules {
         TRANSACTIONAL_PUBLISHERS("transactional-publishers",
             "(e) methods publishing an event consumed after commit (@ApplicationModuleListener, or "
                 + "@TransactionalEventListener AFTER_* without fallbackExecution) run inside a transaction "
-                + "(@Transactional method/class, TransactionTemplate, or only called from such methods)");
+                + "(@Transactional method/class, TransactionTemplate, or only called from such methods)"),
+        CAPABILITY_INJECTION("capability-injection",
+            "(f) no field or constructor parameter typed as a Capability sub-interface outside shared.module: "
+                + "capabilities are resolved per tenant through CapabilityRegistry.find (Story 13.6)");
 
         final String id;
         final String description;
@@ -92,7 +95,46 @@ final class KeevoArchitectureRules {
             case PERSISTENCE_LOCATION -> persistenceLocation(classes);
             case WEB_FREE_APPLICATION -> webFreeApplication(classes);
             case TRANSACTIONAL_PUBLISHERS -> transactionalPublishers(classes);
+            case CAPABILITY_INJECTION -> capabilityInjection(classes);
         };
+    }
+
+    // ── (f) capabilities never injected ─────────────────────────────────────────────────────────────
+
+    static final String CAPABILITY = "com.keevo.shared.module.Capability";
+    private static final PackageMatcher SHARED_MODULE = PackageMatcher.of("com.keevo.shared.module..");
+
+    /**
+     * A field or constructor parameter typed as a {@code Capability} sub-interface would bypass the tenant check of
+     * {@code CapabilityRegistry.find} (the providers are not autowire candidates either, so it also fails at
+     * startup). Key: the declaring class.
+     */
+    static SortedMap<String, String> capabilityInjection(JavaClasses classes) {
+        SortedMap<String, Set<String>> found = new TreeMap<>();
+        for (JavaClass javaClass : classes) {
+            if (SHARED_MODULE.matches(javaClass.getPackageName())) {
+                continue;
+            }
+            javaClass.getFields().forEach(field -> {
+                if (isCapabilitySubtype(field.getRawType())) {
+                    found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
+                        .add("field " + field.getName() + " : " + field.getRawType().getSimpleName());
+                }
+            });
+            javaClass.getConstructors().forEach(constructor -> constructor.getRawParameterTypes().forEach(type -> {
+                if (isCapabilitySubtype(type)) {
+                    found.computeIfAbsent(javaClass.getName(), k -> new TreeSet<>())
+                        .add("constructor parameter : " + type.getSimpleName());
+                }
+            }));
+        }
+        SortedMap<String, String> violations = new TreeMap<>();
+        found.forEach((name, where) -> violations.put(name, "injects " + where + " — use CapabilityRegistry.find"));
+        return violations;
+    }
+
+    private static boolean isCapabilitySubtype(JavaClass type) {
+        return !type.getName().equals(CAPABILITY) && type.isAssignableTo(CAPABILITY);
     }
 
     // ── (a) tenant schema validation ────────────────────────────────────────────────────────────────

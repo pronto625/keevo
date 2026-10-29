@@ -15,6 +15,9 @@
  * (blocked by active dependents). Since Story 13.5 the effective {@link com.keevo.shared.module.ModuleState} of a
  * module (real-time expiry, read-only grace) is computed once and shared by the registry and
  * {@link com.keevo.shared.module.EntitlementService}; {@link com.keevo.shared.module.RequiresEntitlement} gates use
- * cases / controllers declaratively. Activation itself comes with Story 13.8.
+ * cases / controllers declaratively. Since Story 13.6 {@link com.keevo.shared.module.CapabilityRegistry} resolves, per
+ * tenant, the optional {@link com.keevo.shared.module.Capability capabilities} that provider beans declare with
+ * {@link com.keevo.shared.module.ProvidesCapability} (cross-checked with the manifests' {@code provides} at boot).
+ * Activation itself comes with Story 13.8.
  */
 package com.keevo.shared.module;

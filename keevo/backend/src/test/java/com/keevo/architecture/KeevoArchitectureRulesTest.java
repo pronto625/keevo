@@ -104,6 +104,11 @@ class KeevoArchitectureRulesTest {
         check(Rule.TRANSACTIONAL_PUBLISHERS);
     }
 
+    @Test
+    void capabilities_neverInjected() {
+        check(Rule.CAPABILITY_INJECTION);
+    }
+
     private static void check(Rule rule) {
         SortedMap<String, String> violations;
         try {

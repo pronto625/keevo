@@ -27,6 +27,31 @@ final class ArchitectureRuleFixtures {
         }
     }
 
+    /** (f) a capability type. */
+    interface FixtureCapability extends com.keevo.shared.module.Capability {
+    }
+
+    /** (f) violation: capability injected into a field. */
+    static class CapabilityFieldConsumer {
+        FixtureCapability capability;
+    }
+
+    /** (f) violation: capability injected through the constructor. */
+    static class CapabilityConstructorConsumer {
+        CapabilityConstructorConsumer(FixtureCapability capability) {
+        }
+    }
+
+    /** (f) compliant: resolves the capability per tenant. */
+    static class CapabilityRegistryUser {
+        com.keevo.shared.module.CapabilityRegistry capabilities;
+
+        boolean has(String tenant) {
+            java.util.Optional<FixtureCapability> found = capabilities.find(FixtureCapability.class, tenant);
+            return found.isPresent();
+        }
+    }
+
     record FixtureEvent(String id) {
     }
 

@@ -22,7 +22,7 @@ class ClasspathModuleManifestsTest {
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
                 "messaging", "sync", "admin");
         assertThat(byId.values()).allSatisfy(m -> {
-            assertThat(m.version()).isEqualTo("1.0.0");
+            assertThat(m.version()).isEqualTo(m.id().equals("crm") ? "1.1.0" : "1.0.0"); // 13.6: crm provides
             assertThat(m.free()).isTrue();
             assertThat(m.entitlement()).isEqualTo("module." + m.id());
         });
@@ -37,6 +37,9 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("messaging").enhances()).containsExactly("reporting", "pos", "inventory");
         assertThat(byId.get("catalog").enhances()).containsExactly("reporting");
         assertThat(byId.get("crm").enhances()).containsExactly("pos");
+        assertThat(byId.get("crm").provides()).containsExactly("ClientLookupPort");
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm"))
+                .allSatisfy(m -> assertThat(m.provides()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.isCore())
                 .allSatisfy(m -> assertThat(m.requires()).contains("core"));
         assertThat(byId.values().stream().filter(m -> m.category() == ModuleCategory.BUSINESS).map(ModuleManifest::id)
