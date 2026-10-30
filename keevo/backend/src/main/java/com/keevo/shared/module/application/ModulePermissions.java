@@ -4,11 +4,14 @@ import com.keevo.shared.module.KeevoModule;
 import com.keevo.shared.module.ModuleManifest;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeMap;
@@ -30,6 +33,8 @@ public class ModulePermissions implements SmartInitializingSingleton {
 
     public static final String ROLE_OWNER = "OWNER";
     public static final String ROLE_EMPLOYEE = "EMPLOYEE";
+
+    private static final String ROLE_PREFIX = "ROLE_";
 
     private final ModuleCatalog catalog;
     private final KeevoModuleDirectory modules;
@@ -56,6 +61,24 @@ public class ModulePermissions implements SmartInitializingSingleton {
     /** Whether {@code permission} is declared by an installed manifest. */
     public boolean isDeclared(String permission) {
         return permission != null && mapping().declared().contains(permission);
+    }
+
+    /**
+     * Story 14.5 — the role names ({@code ROLE_<role>} authorities without the prefix) of an authentication, as
+     * {@link #permissionsOf} expects them; empty for {@code null}. Shared by the {@code @RequiresPermission} check and
+     * the extension slot filter so both always agree.
+     */
+    public static Set<String> rolesOf(Authentication authentication) {
+        Set<String> roles = new HashSet<>();
+        if (authentication != null) {
+            for (GrantedAuthority authority : authentication.getAuthorities()) {
+                String name = authority.getAuthority();
+                if (name != null && name.startsWith(ROLE_PREFIX)) {
+                    roles.add(name.substring(ROLE_PREFIX.length()));
+                }
+            }
+        }
+        return roles;
     }
 
     /** The permissions held by a user with these roles (role names without the {@code ROLE_} prefix). */

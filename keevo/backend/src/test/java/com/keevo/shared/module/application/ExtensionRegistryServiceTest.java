@@ -184,6 +184,22 @@ class ExtensionRegistryServiceTest {
     static class NotAnExtension {
     }
 
+    /** Story 14.5 — a contribution requiring a module permission. */
+    @ContributesExtension(module = "invoicing", point = SLOT)
+    static class Guarded extends Action {
+        private final String permission;
+
+        Guarded(String permission) {
+            super("invoicing.guarded", "Facturer", 20, "invoicing.open-sale-invoice");
+            this.permission = permission;
+        }
+
+        @Override
+        public String permission() {
+            return permission;
+        }
+    }
+
     static class NotAnnotated extends Action {
         NotAnnotated() {
             super("crm.none", "Rien", 1, "crm.none");
@@ -496,6 +512,62 @@ class ExtensionRegistryServiceTest {
         void initializeOnce() {
             ExtensionRegistryService service = twoContributors();
             assertThatThrownBy(() -> service.initialize(List.of())).isInstanceOf(IllegalStateException.class);
+        }
+    }
+
+    // ── Story 14.5 — required permission of a contribution ──────────────────────────────────────────────
+
+    /** pos declares SLOT; invoicing fills it and declares INVOICE_VIEW (and nothing else). */
+    private static ModuleCatalog permissionCatalog() {
+        com.keevo.shared.module.ModuleManifest invoicing = new com.keevo.shared.module.ModuleManifest("invoicing",
+                "1.0.0", "invoicing", ModuleCategory.PREMIUM, List.of("core"), List.of(), List.of(), List.of(),
+                List.of(), List.of(), new com.keevo.shared.module.ModuleManifest.ExtensionPoints(List.of(),
+                List.of(SLOT)), List.of("INVOICE_VIEW"), List.of(), "module.invoicing", false);
+        return new ModuleCatalog(List.of(
+                TestModuleCatalogs.loaded("core", ModuleCategory.CORE, true),
+                TestModuleCatalogs.withExtensionPoints("pos", List.of(SLOT, OTHER_SLOT), List.of()),
+                new com.keevo.shared.module.LoadedModuleManifest("test:invoicing", invoicing, "{}"),
+                TestModuleCatalogs.withExtensionPoints("crm", List.of(), List.of())));
+    }
+
+    @Nested
+    @DisplayName("required permission (Story 14.5)")
+    class Permission {
+
+        @Test
+        @DisplayName("permission declared by the contributing manifest → indexed, carried by the snapshot; "
+                + "contributions() does not filter on it")
+        void declared() {
+            enabled("pos", "invoicing");
+            ExtensionRegistryService service = service(permissionCatalog(), new Guarded("INVOICE_VIEW"));
+            assertThat(service.contributions(SLOT, TENANT)).singleElement()
+                    .isEqualTo(new ExtensionView("invoicing", "invoicing.guarded", "Facturer", 20,
+                            "invoicing.open-sale-invoice", "INVOICE_VIEW"));
+        }
+
+        @Test
+        @DisplayName("no permission (default null) → allowed, snapshot permission null")
+        void none() {
+            enabled("pos", "invoicing");
+            ExtensionRegistryService service = service(permissionCatalog(), new Guarded(null));
+            assertThat(service.contributions(SLOT, TENANT).get(0).permission()).isNull();
+            assertThat(new Invoice().permission()).isNull();
+        }
+
+        @Test
+        @DisplayName("permission not declared by its manifest → boot fails naming class, module and permission")
+        void undeclared() {
+            assertThat(bootFailure(permissionCatalog(), new Guarded("INVOICE_MANAGE")))
+                    .contains(Guarded.class.getName(), "module 'invoicing'", "requires permission 'INVOICE_MANAGE'",
+                            "does not declare in 'permissions'")
+                    .doesNotContain("contributes to it");
+        }
+
+        @Test
+        @DisplayName("permission declared by another module only → boot fails")
+        void otherModulesPermission() {
+            assertThat(bootFailure(catalog(List.of(SLOT), List.of()), new Guarded("INVOICE_VIEW")))
+                    .contains("requires permission 'INVOICE_VIEW'");
         }
     }
 

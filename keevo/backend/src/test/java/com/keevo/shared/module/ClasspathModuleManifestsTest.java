@@ -30,10 +30,11 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
             // 14.4: pos publishes sale.completed (1.3.0), invoicing consumes it (1.1.0)
+            // 14.5: invoicing fills the POS checkout slot (1.2.0)
             String expected = switch (m.id()) {
                 case "crm" -> "1.2.0";
                 case "pos" -> "1.3.0";
-                case "invoicing" -> "1.1.0";
+                case "invoicing" -> "1.2.0";
                 default -> "1.0.0";
             };
             assertThat(m.version()).isEqualTo(expected);
@@ -82,7 +83,10 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("pos").extensionPoints().declares()).containsExactly("pos.checkout.post-sale-actions");
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("pos"))
                 .allSatisfy(m -> assertThat(m.extensionPoints().declares()).isEmpty());
-        assertThat(byId.values()).allSatisfy(m -> assertThat(m.extensionPoints().fills()).isEmpty());
+        // 14.5: invoicing contributes « Facturer » to the POS checkout slot
+        assertThat(byId.get("invoicing").extensionPoints().fills()).containsExactly("pos.checkout.post-sale-actions");
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
+                .allSatisfy(m -> assertThat(m.extensionPoints().fills()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.isCore())
                 .allSatisfy(m -> assertThat(m.requires()).contains("core"));
         assertThat(byId.values().stream().filter(m -> m.category() == ModuleCategory.BUSINESS).map(ModuleManifest::id)

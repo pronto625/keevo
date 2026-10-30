@@ -26,8 +26,8 @@ public class InvoiceQueryUseCase {
     }
 
     @Transactional(readOnly = true)
-    public InvoiceRepository.Page list(InvoiceStatus status, int page, int size) {
-        return invoices.list(status, page, size);
+    public InvoiceRepository.Page list(InvoiceStatus status, UUID saleId, int page, int size) {
+        return invoices.list(status, saleId, page, size);
     }
 
     static DomainException notFound() {

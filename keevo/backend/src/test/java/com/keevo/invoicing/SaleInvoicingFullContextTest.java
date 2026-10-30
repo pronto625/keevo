@@ -256,6 +256,14 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
         assertThat(dto.path("status").asText()).isEqualTo("PAID");
         assertThat(dto.path("totalTtc").asLong()).isEqualTo(2000);
 
+        // 14.5: the checkout « Facturer » action finds the sale's invoice through ?saleId=
+        MvcResult bySale = call(HttpMethod.GET, "/api/v1/invoices?saleId=" + saleId, null);
+        JsonNode found = data(bySale, 200);
+        assertThat(found.size()).isEqualTo(1);
+        assertThat(found.get(0).path("id").asText()).isEqualTo(inv.get("id").toString());
+        assertThat(found.get(0).path("saleId").asText()).isEqualTo(saleId.toString());
+        assertThat(objectMapper.readTree(body(bySale)).path("meta").path("totalElements").asLong()).isEqualTo(1);
+
         await().atMost(WAIT).untilAsserted(() -> assertThat(jdbc.queryForList("SELECT action FROM \"" + schema
                         + "\".audit_log WHERE entity_type = 'Invoice' AND entity_id = ? AND user_id = ?",
                 String.class, inv.get("id"), ownerId))
@@ -265,6 +273,29 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
         JsonNode manual = data(call(HttpMethod.POST, "/api/v1/invoices", Map.of("client", Map.of("name", "Awa"),
                 "lines", List.of(Map.of("description", "Riz", "quantity", 1, "unitPrice", 500)))), 201);
         assertThat(manual.path("saleId").isNull()).isTrue();
+    }
+
+    @Test
+    @DisplayName("14.5 — ?saleId= of a sale without invoice → empty page; malformed saleId → 400; combined with "
+            + "status")
+    void invoiceBySale() throws Exception {
+        UUID saleId = sell(1, 0, null, "CASH", null);
+        awaitInvoice(saleId);
+
+        MvcResult none = call(HttpMethod.GET, "/api/v1/invoices?saleId=" + UUID.randomUUID(), null);
+        assertThat(data(none, 200).size()).isZero();
+        assertThat(objectMapper.readTree(body(none)).path("meta").path("totalElements").asLong()).isZero();
+
+        assertThat(data(call(HttpMethod.GET, "/api/v1/invoices?status=PAID&saleId=" + saleId, null), 200).size())
+                .isEqualTo(1);
+        assertThat(data(call(HttpMethod.GET, "/api/v1/invoices?status=DRAFT&saleId=" + saleId, null), 200).size())
+                .isZero();
+
+        for (String bad : new String[]{"abc", "1-1-1-1-1", "0123456789-ab-0123-4567-89abcdef0123"}) {
+            MvcResult r = call(HttpMethod.GET, "/api/v1/invoices?saleId=" + bad, null);
+            assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(400);
+            assertThat(body(r)).contains("VALIDATION_ERROR");
+        }
     }
 
     @Test

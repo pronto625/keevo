@@ -1,6 +1,6 @@
 {
   "id": "invoicing",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "displayName": "Facturation",
   "category": "premium",
   "requires": [
@@ -26,7 +26,9 @@
   ],
   "extensionPoints": {
     "declares": [],
-    "fills": []
+    "fills": [
+      "pos.checkout.post-sale-actions"
+    ]
   },
   "permissions": [
     "INVOICE_CREATE",

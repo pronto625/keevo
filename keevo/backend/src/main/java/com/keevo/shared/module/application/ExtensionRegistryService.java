@@ -319,10 +319,16 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
         String id = extension.id();
         String label = extension.label();
         String action = extension.action();
+        String permission = extension.permission();
         boolean valid = validKey(where, "id", id, module, problems);
         valid &= validKey(where, "action", action, module, problems);
         if (label == null || label.isBlank()) {
             problems.add(where + " has a blank label");
+            valid = false;
+        }
+        if (permission != null && !manifest.permissions().contains(permission)) {
+            problems.add(where + " requires permission '" + permission + "', which the manifest of module '" + module
+                    + "' does not declare in 'permissions'");
             valid = false;
         }
         if (!valid) {
@@ -336,7 +342,7 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
                 return;
             }
         }
-        list.add(new Contribution(point, new ExtensionView(module, id, label, extension.order(), action), name));
+        list.add(new Contribution(point, new ExtensionView(module, id, label, extension.order(), action, permission), name));
     }
 
     /** An id / action key: {@link ModuleManifestLoader#POINT_PATTERN}, prefixed by the contributing module id. */

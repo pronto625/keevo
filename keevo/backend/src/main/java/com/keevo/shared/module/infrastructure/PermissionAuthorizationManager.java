@@ -10,11 +10,9 @@ import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.authorization.AuthorizationResult;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Supplier;
 
@@ -24,8 +22,6 @@ import java.util.function.Supplier;
  * No authentication, an anonymous one, or an unresolvable annotation → denied (never an open door).
  */
 public class PermissionAuthorizationManager implements AuthorizationManager<MethodInvocation> {
-
-    private static final String ROLE_PREFIX = "ROLE_";
 
     private final ObjectProvider<ModulePermissions> permissions;
 
@@ -43,14 +39,7 @@ public class PermissionAuthorizationManager implements AuthorizationManager<Meth
         if (auth == null || !auth.isAuthenticated()) {
             return new AuthorizationDecision(false);
         }
-        Set<String> roles = new HashSet<>();
-        for (GrantedAuthority authority : auth.getAuthorities()) {
-            String name = authority.getAuthority();
-            if (name != null && name.startsWith(ROLE_PREFIX)) {
-                roles.add(name.substring(ROLE_PREFIX.length()));
-            }
-        }
-        Set<String> held = permissions.getObject().permissionsOf(roles);
+        Set<String> held = permissions.getObject().permissionsOf(ModulePermissions.rolesOf(auth));
         return new AuthorizationDecision(held.containsAll(Arrays.asList(required.value())));
     }
 

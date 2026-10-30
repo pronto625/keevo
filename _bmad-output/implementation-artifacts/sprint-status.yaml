@@ -266,7 +266,7 @@ development_status:
   14-2-generation-pdf-envoi-whatsapp: done  # 2026-10-30 build-auto done (spec-14-2-pdf-whatsapp-facture.md) — PDF facture + envoi WhatsApp (lien signé), désignation + logo entreprise (exports et factures) ; 43 constats (26 corrigés) ; routés → 16-7
   14-3-integration-crm-optionnelle-capability: done  # 2026-10-30 build-auto done (spec-14-3-integration-crm-optionnelle.md) — ClientLookupPort find/search (crm 1.2.0), sélecteur client facture, vente client inconnu 404 (au lieu de 500), SPI sync dans shared + handlers crm déplacés ; 24 constats (2 corrigés)
   14-4-bridge-pos-facturation-auto: done  # 2026-10-30 build-auto done (spec-14-4-bridge-pos-facturation.md) — facture émise+payée par vente (pos+invoicing actifs), idempotente (source_sale_id), SaleCompletedEvent enrichi ; 24 constats (5 corrigés) ; routés → 14-7
-  14-5-point-extension-checkout-facturer: backlog
+  14-5-point-extension-checkout-facturer: done  # 2026-10-30 build-auto done (spec-14-5-extension-checkout-facturer.md) — « Facturer » dans pos.checkout.post-sale-actions, Extension.permission(), GET /tenants/me/extensions/{point}, GET /invoices?saleId= ; 25 constats (3 corrigés) ; routés → 15-3, 15-5, 16-7
   14-6-test-acceptation-vision-4-scenarios: backlog
   14-7-avoirs-factures: backlog  # 2026-10-30 spec 14-1 — 1 item
   epic-14-retrospective: optional

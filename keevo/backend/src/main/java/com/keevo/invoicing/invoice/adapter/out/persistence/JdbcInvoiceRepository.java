@@ -159,12 +159,21 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
-    public Page list(InvoiceStatus status, int page, int size) {
+    public Page list(InvoiceStatus status, UUID saleId, int page, int size) {
         String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
-        String where = status == null ? "" : " WHERE status = ?";
-        Object[] filter = status == null ? new Object[0] : new Object[]{status.name()};
-        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter);
-        List<Object> args = new ArrayList<>(List.of(filter));
+        List<String> conditions = new ArrayList<>();
+        List<Object> filter = new ArrayList<>();
+        if (status != null) {
+            conditions.add("status = ?");
+            filter.add(status.name());
+        }
+        if (saleId != null) {
+            conditions.add("source_sale_id = ?");
+            filter.add(saleId);
+        }
+        String where = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
+        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter.toArray());
+        List<Object> args = new ArrayList<>(filter);
         args.add(size);
         args.add((long) page * size);
         List<Row> rows = jdbc.query("SELECT " + COLUMNS + " FROM " + table + where

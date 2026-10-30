@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 195 — gated: 103, exempt: 92.
+Handlers: 196 — gated: 103, exempt: 93.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -203,4 +203,5 @@ Handlers: 195 — gated: 103, exempt: 92.
 | PUT | `/api/v1/tenant/report-preferences` | `report-config` | WRITE | — |  | TenantPreferencesController#updateReportPreferences |
 | POST | `/api/v1/tenant/report-test` | `report-config` | WRITE | — |  | TenantPreferencesController#sendTestReport |
 | GET | `/api/v1/tenant/stores` | `store` | READ | — |  | TenantPreferencesController#getStores |
+| GET | `/api/v1/tenants/me/extensions/{pointId}` | — | — | — | points d'extension du commerçant | TenantExtensionsController#extensions |
 | GET | `/api/v1/tenants/me/modules` | — | — | — | liste des modules du commerçant | TenantModulesController#modules |

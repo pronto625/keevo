@@ -1151,7 +1151,7 @@ So that **je déclenche une facture depuis la vente (MOD-FR10, UX-DR3)** *(rendu
 - POS déclare `pos.checkout.post-sale-actions` dans son manifest (`extensionPoints.declares`, fait en 13.7) ; Facturation contribue par manifest `fills` + bean `@ContributesExtension(module = "invoicing", point = ...)` (chemin déclaratif de 13.7 — pas de second chemin programmatique avant 13.9).
 - Le rendu Flutter du slot est en Story 15.3.
 
-- [ ] [Deferred-from: review 13-7, 2026-10-29] « Facturer » visibility: permission of the cashier and per-sale context (already auto-invoiced, 14.6 scenario 3) — client-side filter or an optional `permission()` on `Extension`; a `@Bean`-method `List<Extension>` parameter outside `shared.module` silently gets an empty list (documented gap) [invoicing / pos]
+- [x] [Deferred-from: review 13-7, 2026-10-29] « Facturer » visibility: permission of the cashier and per-sale context (already auto-invoiced, 14.6 scenario 3) — client-side filter or an optional `permission()` on `Extension`; a `@Bean`-method `List<Extension>` parameter outside `shared.module` silently gets an empty list (documented gap) [invoicing / pos] — **Done in 14.5 (2026-10-30):** optional `Extension.permission()` (validated at boot against the contributing manifest's `permissions`); « Facturer » (`invoicing.invoice-sale`, action `invoicing.open-sale-invoice`) requires `INVOICE_VIEW`; server-side role filtering in `GET /api/v1/tenants/me/extensions/{pointId}`; per-sale context through `GET /api/v1/invoices?saleId=` (the action opens the sale's auto invoice, empty → « Facture en cours de création », app side 15.3/15.5) — no create-from-sale endpoint since 14.4 creates it. Server side only: the app's per-sale behaviour is routed to 15.5 and the `@Bean`-method gap to 15.3 (items below those stories).
 
 ### Story 14.6 : Test d'acceptation de la vision (4 scénarios)
 
@@ -1258,6 +1258,8 @@ So that **les modules enrichissent l'UI d'autres modules et l'app reste légère
 
 - [ ] [Deferred-from: review 13-7, 2026-10-29] Decide who owns slot contributions: server-driven (`GET` endpoint over `ExtensionRegistry.contributions`, DTO from the immutable views incl. module id) vs a Flutter-side registry fed by active modules (spec-socle §11) — avoid defining « Facturer » label/action twice [Flutter ExtensionSlot]
 
+- [ ] [Deferred-from: review 13-7 / 14-5, 2026-10-30] A `@Bean`-method `List<Extension>` parameter outside `shared.module` silently receives an empty list (contribution beans are not autowire candidates) — document it in the `ExtensionSlot` integration guide or fail fast at boot [shared.module / ModuleBeanAutowireExclusion]
+
 ### Story 15.4a : Workspace Melos + package `keevo_core`
 
 As a **développeur frontend**, I want **un monorepo Melos avec le noyau partagé extrait en package `keevo_core`**, So that **les futurs modules s'appuient sur un core isolé (MOD-FR18, dette)**.
@@ -1299,6 +1301,8 @@ So that **j'utilise la facturation depuis l'app (UX-DR5)**.
 - [ ] [Deferred-from: spec 14-1, 2026-10-30] Offline-first invoices: sync operations (`CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE`) with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (issue needs the server counter, offline issue = held until sync) [sync / invoicing]
 - [ ] [Deferred-from: review 14-1, 2026-10-30] Invoice list needs search (client name, number) and issue-date range; payment date selectable (back-dated payment received earlier) instead of `paidAt = now` [`InvoiceController` list / `PayInvoiceRequestDto`]
 - [ ] [Deferred-from: spec 14-1, 2026-10-30] Settings screen for the seller fiscal profile (legal name, address, NIU, RCCM, VAT-registered, rate, prices incl. VAT, payment details); show `complianceWarnings` before issuing [app]
+
+- [ ] [Deferred-from: review 14-5, 2026-10-30] Checkout « Facturer » (`invoicing.open-sale-invoice`): open the sale's auto invoice via `GET /api/v1/invoices?saleId=`; when the page is empty show « Facture en cours de création » (sale offline or bridge pending) and let the user retry; cache the slot (`GET /api/v1/tenants/me/extensions/pos.checkout.post-sale-actions`) per session and refresh it with the entitlements [app invoicing / pos checkout]
 
 ### Story 15.6 : Écran « Mes modules » (owner)
 
@@ -1563,6 +1567,7 @@ So that **le risque de mise en production est maîtrisé (MOD-NFR12, fiabilité)
 - [ ] [Deferred-from: review 13-10a, 2026-10-30] **Go-live gate**: the backend enforcement of 13.10a must not reach production before a minimum app version that understands `MODULE_INACTIVE`/`MODULE_READ_ONLY`/`MODULE_NOT_ENTITLED` is forced (V1 apps treat unknown sync reasons as terminal: counting sessions abandoned, transfers quarantined; the export upgrade sheet keys on `PLAN_FEATURE_REQUIRED`) — or ship a compatibility path; communicate to Free tenants which features become Premium (transfers, counting, advanced reports, profitability, PDF/Excel exports, alerts/owner pushes, report configuration) [release]
 - [ ] [Deferred-from: spec 14-2, 2026-10-30] **Go-live config (invoices / company logo):** set `KEEVO_INVOICE_LINK_SECRET` (or `KEEVO_EXPORT_LINK_SECRET`, ≥ 32 chars, stable) — otherwise WhatsApp invoice links (30 days) die at each restart (WARN `INVOICE_LINK_SECRET_MISSING`); set `KEEVO_PUBLIC_BASE_URL=https://keevo.ad2s.cm` (else links are built from forwarded headers); `KEEVO_COMPANY_LOGO_DIR` on a persistent volume (logos lost on redeploy otherwise) [deploy config]
 - [ ] [Deferred-from: live test 14-2, 2026-10-30] Pre-existing: a request with an unsupported `Content-Type` (e.g. JSON body on a multipart endpoint) answers 500 `INTERNAL_ERROR` instead of 415 — map `HttpMediaTypeNotSupportedException` to 415 with a French message in `GlobalExceptionHandler` [shared web]
+- [ ] [Deferred-from: implementation 14-5, 2026-10-30] Pre-existing: `DomainException(ErrorCode.NOT_FOUND, msg)` has no French entry in `GlobalExceptionHandler`'s message map, so the client may receive the raw message (« NOT_FOUND: … », or English such as « Report not found » in `ReportController:165`) — callers: `AdminGlobalNotificationController:118`, `AdminPlanService:231`, `GlobalNotificationService:108`, `ReportController:165`; add a generic « Ressource introuvable » mapping and French messages [shared web / admin / reporting]
 
 ### Story 16.8 : Profils de plan & plafonds configurables (super-admin)
 

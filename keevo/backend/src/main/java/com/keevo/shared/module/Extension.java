@@ -29,4 +29,14 @@ public interface Extension {
      * id>.<name>}).
      */
     String action();
+
+    /**
+     * Story 14.5 — the module permission (spec-socle §9.2, e.g. {@code INVOICE_VIEW}) a user must hold to see this
+     * contribution, or {@code null} (default): anyone who can see the slot. It must be declared by the contributing
+     * module's manifest {@code permissions} (checked at boot). {@link ExtensionRegistry#contributions} does not filter
+     * on it (tenant-level); the tenant extension endpoint filters on the caller's roles.
+     */
+    default String permission() {
+        return null;
+    }
 }

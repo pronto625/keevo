@@ -9,6 +9,13 @@ package com.keevo.shared.module;
  * @param label  French label shown to the user
  * @param order  position within the slot
  * @param action client routing key ({@code <module>.<name>})
+ * @param permission module permission required to see it ({@code null}: none) — Story 14.5
  */
-public record ExtensionView(String module, String id, String label, int order, String action) implements Extension {
+public record ExtensionView(String module, String id, String label, int order, String action, String permission)
+        implements Extension {
+
+    /** A contribution without required permission. */
+    public ExtensionView(String module, String id, String label, int order, String action) {
+        this(module, id, label, order, action, null);
+    }
 }

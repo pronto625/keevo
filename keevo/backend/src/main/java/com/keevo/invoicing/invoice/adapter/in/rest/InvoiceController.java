@@ -65,6 +65,10 @@ public class InvoiceController {
 
     static final int MAX_PAGE_SIZE = 100;
 
+    /** Canonical UUID text (UUID.fromString alone accepts misplaced dashes). */
+    private static final java.util.regex.Pattern CANONICAL_UUID =
+            java.util.regex.Pattern.compile("[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}");
+
     private final ManageDraftInvoiceUseCase drafts;
     private final InvoiceLifecycleUseCase lifecycle;
     private final InvoiceQueryUseCase queries;
@@ -97,12 +101,16 @@ public class InvoiceController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(dto(draft)));
     }
 
-    /** GET /api/v1/invoices?status=&page=&size= — newest first. */
+    /**
+     * GET /api/v1/invoices?status=&saleId=&page=&size= — newest first. Story 14.5: {@code saleId} = only the invoice
+     * created from that sale by the POS bridge (0 or 1 item; empty while not created yet).
+     */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<InvoiceResponseDto>>> list(
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String saleId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (page < 0) {
@@ -112,7 +120,7 @@ public class InvoiceController {
             throw new InvalidRequestParameterException("size", "size must be between 1 and " + MAX_PAGE_SIZE);
         }
         InvoiceStatus filter = parseStatus(status);
-        InvoiceRepository.Page result = queries.list(filter, page, size);
+        InvoiceRepository.Page result = queries.list(filter, parseSaleId(saleId), page, size);
         InvoicingSettings current = settings.current();
         List<InvoiceResponseDto> items = result.items().stream()
                 .map(i -> InvoiceResponseDto.fromDomain(i, current)).toList();
@@ -240,6 +248,17 @@ public class InvoiceController {
         } catch (IllegalArgumentException e) {
             throw new InvalidRequestParameterException("status", "unknown invoice status");
         }
+    }
+
+    private static UUID parseSaleId(String saleId) {
+        if (saleId == null || saleId.isBlank()) {
+            return null;
+        }
+        String value = saleId.strip();
+        if (!CANONICAL_UUID.matcher(value).matches()) {
+            throw new InvalidRequestParameterException("saleId", "invalid sale id");
+        }
+        return UUID.fromString(value);
     }
 
     private static DraftContent content(InvoiceRequestDto request) {
