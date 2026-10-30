@@ -180,15 +180,20 @@ class AuditPresenter {
         Icons.inventory_2_outlined, AuditCategory.product),
     'PRODUCT_UPDATED': AuditActionInfo('Produit modifié', 'modifié le produit',
         Icons.edit_outlined, AuditCategory.product),
-    'PRODUCT_PHOTO_UPDATED': AuditActionInfo('Photo du produit modifiée',
-        'modifié la photo du produit', Icons.photo_camera_outlined,
+    'PRODUCT_PHOTO_UPDATED': AuditActionInfo(
+        'Photo du produit modifiée',
+        'modifié la photo du produit',
+        Icons.photo_camera_outlined,
         AuditCategory.product),
     'PRODUCT_ARCHIVED': AuditActionInfo('Produit archivé', 'archivé le produit',
         Icons.archive_outlined, AuditCategory.product),
     'PRODUCT_ACTIVATED': AuditActionInfo('Produit activé', 'activé le produit',
         Icons.check_circle_outline_rounded, AuditCategory.product),
-    'PRODUCT_UNARCHIVED': AuditActionInfo('Produit désarchivé',
-        'désarchivé le produit', Icons.unarchive_outlined, AuditCategory.product),
+    'PRODUCT_UNARCHIVED': AuditActionInfo(
+        'Produit désarchivé',
+        'désarchivé le produit',
+        Icons.unarchive_outlined,
+        AuditCategory.product),
     'PRICE_OVERRIDDEN': AuditActionInfo('Prix modifié en caisse',
         'modifié le prix de', Icons.sell_outlined, AuditCategory.price,
         fallbackObject: _product),
@@ -345,6 +350,21 @@ class AuditPresenter {
         Icons.verified_outlined,
         AuditCategory.inventory,
         takesObject: false),
+    // Invoicing (Story 14.1)
+    'INVOICE_CREATED': AuditActionInfo('Facture créée', 'créé la facture',
+        Icons.receipt_long_outlined, AuditCategory.sale),
+    'INVOICE_ISSUED': AuditActionInfo('Facture émise', 'émis la facture',
+        Icons.receipt_long_outlined, AuditCategory.sale),
+    'INVOICE_PAID': AuditActionInfo('Facture payée', 'encaissé la facture',
+        Icons.paid_outlined, AuditCategory.sale),
+    'INVOICE_CANCELLED': AuditActionInfo('Facture annulée', 'annulé la facture',
+        Icons.receipt_long_outlined, AuditCategory.sale),
+    'INVOICING_SETTINGS_UPDATED': AuditActionInfo(
+        'Paramètres de facturation modifiés',
+        'modifié les paramètres de facturation',
+        Icons.settings_outlined,
+        AuditCategory.account,
+        takesObject: false),
     // Export (v1s-18-1)
     'DATA_EXPORTED': AuditActionInfo('Données exportées', 'exporté des données',
         Icons.file_download_outlined, AuditCategory.other,
@@ -352,8 +372,10 @@ class AuditPresenter {
     // Modules (Story 13.8a: activated / deactivated by the platform)
     'MODULE_ACTIVATED': AuditActionInfo('Module activé', 'activé le module',
         Icons.extension_outlined, AuditCategory.account),
-    'MODULE_DEACTIVATED': AuditActionInfo('Module désactivé',
-        'désactivé le module', Icons.extension_off_outlined,
+    'MODULE_DEACTIVATED': AuditActionInfo(
+        'Module désactivé',
+        'désactivé le module',
+        Icons.extension_off_outlined,
         AuditCategory.account),
   };
 
@@ -382,6 +404,8 @@ class AuditPresenter {
     'User': 'Utilisateurs',
     'Export': 'Exports',
     'Module': 'Modules',
+    'Invoice': 'Factures',
+    'InvoicingSettings': 'Paramètres de facturation',
   };
 
   /// Singular noun of each object type (contract `audit_log.entityType`).
@@ -519,9 +543,7 @@ class AuditPresenter {
 
   static String? _readableLabel(AuditEntryDto e) {
     final label = e.entityLabel?.trim();
-    if (label != null &&
-        label.isNotEmpty &&
-        !AuditFormat.isTechnical(label)) {
+    if (label != null && label.isNotEmpty && !AuditFormat.isTechnical(label)) {
       return label;
     }
     // Legacy rows (before v1s-18-6): the name sits in value_after.

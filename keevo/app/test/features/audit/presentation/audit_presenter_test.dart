@@ -83,15 +83,15 @@ void main() {
           );
 
       test('sending reads « … vers B », receipt « … depuis A »', () {
-        final out = AuditPresenter.sentence(transfer(
-            'TRANSFER_OUT', '{"destinationStoreName":"Boutique B"}'));
+        final out = AuditPresenter.sentence(
+            transfer('TRANSFER_OUT', '{"destinationStoreName":"Boutique B"}'));
         expect(out.toString(),
             'Awa a transféré du stock de Pagne wax vers Boutique B');
         expect(out.tailLead, 'vers');
         expect(out.tail, 'Boutique B');
         expect(
-            AuditPresenter.sentence(transfer(
-                    'TRANSFER_IN', '{"sourceStoreName":"Boutique A"}'))
+            AuditPresenter.sentence(
+                    transfer('TRANSFER_IN', '{"sourceStoreName":"Boutique A"}'))
                 .toString(),
             'Awa a reçu par transfert du stock de Pagne wax depuis Boutique A');
       });
@@ -106,7 +106,8 @@ void main() {
       });
 
       test('legacy entry or missing store: sentence unchanged', () {
-        expect(AuditPresenter.sentence(transfer('TRANSFER_OUT', null)).toString(),
+        expect(
+            AuditPresenter.sentence(transfer('TRANSFER_OUT', null)).toString(),
             'Awa a transféré du stock de Pagne wax');
         expect(
             AuditPresenter.sentence(
@@ -122,12 +123,14 @@ void main() {
       });
 
       test('Contexte rows « Vers » / « Depuis »', () {
-        final out = AuditPresenter.context(transfer(
-            'TRANSFER_OUT', '{"storeId":"x","destinationStoreName":"Boutique B"}'));
-        expect(out.map((c) => '${c.label} : ${c.value}'), ['Vers : Boutique B']);
-        final inn = AuditPresenter.context(transfer(
-            'TRANSFER_IN', '{"sourceStoreName":"Boutique A"}'));
-        expect(inn.map((c) => '${c.label} : ${c.value}'), ['Depuis : Boutique A']);
+        final out = AuditPresenter.context(transfer('TRANSFER_OUT',
+            '{"storeId":"x","destinationStoreName":"Boutique B"}'));
+        expect(
+            out.map((c) => '${c.label} : ${c.value}'), ['Vers : Boutique B']);
+        final inn = AuditPresenter.context(
+            transfer('TRANSFER_IN', '{"sourceStoreName":"Boutique A"}'));
+        expect(
+            inn.map((c) => '${c.label} : ${c.value}'), ['Depuis : Boutique A']);
       });
     });
 
@@ -273,7 +276,8 @@ void main() {
           'Vous avez modifié les produits du fournisseur Socada');
       expect(self('STORE_REACTIVATED', 'Store', 'Akwa'),
           'Vous avez réactivé la boutique Akwa');
-      expect(self('REPORT_PREFERENCES_UPDATED', 'Tenant',
+      expect(
+          self('REPORT_PREFERENCES_UPDATED', 'Tenant',
               'Préférences des rapports'),
           'Vous avez modifié les préférences des rapports');
     });
@@ -290,8 +294,7 @@ void main() {
           'Appareil de l\'auteur');
     });
 
-    test('DATA_EXPORTED is a known action; unknown object type humanized',
-        () {
+    test('DATA_EXPORTED is a known action; unknown object type humanized', () {
       expect(AuditPresenter.isKnownAction('DATA_EXPORTED'), isTrue);
       expect(AuditPresenter.actionInfo('DATA_EXPORTED').label,
           'Données exportées');
@@ -406,7 +409,8 @@ void main() {
               '{"productName":"SALE","name":"STORE","movementType":"SALE","type":"STORE"}'));
       expect(rows, contains(const AuditChange('Produit', '—', 'SALE')));
       expect(rows, contains(const AuditChange('Nom', '—', 'STORE')));
-      expect(rows, contains(const AuditChange('Type de mouvement', '—', 'Vente')));
+      expect(
+          rows, contains(const AuditChange('Type de mouvement', '—', 'Vente')));
       expect(rows, contains(const AuditChange('Type', '—', 'Boutique')));
       expect(
           AuditPresenter.context(
@@ -420,10 +424,22 @@ void main() {
     test('every entity type written by the listener is a selectable object',
         () {
       for (final t in [
-        'Product', 'Sale', 'StockMovement', 'PriceOverride', 'Client',
-        'Supplier', 'Category', 'Store', 'Employee', 'DayClosure',
-        'InventorySession', 'InventoryCount', 'StockLevel', 'StockAlert',
-        'Tenant', 'User',
+        'Product',
+        'Sale',
+        'StockMovement',
+        'PriceOverride',
+        'Client',
+        'Supplier',
+        'Category',
+        'Store',
+        'Employee',
+        'DayClosure',
+        'InventorySession',
+        'InventoryCount',
+        'StockLevel',
+        'StockAlert',
+        'Tenant',
+        'User',
       ]) {
         expect(AuditPresenter.objectTypes.containsKey(t), isTrue, reason: t);
       }
@@ -431,7 +447,8 @@ void main() {
 
     test('v1s-16-20: nested maps, UUID values and *Id keys never shown', () {
       final rows = AuditPresenter.changes(_entry(
-        valueBefore: '{"price":1000,"productId":"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f"}',
+        valueBefore:
+            '{"price":1000,"productId":"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f"}',
         valueAfter: '{"price":1500,"criteria":{"q":"x"},"ref":'
             '"7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f","categoryId":"c-1",'
             '"draftProductIds":["a"],"mode":"DIRECT","kind":"FOO_BAR"}',
@@ -493,7 +510,8 @@ void main() {
     test('inventory notes are readable, ids hidden', () {
       expect(
           AuditPresenter.context(_entry(
-              metadata: '{"notes":"INVENTORY:7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f",'
+              metadata:
+                  '{"notes":"INVENTORY:7f1c2b4e-2b9a-4c1e-9d0f-0a1b2c3d4e5f",'
                   '"sessionId":"s-1","ip":"1.2.3.4"}')),
           [const AuditContextItem('Motif', 'Ajustement d\'inventaire')]);
     });
@@ -541,7 +559,8 @@ void main() {
   // French — title, sentence, object type and every payload key.
   group('module lifecycle entries', () {
     test('titles, sentence and object type', () {
-      expect(AuditPresenter.actionInfo('MODULE_ACTIVATED').label, 'Module activé');
+      expect(
+          AuditPresenter.actionInfo('MODULE_ACTIVATED').label, 'Module activé');
       expect(AuditPresenter.actionInfo('MODULE_DEACTIVATED').label,
           'Module désactivé');
       expect(
@@ -561,16 +580,50 @@ void main() {
           AuditFormat.changesText(
               null,
               '{"module":"Clients & fournisseurs","statut":"Actif",'
-                  '"finAbonnement":"30/11/2026"}'),
+              '"finAbonnement":"30/11/2026"}'),
           'Module : Clients & fournisseurs ; Statut : Actif ; '
           'Fin de l\'abonnement : 30/11/2026');
       expect(
           AuditFormat.changesText(
               null,
               '{"module":"Clients & fournisseurs","statut":"Désactivé",'
-                  '"donnees":"Conservées"}'),
+              '"donnees":"Conservées"}'),
           'Module : Clients & fournisseurs ; Statut : Désactivé ; '
           'Données : Conservées');
+    });
+  });
+  group('invoice entries', () {
+    String said(String action, String entityType, String? label) =>
+        AuditPresenter.sentence(
+                _entry(
+                    action: action, entityType: entityType, entityLabel: label),
+                selfUserId: 'user-awa')
+            .toString();
+
+    test('sentences of the 4 invoice actions and the settings change', () {
+      expect(said('INVOICE_CREATED', 'Invoice', 'brouillon de Société Ndolo'),
+          'Vous avez créé la facture brouillon de Société Ndolo');
+      expect(said('INVOICE_ISSUED', 'Invoice', 'FAC-2026-000001'),
+          'Vous avez émis la facture FAC-2026-000001');
+      expect(said('INVOICE_PAID', 'Invoice', 'FAC-2026-000001'),
+          'Vous avez encaissé la facture FAC-2026-000001');
+      expect(said('INVOICE_CANCELLED', 'Invoice', 'FAC-2026-000002'),
+          'Vous avez annulé la facture FAC-2026-000002');
+      expect(
+          said('INVOICING_SETTINGS_UPDATED', 'InvoicingSettings',
+              'Boutique Awa SARL'),
+          'Vous avez modifié les paramètres de facturation');
+    });
+
+    test('titles and object types', () {
+      expect(
+          AuditPresenter.actionInfo('INVOICE_ISSUED').label, 'Facture émise');
+      expect(AuditPresenter.actionInfo('INVOICING_SETTINGS_UPDATED').label,
+          'Paramètres de facturation modifiés');
+      expect(AuditPresenter.objectTypeLabel('Invoice'), 'Factures');
+      expect(AuditPresenter.objectTypeLabel('InvoicingSettings'),
+          'Paramètres de facturation');
+      expect(AuditPresenter.typeNouns['Invoice'], 'Facture');
     });
   });
 }

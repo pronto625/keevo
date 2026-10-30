@@ -1,0 +1,40 @@
+{
+  "id": "invoicing",
+  "version": "1.0.0",
+  "displayName": "Facturation",
+  "category": "premium",
+  "requires": [
+    "core"
+  ],
+  "enhances": [
+    "pos",
+    "crm"
+  ],
+  "publishes": [
+    "invoice.created",
+    "invoice.issued",
+    "invoice.paid",
+    "invoice.cancelled"
+  ],
+  "consumes": [],
+  "provides": [],
+  "needs": [
+    "ClientLookupPort?"
+  ],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [
+    "INVOICE_CREATE",
+    "INVOICE_VIEW",
+    "INVOICE_SEND",
+    "INVOICE_MANAGE"
+  ],
+  "routes": [
+    "/invoicing",
+    "/invoicing/:id"
+  ],
+  "entitlement": "module.invoicing",
+  "free": false
+}

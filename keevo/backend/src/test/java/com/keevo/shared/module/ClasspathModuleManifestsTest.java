@@ -23,10 +23,10 @@ class ClasspathModuleManifestsTest {
                 .collect(Collectors.toMap(ModuleManifest::id, Function.identity()));
 
         List<String> paid = List.of("multi-store", "counting", "advanced-reports", "report-config", "alerts",
-                "profitability", "exports");
+                "profitability", "exports", "invoicing");
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
                 "messaging", "sync", "admin", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
-                "profitability", "exports");
+                "profitability", "exports", "invoicing");
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point
             assertThat(m.version()).isEqualTo(m.id().equals("crm") || m.id().equals("pos") ? "1.1.0" : "1.0.0");
@@ -53,6 +53,17 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("catalog").enhances()).containsExactly("reporting");
         assertThat(byId.get("crm").enhances()).containsExactly("pos");
         assertThat(byId.get("crm").provides()).containsExactly("ClientLookupPort");
+        // 14.1: invoicing — standalone (core only), enhances pos/crm, optional ClientLookupPort, own permissions
+        assertThat(byId.get("invoicing").requires()).containsExactly("core");
+        assertThat(byId.get("invoicing").enhances()).containsExactly("pos", "crm");
+        assertThat(byId.get("invoicing").needs()).containsExactly("ClientLookupPort?");
+        assertThat(byId.get("invoicing").permissions()).containsExactly("INVOICE_CREATE", "INVOICE_VIEW",
+                "INVOICE_SEND", "INVOICE_MANAGE");
+        assertThat(byId.get("invoicing").publishes()).containsExactly("invoice.created", "invoice.issued",
+                "invoice.paid", "invoice.cancelled");
+        assertThat(byId.get("invoicing").displayName()).isEqualTo("Facturation");
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
+                .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm"))
                 .allSatisfy(m -> assertThat(m.provides()).isEmpty());
         assertThat(byId.get("pos").extensionPoints().declares()).containsExactly("pos.checkout.post-sale-actions");

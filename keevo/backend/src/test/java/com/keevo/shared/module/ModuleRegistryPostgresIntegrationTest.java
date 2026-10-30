@@ -45,11 +45,11 @@ class ModuleRegistryPostgresIntegrationTest {
     private static final UUID TENANT_ID = UUID.randomUUID();
     private static final String DELETED_TENANT = "kv_reg002";
     private static final String[] SHIPPED = {"admin", "advanced-reports", "alerts", "catalog", "core", "counting",
-            "crm", "exports", "inventory", "messaging", "multi-store", "pos", "profitability", "report-config",
-            "reporting", "store", "sync"};
+            "crm", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
+            "report-config", "reporting", "store", "sync"};
     /** Story 13.10a — the paid feature modules of plan §6.1. */
-    private static final String[] PAID = {"advanced-reports", "alerts", "counting", "exports", "multi-store",
-            "profitability", "report-config"};
+    private static final String[] PAID = {"advanced-reports", "alerts", "counting", "exports", "invoicing",
+            "multi-store", "profitability", "report-config"};
 
     private static JdbcTemplate jdbc;
     private static JdbcTenantModuleStateStore store;
@@ -115,7 +115,7 @@ class ModuleRegistryPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("shipped set: 17 manifests, the 7 §6.1 feature modules paid; a tenant without rows nor plan gets the free ones")
+    @DisplayName("shipped set: 18 manifests, the 7 §6.1 feature modules + invoicing paid; a tenant without rows nor plan gets the free ones")
     void shippedCatalogue() {
         ModuleRegistry shipped = new ModuleRegistryService(shippedCatalog, store, new RequestScopedActiveModulesCache(), Clock.systemUTC());
         assertThat(shipped.installed()).extracting(ModuleManifest::id).containsExactly(SHIPPED);

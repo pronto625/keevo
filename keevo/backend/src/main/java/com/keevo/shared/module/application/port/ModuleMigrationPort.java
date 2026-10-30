@@ -31,6 +31,28 @@ public interface ModuleMigrationPort {
     Outcome migrate(String tenantSchema, String moduleId, com.keevo.shared.module.ExistingSchemaBaseline baseline);
 
     /**
+     * Story 14.1 — the highest versioned script the module ships ({@code V<version>__…sql}), {@code null} when none
+     * (or unknown to this implementation: the caller then provisions to find out).
+     */
+    default String latestVersion(String moduleId) {
+        return null;
+    }
+
+    /** Story 14.1 — whether the tenant schema exists (a tenant row whose schema is not created yet: nothing to do). */
+    default boolean schemaExists(String tenantSchema) {
+        return true;
+    }
+
+    /**
+     * Story 14.1 — the highest version applied in the tenant schema (a {@code 0} baseline row does not count; an
+     * adopted existing schema's baseline does), {@code null} when the module's history table does not exist or holds
+     * nothing. One cheap read, no migration.
+     */
+    default String currentVersion(String tenantSchema, String moduleId) {
+        return null;
+    }
+
+    /**
      * @param fromVersion highest applied version before the run ({@code null}: none)
      * @param toVersion   highest applied version after the run ({@code null}: none)
      * @param applied     migrations applied by the run

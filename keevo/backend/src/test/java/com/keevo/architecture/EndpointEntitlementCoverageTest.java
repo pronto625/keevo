@@ -4,6 +4,7 @@ import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.shared.module.LoadedModuleManifest;
 import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.RequiresEntitlement;
+import com.keevo.shared.module.RequiresPermission;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
@@ -47,7 +48,8 @@ class EndpointEntitlementCoverageTest {
     static final String REGENERATE_PROPERTY = "keevo.entitlements.regenerate";
     static final String TABLE = "docs/entitlements/endpoints.md";
 
-    record Endpoint(String verb, String path, String handler, String module, String access, String exemption) {
+    record Endpoint(String verb, String path, String handler, String module, String access, String exemption,
+                    String permission) {
     }
 
     @Test
@@ -87,6 +89,12 @@ class EndpointEntitlementCoverageTest {
         assertThat(problemsOf(Fixtures.JustificationOnGet.class, modules)).singleElement().asString()
                 .contains("JustificationOnGet#get", "readJustification");
         assertThat(problemsOf(Fixtures.ReadPostJustified.class, modules)).isEmpty();
+        // 14.1: a permission must be declared by a manifest
+        List<String> permissionProblems = new ArrayList<>();
+        List<Endpoint> permissioned = new ArrayList<>();
+        inspect(Fixtures.WithPermission.class, modules, Set.of("INVOICE_VIEW"), permissionProblems, permissioned);
+        assertThat(permissionProblems).singleElement().asString().contains("WithPermission#post", "GHOST_PERMISSION");
+        assertThat(permissioned).extracting(Endpoint::permission).containsExactly("INVOICE_VIEW", "GHOST_PERMISSION");
         // inherited handler: declared by the unannotated superclass, the subclass' class-level gate does not advise it
         assertThat(problemsOf(Fixtures.InheritsHandler.class, modules)).singleElement().asString()
                 .contains("InheritsHandler#get", "inherited");
@@ -118,8 +126,11 @@ class EndpointEntitlementCoverageTest {
      * endpoint, whether it answers a body through {@code @ResponseBody} or not.
      */
     static List<Endpoint> scan(List<String> problems) throws Exception {
-        Set<String> modules = ModuleManifestLoader.loadFromClasspath(new PathMatchingResourcePatternResolver())
-                .stream().map(LoadedModuleManifest::manifest).map(m -> m.id()).collect(Collectors.toSet());
+        List<com.keevo.shared.module.ModuleManifest> manifests = ModuleManifestLoader.loadFromClasspath(
+                new PathMatchingResourcePatternResolver()).stream().map(LoadedModuleManifest::manifest).toList();
+        Set<String> modules = manifests.stream().map(m -> m.id()).collect(Collectors.toSet());
+        Set<String> permissions = manifests.stream().flatMap(m -> m.permissions().stream())
+                .collect(Collectors.toSet());
         ClassPathScanningCandidateComponentProvider scanner = new ClassPathScanningCandidateComponentProvider(false);
         scanner.addIncludeFilter(new AnnotationTypeFilter(Controller.class));
         Path mainClasses = baseDir().resolve("target/classes").toRealPath();
@@ -130,7 +141,7 @@ class EndpointEntitlementCoverageTest {
             if (!location.equals(mainClasses)) {
                 continue; // test-only controllers (slice tests) are not part of the application
             }
-            inspect(type, modules, problems, endpoints);
+            inspect(type, modules, permissions, problems, endpoints);
         }
         endpoints.sort(Comparator.comparing(Endpoint::path).thenComparing(Endpoint::verb)
                 .thenComparing(Endpoint::handler));
@@ -143,6 +154,15 @@ class EndpointEntitlementCoverageTest {
      * no inheritance. Handlers inherited from a superclass are inspected too.
      */
     static void inspect(Class<?> type, Set<String> modules, List<String> problems, List<Endpoint> out) {
+        inspect(type, modules, null, problems, out);
+    }
+
+    /**
+     * @param permissions Story 14.1 — the permissions declared by the manifests ({@code null}: not checked); a
+     *                    {@code @RequiresPermission} (method, else class) naming another one is a problem
+     */
+    static void inspect(Class<?> type, Set<String> modules, Set<String> permissions, List<String> problems,
+                        List<Endpoint> out) {
         RequestMapping typeMapping = AnnotatedElementUtils.findMergedAnnotation(type, RequestMapping.class);
         String[] prefixes = typeMapping != null && typeMapping.path().length > 0 ? typeMapping.path() : new String[]{""};
         String typeName = type.getSimpleName();
@@ -219,11 +239,30 @@ class EndpointEntitlementCoverageTest {
                     access += " (" + gate.readJustification() + ")";
                 }
             }
+            RequiresPermission permissionGate = method.getDeclaredAnnotation(RequiresPermission.class);
+            if (permissionGate == null) {
+                permissionGate = declaring.getDeclaredAnnotation(RequiresPermission.class);
+            }
+            if (permissionGate == null) {
+                permissionGate = type.getDeclaredAnnotation(RequiresPermission.class);
+            }
+            String permission = "";
+            if (permissionGate != null) {
+                if (permissionGate.value().length == 0) {
+                    problems.add(handler + ": @RequiresPermission without a permission");
+                }
+                for (String p : permissionGate.value()) {
+                    if (permissions != null && !permissions.contains(p)) {
+                        problems.add(handler + ": permission '" + p + "' is declared by no manifest");
+                    }
+                }
+                permission = String.join(", ", permissionGate.value());
+            }
             String[] paths = mapping.path().length > 0 ? mapping.path() : new String[]{""};
             for (String prefix : prefixes) {
                 for (String path : paths) {
                     out.add(new Endpoint(verb, join(prefix, path), handler, gate != null ? gate.value() : "",
-                            access, exempt != null && gate == null ? exempt.value() : ""));
+                            access, exempt != null && gate == null ? exempt.value() : "", permission));
                 }
             }
         }
@@ -245,16 +284,20 @@ class EndpointEntitlementCoverageTest {
                 .append(REGENERATE_PROPERTY).append("=true`.\n\n")
                 .append("Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; ")
                 .append("`WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. ")
-                .append("Exempt handlers state why.\n\n");
+                .append("Exempt handlers state why. ")
+                .append("A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: ")
+                .append("missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, ")
+                .append("`SUPER_ADMIN` none.\n\n");
         long gated = endpoints.stream().filter(e -> !e.module().isEmpty()).count();
         sb.append("Handlers: ").append(endpoints.size()).append(" — gated: ").append(gated)
                 .append(", exempt: ").append(endpoints.size() - gated).append(".\n\n");
-        sb.append("| Method | Path | Module | Access | Exemption | Handler |\n")
-                .append("|---|---|---|---|---|---|\n");
+        sb.append("| Method | Path | Module | Access | Permission | Exemption | Handler |\n")
+                .append("|---|---|---|---|---|---|---|\n");
         for (Endpoint e : endpoints) {
             sb.append("| ").append(e.verb()).append(" | `").append(e.path()).append("` | ")
                     .append(e.module().isEmpty() ? "—" : "`" + e.module() + "`").append(" | ")
                     .append(e.access().isEmpty() ? "—" : e.access()).append(" | ")
+                    .append(e.permission().isEmpty() ? "—" : "`" + e.permission() + "`").append(" | ")
                     .append(e.exemption().isEmpty() ? "" : e.exemption()).append(" | ")
                     .append(e.handler()).append(" |\n");
         }
@@ -269,6 +312,21 @@ class EndpointEntitlementCoverageTest {
 
     /** Controllers for the self-check of {@link #inspect} (not Spring beans: not annotated {@code @RestController}). */
     static final class Fixtures {
+
+        @RequestMapping("/p")
+        static class WithPermission {
+            @RequiresPermission("INVOICE_VIEW")
+            @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
+            @org.springframework.web.bind.annotation.GetMapping
+            public void get() {
+            }
+
+            @RequiresPermission("GHOST_PERMISSION")
+            @RequiresEntitlement("crm")
+            @org.springframework.web.bind.annotation.PostMapping
+            public void post() {
+            }
+        }
 
         @RequestMapping("/x")
         static class Missing {

@@ -133,6 +133,10 @@ public class GlobalExceptionHandler {
             Map.entry("EXPORT_LINK_INVALID",         "Lien de téléchargement invalide"),
             Map.entry("EXPORT_QUEUE_FULL",           "Trop d'exports en cours, réessayez dans quelques minutes"),
             Map.entry("EXPORT_PDF_TOO_LARGE",        "Ce PDF dépasserait la limite de {limit} {unit} : réduisez la période, choisissez une boutique ou exportez en Excel"),
+            Map.entry("INVOICE_NOT_FOUND",           "Facture introuvable"),
+            Map.entry("INVOICE_NOT_EDITABLE",        "Cette facture a été émise : elle ne peut plus être modifiée ni supprimée"),
+            Map.entry("INVOICE_INVALID_TRANSITION",  "Cette action n'est pas possible pour une facture {status}"),
+            Map.entry("INVOICE_NOT_ISSUABLE",        "La facture ne peut pas être émise : {reason}"),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
 
@@ -331,6 +335,7 @@ public class GlobalExceptionHandler {
                  "AUDIT_ENTRY_NOT_FOUND",
                  "EXPORT_NOT_FOUND",
                  "MODULE_NOT_FOUND",
+                 "INVOICE_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -358,6 +363,8 @@ public class GlobalExceptionHandler {
                  "MODULE_ACTIVATION_BLOCKED",
                  "MODULE_HAS_DEPENDENTS",
                  "CORE_MODULE_REQUIRED",
+                 "INVOICE_NOT_EDITABLE",
+                 "INVOICE_INVALID_TRANSITION",
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
@@ -370,6 +377,7 @@ public class GlobalExceptionHandler {
                  "SALE_NOT_COMPLETED",
                  "INVALID_OR_EXPIRED_CODE",
                  "CODE_LOCKED",
+                 "INVOICE_NOT_ISSUABLE",
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;

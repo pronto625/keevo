@@ -2,12 +2,15 @@ package com.keevo.shared.module.infrastructure;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.module.EntitlementService;
+import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.RequiresEntitlement;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -17,8 +20,11 @@ import java.lang.reflect.Method;
  * Enforces {@link RequiresEntitlement} (Story 13.5, spec-socle §9.2) on Spring beans (use cases, controllers): the
  * tenant comes from {@link TenantContext}; {@code READ} → {@link EntitlementService#assertEnabled}, {@code WRITE} →
  * {@link EntitlementService#assertWritable}. No tenant bound → {@link IllegalStateException}, never a pass.
+ * Story 14.1: once the check passed, the module's tables are ensured in the tenant schema
+ * ({@link ModuleProvisioner#ensureProvisioned}, cached — a warm call is a map lookup; failure → 503).
  *
- * <p>Order {@value #ORDER}: after Spring Security's method authorization interceptors (role check first) and
+ * <p>Order {@value #ORDER}: after Spring Security's method authorization interceptors (role check first, then
+ * {@code @RequiresPermission}, Story 14.1) and
  * before {@code @Transactional} (lowest precedence), so a refused call never opens a transaction.
  *
  * <p>Put the annotation on the bean's class or on its (public, proxied) methods: like every Spring AOP advice, a
@@ -33,9 +39,21 @@ public class EntitlementAspect {
     static final int ORDER = 1_000;
 
     private final EntitlementService entitlements;
+    private final ObjectProvider<ModuleProvisioner> provisioner;
 
+    /** Without lazy provisioning (unit tests). */
     public EntitlementAspect(EntitlementService entitlements) {
+        this(entitlements, null);
+    }
+
+    /**
+     * @param provisioner Story 14.1 — once the check passed, the module's tables are ensured in the tenant schema
+     *                    ({@link ModuleProvisioner#ensureProvisioned}); absent (slice tests) → skipped
+     */
+    @Autowired
+    public EntitlementAspect(EntitlementService entitlements, ObjectProvider<ModuleProvisioner> provisioner) {
         this.entitlements = entitlements;
+        this.provisioner = provisioner;
     }
 
     /**
@@ -63,6 +81,10 @@ public class EntitlementAspect {
             entitlements.assertEnabled(tenant, gate.value());
         } else {
             entitlements.assertWritable(tenant, gate.value());
+        }
+        ModuleProvisioner modules = provisioner != null ? provisioner.getIfAvailable() : null;
+        if (modules != null) {
+            modules.ensureProvisioned(tenant, gate.value());
         }
         return joinPoint.proceed();
     }

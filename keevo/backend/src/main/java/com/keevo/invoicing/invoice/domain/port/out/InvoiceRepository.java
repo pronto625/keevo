@@ -1,0 +1,49 @@
+package com.keevo.invoicing.invoice.domain.port.out;
+
+import com.keevo.invoicing.invoice.domain.model.Invoice;
+import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+/** Invoices of the current tenant (Story 14.1), in the module-owned tables of its schema. */
+public interface InvoiceRepository {
+
+    Optional<Invoice> findById(UUID id);
+
+    /** Same, row-locked until the end of the caller's transaction (serialises concurrent transitions). */
+    Optional<Invoice> findByIdForUpdate(UUID id);
+
+    void insert(Invoice invoice);
+
+    /** A DRAFT edit: client, VAT parameters, totals, {@code updated_at}, and its lines replaced. */
+    void updateDraft(Invoice draft);
+
+    /**
+     * DRAFT → ISSUED: number, issue date, seller snapshot, frozen VAT parameters / totals and lines,
+     * {@code issued_at}, {@code updated_at}. The only write that touches an invoice's lines after its drafting.
+     */
+    void issue(Invoice issued);
+
+    /** ISSUED → PAID: status, {@code paid_at}, payment method, {@code updated_at} only. */
+    void markPaid(Invoice paid);
+
+    /** ISSUED → CANCELLED: status, {@code cancelled_at}, reason, {@code updated_at} only. */
+    void markCancelled(Invoice cancelled);
+
+    /** Deletes a DRAFT (and its lines); returns false when no draft has this id. */
+    boolean deleteDraft(UUID id);
+
+    /** Newest first; {@code status} null = every status. */
+    Page list(InvoiceStatus status, int page, int size);
+
+    /**
+     * Next number of the year's gapless sequence, incremented in the caller's transaction (a rollback gives the
+     * number back): 1, 2, 3…
+     */
+    long nextNumber(int year);
+
+    record Page(List<Invoice> items, long totalElements) {
+    }
+}

@@ -137,6 +137,82 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
         return false;
     }
 
+    /** {@code V<version>__} prefix of a versioned script (version part captured). */
+    static final Pattern VERSIONED_SCRIPT = Pattern.compile("^V([0-9]+(?:[._][0-9]+)*)__.+\\.sql$");
+
+    /** Story 14.1 — highest {@code V<version>__} script of the module across the roots; {@code null} when none. */
+    @Override
+    public String latestVersion(String moduleId) {
+        String id = validateModuleId(moduleId);
+        MigrationVersion highest = null;
+        for (String root : roots) {
+            try {
+                for (Resource resource : resources.getResources("classpath*:" + root + "/" + id + "/**/*.sql")) {
+                    String name = resource.getFilename();
+                    java.util.regex.Matcher m = name == null ? null : VERSIONED_SCRIPT.matcher(name);
+                    if (m != null && m.matches()) {
+                        MigrationVersion version = MigrationVersion.fromVersion(m.group(1).replace('_', '.'));
+                        if (highest == null || version.compareTo(highest) > 0) {
+                            highest = version;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException("Cannot scan the migrations of a module", e);
+            }
+        }
+        return highest == null ? null : highest.getVersion();
+    }
+
+    /** Story 14.1 — the schema exists ({@code information_schema.schemata}, bind parameter). */
+    @Override
+    public boolean schemaExists(String tenantSchema) {
+        String schema = TenantSchema.validate(tenantSchema);
+        try (Connection connection = dataSource.getConnection();
+             PreparedStatement statement = connection.prepareStatement(
+                     "SELECT 1 FROM information_schema.schemata WHERE schema_name = ?")) {
+            statement.setString(1, schema);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
+        } catch (SQLException e) {
+            throw new ModuleProvisioningException("schema", schema, "SCHEMA/" + failureCode(e), null);
+        }
+    }
+
+    /**
+     * Story 14.1 — highest successful version in the module's history table of the schema (a {@code 0} baseline row
+     * ignored), {@code null} when the table does not exist or holds none. Read-only, on a pooled connection (fully
+     * qualified names, the connection's {@code search_path} is not touched).
+     */
+    @Override
+    public String currentVersion(String tenantSchema, String moduleId) {
+        String schema = TenantSchema.validate(tenantSchema);
+        String table = historyTable(moduleId);
+        try (Connection connection = dataSource.getConnection()) {
+            if (!tableExists(connection, schema, table)) {
+                return null;
+            }
+            String sql = "SELECT version, type FROM \"" + schema + "\"." + table
+                    + " WHERE success AND version IS NOT NULL";
+            MigrationVersion highest = null;
+            try (PreparedStatement statement = connection.prepareStatement(sql);
+                 ResultSet rows = statement.executeQuery()) {
+                while (rows.next()) {
+                    MigrationVersion version = MigrationVersion.fromVersion(rows.getString(1));
+                    boolean emptyBaseline = "BASELINE".equals(rows.getString(2))
+                            && version.compareTo(MigrationVersion.fromVersion("0")) <= 0;
+                    if (!emptyBaseline && (highest == null || version.compareTo(highest) > 0)) {
+                        highest = version;
+                    }
+                }
+            }
+            return highest == null ? null : highest.getVersion();
+        } catch (SQLException e) {
+            throw new ModuleProvisioningException(moduleId, schema, "HISTORY/" + failureCode(e), null);
+        }
+    }
+
     @Override
     public Outcome migrate(String tenantSchema, String moduleId, ExistingSchemaBaseline baseline) {
         String schema = TenantSchema.validate(tenantSchema);

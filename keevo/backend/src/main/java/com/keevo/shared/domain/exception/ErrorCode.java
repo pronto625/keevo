@@ -148,6 +148,11 @@ public enum ErrorCode {
     EXPORT_PDF_TOO_LARGE,      // HTTP 422 — PDF over keevo.export.pdf-max-rows / pdf-max-closures (v1s-18-3)
     // ── WhatsApp (Story 8.0) ──────────────────────────────────────────────
     WHATSAPP_DELIVERY_FAILED, // WhatsApp message delivery failed (Wassender API error or timeout)
+    // ── Invoicing (Story 14.1) ────────────────────────────────────────────
+    INVOICE_NOT_FOUND,          // HTTP 404 — invoice id unknown in the tenant
+    INVOICE_NOT_EDITABLE,       // HTTP 409 — only a DRAFT invoice can be modified or deleted
+    INVOICE_INVALID_TRANSITION, // HTTP 409 — lifecycle transition not allowed from the invoice's status
+    INVOICE_NOT_ISSUABLE,       // HTTP 422 — the draft misses a mandatory element (details.reason, French)
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

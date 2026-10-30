@@ -11,6 +11,9 @@ package com.keevo.shared.module;
  *   <li>a row exists for (tenant, module) → only {@code provisioned_version} is updated (status untouched);</li>
  *   <li>no row and the module is active through the free rule (13.2) → a row {@code ACTIVE}/{@code FREE} is
  *       inserted (equivalent to the implicit state);</li>
+ *   <li>no row and a <b>paid</b> module active through the transition rule (13.10a, e.g. the registration trial) →
+ *       nothing is inserted (Story 14.1: an {@code ACTIVE}/{@code FREE} row without expiry would grant it for ever);
+ *       the module's Flyway history is the record;</li>
  *   <li>no row and the module is not active → {@link ModuleNotActiveException}, checked <b>before</b> any migration
  *       (Story 13.8 writes the row first, then provisions).</li>
  * </ul>
@@ -34,6 +37,20 @@ public interface ModuleProvisioner {
      *                                     the highest version applied before the failure)
      */
     ProvisioningResult provision(String tenantSchema, String moduleId);
+
+    /**
+     * Story 14.1 — makes sure the module's tables are in the tenant schema at the module's latest shipped version,
+     * provisioning it when they are not (lazy provisioning: a tenant entitled to a module that was never provisioned
+     * for it — e.g. an existing tenant covered by the transition rule — gets its tables on its first gated call).
+     * Called by the entitlement aspect once the check has passed. Cached in memory per (schema, module, latest
+     * version): a warm call does no database work; the first call costs one history read (plus the migrations only
+     * when behind). Concurrent first calls are serialised. A module without migrations, an invalid or platform
+     * schema: no-op.
+     *
+     * @throws com.keevo.shared.domain.exception.DomainException {@code SERVICE_UNAVAILABLE} (HTTP 503, French
+     *         message) when the provisioning fails — never a missing-table 500 later
+     */
+    void ensureProvisioned(String tenantSchema, String moduleId);
 
     /** Whether the module ships migrations ({@code db/modules/<moduleId>/**}{@code /*.sql} on the classpath). */
     boolean hasMigrations(String moduleId);

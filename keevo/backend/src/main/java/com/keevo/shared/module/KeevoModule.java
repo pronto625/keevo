@@ -1,6 +1,7 @@
 package com.keevo.shared.module;
 
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * The code-side contract of a module (Story 13.9, spec-socle §4.1, MOD-FR1): lifecycle hooks called by the
@@ -44,6 +45,16 @@ public interface KeevoModule {
      */
     default Optional<ExistingSchemaBaseline> existingSchemaBaseline() {
         return Optional.empty();
+    }
+
+    /**
+     * Story 14.1 — the permissions of this module (manifest {@code permissions}) granted to an {@code EMPLOYEE}.
+     * The role mapping of a module's permissions is declared by the module: {@code OWNER} holds every permission of
+     * every module, {@code EMPLOYEE} only those returned here, {@code SUPER_ADMIN} none (it is not a tenant user).
+     * Must be a subset of the manifest's {@code permissions} (checked at boot). Default: none.
+     */
+    default Set<String> employeePermissions() {
+        return Set.of();
     }
 
     /** Registers the capabilities listed in the manifest {@code provides}. Called once at boot. */

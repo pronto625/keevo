@@ -86,7 +86,13 @@ public final class AuditLabels {
             entry("DATA_EXPORTED", "Données exportées"),
             // Modules (Story 13.8a: super-admin activation / deactivation)
             entry("MODULE_ACTIVATED", "Module activé"),
-            entry("MODULE_DEACTIVATED", "Module désactivé"));
+            entry("MODULE_DEACTIVATED", "Module désactivé"),
+            // Invoicing (Story 14.1)
+            entry("INVOICE_CREATED", "Facture créée"),
+            entry("INVOICE_ISSUED", "Facture émise"),
+            entry("INVOICE_PAID", "Facture payée"),
+            entry("INVOICE_CANCELLED", "Facture annulée"),
+            entry("INVOICING_SETTINGS_UPDATED", "Paramètres de facturation modifiés"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
     public static final Map<String, String> ENTITY_TYPES = Map.ofEntries(
@@ -107,7 +113,9 @@ public final class AuditLabels {
             entry("InventorySession", "Inventaire"),
             entry("InventoryCount", "Comptage d'inventaire"),
             entry("Export", "Export de données"),
-            entry("Module", "Module"));
+            entry("Module", "Module"),
+            entry("Invoice", "Facture"),
+            entry("InvoicingSettings", "Paramètres de facturation"));
 
     /** French label of each before/after field key. */
     public static final Map<String, String> FIELDS = Map.ofEntries(
@@ -196,7 +204,11 @@ public final class AuditLabels {
             entry("statut", "Statut"),
             entry("finAbonnement", "Fin de l'abonnement"),
             entry("entreprise", "Entreprise"),
-            entry("donnees", "Données"));
+            entry("donnees", "Données"),
+            // Invoicing (Story 14.1)
+            entry("invoiceNumber", "Numéro de facture"),
+            entry("clientName", "Client"),
+            entry("paymentMethod", "Mode de paiement"));
 
     /** French label of each code value (statuses, types, roles, sectors, export modes…). */
     public static final Map<String, String> VALUES = Map.ofEntries(

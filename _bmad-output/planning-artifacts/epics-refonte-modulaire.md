@@ -1028,9 +1028,9 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 
 > Livrer le **premier module vendable, autonome ET composable**, qui **prouve la vision** : facturation seule → +CRM → +POS (facture auto) → POS désactivé sans casse. C'est le **patron** de tout futur module.
 
-- [ ] [Deferred-from: spec 12-7, 2026-10-29] `GET /api/v1/sync/pull` must skip `DeltaEntityProvider`s of inactive modules (same `ModuleRegistry` rule as the push guard) [sync pull gating]
+- [x] [Deferred-from: spec 12-7, 2026-10-29] `GET /api/v1/sync/pull` must skip `DeltaEntityProvider`s of inactive modules (same `ModuleRegistry` rule as the push guard) [sync pull gating] — ✅ already done (13.10a review, item 4b): `SyncPushService.pull` reads `moduleStates` once and skips (empty list, delta done) every provider whose `DeltaEntityProvider.moduleId()` is DISABLED (READ_ONLY still pulls) — `sync/sync/application/service/SyncPushService.java`, `SyncPullServiceTest.story1310a_*`, `PremiumGatingFullContextTest.freeTenant_premiumDataNotLeaked`; ticked in 14.1 (2026-10-30). No invoicing delta provider yet (offline app flows → 15.5)
 
-- [ ] [Deferred-from: review 13-5, 2026-10-29] Gating rollout: slice test combining `@RequiresEntitlement` + `@RequiresPermission` with an asserted interceptor order; class-level default `WRITE` would refuse GET endpoints during grace — default READ for safe HTTP verbs or check READ/WRITE per verb in the endpoint mapping test; annotate HTTP/use-case entry points only (no tenant in schedulers/async listeners); confirm tenant-module endpoints are role-guarded against the super-admin (entitlement passes for `public`); Flutter `auth_interceptor` handles 403 `MODULE_NOT_ENTITLED`/`MODULE_READ_ONLY` [gating] — 13.10a (2026-10-30): READ/WRITE per HTTP verb enforced by `EndpointEntitlementCoverageTest` (method-level annotations, no class-level default), HTTP entry points only (schedulers / listeners gated through `ModuleRegistry` / `@ModuleScoped`); still open: `@RequiresPermission` slice + order → 14.1 (Flutter 403 handling done in 13.10b, 2026-10-30)
+- [x] [Deferred-from: review 13-5, 2026-10-29] Gating rollout: slice test combining `@RequiresEntitlement` + `@RequiresPermission` with an asserted interceptor order; class-level default `WRITE` would refuse GET endpoints during grace — default READ for safe HTTP verbs or check READ/WRITE per verb in the endpoint mapping test; annotate HTTP/use-case entry points only (no tenant in schedulers/async listeners); confirm tenant-module endpoints are role-guarded against the super-admin (entitlement passes for `public`); Flutter `auth_interceptor` handles 403 `MODULE_NOT_ENTITLED`/`MODULE_READ_ONLY` [gating] — 13.10a (2026-10-30): READ/WRITE per HTTP verb enforced by `EndpointEntitlementCoverageTest` (method-level annotations, no class-level default), HTTP entry points only (schedulers / listeners gated through `ModuleRegistry` / `@ModuleScoped`); still open: `@RequiresPermission` slice + order → 14.1 (Flutter 403 handling done in 13.10b, 2026-10-30) — slice + order done in 14.1 (`PermissionGatingSliceTest`, 2026-10-30)
 
 ### Story 14.1 : Module Facturation autonome (domaine + provisioning + CRUD)
 
@@ -1056,7 +1056,7 @@ So that **je peux activer juste la facturation pour mon besoin (MOD-FR7, MOD-FR1
 - Numérotation : séquence par tenant (`invoice_number_seq` dans le schéma tenant) — gérer l'unicité/lacunes.
 - TDD : domaine (calcul total) → use cases → REST → provisioning.
 
-- [ ] [Deferred-from: 13-10a, 2026-10-30] Introduce `@RequiresPermission` (spec-socle §9.2) with the first module that has its own permissions (`INVOICE_CREATE/VIEW/SEND`): a `Permission` model mapped to the existing roles, enforced by Spring method security, combinable with `@RequiresEntitlement` (entitlement aspect order 1000 runs after method security, before `@Transactional`); slice test asserting both and their order; add it to `EndpointEntitlementCoverageTest` / `docs/entitlements/endpoints.md` [RBAC]
+- [x] [Deferred-from: 13-10a, 2026-10-30] Introduce `@RequiresPermission` (spec-socle §9.2) with the first module that has its own permissions (`INVOICE_CREATE/VIEW/SEND`): a `Permission` model mapped to the existing roles, enforced by Spring method security, combinable with `@RequiresEntitlement` (entitlement aspect order 1000 runs after method security, before `@Transactional`); slice test asserting both and their order; add it to `EndpointEntitlementCoverageTest` / `docs/entitlements/endpoints.md` [RBAC] — ✅ 14.1 (2026-10-30): `shared.module.RequiresPermission` (all-of), enforced by an `AuthorizationManagerBeforeMethodInterceptor` (`PermissionMethodSecurityConfig`, order `PRE_AUTHORIZE + 1` < `EntitlementAspect` 1000) with `PermissionAuthorizationManager`; role mapping in `ModulePermissions` (OWNER = every manifest permission, EMPLOYEE = `KeevoModule.employeePermissions()`, SUPER_ADMIN none; boot-validated), values validated at boot by `RequiresPermissionValidator`; denial → 403 `FORBIDDEN`. Tests: `PermissionGatingSliceTest` (order role → permission → entitlement), `ModulePermissionsTest`, `RequiresPermissionValidatorTest`, `InvoicingFullContextTest`; `EndpointEntitlementCoverageTest` + `docs/entitlements/endpoints.md` now carry a Permission column (unknown permission fails the build)
 
 ### Story 14.2 : Génération PDF + envoi WhatsApp de la facture
 
@@ -1170,6 +1170,16 @@ So that **la promesse « mini-apps connectées » est prouvée et non régressab
 - Test d'intégration `@ApplicationModuleTest` (Spring Modulith) + `AssertablePublishedEvents` pour vérifier la publication/consommation.
 - Activer/désactiver les modules par tenant dans le test (via `ModuleLifecycleService`).
 
+### Story 14.7 : Avoirs (notes de crédit) sur factures
+
+As a **commerçant**, I want **corriger ou annuler une facture déjà payée par un avoir numéroté**, So that **ma facturation reste conforme (factures émises jamais modifiées ni supprimées, numérotation continue)**.
+
+**Scope:** an `invoicing` credit note referencing an ISSUED/PAID invoice (full or partial lines), its own gapless series (`AV-<yyyy>-<000001>`), negative totals mirroring the VAT treatment of the referenced lines, audit + events; PAID invoices become cancellable only through a credit note.
+
+- [ ] [Deferred-from: spec 14-1, 2026-10-30] A PAID invoice cannot be cancelled (409 `INVOICE_INVALID_TRANSITION`); correction needs a credit note [invoicing / `Invoice` transitions]
+
+**Interim AC:** Given a PAID invoice, when the owner issues a credit note for it, then a numbered credit note is created, the invoice keeps its number and content, and totals net to the credited amount.
+
 ---
 
 ## Epic 15 : Frontend Modulaire (Phase 5)
@@ -1280,6 +1290,11 @@ So that **j'utilise la facturation depuis l'app (UX-DR5)**.
 **Implementation Notes:**
 - Package `keevo_invoicing` (15.4) ; écrans liste/création/détail ; intégration `entitlementsProvider`.
 - Sélecteur client conditionné par la présence de la capability CRM côté backend (14.3).
+
+### Deferred items routed 2026-10-30
+- [ ] [Deferred-from: spec 14-1, 2026-10-30] Offline-first invoices: sync operations (`CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE`) with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (issue needs the server counter, offline issue = held until sync) [sync / invoicing]
+- [ ] [Deferred-from: review 14-1, 2026-10-30] Invoice list needs search (client name, number) and issue-date range; payment date selectable (back-dated payment received earlier) instead of `paidAt = now` [`InvoiceController` list / `PayInvoiceRequestDto`]
+- [ ] [Deferred-from: spec 14-1, 2026-10-30] Settings screen for the seller fiscal profile (legal name, address, NIU, RCCM, VAT-registered, rate, prices incl. VAT, payment details); show `complianceWarnings` before issuing [app]
 
 ### Story 15.6 : Écran « Mes modules » (owner)
 
@@ -1574,6 +1589,16 @@ So that **je peux ajuster l'offre commerciale dynamiquement (MOD-FR13b, décisio
 
 **Items (routed 2026-10-29 from review 12-2c/12-2d):**
 - [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] `ProductCountPort` returns 0 for an invalid schema / missing table, so the product limit fails open (same JDBC code as before 12.2d) — fail closed when limits become configurable [catalog ProductCountAdapter]
+
+### Story 16.9 : Facturation électronique DGI (taxation en temps réel, art. L 8 sexies CGI)
+
+As a **commerçant assujetti**, I want **que mes factures Keevo soient transmises à la DGI selon le dispositif homologué**, So that **je reste conforme au régime de taxation en temps réel (loi de finances 2026) et à la facture électronique normalisée**.
+
+**Scope:** follow the DGI technical specifications once published (homologated electronic devices, instant transmission of invoicing data, validation identifier / QR code on the invoice); decide homologation of Keevo vs integration with an accredited provider; until then Keevo invoices must never claim « normalisée DGI ».
+
+- [ ] [Deferred-from: spec 14-1, 2026-10-30] Legal research 2026-10-30: LF 2026 creates real-time taxation (art. L 8 sexies CGI: tax collected at the transaction through homologated devices, invoicing data sent instantly to the DGI); FEN e-invoicing reported mandatory from 2026-01-01 (secondary source, specs not published) — Keevo invoices are commercial invoices only [invoicing / compliance]
+
+**Interim AC:** Given the published DGI specifications, when an invoice is issued by a concerned tenant, then it is transmitted and carries the DGI identifier; otherwise no « normalisée » mention appears.
 
 ## Epic 17 : Complétion Fonctionnelle & Gating Produit (Phase 7)
 

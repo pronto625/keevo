@@ -261,13 +261,14 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 14: Module Pilote Facturation (Phase 4) — preuve de la vision
   # ─────────────────────────────────────────────────────────
-  epic-14: backlog
-  14-1-module-facturation-autonome: backlog
+  epic-14: in-progress
+  14-1-module-facturation-autonome: done  # 2026-10-30 build-auto done (spec-14-1-module-facturation-autonome.md) — module invoicing autonome, @RequiresPermission, provisioning à la demande ; 35 constats (10 corrigés) ; routés → 14-7, 15-5, 16-9
   14-2-generation-pdf-envoi-whatsapp: backlog
   14-3-integration-crm-optionnelle-capability: backlog
   14-4-bridge-pos-facturation-auto: backlog
   14-5-point-extension-checkout-facturer: backlog
   14-6-test-acceptation-vision-4-scenarios: backlog
+  14-7-avoirs-factures: backlog  # 2026-10-30 spec 14-1 — 1 item
   epic-14-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
@@ -298,6 +299,7 @@ development_status:
   16-6-rgpd-suppression-compte-donnees: backlog
   16-7-go-live-canary-runbook: backlog
   16-8-profils-plan-plafonds-configurables: backlog  # 2026-10-29 journal I14 — +1 item (FREE employés : 3 dans le code vs 2 dans le plan) | 2026-10-29 review 12-2c/12-2d — 1 item (ProductCountPort fail-open)
+  16-9-facturation-electronique-dgi: backlog  # 2026-10-30 spec 14-1 (recherche légale) — 1 item
   epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

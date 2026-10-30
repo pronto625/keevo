@@ -35,9 +35,9 @@ class ApplicationModulesBaselineTest {
     private static final Path DOCS_FAILURE_FILE =
         Path.of("target/spring-modulith-docs/GENERATION-FAILED.txt");
 
-    /** The 13 top-level packages under com.keevo (story 12.1; crm split out of catalog in 12.5). */
+    /** The 14 top-level packages under com.keevo (story 12.1; crm split out of catalog in 12.5). */
     private static final Set<String> EXPECTED_MODULES = Set.of(
-        "admin", "catalog", "commerce", "crm", "feedback", "identity", "inventory",
+        "admin", "catalog", "commerce", "crm", "feedback", "identity", "inventory", "invoicing",
         "messaging", "reporting", "shared", "store", "subscription", "sync");
 
     /**

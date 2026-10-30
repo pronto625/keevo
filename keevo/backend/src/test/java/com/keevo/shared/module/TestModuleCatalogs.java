@@ -51,6 +51,15 @@ public final class TestModuleCatalogs {
         return new LoadedModuleManifest("test:" + id, manifest, "{}");
     }
 
+    /** Story 14.1 — a module manifest (requires {@code core}) declaring {@code permissions}. */
+    public static LoadedModuleManifest withPermissions(String id, ModuleCategory category, boolean free,
+                                                       List<String> permissions) {
+        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, category, List.of(ModuleManifest.CORE_ID),
+                List.of(), List.of(), List.of(), List.of(), List.of(), null, permissions, List.of(), "module." + id,
+                free);
+        return new LoadedModuleManifest("test:" + id, manifest, "{}");
+    }
+
     /**
      * Story 13.3 — a dependency graph for resolver tests (every module also requires {@code core}):
      * <ul>

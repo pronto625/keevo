@@ -1,6 +1,9 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import org.flywaydb.core.api.MigrationVersion;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleNotActiveException;
@@ -48,6 +51,11 @@ public class ModuleProvisionerService implements ModuleProvisioner {
     private final ModuleMigrationPort migrations;
     private final KeevoModuleDirectory modules;
     private final TransactionOperations moduleTransaction;
+    /** Story 14.1 — ensureProvisioned caches: (schema/module/latest version) already checked, per-key locks. */
+    private final java.util.Set<String> ensured = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Map<String, Object> ensureLocks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Boolean> shipsMigrations = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Map<String, Optional<String>> latestVersions = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Without module beans (no existing-schema baseline) nor transaction manager — tests. */
     public ModuleProvisionerService(ModuleCatalog catalog, ModuleRegistry registry, TenantModuleStatePort states,
@@ -131,7 +139,9 @@ public class ModuleProvisionerService implements ModuleProvisioner {
      */
     private void recordVersion(String schema, ModuleManifest module, boolean rowExists, String version) {
         String id = module.id();
-        if (version == null || (!rowExists && module.isCore())) {
+        // Story 14.1: no row for a paid module → nothing inserted (an ACTIVE/FREE row without expiry would grant it
+        // for ever, e.g. when tenant creation provisions it for the trial); the Flyway history is the record.
+        if (version == null || (!rowExists && (module.isCore() || !module.free()))) {
             registry.evict(schema);
             return;
         }
@@ -147,6 +157,54 @@ public class ModuleProvisionerService implements ModuleProvisioner {
         if (written == 0) {
             log.warn("Module '{}': provisioned_version {} not recorded (a higher version is already stored, or the "
                     + "tenant row is gone)", id, version);
+        }
+    }
+
+    @Override
+    public void ensureProvisioned(String tenantSchema, String moduleId) {
+        if (!TenantSchema.isValid(tenantSchema) || moduleId == null || !catalog.contains(moduleId)) {
+            return;
+        }
+        String id = moduleId;
+        if (!shipsMigrations.computeIfAbsent(id, migrations::hasMigrations)) {
+            return;
+        }
+        // Legacy modules (existing-schema baseline, e.g. crm) keep their tables from the tenant provisioner until
+        // 16.5: no lazy adoption on first use, so an update writes no tenant_modules row nor history table for them.
+        if (modules.module(id).flatMap(KeevoModule::existingSchemaBaseline).isPresent()) {
+            return;
+        }
+        String latest = latestVersions.computeIfAbsent(id, k -> Optional.ofNullable(migrations.latestVersion(k)))
+                .orElse(null);
+        String key = tenantSchema + '/' + id + '/' + latest;
+        if (ensured.contains(key)) {
+            return;
+        }
+        Object lock = ensureLocks.computeIfAbsent(tenantSchema + '/' + id, k -> new Object());
+        synchronized (lock) {
+            if (ensured.contains(key)) {
+                return;
+            }
+            try {
+                if (!migrations.schemaExists(tenantSchema)) {
+                    // tenant row without its schema yet (registration in progress): nothing to provision, not cached
+                    return;
+                }
+                String current = migrations.currentVersion(tenantSchema, id);
+                if (latest == null || current == null
+                        || MigrationVersion.fromVersion(current).compareTo(MigrationVersion.fromVersion(latest)) < 0) {
+                    ProvisioningResult result = provision(tenantSchema, id);
+                    log.info("Module '{}' provisioned on first use for tenant {} (version {} → {})", id,
+                            tenantCode(tenantSchema), result.fromVersion(), result.toVersion());
+                }
+            } catch (RuntimeException e) {
+                // our messages carry no schema value nor SQL text; the tenant is named by its code
+                log.error("Module '{}' could not be provisioned on first use for tenant {} ({})", id,
+                        tenantCode(tenantSchema), e.getClass().getSimpleName());
+                throw new DomainException(ErrorCode.SERVICE_UNAVAILABLE,
+                        "Module tables could not be provisioned; retry later");
+            }
+            ensured.add(key);
         }
     }
 

@@ -16,6 +16,11 @@ import com.keevo.shared.event.catalog.category.CategoryRenamedEvent;
 import com.keevo.shared.event.catalog.contact.ClientArchivedEvent;
 import com.keevo.shared.event.catalog.contact.ClientUnarchivedEvent;
 import com.keevo.shared.event.catalog.contact.ClientCreatedEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoicingSettingsUpdatedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierArchivedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierUnarchivedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierCreatedEvent;
@@ -750,6 +755,56 @@ public class AuditEventListener {
         log.info("AUDIT: data_exported exportId={} format={} datasets={} rows={} mode={} tenantId={} actorId={}",
                 event.exportId(), event.format(), event.datasets(), event.rowCount(), event.mode(),
                 event.tenantId(), event.actorId());
+    }
+
+    // ── Invoicing (Story 14.1) — label = the invoice number (never a UUID) ───────
+
+    @EventListener
+    public void on(InvoiceCreatedEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_CREATED", "Invoice", event.invoiceId(),
+                null, map("clientName", event.clientName(), "totalAmount", event.totalTtc()),
+                null, "brouillon de " + event.clientName(), null, null);
+        log.info("AUDIT: invoice_created tenantId={} actorId={}", event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(InvoiceIssuedEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_ISSUED", "Invoice", event.invoiceId(),
+                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+                        "totalAmount", event.totalTtc()),
+                null, event.number(), null, null);
+        log.info("AUDIT: invoice_issued number={} tenantId={} actorId={}", event.number(), event.tenantId(),
+                event.actorId());
+    }
+
+    @EventListener
+    public void on(InvoicePaidEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_PAID", "Invoice", event.invoiceId(),
+                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+                        "totalAmount", event.totalTtc(), "paymentMethod", event.paymentMethod()),
+                null, event.number(), null, null);
+        log.info("AUDIT: invoice_paid number={} tenantId={} actorId={}", event.number(), event.tenantId(),
+                event.actorId());
+    }
+
+    @EventListener
+    public void on(InvoiceCancelledEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_CANCELLED", "Invoice", event.invoiceId(),
+                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+                        "totalAmount", event.totalTtc()),
+                null, event.number(), map("reason", event.reason()), null);
+        log.info("AUDIT: invoice_cancelled number={} tenantId={} actorId={}", event.number(), event.tenantId(),
+                event.actorId());
+    }
+
+    @EventListener
+    public void on(InvoicingSettingsUpdatedEvent event) {
+        String label = event.legalName() != null && !event.legalName().isBlank()
+                ? event.legalName() : "Paramètres de facturation";
+        write(event.actorId(), event.tenantId(), "INVOICING_SETTINGS_UPDATED", "InvoicingSettings",
+                InvoicingSettingsUpdatedEvent.SETTINGS_ENTITY_ID, null, map("name", event.legalName()),
+                null, label, null, null);
+        log.info("AUDIT: invoicing_settings_updated tenantId={} actorId={}", event.tenantId(), event.actorId());
     }
 
     // ── Password reset (Story 14.12) — cross-tenant, best-effort ────────────
