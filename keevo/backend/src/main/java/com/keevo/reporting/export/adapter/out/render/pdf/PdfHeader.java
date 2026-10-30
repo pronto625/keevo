@@ -1,5 +1,6 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
+import com.keevo.shared.infrastructure.pdf.PdfFormats;
 import com.keevo.shared.application.port.export.ExportFilter;
 
 import java.time.Instant;
@@ -7,9 +8,16 @@ import java.time.Instant;
 /**
  * Brand header repeated on every page of a PDF (Story v1s-18-3): document title, business name,
  * store (or « Toutes les boutiques »), period (or « Situation au … » for a snapshot) and the
- * generation time in WAT. No logo: the store / tenant model has none (recorded decision).
+ * generation time in WAT. Story 14.2: the business name follows the company identity rule (designation, else the
+ * shop name) and the company logo, when one was uploaded, is shown left of the title ({@code logo} = a
+ * {@code data:} URI, {@code null} without logo).
  */
-public record PdfHeader(String title, String businessName, String scope, String period, String generatedAt) {
+public record PdfHeader(String title, String businessName, String scope, String period, String generatedAt,
+                        String logo) {
+
+    public PdfHeader(String title, String businessName, String scope, String period, String generatedAt) {
+        this(title, businessName, scope, period, generatedAt, null);
+    }
 
     static final String ALL_STORES = "Toutes les boutiques";
 
@@ -19,6 +27,11 @@ public record PdfHeader(String title, String businessName, String scope, String 
      */
     static PdfHeader of(PdfTemplate template, String businessName, String storeName, ExportFilter filter,
                         boolean snapshot, Instant now) {
+        return of(template, businessName, null, storeName, filter, snapshot, now);
+    }
+
+    static PdfHeader of(PdfTemplate template, String businessName, String logo, String storeName,
+                        ExportFilter filter, boolean snapshot, Instant now) {
         String period = snapshot
                 ? "Situation au " + PdfFormats.date(now) + " à " + PdfFormats.time(now)
                 : period(filter);
@@ -26,7 +39,8 @@ public record PdfHeader(String title, String businessName, String scope, String 
                 businessName == null || businessName.isBlank() ? "" : businessName,
                 storeName != null ? storeName : ALL_STORES,
                 period,
-                "Généré le " + PdfFormats.date(now) + " à " + PdfFormats.time(now));
+                "Généré le " + PdfFormats.date(now) + " à " + PdfFormats.time(now),
+                logo);
     }
 
     static String period(ExportFilter filter) {

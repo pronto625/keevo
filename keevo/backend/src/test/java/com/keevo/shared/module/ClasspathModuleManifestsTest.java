@@ -60,7 +60,7 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("invoicing").permissions()).containsExactly("INVOICE_CREATE", "INVOICE_VIEW",
                 "INVOICE_SEND", "INVOICE_MANAGE");
         assertThat(byId.get("invoicing").publishes()).containsExactly("invoice.created", "invoice.issued",
-                "invoice.paid", "invoice.cancelled");
+                "invoice.paid", "invoice.cancelled", "invoice.sent");
         assertThat(byId.get("invoicing").displayName()).isEqualTo("Facturation");
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());

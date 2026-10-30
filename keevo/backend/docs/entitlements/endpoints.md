@@ -5,10 +5,15 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 186 — gated: 100, exempt: 86.
+Handlers: 194 — gated: 102, exempt: 92.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
+| GET | `/api/v1/account/company` | — | — | — | core — identité de l'entreprise | CompanyController#get |
+| PUT | `/api/v1/account/company` | — | — | — | core — identité de l'entreprise | CompanyController#update |
+| DELETE | `/api/v1/account/company/logo` | — | — | — | core — identité de l'entreprise | CompanyController#deleteLogo |
+| GET | `/api/v1/account/company/logo` | — | — | — | core — identité de l'entreprise | CompanyController#logo |
+| PUT | `/api/v1/account/company/logo` | — | — | — | core — identité de l'entreprise | CompanyController#uploadLogo |
 | POST | `/api/v1/account/delete` | — | — | — | core: compte | AccountController#requestDeletion |
 | POST | `/api/v1/account/delete/cancel` | — | — | — | core: compte | AccountController#cancelDeletion |
 | GET | `/api/v1/admin/alerts` | — | — | — | super-admin | AdminAlertController#list |
@@ -124,12 +129,15 @@ Handlers: 186 — gated: 100, exempt: 86.
 | POST | `/api/v1/inventory/sessions/{sessionId}/quick-add` | `counting` | WRITE | — |  | InventoryCountController#quickAddProduct |
 | GET | `/api/v1/invoices` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#list |
 | POST | `/api/v1/invoices` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#create |
+| GET | `/api/v1/invoices/shared` | — | — | — | lien signé envoyé au client (facture déjà contrôlée à l'envoi) | InvoiceSharedLinkController#shared |
 | DELETE | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#delete |
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
 | PUT | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#update |
 | POST | `/api/v1/invoices/{id}/cancel` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoiceController#cancel |
 | POST | `/api/v1/invoices/{id}/issue` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#issue |
 | POST | `/api/v1/invoices/{id}/pay` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#pay |
+| GET | `/api/v1/invoices/{id}/pdf` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#pdf |
+| POST | `/api/v1/invoices/{id}/send` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#send |
 | GET | `/api/v1/invoicing/settings` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoicingSettingsController#get |
 | PUT | `/api/v1/invoicing/settings` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoicingSettingsController#update |
 | GET | `/api/v1/messaging/status` | `messaging` | READ | — |  | MessagingStatusController#getStatus |

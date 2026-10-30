@@ -263,7 +263,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-14: in-progress
   14-1-module-facturation-autonome: done  # 2026-10-30 build-auto done (spec-14-1-module-facturation-autonome.md) — module invoicing autonome, @RequiresPermission, provisioning à la demande ; 35 constats (10 corrigés) ; routés → 14-7, 15-5, 16-9
-  14-2-generation-pdf-envoi-whatsapp: backlog
+  14-2-generation-pdf-envoi-whatsapp: done  # 2026-10-30 build-auto done (spec-14-2-pdf-whatsapp-facture.md) — PDF facture + envoi WhatsApp (lien signé), désignation + logo entreprise (exports et factures) ; 43 constats (26 corrigés) ; routés → 16-7
   14-3-integration-crm-optionnelle-capability: backlog
   14-4-bridge-pos-facturation-auto: backlog
   14-5-point-extension-checkout-facturer: backlog

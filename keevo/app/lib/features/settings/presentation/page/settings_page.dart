@@ -163,6 +163,15 @@ class SettingsPage extends ConsumerWidget {
                     ),
                     const _Divider(),
                     _SettingsTile(
+                      key: const Key('settings-company'),
+                      icon: Icons.business_outlined,
+                      iconColor: AppTheme.iconIndigo,
+                      title: 'Entreprise',
+                      subtitle: 'Nom et logo sur vos factures et exports',
+                      onTap: () => context.push('/settings/company'),
+                    ),
+                    const _Divider(),
+                    _SettingsTile(
                       icon: Icons.card_membership_outlined,
                       iconColor: AppTheme.iconPurple,
                       title: 'Abonnement',

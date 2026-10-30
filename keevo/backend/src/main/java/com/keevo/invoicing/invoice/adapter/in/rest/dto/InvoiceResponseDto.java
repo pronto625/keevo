@@ -1,5 +1,6 @@
 package com.keevo.invoicing.invoice.adapter.in.rest.dto;
 
+import com.keevo.invoicing.invoice.application.service.InvoicePhones;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
@@ -16,7 +17,8 @@ import java.util.UUID;
  * An invoice as returned by the API (Story 14.1). For an issued invoice it carries every CGI art. 150 (5) element
  * available: seller identity snapshot, client identity, lines with HT / rate / VAT / TTC and their exemption mention,
  * totals HT / VAT / TTC, « TVA non applicable » for a non-VAT-registered seller. {@code complianceWarnings}: missing
- * seller mentions (French sentences, non-blocking).
+ * seller mentions (French sentences, non-blocking). Story 14.2: WhatsApp sendings — {@code lastSentAt},
+ * {@code lastSentTo} (masked, « +237 6•• ••• 111 »), {@code sendCount}.
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -41,7 +43,10 @@ public record InvoiceResponseDto(
         String cancellationReason,
         Instant createdAt,
         Instant updatedAt,
-        List<String> complianceWarnings) {
+        List<String> complianceWarnings,
+        Instant lastSentAt,
+        String lastSentTo,
+        int sendCount) {
 
     public record Client(UUID id, String name, String niu, String address, String phone) {
     }
@@ -66,7 +71,8 @@ public record InvoiceResponseDto(
                 i.lines().stream().map(InvoiceResponseDto::line).toList(),
                 i.totals().totalHt(), i.totals().totalVat(), i.totals().totalTtc(), i.issuedAt(), i.paidAt(),
                 i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdAt(), i.updatedAt(),
-                i.complianceWarnings(currentSettings));
+                i.complianceWarnings(currentSettings), i.delivery().lastSentAt(),
+                InvoicePhones.mask(i.delivery().lastSentTo()), i.delivery().sendCount());
     }
 
     private static Line line(InvoiceLine l) {

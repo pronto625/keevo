@@ -137,6 +137,16 @@ public class GlobalExceptionHandler {
             Map.entry("INVOICE_NOT_EDITABLE",        "Cette facture a été émise : elle ne peut plus être modifiée ni supprimée"),
             Map.entry("INVOICE_INVALID_TRANSITION",  "Cette action n'est pas possible pour une facture {status}"),
             Map.entry("INVOICE_NOT_ISSUABLE",        "La facture ne peut pas être émise : {reason}"),
+            Map.entry("INVOICE_PHONE_REQUIRED",      "Indiquez le numéro WhatsApp du client"),
+            Map.entry("INVOICE_PHONE_INVALID",       "Le numéro WhatsApp du client n'est pas valide"),
+            Map.entry("INVOICE_LINK_INVALID",        "Ce lien de facture n'est pas valide"),
+            Map.entry("INVOICE_LINK_RATE_LIMITED",   "Trop de demandes pour ce lien, réessayez plus tard"),
+            Map.entry("INVOICE_LINK_EXPIRED",        "Ce lien de facture a expiré : demandez un nouvel envoi à votre commerçant"),
+            Map.entry("WHATSAPP_UNAVAILABLE",        "L'envoi WhatsApp n'est pas disponible pour le moment"),
+            Map.entry("COMPANY_LOGO_INVALID",        "Format de logo non pris en charge (PNG ou JPEG)"),
+            Map.entry("COMPANY_LOGO_TOO_LARGE",      "Le logo est trop lourd (200 Ko maximum)"),
+            Map.entry("COMPANY_LOGO_TOO_HEAVY",      "Logo trop lourd après traitement : choisissez une image plus simple"),
+            Map.entry("COMPANY_LOGO_NOT_FOUND",      "Aucun logo n'a été ajouté"),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
     );
 
@@ -336,6 +346,8 @@ public class GlobalExceptionHandler {
                  "EXPORT_NOT_FOUND",
                  "MODULE_NOT_FOUND",
                  "INVOICE_NOT_FOUND",
+                 "INVOICE_LINK_INVALID",
+                 "COMPANY_LOGO_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -378,8 +390,14 @@ public class GlobalExceptionHandler {
                  "INVALID_OR_EXPIRED_CODE",
                  "CODE_LOCKED",
                  "INVOICE_NOT_ISSUABLE",
+                 "INVOICE_PHONE_REQUIRED",
+                 "INVOICE_PHONE_INVALID",
+                 "COMPANY_LOGO_INVALID",
+                 "COMPANY_LOGO_TOO_LARGE",
+                 "COMPANY_LOGO_TOO_HEAVY",
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
-            case "SERVICE_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+            case "SERVICE_UNAVAILABLE",
+                 "WHATSAPP_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case "JUSTIFICATION_REQUIRED",
@@ -390,7 +408,8 @@ public class GlobalExceptionHandler {
                  "INVENTORY_COUNT_PRODUCT_NOT_IN_SCOPE",
                  "EXPORT_DATASET_UNKNOWN",
                  "EXPORT_FORMAT_UNSUPPORTED" -> HttpStatus.BAD_REQUEST;
-            case "EXPORT_EXPIRED" -> HttpStatus.GONE;  // v1s-18-1 — expired export file
+            case "EXPORT_EXPIRED",
+                 "INVOICE_LINK_EXPIRED" -> HttpStatus.GONE;  // v1s-18-1 — expired export file
             case "TENANT_PROVISION_FAILED",
                  "MODULE_PROVISIONING_FAILED",
                  "MODULE_ACTIVATION_FAILED",
@@ -412,6 +431,7 @@ public class GlobalExceptionHandler {
                  "PLAN_FEATURE_REQUIRED",
                  "EXPORT_LINK_INVALID" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
             case "RATE_LIMIT_EXCEEDED",
+                 "INVOICE_LINK_RATE_LIMITED",
                  "EXPORT_QUEUE_FULL" -> HttpStatus.TOO_MANY_REQUESTS;
             case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
             default -> HttpStatus.INTERNAL_SERVER_ERROR;

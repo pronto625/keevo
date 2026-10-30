@@ -51,6 +51,7 @@ import '../../features/help/presentation/page/help_tutorials_page.dart';
 import '../../features/settings/presentation/page/account_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
+import '../../features/settings/presentation/page/company_page.dart';
 import '../../features/settings/presentation/page/report_preferences_page.dart';
 import '../../features/sync_indicator/presentation/page/blocked_operations_page.dart';
 import '../../features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
@@ -178,6 +179,7 @@ const _ownerOnlyPrefixes = [
   '/reports/rentabilite',
   '/reports/boutiques',
   '/settings/reports',
+  '/settings/company',
 ];
 
 /// S12 (Story 12.7 AC5): Global auth guard — any deep link to a non-public route
@@ -704,6 +706,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/reports',
       builder: (_, __) => const ReportPreferencesPage(),
+    ),
+    // ── Settings > Entreprise (Story 14.2 — OWNER only) ──────────────────
+    GoRoute(
+      path: '/settings/company',
+      builder: (_, __) => const CompanyPage(),
     ),
     // ── Settings > Mon Compte (Story 8.6 — OWNER + EMPLOYEE) ─────────────
     GoRoute(

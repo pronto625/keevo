@@ -94,6 +94,7 @@ class EventRegistryProdBootIntegrationTest {
                 Map.entry("keevo.scheduling.enabled", "false"),
                 Map.entry("keevo.product-photo.storage-dir", keyDir.resolve("photos").toString()),
                 Map.entry("keevo.export.storage-dir", keyDir.resolve("exports").toString()),
+                Map.entry("keevo.company-logo.storage-dir", keyDir.resolve("logos").toString()),
                 Map.entry("spring.main.banner-mode", "off"));
         List<String> args = new ArrayList<>();
         props.forEach((k, v) -> args.add("--" + k + "=" + v));

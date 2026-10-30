@@ -39,11 +39,28 @@ public record Invoice(
         String cancellationReason,
         UUID createdBy,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant updatedAt,
+        InvoiceDelivery delivery) {
 
     public Invoice {
         lines = lines == null ? List.of() : List.copyOf(lines);
+        delivery = delivery == null ? InvoiceDelivery.NONE : delivery;
     }
+
+    /** Story 14.1 shape: never sent. */
+    public Invoice(UUID id, String number, InvoiceStatus status, LocalDate issueDate, ClientInfo client,
+                   SellerSnapshot seller, boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                   String vatMention, List<InvoiceLine> lines, InvoiceTotals totals, Instant issuedAt, Instant paidAt,
+                   String paymentMethod, Instant cancelledAt, String cancellationReason, UUID createdBy,
+                   Instant createdAt, Instant updatedAt) {
+        this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
+                lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
+                updatedAt, InvoiceDelivery.NONE);
+    }
+
+    /** Story 14.2 — shown when the invoice prints the company display name instead of a typed legal name. */
+    public static final String LEGAL_NAME_FALLBACK_WARNING =
+            "La raison sociale n'est pas renseignée : le nom affiché de votre entreprise est utilisé.";
 
     /** A new draft computed with the seller's current settings. */
     public static Invoice draft(UUID id, ClientInfo client, List<LineInput> lines, InvoicingSettings settings,
@@ -127,7 +144,7 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, now, InvoicingSettings.trimToNull(method),
-                null, null, createdBy, createdAt, now);
+                null, null, createdBy, createdAt, now, delivery);
     }
 
     /** ISSUED → CANCELLED, number kept. */
@@ -142,7 +159,7 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
-                now);
+                now, delivery);
     }
 
     /**
@@ -153,18 +170,24 @@ public record Invoice(
         String niu;
         String rccm;
         String address;
+        boolean nameFromDisplay;
         if (seller != null) {
             niu = seller.niu();
             rccm = seller.rccm();
             address = seller.address();
+            nameFromDisplay = seller.nameFromDisplayName();
         } else if (current != null) {
             niu = current.niu();
             rccm = current.rccm();
             address = current.address();
+            nameFromDisplay = current.legalName() == null;
         } else {
             return List.of();
         }
         List<String> warnings = new ArrayList<>();
+        if (nameFromDisplay) {
+            warnings.add(LEGAL_NAME_FALLBACK_WARNING);
+        }
         if (niu == null) {
             warnings.add("Le NIU de votre commerce n'est pas renseigné : la facture ne sera pas déductible pour un "
                     + "client professionnel.");
@@ -183,7 +206,43 @@ public record Invoice(
     private Invoice touched(Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, now);
+                createdBy, createdAt, now, delivery);
+    }
+
+    /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
+    public Invoice withSellerIdentity(boolean nameFromDisplayName, boolean hasLogo) {
+        if (seller == null) {
+            return this;
+        }
+        return new Invoice(id, number, status, issueDate, client, seller.withIdentityFlags(nameFromDisplayName,
+                hasLogo), vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt,
+                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery);
+    }
+
+    /**
+     * Story 14.2 — only an issued or paid invoice can be sent (and re-sent) to the client: a draft has no legal value,
+     * a cancelled invoice must not reach the client as if it were due → {@code INVOICE_INVALID_TRANSITION}.
+     */
+    public void assertSendable() {
+        if (status != InvoiceStatus.ISSUED && status != InvoiceStatus.PAID) {
+            throw invalidTransition();
+        }
+    }
+
+    /** Story 14.2 — one more WhatsApp sending to {@code phone} (E.164) at {@code now}. */
+    public Invoice sent(String phone, Instant now) {
+        assertSendable();
+        return recordSending(phone, now);
+    }
+
+    /**
+     * Story 14.2 — records a sending that already left (the client received the message): no status check, so a
+     * concurrent cancellation between the check and the delivery never loses the record of what was sent.
+     */
+    public Invoice recordSending(String phone, Instant now) {
+        return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
+                vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
+                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now));
     }
 
     private DomainException invalidTransition() {

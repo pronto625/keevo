@@ -1,5 +1,6 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
+import com.keevo.shared.infrastructure.pdf.PdfFormats;
 import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.commerce.api.DayClosureQueryPort;
 import com.keevo.commerce.api.DayClosureView;

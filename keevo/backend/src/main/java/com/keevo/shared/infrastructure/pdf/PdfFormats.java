@@ -1,4 +1,4 @@
-package com.keevo.reporting.export.adapter.out.render.pdf;
+package com.keevo.shared.infrastructure.pdf;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -11,11 +11,12 @@ import java.time.format.DateTimeFormatter;
 /**
  * Value formatting of the PDF documents (Story v1s-18-3): integer XAF amounts grouped with a
  * non-breaking space ({@code 12 500 XAF}), dates and times in WAT ({@code Africa/Douala}).
+ * Story 14.2: core helper shared by the export documents and the invoices.
  */
 public final class PdfFormats {
 
-    static final ZoneId WAT = ZoneId.of("Africa/Douala");
-    static final char NBSP = ' ';
+    public static final ZoneId WAT = ZoneId.of("Africa/Douala");
+    public static final char NBSP = ' ';
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
@@ -57,7 +58,7 @@ public final class PdfFormats {
     }
 
     /** Integer value of a provider cell (amounts rounded half-up), {@code null} stays null. */
-    static Long toLong(Object v) {
+    public static Long toLong(Object v) {
         if (v == null) return null;
         if (v instanceof BigDecimal bd) return bd.setScale(0, RoundingMode.HALF_UP).longValue();
         if (v instanceof Double || v instanceof Float) return Math.round(((Number) v).doubleValue());
@@ -65,13 +66,13 @@ public final class PdfFormats {
         return Long.parseLong(v.toString().trim());
     }
 
-    static long toLongOrZero(Object v) {
+    public static long toLongOrZero(Object v) {
         Long l = toLong(v);
         return l != null ? l : 0L;
     }
 
     /** Absolute instant of a provider DATETIME cell. */
-    static Instant toInstant(Object v) {
+    public static Instant toInstant(Object v) {
         if (v == null) return null;
         if (v instanceof Instant i) return i;
         if (v instanceof java.time.OffsetDateTime o) return o.toInstant();
@@ -85,7 +86,7 @@ public final class PdfFormats {
     private static final java.util.regex.Pattern XML_ILLEGAL =
             java.util.regex.Pattern.compile("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\uFFFE\\uFFFF]");
 
-    static String text(Object v) {
+    public static String text(Object v) {
         return v == null ? "" : XML_ILLEGAL.matcher(v.toString()).replaceAll("");
     }
 }

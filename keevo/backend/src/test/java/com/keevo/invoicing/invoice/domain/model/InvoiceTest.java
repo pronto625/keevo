@@ -154,6 +154,41 @@ class InvoiceTest {
     @DisplayName("draft warnings come from the current settings")
     void draftWarnings() {
         assertThat(draft().complianceWarnings(SELLER)).isEmpty();
-        assertThat(draft().complianceWarnings(InvoicingSettings.defaults())).hasSize(3);
+        // Story 14.2: + « La raison sociale n'est pas renseignée » (no legal name → display name printed)
+        assertThat(draft().complianceWarnings(InvoicingSettings.defaults())).hasSize(4)
+                .contains(Invoice.LEGAL_NAME_FALLBACK_WARNING);
+    }
+
+    @Test
+    @DisplayName("14.2 issued with the display name: the snapshot keeps the flags and the warning stays")
+    void sellerIdentityFlags() {
+        Invoice issued = draft().issue("FAC-2026-000001", LocalDate.of(2026, 10, 30), SELLER, T1)
+                .withSellerIdentity(true, true);
+        assertThat(issued.seller().nameFromDisplayName()).isTrue();
+        assertThat(issued.seller().hasLogo()).isTrue();
+        assertThat(issued.complianceWarnings(null)).contains(Invoice.LEGAL_NAME_FALLBACK_WARNING);
+        assertThat(draft().issue("FAC-2026-000002", LocalDate.of(2026, 10, 30), SELLER, T1)
+                .complianceWarnings(null)).doesNotContain(Invoice.LEGAL_NAME_FALLBACK_WARNING);
+    }
+
+    @Test
+    @DisplayName("14.2 sending: ISSUED and PAID can be sent (count grows), DRAFT and CANCELLED → 409")
+    void sending() {
+        Invoice issued = draft().issue("FAC-2026-000001", LocalDate.of(2026, 10, 30), SELLER, T1);
+        assertThat(issued.delivery()).isEqualTo(InvoiceDelivery.NONE);
+        Invoice once = issued.sent("+237677000111", T1);
+        Invoice twice = once.pay("Espèces", T1).sent("+237699000000", T1.plusSeconds(60));
+        assertThat(once.delivery().sendCount()).isEqualTo(1);
+        assertThat(twice.delivery().sendCount()).isEqualTo(2);
+        assertThat(twice.delivery().lastSentTo()).isEqualTo("+237699000000");
+        assertThat(twice.status()).isEqualTo(InvoiceStatus.PAID);
+        assertThatThrownBy(() -> draft().sent("+237677000111", T1))
+                .satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
+        assertThatThrownBy(() -> issued.cancel("Erreur", T1).sent("+237677000111", T1))
+                .satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
+        // already delivered when the invoice got cancelled meanwhile: still recorded
+        Invoice recorded = issued.cancel("Erreur", T1).recordSending("+237677000111", T1);
+        assertThat(recorded.delivery().sendCount()).isEqualTo(1);
+        assertThat(recorded.status()).isEqualTo(InvoiceStatus.CANCELLED);
     }
 }

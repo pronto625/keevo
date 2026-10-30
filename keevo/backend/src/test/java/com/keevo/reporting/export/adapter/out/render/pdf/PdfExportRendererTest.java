@@ -1,5 +1,7 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
+import com.keevo.shared.infrastructure.pdf.PdfDocumentFactory;
+import com.keevo.shared.infrastructure.pdf.PdfFormats;
 import com.keevo.store.store.adapter.in.api.StoreApiTestSupport;
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
 import com.keevo.commerce.sale.adapter.in.api.CommerceSaleApiTestSupport;
@@ -22,6 +24,7 @@ import com.keevo.shared.application.port.export.ExportColumn;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
 import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.application.port.export.ExportPage;
+import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.store.domain.model.Store;
@@ -89,10 +92,43 @@ class PdfExportRendererTest {
         TenantContext.clear();
     }
 
+    /**
+     * Story 14.2 — company identity: the designation when set, else the tenant (shop) name; optional logo. Backed by
+     * the tenant repository mock through the published identity view, like the former TenantQueryPort wiring.
+     */
+    private final class FakeCompany implements CompanyIdentity {
+        String designation;
+        Logo logo;
+
+        @Override
+        public String displayName(String tenantSchema) {
+            if (designation != null) return designation;
+            return IdentityAuthApiTestSupport.tenantQueryPort(tenants).findBySchemaName(tenantSchema)
+                    .map(com.keevo.identity.api.TenantView::name).orElse(DEFAULT_NAME);
+        }
+
+        @Override
+        public Optional<Logo> logo(String tenantSchema) {
+            return Optional.ofNullable(logo);
+        }
+
+        @Override
+        public boolean hasLogo(String tenantSchema) {
+            return logo != null;
+        }
+
+        @Override
+        public boolean isActive(String tenantSchema) {
+            return true;
+        }
+    }
+
+    private final FakeCompany company = new FakeCompany();
+
     private PdfExportRenderer renderer() {
         return new PdfExportRenderer(new PdfDocumentFactory(), new EndOfDayPdfModel(
                 CommerceSaleApiTestSupport.dayClosureQueryPort(closures), reportBuilder),
-                IdentityAuthApiTestSupport.tenantQueryPort(tenants), StoreApiTestSupport.queryPort(stores), props, Clock.fixed(NOW, ZoneOffset.UTC));
+                company, StoreApiTestSupport.queryPort(stores), props, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     // ── synthetic providers with the real column schemas ───────────────────────────
@@ -430,6 +466,43 @@ class PdfExportRendererTest {
         java.lang.reflect.Field ok = StockLevelsExportDatasetProvider.class.getDeclaredField("OK");
         ok.setAccessible(true);
         assertThat(ok.get(null)).isEqualTo(StockPdfModel.OK);
+    }
+
+    @Test
+    @DisplayName("14.2 header: the company designation replaces the shop name; blank designation → shop name")
+    void headerUsesDesignation() throws IOException {
+        company.designation = "Tech Centre SARL";
+        Rendered pdf = render(sales(3), period(STORE));
+        assertThat(pdf.all()).contains("Tech Centre SARL").doesNotContain("Épicerie Ngono");
+
+        company.designation = null;
+        assertThat(render(sales(3), period(STORE)).all()).contains("Épicerie Ngono");
+    }
+
+    @Test
+    @DisplayName("14.2 header: the company logo, when uploaded, is drawn on every page left of the title")
+    void headerShowsLogo() throws IOException {
+        java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(120, 60,
+                java.awt.image.BufferedImage.TYPE_INT_ARGB);
+        java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(img, "png", png);
+        company.logo = new CompanyIdentity.Logo(png.toByteArray(), "image/png");
+
+        Rendered pdf = render(sales(120), period(null));
+        assertThat(pdf.all()).contains("Liste des ventes", "Épicerie Ngono");
+        try (PDDocument doc = Loader.loadPDF(pdf.bytes())) {
+            for (int p = 0; p < doc.getNumberOfPages(); p++) {
+                boolean hasImage = false;
+                for (org.apache.pdfbox.cos.COSName name : doc.getPage(p).getResources().getXObjectNames()) {
+                    hasImage |= doc.getPage(p).getResources().isImageXObject(name);
+                }
+                assertThat(hasImage).as("logo on page " + (p + 1)).isTrue();
+            }
+        }
+        company.logo = null;
+        try (PDDocument doc = Loader.loadPDF(render(sales(3), period(null)).bytes())) {
+            assertThat(doc.getPage(0).getResources().getXObjectNames()).isEmpty();
+        }
     }
 
     @Test

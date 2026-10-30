@@ -615,6 +615,16 @@ void main() {
           'Vous avez modifié les paramètres de facturation');
     });
 
+    test('14.2: invoice sent by WhatsApp and company identity change', () {
+      expect(said('INVOICE_SENT', 'Invoice', 'FAC-2026-000001'),
+          'Vous avez envoyé la facture FAC-2026-000001');
+      expect(AuditPresenter.actionInfo('INVOICE_SENT').label, 'Facture envoyée');
+      expect(said('COMPANY_PROFILE_UPDATED', 'Tenant', 'Tech Centre SARL'),
+          'Vous avez modifié l\'identité de l\'entreprise');
+      expect(AuditPresenter.actionInfo('COMPANY_PROFILE_UPDATED').label,
+          'Identité de l\'entreprise modifiée');
+    });
+
     test('titles and object types', () {
       expect(
           AuditPresenter.actionInfo('INVOICE_ISSUED').label, 'Facture émise');

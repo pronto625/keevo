@@ -32,6 +32,12 @@ public interface InvoiceRepository {
     /** ISSUED → CANCELLED: status, {@code cancelled_at}, reason, {@code updated_at} only. */
     void markCancelled(Invoice cancelled);
 
+    /**
+     * Story 14.2 — records one WhatsApp sending already delivered: {@code last_sent_at}, {@code last_sent_to},
+     * {@code send_count + 1} only, whatever the current status (checked before the delivery).
+     */
+    void markSent(Invoice sent);
+
     /** Deletes a DRAFT (and its lines); returns false when no draft has this id. */
     boolean deleteDraft(UUID id);
 

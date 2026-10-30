@@ -92,7 +92,9 @@ public final class AuditLabels {
             entry("INVOICE_ISSUED", "Facture émise"),
             entry("INVOICE_PAID", "Facture payée"),
             entry("INVOICE_CANCELLED", "Facture annulée"),
-            entry("INVOICING_SETTINGS_UPDATED", "Paramètres de facturation modifiés"));
+            entry("INVOICING_SETTINGS_UPDATED", "Paramètres de facturation modifiés"),
+            entry("INVOICE_SENT", "Facture envoyée"),
+            entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
     public static final Map<String, String> ENTITY_TYPES = Map.ofEntries(
@@ -208,7 +210,11 @@ public final class AuditLabels {
             // Invoicing (Story 14.1)
             entry("invoiceNumber", "Numéro de facture"),
             entry("clientName", "Client"),
-            entry("paymentMethod", "Mode de paiement"));
+            entry("paymentMethod", "Mode de paiement"),
+            // Invoice sending, company identity (Story 14.2)
+            entry("sentTo", "Envoyée au"),
+            entry("designation", "Désignation"),
+            entry("logo", "Logo"));
 
     /** French label of each code value (statuses, types, roles, sectors, export modes…). */
     public static final Map<String, String> VALUES = Map.ofEntries(

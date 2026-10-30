@@ -35,14 +35,32 @@ td { padding: 1mm 1.5mm; border-bottom: 0.4pt solid #dddddd; vertical-align: top
 .note { margin-top: 4mm; font-size: 8.5pt; color: #8a4b00; }
 .section { page-break-inside: auto; }
 .kv td.label { width: 55%; }
+/* Story 14.2 — optional company logo, left of the title (header only) */
+table.brand { width: auto; margin: 0; -fs-table-paginate: auto; }
+table.brand td { border: none; padding: 0; vertical-align: middle; }
+td.brand-logo { padding-right: 3mm; }
+img.logo { max-height: 14mm; max-width: 30mm; }
 </style>
 </head>
 <body>
 <div class="header" th:fragment="header">
+  <table class="brand" th:if="${header.logo() != null}">
+    <tr>
+      <td class="brand-logo"><img class="logo" th:src="${header.logo()}" alt=""/></td>
+      <td class="brand-text">
+        <div><span class="title" th:text="${header.title()}">Titre</span></div>
+        <div class="business" th:text="${header.businessName()}">Commerce</div>
+        <div class="meta"><span th:text="${header.scope()}">Boutique</span> · <span th:text="${header.period()}">Période</span></div>
+        <div class="meta" th:text="${header.generatedAt()}">Généré le</div>
+      </td>
+    </tr>
+  </table>
+  <th:block th:if="${header.logo() == null}">
   <div><span class="title" th:text="${header.title()}">Titre</span></div>
   <div class="business" th:text="${header.businessName()}">Commerce</div>
   <div class="meta"><span th:text="${header.scope()}">Boutique</span> · <span th:text="${header.period()}">Période</span></div>
   <div class="meta" th:text="${header.generatedAt()}">Généré le</div>
+  </th:block>
 </div>
 <div th:fragment="notes">
   <p class="empty" th:if="${empty}">Aucune donnée pour cette période</p>

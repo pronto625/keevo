@@ -1,11 +1,11 @@
 package com.keevo.reporting.export.adapter.out.render.pdf;
 
-import com.keevo.identity.api.TenantView;
-import com.keevo.identity.api.TenantQueryPort;
+import com.keevo.shared.infrastructure.pdf.PdfDocumentFactory;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.port.out.DocumentExportRenderer;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
+import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -42,7 +42,7 @@ public class PdfExportRenderer implements DocumentExportRenderer {
 
     private final PdfDocumentFactory documents;
     private final EndOfDayPdfModel endOfDay;
-    private final TenantQueryPort tenantQuery;
+    private final CompanyIdentity companyIdentity;
     private final StoreQueryPort storeQuery;
     private final Clock clock;
     private final int pageSize;
@@ -50,11 +50,11 @@ public class PdfExportRenderer implements DocumentExportRenderer {
     private final int maxClosures;
 
     public PdfExportRenderer(PdfDocumentFactory documents, EndOfDayPdfModel endOfDay,
-                             TenantQueryPort tenantQuery, StoreQueryPort storeQuery,
+                             CompanyIdentity companyIdentity, StoreQueryPort storeQuery,
                              ExportProperties properties, Clock clock) {
         this.documents = documents;
         this.endOfDay = endOfDay;
-        this.tenantQuery = tenantQuery;
+        this.companyIdentity = companyIdentity;
         this.storeQuery = storeQuery;
         this.clock = clock;
         this.pageSize = properties.getPageSize();
@@ -104,7 +104,8 @@ public class PdfExportRenderer implements DocumentExportRenderer {
         PdfTemplate template = template(providers);
         ExportDatasetProvider provider = providers.get(0);
         Instant now = Instant.now(clock);
-        PdfHeader header = PdfHeader.of(template, businessName(), storeName(filter), filter,
+        String schema = TenantContext.getCurrentTenant();
+        PdfHeader header = PdfHeader.of(template, businessName(schema), logo(schema), storeName(filter), filter,
                 template == PdfTemplate.STOCK, now);
         long before = progress.get();
         int limit = limit(template);
@@ -139,10 +140,20 @@ public class PdfExportRenderer implements DocumentExportRenderer {
                         "dataset", providers.stream().map(ExportDatasetProvider::key).collect(Collectors.joining(",")))));
     }
 
-    private String businessName() {
-        String schema = TenantContext.getCurrentTenant();
+    /** Story 14.2 — the company designation when filled in, else the shop name (tenant name). */
+    private String businessName(String schema) {
         if (schema == null) return null;
-        return tenantQuery.findBySchemaName(schema).map(TenantView::name).orElse(null);
+        return companyIdentity.displayName(schema);
+    }
+
+    /** Story 14.2 — the company logo as a {@code data:} URI, {@code null} without logo (never fails the export). */
+    private String logo(String schema) {
+        if (schema == null) return null;
+        try {
+            return companyIdentity.logo(schema).map(CompanyIdentity.Logo::dataUri).orElse(null);
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private String storeName(ExportFilter filter) {

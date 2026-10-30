@@ -1,5 +1,13 @@
 package com.keevo.invoicing.invoice.adapter.in.rest;
 
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.SendInvoiceRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.InvoiceDocumentUseCase;
+import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceClientDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceLineRequestDto;
@@ -27,6 +35,7 @@ import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.shared.module.RequiresPermission;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -57,13 +66,21 @@ public class InvoiceController {
     private final InvoiceLifecycleUseCase lifecycle;
     private final InvoiceQueryUseCase queries;
     private final InvoicingSettingsUseCase settings;
+    private final InvoiceDocumentUseCase documents;
+    private final SendInvoiceUseCase sending;
+    private final PublicBaseUrl publicBaseUrl;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
-                             InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings) {
+                             InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
+                             InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
+                             PublicBaseUrl publicBaseUrl) {
         this.drafts = drafts;
         this.lifecycle = lifecycle;
         this.queries = queries;
         this.settings = settings;
+        this.documents = documents;
+        this.sending = sending;
+        this.publicBaseUrl = publicBaseUrl;
     }
 
     /** POST /api/v1/invoices — a new draft. */
@@ -153,6 +170,40 @@ public class InvoiceController {
         Invoice cancelled = lifecycle.cancel(id, request.reason(), CurrentActor.actorId(),
                 TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(cancelled)));
+    }
+
+    /** GET /api/v1/invoices/{id}/pdf — Story 14.2: the invoice as an A4 PDF, rendered on demand. */
+    @RequiresPermission(InvoicingModule.INVOICE_VIEW)
+    @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
+        return pdfResponse(documents.pdf(id, TenantContext.getCurrentTenant()));
+    }
+
+    /**
+     * POST /api/v1/invoices/{id}/send {@code {phone?}} — Story 14.2: WhatsApp message with a signed link to the PDF
+     * (ISSUED / PAID only; the client's phone by default).
+     */
+    @RequiresPermission(InvoicingModule.INVOICE_SEND)
+    @RequiresEntitlement(InvoicingModule.ID)
+    @PostMapping("/{id}/send")
+    public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> send(
+            @PathVariable UUID id, @Valid @RequestBody(required = false) SendInvoiceRequestDto request,
+            HttpServletRequest http) {
+        Invoice sent = sending.send(id, request == null ? null : request.phone(), publicBaseUrl.resolve(http),
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(sent)));
+    }
+
+    /** {@code application/pdf}, displayed inline, never cached by a shared cache. */
+    static ResponseEntity<byte[]> pdfResponse(InvoiceDocumentUseCase.InvoiceDocument document) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.inline()
+                        .filename(document.filename()).build().toString())
+                .cacheControl(CacheControl.noStore())
+                .header("X-Content-Type-Options", "nosniff")
+                .body(document.content());
     }
 
     private InvoiceResponseDto dto(Invoice invoice) {

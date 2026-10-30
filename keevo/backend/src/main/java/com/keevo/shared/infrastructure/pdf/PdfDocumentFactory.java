@@ -1,4 +1,4 @@
-package com.keevo.reporting.export.adapter.out.render.pdf;
+package com.keevo.shared.infrastructure.pdf;
 
 import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder.FontStyle;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
@@ -9,6 +9,7 @@ import org.thymeleaf.templatemode.TemplateMode;
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -22,11 +23,14 @@ import java.util.Map;
  * {@code pdf/templates/<name>.html} — values only through escaped {@code th:text} — then
  * OpenHTMLtoPDF lays the XHTML out (A4, running header, repeated table headers, page counter)
  * with the embedded Liberation Sans font (SIL OFL 1.1, subset), so accents render everywhere.
+ *
+ * <p>Story 14.2: moved from {@code reporting} to the core so every module renders its own documents (exports,
+ * invoices) with the same engine, fonts and shared {@code layout.html} fragments.
  */
 @Component
 public class PdfDocumentFactory {
 
-    static final String FONT_FAMILY = "Keevo Sans";
+    public static final String FONT_FAMILY = "Keevo Sans";
     private static final String TEMPLATES = "pdf/templates/";
     private static final String FONTS = "pdf/fonts/";
 
@@ -48,14 +52,14 @@ public class PdfDocumentFactory {
     }
 
     /** XHTML of {@code template} filled with {@code variables}. */
-    String html(String template, Map<String, Object> variables) {
+    public String html(String template, Map<String, Object> variables) {
         Context context = new Context(Locale.FRANCE);
         context.setVariables(variables);
         return engine.process(template, context);
     }
 
     /** Render {@code template} as a PDF into {@code out} (left open). */
-    void render(String template, Map<String, Object> variables, OutputStream out) throws IOException {
+    public void render(String template, Map<String, Object> variables, OutputStream out) throws IOException {
         String xhtml = html(template, variables);
         PdfRendererBuilder builder = new PdfRendererBuilder();
         builder.useFastMode();
@@ -65,6 +69,17 @@ public class PdfDocumentFactory {
         builder.withHtmlContent(xhtml, null);
         builder.toStream(out);
         builder.run();
+    }
+
+    /** Render {@code template} as a PDF in memory (small documents: an invoice). */
+    public byte[] render(String template, Map<String, Object> variables) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(32 * 1024);
+        try {
+            render(template, variables, out);
+        } catch (IOException e) {
+            throw new UncheckedIOException("PDF rendering failed for template " + template, e);
+        }
+        return out.toByteArray();
     }
 
     private static byte[] load(String path) {

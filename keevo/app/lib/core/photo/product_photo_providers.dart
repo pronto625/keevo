@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../di/providers.dart';
 import '../sync/product_photo_outbox.dart';
+import 'company_logo_compressor.dart';
 import 'product_photo_cache.dart';
 import 'product_photo_compressor.dart';
 import 'product_photo_files.dart';
@@ -38,3 +39,8 @@ final productPhotoOutboxProvider = Provider<ProductPhotoOutbox>((ref) {
     compressor: ref.watch(productPhotoCompressorProvider),
   );
 });
+
+/// Company logo compression (Story 14.2) — picked with
+/// [productPhotoPickerProvider].
+final companyLogoCompressorProvider =
+    Provider<CompanyLogoCompressor>((ref) => const CompanyLogoCompressor());

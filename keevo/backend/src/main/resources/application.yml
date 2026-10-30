@@ -153,6 +153,19 @@ keevo:
     stale-job-after: 2h
     pdf-max-rows: 2000            # v1s-18-3: data rows a PDF may hold (larger → 422 EXPORT_PDF_TOO_LARGE)
     pdf-max-closures: 31          # v1s-18-3: closures in one « Fin de journée » PDF
+  # Story 14.2 — absolute base of the links sent outside the app (invoice links by WhatsApp). Blank = derived from
+  # the request (Forwarded / X-Forwarded-* honoured). Prod: https://keevo.ad2s.cm
+  public-base-url: ${KEEVO_PUBLIC_BASE_URL:}
+  # Story 14.2 — invoice sending: signed public PDF links (secret ≥ 32 chars; blank = the export link secret, both
+  # blank = random per boot + WARN, links die on restart) and the per-tenant WhatsApp sending cap.
+  invoicing:
+    link-secret: ${KEEVO_INVOICE_LINK_SECRET:}
+    max-sends-per-hour: 30
+  # Story 14.2 — company logo (invoices, export PDF headers). The directory MUST be persistent: only copy.
+  company-logo:
+    storage-dir: ${KEEVO_COMPANY_LOGO_DIR:${user.home}/keevo-data/company-logos}
+    max-bytes: 204800             # 200 KB — the app compresses the logo (600 px) before sending it
+    max-dimension: 600            # longest side of the stored logo
   # FR21 — product photo thumbnails, stored server side and synced to every device.
   # The directory MUST be persistent (volume / backed-up disk): it holds the only copy.
   product-photo:

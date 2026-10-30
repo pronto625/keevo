@@ -20,7 +20,9 @@ import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoiceSentEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoicingSettingsUpdatedEvent;
+import com.keevo.shared.event.catalog.onboarding.CompanyProfileUpdatedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierArchivedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierUnarchivedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierCreatedEvent;
@@ -794,6 +796,29 @@ public class AuditEventListener {
                         "totalAmount", event.totalTtc()),
                 null, event.number(), map("reason", event.reason()), null);
         log.info("AUDIT: invoice_cancelled number={} tenantId={} actorId={}", event.number(), event.tenantId(),
+                event.actorId());
+    }
+
+    /** Story 14.2 — label = the invoice number, detail = the masked WhatsApp number (never the full one). */
+    @EventListener
+    public void on(InvoiceSentEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_SENT", "Invoice", event.invoiceId(),
+                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+                        "totalAmount", event.totalTtc(), "sentTo", event.maskedPhone()),
+                null, event.number(), null, null);
+        log.info("AUDIT: invoice_sent number={} tenantId={} actorId={}", event.number(), event.tenantId(),
+                event.actorId());
+    }
+
+    /** Story 14.2 — the company identity (designation / logo) shown on invoices and export documents. */
+    @EventListener
+    public void on(CompanyProfileUpdatedEvent event) {
+        write(event.actorId(), event.tenantId(), "COMPANY_PROFILE_UPDATED", "Tenant", event.tenantUuid(),
+                event.before() == null || event.before().isEmpty() ? null : event.before(),
+                event.after() == null || event.after().isEmpty() ? null : event.after(),
+                null, event.displayName(), null, null);
+        log.info("AUDIT: company_profile_updated fields={} tenantId={} actorId={}",
+                event.after() == null ? java.util.Set.of() : event.after().keySet(), event.tenantId(),
                 event.actorId());
     }
 

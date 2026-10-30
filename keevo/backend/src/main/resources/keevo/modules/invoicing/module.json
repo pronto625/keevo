@@ -14,7 +14,8 @@
     "invoice.created",
     "invoice.issued",
     "invoice.paid",
-    "invoice.cancelled"
+    "invoice.cancelled",
+    "invoice.sent"
   ],
   "consumes": [],
   "provides": [],

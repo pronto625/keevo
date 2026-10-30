@@ -345,6 +345,41 @@ void main() {
     });
   });
 
+  group('SettingsPage — Entreprise tile (Story 14.2)', () {
+    testWidgets('OWNER sees « Entreprise »', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+      ));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings-company')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Entreprise'), findsOneWidget);
+      expect(find.text('Nom et logo sur vos factures et exports'),
+          findsOneWidget);
+    });
+
+    testWidgets('EMPLOYEE does not', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+      ));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Se déconnecter'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const Key('settings-company')), findsNothing);
+    });
+  });
+
   group('SettingsPage — Logout FCM cleanup (Story 16.1)', () {
     // ── AC1 + AC2: Normal logout with token ─────────────────────────────
 

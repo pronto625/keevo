@@ -359,6 +359,14 @@ class AuditPresenter {
         Icons.paid_outlined, AuditCategory.sale),
     'INVOICE_CANCELLED': AuditActionInfo('Facture annulée', 'annulé la facture',
         Icons.receipt_long_outlined, AuditCategory.sale),
+    'INVOICE_SENT': AuditActionInfo('Facture envoyée', 'envoyé la facture',
+        Icons.send_outlined, AuditCategory.sale),
+    'COMPANY_PROFILE_UPDATED': AuditActionInfo(
+        'Identité de l\'entreprise modifiée',
+        'modifié l\'identité de l\'entreprise',
+        Icons.business_outlined,
+        AuditCategory.account,
+        takesObject: false),
     'INVOICING_SETTINGS_UPDATED': AuditActionInfo(
         'Paramètres de facturation modifiés',
         'modifié les paramètres de facturation',

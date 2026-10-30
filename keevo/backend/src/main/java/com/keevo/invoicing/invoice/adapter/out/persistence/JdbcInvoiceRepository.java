@@ -2,6 +2,7 @@ package com.keevo.invoicing.invoice.adapter.out.persistence;
 
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
+import com.keevo.invoicing.invoice.domain.model.InvoiceDelivery;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 import com.keevo.invoicing.invoice.domain.model.InvoiceTotals;
@@ -35,7 +36,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             + "client_address, client_phone, seller_legal_name, seller_address, seller_phone, seller_niu, seller_rccm, "
             + "seller_payment_details, seller_footer, vat_registered, vat_rate, prices_include_vat, vat_mention, "
             + "total_ht, total_vat, total_ttc, issued_at, paid_at, payment_method, cancelled_at, cancellation_reason, "
-            + "created_by, created_at, updated_at";
+            + "created_by, created_at, updated_at, last_sent_at, last_sent_to, send_count, seller_name_from_display, "
+            + "seller_has_logo";
 
     private final JdbcTemplate jdbc;
 
@@ -65,7 +67,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     @Override
     public void insert(Invoice invoice) {
         jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS + ") VALUES "
-                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 values(invoice));
         insertLines(invoice);
     }
@@ -92,12 +94,14 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                         + "status = 'ISSUED', issue_date = ?, seller_legal_name = ?, seller_address = ?, "
                         + "seller_phone = ?, seller_niu = ?, seller_rccm = ?, seller_payment_details = ?, "
                         + "seller_footer = ?, vat_registered = ?, vat_rate = ?, prices_include_vat = ?, "
-                        + "vat_mention = ?, total_ht = ?, total_vat = ?, total_ttc = ?, issued_at = ?, updated_at = ? "
+                        + "vat_mention = ?, total_ht = ?, total_vat = ?, total_ttc = ?, issued_at = ?, updated_at = ?, "
+                        + "seller_name_from_display = ?, seller_has_logo = ? "
                         + "WHERE id = ? AND status = 'DRAFT'",
                 issued.number(), Date.valueOf(issued.issueDate()), s.legalName(), s.address(), s.phone(), s.niu(),
                 s.rccm(), s.paymentDetails(), s.footer(), issued.vatRegistered(), issued.vatRate(),
                 issued.pricesIncludeVat(), issued.vatMention(), t.totalHt(), t.totalVat(), t.totalTtc(),
-                ts(issued.issuedAt()), ts(issued.updatedAt()), issued.id()), "issue");
+                ts(issued.issuedAt()), ts(issued.updatedAt()), s.nameFromDisplayName(), s.hasLogo(), issued.id()),
+                "issue");
         // lines are recomputed with the settings of the issue, then frozen
         replaceLines(issued);
     }
@@ -116,6 +120,14 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                         + "WHERE id = ? AND status = 'ISSUED'",
                 ts(cancelled.cancelledAt()), cancelled.cancellationReason(), ts(cancelled.updatedAt()),
                 cancelled.id()), "cancellation");
+    }
+
+    @Override
+    public void markSent(Invoice sent) {
+        expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                        + " SET last_sent_at = ?, last_sent_to = ?, send_count = send_count + 1 "
+                        + "WHERE id = ?",
+                ts(sent.delivery().lastSentAt()), sent.delivery().lastSentTo(), sent.id()), "sending");
     }
 
     /** Only for a DRAFT edit or the issue itself: an issued invoice's lines are never rewritten. */
@@ -212,7 +224,9 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 i.vatRegistered(), i.vatRate(), i.pricesIncludeVat(), i.vatMention(),
                 i.totals().totalHt(), i.totals().totalVat(), i.totals().totalTtc(),
                 ts(i.issuedAt()), ts(i.paidAt()), i.paymentMethod(), ts(i.cancelledAt()), i.cancellationReason(),
-                i.createdBy(), ts(i.createdAt()), ts(i.updatedAt())};
+                i.createdBy(), ts(i.createdAt()), ts(i.updatedAt()),
+                ts(i.delivery().lastSentAt()), i.delivery().lastSentTo(), i.delivery().sendCount(),
+                s != null && s.nameFromDisplayName(), s != null && s.hasLogo()};
     }
 
     private static Timestamp ts(Instant instant) {
@@ -231,7 +245,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             return new Invoice(i.id(), i.number(), i.status(), i.issueDate(), i.client(), i.seller(), i.vatRegistered(),
                     i.vatRate(), i.pricesIncludeVat(), i.vatMention(), lines, i.totals(), i.issuedAt(), i.paidAt(),
                     i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdBy(), i.createdAt(),
-                    i.updatedAt());
+                    i.updatedAt(), i.delivery());
         }
     }
 
@@ -242,7 +256,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         SellerSnapshot seller = status == InvoiceStatus.DRAFT ? null : new SellerSnapshot(
                 rs.getString("seller_legal_name"), rs.getString("seller_address"), rs.getString("seller_phone"),
                 rs.getString("seller_niu"), rs.getString("seller_rccm"), rs.getString("seller_payment_details"),
-                rs.getString("seller_footer"));
+                rs.getString("seller_footer"), rs.getBoolean("seller_name_from_display"),
+                rs.getBoolean("seller_has_logo"));
         Invoice invoice = new Invoice(id, rs.getString("number"), status,
                 issueDate == null ? null : issueDate.toLocalDate(),
                 new ClientInfo(rs.getObject("client_id", UUID.class), rs.getString("client_name"),
@@ -252,7 +267,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 new InvoiceTotals(rs.getLong("total_ht"), rs.getLong("total_vat"), rs.getLong("total_ttc")),
                 instant(rs, "issued_at"), instant(rs, "paid_at"), rs.getString("payment_method"),
                 instant(rs, "cancelled_at"), rs.getString("cancellation_reason"),
-                rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"));
+                rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
+                new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")));
         return new Row(id, invoice);
     }
 }

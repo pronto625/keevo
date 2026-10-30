@@ -352,20 +352,32 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("not issuable: no line / no seller legal name → 422 INVOICE_NOT_ISSUABLE (French reason), no number used")
+    @DisplayName("not issuable: no line → 422 INVOICE_NOT_ISSUABLE (French reason), no number used; no legal name → "
+            + "the company display name is printed with a warning (14.2)")
     void notIssuable() throws Exception {
         String noLegalName = createDraft(ownerToken);
-        MvcResult r = owner(HttpMethod.POST, "/api/v1/invoices/" + noLegalName + "/issue", null);
-        assertError(r, 422, "INVOICE_NOT_ISSUABLE");
-        assertThat(body(r)).contains("La facture ne peut pas être émise").contains("nom de votre commerce");
+        JsonNode draftDto = data(owner(HttpMethod.GET, "/api/v1/invoices/" + noLegalName, null), 200);
+        assertThat(draftDto.path("complianceWarnings").toString()).contains("La raison sociale n'est pas renseignée");
 
-        ownerSettings(true, null);
         String empty = data(owner(HttpMethod.POST, "/api/v1/invoices", draft("Awa", List.of())), 201)
                 .path("id").asText();
-        assertThat(body(owner(HttpMethod.POST, "/api/v1/invoices/" + empty + "/issue", null)))
-                .contains("ajoutez au moins une ligne");
-        assertThat(data(owner(HttpMethod.POST, "/api/v1/invoices/" + noLegalName + "/issue", null), 200)
-                .path("number").asText()).isEqualTo("FAC-" + year + "-000001");
+        MvcResult r = owner(HttpMethod.POST, "/api/v1/invoices/" + empty + "/issue", null);
+        assertError(r, 422, "INVOICE_NOT_ISSUABLE");
+        assertThat(body(r)).contains("La facture ne peut pas être émise").contains("ajoutez au moins une ligne");
+
+        // Story 14.2: issuing is no longer blocked by a missing legal name — the shop name is printed instead
+        JsonNode issued = data(owner(HttpMethod.POST, "/api/v1/invoices/" + noLegalName + "/issue", null), 200);
+        assertThat(issued.path("number").asText()).isEqualTo("FAC-" + year + "-000001");
+        String shopName = jdbc.queryForObject("SELECT name FROM public.tenants WHERE id = ?", String.class, tenantId);
+        String expectedName = shopName == null || shopName.startsWith("KV-") ? "Mon commerce" : shopName;
+        assertThat(issued.path("seller").path("legalName").asText()).isEqualTo(expectedName);
+        assertThat(issued.path("complianceWarnings").toString())
+                .contains("La raison sociale n'est pas renseignée : le nom affiché de votre entreprise est utilisé.");
+        // read back: the flag is persisted with the snapshot
+        JsonNode reread = data(owner(HttpMethod.GET, "/api/v1/invoices/" + noLegalName, null), 200);
+        assertThat(reread.path("complianceWarnings").toString())
+                .contains("La raison sociale n'est pas renseignée : le nom affiché de votre entreprise est utilisé.");
+        assertThat(reread.path("seller").path("legalName").asText()).isEqualTo(expectedName);
     }
 
     @Test

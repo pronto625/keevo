@@ -8,6 +8,7 @@ import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
+import com.keevo.shared.capability.business.CompanyIdentity;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,13 +29,15 @@ public class InvoiceLifecycleUseCase {
     private final InvoiceRepository invoices;
     private final InvoicingSettingsRepository settings;
     private final ApplicationEventPublisher events;
+    private final CompanyIdentity companyIdentity;
     private final Clock clock;
 
     public InvoiceLifecycleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
-                                   ApplicationEventPublisher events, Clock clock) {
+                                   ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock) {
         this.invoices = invoices;
         this.settings = settings;
         this.events = events;
+        this.companyIdentity = companyIdentity;
         this.clock = clock;
     }
 
@@ -46,16 +49,29 @@ public class InvoiceLifecycleUseCase {
     @Transactional
     public Invoice issue(UUID id, UUID actorId, String tenantId) {
         Invoice draft = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        InvoicingSettings seller = settings.find().orElseGet(InvoicingSettings::defaults);
+        InvoicingSettings stored = settings.find().orElseGet(InvoicingSettings::defaults);
+        // Story 14.2 — no legal name typed: the company display name (designation › shop name) is printed instead
+        // (non-blocking; the invoice carries a compliance warning).
+        boolean nameFromDisplay = stored.legalName() == null;
+        InvoicingSettings seller = nameFromDisplay
+                ? withLegalName(stored, companyIdentity.displayName(tenantId)) : stored;
+        boolean hasLogo = companyIdentity.hasLogo(tenantId);
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
         draft.assertIssuable(seller); // throws the precise error before any number is allocated
         Invoice issued = ManageDraftInvoiceUseCase.valid(() -> draft.issue(
-                number(today.getYear(), invoices.nextNumber(today.getYear())), today, seller, now));
+                number(today.getYear(), invoices.nextNumber(today.getYear())), today, seller, now))
+                .withSellerIdentity(nameFromDisplay, hasLogo);
         invoices.issue(issued);
         events.publishEvent(new InvoiceIssuedEvent(issued.id(), issued.number(), issued.client().name(),
                 issued.totals().totalTtc(), actorId, tenantId, now));
         return issued;
+    }
+
+    /** The settings with the company display name as legal name (Story 14.2 fallback). */
+    static InvoicingSettings withLegalName(InvoicingSettings s, String legalName) {
+        return new InvoicingSettings(legalName, s.address(), s.phone(), s.niu(), s.rccm(), s.vatRegistered(),
+                s.vatRate(), s.pricesIncludeVat(), s.paymentDetails(), s.footer());
     }
 
     @Transactional

@@ -153,6 +153,17 @@ public enum ErrorCode {
     INVOICE_NOT_EDITABLE,       // HTTP 409 — only a DRAFT invoice can be modified or deleted
     INVOICE_INVALID_TRANSITION, // HTTP 409 — lifecycle transition not allowed from the invoice's status
     INVOICE_NOT_ISSUABLE,       // HTTP 422 — the draft misses a mandatory element (details.reason, French)
+    // ── Invoice PDF / WhatsApp sending, company identity (Story 14.2) ─────
+    INVOICE_PHONE_REQUIRED,     // HTTP 422 — no WhatsApp number given and the client has none
+    INVOICE_PHONE_INVALID,      // HTTP 422 — the WhatsApp number is not a valid phone number
+    INVOICE_LINK_INVALID,       // HTTP 404 — public invoice link tampered / unknown invoice / tenant not active
+    INVOICE_LINK_RATE_LIMITED,  // HTTP 429 — public invoice link opened too often (per token, 10 min window)
+    INVOICE_LINK_EXPIRED,       // HTTP 410 — public invoice link older than its validity (30 days)
+    WHATSAPP_UNAVAILABLE,       // HTTP 503 — no WhatsApp provider configured (NoOp): nothing sent, nothing recorded
+    COMPANY_LOGO_INVALID,       // HTTP 422 — not a PNG / JPEG image (or corrupt)
+    COMPANY_LOGO_TOO_LARGE,     // HTTP 422 — logo over keevo.company-logo.max-bytes
+    COMPANY_LOGO_TOO_HEAVY,     // HTTP 422 — re-encoded logo still over 300 KB (inlined in every PDF)
+    COMPANY_LOGO_NOT_FOUND,     // HTTP 404 — the company has no logo
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,
