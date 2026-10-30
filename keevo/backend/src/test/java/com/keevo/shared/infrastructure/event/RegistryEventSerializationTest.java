@@ -95,7 +95,8 @@ class RegistryEventSerializationTest {
         f.put(TenantSuspendedEvent.class, new TenantSuspendedEvent(A, B, TENANT, "fraude", T0));
         f.put(TenantReactivatedEvent.class, new TenantReactivatedEvent(A, B, TENANT, T0));
         f.put(SaleCompletedEvent.class, new SaleCompletedEvent(A, B, TENANT, C, 54000, 500,
-                "[{\"productId\":\"p-1\",\"qty\":2}]", T0));
+                "[{\"productId\":\"p-1\",\"qty\":2}]", T0, A, "MOBILE_MONEY",
+                List.of(new SaleCompletedEvent.Line("Riz 5kg", 27000, 2))));
         // 12.6a: the four notification listeners converted to module listeners
         f.put(StockThresholdBreachedEvent.class, new StockThresholdBreachedEvent(A, "Savon", B, 3, 5, C, TENANT, T0));
         f.put(StockAdjustedEvent.class, new StockAdjustedEvent(A, null, B, MovementKind.ADJUSTMENT, 10, -2, 8, C,
@@ -124,6 +125,36 @@ class RegistryEventSerializationTest {
                 assertThat(back).as("deserialized %s", e.getKey().getSimpleName()).isEqualTo(event);
             }
         }
+    }
+
+    @Test
+    @DisplayName("14.4: a sale.completed stored before 14.4 (no client / payment mode / lines) still deserializes")
+    void legacySaleCompletedPayloadDeserializes() throws Exception {
+        String legacy = "{\"actorId\":\"22222222-2222-2222-2222-222222222222\",\"discountAmount\":500,"
+                + "\"itemsSnapshot\":\"[]\",\"occurredAt\":\"2026-10-29T10:15:30Z\","
+                + "\"saleId\":\"11111111-1111-1111-1111-111111111111\","
+                + "\"storeId\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"kv_abc123\","
+                + "\"totalAmount\":54000}";
+
+        SaleCompletedEvent back = mapper.readValue(legacy, SaleCompletedEvent.class);
+
+        assertThat(back.getSaleId()).isEqualTo(A);
+        assertThat(back.getTotalAmount()).isEqualTo(54000);
+        assertThat(back.getClientId()).isNull();
+        assertThat(back.getPaymentMode()).isNull();
+        assertThat(back.getLines()).isNull();
+    }
+
+    @Test
+    @DisplayName("14.4: the typed sale lines survive the round trip")
+    void saleCompletedLinesRoundTrip() throws Exception {
+        SaleCompletedEvent event = (SaleCompletedEvent) fixtures().get(SaleCompletedEvent.class);
+
+        SaleCompletedEvent back = mapper.readValue(mapper.writeValueAsString(event), SaleCompletedEvent.class);
+
+        assertThat(back.getClientId()).isEqualTo(A);
+        assertThat(back.getPaymentMode()).isEqualTo("MOBILE_MONEY");
+        assertThat(back.getLines()).containsExactly(new SaleCompletedEvent.Line("Riz 5kg", 27000, 2));
     }
 
     @Test

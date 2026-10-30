@@ -81,6 +81,19 @@ public class InvoiceClientResolver {
         return resolved;
     }
 
+    /**
+     * Story 14.4 — the CRM client of a sale for its automatic invoice: empty when the sale has no client, when
+     * {@code crm} is off for the tenant (capability absent) or when the client is unknown to the CRM — the invoice then
+     * goes to the counter client. Exceptions of the provider propagate.
+     */
+    public Optional<ClientSummary> saleClient(UUID clientId, String tenantSchema) {
+        if (clientId == null) {
+            return Optional.empty();
+        }
+        return capabilities.find(ClientLookupPort.class, tenantSchema)
+                .flatMap(crm -> crm.find(tenantSchema, clientId));
+    }
+
     /** The CRM clients matching {@code search} (non-archived, sorted by name); {@code crmAvailable=false} when off. */
     public ClientSuggestions suggest(String search, int limit, String tenantSchema) {
         Optional<ClientLookupPort> crm = capabilities.find(ClientLookupPort.class, tenantSchema);

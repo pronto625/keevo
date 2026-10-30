@@ -620,7 +620,7 @@ class AuditEventListenerTest {
         @DisplayName("SaleCompleted → store column = sale store")
         void saleCompleted_store() {
             listener.on(new SaleCompletedEvent(UUID.randomUUID(), actorId, "kv_abc123", STORE,
-                    1000, 0, "[]", Instant.now()));
+                    1000, 0, "[]", Instant.now(), null, "CASH", java.util.List.of()));
             assertThat(captureEntry().storeId()).isEqualTo(STORE);
         }
 

@@ -1126,10 +1126,10 @@ So that **les deux mini-apps se lient sans que j'aie rien à configurer (MOD-FR8
 **Then** le handler `sale.completed` cesse d'être invoqué, les factures existantes sont conservées, la facturation manuelle continue
 
 **Implementation Notes:**
-- `@ApplicationModuleListener void on(SaleCompletedEvent)` dans `invoicing` (event du catalogue partagé `core/event/catalog`, pas d'import de POS).
-- **Idempotence** : clé `(eventId)` ou `(saleId)` → upsert ; le registre Modulith peut rejouer.
-- Le handler ne s'exécute que si `invoicing` actif (gating via `ModuleRegistry` au dispatch).
-- Si le mapping vente→facture grossit (taxes, remises, multi-devises futures) → extraire un **bridge dédié** `bridge-pos-invoicing` (décision D3) ; sinon garder le listener simple.
+- [x] `@ApplicationModuleListener void on(SaleCompletedEvent)` dans `invoicing` (event du catalogue partagé `core/event/catalog`, pas d'import de POS). — ✅ 14.4: `invoicing.invoice.adapter.in.event.SaleInvoicingListener` (`@ApplicationModuleListener` + `@ModuleScoped("invoicing")`), delegating to `InvoiceSaleUseCase` (draft → issue → pay in one `REQUIRES_NEW` transaction, same numbering and events as the manual path, under the sale's actor). `SaleCompletedEvent` gained `clientId`, `paymentMode` and typed `lines` (product name, applied TTC unit price, quantity), filled by its 3 publishers; events stored before 14.4 deserialize with null fields (no invoice, WARN). Manifests: pos 1.3.0 `publishes: ["sale.completed"]`, invoicing 1.1.0 `consumes: ["sale.completed"]` — `SaleInvoicingFullContextTest`, `RegistryEventSerializationTest.legacySaleCompletedPayloadDeserializes`
+- [x] **Idempotence** : clé `(eventId)` ou `(saleId)` → upsert ; le registre Modulith peut rejouer. — ✅ 14.4: key = sale id, `invoices.source_sale_id` + unique index (`db/modules/invoicing/V3__invoice_source_sale.sql`, lazy, additive); existing invoice → no-op; a concurrent replay fails on the unique index before the counter and rolls back entirely (gapless), caught as « already done »; exposed as `saleId` on the invoice response — `SaleInvoicingFullContextTest.replaySequential` / `replayConcurrent`
+- [x] Le handler ne s'exécute que si `invoicing` actif (gating via `ModuleRegistry` au dispatch). — ✅ 14.4: `@ModuleScoped` skips DISABLED (FREE plan included), the listener skips READ_ONLY (INFO) — no invoice and no table created; provisioning (`ensureProvisioned`) only for an ENABLED module — `SaleInvoicingFullContextTest.invoicingDisabled` / `freeTenant` / `invoicingReadOnly`
+- [x] Si le mapping vente→facture grossit (taxes, remises, multi-devises futures) → extraire un **bridge dédié** `bridge-pos-invoicing` (décision D3) ; sinon garder le listener simple. — ✅ 14.4: kept in `invoicing` — the mapping is a pure `SaleInvoiceMapper` (CRM client or « Client comptoir », discount spread over the lines HALF_UP with the remainder on the largest line, non-divisible line → quantity 1 « produit (× q) », prices always TTC so the invoice total equals the sale total, « Espèces » / « Mobile Money »); no dedicated bridge needed
 
 ### Story 14.5 : Point d'extension checkout POS → action « Facturer »
 
@@ -1177,6 +1177,10 @@ As a **commerçant**, I want **corriger ou annuler une facture déjà payée par
 **Scope:** an `invoicing` credit note referencing an ISSUED/PAID invoice (full or partial lines), its own gapless series (`AV-<yyyy>-<000001>`), negative totals mirroring the VAT treatment of the referenced lines, audit + events; PAID invoices become cancellable only through a credit note.
 
 - [ ] [Deferred-from: spec 14-1, 2026-10-30] A PAID invoice cannot be cancelled (409 `INVOICE_INVALID_TRANSITION`); correction needs a credit note [invoicing / `Invoice` transitions]
+
+- [ ] [Deferred-from: spec 14-4, 2026-10-30] Cancelling a completed sale that was invoiced automatically (`SaleCancelledEvent` after `sale.completed`): its invoice is PAID and stays as is — issue a full credit note for the invoice whose `source_sale_id` is the sale (idempotent on the sale) [invoicing / pos bridge]
+
+- [ ] [Deferred-from: spec 14-4, 2026-10-30] Correcting a completed sale that was invoiced automatically (`SaleCorrectedEvent`): the PAID invoice keeps the original lines — issue a credit note for the difference (or full credit + new invoice), idempotent on the correction [invoicing / pos bridge]
 
 **Interim AC:** Given a PAID invoice, when the owner issues a credit note for it, then a numbered credit note is created, the invoice keeps its number and content, and totals net to the credited amount.
 

@@ -124,7 +124,8 @@ public class SaleValidationCascadeService {
         eventPublisher.publishEvent(new SaleCompletedEvent(
                 sale.getId(), actorId, tenantId, sale.getStoreId(),
                 sale.getTotalAmount(), sale.getDiscountAmount(),
-                SaleAuditSnapshot.serialize(objectMapper, sale.getItems(), sale.getId()), now));
+                SaleAuditSnapshot.serialize(objectMapper, sale.getItems(), sale.getId()), now,
+                sale.getClientId(), SaleCompletedLines.paymentMode(sale), SaleCompletedLines.of(sale)));
 
         eventPublisher.publishEvent(new SaleAutoValidatedEvent(
                 sale.getId(), triggerProductId, actorId, tenantId, now, sale.getStoreId()));

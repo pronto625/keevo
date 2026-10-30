@@ -143,7 +143,8 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         eventPublisher.publishEvent(new SaleCompletedEvent(
                 sale.getId(), command.actorId(), tenantId, sale.getStoreId(),
                 sale.getTotalAmount(), sale.getDiscountAmount(),
-                serializeItems(sale.getItems(), sale.getId()), now));
+                serializeItems(sale.getItems(), sale.getId()), now,
+                sale.getClientId(), SaleCompletedLines.paymentMode(sale), SaleCompletedLines.of(sale)));
     }
 
     @Override

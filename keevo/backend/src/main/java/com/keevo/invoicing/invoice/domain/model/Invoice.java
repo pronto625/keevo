@@ -40,11 +40,23 @@ public record Invoice(
         UUID createdBy,
         Instant createdAt,
         Instant updatedAt,
-        InvoiceDelivery delivery) {
+        InvoiceDelivery delivery,
+        UUID sourceSaleId) {
 
     public Invoice {
         lines = lines == null ? List.of() : List.copyOf(lines);
         delivery = delivery == null ? InvoiceDelivery.NONE : delivery;
+    }
+
+    /** Story 14.2 shape: not created from a sale. */
+    public Invoice(UUID id, String number, InvoiceStatus status, LocalDate issueDate, ClientInfo client,
+                   SellerSnapshot seller, boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                   String vatMention, List<InvoiceLine> lines, InvoiceTotals totals, Instant issuedAt, Instant paidAt,
+                   String paymentMethod, Instant cancelledAt, String cancellationReason, UUID createdBy,
+                   Instant createdAt, Instant updatedAt, InvoiceDelivery delivery) {
+        this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
+                lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
+                updatedAt, delivery, null);
     }
 
     /** Story 14.1 shape: never sent. */
@@ -55,7 +67,7 @@ public record Invoice(
                    Instant createdAt, Instant updatedAt) {
         this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
                 lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
-                updatedAt, InvoiceDelivery.NONE);
+                updatedAt, InvoiceDelivery.NONE, null);
     }
 
     /** Story 14.2 — shown when the invoice prints the company display name instead of a typed legal name. */
@@ -78,7 +90,7 @@ public record Invoice(
                                     Instant now) {
         assertEditable();
         Invoice recomputed = draft(id, newClient, newLines, settings, createdBy, createdAt);
-        return recomputed.touched(now);
+        return (sourceSaleId == null ? recomputed : recomputed.fromSale(sourceSaleId)).touched(now);
     }
 
     /** Refuses any change of a non-draft invoice. */
@@ -134,7 +146,7 @@ public record Invoice(
         return new Invoice(id, invoiceNumber, InvoiceStatus.ISSUED, date, client, SellerSnapshot.of(settings),
                 settings.vatRegistered(), settings.vatRate(), settings.pricesIncludeVat(),
                 VatCalculator.vatMention(settings.vatRegistered()), computed, VatCalculator.totals(computed), now,
-                null, null, null, null, createdBy, createdAt, now);
+                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId);
     }
 
     /** ISSUED → PAID. */
@@ -144,7 +156,7 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, now, InvoicingSettings.trimToNull(method),
-                null, null, createdBy, createdAt, now, delivery);
+                null, null, createdBy, createdAt, now, delivery, sourceSaleId);
     }
 
     /** ISSUED → CANCELLED, number kept. */
@@ -159,7 +171,7 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
-                now, delivery);
+                now, delivery, sourceSaleId);
     }
 
     /**
@@ -206,7 +218,18 @@ public record Invoice(
     private Invoice touched(Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, now, delivery);
+                createdBy, createdAt, now, delivery, sourceSaleId);
+    }
+
+    /**
+     * Story 14.4 — the draft created automatically for the completed sale {@code saleId} (POS → Invoicing bridge):
+     * the sale is the invoice's idempotency key (one invoice per sale).
+     */
+    public Invoice fromSale(UUID saleId) {
+        assertEditable();
+        return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
+                vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
+                createdBy, createdAt, updatedAt, delivery, saleId);
     }
 
     /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
@@ -216,7 +239,7 @@ public record Invoice(
         }
         return new Invoice(id, number, status, issueDate, client, seller.withIdentityFlags(nameFromDisplayName,
                 hasLogo), vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt,
-                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery);
+                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId);
     }
 
     /**
@@ -242,7 +265,7 @@ public record Invoice(
     public Invoice recordSending(String phone, Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now));
+                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId);
     }
 
     private DomainException invalidTransition() {

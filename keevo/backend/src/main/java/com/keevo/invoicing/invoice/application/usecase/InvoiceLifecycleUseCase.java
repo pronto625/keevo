@@ -48,8 +48,19 @@ public class InvoiceLifecycleUseCase {
 
     @Transactional
     public Invoice issue(UUID id, UUID actorId, String tenantId) {
+        return issue(id, actorId, tenantId, false);
+    }
+
+    /**
+     * Story 14.4 — {@code pricesIncludeVat} forces the seller settings to VAT-inclusive prices for this invoice (an
+     * automatic invoice of a sale: its prices are what the client paid, whatever the setting). Same numbering, same
+     * events as a manual issue.
+     */
+    @Transactional
+    public Invoice issue(UUID id, UUID actorId, String tenantId, boolean pricesIncludeVat) {
         Invoice draft = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        InvoicingSettings stored = settings.find().orElseGet(InvoicingSettings::defaults);
+        InvoicingSettings found = settings.find().orElseGet(InvoicingSettings::defaults);
+        InvoicingSettings stored = pricesIncludeVat ? withPricesIncludingVat(found) : found;
         // Story 14.2 — no legal name typed: the company display name (designation › shop name) is printed instead
         // (non-blocking; the invoice carries a compliance warning).
         boolean nameFromDisplay = stored.legalName() == null;
@@ -66,6 +77,12 @@ public class InvoiceLifecycleUseCase {
         events.publishEvent(new InvoiceIssuedEvent(issued.id(), issued.number(), issued.client().name(),
                 issued.totals().totalTtc(), actorId, tenantId, now));
         return issued;
+    }
+
+    /** Story 14.4 — the settings with VAT-inclusive prices (automatic invoice of a sale). */
+    static InvoicingSettings withPricesIncludingVat(InvoicingSettings s) {
+        return new InvoicingSettings(s.legalName(), s.address(), s.phone(), s.niu(), s.rccm(), s.vatRegistered(),
+                s.vatRate(), true, s.paymentDetails(), s.footer());
     }
 
     /** The settings with the company display name as legal name (Story 14.2 fallback). */

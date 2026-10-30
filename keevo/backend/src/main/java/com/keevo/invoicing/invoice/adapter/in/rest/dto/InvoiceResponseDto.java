@@ -18,7 +18,8 @@ import java.util.UUID;
  * available: seller identity snapshot, client identity, lines with HT / rate / VAT / TTC and their exemption mention,
  * totals HT / VAT / TTC, « TVA non applicable » for a non-VAT-registered seller. {@code complianceWarnings}: missing
  * seller mentions (French sentences, non-blocking). Story 14.2: WhatsApp sendings — {@code lastSentAt},
- * {@code lastSentTo} (masked, « +237 6•• ••• 111 »), {@code sendCount}.
+ * {@code lastSentTo} (masked, « +237 6•• ••• 111 »), {@code sendCount}. Story 14.4: {@code saleId} = the sale the
+ * invoice was created from automatically (POS → Invoicing bridge), {@code null} for a manual invoice.
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -46,7 +47,8 @@ public record InvoiceResponseDto(
         List<String> complianceWarnings,
         Instant lastSentAt,
         String lastSentTo,
-        int sendCount) {
+        int sendCount,
+        UUID saleId) {
 
     public record Client(UUID id, String name, String niu, String address, String phone) {
     }
@@ -72,7 +74,7 @@ public record InvoiceResponseDto(
                 i.totals().totalHt(), i.totals().totalVat(), i.totals().totalTtc(), i.issuedAt(), i.paidAt(),
                 i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdAt(), i.updatedAt(),
                 i.complianceWarnings(currentSettings), i.delivery().lastSentAt(),
-                InvoicePhones.mask(i.delivery().lastSentTo()), i.delivery().sendCount());
+                InvoicePhones.mask(i.delivery().lastSentTo()), i.delivery().sendCount(), i.sourceSaleId());
     }
 
     private static Line line(InvoiceLine l) {

@@ -71,7 +71,7 @@ class CatalogueEventPayloadTest {
                 new DayClosureSummary(12, 54000, "p-1", "Riz 5kg", 9, 30000, 24000, 2, 8000), false, TENANT, AT,
                 AT.minusSeconds(36000), AT));
         events.put("SaleCompletedEvent", new SaleCompletedEvent(ENTITY, ACTOR, TENANT, STORE, 54000, 500,
-                "[{\"productId\":\"p-1\",\"qty\":2}]", AT));
+                "[{\"productId\":\"p-1\",\"qty\":2}]", AT, null, null, null));
         events.put("ProductCreatedEvent", new ProductCreatedEvent(ENTITY, "Riz 5kg", "RIZ-5", TENANT, ACTOR,
                 "EMPLOYEE", "Awa", "Akwa", AT));
         events.put("ClientCreatedEvent", new ClientCreatedEvent(ENTITY, "Mme Ngo", ACTOR, TENANT, AT));
@@ -159,8 +159,10 @@ class CatalogueEventPayloadTest {
                 "{\"actorId\":\"11111111-1111-1111-1111-111111111111\",\"closureId\":\"33333333-3333-3333-3333-333333333333\",\"isAutomatic\":false,\"lateFrom\":null,\"occurredAt\":\"2026-10-29T10:15:30Z\",\"receivedUntil\":null,\"storeId\":\"22222222-2222-2222-2222-222222222222\",\"summary\":{\"cashAmount\":30000,\"momoAmount\":24000,\"pendingSalesCount\":2,\"pendingSalesTotal\":8000,\"topProductId\":\"p-1\",\"topProductName\":\"Riz 5kg\",\"topProductQty\":9,\"totalRevenue\":54000,\"totalSales\":12},\"tenantId\":\"kv_abc123\",\"windowEnd\":\"2026-10-29T10:15:30Z\",\"windowStart\":\"2026-10-29T00:15:30Z\"}");
         GOLDEN.put("DayClosedEvent.audit",
                 "AuditEntry[actorId=11111111-1111-1111-1111-111111111111, tenantId=kv_abc123, action=DAY_CLOSED, entityType=DayClosure, entityId=33333333-3333-3333-3333-333333333333, valueBefore=null, valueAfter={\"totalSales\":12,\"totalRevenue\":54000}, storeId=22222222-2222-2222-2222-222222222222, entityLabel=Clôture de journée, deviceId=null, source=SYSTEM, metadataJson={\"storeId\":\"22222222-2222-2222-2222-222222222222\",\"isAutomatic\":false,\"occurredAt\":\"2026-10-29T10:15:30Z\"}]");
+        // Story 14.4: three fields added for the invoicing bridge (clientId, lines, paymentMode); the audit row of
+        // the sale is unchanged.
         GOLDEN.put("SaleCompletedEvent.event",
-                "{\"actorId\":\"11111111-1111-1111-1111-111111111111\",\"discountAmount\":500,\"itemsSnapshot\":\"[{\\\"productId\\\":\\\"p-1\\\",\\\"qty\\\":2}]\",\"occurredAt\":\"2026-10-29T10:15:30Z\",\"saleId\":\"33333333-3333-3333-3333-333333333333\",\"storeId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"kv_abc123\",\"totalAmount\":54000}");
+                "{\"actorId\":\"11111111-1111-1111-1111-111111111111\",\"clientId\":null,\"discountAmount\":500,\"itemsSnapshot\":\"[{\\\"productId\\\":\\\"p-1\\\",\\\"qty\\\":2}]\",\"lines\":null,\"occurredAt\":\"2026-10-29T10:15:30Z\",\"paymentMode\":null,\"saleId\":\"33333333-3333-3333-3333-333333333333\",\"storeId\":\"22222222-2222-2222-2222-222222222222\",\"tenantId\":\"kv_abc123\",\"totalAmount\":54000}");
         GOLDEN.put("SaleCompletedEvent.audit",
                 "AuditEntry[actorId=11111111-1111-1111-1111-111111111111, tenantId=kv_abc123, action=SALE_COMPLETED, entityType=Sale, entityId=33333333-3333-3333-3333-333333333333, valueBefore=null, valueAfter={\"totalAmount\":54000,\"discountAmount\":500,\"itemsSnapshot\":\"[{\\\"productId\\\":\\\"p-1\\\",\\\"qty\\\":2}]\"}, storeId=22222222-2222-2222-2222-222222222222, entityLabel=Vente, deviceId=null, source=SYSTEM, metadataJson={\"storeId\":\"22222222-2222-2222-2222-222222222222\",\"occurredAt\":\"2026-10-29T10:15:30Z\"}]");
         GOLDEN.put("ProductCreatedEvent.event",

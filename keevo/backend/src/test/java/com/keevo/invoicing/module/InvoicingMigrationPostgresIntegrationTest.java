@@ -116,18 +116,18 @@ class InvoicingMigrationPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("trial tenant without row: tables + history V1..V2 (14.2), no tenant_modules row; re-provision is a no-op")
+    @DisplayName("trial tenant without row: tables + history V1..V3 (14.4), no tenant_modules row; re-provision is a no-op")
     void trialTenantNoRow() {
         assertThat(tables(A)).isEmpty();
         assertThat(migrations.currentVersion(A, "invoicing")).isNull();
-        assertThat(migrations.latestVersion("invoicing")).isEqualTo("2");
+        assertThat(migrations.latestVersion("invoicing")).isEqualTo("3");
 
         ProvisioningResult result = provisioner.provision(A, "invoicing");
 
-        assertThat(result.migrationsApplied()).isEqualTo(2);
-        assertThat(result.toVersion()).isEqualTo("2");
+        assertThat(result.migrationsApplied()).isEqualTo(3);
+        assertThat(result.toVersion()).isEqualTo("3");
         assertThat(tables(A)).containsExactlyElementsOf(TABLES);
-        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("2");
+        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("3");
         assertThat(rows(A)).isZero();
         assertThat(tables(B)).as("other tenants untouched").isEmpty();
 
@@ -142,7 +142,7 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM')", IDS.get(A));
         provisioner.provision(A, "invoicing");
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("2");
+                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("3");
     }
 
     @Test

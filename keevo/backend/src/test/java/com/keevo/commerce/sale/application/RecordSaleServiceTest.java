@@ -340,6 +340,30 @@ class RecordSaleServiceTest {
         assertThat(completedEvents).hasSize(1);
         assertThat(completedEvents.get(0).getDiscountAmount()).isEqualTo(500);
         assertThat(completedEvents.get(0).getTotalAmount()).isEqualTo(2500); // 3000 - 500
+        // Story 14.4 — what the automatic invoice needs: client, payment mode, typed lines (applied TTC price)
+        assertThat(completedEvents.get(0).getClientId()).isNull();
+        assertThat(completedEvents.get(0).getPaymentMode()).isEqualTo("CASH");
+        assertThat(completedEvents.get(0).getLines())
+                .containsExactly(new SaleCompletedEvent.Line("Produit A", 1500, 2));
+    }
+
+    @Test
+    void story144_saleCompletedLine_carriesTheAppliedPrice_notTheCatalogueOne() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_ID, null, STORE_ID)).thenReturn(10);
+
+        service.recordSale(new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, null,
+                PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1200, 2))));
+
+        var eventCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, atLeastOnce()).publishEvent(eventCaptor.capture());
+        SaleCompletedEvent completed = eventCaptor.getAllValues().stream()
+                .filter(SaleCompletedEvent.class::isInstance).map(SaleCompletedEvent.class::cast)
+                .findFirst().orElseThrow();
+        assertThat(completed.getLines()).containsExactly(new SaleCompletedEvent.Line("Produit A", 1200, 2));
+        assertThat(completed.getTotalAmount()).isEqualTo(2400);
     }
 
     // ── Story 4.3 — PENDING_VALIDATION tests ────────────────────────────────

@@ -29,7 +29,14 @@ class ClasspathModuleManifestsTest {
                 "profitability", "exports", "invoicing");
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
-            assertThat(m.version()).isEqualTo(m.id().equals("crm") || m.id().equals("pos") ? "1.2.0" : "1.0.0");
+            // 14.4: pos publishes sale.completed (1.3.0), invoicing consumes it (1.1.0)
+            String expected = switch (m.id()) {
+                case "crm" -> "1.2.0";
+                case "pos" -> "1.3.0";
+                case "invoicing" -> "1.1.0";
+                default -> "1.0.0";
+            };
+            assertThat(m.version()).isEqualTo(expected);
             assertThat(m.free()).isEqualTo(!paid.contains(m.id()));
             assertThat(m.entitlement()).isEqualTo("module." + m.id());
         });
@@ -63,6 +70,11 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("invoicing").publishes()).containsExactly("invoice.created", "invoice.issued",
                 "invoice.paid", "invoice.cancelled", "invoice.sent");
         assertThat(byId.get("invoicing").displayName()).isEqualTo("Facturation");
+        // 14.4: the POS → Invoicing bridge — pos publishes sale.completed, invoicing consumes it
+        assertThat(byId.get("pos").publishes()).containsExactly("sale.completed");
+        assertThat(byId.get("invoicing").consumes()).containsExactly("sale.completed");
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
+                .allSatisfy(m -> assertThat(m.consumes()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm"))

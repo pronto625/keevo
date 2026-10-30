@@ -56,7 +56,7 @@ class PrometheusScrapeEndpointIntegrationTest extends FullContextIntegrationTest
 
     private static SaleCompletedEvent sale(String tenant, int total) {
         return new SaleCompletedEvent(UUID.randomUUID(), UUID.randomUUID(), tenant,
-                UUID.randomUUID(), total, 0, "[]", Instant.now());
+                UUID.randomUUID(), total, 0, "[]", Instant.now(), null, "CASH", java.util.List.of());
     }
 
     private double sales(String tenant) {

@@ -143,7 +143,10 @@ public class RecordSaleService implements RecordSaleUseCase {
                     sale.getTotalAmount(),
                     sale.getDiscountAmount(),
                     serializeItems(command),
-                    sale.getOccurredAt()
+                    sale.getOccurredAt(),
+                    sale.getClientId(),
+                    SaleCompletedLines.paymentMode(sale),
+                    SaleCompletedLines.of(sale)
             ));
         } else {
             // PENDING_VALIDATION: publish SalePendingValidationEvent, no stock operations

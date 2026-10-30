@@ -37,7 +37,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             + "seller_payment_details, seller_footer, vat_registered, vat_rate, prices_include_vat, vat_mention, "
             + "total_ht, total_vat, total_ttc, issued_at, paid_at, payment_method, cancelled_at, cancellation_reason, "
             + "created_by, created_at, updated_at, last_sent_at, last_sent_to, send_count, seller_name_from_display, "
-            + "seller_has_logo";
+            + "seller_has_logo, source_sale_id";
 
     private final JdbcTemplate jdbc;
 
@@ -65,9 +65,17 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
+    public boolean existsBySourceSale(UUID saleId) {
+        Boolean exists = jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM "
+                + InvoicingTables.qualified(InvoicingTables.INVOICES) + " WHERE source_sale_id = ?)", Boolean.class,
+                saleId);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
     public void insert(Invoice invoice) {
         jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS + ") VALUES "
-                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 values(invoice));
         insertLines(invoice);
     }
@@ -226,7 +234,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 ts(i.issuedAt()), ts(i.paidAt()), i.paymentMethod(), ts(i.cancelledAt()), i.cancellationReason(),
                 i.createdBy(), ts(i.createdAt()), ts(i.updatedAt()),
                 ts(i.delivery().lastSentAt()), i.delivery().lastSentTo(), i.delivery().sendCount(),
-                s != null && s.nameFromDisplayName(), s != null && s.hasLogo()};
+                s != null && s.nameFromDisplayName(), s != null && s.hasLogo(), i.sourceSaleId()};
     }
 
     private static Timestamp ts(Instant instant) {
@@ -245,7 +253,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             return new Invoice(i.id(), i.number(), i.status(), i.issueDate(), i.client(), i.seller(), i.vatRegistered(),
                     i.vatRate(), i.pricesIncludeVat(), i.vatMention(), lines, i.totals(), i.issuedAt(), i.paidAt(),
                     i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdBy(), i.createdAt(),
-                    i.updatedAt(), i.delivery());
+                    i.updatedAt(), i.delivery(), i.sourceSaleId());
         }
     }
 
@@ -268,7 +276,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 instant(rs, "issued_at"), instant(rs, "paid_at"), rs.getString("payment_method"),
                 instant(rs, "cancelled_at"), rs.getString("cancellation_reason"),
                 rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
-                new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")));
+                new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
+                rs.getObject("source_sale_id", UUID.class));
         return new Row(id, invoice);
     }
 }

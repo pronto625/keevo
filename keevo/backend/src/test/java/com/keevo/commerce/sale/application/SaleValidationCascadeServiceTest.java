@@ -45,6 +45,7 @@ class SaleValidationCascadeServiceTest {
     private static final UUID ACTOR_ID = UUID.randomUUID();
     private static final UUID PRODUCT_A = UUID.randomUUID();
     private static final UUID PRODUCT_B = UUID.randomUUID();
+    private static final UUID CLIENT_ID = UUID.randomUUID();
     private static final Instant NOW = Instant.now();
 
     @BeforeEach
@@ -69,7 +70,7 @@ class SaleValidationCascadeServiceTest {
                         "Prod-" + pid.toString().substring(0, 4), 3000, 3000, 1))
                 .toList();
         int total = items.stream().mapToInt(SaleItem::getSubtotal).sum();
-        return new Sale(SALE_ID, STORE_ID, ACTOR_ID, null,
+        return new Sale(SALE_ID, STORE_ID, ACTOR_ID, CLIENT_ID,
                 PaymentMode.CASH, total, 0, SaleStatus.PENDING_VALIDATION, NOW, NOW, items);
     }
 
@@ -101,6 +102,11 @@ class SaleValidationCascadeServiceTest {
         assertThat(completed.getItemsSnapshot())
                 .contains(PRODUCT_A.toString())
                 .contains(PRODUCT_B.toString());
+        // Story 14.4 — the invoice data of the auto-validated sale
+        assertThat(completed.getPaymentMode()).isEqualTo("CASH");
+        assertThat(completed.getClientId()).isEqualTo(CLIENT_ID);
+        assertThat(completed.getLines()).hasSize(2)
+                .allSatisfy(l -> assertThat(l.unitPrice()).isEqualTo(3000));
     }
 
     // 12.2c: the cascade checks the level it decrements — the item's variant — as RecordSaleService.

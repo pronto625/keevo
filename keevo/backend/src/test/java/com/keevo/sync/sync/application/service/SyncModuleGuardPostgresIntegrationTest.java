@@ -102,6 +102,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
             jdbc.update("INSERT INTO \"" + schema + "\".stock_levels (product_id, store_id, quantity) VALUES (?, ?, 50)",
                     productId, storeId);
         }
+        awaitTenantListenersIdle();
         clearInvocations(tenantModuleStatePort);
         // Story 13.10a: count only the reads of the push request (MockMvc runs on the test thread) — the async
         // @ModuleScoped("alerts") listeners triggered by a sale read the state on their own threads
@@ -115,10 +116,26 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
         }).when(tenantModuleStatePort).findTenantRows(anyString());
     }
 
+    /**
+     * Waits until the async module listeners of this tenant's events (product created in the set-up, sales of the
+     * test: alerts, invoicing bridge…) are done: one of them reading the spy while it is being stubbed on the test
+     * thread fails with an {@code UnfinishedStubbingException}.
+     */
+    private void awaitTenantListenersIdle() {
+        try {
+            org.awaitility.Awaitility.await().atMost(java.time.Duration.ofSeconds(20)).until(() -> jdbc.queryForObject(
+                    "SELECT count(*) FROM public.event_publication WHERE completion_date IS NULL "
+                            + "AND serialized_event LIKE ?", Integer.class, "%" + schema + "%") == 0);
+        } catch (org.awaitility.core.ConditionTimeoutException ignored) {
+            // a publication that stays incomplete is not this test's concern
+        }
+    }
+
     private final java.util.concurrent.atomic.AtomicInteger requestReads = new java.util.concurrent.atomic.AtomicInteger();
 
     @AfterEach
     void tearDown() {
+        awaitTenantListenersIdle();
         reset(tenantModuleStatePort);
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId);
         TenantContext.clear();

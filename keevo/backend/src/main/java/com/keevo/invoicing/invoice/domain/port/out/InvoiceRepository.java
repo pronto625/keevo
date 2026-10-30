@@ -15,7 +15,14 @@ public interface InvoiceRepository {
     /** Same, row-locked until the end of the caller's transaction (serialises concurrent transitions). */
     Optional<Invoice> findByIdForUpdate(UUID id);
 
+    /**
+     * Inserts the invoice with its lines. Story 14.4: an invoice whose {@code sourceSaleId} is already used fails with
+     * a duplicate-key failure (unique index — one invoice per sale).
+     */
     void insert(Invoice invoice);
+
+    /** Story 14.4 — whether an invoice was already created from the sale {@code saleId} (POS → Invoicing bridge). */
+    boolean existsBySourceSale(UUID saleId);
 
     /** A DRAFT edit: client, VAT parameters, totals, {@code updated_at}, and its lines replaced. */
     void updateDraft(Invoice draft);
