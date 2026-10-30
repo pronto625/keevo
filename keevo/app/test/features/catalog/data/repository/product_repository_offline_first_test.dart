@@ -17,6 +17,7 @@ import 'package:keevo/features/catalog/data/repository/product_repository_impl.d
 import 'package:keevo/features/catalog/domain/exception/product_exception.dart';
 import 'package:keevo/features/catalog/domain/model/csv_import_result.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
+import 'package:keevo/features/catalog/domain/model/product_response_dto.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalProductDataSource extends Mock implements LocalProductDataSource {}
@@ -307,8 +308,9 @@ void main() {
           storeId: any(named: 'storeId'),
         )).thenAnswer((_) async => const CsvImportResult(imported: 2, skipped: 0));
     when(() => mockSyncService.pull()).thenAnswer((_) async {});
-    when(() => mockSyncService.hasPendingOperations())
-        .thenAnswer((_) async => true);
+    when(() => mockRemote.getAll()).thenAnswer((_) async => []);
+    when(() => mockLocal.getAll()).thenAnswer((_) async => []);
+    when(() => mockSyncService.unsyncedEntityIds()).thenAnswer((_) async => {});
 
     final result = await repo.importCsv(
       csvBytes: Uint8List.fromList([1]),
@@ -328,8 +330,9 @@ void main() {
           storeId: any(named: 'storeId'),
         )).thenAnswer((_) async => const CsvImportResult(imported: 1, skipped: 0));
     when(() => mockSyncService.pull()).thenThrow(Exception('offline'));
-    when(() => mockSyncService.hasPendingOperations())
-        .thenAnswer((_) async => true);
+    when(() => mockRemote.getAll()).thenAnswer((_) async => []);
+    when(() => mockLocal.getAll()).thenAnswer((_) async => []);
+    when(() => mockSyncService.unsyncedEntityIds()).thenAnswer((_) async => {});
 
     final result = await repo.importCsv(
       csvBytes: Uint8List.fromList([1]),
@@ -337,5 +340,62 @@ void main() {
       columnMapping: const {'nameColumn': 'nom'},
     );
     expect(result.imported, 1);
+  });
+
+  // Story 13.8b: only the products with (or referenced by) a pending or held
+  // operation keep their local version; a held operation on another entity
+  // no longer freezes the whole catalogue refresh.
+  group('syncFromRemote() with held operations', () {
+    ProductResponseDto dto(String id, String name) => ProductResponseDto(
+          id: id,
+          name: name,
+          sku: '',
+          createdAt: '2026-10-30T09:00:00.000Z',
+          updatedAt: '2026-10-30T09:00:00.000Z',
+        );
+
+    setUp(() {
+      when(() => mockLocal.upsert(any()))
+          .thenAnswer((inv) async => inv.positionalArguments[0] as ProductModel);
+      when(() => mockLocal.archiveById(any())).thenAnswer((_) async {});
+    });
+
+    test('held queue on an unrelated entity: products still refresh',
+        () async {
+      when(() => mockRemote.getAll())
+          .thenAnswer((_) async => [dto('p-1', 'Savon')]);
+      when(() => mockLocal.getAll())
+          .thenAnswer((_) async => [_testProduct(id: 'p-gone')]);
+      when(() => mockSyncService.unsyncedEntityIds())
+          .thenAnswer((_) async => {'client-1'});
+
+      await repo.syncFromRemote();
+
+      final upserted = verify(() => mockLocal.upsert(captureAny()))
+          .captured
+          .cast<ProductModel>()
+          .map((p) => p.id);
+      expect(upserted, ['p-1']);
+      verify(() => mockLocal.archiveById('p-gone')).called(1);
+    });
+
+    test('a product with a held operation is neither replaced nor archived',
+        () async {
+      when(() => mockRemote.getAll()).thenAnswer(
+          (_) async => [dto('p-held', 'Ancien nom'), dto('p-1', 'Savon')]);
+      when(() => mockLocal.getAll()).thenAnswer((_) async =>
+          [_testProduct(id: 'p-held'), _testProduct(id: 'p-new-held')]);
+      when(() => mockSyncService.unsyncedEntityIds())
+          .thenAnswer((_) async => {'p-held', 'p-new-held'});
+
+      await repo.syncFromRemote();
+
+      final upserted = verify(() => mockLocal.upsert(captureAny()))
+          .captured
+          .cast<ProductModel>()
+          .map((p) => p.id);
+      expect(upserted, ['p-1']);
+      verifyNever(() => mockLocal.archiveById(any()));
+    });
   });
 }

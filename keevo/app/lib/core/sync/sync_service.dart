@@ -28,11 +28,28 @@ abstract interface class SyncService {
 
   /// Returns true if the sync_queue has pending (un-synced) operations.
   ///
-  /// Used by repositories to avoid overwriting local data with stale
-  /// backend values while offline changes haven't been pushed yet.
+  /// Drives the sync cycle (and the sign-out warning). Repositories protect
+  /// local data with [unsyncedEntityIds] / [unsyncedStockKeys] instead.
   ///
-  /// Quarantined operations (refused for good, v1s-16-15) are not pending.
+  /// Quarantined operations (refused for good, v1s-16-15) are not pending,
+  /// nor held ones (Stories 12.7, 13.5).
   Future<bool> hasPendingOperations();
+
+  /// Ids of the entities with a pending or held operation still queued (not
+  /// quarantined, product photo uploads excluded — the same selection as the
+  /// pull protection and [unsyncedStockKeys]), plus every id
+  /// those operations reference in their payload (a held sale protects its
+  /// client, products and store). A refresh from the server must not replace
+  /// them (Story 13.8b).
+  Future<Set<String>> unsyncedEntityIds();
+
+  /// `"productId|storeId"` keys whose stock a pending or held operation
+  /// changed locally: a server stock read must not overwrite them — the
+  /// displayed stock is the server stock plus these local deltas (13.8b).
+  Future<Set<String>> unsyncedStockKeys();
+
+  /// Number of held operations (waiting for their module, Story 13.8b).
+  Future<int> heldOperationCount();
 
   /// Number of quarantined operations: money operations refused for good,
   /// kept on the device until the user acts on them (v1s-16-15).
@@ -52,3 +69,7 @@ abstract interface class SyncService {
     String? entityId,
   });
 }
+
+/// Key of a `(product, store)` stock row in [SyncService.unsyncedStockKeys].
+String unsyncedStockKey(String productId, String storeId) =>
+    '$productId|$storeId';

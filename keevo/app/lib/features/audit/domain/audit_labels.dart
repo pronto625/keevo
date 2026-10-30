@@ -30,6 +30,8 @@ const auditActionLabels = <String, String>{
   'INVENTORY_SESSION_CANCELLED': 'Inventaire annulé',
   'INVENTORY_SESSION_CREATED': 'Inventaire lancé',
   'INVENTORY_VALIDATED': 'Inventaire validé',
+  'MODULE_ACTIVATED': 'Module activé',
+  'MODULE_DEACTIVATED': 'Module désactivé',
   'ONBOARDING_COMPLETED': 'Configuration terminée',
   'PASSWORD_RESET': 'Mot de passe réinitialisé',
   'PASSWORD_RESET_REQUESTED': 'Réinitialisation demandée',
@@ -73,6 +75,7 @@ const auditEntityTypeLabels = <String, String>{
   'Export': 'Export de données',
   'InventoryCount': 'Comptage d\'inventaire',
   'InventorySession': 'Inventaire',
+  'Module': 'Module',
   'PriceOverride': 'Prix de vente',
   'Product': 'Produit',
   'Sale': 'Vente',
@@ -87,6 +90,12 @@ const auditEntityTypeLabels = <String, String>{
 
 /// French label of each before/after field key.
 const auditFieldLabels = <String, String>{
+  // Story 13.8a/b — module activation / deactivation payload.
+  'module': 'Module',
+  'statut': 'Statut',
+  'finAbonnement': 'Fin de l\'abonnement',
+  'entreprise': 'Entreprise',
+  'donnees': 'Données',
   'activated': 'Activée',
   'active': 'Active',
   'adjustmentCount': 'Ajustements',

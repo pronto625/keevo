@@ -875,6 +875,63 @@ class RestSyncService implements SyncService {
     return (count ?? 0) > 0;
   }
 
+  /// Story 13.8b — the one selection of "unsynced" operations: not synced,
+  /// not quarantined (so pending **and held** ones), product photo uploads
+  /// excluded (a queued photo protects only the photo, see _upsertProducts).
+  /// Used by the pull protections ([_getPendingEntityIds],
+  /// [_getPendingStockKeys]) and by the repository guards
+  /// ([unsyncedEntityIds], [unsyncedStockKeys]).
+  Future<List<SyncQueueData>> _unsyncedOperations() =>
+      (_database.select(_database.syncQueue)
+            ..where((t) =>
+                t.synced.equals(false) &
+                t.quarantinedAt.isNull() &
+                t.operation.isNotIn(ProductPhotoOutbox.operations)))
+          .get();
+
+  /// The entities of the unsynced operations plus every id their payloads
+  /// reference (a held `CREATE_SALE` protects its client, products and
+  /// store; a stock operation its product and stores) — the same "any id in
+  /// the payload" rule as the held follow-ups (Story 12.7).
+  @override
+  Future<Set<String>> unsyncedEntityIds() async {
+    final ids = <String>{};
+    void scan(Object? node) {
+      switch (node) {
+        case String value:
+          ids.add(value);
+        case Map<dynamic, dynamic> map:
+          for (final e in map.entries) {
+            if (e.key is String) ids.add(e.key as String);
+            scan(e.value);
+          }
+        case List<dynamic> list:
+          list.forEach(scan);
+      }
+    }
+
+    for (final op in await _unsyncedOperations()) {
+      if (op.entityId != null) ids.add(op.entityId!);
+      scan(_payloadOf(op));
+    }
+    return ids;
+  }
+
+  @override
+  Future<Set<String>> unsyncedStockKeys() => _getPendingStockKeys();
+
+  @override
+  Future<int> heldOperationCount() async {
+    final count = await (_database.selectOnly(_database.syncQueue)
+          ..addColumns([_database.syncQueue.id.count()])
+          ..where(_database.syncQueue.synced.equals(false) &
+              _database.syncQueue.quarantinedAt.isNull() &
+              _database.syncQueue.lastError.isIn(heldSyncRejectionReasons)))
+        .map((row) => row.read(_database.syncQueue.id.count()))
+        .getSingle();
+    return count ?? 0;
+  }
+
   @override
   Future<int> quarantinedOperationCount() async {
     final count = await (_database.selectOnly(_database.syncQueue)
@@ -1064,12 +1121,7 @@ class RestSyncService implements SyncService {
     // Quarantined operations are never pushed: they protect nothing.
     // A queued photo protects only the photo (see _upsertProducts), not the
     // rest of the product.
-    final pendingOps = await (_database.select(_database.syncQueue)
-          ..where((t) =>
-              t.synced.equals(false) &
-              t.quarantinedAt.isNull() &
-              t.operation.isNotIn(ProductPhotoOutbox.operations)))
-        .get();
+    final pendingOps = await _unsyncedOperations();
     return pendingOps
         .map((o) => o.entityId)
         .whereType<String>()
@@ -1120,12 +1172,8 @@ class RestSyncService implements SyncService {
       'VALIDATE_SALE',
       'VALIDATE_INVENTORY',
     };
-    final pendingOps = await (_database.select(_database.syncQueue)
-          ..where((t) =>
-              t.synced.equals(false) &
-              t.quarantinedAt.isNull() &
-              t.operation.isIn(stockMutatingOps)))
-        .get();
+    final pendingOps = (await _unsyncedOperations())
+        .where((o) => stockMutatingOps.contains(o.operation));
 
     final keys = <String>{};
     for (final op in pendingOps) {

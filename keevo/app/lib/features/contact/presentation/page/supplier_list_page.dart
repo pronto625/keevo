@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/held_operation_badge.dart';
 import '../../../../core/widget/soft_icon_button.dart';
 import '../../domain/model/supplier_model.dart';
 import '../provider/contact_provider.dart';
@@ -429,6 +430,10 @@ class _SupplierCard extends ConsumerWidget {
                             ),
                         ],
                       ),
+                      // Story 13.8b: created/changed while its module is off.
+                      HeldOperationBadge(
+                          entityId: supplier.id,
+                          padding: const EdgeInsets.only(top: 4)),
                       const SizedBox(height: 4),
                       Row(
                         children: [

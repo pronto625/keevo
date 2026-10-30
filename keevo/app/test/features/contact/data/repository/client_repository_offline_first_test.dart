@@ -324,4 +324,31 @@ void main() {
       expect(all.map((c) => c.name), ['Ancien Client']);
     });
   });
+
+  group('Story 13.8b — syncFromRemote()', () {
+    test('a client with a pending or held operation keeps its local version',
+        () async {
+      ClientModel client(String id, String name) => ClientModel(
+            id: id,
+            name: name,
+            phone: '690000000',
+            createdAt: DateTime(2026, 10, 30),
+            updatedAt: DateTime(2026, 10, 30),
+          );
+      when(() => mockRemote.getAll(includeArchived: true)).thenAnswer(
+          (_) async => [client('held-1', 'Serveur'), client('c-2', 'Paul')]);
+      when(() => mockSyncService.unsyncedEntityIds())
+          .thenAnswer((_) async => {'held-1'});
+      when(() => mockLocal.upsert(any()))
+          .thenAnswer((inv) async => inv.positionalArguments[0] as ClientModel);
+
+      await repo.syncFromRemote();
+
+      final upserted = verify(() => mockLocal.upsert(captureAny()))
+          .captured
+          .cast<ClientModel>()
+          .map((c) => c.id);
+      expect(upserted, ['c-2']);
+    });
+  });
 }

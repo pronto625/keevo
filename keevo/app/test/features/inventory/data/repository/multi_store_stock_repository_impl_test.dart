@@ -36,7 +36,7 @@ void main() {
     local = _MockLocalDs();
     remote = _MockRemoteDs();
     syncService = _MockSyncService();
-    when(() => syncService.hasPendingOperations()).thenAnswer((_) async => false);
+    when(() => syncService.unsyncedStockKeys()).thenAnswer((_) async => {});
     repo = MultiStoreStockRepositoryImpl(
       local: local, remote: remote, syncService: syncService,
     );
@@ -99,8 +99,12 @@ void main() {
       verifyNever(() => remote.getOverview());
     });
 
-    test('getOverview() returns local data when pending operations exist', () async {
-      when(() => syncService.hasPendingOperations()).thenAnswer((_) async => true);
+    // Story 13.8b: only stock changed by a pending or held operation keeps
+    // its local value; other queued operations do not freeze the refresh.
+    test('getOverview() returns local data while some stock is protected',
+        () async {
+      when(() => syncService.unsyncedStockKeys())
+          .thenAnswer((_) async => {'p1|s1'});
       when(() => local.getStoreOverviews()).thenAnswer((_) async => summaries);
 
       final result = await repo.getOverview();
@@ -110,17 +114,36 @@ void main() {
       verify(() => local.getStoreOverviews()).called(1);
     });
 
-    test('getStoreStockDetail() returns local data when pending operations exist', () async {
-      when(() => syncService.hasPendingOperations()).thenAnswer((_) async => true);
+    test('getStoreStockDetail(): protected row kept, others refreshed, local '
+        'view returned', () async {
+      const other = StoreProductStockModel(
+        productId: 'p2', productName: 'Produit B', storeId: 's1',
+        quantity: 9, status: 'NORMAL', isLow: false, isCritical: false,
+      );
+      when(() => syncService.unsyncedStockKeys())
+          .thenAnswer((_) async => {'p1|s1'});
+      when(() => remote.getStoreStockDetail('s1', page: 0, size: 25, sortLowFirst: true))
+          .thenAnswer((_) async => (content: [...products, other], hasMore: false));
+      when(() => local.upsertStockLevels(any(), any())).thenAnswer((_) async {});
       when(() => local.getStoreStockDetail('s1', page: 0, size: 25, sortLowFirst: true))
           .thenAnswer((_) async => products);
 
       final result = await repo.getStoreStockDetail('s1');
 
       expect(result, products);
-      verifyNever(() => remote.getStoreStockDetail(any(), page: any(named: 'page'),
-          size: any(named: 'size'), sortLowFirst: any(named: 'sortLowFirst')));
-      verifyNever(() => local.upsertStockLevels(any(), any()));
+      verify(() => local.upsertStockLevels('s1', [other])).called(1);
+    });
+
+    test('getStoreStockDetail(): a protected row of another store does not '
+        'change this store', () async {
+      when(() => syncService.unsyncedStockKeys())
+          .thenAnswer((_) async => {'p1|s2'});
+      when(() => remote.getStoreStockDetail('s1', page: 0, size: 25, sortLowFirst: true))
+          .thenAnswer((_) async => (content: products, hasMore: false));
+      when(() => local.upsertStockLevels('s1', products)).thenAnswer((_) async {});
+
+      expect(await repo.getStoreStockDetail('s1'), products);
+      verify(() => local.upsertStockLevels('s1', products)).called(1);
     });
   });
 }

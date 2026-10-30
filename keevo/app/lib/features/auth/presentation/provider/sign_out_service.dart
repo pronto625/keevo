@@ -22,8 +22,8 @@ class SignOutService {
   SignOutService(this._ref);
 
   /// Pushes the sync queue. Returns false when operations could not be sent
-  /// (offline, server error) or are blocked (quarantined, v1s-16-15) — the
-  /// caller warns before signing out.
+  /// (offline, server error), are held (module off, Story 13.8b) or are
+  /// blocked (quarantined, v1s-16-15) — the caller warns before signing out.
   Future<bool> flushPendingOperations() async {
     final sync = _ref.read(syncServiceProvider);
     try {
@@ -32,6 +32,7 @@ class SignOutService {
       debugPrint('[Auth] Push before sign-out failed: $e');
     }
     if (await sync.hasPendingOperations()) return false;
+    if (await sync.heldOperationCount() > 0) return false;
     return await sync.quarantinedOperationCount() == 0;
   }
 

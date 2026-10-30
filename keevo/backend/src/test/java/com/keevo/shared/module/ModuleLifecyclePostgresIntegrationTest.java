@@ -233,8 +233,8 @@ class ModuleLifecyclePostgresIntegrationTest {
         assertThat(instant(row.get("grace_until"))).isEqualTo(expiry.plus(Duration.ofDays(7)));
         assertThat(result.expiresAt()).isEqualTo(expiry);
         assertThat(tables()).contains("lcpaid_items");
-        assertThat(audits.get(0).valueAfter()).contains("Module payant", "finAbonnement", CODE)
-                .doesNotContain(TENANT.toString(), SCHEMA, "lcpaid");
+        assertThat(audits.get(0).valueAfter()).contains("Module payant", "finAbonnement")
+                .doesNotContain(TENANT.toString(), SCHEMA, "lcpaid", CODE, "entreprise");
     }
 
     @Test

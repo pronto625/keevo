@@ -315,4 +315,32 @@ void main() {
       expect(all.map((s) => s.name), ['Ancien Grossiste']);
     });
   });
+
+  // Story 13.8b: a supplier with (or referenced by) a pending or held
+  // operation keeps its local version on a manual refresh.
+  group('Story 13.8b — syncFromRemote()', () {
+    test('a supplier with an unsynced operation is not replaced', () async {
+      SupplierModel supplier(String id) => SupplierModel(
+            id: id,
+            name: 'Grossiste $id',
+            phone: '690000000',
+            createdAt: DateTime(2026, 10, 30),
+            updatedAt: DateTime(2026, 10, 30),
+          );
+      when(() => mockRemote.getAll(includeArchived: true))
+          .thenAnswer((_) async => [supplier('held-1'), supplier('s-2')]);
+      when(() => mockSyncService.unsyncedEntityIds())
+          .thenAnswer((_) async => {'held-1'});
+      when(() => mockLocal.upsert(any())).thenAnswer(
+          (inv) async => inv.positionalArguments[0] as SupplierModel);
+
+      await repo.syncFromRemote();
+
+      final upserted = verify(() => mockLocal.upsert(captureAny()))
+          .captured
+          .cast<SupplierModel>()
+          .map((s) => s.id);
+      expect(upserted, ['s-2']);
+    });
+  });
 }

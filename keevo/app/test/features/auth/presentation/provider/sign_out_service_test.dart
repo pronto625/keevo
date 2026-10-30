@@ -76,6 +76,7 @@ void main() {
     test('pushes the queue first; nothing left → true', () async {
       when(() => sync.push()).thenAnswer((_) async => []);
       when(() => sync.hasPendingOperations()).thenAnswer((_) async => false);
+      when(() => sync.heldOperationCount()).thenAnswer((_) async => 0);
       when(() => sync.quarantinedOperationCount()).thenAnswer((_) async => 0);
 
       expect(await service().flushPendingOperations(), isTrue);
@@ -87,6 +88,7 @@ void main() {
     test('quarantined operations remain → false', () async {
       when(() => sync.push()).thenAnswer((_) async => []);
       when(() => sync.hasPendingOperations()).thenAnswer((_) async => false);
+      when(() => sync.heldOperationCount()).thenAnswer((_) async => 0);
       when(() => sync.quarantinedOperationCount()).thenAnswer((_) async => 1);
 
       expect(await service().flushPendingOperations(), isFalse);
@@ -95,6 +97,17 @@ void main() {
     test('offline: push fails, operations remain → false', () async {
       when(() => sync.push()).thenThrow(Exception('offline'));
       when(() => sync.hasPendingOperations()).thenAnswer((_) async => true);
+
+      expect(await service().flushPendingOperations(), isFalse);
+    });
+
+    // Story 13.8b: held operations (module off) are not pending but would be
+    // left behind — the user is warned.
+    test('held operations remain → false', () async {
+      when(() => sync.push()).thenAnswer((_) async => []);
+      when(() => sync.hasPendingOperations()).thenAnswer((_) async => false);
+      when(() => sync.heldOperationCount()).thenAnswer((_) async => 1);
+      when(() => sync.quarantinedOperationCount()).thenAnswer((_) async => 0);
 
       expect(await service().flushPendingOperations(), isFalse);
     });

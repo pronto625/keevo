@@ -7,6 +7,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/sync/held_operations.dart';
 import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
@@ -133,6 +134,7 @@ Future<void> _pump(
   String? role,
   ValueNotifier<bool>? visible,
   StockRepository? stockRepository,
+  Map<String, String> held = const {},
 }) async {
   SharedPreferences.setMockInitialValues({
     if (activeStoreId != null) 'active_store_id': activeStoreId,
@@ -153,6 +155,7 @@ Future<void> _pump(
       localSaleDataSourceProvider.overrideWithValue(saleDs),
       currentUserIdProvider.overrideWith((_) async => 'u1'),
       productListProvider.overrideWith((_) async => const []),
+      heldEntityReasonsProvider.overrideWith((_) async => held),
       productActionsProvider
           .overrideWith((ref) => _FakeActions(ref, () => shown.value = false)),
     ],
@@ -171,6 +174,20 @@ Future<void> _pump(
 }
 
 void main() {
+  // Story 13.8b: a product created/changed while its module is off.
+  testWidgets('a held product shows « En attente — module non activé »',
+      (tester) async {
+    await _pump(tester,
+        product: _product(), held: const {'p1': 'MODULE_INACTIVE'});
+    expect(find.text('En attente — module non activé'), findsOneWidget);
+  });
+
+  testWidgets('a product without held operation has no held badge',
+      (tester) async {
+    await _pump(tester, product: _product());
+    expect(find.textContaining('En attente —'), findsNothing);
+  });
+
   testWidgets('no fake variants badge based on the product name',
       (tester) async {
     await _pump(tester, product: _product(name: 'Robe rouge'));

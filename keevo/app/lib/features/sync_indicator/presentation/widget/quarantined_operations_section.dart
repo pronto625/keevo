@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/search_fold.dart';
+import '../../../../core/sync/held_operations.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
 import '../../../../core/sync/sync_quarantine_service.dart';
 import '../../../../core/sync/sync_rejection_messages.dart';
@@ -291,6 +292,9 @@ class _QuarantinedChainCard extends ConsumerWidget {
     ref.invalidate(pendingSyncQueueProvider);
     ref.invalidate(pendingSyncCountProvider);
     ref.invalidate(syncHistoryProvider);
+    // Story 13.8b: a released / abandoned / re-attached operation changes the
+    // « En attente — module » badges of the lists.
+    ref.invalidate(heldEntityReasonsProvider);
   }
 
   void _push(WidgetRef ref) {

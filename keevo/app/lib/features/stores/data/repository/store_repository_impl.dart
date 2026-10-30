@@ -205,7 +205,11 @@ class StoreRepositoryImpl implements StoreRepository {
     if (!_isOwnerSession()) return;
     try {
       final remotes = await _remote.getAll(includeInactive: true);
+      // Story 13.8b: a row with a pending or held operation keeps its local
+      // version (same rule as the pull).
+      final unsynced = await _syncService.unsyncedEntityIds();
       for (final s in remotes) {
+        if (unsynced.contains(s.id)) continue;
         await _local.upsert(s);
       }
     } catch (e) {

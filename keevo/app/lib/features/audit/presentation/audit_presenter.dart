@@ -349,6 +349,12 @@ class AuditPresenter {
     'DATA_EXPORTED': AuditActionInfo('Données exportées', 'exporté des données',
         Icons.file_download_outlined, AuditCategory.other,
         takesObject: false),
+    // Modules (Story 13.8a: activated / deactivated by the platform)
+    'MODULE_ACTIVATED': AuditActionInfo('Module activé', 'activé le module',
+        Icons.extension_outlined, AuditCategory.account),
+    'MODULE_DEACTIVATED': AuditActionInfo('Module désactivé',
+        'désactivé le module', Icons.extension_off_outlined,
+        AuditCategory.account),
   };
 
   /// Code → title of every catalogue action; equals the contract
@@ -375,6 +381,7 @@ class AuditPresenter {
     'Tenant': 'Compte',
     'User': 'Utilisateurs',
     'Export': 'Exports',
+    'Module': 'Modules',
   };
 
   /// Singular noun of each object type (contract `audit_log.entityType`).

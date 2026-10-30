@@ -41,16 +41,24 @@ class _EmptyQueueSyncService extends Mock implements SyncService {
   Future<bool> hasPendingOperations() async => false;
 
   @override
+  Future<int> heldOperationCount() async => 0;
+
+  @override
   Future<int> quarantinedOperationCount() async => 0;
 }
 
-/// Pending queue with [blocked] quarantined operations (v1s-16-15).
+/// Pending queue with [blocked] quarantined operations (v1s-16-15) and
+/// [held] held ones (Story 13.8b).
 class _BlockedQueueSyncService extends _EmptyQueueSyncService {
-  _BlockedQueueSyncService(this.blocked);
+  _BlockedQueueSyncService(this.blocked, {this.held = 0});
   final int blocked;
+  final int held;
 
   @override
   Future<int> quarantinedOperationCount() async => blocked;
+
+  @override
+  Future<int> heldOperationCount() async => held;
 }
 
 AuthRepository _authRepository() {
@@ -526,7 +534,8 @@ void main() {
   });
 
   group('SettingsPage — unsynced operations at sign-out', () {
-    Widget page(_FakeSignOutService service, {int blocked = 0}) => ProviderScope(
+    Widget page(_FakeSignOutService service, {int blocked = 0, int held = 0}) =>
+        ProviderScope(
           overrides: [
             fcmServiceProvider.overrideWithValue(mockFcm),
             remoteDeviceTokenDataSourceProvider.overrideWithValue(mockTokenDs),
@@ -536,7 +545,7 @@ void main() {
             flutterSecureStorageProvider
                 .overrideWithValue(const FlutterSecureStorage()),
             syncServiceProvider
-                .overrideWithValue(_BlockedQueueSyncService(blocked)),
+                .overrideWithValue(_BlockedQueueSyncService(blocked, held: held)),
             authRepositoryProvider.overrideWithValue(_authRepository()),
             signOutServiceProvider.overrideWithValue(service),
           ],
@@ -578,6 +587,21 @@ void main() {
 
       expect(find.textContaining('sont bloquées'), findsOneWidget);
       expect(find.textContaining('prochaine connexion'), findsNothing);
+    });
+
+    // Story 13.8b: held operations go once their module is active again.
+    testWidgets('held operations: sent once the module is active again',
+        (tester) async {
+      final service = _FakeSignOutService(() async => false);
+      await tester.pumpWidget(page(service, held: 2));
+      await tester.pumpAndSettle();
+
+      await _tapLogoutAndConfirm(tester);
+
+      expect(find.textContaining('dès que le module sera réactivé'),
+          findsOneWidget);
+      expect(find.textContaining('prochaine connexion'), findsNothing);
+      expect(find.textContaining('sont bloquées'), findsNothing);
     });
 
     testWidgets('only pending operations: sent at the next sign-in',

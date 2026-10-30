@@ -136,8 +136,22 @@ void main() {
           .thenAnswer((_) async => [sampleStore]);
       when(() => local.upsert(any())).thenAnswer((_) async => sampleStore);
 
+      when(() => syncService.unsyncedEntityIds()).thenAnswer((_) async => {});
+
       await repo.syncFromRemote();
       verify(() => local.upsert(sampleStore)).called(1);
+    });
+
+    // Story 13.8b: a store with a pending or held operation keeps its local
+    // version (same rule as the pull).
+    test('syncFromRemote() skips a store with an unsynced operation', () async {
+      when(() => remote.getAll(includeInactive: true))
+          .thenAnswer((_) async => [sampleStore]);
+      when(() => syncService.unsyncedEntityIds())
+          .thenAnswer((_) async => {sampleStore.id});
+
+      await repo.syncFromRemote();
+      verifyNever(() => local.upsert(any()));
     });
 
     // G2 (device test): an employee got 403 on /stores?includeInactive=true

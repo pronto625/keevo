@@ -159,7 +159,11 @@ class ClientRepositoryImpl implements ClientRepository {
   Future<void> syncFromRemote() async {
     try {
       final remotes = await _remote.getAll(includeArchived: true);
+      // Story 13.8b: a row with a pending or held operation keeps its local
+      // version (same rule as the pull).
+      final unsynced = await _syncService.unsyncedEntityIds();
       for (final c in remotes) {
+        if (unsynced.contains(c.id)) continue;
         await _local.upsert(c);
       }
     } catch (e) {

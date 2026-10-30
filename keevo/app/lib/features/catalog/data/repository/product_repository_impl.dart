@@ -241,10 +241,12 @@ class ProductRepositoryImpl implements ProductRepository {
 
   @override
   Future<void> syncFromRemote() async {
-    // Skip remote pull if sync_queue has pending operations — avoids
-    // overwriting local offline changes with stale backend data.
-    if (await _syncService.hasPendingOperations()) return;
+    // Story 13.8b: a product with a pending or held operation (or referenced
+    // by one, e.g. a held sale) keeps its local version — it is neither
+    // overwritten with stale backend data nor archived because the server
+    // does not know it yet. The other products are refreshed.
     final dtos = await _remote.getAll();
+    final unsynced = await _syncService.unsyncedEntityIds();
 
     // Archive local ACTIVE products not present on the backend.
     // This covers two scenarios:
@@ -259,12 +261,14 @@ class ProductRepositoryImpl implements ProductRepository {
     final localProducts = await _local.getAll();
     for (final local in localProducts) {
       if (local.status != ProductStatus.draft &&
-          !backendIds.contains(local.id)) {
+          !backendIds.contains(local.id) &&
+          !unsynced.contains(local.id)) {
         await _local.archiveById(local.id);
       }
     }
 
     for (final dto in dtos) {
+      if (unsynced.contains(dto.id)) continue;
       await _local.upsert(_dtoToModel(dto));
     }
   }

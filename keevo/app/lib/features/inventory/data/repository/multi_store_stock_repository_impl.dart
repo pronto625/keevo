@@ -27,9 +27,11 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
 
   @override
   Future<List<StoreStockSummaryModel>> getOverview() async {
-    // Guard: if offline ops are pending, return local data to prevent
-    // stale remote values from overwriting correct offline decrements.
-    if (await _syncService.hasPendingOperations()) {
+    // Guard: while a pending or held operation (Story 13.8b: a sale held
+    // because its module is off keeps its decrement) changed some stock
+    // locally, the per-store totals are the local ones (server stock + local
+    // deltas). Other queued operations (a client edit…) do not matter here.
+    if ((await _syncService.unsyncedStockKeys()).isNotEmpty) {
       return _local.getStoreOverviews();
     }
     try {
@@ -47,16 +49,12 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
     bool sortLowFirst = true,
     bool lowOnly = false,
   }) async {
-    // Guard: if offline ops are pending, return local data to prevent
-    // stale remote values from overwriting correct offline decrements.
-    if (await _syncService.hasPendingOperations()) {
-      return _local.getStoreStockDetail(
-        storeId,
-        page: page,
-        size: size,
-        sortLowFirst: sortLowFirst,
-      );
-    }
+    // Story 13.8b: the rows of this store changed by a pending or held
+    // operation keep their local quantity (server stock + local delta); the
+    // others are refreshed from the server.
+    final protectedKeys = (await _syncService.unsyncedStockKeys())
+        .where((k) => k.endsWith('|$storeId'))
+        .toSet();
     try {
       final result = await _remote.getStoreStockDetail(
         storeId,
@@ -65,8 +63,22 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
         sortLowFirst: sortLowFirst,
         lowOnly: lowOnly,
       );
-      await _local.upsertStockLevels(storeId, result.content);
-      return result.content;
+      if (protectedKeys.isEmpty) {
+        await _local.upsertStockLevels(storeId, result.content);
+        return result.content;
+      }
+      await _local.upsertStockLevels(
+          storeId,
+          result.content
+              .where((e) => !protectedKeys
+                  .contains(unsyncedStockKey(e.productId, storeId)))
+              .toList());
+      return _local.getStoreStockDetail(
+        storeId,
+        page: page,
+        size: size,
+        sortLowFirst: sortLowFirst,
+      );
     } catch (_) {
       return _local.getStoreStockDetail(
         storeId,

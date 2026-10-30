@@ -9,6 +9,7 @@ import 'package:keevo/features/pos/presentation/page/sales_history_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/sync/held_operations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -253,5 +254,34 @@ void main() {
       expect(find.textContaining('Awa Ndiaye'), findsOneWidget);
       expect(find.textContaining('3f2b9c1e'), findsNothing);
     });
+
+    // Story 13.8b: a sale held because its module is off (or its subscription
+    // expired) is listed with a French badge; the others have none.
+    for (final (reason, label) in [
+      ('MODULE_INACTIVE', 'En attente — module non activé'),
+      ('MODULE_READ_ONLY', 'En attente — abonnement expiré'),
+    ]) {
+      testWidgets('a held sale shows « $label »', (tester) async {
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              sharedPreferencesProvider.overrideWithValue(prefs),
+              currentUserIdProvider
+                  .overrideWith((ref) => Future.value('emp-1')),
+              salesHistoryProvider
+                  .overrideWith((ref, filter) => Future.value(mockSales)),
+              heldEntityReasonsProvider
+                  .overrideWith((ref) async => {'sale-2': reason}),
+            ],
+            child: const MaterialApp(home: SalesHistoryPage()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Card), findsNWidgets(2));
+        expect(find.text(label), findsOneWidget);
+        expect(find.textContaining('MODULE_'), findsNothing);
+      });
+    }
   });
 }

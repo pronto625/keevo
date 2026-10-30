@@ -1,4 +1,5 @@
 import 'dart:developer' as dev;
+import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
@@ -360,19 +361,69 @@ class SaleRepositoryImpl implements SaleRepository {
     // Online-first: try backend, fall back to local Drift
     if (await _connectivity.isOnline()) {
       try {
-        return await _remote.getSalesHistory(filter);
+        // Story 13.8b: a sale whose CREATE_SALE is still queued — pending, or
+        // held because its module is off — is not on the server yet: it stays
+        // listed from the local database so the cashier never thinks it lost.
+        // Read before the server call: a sale applied in between is then
+        // returned by the server and deduplicated below, never lost.
+        final unsent = await _unsentSaleIds();
+        final remote = await _remote.getSalesHistory(filter);
+        // The server keeps the device's sale id (`CREATE_SALE.saleId` is the
+        // sale's primary key, `serverEntityId` = saleId): ids dedupe.
+        unsent.removeAll(remote.map((s) => s.id));
+        if (unsent.isEmpty) return remote;
+        // The remote call is the single (first) page of the period; the local
+        // rows are limited to the same period and employee.
+        final local = <Sale>[];
+        final ids = unsent.toList();
+        for (var i = 0; i < ids.length; i += _maxSqlVariablesPerChunk) {
+          final chunk = ids.sublist(
+              i, min(i + _maxSqlVariablesPerChunk, ids.length));
+          local.addAll(
+              await _localSalesHistory(filter, onlyIds: chunk.toSet()));
+        }
+        if (local.isEmpty) return remote;
+        return [...remote, ...local]
+          ..sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
       } catch (e) {
         dev.log('Remote getSalesHistory failed, falling back to local: $e');
       }
     }
 
     // Fallback: local Drift query
+    return _localSalesHistory(filter);
+  }
+
+  /// Ids per `IN (…)` — below SQLite's bound-variable limit (999 on old
+  /// Android builds) with room for the filter's own variables.
+  static const _maxSqlVariablesPerChunk = 500;
+
+  /// Sales whose `CREATE_SALE` is still queued (pending or held, not
+  /// quarantined): not on the server yet. Reads the entity id only.
+  Future<Set<String>> _unsentSaleIds() async {
+    final q = _db.syncQueue;
+    final rows = await (_db.selectOnly(q)
+          ..addColumns([q.entityId])
+          ..where(q.synced.equals(false) &
+              q.quarantinedAt.isNull() &
+              q.operation.equals('CREATE_SALE') &
+              q.entityId.isNotNull()))
+        .map((r) => r.read(q.entityId))
+        .get();
+    return rows.whereType<String>().toSet();
+  }
+
+  Future<List<Sale>> _localSalesHistory(SalesHistoryFilter filter,
+      {Set<String>? onlyIds}) async {
     final query = _db.select(_db.sales)
       ..where((s) {
         var expr = s.storeId.equals(filter.storeId) &
             s.occurredAt.isBetweenValues(filter.from, filter.to);
         if (filter.employeeId != null) {
           expr = expr & s.employeeId.equals(filter.employeeId!);
+        }
+        if (onlyIds != null) {
+          expr = expr & s.id.isIn(onlyIds);
         }
         return expr;
       })

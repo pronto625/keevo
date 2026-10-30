@@ -1,5 +1,6 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
+import '../../../../core/widget/held_operation_badge.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 
 import 'package:flutter/material.dart';
@@ -102,6 +103,10 @@ class ProductCard extends ConsumerWidget {
                             fontSize: 12,
                           ),
                         ),
+                        // Story 13.8b: created/changed while its module is off.
+                        HeldOperationBadge(
+                            entityId: product.id,
+                            padding: const EdgeInsets.only(top: 4)),
                         const SizedBox(height: 8),
                         // Ligne prix et statut — Wrap : brouillon + stock bas
                         // ne tiennent pas sur une ligne à 360dp.

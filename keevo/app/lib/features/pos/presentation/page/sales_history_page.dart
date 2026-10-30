@@ -1,6 +1,7 @@
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/date_range_clamp.dart';
+import '../../../../core/widget/held_operation_badge.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -459,6 +460,10 @@ class _SaleHistoryCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         _buildStatusBadge(),
+                        // Story 13.8b: a sale held because its module is off
+                        // (or its subscription expired) is still listed.
+                        const SizedBox(width: 6),
+                        Flexible(child: HeldOperationBadge(entityId: sale.id)),
                       ],
                     ),
                     const SizedBox(height: 4),

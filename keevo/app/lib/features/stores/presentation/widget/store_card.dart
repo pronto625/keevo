@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/sync/held_operations.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/widget/held_operation_badge.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';
 import 'store_type_icon.dart';
@@ -14,7 +17,7 @@ import 'store_type_icon.dart';
 /// désactivée (sinon impossible de la remettre en service).
 ///
 /// Story 3.1 — Task 20.2.
-class StoreCard extends StatelessWidget {
+class StoreCard extends ConsumerWidget {
   final StoreModel store;
   final VoidCallback? onEdit;
   final VoidCallback? onDeactivate;
@@ -29,9 +32,14 @@ class StoreCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isInactive = !store.isActive;
+    // Story 13.8b: held store → badge under the address; otherwise the
+    // ListTile keeps its usual one/two-line layout.
+    final held = ref.watch(heldEntityReasonsProvider
+        .select((m) => m.valueOrNull?.containsKey(store.id) ?? false));
+    final subtitle = _subtitle(theme);
 
     return Opacity(
       opacity: isInactive ? 0.55 : 1.0,
@@ -81,7 +89,19 @@ class StoreCard extends StatelessWidget {
                   ),
               ],
             ),
-            subtitle: _subtitle(theme),
+            subtitle: !held
+                ? subtitle
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (subtitle != null) subtitle,
+                      HeldOperationBadge(
+                          entityId: store.id,
+                          padding: EdgeInsets.only(
+                              top: subtitle == null ? 0 : 4)),
+                    ],
+                  ),
             trailing: IconButton(
               icon: const Icon(Icons.more_vert_rounded),
               tooltip: 'Actions',

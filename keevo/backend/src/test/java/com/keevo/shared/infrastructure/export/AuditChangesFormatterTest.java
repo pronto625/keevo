@@ -31,6 +31,20 @@ class AuditChangesFormatterTest {
     }
 
     @Test
+    @DisplayName("13.8b: module activation / deactivation payload reads in French, no raw key")
+    void moduleLifecycle() {
+        assertThat(AuditChangesFormatter.changes(null, "{\"module\":\"Clients & fournisseurs\","
+                + "\"statut\":\"Actif\",\"finAbonnement\":\"30/11/2026\"}"))
+                .isEqualTo("Module : Clients & fournisseurs ; Statut : Actif ; Fin de l'abonnement : 30/11/2026");
+        assertThat(AuditChangesFormatter.changes(null, "{\"module\":\"Clients & fournisseurs\","
+                + "\"statut\":\"Désactivé\",\"donnees\":\"Conservées\"}"))
+                .isEqualTo("Module : Clients & fournisseurs ; Statut : Désactivé ; Données : Conservées");
+        assertThat(AuditLabels.ACTIONS).containsEntry("MODULE_ACTIVATED", "Module activé")
+                .containsEntry("MODULE_DEACTIVATED", "Module désactivé");
+        assertThat(AuditLabels.ENTITY_TYPES).containsEntry("Module", "Module");
+    }
+
+    @Test
     @DisplayName("codes translated, unknown codes humanized, booleans Oui/Non, signed quantities")
     void codesAndValues() {
         assertThat(AuditChangesFormatter.changes("{\"status\":\"PENDING_VALIDATION\"}", "{\"status\":\"COMPLETED\"}"))

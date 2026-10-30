@@ -454,6 +454,8 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         }
     }
 
+    // The entry lands in the tenant's own history (the owner reads it): no
+    // tenant code / id in it — the owner knows its company (Story 13.8b).
     private void recordActivated(TenantRef tenant, Actor actor, Written w) {
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("module", w.module().displayName());
@@ -461,7 +463,6 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         if (w.expiresAt() != null) {
             after.put("finAbonnement", FR_DATE.format(w.expiresAt().atZone(KeevoZones.WAT)));
         }
-        after.put("entreprise", tenant.code());
         record(tenant, actor, ACTION_ACTIVATED, w.rowId(), w.module(), after);
     }
 
@@ -470,7 +471,6 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         after.put("module", module.displayName());
         after.put("statut", "Désactivé");
         after.put("donnees", "Conservées");
-        after.put("entreprise", tenant.code());
         record(tenant, actor, ACTION_DEACTIVATED, rowId, module, after);
     }
 

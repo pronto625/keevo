@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:keevo/features/audit/domain/audit_format.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
 import 'package:keevo/features/audit/presentation/audit_presenter.dart';
 
@@ -533,6 +534,43 @@ void main() {
           'Hier');
       expect(AuditPresenter.dayHeader(DateTime(2026, 8, 3, 10), now: now),
           '03 août 2026');
+    });
+  });
+
+  // Story 13.8b: module activation / deactivation entries (13.8a) read in
+  // French — title, sentence, object type and every payload key.
+  group('module lifecycle entries', () {
+    test('titles, sentence and object type', () {
+      expect(AuditPresenter.actionInfo('MODULE_ACTIVATED').label, 'Module activé');
+      expect(AuditPresenter.actionInfo('MODULE_DEACTIVATED').label,
+          'Module désactivé');
+      expect(
+          AuditPresenter.sentence(_entry(
+            action: 'MODULE_DEACTIVATED',
+            entityType: 'Module',
+            entityLabel: 'Clients & fournisseurs',
+            metadata: '{"actorLabel":"Administrateur Keevo"}',
+          )).toString(),
+          'Administrateur Keevo a désactivé le module Clients & fournisseurs');
+      expect(AuditPresenter.objectTypeLabel('Module'), 'Modules');
+      expect(AuditPresenter.typeNouns['Module'], 'Module');
+    });
+
+    test('payload keys have French labels', () {
+      expect(
+          AuditFormat.changesText(
+              null,
+              '{"module":"Clients & fournisseurs","statut":"Actif",'
+                  '"finAbonnement":"30/11/2026"}'),
+          'Module : Clients & fournisseurs ; Statut : Actif ; '
+          'Fin de l\'abonnement : 30/11/2026');
+      expect(
+          AuditFormat.changesText(
+              null,
+              '{"module":"Clients & fournisseurs","statut":"Désactivé",'
+                  '"donnees":"Conservées"}'),
+          'Module : Clients & fournisseurs ; Statut : Désactivé ; '
+          'Données : Conservées');
     });
   });
 }

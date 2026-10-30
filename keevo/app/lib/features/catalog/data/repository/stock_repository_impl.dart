@@ -37,21 +37,27 @@ class StockRepositoryImpl implements StockRepository {
 
   @override
   Future<List<StockLevelModel>> getLevels(String productId) async {
-    // Best-effort: refresh local cache from remote when no pending operations.
+    // Best-effort: refresh local cache from remote.
     // Always return LOCAL data so the catalog reads the same source as the POS
     // (which only queries the local DB). Returning remote data directly caused
     // the catalog to show a cross-store sum when the owner has no active store
     // selected, making per-product stock appear doubled vs POS.
-    if (!await _syncService.hasPendingOperations()) {
-      try {
-        final levels = await _remote.getLevels(productId);
-        for (final level in levels) {
-          await _local.upsertLevel(level);
+    // Story 13.8b: a (product, store) row changed by a pending or held
+    // operation keeps its local quantity (server stock + local delta); the
+    // other rows are refreshed.
+    final protectedKeys = await _syncService.unsyncedStockKeys();
+    try {
+      final levels = await _remote.getLevels(productId);
+      for (final level in levels) {
+        if (protectedKeys
+            .contains(unsyncedStockKey(level.productId, level.storeId))) {
+          continue;
         }
-      } catch (e) {
-        dev.log('[Stock] Remote getLevels failed — using local cache: $e',
-            name: 'StockRepository');
+        await _local.upsertLevel(level);
       }
+    } catch (e) {
+      dev.log('[Stock] Remote getLevels failed — using local cache: $e',
+          name: 'StockRepository');
     }
     return _local.getLevels(productId);
   }
@@ -61,7 +67,10 @@ class StockRepositoryImpl implements StockRepository {
     String productId,
     String storeId,
   ) async {
-    if (await _syncService.hasPendingOperations()) {
+    // Story 13.8b: only a row changed by a pending or held operation is
+    // read locally.
+    if ((await _syncService.unsyncedStockKeys())
+        .contains(unsyncedStockKey(productId, storeId))) {
       return _local.getLevelByStore(productId, storeId);
     }
     try {
@@ -82,7 +91,13 @@ class StockRepositoryImpl implements StockRepository {
       final model = await _remote.fetchCrossStoreAvailability(productId);
       // AC2: update local Drift cache on remote success
       // Use sync_ prefix + productId_storeId to match Story 3.2 cache convention
+      // Story 13.8b: never over a row changed by a pending or held operation.
+      final protectedKeys = await _syncService.unsyncedStockKeys();
       for (final entry in model.entries) {
+        if (protectedKeys
+            .contains(unsyncedStockKey(productId, entry.storeId))) {
+          continue;
+        }
         await _local.upsertLevel(StockLevelModel(
           id: 'sync_${productId}_${entry.storeId}',
           productId: productId,
@@ -115,7 +130,10 @@ class StockRepositoryImpl implements StockRepository {
     // Best-effort: sync remote movements into local cache when online.
     // Always return from local so offline SALE movements (with local UUIDs)
     // are never hidden by a purely-remote result set.
-    if (!await _syncService.hasPendingOperations()) {
+    // Story 13.8b: skipped only while this product's stock has a pending or
+    // held operation.
+    final protectedKeys = await _syncService.unsyncedStockKeys();
+    if (!protectedKeys.any((k) => k.startsWith('$productId|'))) {
       try {
         final movements = await _remote.getHistory(
           productId: productId,

@@ -430,9 +430,14 @@ class SettingsPage extends ConsumerWidget {
     if (!allSent) {
       // v1s-16-15: blocked operations are never sent automatically.
       var blocked = 0;
+      // Story 13.8b: held operations wait for their module, not a sign-in.
+      var held = 0;
       try {
         blocked =
             await ref.read(syncServiceProvider).quarantinedOperationCount();
+      } catch (_) {}
+      try {
+        held = await ref.read(syncServiceProvider).heldOperationCount();
       } catch (_) {}
       if (!context.mounted) return;
       final proceed = await showDialog<bool>(
@@ -445,7 +450,14 @@ class SettingsPage extends ConsumerWidget {
                   'Traitez-les dans Paramètres › Synchronisation (opérations '
                   'bloquées). Elles seront perdues si un autre compte se '
                   'connecte sur ce téléphone.'
-              : "Certaines opérations n'ont pas encore été envoyées au serveur. "
+              : held > 0
+                  ? 'Certaines opérations attendent que leur module soit de '
+                      'nouveau actif pour votre compte : elles seront '
+                      'envoyées automatiquement dès que le module sera '
+                      'réactivé, si vous restez connecté avec ce compte sur '
+                      'ce téléphone. Elles seront perdues si un autre compte '
+                      's’y connecte.'
+                  : "Certaines opérations n'ont pas encore été envoyées au serveur. "
                   'Elles seront envoyées à votre prochaine connexion sur ce '
                   'téléphone avec ce compte, mais seront perdues si un autre '
                   'compte s’y connecte.'),

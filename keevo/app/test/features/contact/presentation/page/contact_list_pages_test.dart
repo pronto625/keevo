@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/sync/held_operations.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/domain/model/supplier_model.dart';
 import 'package:keevo/features/contact/domain/repository/client_repository.dart';
@@ -400,5 +401,69 @@ void main() {
     await tester.pumpAndSettle();
 
     verify(() => repo.unarchive('s1')).called(1);
+  });
+
+  // Story 13.8b: a client / supplier held because its module is off stays
+  // listed with a French badge (no code); the others have none.
+  testWidgets('ClientListPage: a held client shows its badge', (tester) async {
+    final repo = _MockClientRepository();
+    final now = DateTime(2026, 10, 30);
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => [
+              ClientModel(
+                  id: 'held-1',
+                  name: 'Mireille Ngono',
+                  phone: '+237690000001',
+                  createdAt: now,
+                  updatedAt: now),
+              ClientModel(
+                  id: 'c-2',
+                  name: 'Paul Essomba',
+                  phone: '+237690000002',
+                  createdAt: now,
+                  updatedAt: now),
+            ]);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        clientRepositoryProvider.overrideWithValue(repo),
+        heldEntityReasonsProvider
+            .overrideWith((ref) async => {'held-1': 'MODULE_INACTIVE'}),
+      ],
+      child: const MaterialApp(home: ClientListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('En attente — module non activé'), findsOneWidget);
+    expect(find.textContaining('MODULE_'), findsNothing);
+  });
+
+  testWidgets('SupplierListPage: a read-only held supplier shows its badge',
+      (tester) async {
+    final repo = _MockSupplierRepository();
+    final now = DateTime(2026, 10, 30);
+    when(() => repo.getAll(includeArchived: any(named: 'includeArchived')))
+        .thenAnswer((_) async => [
+              SupplierModel(
+                  id: 's1',
+                  name: 'Grossiste Mokolo',
+                  phone: '+237690000002',
+                  createdAt: now,
+                  updatedAt: now),
+            ]);
+    when(() => repo.syncFromRemote()).thenAnswer((_) async {});
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        supplierRepositoryProvider.overrideWithValue(repo),
+        heldEntityReasonsProvider
+            .overrideWith((ref) async => {'s1': 'MODULE_READ_ONLY'}),
+      ],
+      child: const MaterialApp(home: SupplierListPage()),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('En attente — abonnement expiré'), findsOneWidget);
   });
 }

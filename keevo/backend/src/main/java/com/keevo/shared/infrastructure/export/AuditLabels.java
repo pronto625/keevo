@@ -83,7 +83,10 @@ public final class AuditLabels {
             entry("INVENTORY_REPORT_GENERATED", "Rapport d'inventaire"),
             entry("INVENTORY_VALIDATED", "Inventaire validé"),
             // Export
-            entry("DATA_EXPORTED", "Données exportées"));
+            entry("DATA_EXPORTED", "Données exportées"),
+            // Modules (Story 13.8a: super-admin activation / deactivation)
+            entry("MODULE_ACTIVATED", "Module activé"),
+            entry("MODULE_DEACTIVATED", "Module désactivé"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
     public static final Map<String, String> ENTITY_TYPES = Map.ofEntries(
@@ -103,7 +106,8 @@ public final class AuditLabels {
             entry("DayClosure", "Clôture de journée"),
             entry("InventorySession", "Inventaire"),
             entry("InventoryCount", "Comptage d'inventaire"),
-            entry("Export", "Export de données"));
+            entry("Export", "Export de données"),
+            entry("Module", "Module"));
 
     /** French label of each before/after field key. */
     public static final Map<String, String> FIELDS = Map.ofEntries(
@@ -186,7 +190,13 @@ public final class AuditLabels {
             entry("inventoryReportChannel", "Envoi du rapport d'inventaire"),
             entry("stockAlertEnabled", "Alertes de stock bas"),
             entry("stockAlertChannel", "Envoi des alertes de stock"),
-            entry("trendNotificationEnabled", "Notifications de tendance"));
+            entry("trendNotificationEnabled", "Notifications de tendance"),
+            // Modules (Story 13.8a, ModuleLifecycleService audit payload)
+            entry("module", "Module"),
+            entry("statut", "Statut"),
+            entry("finAbonnement", "Fin de l'abonnement"),
+            entry("entreprise", "Entreprise"),
+            entry("donnees", "Données"));
 
     /** French label of each code value (statuses, types, roles, sectors, export modes…). */
     public static final Map<String, String> VALUES = Map.ofEntries(

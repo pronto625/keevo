@@ -24,6 +24,7 @@ import '../../features/team/presentation/provider/employee_provider.dart';
 import '../di/providers.dart';
 import '../storage/app_constants.dart';
 import 'account_read_only_exception.dart';
+import 'held_operations.dart';
 import 'sync_event_logger.dart';
 import 'sync_gate_provider.dart';
 import 'sync_monitoring_providers.dart';
@@ -378,6 +379,10 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     if (rejections.any((r) => r['rolledBack'] == true)) {
       ref.invalidate(activeStoreIdProvider);
     }
+    // Story 13.8b: after every push — a newly held operation shows its badge,
+    // an applied, quarantined or dropped one loses it — without waiting for
+    // the pull (which may fail).
+    ref.invalidate(heldEntityReasonsProvider);
     // Blocked list/counts must not wait for a pull that may fail.
     if (rejections.any((r) => r['quarantined'] == true)) {
       ref.invalidate(quarantinedSyncQueueProvider);
@@ -404,6 +409,8 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     ref.invalidate(quarantinedSyncCountProvider);
     ref.invalidate(pendingSyncQueueProvider);
     ref.invalidate(pendingSyncCountProvider);
+    // Story 13.8b: « en attente — module » badges of the lists.
+    ref.invalidate(heldEntityReasonsProvider);
     // ── Catalog ───────────────────────────────────────────────────────────
     ref.invalidate(stockNotifierProvider);
     ref.invalidate(productListForPickerProvider);

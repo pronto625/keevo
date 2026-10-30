@@ -192,8 +192,8 @@ class ModuleLifecycleServiceTest {
         assertThat(top.actorId()).isEqualTo(ADMIN);
         assertThat(top.tenantId()).isEqualTo(SCHEMA);
         assertThat(top.entityId()).isEqualTo(rows.stored.get("lctop").id());
-        assertThat(top.valueAfter()).contains("Module supérieur", "Actif", CODE)
-                .doesNotContain("lctop", TENANT.toString(), SCHEMA);
+        assertThat(top.valueAfter()).contains("Module supérieur", "Actif")
+                .doesNotContain("lctop", TENANT.toString(), SCHEMA, CODE, "entreprise");
         assertThat(TenantContext.getCurrentTenant()).isNull(); // restored after the audit write
     }
 
@@ -467,7 +467,8 @@ class ModuleLifecycleServiceTest {
         verify(provisioner, never()).provision(anyString(), anyString());
         AuditPort.AuditEntry entry = auditEntries(1).get(0);
         assertThat(entry.action()).isEqualTo("MODULE_DEACTIVATED");
-        assertThat(entry.valueAfter()).contains("Module simple", "Désactivé", CODE).doesNotContain("lcplain");
+        assertThat(entry.valueAfter()).contains("Module simple", "Désactivé", "Conservées")
+                .doesNotContain("lcplain", CODE, "entreprise");
     }
 
     @Test
