@@ -10,6 +10,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -30,6 +31,7 @@ import java.util.UUID;
  * <p>Inherits the {@code /api/v1/admin/**} {@code SUPER_ADMIN} filter from SecurityConfig, plus the
  * class-level {@code @PreAuthorize} and an explicit {@link CurrentActor#requireSuperAdmin()} per method.
  */
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin/feedback")
 @PreAuthorize("hasRole('SUPER_ADMIN')")

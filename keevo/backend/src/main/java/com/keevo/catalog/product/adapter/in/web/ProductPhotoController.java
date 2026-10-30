@@ -8,6 +8,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -54,6 +55,7 @@ public class ProductPhotoController {
         this.useCase = useCase;
     }
 
+    @RequiresEntitlement("catalog")
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> upload(
             @PathVariable UUID id, @RequestParam("file") MultipartFile file) throws IOException {
@@ -65,6 +67,7 @@ public class ProductPhotoController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("photoUrl", url)));
     }
 
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<byte[]> read(@PathVariable UUID id) {
         StoredPhoto photo = useCase.read(TenantContext.getCurrentTenant(), id);
@@ -77,6 +80,7 @@ public class ProductPhotoController {
                 .body(photo.content());
     }
 
+    @RequiresEntitlement("catalog")
     @DeleteMapping
     public ResponseEntity<ApiResponseWrapper<Void>> delete(@PathVariable UUID id) {
         useCase.delete(TenantContext.getCurrentTenant(), id, actor());

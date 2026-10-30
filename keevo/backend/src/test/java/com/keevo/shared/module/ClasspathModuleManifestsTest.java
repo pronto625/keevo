@@ -10,23 +10,37 @@ import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Story 13.1 — the 10 manifests shipped in {@code src/main/resources/keevo/modules} load and carry the decided graph. */
+/**
+ * Story 13.1 — the manifests shipped in {@code src/main/resources/keevo/modules} load and carry the decided graph:
+ * the 10 base modules (free) + the 7 paid feature modules of plan §6.1 (Story 13.10a).
+ */
 class ClasspathModuleManifestsTest {
 
     @Test
-    void theTenShippedManifestsAreValid() {
+    void theShippedManifestsAreValid() {
         Map<String, ModuleManifest> byId = ModuleManifestLoader.loadFromClasspath(new PathMatchingResourcePatternResolver()).stream()
                 .map(LoadedModuleManifest::manifest)
                 .collect(Collectors.toMap(ModuleManifest::id, Function.identity()));
 
+        List<String> paid = List.of("multi-store", "counting", "advanced-reports", "report-config", "alerts",
+                "profitability", "exports");
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
-                "messaging", "sync", "admin");
+                "messaging", "sync", "admin", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
+                "profitability", "exports");
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point
             assertThat(m.version()).isEqualTo(m.id().equals("crm") || m.id().equals("pos") ? "1.1.0" : "1.0.0");
-            assertThat(m.free()).isTrue();
+            assertThat(m.free()).isEqualTo(!paid.contains(m.id()));
             assertThat(m.entitlement()).isEqualTo("module." + m.id());
         });
+        // 13.10a: paid feature modules — category premium, hard dependencies of plan §6.1 decisions
+        paid.forEach(id -> assertThat(byId.get(id).category()).isEqualTo(ModuleCategory.PREMIUM));
+        assertThat(byId.get("multi-store").requires()).containsExactly("core", "store", "inventory");
+        assertThat(byId.get("counting").requires()).containsExactly("core", "inventory");
+        assertThat(byId.get("alerts").requires()).containsExactly("core", "messaging");
+        for (String id : List.of("advanced-reports", "report-config", "profitability", "exports")) {
+            assertThat(byId.get(id).requires()).containsExactly("core", "reporting");
+        }
         assertThat(byId.get("core").category()).isEqualTo(ModuleCategory.CORE);
         assertThat(byId.get("core").requires()).isEmpty();
         assertThat(byId.get("sync").category()).isEqualTo(ModuleCategory.CORE);

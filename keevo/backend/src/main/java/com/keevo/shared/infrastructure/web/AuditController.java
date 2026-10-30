@@ -6,6 +6,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.dto.AuditEntryResponse;
 import com.keevo.shared.infrastructure.web.dto.AuditPageResponse;
+import com.keevo.shared.module.EntitlementExempt;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -31,6 +32,7 @@ import java.util.UUID;
  *
  * <p>Cross-cutting concern — lives in {@code shared/infrastructure/web/} (not feature module).
  */
+@EntitlementExempt("core: journal d'audit")
 @RestController
 @RequestMapping("/api/v1/audit")
 public class AuditController {

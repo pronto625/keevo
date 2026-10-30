@@ -8,6 +8,7 @@ import com.keevo.admin.revenue.domain.model.ChurnReport;
 import com.keevo.admin.revenue.domain.port.in.RevenueRangeQuery;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,6 +28,7 @@ import java.util.List;
  * behind the SecurityConfig URL rule). Parameter validation lives in the service (422 VALIDATION_ERROR).
  */
 @Tag(name = "Admin — Revenue", description = "Super Admin revenue dashboard (MRR, churn, conversion)")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin/revenue")
 public class AdminRevenueController {

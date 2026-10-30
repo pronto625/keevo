@@ -22,6 +22,11 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
+    public String moduleId() {
+        return "multi-store"; // Story 13.10a review: skipped by the pull while DISABLED
+    }
+
+    @Override
     public String entityKey() {
         return "stockTransfers";
     }

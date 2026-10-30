@@ -45,6 +45,7 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
         super(em);
     }
 
+    @Override public String moduleId() { return "crm"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Clients"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

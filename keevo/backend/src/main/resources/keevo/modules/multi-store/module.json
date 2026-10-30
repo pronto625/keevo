@@ -1,0 +1,24 @@
+{
+  "id": "multi-store",
+  "version": "1.0.0",
+  "displayName": "Multi-boutiques et transferts",
+  "category": "premium",
+  "requires": [
+    "core",
+    "store",
+    "inventory"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.multi-store",
+  "free": false
+}

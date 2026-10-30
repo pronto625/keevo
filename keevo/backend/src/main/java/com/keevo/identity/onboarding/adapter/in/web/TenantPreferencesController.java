@@ -12,6 +12,8 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.module.EntitlementExempt;
+import com.keevo.shared.module.RequiresEntitlement;
 
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -49,6 +51,7 @@ public class TenantPreferencesController {
      * Get current tenant preferences including sector type.
      * GET /api/v1/tenant/preferences
      */
+    @EntitlementExempt("core: préférences du commerce")
     @GetMapping("/preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> getPreferences() {
         return tenantPreferencesRepository.findByCurrentTenant()
@@ -63,6 +66,7 @@ public class TenantPreferencesController {
      * Update report preferences for the current tenant. OWNER only.
      * PUT /api/v1/tenant/report-preferences
      */
+    @RequiresEntitlement("report-config")
     @PutMapping("/report-preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> updateReportPreferences(
             @Valid @RequestBody UpdateReportPreferencesRequestDto request) {
@@ -93,6 +97,7 @@ public class TenantPreferencesController {
      * Send a test WhatsApp report to the OWNER. OWNER only.
      * POST /api/v1/tenant/report-test
      */
+    @RequiresEntitlement("report-config")
     @PostMapping("/report-test")
     public ResponseEntity<ApiResponseWrapper<SendTestReportUseCase.TestReportResult>> sendTestReport() {
         requireAuthentication();
@@ -113,6 +118,7 @@ public class TenantPreferencesController {
      *
      * <p>Epic 3 will supersede this with a full StoreRepository.
      */
+    @RequiresEntitlement(value = "store", access = RequiresEntitlement.Access.READ)
     @GetMapping("/stores")
     public ResponseEntity<ApiResponseWrapper<List<StoreDto>>> getStores() {
         String schema = TenantSchema.validate(TenantContext.getCurrentTenant());

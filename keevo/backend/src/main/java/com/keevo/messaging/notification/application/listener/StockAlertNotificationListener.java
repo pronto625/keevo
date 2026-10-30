@@ -12,6 +12,7 @@ import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
 import com.keevo.store.api.StoreQueryPort;
+import com.keevo.shared.module.ModuleScoped;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -100,6 +101,7 @@ public class StockAlertNotificationListener {
         this.storeQuery = storeQuery;
     }
 
+    @ModuleScoped("alerts") // Story 13.10a: owner alerts are a paid module (plan §6.1)
     @ApplicationModuleListener
     @DeliverOnce
     public void onStockThresholdBreached(StockThresholdBreachedEvent event) {

@@ -10,6 +10,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -52,6 +53,7 @@ public class DayClosureController {
      * @return 201 Created with DayClosureResponseDto
      * @throws 409 Conflict if day already closed
      */
+    @RequiresEntitlement("pos")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<DayClosureResponseDto>> closeDay(
             @Valid @RequestBody CloseDayRequestDto request,
@@ -111,6 +113,7 @@ public class DayClosureController {
      *
      * @return 200 OK with DayClosureResponseDto or 404 if not found
      */
+    @RequiresEntitlement(value = "pos", access = RequiresEntitlement.Access.READ)
     @GetMapping
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<DayClosureResponseDto>> getClosure(

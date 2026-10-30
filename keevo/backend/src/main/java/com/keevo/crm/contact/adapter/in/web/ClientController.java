@@ -5,6 +5,7 @@ import com.keevo.crm.contact.application.usecase.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,6 +45,7 @@ public class ClientController {
     }
 
     /** POST /api/v1/clients */
+    @RequiresEntitlement("crm")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<ClientResponseDto>> createClient(
             @Valid @RequestBody CreateClientRequestDto request) {
@@ -57,6 +59,7 @@ public class ClientController {
     }
 
     /** GET /api/v1/clients?search=&includeArchived= */
+    @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<ClientResponseDto>>> listClients(
             @RequestParam(required = false) String search,
@@ -68,6 +71,7 @@ public class ClientController {
     }
 
     /** GET /api/v1/clients/{id} */
+    @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<ClientProfileResponseDto>> getClientProfile(
             @PathVariable UUID id) {
@@ -83,6 +87,7 @@ public class ClientController {
     }
 
     /** PATCH /api/v1/clients/{id} */
+    @RequiresEntitlement("crm")
     @PatchMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<ClientResponseDto>> updateClient(
             @PathVariable UUID id,
@@ -95,6 +100,7 @@ public class ClientController {
     }
 
     /** DELETE /api/v1/clients/{id} (soft delete) */
+    @RequiresEntitlement("crm")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> archiveClient(@PathVariable UUID id) {
         UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();

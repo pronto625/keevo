@@ -29,7 +29,7 @@ public class TransferSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     public String moduleId() {
-        return "inventory";
+        return "multi-store"; // Story 13.10a: premium (plan §6.1)
     }
 
     @Override

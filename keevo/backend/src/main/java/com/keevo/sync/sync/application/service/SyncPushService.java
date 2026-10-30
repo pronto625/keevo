@@ -503,12 +503,18 @@ public class SyncPushService implements SyncUseCase {
         // (avoids UnexpectedRollbackException from rollback-only propagation).
         TransactionTemplate readOnlyTx = new TransactionTemplate(transactionTemplate.getTransactionManager());
         readOnlyTx.setReadOnly(true);
+        Map<String, ModuleState> moduleStates = pullModuleStates(command.tenantId());
 
         for (DeltaEntityProvider provider : deltaProviders) {
             String key = provider.entityKey();
             List<Map<String, Object>> rows = List.of();
             if (provider.ownerOnly() && !command.owner()) {
                 // Story v1s-18-7 — owner-only delta: never queried for other roles (FR98).
+                state.positions().put(key, PullCursor.DONE);
+            } else if (provider.moduleId() != null
+                    && moduleStates.get(provider.moduleId()) == ModuleState.DISABLED) {
+                // Story 13.10a review — the entity's module is DISABLED for the tenant: nothing sent (premium data
+                // never leaves through the free sync path); rows changed meanwhile are not replayed on reactivation
                 state.positions().put(key, PullCursor.DONE);
             } else if (!state.isDone(key)) {
                 DeltaEntityProvider.Position after = state.positions().get(key);
@@ -548,6 +554,20 @@ public class SyncPushService implements SyncUseCase {
 
         return new SyncPullResult(serverTimestamp, entities, counts,
                 hasMore, hasMore ? state.encode() : null);
+    }
+
+    /**
+     * Story 13.10a review — the tenant's module states for the pull (one read). Unreadable → empty map: every
+     * provider is pulled (a pull never fails on the gate; the REST and push gates still apply).
+     */
+    private Map<String, ModuleState> pullModuleStates(String tenantId) {
+        try {
+            Map<String, ModuleState> states = moduleRegistry.moduleStates(tenantId);
+            return states != null ? states : Map.of();
+        } catch (RuntimeException e) {
+            log.warn("[Sync] Module states unreadable for the pull ({}) — every entity pulled", e.getClass().getSimpleName());
+            return Map.of();
+        }
     }
 
     /**

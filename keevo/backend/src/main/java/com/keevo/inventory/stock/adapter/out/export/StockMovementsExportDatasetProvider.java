@@ -59,6 +59,7 @@ public class StockMovementsExportDatasetProvider extends NativeKeysetExportDatas
         super(em);
     }
 
+    @Override public String moduleId() { return "inventory"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Mouvements de stock"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

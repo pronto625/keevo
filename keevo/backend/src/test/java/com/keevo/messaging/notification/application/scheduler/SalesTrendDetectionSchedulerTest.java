@@ -219,4 +219,40 @@ class SalesTrendDetectionSchedulerTest {
         // Second tenant should still be processed (prefs loaded, even if disabled)
         verify(tenantPreferencesRepository, times(2)).findByCurrentTenant();
     }
+
+    // ── Story 13.10a: trends belong to « Rapports avancés » ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("13.10a: « Rapports avancés » DISABLED → tenant skipped (nothing read, nothing sent); READ_ONLY → processed")
+    void advancedReportsGate() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        SalesTrendDetectionScheduler gated = new SalesTrendDetectionScheduler(jdbcTemplate, pushNotifier,
+                cooldownRepository, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                StoreApiTestSupport.queryPort(storeRepository), modules);
+        stubActiveSchemas(SCHEMA);
+        when(modules.moduleState(SCHEMA, "advanced-reports")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
+
+        gated.detectTrends();
+        verifyNoInteractions(tenantPreferencesRepository, storeRepository, pushNotifier);
+
+        when(modules.moduleState(SCHEMA, "advanced-reports")).thenReturn(com.keevo.shared.module.ModuleState.READ_ONLY);
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendDisabledPrefs()));
+        gated.detectTrends();
+        verify(tenantPreferencesRepository).findByCurrentTenant();
+    }
+
+    @Test
+    @DisplayName("13.10a: module state unreadable → tenant processed (never silently skipped)")
+    void advancedReportsGateUnreadable() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        SalesTrendDetectionScheduler gated = new SalesTrendDetectionScheduler(jdbcTemplate, pushNotifier,
+                cooldownRepository, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                StoreApiTestSupport.queryPort(storeRepository), modules);
+        stubActiveSchemas(SCHEMA);
+        when(modules.moduleState(SCHEMA, "advanced-reports")).thenThrow(new IllegalStateException("db"));
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendDisabledPrefs()));
+
+        gated.detectTrends();
+        verify(tenantPreferencesRepository).findByCurrentTenant();
+    }
 }

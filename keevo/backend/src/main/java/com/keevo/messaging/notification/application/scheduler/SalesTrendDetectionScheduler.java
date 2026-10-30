@@ -7,6 +7,8 @@ import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepo
 import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -14,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -31,6 +34,10 @@ import java.util.UUID;
  * the average of the same hour over the previous 3 days.
  *
  * <p>Story 8.1 — AC3/AC4.
+ *
+ * <p>Story 13.10a: sales trends belong to the paid « Rapports avancés » module (plan §6.1) — a tenant for which
+ * it is DISABLED is skipped (READ_ONLY still runs: it only reads past sales); an unreadable state is logged at
+ * WARN and the tenant processed.
  */
 @Component
 public class SalesTrendDetectionScheduler {
@@ -51,12 +58,27 @@ public class SalesTrendDetectionScheduler {
     private final NotificationCooldownRepository cooldownRepository;
     private final TenantPreferencesQueryPort preferencesQuery;
     private final StoreQueryPort storeQuery;
+    /** Story 13.10a — {@code null} only in unit tests built without it (no gate). */
+    private final ModuleRegistry modules;
+
+    static final String ADVANCED_REPORTS = "advanced-reports";
 
     public SalesTrendDetectionScheduler(JdbcTemplate jdbcTemplate,
                                         PushNotifier pushNotifier,
                                         NotificationCooldownRepository cooldownRepository,
                                         TenantPreferencesQueryPort preferencesQuery,
                                         StoreQueryPort storeQuery) {
+        this(jdbcTemplate, pushNotifier, cooldownRepository, preferencesQuery, storeQuery, null);
+    }
+
+    @Autowired
+    public SalesTrendDetectionScheduler(JdbcTemplate jdbcTemplate,
+                                        PushNotifier pushNotifier,
+                                        NotificationCooldownRepository cooldownRepository,
+                                        TenantPreferencesQueryPort preferencesQuery,
+                                        StoreQueryPort storeQuery,
+                                        ModuleRegistry modules) {
+        this.modules = modules;
         this.jdbcTemplate = jdbcTemplate;
         this.pushNotifier = pushNotifier;
         this.cooldownRepository = cooldownRepository;
@@ -72,6 +94,7 @@ public class SalesTrendDetectionScheduler {
 
         for (String schema : schemas) {
             if (!TenantSchema.isValid(schema)) continue;
+            if (advancedReportsDisabled(schema)) continue;
             try {
                 TenantContext.setCurrentTenant(schema);
                 processTenant(schema);
@@ -82,6 +105,22 @@ public class SalesTrendDetectionScheduler {
             }
         }
         log.info("[TREND] Hourly trend detection completed for {} tenants", schemas.size());
+    }
+
+    private boolean advancedReportsDisabled(String schema) {
+        if (modules == null) {
+            return false;
+        }
+        try {
+            if (modules.moduleState(schema, ADVANCED_REPORTS) == ModuleState.DISABLED) {
+                log.debug("[TREND] Module « Rapports avancés » disabled for tenant {} — skipped", schema);
+                return true;
+            }
+            return false;
+        } catch (RuntimeException e) {
+            log.warn("[TREND] Module state unreadable for tenant {} ({}) — processed", schema, e.getClass().getSimpleName());
+            return false;
+        }
     }
 
     private void processTenant(String schema) {

@@ -6,6 +6,8 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
+import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncOperationDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPullResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushRequestDto;
@@ -118,6 +120,7 @@ public class SyncController {
         return cleaned.length() > 64 ? cleaned.substring(0, 64) + "…" : cleaned;
     }
 
+    @EntitlementExempt("synchronisation (contrôle par opération)")
     @PostMapping("/push")
     @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
     @Operation(summary = "Push batch of offline operations", description = "Processes a batch of queued offline operations. Each operation is handled independently — partial success is possible.")
@@ -175,6 +178,7 @@ public class SyncController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPushResponseDto.from(result)));
     }
 
+    @EntitlementExempt("synchronisation (contrôle par opération)")
     @GetMapping("/pull")
     @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
     @Operation(summary = "Pull delta changes since timestamp",
@@ -220,6 +224,7 @@ public class SyncController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
     }
 
+    @RequiresEntitlement(value = "sync", access = RequiresEntitlement.Access.READ)
     @GetMapping("/conflicts")
     @PreAuthorize("hasRole('OWNER')")
     @Operation(summary = "List sync conflict log",
@@ -239,6 +244,7 @@ public class SyncController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(conflicts));
     }
 
+    @RequiresEntitlement(value = "sync", access = RequiresEntitlement.Access.READ)
     @GetMapping("/devices")
     @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
     @Operation(summary = "List active devices for current tenant",

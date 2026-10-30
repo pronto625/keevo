@@ -19,6 +19,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
@@ -89,6 +90,7 @@ public class ExportController {
     }
 
     @Operation(summary = "Jeux de données exportables")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/datasets")
     public ResponseEntity<ApiResponseWrapper<List<ExportDatasetDto>>> datasets() {
         CurrentActor.requireOwner(OWNER_ONLY);
@@ -102,6 +104,8 @@ public class ExportController {
     }
 
     @Operation(summary = "Lancer un export (fichier direct ou tâche en arrière-plan)")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ,
+            readJustification = "produit un fichier à partir des données existantes, sans les modifier")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<ExportJobDto>> request(@RequestBody(required = false) ExportRequestDto body,
                                                                     HttpServletResponse response) throws IOException {
@@ -136,6 +140,7 @@ public class ExportController {
     }
 
     @Operation(summary = "Mes exports")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<ExportJobDto>>> list() {
         CurrentActor.requireOwner(OWNER_ONLY);
@@ -145,6 +150,7 @@ public class ExportController {
     }
 
     @Operation(summary = "Détail d'un export")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<ExportJobDto>> get(@PathVariable UUID id) {
         CurrentActor.requireOwner(OWNER_ONLY);
@@ -153,6 +159,7 @@ public class ExportController {
     }
 
     @Operation(summary = "Télécharger le fichier d'un export prêt")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}/file")
     public ResponseEntity<Resource> file(@PathVariable UUID id) throws IOException {
         CurrentActor.requireOwner(OWNER_ONLY);

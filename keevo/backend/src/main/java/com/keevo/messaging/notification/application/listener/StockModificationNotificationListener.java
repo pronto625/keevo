@@ -6,6 +6,7 @@ import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.shared.capability.notification.WhatsAppSender;
+import com.keevo.shared.module.ModuleScoped;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,6 +89,7 @@ public class StockModificationNotificationListener {
         this.clock = clock;
     }
 
+    @ModuleScoped("alerts") // Story 13.10a: owner alerts are a paid module (plan §6.1)
     @ApplicationModuleListener
     public void onStockAdjusted(StockAdjustedEvent event) {
         // Skip if not EMPLOYEE

@@ -15,6 +15,7 @@ import com.keevo.commerce.sale.domain.port.in.ValidateSaleUseCase.ValidateSaleCo
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -43,6 +44,7 @@ public class PendingSaleController {
         this.correctSaleUseCase = correctSaleUseCase;
     }
 
+    @RequiresEntitlement(value = "pos", access = RequiresEntitlement.Access.READ)
     @GetMapping("/pending")
     @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
     public ResponseEntity<ApiResponseWrapper<List<PendingSaleResponseDto>>> getPendingSales() {
@@ -58,6 +60,7 @@ public class PendingSaleController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
+    @RequiresEntitlement("pos")
     @PostMapping("/{id}/validate")
     @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> validateSale(
@@ -71,6 +74,7 @@ public class PendingSaleController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale validated")));
     }
 
+    @RequiresEntitlement("pos")
     @PostMapping("/{id}/cancel")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> cancelSale(
@@ -87,6 +91,7 @@ public class PendingSaleController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(Map.of("message", "Sale cancelled")));
     }
 
+    @RequiresEntitlement("pos")
     @PostMapping("/{id}/correct")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> correctSale(

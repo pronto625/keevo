@@ -29,6 +29,12 @@ public interface ExportDatasetProvider {
     /** Stable dataset key used in requests ({@code [a-z][a-z0-9_]*}, e.g. {@code stores}). */
     String key();
 
+    /**
+     * Story 13.10a review — the module owning the data ({@code module.json} id, e.g. {@code crm}, {@code counting}):
+     * the export is refused ({@code MODULE_NOT_ENTITLED}) when it is disabled for the tenant, whatever the format.
+     */
+    String moduleId();
+
     /** French label (sheet name, audit label). */
     String label();
 

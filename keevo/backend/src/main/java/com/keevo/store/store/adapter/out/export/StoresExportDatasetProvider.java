@@ -45,6 +45,7 @@ public class StoresExportDatasetProvider extends NativeKeysetExportDataset {
         super(em);
     }
 
+    @Override public String moduleId() { return "store"; } // Story 13.10a review: owning module
     @Override
     public String key() {
         return KEY;

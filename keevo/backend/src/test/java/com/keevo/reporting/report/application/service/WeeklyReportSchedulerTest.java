@@ -413,20 +413,22 @@ class WeeklyReportSchedulerTest {
 
     @Test
     void story139_reportingDisabled_tenantSkipped_readOnlyStillGenerated() {
-        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        com.keevo.shared.module.ModuleRegistry modules = installedRegistry();
         scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository),
                 StoreApiTestSupport.queryPort(storeRepository), reportRepository, weeklyReportGenerator,
                 IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
                 new WeeklyReportWindowResolver(reportRepository), fixedClockAt(SUNDAY_DATE, "20:05:00", WAT), modules);
         var tenant = activeTenant();
         when(tenantRepository.findAll()).thenReturn(List.of(tenant));
-        when(modules.moduleState(TENANT_SCHEMA, "reporting")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
+        when(modules.moduleStates(TENANT_SCHEMA)).thenReturn(states(com.keevo.shared.module.ModuleState.DISABLED,
+                com.keevo.shared.module.ModuleState.ENABLED));
 
         scheduler.runWeeklyReport();
         verifyNoInteractions(weeklyReportGenerator);
         verifyNoInteractions(tenantPreferencesRepository);
 
-        when(modules.moduleState(TENANT_SCHEMA, "reporting")).thenReturn(com.keevo.shared.module.ModuleState.READ_ONLY);
+        when(modules.moduleStates(TENANT_SCHEMA)).thenReturn(states(com.keevo.shared.module.ModuleState.READ_ONLY,
+                com.keevo.shared.module.ModuleState.READ_ONLY));
         when(storeRepository.findAllActive()).thenReturn(List.of(activeStore()));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.of(prefs(0, "20:00:00", true)));
@@ -435,5 +437,57 @@ class WeeklyReportSchedulerTest {
         when(weeklyReportGenerator.generateWeeklyReport(any())).thenReturn(mock(EndOfDayReport.class));
         scheduler.runWeeklyReport();
         verify(weeklyReportGenerator).generateWeeklyReport(any());
+    }
+
+    @Test
+    void story1310a_advancedReportsDisabled_tenantSkipped() {
+        com.keevo.shared.module.ModuleRegistry modules = installedRegistry();
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository),
+                StoreApiTestSupport.queryPort(storeRepository), reportRepository, weeklyReportGenerator,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                new WeeklyReportWindowResolver(reportRepository), fixedClockAt(SUNDAY_DATE, "20:05:00", WAT), modules);
+        when(tenantRepository.findAll()).thenReturn(List.of(activeTenant()));
+        // a Free tenant: reporting enabled (free), « Rapports avancés » disabled (no row, no premium plan)
+        when(modules.moduleStates(TENANT_SCHEMA)).thenReturn(states(com.keevo.shared.module.ModuleState.ENABLED,
+                com.keevo.shared.module.ModuleState.DISABLED));
+
+        scheduler.runWeeklyReport();
+        verifyNoInteractions(weeklyReportGenerator);
+        verifyNoInteractions(tenantPreferencesRepository);
+    }
+
+    private static java.util.Map<String, com.keevo.shared.module.ModuleState> states(
+            com.keevo.shared.module.ModuleState reporting, com.keevo.shared.module.ModuleState advanced) {
+        return java.util.Map.of("reporting", reporting, "advanced-reports", advanced);
+    }
+
+    @Test
+    void story1310a_review_uninstalledGateModule_tenantProcessedWithWarn() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        // nothing installed: definition() empty for every id
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository),
+                StoreApiTestSupport.queryPort(storeRepository), reportRepository, weeklyReportGenerator,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                new WeeklyReportWindowResolver(reportRepository), fixedClockAt(SUNDAY_DATE, "20:05:00", WAT), modules);
+        when(tenantRepository.findAll()).thenReturn(List.of(activeTenant()));
+        when(modules.moduleStates(TENANT_SCHEMA)).thenReturn(java.util.Map.of());
+        when(storeRepository.findAllActive()).thenReturn(List.of(activeStore()));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(prefs(0, "20:00:00", true)));
+        when(reportRepository.findByDateAndTenant(any(LocalDate.class), eq(TENANT_SCHEMA), eq(ReportType.WEEKLY)))
+                .thenReturn(List.of());
+        when(weeklyReportGenerator.generateWeeklyReport(any())).thenReturn(mock(EndOfDayReport.class));
+
+        scheduler.runWeeklyReport();
+        verify(weeklyReportGenerator).generateWeeklyReport(any());
+    }
+
+    /** A registry mock where every module id is installed (13.10a review: the gate ignores uninstalled ids). */
+    static com.keevo.shared.module.ModuleRegistry installedRegistry() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        org.mockito.Mockito.lenient().when(modules.definition(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> java.util.Optional.of(com.keevo.shared.module.TestModuleCatalogs.loaded(
+                        inv.getArgument(0), com.keevo.shared.module.ModuleCategory.BUSINESS, true).manifest()));
+        return modules;
     }
 }

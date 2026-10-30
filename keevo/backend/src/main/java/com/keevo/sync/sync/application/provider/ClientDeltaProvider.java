@@ -22,6 +22,11 @@ public class ClientDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
+    public String moduleId() {
+        return "crm"; // Story 13.10a review: skipped by the pull while DISABLED
+    }
+
+    @Override
     public String entityKey() {
         return "clients";
     }

@@ -10,6 +10,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -58,6 +59,7 @@ public class InventorySessionController {
             @ApiResponse(responseCode = "409", description = "Active session already exists for store"),
             @ApiResponse(responseCode = "404", description = "Store not found")
     })
+    @RequiresEntitlement("counting")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<InventorySessionResponseDto>> createSession(
             @Valid @RequestBody CreateInventorySessionRequestDto request) {
@@ -84,6 +86,7 @@ public class InventorySessionController {
             @ApiResponse(responseCode = "200", description = "Active session found"),
             @ApiResponse(responseCode = "404", description = "No active session")
     })
+    @RequiresEntitlement(value = "counting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/active")
     public ResponseEntity<ApiResponseWrapper<InventorySessionResponseDto>> getActiveSession(
             @RequestParam UUID storeId) {
@@ -102,6 +105,7 @@ public class InventorySessionController {
             @ApiResponse(responseCode = "404", description = "Session not found"),
             @ApiResponse(responseCode = "409", description = "Session is not in progress")
     })
+    @RequiresEntitlement("counting")
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponseWrapper<InventorySessionResponseDto>> cancelSession(
             @PathVariable UUID id, HttpServletRequest httpRequest) {
@@ -120,6 +124,7 @@ public class InventorySessionController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Sessions listed")
     })
+    @RequiresEntitlement(value = "counting", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<InventorySessionResponseDto>>> listSessions(
             @RequestParam(required = false) UUID storeId,
@@ -143,6 +148,7 @@ public class InventorySessionController {
             @ApiResponse(responseCode = "409", description = "Session not in IN_PROGRESS status"),
             @ApiResponse(responseCode = "403", description = "Forbidden")
     })
+    @RequiresEntitlement("counting")
     @PostMapping("/{id}/validate")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<ValidateInventoryResponseDto>> validateInventory(

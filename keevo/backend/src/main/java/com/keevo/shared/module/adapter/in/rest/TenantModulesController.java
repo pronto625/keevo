@@ -4,6 +4,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.shared.module.ModuleLifecycle;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -21,6 +22,7 @@ import java.util.List;
  * Flutter module UI of 15.1/15.6). OWNER only; the tenant is the one bound to the request ({@link TenantContext}).
  */
 @Tag(name = "Tenant — Modules", description = "Modules of the current tenant and their subscription state")
+@EntitlementExempt("liste des modules du commerçant")
 @RestController
 @RequestMapping("/api/v1/tenants/me")
 public class TenantModulesController {

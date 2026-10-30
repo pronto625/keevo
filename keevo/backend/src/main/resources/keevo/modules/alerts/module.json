@@ -1,0 +1,23 @@
+{
+  "id": "alerts",
+  "version": "1.0.0",
+  "displayName": "Alertes et notifications",
+  "category": "premium",
+  "requires": [
+    "core",
+    "messaging"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.alerts",
+  "free": false
+}

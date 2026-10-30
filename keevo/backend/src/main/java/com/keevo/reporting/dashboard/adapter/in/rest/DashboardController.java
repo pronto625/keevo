@@ -5,6 +5,7 @@ import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase;
 import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase.GetDashboardSummaryQuery;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -35,6 +36,7 @@ public class DashboardController {
     }
 
     @Operation(summary = "Get aggregated dashboard summary for the OWNER morning view")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/summary")
     public ResponseEntity<ApiResponseWrapper<DashboardSummaryResponseDto>> getSummary() {
         String tenantId = TenantContext.getCurrentTenant();

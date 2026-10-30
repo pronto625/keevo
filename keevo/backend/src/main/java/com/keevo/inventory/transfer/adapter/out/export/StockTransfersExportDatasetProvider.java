@@ -55,6 +55,7 @@ public class StockTransfersExportDatasetProvider extends NativeKeysetExportDatas
         super(em);
     }
 
+    @Override public String moduleId() { return "multi-store"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Transferts"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

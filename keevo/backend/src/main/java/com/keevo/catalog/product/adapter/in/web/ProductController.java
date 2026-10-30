@@ -15,6 +15,7 @@ import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.shared.infrastructure.security.AuthDetails;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.store.api.StoreQueryPort;
 
 import org.springframework.http.HttpStatus;
@@ -64,6 +65,7 @@ public class ProductController {
      * Create new product
      * POST /api/v1/products
      */
+    @RequiresEntitlement("catalog")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> createProduct(
             @Valid @RequestBody CreateProductRequestDto request) {
@@ -102,6 +104,7 @@ public class ProductController {
      * List all active products
      * GET /api/v1/products
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<ProductResponseDto>>> listProducts() {
         List<Product> products = productRepository.findAllActive();
@@ -116,6 +119,7 @@ public class ProductController {
      * Get product by ID
      * GET /api/v1/products/{id}
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> getProduct(@PathVariable UUID id) {
         return productRepository.findById(id)
@@ -131,6 +135,7 @@ public class ProductController {
      * Update product
      * PATCH /api/v1/products/{id}
      */
+    @RequiresEntitlement("catalog")
     @PatchMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> updateProduct(
             @PathVariable UUID id,
@@ -163,6 +168,7 @@ public class ProductController {
      * Archive product (soft delete)
      * PATCH /api/v1/products/{id}/archive
      */
+    @RequiresEntitlement("catalog")
     @PatchMapping("/{id}/archive")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> archiveProduct(@PathVariable UUID id) {
         UUID actorId = CurrentActor.actorId();
@@ -183,6 +189,7 @@ public class ProductController {
      * <p>Returns the supplier that supplies this product (from {@code product_suppliers}).
      * Returns 404 if no supplier is linked.
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{productId}/supplier")
     public ResponseEntity<ApiResponseWrapper<ProductSupplierResponseDto>> getProductSupplier(
             @PathVariable UUID productId) {
@@ -202,6 +209,7 @@ public class ProductController {
      * <p>Returns real-time margin calculation without modifying the product.
      * Used by the frontend for live margin display in the product form.
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}/pricing")
     public ResponseEntity<ApiResponseWrapper<GetProductPricingUseCase.ProductPricingDto>> getProductPricing(
             @PathVariable UUID id) {

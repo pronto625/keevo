@@ -2,6 +2,7 @@ package com.keevo.messaging.notification.adapter.in.rest;
 
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,6 +30,7 @@ public class MessagingStatusController {
     }
 
     @Operation(summary = "Get messaging infrastructure status")
+    @RequiresEntitlement(value = "messaging", access = RequiresEntitlement.Access.READ)
     @GetMapping("/status")
     public ResponseEntity<ApiResponseWrapper<Map<String, Object>>> getStatus() {
         Map<String, Object> status = Map.of(

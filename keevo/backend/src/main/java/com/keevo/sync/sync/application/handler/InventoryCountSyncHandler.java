@@ -40,7 +40,7 @@ public class InventoryCountSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     public String moduleId() {
-        return "inventory";
+        return "counting"; // Story 13.10a: premium (plan §6.1)
     }
 
     @Override

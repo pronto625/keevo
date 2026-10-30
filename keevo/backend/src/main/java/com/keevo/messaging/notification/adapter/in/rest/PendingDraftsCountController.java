@@ -6,6 +6,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +34,7 @@ public class PendingDraftsCountController {
      * Used by the owner's UI badge counter.
      */
     @Operation(summary = "Count the draft products awaiting owner validation (owner only)")
+    @RequiresEntitlement(value = "messaging", access = RequiresEntitlement.Access.READ)
     @GetMapping("/api/v1/products/drafts/count")
     public ResponseEntity<ApiResponseWrapper<Long>> getPendingDraftsCount() {
         String role = CurrentActor.role();

@@ -8,6 +8,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,6 +22,7 @@ import java.util.List;
  * the merchant app lists them even when the push was never received or tapped (Story 9-5, FR82).
  * OWNER / EMPLOYEE only; the company always comes from the JWT (tenant context), never the request.
  */
+@EntitlementExempt("core: annonces de la plateforme")
 @RestController
 @RequestMapping("/api/v1/notifications/announcements")
 public class AnnouncementController {

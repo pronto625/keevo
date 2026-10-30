@@ -24,6 +24,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.subscription.api.CurrentPlan;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -54,6 +55,7 @@ import java.util.UUID;
  * {@code AdminSubscriptionController}.
  */
 @Tag(name = "Admin — Plans", description = "Super Admin plan activation, payments, suspension")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin")
 public class AdminTenantPlanController {

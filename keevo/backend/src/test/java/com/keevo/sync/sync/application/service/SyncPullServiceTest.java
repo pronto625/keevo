@@ -220,4 +220,37 @@ class SyncPullServiceTest {
 
         assertThat(result.hasMore()).isFalse();
     }
+
+    @Test
+    void story1310a_disabledModuleProviderSkipped_readOnlyStillPulled() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        when(productProvider.moduleId()).thenReturn("catalog");
+        when(clientProvider.moduleId()).thenReturn("counting");
+        when(moduleRegistry.moduleStates(TENANT_ID)).thenReturn(Map.of(
+                "catalog", com.keevo.shared.module.ModuleState.READ_ONLY,
+                "counting", com.keevo.shared.module.ModuleState.DISABLED));
+        when(productProvider.queryDeltaPage(eq(since), isNull(), anyInt())).thenReturn(
+                page(List.of(Map.of("id", "p1"))));
+
+        var result = service.pull(new SyncUseCase.PullCommand(ACTOR_ID, TENANT_ID, since));
+
+        assertThat(result.entities().get("products")).hasSize(1);
+        assertThat(result.entities().get("clients")).isEmpty();
+        assertThat(result.hasMore()).isFalse();
+        verify(clientProvider, never()).queryDeltaPage(any(), any(), anyInt());
+    }
+
+    @Test
+    void story1310a_moduleStatesUnreadable_everythingPulled() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        when(clientProvider.moduleId()).thenReturn("counting");
+        when(moduleRegistry.moduleStates(TENANT_ID)).thenThrow(new IllegalStateException("db"));
+        when(productProvider.queryDeltaPage(eq(since), isNull(), anyInt())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(since), isNull(), anyInt())).thenReturn(
+                page(List.of(Map.of("id", "c1"))));
+
+        var result = service.pull(new SyncUseCase.PullCommand(ACTOR_ID, TENANT_ID, since));
+
+        assertThat(result.entities().get("clients")).hasSize(1);
+    }
 }

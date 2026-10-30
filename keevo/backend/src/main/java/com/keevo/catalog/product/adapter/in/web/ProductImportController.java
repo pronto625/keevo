@@ -14,6 +14,7 @@ import com.keevo.catalog.product.application.usecase.ImportCsvProductsUseCase;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -69,6 +70,7 @@ public class ProductImportController {
      * GET /api/v1/products/import/template
      * Returns a UTF-8 CSV file with the expected column layout + 3 example rows.
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/import/template")
     public ResponseEntity<byte[]> downloadTemplate() {
         byte[] csv = templateUseCase.execute();
@@ -98,6 +100,7 @@ public class ProductImportController {
      *     -F "storeId=<uuid>"
      * }</pre>
      */
+    @RequiresEntitlement("catalog")
     @PostMapping(value = "/import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponseWrapper<ImportResultResponseDto>> importCsv(
             @RequestPart("file") MultipartFile file,
@@ -155,6 +158,7 @@ public class ProductImportController {
      * POST /api/v1/products/draft
      * Creates a product with status=DRAFT. Accessible to OWNER and EMPLOYEE.
      */
+    @RequiresEntitlement("catalog")
     @PostMapping("/draft")
     public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> createDraft(
             @Valid @RequestBody CreateDraftProductRequestDto request) {

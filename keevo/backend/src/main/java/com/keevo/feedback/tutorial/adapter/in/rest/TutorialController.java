@@ -3,6 +3,7 @@ package com.keevo.feedback.tutorial.adapter.in.rest;
 import com.keevo.feedback.tutorial.adapter.in.rest.dto.TutorialResponseDto;
 import com.keevo.feedback.tutorial.domain.port.in.ListTutorialsUseCase;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ import java.util.List;
  * (OWNER or EMPLOYEE) can read it.
  */
 @Tag(name = "Help", description = "Video tutorials")
+@EntitlementExempt("core: tutoriels")
 @RestController
 @RequestMapping("/api/v1/help")
 public class TutorialController {

@@ -12,9 +12,12 @@ import com.keevo.reporting.export.domain.port.out.ExportJobRepository;
 import com.keevo.reporting.export.domain.port.out.ExportRenderer;
 import com.keevo.shared.application.port.export.ExportDatasetProvider;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.EntitlementService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -50,6 +53,8 @@ public class ExportJobRunner {
     private final PushNotifier pushNotifier;
     private final Duration retention;
     private final Clock clock;
+    /** Story 13.10a — {@code null} only in unit tests built without it (no gate). */
+    private final EntitlementService entitlements;
 
     @SuppressWarnings("java:S107")
     public ExportJobRunner(ExportJobRepository jobRepository,
@@ -60,6 +65,21 @@ public class ExportJobRunner {
                            PushNotifier pushNotifier,
                            ExportProperties properties,
                            Clock clock) {
+        this(jobRepository, storage, writer, datasetRegistry, rendererRegistry, pushNotifier, properties, clock, null);
+    }
+
+    @Autowired
+    @SuppressWarnings("java:S107")
+    public ExportJobRunner(ExportJobRepository jobRepository,
+                           ExportFileStorage storage,
+                           ExportStreamingWriter writer,
+                           ExportDatasetRegistry datasetRegistry,
+                           ExportRendererRegistry rendererRegistry,
+                           PushNotifier pushNotifier,
+                           ExportProperties properties,
+                           Clock clock,
+                           EntitlementService entitlements) {
+        this.entitlements = entitlements;
         this.jobRepository = jobRepository;
         this.storage = storage;
         this.writer = writer;
@@ -85,6 +105,16 @@ public class ExportJobRunner {
                         job.getStatus());
                 job = null; // not ours to run nor to notify about
                 return;
+            }
+            if (entitlements != null && (!entitlements.isEnabled(tenantSchema, ExportService.EXPORTS_MODULE)
+                    || job.getDatasets().stream().map(datasetRegistry::require)
+                            .anyMatch(p -> !entitlements.isEnabled(tenantSchema, p.moduleId())))) {
+                // Story 13.10a: background exports belong to the « Exports PDF et Excel » module and each dataset to
+                // its owning module — refused if one was disabled between the request and the run (the request is
+                // gated the same way); the owners
+                // get the usual EXPORT_FAILED push
+                log.info("EXPORT_JOB_NOT_ENTITLED jobId={} tenant={} — module « exports » disabled", jobId, tenantSchema);
+                throw new DomainException(ErrorCode.MODULE_NOT_ENTITLED, "Module is not included in the tenant's subscription");
             }
             job.start(Instant.now(clock));
             job = jobRepository.save(job);

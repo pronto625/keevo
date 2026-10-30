@@ -49,6 +49,7 @@ public class InventorySessionsExportDatasetProvider extends NativeKeysetExportDa
         super(em);
     }
 
+    @Override public String moduleId() { return "counting"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Inventaires"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

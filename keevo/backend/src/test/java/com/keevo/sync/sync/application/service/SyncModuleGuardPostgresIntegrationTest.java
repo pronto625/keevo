@@ -40,13 +40,12 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -104,7 +103,19 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                     productId, storeId);
         }
         clearInvocations(tenantModuleStatePort);
+        // Story 13.10a: count only the reads of the push request (MockMvc runs on the test thread) — the async
+        // @ModuleScoped("alerts") listeners triggered by a sale read the state on their own threads
+        Thread testThread = Thread.currentThread();
+        requestReads.set(0);
+        doAnswer(inv -> {
+            if (Thread.currentThread() == testThread) {
+                requestReads.incrementAndGet();
+            }
+            return inv.callRealMethod();
+        }).when(tenantModuleStatePort).findTenantRows(anyString());
     }
+
+    private final java.util.concurrent.atomic.AtomicInteger requestReads = new java.util.concurrent.atomic.AtomicInteger();
 
     @AfterEach
     void tearDown() {
@@ -197,7 +208,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 .andExpect(jsonPath(result(id(client), "reason"), contains("MODULE_INACTIVE")))
                 .andExpect(jsonPath(result(id(sale), "status"), contains("APPLIED")));
 
-        verify(tenantModuleStatePort, times(1)).findRows(anyString());
+        assertThat(requestReads).as("tenant_modules reads of the push request").hasValue(1);
 
         Map<String, Object> error = jdbc.queryForMap("SELECT operation_type, error_reason, payload::text AS payload "
                 + "FROM \"" + schema + "\".sync_error_log WHERE operation_id = ?", id(client));
@@ -227,7 +238,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 .andExpect(jsonPath(result(id(client), "reason"), contains("MODULE_READ_ONLY")))
                 .andExpect(jsonPath(result(id(sale), "status"), contains("APPLIED")));
 
-        verify(tenantModuleStatePort, times(1)).findRows(anyString());
+        assertThat(requestReads).as("tenant_modules reads of the push request").hasValue(1);
         assertThat(jdbc.queryForObject("SELECT error_reason FROM \"" + schema + "\".sync_error_log "
                 + "WHERE operation_id = ?", String.class, id(client))).isEqualTo("MODULE_READ_ONLY");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".clients WHERE name = ?",
@@ -246,7 +257,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 .andExpect(jsonPath("$.data.results", hasSize(3)))
                 .andExpect(jsonPath("$.data.results[*].status", everyItem(is("APPLIED"))));
 
-        verify(tenantModuleStatePort, times(1)).findRows(anyString());
+        assertThat(requestReads).as("tenant_modules reads of the push request").hasValue(1);
     }
 
     @Test
@@ -292,7 +303,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
     @DisplayName("module state unreadable: the push is answered 503, nothing is processed or recorded")
     void registryFailure_503_nothingRecorded() throws Exception {
         doThrow(new org.springframework.dao.DataAccessResourceFailureException("database down"))
-                .when(tenantModuleStatePort).findRows(anyString());
+                .when(tenantModuleStatePort).findTenantRows(anyString());
         var client = createClient("Client 503");
         var sale = createSale();
 
@@ -315,7 +326,66 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
 
         pushAs(token, createClient("Client admin")).andExpect(status().isForbidden());
 
-        verify(tenantModuleStatePort, never()).findRows(anyString());
+        assertThat(requestReads).as("tenant_modules reads of the push request").hasValue(0);
+    }
+
+    private Map<String, Object> transfer() {
+        return op("STOCK_TRANSFER", Map.of("sourceStoreId", storeId.toString(),
+                "destinationStoreId", UUID.randomUUID().toString(), "productId", productId.toString(), "quantity", 1));
+    }
+
+    @Test
+    @DisplayName("13.10a: Free tenant — STOCK_TRANSFER / CREATE_INVENTORY_SESSION REJECTED MODULE_INACTIVE (held), sale APPLIED")
+    void freeTenant_premiumOpsRejected_saleApplied() throws Exception {
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', expires_at = NULL");
+        var transfer = transfer();
+        var session = op("CREATE_INVENTORY_SESSION", Map.of("storeId", storeId.toString()));
+        var sale = createSale();
+
+        push(transfer, session, sale)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(transfer), "status"), contains("REJECTED")))
+                .andExpect(jsonPath(result(id(transfer), "reason"), contains("MODULE_INACTIVE")))
+                .andExpect(jsonPath(result(id(session), "status"), contains("REJECTED")))
+                .andExpect(jsonPath(result(id(session), "reason"), contains("MODULE_INACTIVE")))
+                .andExpect(jsonPath(result(id(sale), "status"), contains("APPLIED")));
+        assertThat(requestReads).as("tenant_modules reads of the push request").hasValue(1);
+    }
+
+    @Test
+    @DisplayName("13.10a: trial — STOCK_TRANSFER passes the guard; ended 1 day ago → MODULE_READ_ONLY (grace); 8 days → MODULE_INACTIVE")
+    void premiumTrial_transferPassesGuard_expiredTrialRejected() throws Exception {
+        var transfer = transfer();
+        push(transfer)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(transfer), "reason"), not(contains("MODULE_INACTIVE"))));
+
+        // ended yesterday: read-only grace (13.10a review) — a sync op is a write
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET expires_at = now() - interval '1 day'");
+        var late = transfer();
+        push(late)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(late), "status"), contains("REJECTED")))
+                .andExpect(jsonPath(result(id(late), "reason"), contains("MODULE_READ_ONLY")));
+
+        // grace over (8 days): inactive
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET expires_at = now() - interval '8 days'");
+        var later = transfer();
+        push(later)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(later), "status"), contains("REJECTED")))
+                .andExpect(jsonPath(result(id(later), "reason"), contains("MODULE_INACTIVE")));
+    }
+
+    @Test
+    @DisplayName("13.10a: Free tenant with a counting row ACTIVE (super-admin grant) — the session passes the guard")
+    void freeTenant_countingRowActive_passesGuard() throws Exception {
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', expires_at = NULL");
+        moduleRow("counting", "ACTIVE");
+        var session = op("CREATE_INVENTORY_SESSION", Map.of("storeId", storeId.toString()));
+        push(session)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(session), "reason"), not(contains("MODULE_INACTIVE"))));
     }
 
     @Test
@@ -334,8 +404,10 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
         put.apply("crm").accept(List.of("CREATE_CLIENT", "UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT",
                 "CREATE_SUPPLIER", "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER", "UNARCHIVE_SUPPLIER"));
         put.apply("store").accept(List.of("CREATE_STORE", "UPDATE_STORE", "DEACTIVATE_STORE"));
-        put.apply("inventory").accept(List.of("STOCK_ADJUST", "RECORD_STOCK_ENTRY", "STOCK_TRANSFER",
-                "SAVE_INVENTORY_COUNT", "CREATE_INVENTORY_SESSION", "VALIDATE_INVENTORY"));
+        put.apply("inventory").accept(List.of("STOCK_ADJUST", "RECORD_STOCK_ENTRY"));
+        // Story 13.10a: premium operations declare their paid module (plan §6.1)
+        put.apply("multi-store").accept(List.of("STOCK_TRANSFER"));
+        put.apply("counting").accept(List.of("SAVE_INVENTORY_COUNT", "CREATE_INVENTORY_SESSION", "VALIDATE_INVENTORY"));
         put.apply("core").accept(List.of("CREATE_EMPLOYEE", "REASSIGN_EMPLOYEE", "DEACTIVATE_EMPLOYEE",
                 "REACTIVATE_EMPLOYEE", "SUBMIT_FEEDBACK"));
 

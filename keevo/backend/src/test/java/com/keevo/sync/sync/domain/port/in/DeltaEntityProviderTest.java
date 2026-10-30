@@ -15,6 +15,11 @@ class DeltaEntityProviderTest {
      */
     static class StubDeltaEntityProvider implements DeltaEntityProvider {
         @Override
+        public String moduleId() {
+            return "core";
+        }
+
+        @Override
         public String entityKey() {
             return "testEntities";
         }

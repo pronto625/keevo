@@ -10,6 +10,7 @@ import com.keevo.inventory.counting.domain.port.out.InventorySessionRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -51,6 +52,7 @@ public class InventoryCountController {
             @ApiResponse(responseCode = "200", description = "Products listed"),
             @ApiResponse(responseCode = "404", description = "Session not found")
     })
+    @RequiresEntitlement(value = "counting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/products")
     public ResponseEntity<ApiResponseWrapper<List<InventoryProductRowResponseDto>>> getProducts(
             @PathVariable UUID sessionId) {
@@ -70,6 +72,7 @@ public class InventoryCountController {
             @ApiResponse(responseCode = "404", description = "Session not found"),
             @ApiResponse(responseCode = "409", description = "Session not in progress")
     })
+    @RequiresEntitlement("counting")
     @PostMapping("/counts")
     public ResponseEntity<ApiResponseWrapper<InventoryCountResponseDto>> saveCount(
             @PathVariable UUID sessionId,
@@ -93,6 +96,7 @@ public class InventoryCountController {
             @ApiResponse(responseCode = "200", description = "Counts saved"),
             @ApiResponse(responseCode = "409", description = "Session not in progress")
     })
+    @RequiresEntitlement("counting")
     @PutMapping("/counts")
     public ResponseEntity<ApiResponseWrapper<List<InventoryCountResponseDto>>> bulkSaveCounts(
             @PathVariable UUID sessionId,
@@ -118,6 +122,7 @@ public class InventoryCountController {
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Counts listed")
     })
+    @RequiresEntitlement(value = "counting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/counts")
     public ResponseEntity<ApiResponseWrapper<List<InventoryCountResponseDto>>> getCounts(
             @PathVariable UUID sessionId) {
@@ -137,6 +142,7 @@ public class InventoryCountController {
             @ApiResponse(responseCode = "404", description = "Session not found"),
             @ApiResponse(responseCode = "409", description = "Product name already exists or session not in progress")
     })
+    @RequiresEntitlement("counting")
     @PostMapping("/quick-add")
     public ResponseEntity<ApiResponseWrapper<QuickAddProductResponseDto>> quickAddProduct(
             @PathVariable UUID sessionId,

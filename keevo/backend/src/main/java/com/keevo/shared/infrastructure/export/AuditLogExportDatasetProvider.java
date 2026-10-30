@@ -64,6 +64,7 @@ public class AuditLogExportDatasetProvider implements ExportDatasetProvider {
         this.auditPort = auditPort;
     }
 
+    @Override public String moduleId() { return "core"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Journal d'audit"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

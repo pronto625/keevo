@@ -3,6 +3,7 @@ package com.keevo.identity.auth.adapter.in.rest;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.auth.application.service.AccountDeletionService;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -23,6 +24,7 @@ import java.util.UUID;
  * (requires authenticated user), and OWNER-only gating is enforced via
  * {@code @PreAuthorize} + programmatic {@code CurrentActor.requireOwner} check.
  */
+@EntitlementExempt("core: compte")
 @RestController
 @RequestMapping("/api/v1/account")
 public class AccountController {

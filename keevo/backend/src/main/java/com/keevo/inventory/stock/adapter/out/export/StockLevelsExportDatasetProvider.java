@@ -52,6 +52,7 @@ public class StockLevelsExportDatasetProvider extends NativeKeysetExportDataset 
         super(em);
     }
 
+    @Override public String moduleId() { return "inventory"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Stocks"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

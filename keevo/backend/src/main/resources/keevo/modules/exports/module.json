@@ -1,0 +1,23 @@
+{
+  "id": "exports",
+  "version": "1.0.0",
+  "displayName": "Exports PDF et Excel",
+  "category": "premium",
+  "requires": [
+    "core",
+    "reporting"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.exports",
+  "free": false
+}

@@ -44,8 +44,12 @@ class ModuleRegistryPostgresIntegrationTest {
     private static final String TENANT = "kv_reg001";
     private static final UUID TENANT_ID = UUID.randomUUID();
     private static final String DELETED_TENANT = "kv_reg002";
-    private static final String[] SHIPPED = {"admin", "catalog", "core", "crm", "inventory", "messaging", "pos",
+    private static final String[] SHIPPED = {"admin", "advanced-reports", "alerts", "catalog", "core", "counting",
+            "crm", "exports", "inventory", "messaging", "multi-store", "pos", "profitability", "report-config",
             "reporting", "store", "sync"};
+    /** Story 13.10a — the paid feature modules of plan §6.1. */
+    private static final String[] PAID = {"advanced-reports", "alerts", "counting", "exports", "multi-store",
+            "profitability", "report-config"};
 
     private static JdbcTemplate jdbc;
     private static JdbcTenantModuleStateStore store;
@@ -111,19 +115,100 @@ class ModuleRegistryPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("shipped set: the 10 manifests, all free today (precondition), all active for a tenant without rows")
+    @DisplayName("shipped set: 17 manifests, the 7 §6.1 feature modules paid; a tenant without rows nor plan gets the free ones")
     void shippedCatalogue() {
         ModuleRegistry shipped = new ModuleRegistryService(shippedCatalog, store, new RequestScopedActiveModulesCache(), Clock.systemUTC());
         assertThat(shipped.installed()).extracting(ModuleManifest::id).containsExactly(SHIPPED);
-        assertThat(shipped.installed()).allSatisfy(m -> assertThat(m.free())
-                .as("shipped module %s is expected free (V1 parity: no backfill)", m.id()).isTrue());
-        assertThat(shipped.activeModules(TENANT)).containsExactly(SHIPPED);
+        assertThat(shipped.installed()).filteredOn(m -> !m.free()).extracting(ModuleManifest::id)
+                .containsExactly(PAID);
+        assertThat(shipped.installed()).filteredOn(m -> !m.free())
+                .allSatisfy(m -> assertThat(m.category()).isEqualTo(ModuleCategory.PREMIUM));
+        assertThat(shipped.activeModules(TENANT)).containsExactlyElementsOf(java.util.Arrays.stream(SHIPPED)
+                .filter(id -> !java.util.List.of(PAID).contains(id)).toList());
+    }
+
+    @Test
+    @DisplayName("13.10a: the plan is read with the rows — oldest subscriptions row; missing schema → no plan")
+    void planReadWithRows() {
+        assertThat(store.findTenantRows(TENANT)).get()
+                .satisfies(t -> assertThat(t.plan()).isEqualTo(TenantModuleStatePort.Plan.NONE));
+        jdbc.execute("CREATE SCHEMA " + TENANT);
+        try {
+            jdbc.execute("CREATE TABLE " + TENANT + ".subscriptions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
+                    + "plan_type VARCHAR(20) NOT NULL, status VARCHAR(20) NOT NULL, created_at TIMESTAMPTZ NOT NULL, "
+                    + "expires_at TIMESTAMPTZ)");
+            assertThat(store.findTenantRows(TENANT)).get()
+                    .satisfies(t -> assertThat(t.plan()).isEqualTo(TenantModuleStatePort.Plan.NONE));
+            jdbc.update("INSERT INTO " + TENANT + ".subscriptions (plan_type, status, created_at, expires_at) "
+                    + "VALUES ('PREMIUM_TRIAL', 'ACTIVE', '2026-01-01T00:00:00Z', '2027-04-29T11:34:20.123456Z'), "
+                    + "('FREE', 'ACTIVE', '2026-06-01T00:00:00Z', NULL)");
+            row("crm", "ACTIVE");
+            row("pos", "DISABLED");
+            assertThat(store.findTenantRows(TENANT)).get().satisfies(t -> {
+                assertThat(t.plan()).isEqualTo(new TenantModuleStatePort.Plan("PREMIUM_TRIAL", "ACTIVE",
+                        java.time.Instant.parse("2027-04-29T11:34:20.123456Z")));
+                assertThat(t.rows()).containsOnlyKeys("crm", "pos");
+            });
+            ModuleRegistry shipped = new ModuleRegistryService(shippedCatalog, store,
+                    new RequestScopedActiveModulesCache(), Clock.fixed(java.time.Instant.parse("2026-10-30T00:00:00Z"),
+                    java.time.ZoneOffset.UTC));
+            assertThat(shipped.activeModules(TENANT)).contains(PAID).doesNotContain("pos");
+            // trial ended 2027-04-29: read-only during the 7-day grace, then off (same outcome as a backfilled row)
+            ModuleRegistry inGrace = new ModuleRegistryService(shippedCatalog, store,
+                    new RequestScopedActiveModulesCache(), Clock.fixed(java.time.Instant.parse("2027-05-01T00:00:00Z"),
+                    java.time.ZoneOffset.UTC));
+            assertThat(inGrace.moduleStates(TENANT)).containsEntry("counting", ModuleState.READ_ONLY);
+            ModuleRegistry afterTrial = new ModuleRegistryService(shippedCatalog, store,
+                    new RequestScopedActiveModulesCache(), Clock.fixed(java.time.Instant.parse("2027-05-07T00:00:00Z"),
+                    java.time.ZoneOffset.UTC));
+            assertThat(afterTrial.activeModules(TENANT)).doesNotContain(PAID).contains("crm");
+
+            // two rows with the same created_at: the id breaks the tie (stable answer)
+            jdbc.update("DELETE FROM " + TENANT + ".subscriptions");
+            jdbc.update("INSERT INTO " + TENANT + ".subscriptions (id, plan_type, status, created_at) VALUES "
+                    + "('00000000-0000-0000-0000-000000000002', 'FREE', 'ACTIVE', '2026-01-01T00:00:00Z'), "
+                    + "('00000000-0000-0000-0000-000000000001', 'PREMIUM', 'ACTIVE', '2026-01-01T00:00:00Z')");
+            assertThat(store.findTenantRows(TENANT).orElseThrow().plan().planType()).isEqualTo("PREMIUM");
+
+            // FREE after the nightly EXPIRY downgrade: the latest plan event anchors the grace
+            jdbc.update("UPDATE " + TENANT + ".subscriptions SET plan_type = 'FREE'");
+            jdbc.update("INSERT INTO public.tenant_plan_events (tenant_id, from_plan, to_plan, cause, occurred_at) "
+                    + "VALUES (?, 'PREMIUM_TRIAL', 'FREE', 'EXPIRY', '2026-10-28T02:00:00Z')", TENANT_ID);
+            assertThat(store.findTenantRows(TENANT).orElseThrow().plan().expiryDowngradeAt())
+                    .isEqualTo(java.time.Instant.parse("2026-10-28T02:00:00Z"));
+            jdbc.update("INSERT INTO public.tenant_plan_events (tenant_id, from_plan, to_plan, cause, occurred_at) "
+                    + "VALUES (?, 'FREE', 'FREE', 'ADMIN_DOWNGRADE', '2026-10-29T02:00:00Z')", TENANT_ID);
+            assertThat(store.findTenantRows(TENANT).orElseThrow().plan().expiryDowngradeAt()).isNull();
+            jdbc.update("DELETE FROM public.tenant_plan_events WHERE tenant_id = ?", TENANT_ID);
+        } finally {
+            jdbc.execute("DROP SCHEMA " + TENANT + " CASCADE");
+        }
     }
 
     @Test
     @DisplayName("existing tenant without rows: the free modules are active, the paid one is not")
     void existingTenantNoRows() {
         assertThat(registry.activeModules(TENANT)).containsExactlyElementsOf(TestModuleCatalogs.FREE);
+    }
+
+    @Test
+    @DisplayName("13.10a review: a faulty subscriptions table → plan UNREADABLE (paid granted), rows and free modules unaffected")
+    void faultyPlanIsolated() {
+        jdbc.execute("CREATE SCHEMA " + TENANT);
+        try {
+            // no status column: the plan statement fails
+            jdbc.execute("CREATE TABLE " + TENANT + ".subscriptions (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
+                    + "plan_type VARCHAR(20) NOT NULL, created_at TIMESTAMPTZ NOT NULL, expires_at TIMESTAMPTZ)");
+            row("pos", "DISABLED");
+            var found = store.findTenantRows(TENANT).orElseThrow();
+            assertThat(found.plan()).isEqualTo(TenantModuleStatePort.Plan.UNREADABLE);
+            assertThat(found.rows()).containsOnlyKeys("pos");
+            ModuleRegistry shipped = new ModuleRegistryService(shippedCatalog, store,
+                    new RequestScopedActiveModulesCache(), Clock.systemUTC());
+            assertThat(shipped.activeModules(TENANT)).contains(PAID).contains("crm").doesNotContain("pos");
+        } finally {
+            jdbc.execute("DROP SCHEMA " + TENANT + " CASCADE");
+        }
     }
 
     @Test

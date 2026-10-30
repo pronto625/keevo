@@ -1,0 +1,23 @@
+{
+  "id": "advanced-reports",
+  "version": "1.0.0",
+  "displayName": "Rapports avancés",
+  "category": "premium",
+  "requires": [
+    "core",
+    "reporting"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.advanced-reports",
+  "free": false
+}

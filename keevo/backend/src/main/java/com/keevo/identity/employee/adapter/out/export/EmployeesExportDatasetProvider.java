@@ -45,6 +45,7 @@ public class EmployeesExportDatasetProvider extends NativeKeysetExportDataset {
         super(em);
     }
 
+    @Override public String moduleId() { return "core"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Équipe"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

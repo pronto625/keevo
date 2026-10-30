@@ -26,6 +26,11 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
+    public String moduleId() {
+        return "pos"; // Story 13.10a review: skipped by the pull while DISABLED
+    }
+
+    @Override
     public String entityKey() {
         return "dayClosures";
     }

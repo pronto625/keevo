@@ -33,6 +33,7 @@ import com.keevo.identity.auth.domain.port.in.ResetPasswordUseCase;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -68,6 +69,7 @@ import java.util.UUID;
  * - POST /api/v1/auth/refresh
  */
 @Tag(name = "Authentication", description = "User registration and login endpoints")
+@EntitlementExempt("authentification")
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {

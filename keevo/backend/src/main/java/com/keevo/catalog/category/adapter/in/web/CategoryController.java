@@ -13,6 +13,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -56,6 +57,7 @@ public class CategoryController {
      * List all active categories (root + subcategories).
      * GET /api/v1/categories
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<CategoryResponseDto>>> getAllCategories() {
         List<Category> categories = getCategoriesUseCase.getAllActive();
@@ -70,6 +72,7 @@ public class CategoryController {
      * List root categories only (parentId = null).
      * GET /api/v1/categories/roots
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/roots")
     public ResponseEntity<ApiResponseWrapper<List<CategoryResponseDto>>> getRootCategories() {
         List<Category> categories = getCategoriesUseCase.getRootCategories();
@@ -84,6 +87,7 @@ public class CategoryController {
      * List subcategories of a parent category.
      * GET /api/v1/categories/{parentId}/subcategories
      */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{parentId}/subcategories")
     public ResponseEntity<ApiResponseWrapper<List<CategoryResponseDto>>> getSubcategories(@PathVariable UUID parentId) {
         List<Category> categories = getCategoriesUseCase.getByParent(parentId);
@@ -98,6 +102,7 @@ public class CategoryController {
      * Create a new custom category.
      * POST /api/v1/categories
      */
+    @RequiresEntitlement("catalog")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<CategoryResponseDto>> createCategory(
             @Valid @RequestBody CreateCategoryRequestDto request) {
@@ -119,6 +124,7 @@ public class CategoryController {
      * Toggle category active status.
      * PATCH /api/v1/categories/{id}/toggle
      */
+    @RequiresEntitlement("catalog")
     @PatchMapping("/{id}/toggle")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<ApiResponseWrapper<CategoryResponseDto>> toggleCategory(@PathVariable UUID id) {
@@ -138,6 +144,7 @@ public class CategoryController {
      * Rename a category.
      * PATCH /api/v1/categories/{id}
      */
+    @RequiresEntitlement("catalog")
     @PatchMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<CategoryResponseDto>> renameCategory(
             @PathVariable UUID id,
@@ -152,6 +159,7 @@ public class CategoryController {
      * Soft-delete a category (sets isActive = false; no-op when already inactive).
      * DELETE /api/v1/categories/{id} — 404 CATEGORY_NOT_FOUND on an unknown id (v1s-14-15).
      */
+    @RequiresEntitlement("catalog")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('OWNER')")
     public ResponseEntity<Void> deleteCategory(@PathVariable UUID id) {

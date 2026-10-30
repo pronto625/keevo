@@ -24,7 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>The manifests are read with the production loader ({@link ModuleManifestLoader}, the one the boot seed
  * uses), so this test and the boot agree on the glob and on the validation (non-blank unique ids, {@code requires}
  * a JSON array of known ids, no cycle) — no second parser. On top of that it checks that no manifest is silently
- * ignored: the ten shipped modules are all loaded, no {@code module.json} sits outside
+ * ignored: the 17 shipped modules (10 base + 7 paid feature modules, Story 13.10a) are all loaded, no {@code module.json} sits outside
  * {@code src/main/resources/keevo/modules/<id>/}, and none is shipped from the test resources.
  */
 class RequiresGraphAcyclicityTest {
@@ -34,7 +34,7 @@ class RequiresGraphAcyclicityTest {
         // throws on any invalid manifest
         List<LoadedModuleManifest> loaded = ModuleManifestLoader.loadFromClasspath(new PathMatchingResourcePatternResolver());
 
-        assertThat(loaded).as("module.json manifests on the classpath").hasSize(10);
+        assertThat(loaded).as("module.json manifests on the classpath").hasSize(17);
         Map<String, List<String>> graph = new LinkedHashMap<>();
         for (LoadedModuleManifest m : loaded) {
             ModuleManifest manifest = m.manifest();
@@ -51,7 +51,7 @@ class RequiresGraphAcyclicityTest {
         Path baseDir = Path.of(getClass().getProtectionDomain().getCodeSource().getLocation().toURI())
             .getParent().getParent();
         assertThat(manifestsUnder(baseDir.resolve("src/main/resources")))
-            .hasSize(10)
+            .hasSize(17)
             .allSatisfy(p -> assertThat(p).matches("keevo/modules/[a-z][a-z0-9]*(-[a-z0-9]+)*/module\\.json"));
         assertThat(manifestsUnder(baseDir.resolve("src/test/resources"))).as("module.json in test resources").isEmpty();
     }

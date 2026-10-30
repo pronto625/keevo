@@ -3,6 +3,7 @@ package com.keevo.subscription.plan.adapter.in.rest;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.subscription.plan.adapter.in.rest.dto.SubscriptionResponse;
 import com.keevo.subscription.plan.domain.port.in.GetSubscriptionQuery;
 import com.keevo.subscription.plan.domain.port.in.GetSubscriptionUseCase;
@@ -26,6 +27,7 @@ import java.util.UUID;
  *   endpoints must reject it explicitly (see {@link #requireTenantRole()}).
  */
 @Tag(name = "Subscription", description = "Plan limits and account lifecycle")
+@EntitlementExempt("core: abonnement")
 @RestController
 @RequestMapping("/api/v1/subscription")
 public class SubscriptionController {

@@ -8,6 +8,7 @@ import com.keevo.inventory.counting.domain.port.in.GenerateGapReportUseCase;
 import com.keevo.inventory.counting.domain.service.InventoryReportTextFormatter;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -48,6 +49,7 @@ public class InventoryReportController {
             @ApiResponse(responseCode = "200", description = "Gap report generated"),
             @ApiResponse(responseCode = "404", description = "Session not found")
     })
+    @RequiresEntitlement(value = "counting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/gap-report")
     public ResponseEntity<ApiResponseWrapper<InventoryGapReportResponseDto>> getGapReport(
             @PathVariable UUID sessionId) {
@@ -62,6 +64,7 @@ public class InventoryReportController {
     }
 
     @Operation(summary = "Get WhatsApp-formatted text report")
+    @RequiresEntitlement(value = "counting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/gap-report/text")
     public ResponseEntity<ApiResponseWrapper<String>> getGapReportText(
             @PathVariable UUID sessionId) {

@@ -230,4 +230,46 @@ class ReportControllerTest {
         org.assertj.core.api.Assertions.assertThat(cmd.receivedUntil()).isEqualTo(window.receivedUntil());
         org.assertj.core.api.Assertions.assertThat(cmd.isAutomatic()).isFalse();
     }
+
+    // ── Story 13.10a review: weekly reports belong to « Rapports avancés » ─────────────────────────────
+
+    private ReportController gatedController(com.keevo.shared.module.EntitlementService entitlements) {
+        return new ReportController(getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator, null,
+                StoreApiTestSupport.queryPort(storeRepository), null, weeklyWindowResolver, reportRepository, clock,
+                entitlements);
+    }
+
+    private EndOfDayReport weeklyReport() {
+        return EndOfDayReport.createNew("kv_test01", UUID.randomUUID(), "Boutique Test", null, null,
+                ReportType.WEEKLY, LocalDate.now(), "Contenu hebdo", 100000, 5, false);
+    }
+
+    @Test
+    void story1310a_weeklyReport_readAndResendNeedAdvancedReports_dailyDoesNot() throws Exception {
+        authenticateAs("OWNER");
+        var entitlements = org.mockito.Mockito.mock(com.keevo.shared.module.EntitlementService.class);
+        org.mockito.Mockito.doThrow(new com.keevo.shared.domain.exception.DomainException(
+                        com.keevo.shared.domain.exception.ErrorCode.MODULE_NOT_ENTITLED, "x"))
+                .when(entitlements).assertEnabled("kv_test01", "advanced-reports");
+        org.mockito.Mockito.doThrow(new com.keevo.shared.domain.exception.DomainException(
+                        com.keevo.shared.domain.exception.ErrorCode.MODULE_NOT_ENTITLED, "x"))
+                .when(entitlements).assertWritable("kv_test01", "advanced-reports");
+        MockMvc gated = MockMvcBuilders.standaloneSetup(gatedController(entitlements))
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        EndOfDayReport weekly = weeklyReport();
+        EndOfDayReport daily = sampleReport();
+        when(getReportHistoryUseCase.getReportById(eq(weekly.getId()), any())).thenReturn(Optional.of(weekly));
+        when(getReportHistoryUseCase.getReportById(eq(daily.getId()), any())).thenReturn(Optional.of(daily));
+
+        gated.perform(get("/api/v1/reports/" + weekly.getId()))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("MODULE_NOT_ENTITLED"));
+        gated.perform(post("/api/v1/reports/" + weekly.getId() + "/resend"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("MODULE_NOT_ENTITLED"));
+        org.mockito.Mockito.verifyNoInteractions(resendReportUseCase);
+
+        gated.perform(get("/api/v1/reports/" + daily.getId())).andExpect(status().isOk());
+        gated.perform(post("/api/v1/reports/" + daily.getId() + "/resend")).andExpect(status().isOk());
+    }
 }

@@ -1,6 +1,7 @@
 package com.keevo.reporting.export.application.service;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.EntitlementService;
 
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.TenantQueryPort;
@@ -22,8 +23,6 @@ import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.infrastructure.export.ExportValues;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.capability.entitlement.PlanView;
-import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -49,8 +48,8 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * ExportService — export use cases (Story v1s-18-1, FR55/FR94/FR96).
  *
- * <p>{@code request}: validate → plan gate → (document renderer: datasets + size check, v1s-18-3)
- * → rate limit → count (Premium only) → then
+ * <p>{@code request}: validate → « exports » module gate (13.10a, formerly the plan gate) → (document renderer: datasets + size check, v1s-18-3)
+ * → rate limit → count (« exports » module only — "Premium" below) → then
  * <ul>
  *   <li><b>DIRECT</b> (rows ≤ {@code sync-row-threshold}, or any non-Premium tenant — CSV stays
  *       free, background is Premium): streams to the caller's output on the request thread;</li>
@@ -70,6 +69,8 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     private static final DateTimeFormatter FILE_STAMP = DateTimeFormatter.ofPattern("yyyyMMdd-HHmm");
     static final String DOWNLOAD_PATH = "/api/v1/exports/download?token=";
     static final int LIST_LIMIT = 50;
+    /** Story 13.10a — the paid module gating XLSX / PDF and background exports (plan §6.1). */
+    public static final String EXPORTS_MODULE = "exports";
 
     private final ExportDatasetRegistry datasetRegistry;
     private final ExportRendererRegistry rendererRegistry;
@@ -78,7 +79,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
     private final ExportFileStorage storage;
     private final ExportRateLimiter rateLimiter;
     private final ExportLinkSigner linkSigner;
-    private final TenantPlanQuery tenantPlanQuery;
+    private final EntitlementService entitlements;
     private final ApplicationEventPublisher eventPublisher;
     private final TenantQueryPort tenantQuery;
     private final Executor exportExecutor;
@@ -94,7 +95,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
                          ExportFileStorage storage,
                          ExportRateLimiter rateLimiter,
                          ExportLinkSigner linkSigner,
-                         TenantPlanQuery tenantPlanQuery,
+                         EntitlementService entitlements,
                          ApplicationEventPublisher eventPublisher,
                          TenantQueryPort tenantQuery,
                          @Qualifier(ExportExecutorConfig.EXPORT_EXECUTOR) Executor exportExecutor,
@@ -108,7 +109,7 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         this.storage = storage;
         this.rateLimiter = rateLimiter;
         this.linkSigner = linkSigner;
-        this.tenantPlanQuery = tenantPlanQuery;
+        this.entitlements = entitlements;
         this.eventPublisher = eventPublisher;
         this.tenantQuery = tenantQuery;
         this.exportExecutor = exportExecutor;
@@ -125,10 +126,12 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
         List<ExportDatasetProvider> providers = validate(request);
         request = withNormalizedCriteria(request);
 
-        boolean premium = isPremium();
+        requireDatasetModules(providers);
+        boolean premium = exportsEnabled();
         String feature = request.format().premiumFeature();
         if (feature != null && !premium) {
-            throw new DomainException(ErrorCode.PLAN_FEATURE_REQUIRED, "Premium plan required",
+            // Story 13.10a: the « Exports PDF et Excel » module is the only source (formerly a plan check)
+            throw new DomainException(ErrorCode.MODULE_NOT_ENTITLED, "Module is not included in the tenant's subscription",
                     Map.of("feature", feature));
         }
         ExportRenderer renderer = rendererRegistry.require(request.format());
@@ -247,14 +250,28 @@ public class ExportService implements RequestExportUseCase, ListExportsUseCase, 
                 new ExportFilter(f.storeId(), f.from(), f.to(), ExportCriteria.normalize(f.criteria())));
     }
 
-    private boolean isPremium() {
-        return tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
-                .map(ExportService::isActivePremium)
-                .orElse(false); // no subscription row ⇒ FREE
+    /**
+     * Story 13.10a — whether the tenant has the paid « Exports PDF et Excel » module (enabled or read-only: an export
+     * only reads data). Replaces the former plan check (PREMIUM / PREMIUM_TRIAL with an ACTIVE subscription): for a
+     * tenant without a module row the transition rule gives the same answer, a module row overrides it.
+     */
+    /**
+     * Story 13.10a review — premium data never leaves through a free path: each requested dataset's owning module
+     * ({@link ExportDatasetProvider#moduleId()}) must be readable for the tenant, whatever the format (CSV
+     * included) — e.g. inventory counts need « Inventaire assisté », transfers « Multi-boutiques et transferts ».
+     */
+    private void requireDatasetModules(List<ExportDatasetProvider> providers) {
+        String tenant = TenantContext.getCurrentTenant();
+        for (ExportDatasetProvider provider : providers) {
+            if (!entitlements.isEnabled(tenant, provider.moduleId())) {
+                throw new DomainException(ErrorCode.MODULE_NOT_ENTITLED,
+                        "Module is not included in the tenant's subscription");
+            }
+        }
     }
 
-    static boolean isActivePremium(PlanView s) {
-        return (s.isPremium() || s.isPremiumTrial()) && s.active();
+    private boolean exportsEnabled() {
+        return entitlements.isEnabled(TenantContext.getCurrentTenant(), EXPORTS_MODULE);
     }
 
     /**

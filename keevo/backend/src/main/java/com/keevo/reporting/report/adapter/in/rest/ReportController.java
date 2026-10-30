@@ -22,9 +22,12 @@ import com.keevo.reporting.report.domain.port.in.ResendReportUseCase.ResendRepor
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementService;
+import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.store.api.StoreQueryPort;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
@@ -77,6 +80,11 @@ public class ReportController {
     private final EndOfDayReportRepository reportRepository;
     /** v1s-13-11 follow-up: same Clock bean as WeeklyReportScheduler (deterministic window tests). */
     private final Clock clock;
+    /** Story 13.10a review — {@code null} only in unit tests built without it (no weekly gate). */
+    private final EntitlementService entitlements;
+
+    /** « Rapports avancés »: weekly reports (plan §6.1). */
+    static final String ADVANCED_REPORTS = "advanced-reports";
 
     public ReportController(GetReportHistoryUseCase getReportHistoryUseCase,
                              ResendReportUseCase resendReportUseCase,
@@ -87,6 +95,22 @@ public class ReportController {
                              WeeklyReportWindowResolver weeklyWindowResolver,
                              EndOfDayReportRepository reportRepository,
                              Clock clock) {
+        this(getReportHistoryUseCase, resendReportUseCase, weeklyReportGenerator, dailyReportGenerator, storeQuery,
+                dayClosureQueryPort, weeklyWindowResolver, reportRepository, clock, null);
+    }
+
+    @Autowired
+    public ReportController(GetReportHistoryUseCase getReportHistoryUseCase,
+                             ResendReportUseCase resendReportUseCase,
+                             GenerateWeeklyReportUseCase weeklyReportGenerator,
+                             GenerateEndOfDayReportUseCase dailyReportGenerator,
+                             StoreQueryPort storeQuery,
+                             DayClosureQueryPort dayClosureQueryPort,
+                             WeeklyReportWindowResolver weeklyWindowResolver,
+                             EndOfDayReportRepository reportRepository,
+                             Clock clock,
+                             EntitlementService entitlements) {
+        this.entitlements = entitlements;
         this.getReportHistoryUseCase = getReportHistoryUseCase;
         this.resendReportUseCase = resendReportUseCase;
         this.weeklyReportGenerator = weeklyReportGenerator;
@@ -99,6 +123,7 @@ public class ReportController {
     }
 
     @Operation(summary = "Get paginated report history. OWNER: all or filtered. EMPLOYEE: own only.")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<ReportListResponseDto>> getHistory(
             @RequestParam(defaultValue = "0") int page,
@@ -129,6 +154,7 @@ public class ReportController {
     }
 
     @Operation(summary = "Get a single report by ID")
+    @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{reportId}")
     public ResponseEntity<ApiResponseWrapper<ReportResponseDto>> getById(
             @PathVariable UUID reportId) {
@@ -137,6 +163,9 @@ public class ReportController {
         String tenantId = TenantContext.getCurrentTenant();
         EndOfDayReport report = getReportHistoryUseCase.getReportById(reportId, tenantId)
                 .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Report not found"));
+        if (report.getReportType() == ReportType.WEEKLY && entitlements != null) {
+            entitlements.assertEnabled(tenantId, ADVANCED_REPORTS); // 13.10a review: weekly = « Rapports avancés »
+        }
 
         // EMPLOYEE can only see their own reports
         if (!"OWNER".equals(role)) {
@@ -149,6 +178,7 @@ public class ReportController {
     }
 
     @Operation(summary = "Re-generate daily report for a store on a given date (OWNER only, recovery)")
+    @RequiresEntitlement("reporting")
     @PostMapping("/trigger-daily")
     public ResponseEntity<ApiResponseWrapper<ReportResponseDto>> triggerDaily(
             @RequestParam UUID storeId,
@@ -178,6 +208,7 @@ public class ReportController {
     }
 
     @Operation(summary = "Manually trigger weekly report generation for all active stores (OWNER only)")
+    @RequiresEntitlement("advanced-reports")
     @PostMapping("/trigger-weekly")
     public ResponseEntity<ApiResponseWrapper<Void>> triggerWeekly() {
         requireOwnerOrForbid();
@@ -209,10 +240,17 @@ public class ReportController {
     }
 
     @Operation(summary = "Resend a report via WhatsApp")
+    @RequiresEntitlement("reporting")
     @PostMapping("/{reportId}/resend")
     public ResponseEntity<ApiResponseWrapper<Void>> resend(@PathVariable UUID reportId) {
         requireOwnerOrForbid();
         String tenantId = TenantContext.getCurrentTenant();
+        if (entitlements != null) {
+            // 13.10a review: re-sending a weekly report is a « Rapports avancés » action
+            getReportHistoryUseCase.getReportById(reportId, tenantId)
+                    .filter(r -> r.getReportType() == ReportType.WEEKLY)
+                    .ifPresent(r -> entitlements.assertWritable(tenantId, ADVANCED_REPORTS));
+        }
         resendReportUseCase.resendReport(new ResendReportCommand(reportId, tenantId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
     }

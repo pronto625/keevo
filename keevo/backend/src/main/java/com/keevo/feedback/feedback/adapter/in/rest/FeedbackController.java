@@ -3,6 +3,7 @@ package com.keevo.feedback.feedback.adapter.in.rest;
 import com.keevo.feedback.feedback.domain.model.Feedback;
 import com.keevo.feedback.feedback.domain.port.in.SubmitFeedbackUseCase;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -21,6 +22,7 @@ import java.util.UUID;
  * <p>Accessible to ALL authenticated roles (OWNER + EMPLOYEE).
  * tenantId/userId/submittedAt are derived server-side from the security context.
  */
+@EntitlementExempt("core: avis")
 @RestController
 @RequestMapping("/api/v1/feedback")
 public class FeedbackController {

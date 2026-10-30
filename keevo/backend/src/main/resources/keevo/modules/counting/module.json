@@ -1,0 +1,23 @@
+{
+  "id": "counting",
+  "version": "1.0.0",
+  "displayName": "Inventaire assisté",
+  "category": "premium",
+  "requires": [
+    "core",
+    "inventory"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.counting",
+  "free": false
+}

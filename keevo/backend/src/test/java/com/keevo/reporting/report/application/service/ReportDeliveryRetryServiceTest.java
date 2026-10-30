@@ -118,7 +118,7 @@ class ReportDeliveryRetryServiceTest {
 
     @Test
     void story139_reportingDisabled_tenantSkipped_readOnlyStillRetried() {
-        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        com.keevo.shared.module.ModuleRegistry modules = installedRegistry();
         ReportDeliveryRetryService gated = new ReportDeliveryRetryService(reportRepository, whatsAppSender,
                 IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), ownerRecipientResolver, modules);
         when(modules.moduleState("kv_test01", "reporting")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
@@ -130,5 +130,14 @@ class ReportDeliveryRetryServiceTest {
         when(reportRepository.findPendingRetries(anyInt())).thenReturn(List.of(report));
         gated.retryFailedDeliveries();
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
+    }
+
+    /** A registry mock where every module id is installed (13.10a review: the gate ignores uninstalled ids). */
+    static com.keevo.shared.module.ModuleRegistry installedRegistry() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        org.mockito.Mockito.lenient().when(modules.definition(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> java.util.Optional.of(com.keevo.shared.module.TestModuleCatalogs.loaded(
+                        inv.getArgument(0), com.keevo.shared.module.ModuleCategory.BUSINESS, true).manifest()));
+        return modules;
     }
 }

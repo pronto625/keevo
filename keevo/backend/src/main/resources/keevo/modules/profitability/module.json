@@ -1,0 +1,23 @@
+{
+  "id": "profitability",
+  "version": "1.0.0",
+  "displayName": "Rentabilité",
+  "category": "premium",
+  "requires": [
+    "core",
+    "reporting"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "entitlement": "module.profitability",
+  "free": false
+}

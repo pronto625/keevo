@@ -4,6 +4,7 @@ import com.keevo.reporting.export.domain.port.in.DownloadExportUseCase;
 import com.keevo.reporting.export.domain.port.in.DownloadExportUseCase.LinkTarget;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.core.io.Resource;
@@ -22,6 +23,7 @@ import java.io.IOException;
  * {@link TenantContext} itself (the JWT filter is bypassed for this path).
  */
 @Tag(name = "Exports", description = "Export de données (CSV, Excel) — propriétaire uniquement")
+@EntitlementExempt("lien signé (export déjà contrôlé à la demande)")
 @RestController
 public class ExportDownloadController {
 

@@ -68,6 +68,7 @@ class NativeKeysetExportDatasetTest {
     /** Minimal provider over a mocked EntityManager. */
     private static final class Demo extends NativeKeysetExportDataset {
         Demo(EntityManager em) { super(em); }
+        @Override public String moduleId() { return "core"; }
         @Override public String key() { return "demo"; }
         @Override public String label() { return "Démo"; }
         @Override public List<ExportColumn> columns() {

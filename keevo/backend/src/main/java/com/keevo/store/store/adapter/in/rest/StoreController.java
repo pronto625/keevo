@@ -2,6 +2,7 @@ package com.keevo.store.store.adapter.in.rest;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.store.store.adapter.in.rest.dto.CreateStoreRequestDto;
 import com.keevo.store.store.adapter.in.rest.dto.StoreResponseDto;
 import com.keevo.store.store.adapter.in.rest.dto.UpdateStoreRequestDto;
@@ -59,6 +60,7 @@ public class StoreController {
             @ApiResponse(responseCode = "403", description = "Plan limit exceeded"),
             @ApiResponse(responseCode = "409", description = "Warehouse already exists")
     })
+    @RequiresEntitlement("store")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<StoreResponseDto>> createStore(
             @Valid @RequestBody CreateStoreRequestDto request) {
@@ -73,6 +75,7 @@ public class StoreController {
 
     @Operation(summary = "List stores")
     @ApiResponse(responseCode = "200", description = "Store list returned")
+    @RequiresEntitlement(value = "store", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<StoreResponseDto>>> listStores(
             @RequestParam(defaultValue = "false") boolean includeInactive) {
@@ -87,6 +90,7 @@ public class StoreController {
             @ApiResponse(responseCode = "200", description = "Store updated"),
             @ApiResponse(responseCode = "404", description = "Store not found")
     })
+    @RequiresEntitlement("store")
     @PatchMapping("/{storeId}")
     public ResponseEntity<ApiResponseWrapper<StoreResponseDto>> updateStore(
             @PathVariable UUID storeId,
@@ -104,6 +108,7 @@ public class StoreController {
             @ApiResponse(responseCode = "200", description = "Store deactivated"),
             @ApiResponse(responseCode = "404", description = "Store not found")
     })
+    @RequiresEntitlement("store")
     @PatchMapping("/{storeId}/deactivate")
     public ResponseEntity<ApiResponseWrapper<StoreResponseDto>> deactivateStore(
             @PathVariable UUID storeId) {
@@ -119,6 +124,7 @@ public class StoreController {
             @ApiResponse(responseCode = "403", description = "Plan limit exceeded"),
             @ApiResponse(responseCode = "404", description = "Store not found")
     })
+    @RequiresEntitlement("store")
     @PatchMapping("/{storeId}/reactivate")
     public ResponseEntity<ApiResponseWrapper<StoreResponseDto>> reactivateStore(
             @PathVariable UUID storeId) {

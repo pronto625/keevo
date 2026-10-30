@@ -7,6 +7,7 @@ import com.keevo.admin.sync_monitoring.domain.port.in.GetSyncTenantDetailQuery;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +25,7 @@ import java.util.UUID;
  * - SUPER_ADMIN role checked explicitly via {@link CurrentActor#requireSuperAdmin()} (second barrier behind the SecurityConfig URL rule)
  */
 @Tag(name = "Admin — Sync Monitoring", description = "Super Admin sync health monitoring")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin/sync")
 public class AdminSyncMonitoringController {

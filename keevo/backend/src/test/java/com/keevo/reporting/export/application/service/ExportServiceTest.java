@@ -1,7 +1,6 @@
 package com.keevo.reporting.export.application.service;
 
 import com.keevo.identity.auth.adapter.in.api.IdentityAuthApiTestSupport;
-import com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport;
 import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.api.TenantStatus;
@@ -22,9 +21,9 @@ import com.keevo.reporting.export.domain.port.out.ExportFileStorage;
 import com.keevo.reporting.export.domain.port.out.ExportJobRepository;
 import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.subscription.plan.domain.model.Subscription;
+import com.keevo.shared.module.EntitlementService;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
-import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.assertj.core.api.ThrowableAssert.ThrowingCallable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -84,7 +83,6 @@ class ExportServiceTest {
 
     @Mock ExportJobRepository jobRepository;
     @Mock ExportFileStorage storage;
-    @Mock SubscriptionRepository subscriptionRepository;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock ExportJobRunner jobRunner;
     @Mock TenantRepository tenantRepository;
@@ -138,13 +136,57 @@ class ExportServiceTest {
                 new ExportRendererRegistry(renderers),
                 new ExportStreamingWriter(1000), jobRepository, storage,
                 new ExportRateLimiter(maxRequestsPerHour, 3, jobRepository, clock), signer,
-                SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner, props, clock);
+                entitlements, eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner, props, clock);
     }
 
+    /**
+     * Story 13.10a: the service asks the « exports » module; without a module row the transition rule answers from
+     * the plan (PREMIUM / PREMIUM_TRIAL with an ACTIVE subscription → enabled) — mirrored here.
+     */
     private void plan(PlanType type, SubscriptionStatus status) {
-        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(
-                new Subscription(UUID.randomUUID(), type, status, 1, 1, 1, NOW, null)));
+        exportsEnabled = (type == PlanType.PREMIUM || type == PlanType.PREMIUM_TRIAL)
+                && status == SubscriptionStatus.ACTIVE;
     }
+
+    private boolean exportsEnabled;
+    private final java.util.Set<String> disabledModules = new java.util.HashSet<>();
+    private final EntitlementService entitlements = new EntitlementService() {
+        @Override
+        public ModuleState state(String tenantSchema, String moduleId) {
+            if (disabledModules.contains(moduleId)) {
+                return ModuleState.DISABLED;
+            }
+            if (!"exports".equals(moduleId)) {
+                return ModuleState.ENABLED;
+            }
+            return exportsEnabled ? ModuleState.ENABLED : ModuleState.DISABLED;
+        }
+
+        @Override
+        public boolean isEnabled(String tenantSchema, String moduleId) {
+            return state(tenantSchema, moduleId).readable();
+        }
+
+        @Override
+        public boolean isReadOnly(String tenantSchema, String moduleId) {
+            return false;
+        }
+
+        @Override
+        public void assertEnabled(String tenantSchema, String moduleId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void assertWritable(String tenantSchema, String moduleId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public java.util.Set<String> enabledModules(String tenantSchema) {
+            throw new UnsupportedOperationException();
+        }
+    };
 
     private static ExportRequest req(ExportFormat format, String... datasets) {
         return new ExportRequest(List.of(datasets), format, ExportFilter.none());
@@ -216,14 +258,24 @@ class ExportServiceTest {
         }
 
         @Test
-        @DisplayName("FREE XLSX → 403 PLAN_FEATURE_REQUIRED feature=EXPORT_XLSX, nothing written, no audit")
+        @DisplayName("13.10a review: a dataset whose owning module is disabled → 403 MODULE_NOT_ENTITLED even in CSV, nothing written")
+        void datasetModuleDisabledRefused() {
+            plan(PlanType.PREMIUM, SubscriptionStatus.ACTIVE);
+            disabledModules.add(stores.moduleId()); // the synthetic datasets belong to "core" — stands for any module
+            assertCode(() -> run(req(ExportFormat.CSV, "stores")), "MODULE_NOT_ENTITLED");
+            assertThat(opened).isEmpty();
+            verifyNoInteractions(eventPublisher);
+        }
+
+        @Test
+        @DisplayName("FREE XLSX → 403 MODULE_NOT_ENTITLED feature=EXPORT_XLSX, nothing written, no audit")
         void freeXlsxRefused() {
             plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
             assertThatThrownBy(() -> run(req(ExportFormat.XLSX, "stores")))
                     .isInstanceOf(DomainException.class)
                     .satisfies(e -> {
                         DomainException de = (DomainException) e;
-                        assertThat(de.getDomainCode()).isEqualTo("PLAN_FEATURE_REQUIRED");
+                        assertThat(de.getDomainCode()).isEqualTo("MODULE_NOT_ENTITLED");
                         assertThat(de.getDetails()).containsEntry("feature", "EXPORT_XLSX");
                     });
             assertThat(opened).isEmpty();
@@ -231,7 +283,7 @@ class ExportServiceTest {
         }
 
         @Test
-        @DisplayName("FREE PDF → PLAN_FEATURE_REQUIRED feature=EXPORT_PDF; Premium PDF → EXPORT_FORMAT_UNSUPPORTED")
+        @DisplayName("FREE PDF → MODULE_NOT_ENTITLED feature=EXPORT_PDF; Premium PDF → EXPORT_FORMAT_UNSUPPORTED")
         void pdf() {
             plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
             assertThatThrownBy(() -> run(req(ExportFormat.PDF, "stores")))
@@ -243,12 +295,12 @@ class ExportServiceTest {
         @Test
         @DisplayName("no subscription row, or a suspended / expired Premium → treated as FREE")
         void inactivePremiumIsFree() {
-            when(subscriptionRepository.findActivePlan()).thenReturn(Optional.empty());
-            assertCode(() -> run(req(ExportFormat.XLSX, "stores")), "PLAN_FEATURE_REQUIRED");
+            exportsEnabled = false; // no subscription row → no plan
+            assertCode(() -> run(req(ExportFormat.XLSX, "stores")), "MODULE_NOT_ENTITLED");
             plan(PlanType.PREMIUM, SubscriptionStatus.SUSPENDED);
-            assertCode(() -> run(req(ExportFormat.XLSX, "stores")), "PLAN_FEATURE_REQUIRED");
+            assertCode(() -> run(req(ExportFormat.XLSX, "stores")), "MODULE_NOT_ENTITLED");
             plan(PlanType.PREMIUM_TRIAL, SubscriptionStatus.EXPIRED);
-            assertCode(() -> run(req(ExportFormat.XLSX, "stores")), "PLAN_FEATURE_REQUIRED");
+            assertCode(() -> run(req(ExportFormat.XLSX, "stores")), "MODULE_NOT_ENTITLED");
         }
 
         @Test
@@ -305,7 +357,7 @@ class ExportServiceTest {
             ExportService s = new ExportService(new ExportDatasetRegistry(List.of(five, fivePlus)),
                     new ExportRendererRegistry(List.of(new CsvExportRenderer())), new ExportStreamingWriter(1000),
                     jobRepository, storage, new ExportRateLimiter(30, 3, jobRepository, clock), signer,
-                    SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
+                    entitlements, eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
                     new ExportProperties(), clock);
 
             assertThat(s.request(TENANT, ACTOR, req(ExportFormat.CSV, "five"), direct))
@@ -328,7 +380,7 @@ class ExportServiceTest {
             ExportService s = new ExportService(new ExportDatasetRegistry(List.of(noCount)),
                     new ExportRendererRegistry(List.of(new CsvExportRenderer())), new ExportStreamingWriter(1000),
                     jobRepository, storage, new ExportRateLimiter(30, 3, jobRepository, clock), signer,
-                    SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
+                    entitlements, eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
                     new ExportProperties(), clock);
             assertThat(s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct))
                     .isInstanceOf(RequestExportUseCase.Direct.class);
@@ -349,7 +401,7 @@ class ExportServiceTest {
             ExportService s = new ExportService(new ExportDatasetRegistry(List.of(failing)),
                     new ExportRendererRegistry(List.of(new CsvExportRenderer())), new ExportStreamingWriter(1000),
                     jobRepository, storage, new ExportRateLimiter(30, 3, jobRepository, clock), signer,
-                    SubscriptionApiTestSupport.queryPort(subscriptionRepository), eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
+                    entitlements, eventPublisher, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), executor, jobRunner,
                     new ExportProperties(), clock);
 
             assertThatThrownBy(() -> s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct))
@@ -412,13 +464,13 @@ class ExportServiceTest {
         }
 
         @Test
-        @DisplayName("a 403 PLAN_FEATURE_REQUIRED does not consume the hourly quota")
+        @DisplayName("a 403 MODULE_NOT_ENTITLED does not consume the hourly quota")
         void planGateDoesNotConsumeQuota() throws Exception {
             plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
             maxRequestsPerHour = 1;
             ExportService s = service();
-            assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.XLSX, "stores"), direct), "PLAN_FEATURE_REQUIRED");
-            assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.PDF, "stores"), direct), "PLAN_FEATURE_REQUIRED");
+            assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.XLSX, "stores"), direct), "MODULE_NOT_ENTITLED");
+            assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.PDF, "stores"), direct), "MODULE_NOT_ENTITLED");
             s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct);
             assertCode(() -> s.request(TENANT, ACTOR, req(ExportFormat.CSV, "stores"), direct), "RATE_LIMIT_EXCEEDED");
         }
@@ -617,14 +669,14 @@ class ExportServiceTest {
         }
 
         @Test
-        @DisplayName("FREE PDF → 403 PLAN_FEATURE_REQUIRED feature=EXPORT_PDF before the document checks")
+        @DisplayName("FREE PDF → 403 MODULE_NOT_ENTITLED feature=EXPORT_PDF before the document checks")
         void freePdf() {
             plan(PlanType.FREE, SubscriptionStatus.ACTIVE);
             assertThatThrownBy(() -> run(req(ExportFormat.PDF, "sales")))
                     .isInstanceOf(DomainException.class)
                     .satisfies(e -> {
                         DomainException de = (DomainException) e;
-                        assertThat(de.getDomainCode()).isEqualTo("PLAN_FEATURE_REQUIRED");
+                        assertThat(de.getDomainCode()).isEqualTo("MODULE_NOT_ENTITLED");
                         assertThat(de.getDetails()).containsEntry("feature", "EXPORT_PDF");
                     });
             assertThat(pdfRenderer.calls).isEmpty();

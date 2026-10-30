@@ -258,12 +258,12 @@ class ExportControllerTest {
     }
 
     @Test
-    @DisplayName("POST domain errors → 400 dataset unknown / 403 plan feature (with details.feature) / 429 rate limit")
+    @DisplayName("POST domain errors → 400 dataset unknown / 403 module not entitled (with details.feature) / 429 rate limit")
     void postDomainErrors() throws Exception {
         as("OWNER");
         when(requestUseCase.request(any(), any(), any(), any()))
                 .thenThrow(new DomainException(ErrorCode.EXPORT_DATASET_UNKNOWN, "x"))
-                .thenThrow(new DomainException(ErrorCode.PLAN_FEATURE_REQUIRED, "x", Map.of("feature", "EXPORT_XLSX")))
+                .thenThrow(new DomainException(ErrorCode.MODULE_NOT_ENTITLED, "x", Map.of("feature", "EXPORT_XLSX")))
                 .thenThrow(new DomainException(ErrorCode.RATE_LIMIT_EXCEEDED, "x"))
                 .thenThrow(new DomainException(ErrorCode.EXPORT_FORMAT_UNSUPPORTED, "x"))
                 .thenThrow(new DomainException(ErrorCode.EXPORT_QUEUE_FULL, "x"));
@@ -272,7 +272,7 @@ class ExportControllerTest {
                 .andExpect(status().isBadRequest()).andExpect(jsonPath("$.domainCode").value("EXPORT_DATASET_UNKNOWN"));
         mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(CSV_BODY))
                 .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.domainCode").value("PLAN_FEATURE_REQUIRED"))
+                .andExpect(jsonPath("$.domainCode").value("MODULE_NOT_ENTITLED"))
                 .andExpect(jsonPath("$.details.feature").value("EXPORT_XLSX"));
         mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(CSV_BODY))
                 .andExpect(status().isTooManyRequests());
@@ -292,7 +292,7 @@ class ExportControllerTest {
                 .thenThrow(new DomainException(ErrorCode.EXPORT_PDF_TOO_LARGE, "x", Map.of("limit", 2000, "rows", 2500L, "unit", "lignes")))
                 .thenThrow(new DomainException(ErrorCode.EXPORT_FORMAT_UNSUPPORTED, "x",
                         Map.of("format", "PDF", "dataset", "stores")))
-                .thenThrow(new DomainException(ErrorCode.PLAN_FEATURE_REQUIRED, "x", Map.of("feature", "EXPORT_PDF")));
+                .thenThrow(new DomainException(ErrorCode.MODULE_NOT_ENTITLED, "x", Map.of("feature", "EXPORT_PDF")));
 
         mvc.perform(post("/api/v1/exports").contentType(MediaType.APPLICATION_JSON).content(pdfBody))
                 .andExpect(status().isUnprocessableEntity())

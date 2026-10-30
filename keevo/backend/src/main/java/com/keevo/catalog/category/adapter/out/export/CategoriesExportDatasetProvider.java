@@ -40,6 +40,7 @@ public class CategoriesExportDatasetProvider extends NativeKeysetExportDataset {
         super(em);
     }
 
+    @Override public String moduleId() { return "catalog"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Catégories"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

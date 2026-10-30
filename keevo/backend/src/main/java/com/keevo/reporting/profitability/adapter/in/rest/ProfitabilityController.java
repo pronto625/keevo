@@ -11,6 +11,7 @@ import com.keevo.reporting.profitability.domain.port.in.GetStorePerformanceUseCa
 import com.keevo.reporting.profitability.domain.port.in.GetStorePerformanceUseCase.StorePerformanceQuery;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -55,6 +56,7 @@ public class ProfitabilityController {
     // ── GET /products ─────────────────────────────────────────────────────────
 
     @Operation(summary = "Product profitability list for a date range (OWNER only)")
+    @RequiresEntitlement(value = "profitability", access = RequiresEntitlement.Access.READ)
     @GetMapping("/products")
     public ResponseEntity<ApiResponseWrapper<List<ProductProfitabilityEntryDto>>> getProductProfitability(
             @RequestParam(required = false) String from,
@@ -79,6 +81,7 @@ public class ProfitabilityController {
     // ── GET /products/{productId} ─────────────────────────────────────────────
 
     @Operation(summary = "Product profitability detail (OWNER only)")
+    @RequiresEntitlement(value = "profitability", access = RequiresEntitlement.Access.READ)
     @GetMapping("/products/{productId}")
     public ResponseEntity<ApiResponseWrapper<ProductProfitabilityDetailDto>> getProductDetail(
             @PathVariable UUID productId,
@@ -101,6 +104,7 @@ public class ProfitabilityController {
     // ── GET /stores ───────────────────────────────────────────────────────────
 
     @Operation(summary = "Store comparative performance ranking (OWNER only)")
+    @RequiresEntitlement(value = "profitability", access = RequiresEntitlement.Access.READ)
     @GetMapping("/stores")
     public ResponseEntity<ApiResponseWrapper<List<StorePerformanceEntryDto>>> getStorePerformance(
             @RequestParam(required = false) String from,

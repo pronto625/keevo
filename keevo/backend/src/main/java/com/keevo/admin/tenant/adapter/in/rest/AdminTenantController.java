@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.module.EntitlementExempt;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -34,6 +35,7 @@ import java.util.UUID;
  * - SUPER_ADMIN role checked explicitly via {@link CurrentActor#requireSuperAdmin()} (second barrier behind the SecurityConfig URL rule)
  */
 @Tag(name = "Admin — Tenants", description = "Super Admin tenant management")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin/tenants")
 public class AdminTenantController {

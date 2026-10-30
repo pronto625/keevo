@@ -13,6 +13,7 @@ import com.keevo.inventory.transfer.domain.port.in.TransferStockCommand;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -68,6 +69,7 @@ public class StockTransferController {
      * ({@code sourceStoreId} must equal it), else 403 FORBIDDEN before the use case runs.
      * Destination may be any store of the tenant. Mirrored in {@code TransferSyncHandler}.
      */
+    @RequiresEntitlement("multi-store")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<StockTransferResponseDto>> transfer(
             @Valid @RequestBody TransferStockRequestDto request) {
@@ -104,6 +106,7 @@ public class StockTransferController {
      * Credits stock at the destination. Returns 200 OK with status COMPLETED.
      * Story v1s-12-9 — EMPLOYEE scoped to assigned store (FR36).
      */
+    @RequiresEntitlement("multi-store")
     @PostMapping("/{id}/complete")
     public ResponseEntity<ApiResponseWrapper<StockTransferResponseDto>> complete(
             @PathVariable UUID id) {
@@ -122,6 +125,7 @@ public class StockTransferController {
     /**
      * Paginated transfer history with optional filters.
      */
+    @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<Map<String, Object>>> getHistory(
             @RequestParam(required = false) UUID source,

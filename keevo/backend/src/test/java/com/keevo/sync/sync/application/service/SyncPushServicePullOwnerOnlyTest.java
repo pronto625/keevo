@@ -103,6 +103,11 @@ class SyncPushServicePullOwnerOnlyTest {
         var audit = new com.keevo.sync.sync.application.provider.AuditEntryDeltaProvider(null);
         assertThat(audit.ownerOnly()).isTrue();
         DeltaEntityProvider plain = new DeltaEntityProvider() {
+            @Override
+            public String moduleId() {
+                return "core";
+            }
+
             @Override public String entityKey() { return "x"; }
             @Override public Page queryDeltaPage(Instant since, Position after, int limit) { return null; }
         };

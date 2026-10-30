@@ -16,6 +16,7 @@ import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -73,6 +74,7 @@ public class StockController {
      * Returns all stock levels for the product across all stores.
      * Response includes minimumThreshold and isLow per level.
      */
+    @RequiresEntitlement(value = "inventory", access = RequiresEntitlement.Access.READ)
     @GetMapping("/stock")
     public ResponseEntity<ApiResponseWrapper<List<StockLevelResponseDto>>> getCurrentStock(
             @PathVariable UUID productId) {
@@ -95,6 +97,7 @@ public class StockController {
      * Records an incoming stock delivery (STOCK_ENTRY movement).
      * Story 12.6 — EMPLOYEE scoped to assigned store (FR36).
      */
+    @RequiresEntitlement("inventory")
     @PostMapping("/stock/entry")
     public ResponseEntity<ApiResponseWrapper<StockMovementResponseDto>> recordStockEntry(
             @PathVariable UUID productId,
@@ -123,6 +126,7 @@ public class StockController {
      * Sets the stock to an absolute quantity (ADJUSTMENT movement).
      * Story 12.6 — EMPLOYEE scoped to assigned store (FR36).
      */
+    @RequiresEntitlement("inventory")
     @PostMapping("/stock/adjust")
     public ResponseEntity<ApiResponseWrapper<StockMovementResponseDto>> adjustStock(
             @PathVariable UUID productId,
@@ -150,6 +154,7 @@ public class StockController {
     /**
      * Sets the minimum stock threshold for alert evaluation.
      */
+    @RequiresEntitlement("inventory")
     @PatchMapping("/threshold")
     public ResponseEntity<ApiResponseWrapper<ProductThresholdResponseDto>> setThreshold(
             @PathVariable UUID productId,
@@ -174,6 +179,7 @@ public class StockController {
      * @param page    0-based page (default 0)
      * @param size    page size (default 20)
      */
+    @RequiresEntitlement(value = "inventory", access = RequiresEntitlement.Access.READ)
     @GetMapping("/stock/history")
     public ResponseEntity<ApiResponseWrapper<Page<StockMovementResponseDto>>> getHistory(
             @PathVariable UUID productId,

@@ -90,7 +90,7 @@ public class ModuleRegistryService implements ModuleRegistry {
         }
         ActiveModulesCache.Entry entry = lookup(tenantSchema);
         return effectiveStates(catalog.manifests(),
-                entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), clock);
+                entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), entry.plan(), clock);
     }
 
     /** The tenant's entry: from the request cache, else one query (cached for the rest of the request). */
@@ -100,11 +100,13 @@ public class ModuleRegistryService implements ModuleRegistry {
         if (cached.isPresent()) {
             return cached.get();
         }
-        Optional<Map<String, TenantModuleStatePort.Row>> rows = states.findRows(schema);
-        if (rows.isEmpty()) {
+        Optional<TenantModuleStatePort.TenantRows> found = states.findTenantRows(schema);
+        if (found.isEmpty()) {
             log.debug("Module registry: no tenant registered for the given schema — only core is active");
         }
-        ActiveModulesCache.Entry entry = new ActiveModulesCache.Entry(rows.isPresent(), rows.orElse(Map.of()));
+        ActiveModulesCache.Entry entry = found
+                .map(t -> new ActiveModulesCache.Entry(true, t.rows(), t.plan()))
+                .orElseGet(() -> new ActiveModulesCache.Entry(false, Map.of(), TenantModuleStatePort.Plan.NONE));
         cache.put(schema, entry);
         return entry;
     }
@@ -136,16 +138,17 @@ public class ModuleRegistryService implements ModuleRegistry {
      *
      * @param installed the installed manifests
      * @param rows      the tenant's rows (module id → row), empty when the tenant is unknown
+     * @param plan      the tenant's plan, for the paid modules without a row (Story 13.10a transition rule)
      * @return module id → state, immutable, sorted by id, {@code get(null)} answers {@code null}
      */
     static Map<String, ModuleState> effectiveStates(Collection<ModuleManifest> installed,
                                                     Optional<Map<String, TenantModuleStatePort.Row>> rows,
-                                                    Clock clock) {
+                                                    TenantModuleStatePort.Plan plan, Clock clock) {
         var now = clock.instant();
         Map<String, ModuleState> states = new LinkedHashMap<>();
         installed.stream()
                 .sorted(java.util.Comparator.comparing(ModuleManifest::id))
-                .forEach(m -> states.put(m.id(), ModuleStateRules.stateOf(m, rows, now)));
+                .forEach(m -> states.put(m.id(), ModuleStateRules.stateOf(m, rows, plan, now)));
         return Collections.unmodifiableMap(states);
     }
 }

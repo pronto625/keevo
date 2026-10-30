@@ -7,6 +7,7 @@ import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase.SalesHistoryQuery;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
@@ -56,6 +57,7 @@ public class SaleHistoryController {
      *
      * @return 200 OK with paginated SaleHistoryPageDto
      */
+    @RequiresEntitlement(value = "pos", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<SaleHistoryPageDto>> getSalesHistory(
             @RequestParam UUID storeId,

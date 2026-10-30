@@ -176,8 +176,10 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
         adminPost("deactivate", "inventory", adminToken)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.domainCode").value("MODULE_HAS_DEPENDENTS"))
-                .andExpect(jsonPath("$.error").value(
-                        "Désactivation impossible : ce module est utilisé par « Point de vente »"));
+                // 13.10a: the tenant is on its registration trial — the paid feature modules depending on inventory
+                // are enabled by the transition rule, so they are dependents too
+                .andExpect(jsonPath("$.error").value("Désactivation impossible : ce module est utilisé par "
+                        + "« Inventaire assisté », « Multi-boutiques et transferts », « Point de vente »"));
         adminPost("deactivate", "core", adminToken)
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.domainCode").value("CORE_MODULE_REQUIRED"));

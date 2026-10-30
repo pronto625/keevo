@@ -8,6 +8,7 @@ import com.keevo.identity.onboarding.domain.port.in.CompleteOnboardingUseCase;
 import com.keevo.identity.onboarding.domain.port.in.OnboardingResult;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -32,6 +33,7 @@ import java.util.UUID;
  * <p>Protected endpoint: falls under /api/v1/** in SecurityConfig — JWT required.
  */
 @Tag(name = "Onboarding", description = "Onboarding wizard completion endpoint")
+@EntitlementExempt("inscription / onboarding")
 @RestController
 @RequestMapping("/api/v1/onboarding")
 public class OnboardingController {

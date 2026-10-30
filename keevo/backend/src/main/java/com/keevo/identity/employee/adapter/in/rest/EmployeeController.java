@@ -8,6 +8,7 @@ import com.keevo.identity.employee.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -26,6 +27,7 @@ import java.util.UUID;
  * <p>All endpoints require JWT authentication (OWNER only).
  */
 @Tag(name = "Employees", description = "Employee management")
+@EntitlementExempt("core: employés (plafond du plan)")
 @RestController
 @RequestMapping("/api/v1/employees")
 public class EmployeeController {

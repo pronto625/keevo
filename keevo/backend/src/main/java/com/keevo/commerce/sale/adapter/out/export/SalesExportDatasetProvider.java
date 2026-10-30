@@ -51,6 +51,7 @@ public class SalesExportDatasetProvider extends NativeKeysetExportDataset {
         super(em);
     }
 
+    @Override public String moduleId() { return "pos"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Ventes"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

@@ -7,6 +7,7 @@ import com.keevo.reporting.profitability.domain.model.RankingMetric;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -52,6 +53,7 @@ public class LeaderboardController {
     }
 
     @Operation(summary = "Seller leaderboard for a date range (OWNER only)")
+    @RequiresEntitlement(value = "advanced-reports", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<SellerLeaderboardEntryDto>>> getLeaderboard(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,

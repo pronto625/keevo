@@ -5,6 +5,7 @@ import com.keevo.admin.operations.application.service.AdminOperationsService;
 import com.keevo.admin.operations.domain.port.in.OperationsPeriodQuery;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ import java.util.List;
  * - Read-only: no write endpoint
  */
 @Tag(name = "Admin — Operations", description = "Super Admin operational activity monitoring")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin/operations")
 public class AdminOperationsController {

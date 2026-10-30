@@ -14,6 +14,7 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
+import com.keevo.reporting.module.ReportingModule;
 import com.keevo.shared.module.ModuleRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -100,7 +101,8 @@ public class WeeklyReportScheduler {
             if (tenant.status() != TenantStatus.ACTIVE) {
                 return;
             }
-            if (ReportingModuleGate.disabled(modules, tenant.schemaName(), "WeeklyReportScheduler")) {
+            if (ReportingModuleGate.disabled(modules, tenant.schemaName(), "WeeklyReportScheduler",
+                    ReportingModule.ID, ReportingModuleGate.ADVANCED_REPORTS)) {
                 return;
             }
             TenantContext.setCurrentTenant(tenant.schemaName());

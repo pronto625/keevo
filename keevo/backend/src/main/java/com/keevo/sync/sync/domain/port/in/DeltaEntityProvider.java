@@ -30,6 +30,13 @@ public interface DeltaEntityProvider {
     String entityKey();
 
     /**
+     * Story 13.10a review — the module owning the entity ({@code module.json} id): the pull skips the provider (empty
+     * list, delta done) while that module is DISABLED for the tenant, so premium data (inventory counts, transfers)
+     * never reaches a device through the free sync path. READ_ONLY still pulls.
+     */
+    String moduleId();
+
+    /**
      * Records whose cursor column is {@code >= since} (the overlap is intentional: the pull
      * cursor keeps a safety margin and the client upserts idempotently), ordered by
      * (cursor column, id), strictly after {@code after} when given, at most {@code limit} rows.

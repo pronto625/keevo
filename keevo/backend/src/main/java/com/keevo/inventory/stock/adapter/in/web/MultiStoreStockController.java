@@ -10,6 +10,7 @@ import com.keevo.inventory.stock.domain.port.in.GetMultiStoreOverviewUseCase;
 import com.keevo.inventory.stock.domain.port.in.GetStoreStockDetailQuery;
 import com.keevo.inventory.stock.domain.port.in.GetStoreStockDetailUseCase;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.data.domain.Page;
@@ -50,6 +51,7 @@ public class MultiStoreStockController {
     }
 
     @Operation(summary = "Get stock summary for all active stores + warehouse")
+    @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
     @GetMapping("/overview")
     public ResponseEntity<ApiResponseWrapper<List<StoreStockSummaryDto>>> getOverview() {
         List<StoreStockSummaryDto> dtos = overviewUseCase
@@ -61,6 +63,7 @@ public class MultiStoreStockController {
     }
 
     @Operation(summary = "Get paginated product stock list for a specific store")
+    @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
     @GetMapping("/stores/{storeId}/products")
     public ResponseEntity<ApiResponseWrapper<Page<StoreProductStockEntryDto>>> getStoreDetail(
             @PathVariable UUID storeId,
@@ -79,6 +82,7 @@ public class MultiStoreStockController {
     }
 
     @Operation(summary = "Get product stock availability across all active stores")
+    @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
     @GetMapping("/products/{productId}/availability")
     public ResponseEntity<ApiResponseWrapper<CrossStoreAvailabilityResponseDto>> getProductAvailability(
             @PathVariable UUID productId) {

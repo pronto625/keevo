@@ -7,6 +7,7 @@ import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.shared.capability.notification.WhatsAppSender;
+import com.keevo.shared.module.ModuleScoped;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,6 +90,7 @@ public class ProductCreationNotificationListener {
     // (CreateProductUseCase, ProductCommandAdapter.register via QuickAddProductService) are transactional.
     // Replay-safe without a receipt: the handler only adds the event to an in-memory batch window — a
     // replay after a restart (the window died with the process) yields exactly one notification.
+    @ModuleScoped("alerts") // Story 13.10a: owner alerts are a paid module (plan §6.1)
     @ApplicationModuleListener
     public void onProductCreated(ProductCreatedEvent event) {
         if (!"EMPLOYEE".equals(event.actorRole())) {

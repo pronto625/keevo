@@ -5,6 +5,7 @@ import com.keevo.crm.contact.application.usecase.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -44,6 +45,7 @@ public class SupplierController {
     }
 
     /** POST /api/v1/suppliers */
+    @RequiresEntitlement("crm")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<SupplierResponseDto>> createSupplier(
             @Valid @RequestBody CreateSupplierRequestDto request) {
@@ -58,6 +60,7 @@ public class SupplierController {
     }
 
     /** GET /api/v1/suppliers?search=&includeArchived= */
+    @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<SupplierResponseDto>>> listSuppliers(
             @RequestParam(required = false) String search,
@@ -72,6 +75,7 @@ public class SupplierController {
     }
 
     /** GET /api/v1/suppliers/{id} */
+    @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<SupplierProfileResponseDto>> getSupplierProfile(
             @PathVariable UUID id) {
@@ -87,6 +91,7 @@ public class SupplierController {
     }
 
     /** PATCH /api/v1/suppliers/{id} */
+    @RequiresEntitlement("crm")
     @PatchMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<SupplierResponseDto>> updateSupplier(
             @PathVariable UUID id,
@@ -101,6 +106,7 @@ public class SupplierController {
     }
 
     /** DELETE /api/v1/suppliers/{id} (soft delete) */
+    @RequiresEntitlement("crm")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> archiveSupplier(@PathVariable UUID id) {
         UUID actorId = (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();

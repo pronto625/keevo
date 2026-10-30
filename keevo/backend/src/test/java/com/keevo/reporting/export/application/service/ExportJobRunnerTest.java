@@ -88,6 +88,28 @@ class ExportJobRunnerTest {
     }
 
     @Test
+    @DisplayName("13.10a: « exports » module disabled at run time → job FAILED MODULE_NOT_ENTITLED, nothing produced, EXPORT_FAILED pushed")
+    void moduleDisabledAtRunTime() {
+        ExportJob job = pending(ExportFormat.XLSX, "stores");
+        com.keevo.shared.module.EntitlementService disabled = org.mockito.Mockito.mock(com.keevo.shared.module.EntitlementService.class);
+        org.mockito.Mockito.when(disabled.isEnabled(TENANT, "exports")).thenReturn(false);
+        SyntheticExportProvider stores = recordingProvider("stores", 3);
+        new ExportJobRunner(repository, storage, new ExportStreamingWriter(1000),
+                new ExportDatasetRegistry(List.of(stores)),
+                new ExportRendererRegistry(List.of(new CsvExportRenderer(), new XlsxExportRenderer())),
+                pushNotifier, new ExportProperties(), Clock.fixed(NOW, ZoneOffset.UTC), disabled).run(TENANT, job.getId());
+
+        ExportJob after = repository.findById(job.getId()).orElseThrow();
+        assertThat(after.getStatus()).isEqualTo(ExportJobStatus.FAILED);
+        assertThat(after.getErrorCode()).isEqualTo("MODULE_NOT_ENTITLED");
+        ArgumentCaptor<NotificationPayload> payload = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(pushNotifier).notifyOwners(eq(TENANT), payload.capture());
+        assertThat(payload.getValue().type()).isEqualTo("EXPORT_FAILED");
+        assertThat(stores.pageReads).hasValue(0);
+        assertThat(allFiles()).isEmpty();
+    }
+
+    @Test
     @DisplayName("READY: file stored under <root>/<tenant>/<id>.csv, rows / size / expiresAt = completedAt + 24 h, EXPORT_READY pushed, context cleared")
     void readyAndPushed() throws Exception {
         ExportJob job = pending(ExportFormat.CSV, "sales");

@@ -7,6 +7,7 @@ import com.keevo.messaging.notification.domain.port.in.DeleteDeviceTokenUseCase;
 import com.keevo.messaging.notification.domain.port.in.RegisterDeviceTokenCommand;
 import com.keevo.messaging.notification.domain.port.in.RegisterDeviceTokenUseCase;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,6 +32,7 @@ public class DeviceTokenController {
     }
 
     @Operation(summary = "Register FCM device token")
+    @RequiresEntitlement("messaging")
     @PostMapping("/token")
     public ResponseEntity<ApiResponseWrapper<Map<String, Boolean>>> registerToken(
             @Valid @RequestBody RegisterDeviceTokenRequestDto request) {
@@ -48,6 +50,7 @@ public class DeviceTokenController {
     }
 
     @Operation(summary = "Delete FCM device token (logout cleanup)")
+    @RequiresEntitlement("messaging")
     @DeleteMapping("/token")
     public ResponseEntity<ApiResponseWrapper<Map<String, Boolean>>> deleteToken(
             @Valid @RequestBody DeleteDeviceTokenRequestDto request) {

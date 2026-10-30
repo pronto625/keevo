@@ -35,16 +35,18 @@ class ModuleCatalogBootIntegrationTest extends FullContextIntegrationTest {
     void bootSeedsTheTenModulesAndARestartChangesNothing() {
         JdbcTemplate jdbc = new JdbcTemplate(dataSource);
         assertThat(jdbc.queryForList("SELECT id FROM public.module_definitions ORDER BY id", String.class))
-                .contains("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync");
+                .contains("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync",
+                        "multi-store", "counting", "advanced-reports", "report-config", "alerts", "profitability",
+                        "exports");
         assertThat(jdbc.queryForObject("SELECT category FROM public.module_definitions WHERE id = 'sync'", String.class))
                 .isEqualTo("core");
 
         assertThat(seeder.seed(ModuleManifestLoader.loadFromClasspath(resources)).changedRows()).isZero();
         // 13.2: the context holds the validated set once; it is the one the seed used
-        assertThat(catalog.manifests()).hasSize(10);
+        assertThat(catalog.manifests()).hasSize(17);
         assertThat(seeder.seed(catalog.loaded()).changedRows()).isZero();
         // 13.2: the registry is wired on the same set and works outside a request (no request-scope proxy)
-        assertThat(registry.installed()).hasSize(10);
+        assertThat(registry.installed()).hasSize(17);
         assertThat(registry.activeModules("kv_nobody")).containsExactly("core");
         assertThat(TenantSchemaSyncService.globalOnlyTables()).contains("module_definitions", "tenant_modules");
     }

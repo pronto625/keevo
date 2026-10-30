@@ -1014,9 +1014,11 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 - S'appuie sur `EntitlementService` (13.5) + `PlanLimitGuard` (refonte 16.8) ; produire une **table de correspondance endpoint→entitlement** (doc + test).
 - Dépend de 13.5 ; à faire après la conversion des modules (13.9).
 
-- [ ] [Deferred-from: review 13-9, 2026-10-30] REST gating of the converted modules: `@RequiresEntitlement("crm")` on the crm (clients / suppliers) controllers and `@RequiresEntitlement("reporting")` on the report / dashboard / export controllers — 13.9 gated only the capability, the event listeners and the reporting schedulers [crm / reporting REST]
+- [ ] [Deferred-from: 13-10a, 2026-10-30] 13.10b (app): XLSX/PDF exports now answer 403 `MODULE_NOT_ENTITLED` (+ `details.feature`) instead of `PLAN_FEATURE_REQUIRED` — `export_exception.dart` `isPlanGate` must accept it (upgrade sheet kept); every premium entry point of `docs/entitlements/endpoints.md` (transfers, multi-store overview / availability, counting, leaderboard, weekly trigger, profitability, report preferences / test report) hidden or shows the French message for a Free tenant; sync ops `STOCK_TRANSFER` / inventory counting held as `MODULE_INACTIVE` [app 403] — also (review 13-10a): the dashboard « stock bas » tile and the catalogue button open `/stock/overview?showLowOnly=true` (now `multi-store`) — send Free tenants to a free local low-stock list instead of hiding it
 
-- [ ] [Deferred-from: 13-5, 2026-10-29] `@RequiresPermission` (spec-socle §9.2) not built in 13.5: no permission model exists yet (roles OWNER/EMPLOYEE/SUPER_ADMIN only, checked by `CurrentActor` / `@PreAuthorize`). Proposed decision (13.10 spec confirms or revises): 13.10 introduces it as a thin annotation over the existing role checks (a `Permission` enum mapped to roles, enforced by Spring method security), combinable with `@RequiresEntitlement` — the entitlement aspect already runs after the method-security interceptors and before `@Transactional` (`EntitlementAspect` order 1000). Also: `@RequiresEntitlement` is not matched on interface-only annotations and not on self-invocation (Spring AOP) — annotate controller/use-case classes [entitlement / RBAC]
+- [x] [Deferred-from: review 13-9, 2026-10-30] REST gating of the converted modules: `@RequiresEntitlement("crm")` on the crm (clients / suppliers) controllers and `@RequiresEntitlement("reporting")` on the report / dashboard / export controllers — 13.9 gated only the capability, the event listeners and the reporting schedulers [crm / reporting REST] — **done 13.10a (2026-10-30)**: `ClientController` / `SupplierController` → `crm`, `DashboardController` / `ReportController` / `ExportController` → `reporting` (GET READ, other verbs WRITE); `docs/entitlements/endpoints.md` + `EndpointEntitlementCoverageTest`; `PremiumGatingFullContextTest.crmDisabled_refused` (crm DISABLED → GET clients 403)
+
+- [x] [Deferred-from: 13-5, 2026-10-29] `@RequiresPermission` (spec-socle §9.2) not built in 13.5: no permission model exists yet (roles OWNER/EMPLOYEE/SUPER_ADMIN only, checked by `CurrentActor` / `@PreAuthorize`). Proposed decision (13.10 spec confirms or revises): 13.10 introduces it as a thin annotation over the existing role checks (a `Permission` enum mapped to roles, enforced by Spring method security), combinable with `@RequiresEntitlement` — the entitlement aspect already runs after the method-security interceptors and before `@Transactional` (`EntitlementAspect` order 1000). Also: `@RequiresEntitlement` is not matched on interface-only annotations and not on self-invocation (Spring AOP) — annotate controller/use-case classes [entitlement / RBAC] — **routed → Story 14.1 (13.10a decision, 2026-10-30)**: not built in 13.10 — every existing endpoint keeps its role checks (`CurrentActor` / `@PreAuthorize`); the first module with its own permissions (Invoicing: `INVOICE_CREATE/VIEW/SEND`) introduces the annotation
 
 
 
@@ -1028,7 +1030,7 @@ So that **le classement validé est réellement enforce, pas seulement défini (
 
 - [ ] [Deferred-from: spec 12-7, 2026-10-29] `GET /api/v1/sync/pull` must skip `DeltaEntityProvider`s of inactive modules (same `ModuleRegistry` rule as the push guard) [sync pull gating]
 
-- [ ] [Deferred-from: review 13-5, 2026-10-29] Gating rollout: slice test combining `@RequiresEntitlement` + `@RequiresPermission` with an asserted interceptor order; class-level default `WRITE` would refuse GET endpoints during grace — default READ for safe HTTP verbs or check READ/WRITE per verb in the endpoint mapping test; annotate HTTP/use-case entry points only (no tenant in schedulers/async listeners); confirm tenant-module endpoints are role-guarded against the super-admin (entitlement passes for `public`); Flutter `auth_interceptor` handles 403 `MODULE_NOT_ENTITLED`/`MODULE_READ_ONLY` [gating]
+- [ ] [Deferred-from: review 13-5, 2026-10-29] Gating rollout: slice test combining `@RequiresEntitlement` + `@RequiresPermission` with an asserted interceptor order; class-level default `WRITE` would refuse GET endpoints during grace — default READ for safe HTTP verbs or check READ/WRITE per verb in the endpoint mapping test; annotate HTTP/use-case entry points only (no tenant in schedulers/async listeners); confirm tenant-module endpoints are role-guarded against the super-admin (entitlement passes for `public`); Flutter `auth_interceptor` handles 403 `MODULE_NOT_ENTITLED`/`MODULE_READ_ONLY` [gating] — 13.10a (2026-10-30): READ/WRITE per HTTP verb enforced by `EndpointEntitlementCoverageTest` (method-level annotations, no class-level default), HTTP entry points only (schedulers / listeners gated through `ModuleRegistry` / `@ModuleScoped`); still open: `@RequiresPermission` slice + order → 14.1, Flutter 403 handling → 13.10b
 
 ### Story 14.1 : Module Facturation autonome (domaine + provisioning + CRUD)
 
@@ -1053,6 +1055,8 @@ So that **je peux activer juste la facturation pour mon besoin (MOD-FR7, MOD-FR1
 - Gating `@RequiresEntitlement("invoicing")` + `@RequiresPermission`.
 - Numérotation : séquence par tenant (`invoice_number_seq` dans le schéma tenant) — gérer l'unicité/lacunes.
 - TDD : domaine (calcul total) → use cases → REST → provisioning.
+
+- [ ] [Deferred-from: 13-10a, 2026-10-30] Introduce `@RequiresPermission` (spec-socle §9.2) with the first module that has its own permissions (`INVOICE_CREATE/VIEW/SEND`): a `Permission` model mapped to the existing roles, enforced by Spring method security, combinable with `@RequiresEntitlement` (entitlement aspect order 1000 runs after method security, before `@Transactional`); slice test asserting both and their order; add it to `EndpointEntitlementCoverageTest` / `docs/entitlements/endpoints.md` [RBAC]
 
 ### Story 14.2 : Génération PDF + envoi WhatsApp de la facture
 
@@ -1191,6 +1195,8 @@ So that **l'UI s'adapte aux modules souscrits (MOD-FR15, MOD-FR18)**.
 **Implementation Notes:**
 - Lire le claim `modules` (Epic 16.3) ; fallback `GET /tenants/me/modules`.
 - Offline : respecter le dernier état signé (cohérent gate 7 jours).
+
+- [ ] [Deferred-from: review 13-10a, 2026-10-30] When a module becomes ENABLED again for the tenant, the app must re-pull that module's entities from scratch (the 13.10a pull skips DISABLED providers but advances the cursor, so rows changed meanwhile are never re-sent); hide premium export datasets the tenant cannot use (`GET /exports/datasets` is not filtered) [Flutter entitlements / sync]
 
 ### Story 15.2 : Routing dynamique go_router selon les modules actifs
 
@@ -1349,6 +1355,8 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 
 - [ ] [Deferred-from: review 13-8b, 2026-10-30] **Blocking before disabling `pos`/`crm` (or letting them expire) in prod**: while operations are held — (a) inventory session reads are server-first (`InventorySessionRepositoryImpl.getActiveByStoreId`: an online device with a held session sees « aucun inventaire en cours »; `getCountingProducts` shows the server's expected stock); (b) held stock ops (adjust/entry/transfer) have no badge in their lists; (c) the owner dashboard and day summary read server totals only and a day closed while a sale is held misses that sale when it later applies with an `occurredAt` inside the closed day [Flutter sync / reports]
 
+- [ ] [Deferred-from: review 13-10a, 2026-10-30] The leaderboard is gated `advanced-reports` but shown inside the profitability feature in the app — align the feature→module mapping [Flutter gating]
+
 ### Story 16.1 : Cycle de vie des licences (trial hybride, grâce lecture seule, temps réel)
 
 As a **plateforme**,
@@ -1452,6 +1460,8 @@ So that **je gère la commercialisation après paiement Mobile Money (MOD-FR16, 
 - [ ] [Deferred-from: review 13-9, 2026-10-30] Paid-module upgrades for tenants that already have the module active (new migrations shipped after activation: who runs them, when), and a forced deactivation path when a module's `onDeactivate` hook keeps failing (super-admin override, audited) [ModuleLifecycle / console] — merged with: [Deferred-from: spec 13-8a, 2026-10-30] Expose `ModuleProvisioner.provisionAll(moduleId)` to the console (not done in 13.8a); the lifecycle `GET /admin/tenants/{id}/modules` already returns `provisionedVersion` per module [ModuleAdminController]
 
 
+- [ ] [Deferred-from: review 13-10a, 2026-10-30] Deactivating a free module (e.g. `inventory`, `messaging`) on a Premium/trial tenant is refused because rule-enabled paid modules count as dependents — the console must explain it and offer the cascade (deactivate dependents first) [console]
+
 ### Story 16.5 : Migration des tenants existants (backfill `tenant_modules`)
 
 As a **plateforme**,
@@ -1487,6 +1497,8 @@ So that **la bascule au modèle modulaire ne casse aucun tenant (MOD-FR19, MOD-N
 - [ ] [Deferred-from: spec 13-9, 2026-10-30] Drifted early tenants (created by the old `LIKE public INCLUDING ALL` copy — 157/331 dev schemas, likely the oldest prod ones) lack the crm indexes `idx_clients_name`/`idx_clients_archived`/`idx_suppliers_name`/`idx_product_suppliers_supplier`, the column defaults (`id`, `archived`, `created_at`, `updated_at`) and the `product_suppliers` FKs. crm is baselined at 1 without executing V1 (13.9 review), so nothing is repaired — decide with a dry-run on a prod copy whether a crm `V2` repairs them (`CREATE INDEX CONCURRENTLY` outside Flyway's transaction, `SET DEFAULT` metadata only, FKs `NOT VALID` + `VALIDATE` after an orphan report). Dev note: on keevo_dev V1 was applied once before the review (157 schemas already repaired, histories `0`+`1:SQL`) [crm migrations]
 
 - [ ] [Deferred-from: review 13-9, 2026-10-30] Stop `TenantSchemaSyncService` mirroring `clients`/`suppliers`/`product_suppliers` (and every other converted module's tables) once the module migrations are the single writer — together with the full conversion above [tenant provisioning]
+
+- [ ] [Deferred-from: review 13-10a, 2026-10-30] Backfill parity with the 13.10a transition rule: PREMIUM/PREMIUM_TRIAL → paid module rows with the subscription's `expires_at` and `grace_until` = +7 d; status ≠ ACTIVE and no-subscription tenants → no paid rows; after the backfill the rule must give the same states (test on a prod copy) [backfill]
 
 ### Story 16.6 : Conformité RGPD — suppression compte/données (FR91)
 
@@ -1527,6 +1539,8 @@ So that **le risque de mise en production est maîtrisé (MOD-NFR12, fiabilité)
 
 - [ ] [Deferred-from: spec 13-4, 2026-10-29] **Decision for the user:** stray copies of global-only tables in tenant schemas (dev: 331 schemas × `shedlock`, `flyway_schema_history`, `event_publication`, `event_listener_receipt`, `refresh_tokens`, `password_reset_tokens`, `user_tenant_memberships`, `user_sync_state`, `feedback`) are unused but kept (an update must not alter prod data). Choose: keep forever, or a one-shot reviewed cleanup (`DROP TABLE IF EXISTS` per tenant, empty-table check first, prod backup). Counts are logged at boot by `GlobalTableStrayCopiesReporter` [tenant schemas]
 
+- [ ] [Deferred-from: review 13-10a, 2026-10-30] **Go-live gate**: the backend enforcement of 13.10a must not reach production before a minimum app version that understands `MODULE_INACTIVE`/`MODULE_READ_ONLY`/`MODULE_NOT_ENTITLED` is forced (V1 apps treat unknown sync reasons as terminal: counting sessions abandoned, transfers quarantined; the export upgrade sheet keys on `PLAN_FEATURE_REQUIRED`) — or ship a compatibility path; communicate to Free tenants which features become Premium (transfers, counting, advanced reports, profitability, PDF/Excel exports, alerts/owner pushes, report configuration) [release]
+
 ### Story 16.8 : Profils de plan & plafonds configurables (super-admin)
 
 As a **super-admin (Toor)**,
@@ -1563,6 +1577,8 @@ So that **je peux ajuster l'offre commerciale dynamiquement (MOD-FR13b, décisio
 
 > **Objectif :** refermer les FR produit non planifiés + livrer les features Premium décidées, **gâtées** par le moteur d'entitlements. Dépend d'Epic 13 (gating) et du classement §6.1. Rend l'app **fonctionnellement complète** sur les 3 surfaces. (Comble les gaps G5-G13.)
 > **Note :** 17.1-17.4 reprennent et **remplacent** les stories backlog d'origine (4-5, 4-6, 8-2, 8-4) — désormais planifiées dans la refonte.
+
+- [ ] [Deferred-from: review 13-10a, 2026-10-30] With `report-config` DISABLED the end-of-day report must use the fixed default (hour/channel) — stored `report_preferences` set during a trial must be ignored; retire/replace the 13.10a transition rule (plan → paid modules without row) by `profile_modules` [plan profiles]
 
 ### Story 17.1 : Annulation / correction de vente (FR90)
 As a **propriétaire**, I want **annuler ou corriger une vente avec justification, stock réajusté**, So that **les erreurs de caisse sont gérables (FR90)**.

@@ -4,6 +4,7 @@ import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.admin.tenant.adapter.in.rest.dto.ActivatePlanRequest;
+import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.subscription.api.ActivatePlanInput;
 import com.keevo.subscription.api.PlanAdministrationPort;
 import io.swagger.v3.oas.annotations.Operation;
@@ -26,6 +27,7 @@ import java.util.UUID;
  * - actorId extracted from SecurityContext principal (UUID)
  */
 @Tag(name = "Admin — Subscriptions", description = "Super Admin subscription management")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin/subscriptions")
 public class AdminSubscriptionController {

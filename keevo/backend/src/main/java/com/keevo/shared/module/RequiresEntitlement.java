@@ -27,6 +27,14 @@ public @interface RequiresEntitlement {
     /** What the method does with the module: {@link Access#WRITE} by default. */
     Access access() default Access.WRITE;
 
+    /**
+     * Story 13.10a review — why a non-GET handler only reads (e.g. {@code POST /exports} builds a file from existing
+     * data): required, non-blank, when {@link #access()} is {@link Access#READ} on a handler mapped to another verb
+     * than GET, so it stays usable during the read-only grace; must stay empty otherwise (checked by the
+     * architecture test {@code EndpointEntitlementCoverageTest}). No runtime effect.
+     */
+    String readJustification() default "";
+
     /** Kind of access a gated method needs. */
     enum Access {
         /** Reads only: allowed while the module is read-only (expired, in grace). */

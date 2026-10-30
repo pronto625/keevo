@@ -11,6 +11,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.RequiresEntitlement;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -36,6 +37,7 @@ public class SaleController {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
+    @RequiresEntitlement("pos")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<RecordSaleResponseDto>> recordSale(
             @Valid @RequestBody RecordSaleRequestDto request,

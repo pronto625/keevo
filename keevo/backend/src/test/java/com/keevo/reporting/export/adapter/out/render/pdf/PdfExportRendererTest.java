@@ -110,6 +110,7 @@ class PdfExportRendererTest {
             this.rowFactory = rowFactory;
         }
 
+        @Override public String moduleId() { return "core"; }
         @Override public String key() { return schema.key(); }
         @Override public String label() { return schema.label(); }
         @Override public List<ExportColumn> columns() { return schema.columns(); }

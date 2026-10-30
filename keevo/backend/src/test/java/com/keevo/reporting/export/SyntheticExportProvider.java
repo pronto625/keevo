@@ -34,6 +34,7 @@ public class SyntheticExportProvider implements ExportDatasetProvider {
         this.total = total;
     }
 
+    @Override public String moduleId() { return "core"; }
     @Override public String key() { return key; }
     @Override public String label() { return label; }
 

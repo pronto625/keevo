@@ -50,6 +50,7 @@ public class InventoryCountsExportDatasetProvider extends NativeKeysetExportData
         super(em);
     }
 
+    @Override public String moduleId() { return "counting"; } // Story 13.10a review: owning module
     @Override public String key() { return KEY; }
     @Override public String label() { return "Comptages d'inventaire"; }
     @Override public List<ExportColumn> columns() { return COLUMNS; }

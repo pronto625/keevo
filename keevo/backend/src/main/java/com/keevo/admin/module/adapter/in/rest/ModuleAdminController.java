@@ -10,6 +10,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.shared.module.ModuleLifecycle;
 import com.keevo.shared.module.TenantModuleStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,6 +43,7 @@ import java.util.UUID;
  * messages naming modules by display name.
  */
 @Tag(name = "Admin — Modules", description = "Super Admin module catalogue and per-tenant activation")
+@EntitlementExempt("super-admin")
 @RestController
 @RequestMapping("/api/v1/admin")
 public class ModuleAdminController {

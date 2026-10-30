@@ -18,10 +18,15 @@ public interface ActiveModulesCache {
      * unknown tenant from a tenant whose modules are off — and its {@code tenant_modules} rows (empty for an
      * unknown tenant).
      */
-    record Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows) {
+    record Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows, TenantModuleStatePort.Plan plan) {
 
         public Entry {
             rows = Map.copyOf(rows);
+            plan = plan != null ? plan : TenantModuleStatePort.Plan.NONE;
+        }
+
+        public Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows) {
+            this(knownTenant, rows, TenantModuleStatePort.Plan.NONE);
         }
     }
 
