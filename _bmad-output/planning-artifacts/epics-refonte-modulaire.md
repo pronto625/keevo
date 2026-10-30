@@ -1167,8 +1167,8 @@ So that **la promesse « mini-apps connectées » est prouvée et non régressab
 **Given/When/Then** — Scénario 4 (pos désactivé) : pas de facture auto, facturation manuelle continue, données conservées.
 
 **Implementation Notes:**
-- Test d'intégration `@ApplicationModuleTest` (Spring Modulith) + `AssertablePublishedEvents` pour vérifier la publication/consommation.
-- Activer/désactiver les modules par tenant dans le test (via `ModuleLifecycleService`).
+- [x] ~~Test d'intégration `@ApplicationModuleTest` (Spring Modulith) + `AssertablePublishedEvents`~~ → remplacé (décision 14.6) par un test pleine application vérifiant publication et consommation. — **Done in 14.6 (2026-10-30), not with `@ApplicationModuleTest`:** `keevo/backend/src/test/java/com/keevo/acceptance/ModularVisionAcceptanceTest.java`, full context (`FullContextIntegrationTest`, real owner JWT, REST surface only), 4 ordered scenarios on one Premium tenant; each scenario runs only when the previous one passed. Events asserted through Modulith's `PublishedEvents` API fed by a context-wide recorder: `PublishedEventsExtension` binds its listener to the test thread and cannot see the invoice events of the auto invoice (published on the registry's async thread). Run alone: `mvn -q -o test -Dtest='com.keevo.acceptance.**'`.
+- [x] Activer/désactiver les modules par tenant dans le test (via `ModuleLifecycleService`). — **Done in 14.6:** every toggle goes through `ModuleLifecycle` (super-admin actor): scenario 1 deactivates pos, crm, then inventory / catalog unless active modules still require them; scenario 2 activates crm; scenario 3 activates pos (with its requirements); scenario 4 deactivates pos.
 
 ### Story 14.7 : Avoirs (notes de crédit) sur factures
 
