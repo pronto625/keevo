@@ -1,4 +1,4 @@
-package com.keevo.sync.sync.domain.model;
+package com.keevo.shared.application.port.sync;
 
 /**
  * SyncOperationStatus — Result status for each sync operation.

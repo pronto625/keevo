@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.crm.api.ClientLookupPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.inventory.api.StockMovementInput;
 import com.keevo.inventory.api.StockMovementKind;
@@ -16,11 +17,15 @@ import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.CapabilityRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -29,22 +34,33 @@ import java.util.UUID;
  * <p>GoF Command: receives RecordSaleCommand, delegates to SaleFactory.
  * <p>GoF Observer: publishes SaleCompletedEvent for AuditEventListener.
  * <p>Hexagonal: imports ONLY from domain/ and shared/ — zero Spring Data/JPA.
+ *
+ * <p>Story 14.3: the sale client is checked through the optional {@code crm} capability {@link ClientLookupPort}
+ * (resolved per call, never injected) — REST and sync alike. crm on + unknown client → {@code CLIENT_NOT_FOUND}
+ * (404 / sync REJECTED) before anything is written (the {@code sales.client_id} FK used to answer 500); crm off → the
+ * sale is recorded <b>without</b> its client (money and stock must never be refused because an optional module is
+ * off), with a WARN log.
  */
 @Service
 @Transactional
 public class RecordSaleService implements RecordSaleUseCase {
+
+    private static final Logger log = LoggerFactory.getLogger(RecordSaleService.class);
 
     private final SaleRepository saleRepository;
     private final StockQueryPort stockQuery;
     private final StockCommandPort stockCommand;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final CapabilityRegistry capabilities;
 
     public RecordSaleService(SaleRepository saleRepository,
                              StockQueryPort stockQuery,
                              StockCommandPort stockCommand,
                              ApplicationEventPublisher eventPublisher,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             CapabilityRegistry capabilities) {
+        this.capabilities = capabilities;
         this.saleRepository = saleRepository;
         this.stockQuery = stockQuery;
         this.stockCommand = stockCommand;
@@ -53,12 +69,13 @@ public class RecordSaleService implements RecordSaleUseCase {
     }
 
     @Override
-    public void recordSale(RecordSaleCommand command) {
+    public void recordSale(RecordSaleCommand recorded) {
         String tenantSchema = TenantContext.getCurrentTenant();
         // Idempotency guard — duplicate saleId is a no-op
-        if (saleRepository.existsById(command.saleId())) {
+        if (saleRepository.existsById(recorded.saleId())) {
             return;
         }
+        RecordSaleCommand command = withCheckedClient(recorded, tenantSchema);
 
         SaleStatus effectiveStatus = command.requestedStatus() != null
                 ? command.requestedStatus() : SaleStatus.COMPLETED;
@@ -143,6 +160,25 @@ public class RecordSaleService implements RecordSaleUseCase {
                     sale.getOccurredAt()
             ));
         }
+    }
+
+    /**
+     * Story 14.3 — the sale client through the optional crm capability: unknown with crm on →
+     * {@code CLIENT_NOT_FOUND}; crm off → the sale goes on without its client (WARN, no id in the log).
+     */
+    private RecordSaleCommand withCheckedClient(RecordSaleCommand command, String tenantSchema) {
+        if (command.clientId() == null) {
+            return command;
+        }
+        Optional<ClientLookupPort> crm = capabilities.find(ClientLookupPort.class, tenantSchema);
+        if (crm.isPresent()) {
+            if (!crm.get().exists(tenantSchema, command.clientId())) {
+                throw new DomainException(ErrorCode.CLIENT_NOT_FOUND, "Unknown sale client");
+            }
+            return command;
+        }
+        log.warn("[sale] crm module off for tenant {}: sale recorded without its client", tenantSchema);
+        return command.withoutClient();
     }
 
     private int getAvailableStock(String tenantSchema, UUID productId, UUID variantId, UUID storeId) {

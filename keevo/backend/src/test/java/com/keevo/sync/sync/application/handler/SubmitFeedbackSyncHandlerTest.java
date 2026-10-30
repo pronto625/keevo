@@ -3,7 +3,7 @@ package com.keevo.sync.sync.application.handler;
 import com.keevo.feedback.feedback.adapter.in.api.FeedbackApiTestSupport;
 import com.keevo.feedback.feedback.domain.model.Feedback;
 import com.keevo.feedback.feedback.domain.port.in.SubmitFeedbackUseCase;
-import com.keevo.sync.sync.domain.model.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperation;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -109,7 +109,7 @@ class SubmitFeedbackSyncHandlerTest {
 
         var result = handler.apply(operation, UUID.randomUUID(), "kv_abc123");
 
-        assertThat(result.status()).isEqualTo(com.keevo.sync.sync.domain.model.SyncOperationStatus.APPLIED);
+        assertThat(result.status()).isEqualTo(com.keevo.shared.application.port.sync.SyncOperationStatus.APPLIED);
     }
 
     private SyncOperation createOperation(Map<String, Object> payload) {

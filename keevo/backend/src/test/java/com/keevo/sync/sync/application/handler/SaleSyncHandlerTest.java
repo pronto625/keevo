@@ -7,8 +7,8 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.port.out.StoreRepository;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,7 +44,6 @@ class SaleSyncHandlerTest {
     @Mock private RecordSaleUseCase recordSaleUseCase;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private StoreRepository storeRepository;
-    @Mock private com.keevo.crm.api.ClientQueryPort clientQuery;
 
     private SaleSyncHandler handler;
 
@@ -54,9 +53,7 @@ class SaleSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new SaleSyncHandler(
-                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository),
-                clientQuery);
-        lenient().when(clientQuery.existsById(any(), any())).thenReturn(true);
+                CommerceSaleApiTestSupport.saleCommandPort(recordSaleUseCase, null, null), eventPublisher, StoreApiTestSupport.queryPort(storeRepository));
         lenient().when(storeRepository.findById(any())).thenReturn(Optional.of(mock(Store.class)));
         SyncTestAuth.owner(); // v1s-12-10: null auth now fails closed
     }
@@ -459,35 +456,28 @@ class SaleSyncHandlerTest {
                 Instant.now());
     }
 
-    // Story 12.7 (live test): sales.client_id has a FK — an unknown client (its creation held because crm is
-    // off) is refused before any write instead of aborting the transaction at insert.
+    // Story 12.7 (live test) → 14.3: the client is checked by the sale use case through the optional crm
+    // capability; its CLIENT_NOT_FOUND still ends REJECTED with that reason.
     @Test
-    void handle_unknownClient_isRejectedClientNotFound_beforeAnyWrite() {
+    void handle_unknownClient_isRejectedClientNotFound() {
         UUID clientId = UUID.randomUUID();
-        when(clientQuery.existsById(TENANT_ID, clientId)).thenReturn(false);
+        org.mockito.Mockito.doThrow(new com.keevo.shared.domain.exception.DomainException(
+                        com.keevo.shared.domain.exception.ErrorCode.CLIENT_NOT_FOUND, "Unknown sale client"))
+                .when(recordSaleUseCase).recordSale(any());
 
         var result = handler.handle(saleWithClient(clientId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(result.reason()).isEqualTo("CLIENT_NOT_FOUND");
-        verifyNoInteractions(recordSaleUseCase);
     }
 
     @Test
-    void handle_knownClient_isApplied() {
+    void handle_knownClient_isApplied_clientPassedToTheUseCase() {
         UUID clientId = UUID.randomUUID();
 
         var result = handler.handle(saleWithClient(clientId), ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
-        verify(clientQuery).existsById(TENANT_ID, clientId);
-        verify(recordSaleUseCase).recordSale(any());
-    }
-
-    @Test
-    void handle_withoutClient_doesNotQueryClients() {
-        handler.handle(saleIn(UUID.randomUUID()), ACTOR_ID, TENANT_ID);
-
-        verifyNoInteractions(clientQuery);
+        assertThat(capturedCommand().clientId()).isEqualTo(clientId);
     }
 }

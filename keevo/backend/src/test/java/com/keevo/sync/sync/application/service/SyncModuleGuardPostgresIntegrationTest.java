@@ -8,7 +8,7 @@ import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.module.application.port.TenantModuleStatePort;
-import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -275,9 +275,9 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
     }
 
     @Test
-    @DisplayName("live scenario: crm off, client + sale with that client + sale without client → 200, "
-            + "client MODULE_INACTIVE, its sale CLIENT_NOT_FOUND, the other sale APPLIED")
-    void crmOff_saleWithHeldClient_rejectedCleanly_otherSaleApplied() throws Exception {
+    @DisplayName("live scenario (14.3): crm off, client + sale with that client + sale without client → 200, "
+            + "client MODULE_INACTIVE, both sales APPLIED, the first one without its client")
+    void crmOff_saleWithHeldClient_appliedWithoutClient_otherSaleApplied() throws Exception {
         moduleRow("crm", "DISABLED");
         var client = createClient("Mireille");
         @SuppressWarnings("unchecked")
@@ -289,14 +289,31 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.results", hasSize(3)))
                 .andExpect(jsonPath(result(id(client), "reason"), contains("MODULE_INACTIVE")))
-                .andExpect(jsonPath(result(id(saleWithClient), "status"), contains("REJECTED")))
-                .andExpect(jsonPath(result(id(saleWithClient), "reason"), contains("CLIENT_NOT_FOUND")))
+                .andExpect(jsonPath(result(id(saleWithClient), "status"), contains("APPLIED")))
+                .andExpect(jsonPath(result(id(saleWithoutClient), "status"), contains("APPLIED")));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".sales", Integer.class))
+                .isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".sales WHERE client_id IS NOT NULL",
+                Integer.class)).isZero();
+    }
+
+    @Test
+    @DisplayName("14.3: crm on, sale with an unknown client → REJECTED CLIENT_NOT_FOUND, nothing written (unchanged)")
+    void crmOn_saleWithUnknownClient_rejectedClientNotFound() throws Exception {
+        var saleWithUnknownClient = createSale(UUID.randomUUID().toString());
+        var saleWithoutClient = createSale();
+
+        push(saleWithUnknownClient, saleWithoutClient)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath(result(id(saleWithUnknownClient), "status"), contains("REJECTED")))
+                .andExpect(jsonPath(result(id(saleWithUnknownClient), "reason"), contains("CLIENT_NOT_FOUND")))
                 .andExpect(jsonPath(result(id(saleWithoutClient), "status"), contains("APPLIED")));
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".sales", Integer.class))
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT error_reason FROM \"" + schema + "\".sync_error_log "
-                + "WHERE operation_id = ?", String.class, id(saleWithClient))).isEqualTo("CLIENT_NOT_FOUND");
+                + "WHERE operation_id = ?", String.class, id(saleWithUnknownClient))).isEqualTo("CLIENT_NOT_FOUND");
     }
 
     @Test

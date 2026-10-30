@@ -1,13 +1,14 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.catalog.api.CategoryCommandPort;
 import com.keevo.catalog.api.CategoryQueryPort;
 import com.keevo.catalog.api.CategoryView;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -20,7 +21,7 @@ import java.util.UUID;
  * <p>Supported operation types: CREATE_CATEGORY, TOGGLE_CATEGORY, RENAME_CATEGORY.
  *
  * <p>CREATE_CATEGORY preserves the client-assigned UUID for offline-first idempotency
- * (same pattern as {@link CreateClientSyncHandler} / {@link CreateSupplierSyncHandler}).
+ * (same pattern as {@code CreateClientSyncHandler} / {@code CreateSupplierSyncHandler}, now in crm).
  *
  * <p>TOGGLE_CATEGORY is set-based: the payload carries the {@code isActive} target state;
  * the handler toggles only when current state differs — avoiding double-toggle on retry.

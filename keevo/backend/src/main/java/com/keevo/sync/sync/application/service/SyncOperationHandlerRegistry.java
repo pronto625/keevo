@@ -2,7 +2,7 @@ package com.keevo.sync.sync.application.service;
 
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleRegistry;
-import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

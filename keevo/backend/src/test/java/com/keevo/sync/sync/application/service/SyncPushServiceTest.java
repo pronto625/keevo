@@ -1,7 +1,10 @@
 package com.keevo.sync.sync.application.service;
 
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.sync.sync.domain.model.*;
-import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;

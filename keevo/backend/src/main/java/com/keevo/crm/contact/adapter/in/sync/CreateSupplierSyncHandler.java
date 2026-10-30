@@ -1,12 +1,13 @@
-package com.keevo.sync.sync.application.handler;
+package com.keevo.crm.contact.adapter.in.sync;
 
+import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.crm.api.CreateSupplierInput;
 import com.keevo.crm.api.SupplierCommandPort;
 import com.keevo.crm.api.SupplierQueryPort;
 import com.keevo.crm.api.SupplierView;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.List;

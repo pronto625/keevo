@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.commerce.api.RecordSaleInput;
@@ -7,12 +8,11 @@ import com.keevo.commerce.api.SaleCommandPort;
 import com.keevo.commerce.api.SaleLineInput;
 import com.keevo.commerce.api.SalePaymentMode;
 import com.keevo.commerce.api.SaleState;
-import com.keevo.crm.api.ClientQueryPort;
 import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.store.api.StoreQueryPort;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -25,16 +25,13 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
     private final SaleCommandPort saleCommandPort;
     private final ApplicationEventPublisher eventPublisher;
     private final StoreQueryPort storeQuery;
-    private final ClientQueryPort clientQuery;
 
     public SaleSyncHandler(SaleCommandPort saleCommandPort,
                            ApplicationEventPublisher eventPublisher,
-                           StoreQueryPort storeQuery,
-                           ClientQueryPort clientQuery) {
+                           StoreQueryPort storeQuery) {
         this.saleCommandPort = saleCommandPort;
         this.eventPublisher = eventPublisher;
         this.storeQuery = storeQuery;
-        this.clientQuery = clientQuery;
     }
 
     @Override
@@ -76,11 +73,8 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
             throw new DomainException(ErrorCode.STORE_NOT_FOUND, "Store not found: " + storeId);
         }
         UUID clientId = p.get("clientId") != null ? UUID.fromString((String) p.get("clientId")) : null;
-        // Story 12.7 (live test): sales.client_id has a FK — an unknown client (e.g. its offline creation is held
-        // because crm is off) would abort the transaction at insert. Refused cleanly before any write.
-        if (clientId != null && !clientQuery.existsById(tenantId, clientId)) {
-            throw new DomainException(ErrorCode.CLIENT_NOT_FOUND, "Client not found: " + clientId);
-        }
+        // Story 14.3: the client is checked by the sale use case through the optional crm capability (unknown with
+        // crm on → CLIENT_NOT_FOUND, REJECTED as in 12.7; crm off → the sale is applied without its client).
         SalePaymentMode paymentMode = SalePaymentMode.valueOf((String) p.get("paymentMode"));
         String mobileMoneyRef = (String) p.get("mobileMoneyRef");
         int discountAmount = p.get("discountAmount") != null ? requireIntegralInt(p.get("discountAmount"), "discountAmount") : 0;

@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.domain.port.in;
 
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
-import com.keevo.sync.sync.domain.model.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncPullResult;
 
 import java.time.Instant;

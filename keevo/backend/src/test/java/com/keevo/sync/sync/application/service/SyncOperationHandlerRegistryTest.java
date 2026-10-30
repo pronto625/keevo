@@ -1,12 +1,12 @@
 package com.keevo.sync.sync.application.service;
 
-import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import org.junit.jupiter.api.Test;
 
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleRegistry;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
 
 import java.util.List;
 import java.util.Set;

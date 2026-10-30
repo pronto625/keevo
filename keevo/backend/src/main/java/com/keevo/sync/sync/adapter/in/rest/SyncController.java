@@ -15,7 +15,7 @@ import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncConflictDto;
 import com.keevo.sync.sync.application.service.SyncGateCheckService;
 import com.keevo.sync.sync.domain.model.SyncBatchResult;
-import com.keevo.sync.sync.domain.model.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.sync.sync.domain.model.SyncPullResult;
 import com.keevo.sync.sync.domain.model.UserSyncState;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;

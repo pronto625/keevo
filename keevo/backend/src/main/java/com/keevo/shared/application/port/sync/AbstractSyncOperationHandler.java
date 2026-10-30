@@ -1,11 +1,7 @@
-package com.keevo.sync.sync.application.handler;
+package com.keevo.shared.application.port.sync;
 
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
-import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

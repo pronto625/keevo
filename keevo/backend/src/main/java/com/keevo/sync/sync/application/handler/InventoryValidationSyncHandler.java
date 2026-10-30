@@ -1,13 +1,14 @@
 package com.keevo.sync.sync.application.handler;
 
+import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.inventory.api.CountingCommandPort;
 import com.keevo.inventory.api.CountingQueryPort;
 import com.keevo.inventory.api.ValidateCountingInput;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;

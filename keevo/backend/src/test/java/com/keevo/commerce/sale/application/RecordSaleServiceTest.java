@@ -14,6 +14,10 @@ import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.crm.api.ClientLookupPort;
+import com.keevo.commerce.sale.domain.model.Sale;
+import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.module.CapabilityRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +45,8 @@ class RecordSaleServiceTest {
     @Mock private StockQueryPort stockQuery;
     @Mock private StockCommandPort stockCommand;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private CapabilityRegistry capabilities;
+    @Mock private ClientLookupPort clientLookup;
 
     private RecordSaleService service;
 
@@ -54,7 +60,7 @@ class RecordSaleServiceTest {
         TenantContext.setCurrentTenant("kv_abc123");
         service = new RecordSaleService(
                 saleRepository, stockQuery, stockCommand,
-                eventPublisher, new ObjectMapper());
+                eventPublisher, new ObjectMapper(), capabilities);
     }
 
     @AfterEach
@@ -440,5 +446,80 @@ class RecordSaleServiceTest {
                 && java.util.Objects.equals(m.actorId(), ACTOR_ID)
                 && java.util.Objects.equals(m.movementId(), itemId)
                 && m.allowNegative()));
+    }
+
+    // --- Story 14.3: the sale client through the optional crm capability ---------------------------------------
+
+    private RecordSaleCommand commandWithClient(UUID clientId) {
+        return new RecordSaleCommand(
+                SALE_ID, ACTOR_ID, STORE_ID, clientId,
+                PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2)));
+    }
+
+    @Test
+    void story143_crmOn_knownClient_saleSavedWithItsClient() {
+        UUID clientId = UUID.randomUUID();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(capabilities.find(ClientLookupPort.class, "kv_abc123")).thenReturn(Optional.of(clientLookup));
+        when(clientLookup.exists("kv_abc123", clientId)).thenReturn(true);
+        when(stockQuery.availableQuantity("kv_abc123", PRODUCT_ID, null, STORE_ID)).thenReturn(10);
+
+        service.recordSale(commandWithClient(clientId));
+
+        ArgumentCaptor<Sale> saved = ArgumentCaptor.forClass(Sale.class);
+        verify(saleRepository).save(saved.capture());
+        assertThat(saved.getValue().getClientId()).isEqualTo(clientId);
+        verify(stockCommand).recordMovement(any(), any());
+    }
+
+    @Test
+    void story143_crmOn_unknownClient_clientNotFound_nothingWritten_noStockRead() {
+        UUID clientId = UUID.randomUUID();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(capabilities.find(ClientLookupPort.class, "kv_abc123")).thenReturn(Optional.of(clientLookup));
+        when(clientLookup.exists("kv_abc123", clientId)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.recordSale(commandWithClient(clientId)))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.CLIENT_NOT_FOUND));
+
+        verify(saleRepository, never()).save(any());
+        verifyNoInteractions(stockQuery, stockCommand, eventPublisher);
+    }
+
+    @Test
+    void story143_crmOff_saleSavedWithoutClient_stockDecremented() {
+        UUID clientId = UUID.randomUUID();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(capabilities.find(ClientLookupPort.class, "kv_abc123")).thenReturn(Optional.empty());
+        when(stockQuery.availableQuantity("kv_abc123", PRODUCT_ID, null, STORE_ID)).thenReturn(10);
+
+        service.recordSale(commandWithClient(clientId));
+
+        ArgumentCaptor<Sale> saved = ArgumentCaptor.forClass(Sale.class);
+        verify(saleRepository).save(saved.capture());
+        assertThat(saved.getValue().getClientId()).isNull();
+        verify(stockCommand).recordMovement(any(), argThat(m -> m.quantityChange() == -2));
+    }
+
+    @Test
+    void story143_noClient_capabilityNotConsulted() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(stockQuery.availableQuantity("kv_abc123", PRODUCT_ID, null, STORE_ID)).thenReturn(10);
+
+        service.recordSale(validCommand());
+
+        verifyNoInteractions(capabilities);
+    }
+
+    @Test
+    void story143_duplicateSale_idempotencyGuardBeforeTheClientCheck() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(true);
+
+        service.recordSale(commandWithClient(UUID.randomUUID()));
+
+        verifyNoInteractions(capabilities);
+        verify(saleRepository, never()).save(any());
     }
 }

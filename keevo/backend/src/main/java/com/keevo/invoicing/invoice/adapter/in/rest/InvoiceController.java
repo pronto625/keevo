@@ -1,6 +1,7 @@
 package com.keevo.invoicing.invoice.adapter.in.rest;
 
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.SendInvoiceRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.InvoiceClientResolver;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceDocumentUseCase;
 import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
 import jakarta.servlet.http.HttpServletRequest;
@@ -10,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceClientDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceClientSuggestionsDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceLineRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceResponseDto;
@@ -55,6 +57,7 @@ import java.util.UUID;
  * module ({@code @RequiresEntitlement}: GET → READ, other verbs → WRITE) and a module permission
  * ({@code @RequiresPermission}, evaluated first): view → {@code INVOICE_VIEW}; create / edit / delete a draft →
  * {@code INVOICE_CREATE}; issue / record the payment → {@code INVOICE_SEND}; cancel → {@code INVOICE_MANAGE} (owner).
+ * Story 14.3: CRM client suggestions ({@code GET /clients}, {@code INVOICE_CREATE}) and CRM link of the client.
  */
 @RestController
 @RequestMapping("/api/v1/invoices")
@@ -69,11 +72,13 @@ public class InvoiceController {
     private final InvoiceDocumentUseCase documents;
     private final SendInvoiceUseCase sending;
     private final PublicBaseUrl publicBaseUrl;
+    private final InvoiceClientResolver clients;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
                              InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
-                             PublicBaseUrl publicBaseUrl) {
+                             PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients) {
+        this.clients = clients;
         this.drafts = drafts;
         this.lifecycle = lifecycle;
         this.queries = queries;
@@ -115,6 +120,21 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponseWrapper.paginated(items, page, size, result.totalElements(), totalPages));
     }
 
+    /**
+     * GET /api/v1/invoices/clients?search=&limit=20 — Story 14.3: the CRM clients for the invoice client picker
+     * (non-archived, sorted by name, at most {@code limit}, clamped to 1–50). {@code crmAvailable=false} and no client
+     * while {@code crm} is off for the tenant: the app then shows a free-text field.
+     */
+    @RequiresPermission(InvoicingModule.INVOICE_CREATE)
+    @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
+    @GetMapping("/clients")
+    public ResponseEntity<ApiResponseWrapper<InvoiceClientSuggestionsDto>> clientSuggestions(
+            @RequestParam(required = false) String search,
+            @RequestParam(defaultValue = "" + InvoiceClientResolver.DEFAULT_LIMIT) int limit) {
+        return ResponseEntity.ok(ApiResponseWrapper.ok(InvoiceClientSuggestionsDto.from(
+                clients.suggest(search, limit, TenantContext.getCurrentTenant()))));
+    }
+
     /** GET /api/v1/invoices/{id}. */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
@@ -129,7 +149,7 @@ public class InvoiceController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> update(@PathVariable UUID id,
                                                                          @Valid @RequestBody InvoiceRequestDto request) {
-        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(drafts.update(id, content(request)))));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(drafts.update(id, content(request), TenantContext.getCurrentTenant()))));
     }
 
     /** DELETE /api/v1/invoices/{id} — a draft only (an issued invoice is never deleted). */

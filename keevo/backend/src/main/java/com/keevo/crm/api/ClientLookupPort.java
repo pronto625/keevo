@@ -2,6 +2,7 @@ package com.keevo.crm.api;
 
 import com.keevo.shared.module.Capability;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,4 +23,13 @@ public interface ClientLookupPort extends Capability {
 
     /** Whether a client has this id. */
     boolean exists(String tenantSchema, UUID clientId);
+
+    /** Story 14.3 — the client with this id (archived included); empty when unknown or {@code clientId} is null. */
+    Optional<ClientSummary> find(String tenantSchema, UUID clientId);
+
+    /**
+     * Story 14.3 — non-archived clients whose name or phone contains {@code query} (case-insensitive; every
+     * non-archived client when the query is blank), sorted by name, at most {@code limit} (clamped to 1–50).
+     */
+    List<ClientSummary> search(String tenantSchema, String query, int limit);
 }

@@ -1,6 +1,6 @@
 package com.keevo.sync.sync.adapter.in.rest.dto;
 
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
 
 import java.util.Map;
 

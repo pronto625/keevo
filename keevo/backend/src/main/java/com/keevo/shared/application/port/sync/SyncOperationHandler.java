@@ -1,13 +1,15 @@
-package com.keevo.sync.sync.domain.port.in;
+package com.keevo.shared.application.port.sync;
 
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
 
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * SyncOperationHandler — Strategy interface for processing sync operations by type.
+ *
+ * <p>Story 14.3: a public SPI of {@code shared} (like {@code ExportDatasetProvider}) so that a module can own the
+ * handlers of its own operations (e.g. {@code crm} for clients and suppliers) without depending on {@code sync};
+ * {@code sync} discovers every {@code @Component} implementation through {@code SyncOperationHandlerRegistry}.
  */
 public interface SyncOperationHandler {
 

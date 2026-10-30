@@ -1,5 +1,8 @@
 package com.keevo.sync.sync.application.strategy;
 
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.out.EntityLastModifiedRepository;
 import com.keevo.sync.sync.domain.port.out.EntityLastModifiedRepository.LwwEntity;

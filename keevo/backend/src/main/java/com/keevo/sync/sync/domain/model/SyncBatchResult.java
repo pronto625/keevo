@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.domain.model;
 
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import java.time.Instant;
 import java.util.List;
 

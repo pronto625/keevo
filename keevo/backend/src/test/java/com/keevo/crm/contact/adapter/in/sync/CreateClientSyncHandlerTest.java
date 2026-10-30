@@ -1,4 +1,4 @@
-package com.keevo.sync.sync.application.handler;
+package com.keevo.crm.contact.adapter.in.sync;
 
 import com.keevo.crm.api.ClientCommandPort;
 import com.keevo.crm.api.ClientQueryPort;
@@ -7,8 +7,8 @@ import com.keevo.crm.api.CreateClientInput;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

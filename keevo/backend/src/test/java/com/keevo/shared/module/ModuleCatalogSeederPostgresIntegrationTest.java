@@ -118,7 +118,7 @@ class ModuleCatalogSeederPostgresIntegrationTest {
         Map<String, Object> pos = jdbc.queryForMap("SELECT version, display_name, category, requires::text AS requires, "
                 + "enhances::text AS enhances, is_free, manifest->>'entitlement' AS entitlement, installed_at "
                 + "FROM public.module_definitions WHERE id = 'pos'");
-        assertThat(pos).containsEntry("version", "1.1.0").containsEntry("display_name", "Point de vente")
+        assertThat(pos).containsEntry("version", "1.2.0").containsEntry("display_name", "Point de vente")
                 .containsEntry("category", "business").containsEntry("requires", "[\"core\", \"catalog\", \"inventory\"]")
                 .containsEntry("enhances", "[\"crm\", \"reporting\"]").containsEntry("is_free", true)
                 .containsEntry("entitlement", "module.pos");

@@ -28,8 +28,8 @@ class ClasspathModuleManifestsTest {
                 "messaging", "sync", "admin", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
                 "profitability", "exports", "invoicing");
         assertThat(byId.values()).allSatisfy(m -> {
-            // 13.6: crm provides; 13.7: pos declares an extension point
-            assertThat(m.version()).isEqualTo(m.id().equals("crm") || m.id().equals("pos") ? "1.1.0" : "1.0.0");
+            // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
+            assertThat(m.version()).isEqualTo(m.id().equals("crm") || m.id().equals("pos") ? "1.2.0" : "1.0.0");
             assertThat(m.free()).isEqualTo(!paid.contains(m.id()));
             assertThat(m.entitlement()).isEqualTo("module." + m.id());
         });
@@ -53,6 +53,7 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("catalog").enhances()).containsExactly("reporting");
         assertThat(byId.get("crm").enhances()).containsExactly("pos");
         assertThat(byId.get("crm").provides()).containsExactly("ClientLookupPort");
+        assertThat(byId.get("pos").needs()).containsExactly("ClientLookupPort?");
         // 14.1: invoicing — standalone (core only), enhances pos/crm, optional ClientLookupPort, own permissions
         assertThat(byId.get("invoicing").requires()).containsExactly("core");
         assertThat(byId.get("invoicing").enhances()).containsExactly("pos", "crm");

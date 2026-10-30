@@ -2,7 +2,7 @@ package com.keevo.sync.sync.adapter.out.persistence.impl;
 
 import com.keevo.sync.sync.adapter.out.persistence.entity.SyncOperationsLogJpaEntity;
 import com.keevo.sync.sync.adapter.out.persistence.jpa.SyncOperationsLogSpringRepository;
-import com.keevo.sync.sync.domain.model.SyncOperationStatus;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.sync.sync.domain.model.SyncOperationsLogEntry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

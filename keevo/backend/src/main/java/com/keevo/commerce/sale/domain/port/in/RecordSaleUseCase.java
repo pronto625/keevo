@@ -35,6 +35,12 @@ public interface RecordSaleUseCase {
                     discountAmount, requestedStatus, items, null, false);
         }
 
+        /** Story 14.3 — the same sale without its client (crm off: the client cannot be vouched for). */
+        public RecordSaleCommand withoutClient() {
+            return new RecordSaleCommand(saleId, actorId, storeId, null, paymentMode, mobileMoneyRef,
+                    discountAmount, requestedStatus, items, occurredAt, allowNegativeStock);
+        }
+
         /** Backward-compatible constructor: requestedStatus defaults to null (→ COMPLETED). */
         public RecordSaleCommand(UUID saleId, UUID actorId, UUID storeId, UUID clientId,
                                  PaymentMode paymentMode, String mobileMoneyRef, int discountAmount,

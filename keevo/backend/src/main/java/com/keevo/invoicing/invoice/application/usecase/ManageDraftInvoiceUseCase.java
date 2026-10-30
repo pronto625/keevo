@@ -23,6 +23,9 @@ import java.util.function.Supplier;
 /**
  * Creates, edits and deletes draft invoices (Story 14.1): free client and free lines, computed with the seller's
  * current settings on every change. Only a {@code DRAFT} can be changed or deleted ({@code INVOICE_NOT_EDITABLE}).
+ *
+ * <p>Story 14.3: the client goes through {@link InvoiceClientResolver} first (CRM link and prefill when {@code crm}
+ * is on, free text otherwise), before anything is written.
  */
 @Service
 public class ManageDraftInvoiceUseCase {
@@ -31,13 +34,15 @@ public class ManageDraftInvoiceUseCase {
     private final InvoicingSettingsRepository settings;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final InvoiceClientResolver clients;
 
     public ManageDraftInvoiceUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
-                                     ApplicationEventPublisher events, Clock clock) {
+                                     ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients) {
         this.invoices = invoices;
         this.settings = settings;
         this.events = events;
         this.clock = clock;
+        this.clients = clients;
     }
 
     /** The draft's content: client and lines. */
@@ -46,8 +51,9 @@ public class ManageDraftInvoiceUseCase {
 
     @Transactional
     public Invoice create(DraftContent content, UUID actorId, String tenantId) {
+        ClientInfo client = clients.resolve(content.client(), tenantId);
         Instant now = clock.instant();
-        Invoice draft = valid(() -> Invoice.draft(UUID.randomUUID(), content.client(), content.lines(),
+        Invoice draft = valid(() -> Invoice.draft(UUID.randomUUID(), client, content.lines(),
                 currentSettings(), actorId, now));
         invoices.insert(draft);
         events.publishEvent(new InvoiceCreatedEvent(draft.id(), draft.client().name(), draft.totals().totalTtc(),
@@ -56,10 +62,11 @@ public class ManageDraftInvoiceUseCase {
     }
 
     @Transactional
-    public Invoice update(UUID id, DraftContent content) {
+    public Invoice update(UUID id, DraftContent content, String tenantId) {
         Invoice current = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         current.assertEditable();
-        Invoice updated = valid(() -> current.withDraftContent(content.client(), content.lines(), currentSettings(),
+        ClientInfo client = clients.resolve(content.client(), tenantId, current.client().clientId());
+        Invoice updated = valid(() -> current.withDraftContent(client, content.lines(), currentSettings(),
                 clock.instant()));
         invoices.updateDraft(updated);
         return updated;

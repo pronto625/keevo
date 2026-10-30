@@ -1,5 +1,8 @@
 package com.keevo.sync.sync.application.service;
 
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.ModuleRegistry;
@@ -9,7 +12,7 @@ import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
 import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
-import com.keevo.sync.sync.domain.port.in.SyncOperationHandler;
+import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository;

@@ -2,8 +2,8 @@ package com.keevo.sync.sync.domain.port.in;
 
 import com.keevo.sync.sync.domain.model.ConflictResult;
 import com.keevo.sync.sync.domain.model.PreApplyCheck;
-import com.keevo.sync.sync.domain.model.SyncOperation;
-import com.keevo.sync.sync.domain.model.SyncOperationResult;
+import com.keevo.shared.application.port.sync.SyncOperation;
+import com.keevo.shared.application.port.sync.SyncOperationResult;
 
 import java.util.UUID;
 
