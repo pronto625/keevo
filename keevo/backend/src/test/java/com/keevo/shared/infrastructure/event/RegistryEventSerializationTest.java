@@ -13,7 +13,9 @@ import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosureSummary;
+import com.keevo.shared.event.catalog.sale.SaleCancelledEvent;
 import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
+import com.keevo.shared.event.catalog.sale.SaleCorrectedEvent;
 import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.shared.event.catalog.sale.SaleManuallyValidatedEvent;
 import com.keevo.shared.event.catalog.sale.SalePendingValidationEvent;
@@ -97,6 +99,11 @@ class RegistryEventSerializationTest {
         f.put(SaleCompletedEvent.class, new SaleCompletedEvent(A, B, TENANT, C, 54000, 500,
                 "[{\"productId\":\"p-1\",\"qty\":2}]", T0, A, "MOBILE_MONEY",
                 List.of(new SaleCompletedEvent.Line("Riz 5kg", 27000, 2))));
+        // 14.7: the invoicing credit-note bridge listens to sale.cancelled / sale.corrected
+        f.put(SaleCancelledEvent.class, new SaleCancelledEvent(A, B, "client a changé d'avis",
+                "[{\"productId\":\"p-1\",\"qty\":2}]", TENANT, T0, C));
+        f.put(SaleCorrectedEvent.class, new SaleCorrectedEvent(A, B, "erreur de saisie", "[]", "[]", TENANT, T0, C,
+                List.of(new SaleCompletedEvent.Line("Riz 5kg", 27000, 3)), 81000L, A, "CASH"));
         // 12.6a: the four notification listeners converted to module listeners
         f.put(StockThresholdBreachedEvent.class, new StockThresholdBreachedEvent(A, "Savon", B, 3, 5, C, TENANT, T0));
         f.put(StockAdjustedEvent.class, new StockAdjustedEvent(A, null, B, MovementKind.ADJUSTMENT, 10, -2, 8, C,
@@ -143,6 +150,23 @@ class RegistryEventSerializationTest {
         assertThat(back.getClientId()).isNull();
         assertThat(back.getPaymentMode()).isNull();
         assertThat(back.getLines()).isNull();
+    }
+
+    @Test
+    @DisplayName("14.7: a sale.corrected stored before 14.7 (no lines / total / client / payment mode) deserializes")
+    void legacySaleCorrectedPayloadDeserializes() throws Exception {
+        String legacy = "{\"actorId\":\"22222222-2222-2222-2222-222222222222\",\"afterSnapshot\":\"[]\","
+                + "\"beforeSnapshot\":\"[]\",\"justification\":\"erreur de saisie\","
+                + "\"occurredAt\":\"2026-10-29T10:15:30Z\",\"saleId\":\"11111111-1111-1111-1111-111111111111\","
+                + "\"storeId\":\"33333333-3333-3333-3333-333333333333\",\"tenantId\":\"kv_abc123\"}";
+
+        SaleCorrectedEvent back = mapper.readValue(legacy, SaleCorrectedEvent.class);
+
+        assertThat(back.saleId()).isEqualTo(A);
+        assertThat(back.lines()).isNull();
+        assertThat(back.totalAmount()).isNull();
+        assertThat(back.clientId()).isNull();
+        assertThat(back.paymentMode()).isNull();
     }
 
     @Test

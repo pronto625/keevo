@@ -435,15 +435,17 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("upgrade V1 → V3: a tenant provisioned at V1 is migrated on its first call, its invoices kept")
+    @DisplayName("upgrade V1 → V5: a tenant provisioned at V1 is migrated on its first call, its invoices kept")
     void upgradeFromV1() throws Exception {
         String q = "\"" + schema + "\".";
-        // back to the 14.1 state: V2 (14.2) and V3 (14.4) columns and history rows gone, one issued invoice
-        // written under V1
+        // back to the 14.1 state: V2 (14.2), V3 (14.4), V4 and V5 (14.7) tables, columns and history rows gone, one
+        // issued invoice written under V1
+        jdbc.execute("DROP TABLE " + q + "credit_note_items, " + q + "credit_notes, " + q + "credit_note_counters, "
+                + q + "sale_invoice_states");
         jdbc.execute("ALTER TABLE " + q + "invoices DROP COLUMN last_sent_at, DROP COLUMN last_sent_to, "
                 + "DROP COLUMN send_count, DROP COLUMN seller_name_from_display, DROP COLUMN seller_has_logo, "
-                + "DROP COLUMN source_sale_id");
-        jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3')");
+                + "DROP COLUMN source_sale_id, DROP COLUMN superseded_at");
+        jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5')");
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, seller_legal_name, "
                 + "vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, issued_at) VALUES "
@@ -456,7 +458,9 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
         assertThat(invoice.path("sendCount").asInt()).isZero();
         assertThat(invoice.path("saleId").isNull()).isTrue();
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM " + q + "flyway_history_invoicing WHERE version IN "
-                + "('2', '3') AND success", Integer.class)).isEqualTo(2);
+                + "('2', '3', '4', '5') AND success", Integer.class)).isEqualTo(4);
+        assertThat(invoice.path("creditNotes")).isEmpty();
+        assertThat(invoice.path("creditedTtc").asLong()).isZero();
         assertThat(pdfText(owner(HttpMethod.GET, "/api/v1/invoices/" + id + "/pdf", null)))
                 .contains("FAC-2026-000042", "Boutique V1", "5 000 XAF");
     }

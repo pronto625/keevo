@@ -1,6 +1,6 @@
 {
   "id": "pos",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "displayName": "Point de vente",
   "category": "business",
   "requires": [
@@ -13,7 +13,9 @@
     "reporting"
   ],
   "publishes": [
-    "sale.completed"
+    "sale.completed",
+    "sale.cancelled",
+    "sale.corrected"
   ],
   "consumes": [],
   "provides": [],

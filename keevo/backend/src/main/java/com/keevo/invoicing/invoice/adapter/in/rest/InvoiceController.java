@@ -122,8 +122,10 @@ public class InvoiceController {
         InvoiceStatus filter = parseStatus(status);
         InvoiceRepository.Page result = queries.list(filter, parseSaleId(saleId), page, size);
         InvoicingSettings current = settings.current();
+        var credits = queries.credits(result.items());
         List<InvoiceResponseDto> items = result.items().stream()
-                .map(i -> InvoiceResponseDto.fromDomain(i, current)).toList();
+                .map(i -> dto(i, current, credits.getOrDefault(i.id(), InvoiceQueryUseCase.Credits.NONE)))
+                .toList();
         int totalPages = (int) ((result.totalElements() + size - 1) / size);
         return ResponseEntity.ok(ApiResponseWrapper.paginated(items, page, size, result.totalElements(), totalPages));
     }
@@ -189,7 +191,10 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(paid)));
     }
 
-    /** POST /api/v1/invoices/{id}/cancel — an issued (unpaid) invoice; its number is kept. */
+    /**
+     * POST /api/v1/invoices/{id}/cancel — an issued (unpaid) invoice without credit note; its number is kept. A paid
+     * invoice, or one with a credit note, is credited instead (Story 14.7, {@code POST /{id}/credit-notes}).
+     */
     @RequiresPermission(InvoicingModule.INVOICE_MANAGE)
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping("/{id}/cancel")
@@ -235,8 +240,14 @@ public class InvoiceController {
     }
 
     private InvoiceResponseDto dto(Invoice invoice) {
-        return InvoiceResponseDto.fromDomain(invoice,
-                invoice.status() == InvoiceStatus.DRAFT ? settings.current() : null);
+        boolean draft = invoice.status() == InvoiceStatus.DRAFT;
+        return dto(invoice, draft ? settings.current() : null, draft ? InvoiceQueryUseCase.Credits.NONE
+                : queries.credits(List.of(invoice)).getOrDefault(invoice.id(), InvoiceQueryUseCase.Credits.NONE));
+    }
+
+    private static InvoiceResponseDto dto(Invoice invoice, InvoicingSettings current,
+                                          InvoiceQueryUseCase.Credits credits) {
+        return InvoiceResponseDto.fromDomain(invoice, current, credits.notes(), credits.fullyCredited());
     }
 
     private static InvoiceStatus parseStatus(String status) {

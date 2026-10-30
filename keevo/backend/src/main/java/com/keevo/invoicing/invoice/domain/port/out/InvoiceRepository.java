@@ -24,6 +24,18 @@ public interface InvoiceRepository {
     /** Story 14.4 — whether an invoice was already created from the sale {@code saleId} (POS → Invoicing bridge). */
     boolean existsBySourceSale(UUID saleId);
 
+    /**
+     * Story 14.7 — the active (not superseded) invoice created from the sale {@code saleId}, row-locked until the end
+     * of the caller's transaction; empty when the sale was never invoiced automatically.
+     */
+    Optional<Invoice> findActiveBySourceSaleForUpdate(UUID saleId);
+
+    /**
+     * Story 14.7 — marks the automatic invoice {@code id} as replaced by a new invoice of its corrected sale
+     * ({@code superseded_at} only, once): the only write on an issued invoice besides its lifecycle transitions.
+     */
+    void markSuperseded(UUID id, java.time.Instant at);
+
     /** A DRAFT edit: client, VAT parameters, totals, {@code updated_at}, and its lines replaced. */
     void updateDraft(Invoice draft);
 

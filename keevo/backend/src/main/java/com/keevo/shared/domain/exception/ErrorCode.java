@@ -159,6 +159,9 @@ public enum ErrorCode {
     INVOICE_LINK_INVALID,       // HTTP 404 — public invoice link tampered / unknown invoice / tenant not active
     INVOICE_LINK_RATE_LIMITED,  // HTTP 429 — public invoice link opened too often (per token, 10 min window)
     INVOICE_LINK_EXPIRED,       // HTTP 410 — public invoice link older than its validity (30 days)
+    // ── Credit notes (Story 14.7) ─────────────────────────────────────────
+    CREDIT_NOTE_NOT_FOUND,      // HTTP 404 — credit note id unknown in the tenant
+    CREDIT_NOTE_INVALID,        // HTTP 422 — empty selection, unknown line, bad / excessive quantity (details.reason)
     WHATSAPP_UNAVAILABLE,       // HTTP 503 — no WhatsApp provider configured (NoOp): nothing sent, nothing recorded
     COMPANY_LOGO_INVALID,       // HTTP 422 — not a PNG / JPEG image (or corrupt)
     COMPANY_LOGO_TOO_LARGE,     // HTTP 422 — logo over keevo.company-logo.max-bytes

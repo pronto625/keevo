@@ -1,7 +1,9 @@
 package com.keevo.invoicing.invoice.application.usecase;
 
 import com.keevo.invoicing.invoice.domain.model.Invoice;
+import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
+import com.keevo.invoicing.invoice.domain.port.out.CreditNoteRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
 import com.keevo.shared.domain.time.KeevoZones;
@@ -31,9 +33,12 @@ public class InvoiceLifecycleUseCase {
     private final ApplicationEventPublisher events;
     private final CompanyIdentity companyIdentity;
     private final Clock clock;
+    private final CreditNoteRepository creditNotes;
 
     public InvoiceLifecycleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
-                                   ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock) {
+                                   ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock,
+                                   CreditNoteRepository creditNotes) {
+        this.creditNotes = creditNotes;
         this.invoices = invoices;
         this.settings = settings;
         this.events = events;
@@ -106,7 +111,9 @@ public class InvoiceLifecycleUseCase {
     public Invoice cancel(UUID id, String reason, UUID actorId, String tenantId) {
         Invoice issued = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         Instant now = clock.instant();
-        Invoice cancelled = issued.cancel(reason, now);
+        // Story 14.7: an invoice with a credit note is no longer cancellable (its rest is credited instead)
+        Invoice cancelled = issued.cancel(reason, now,
+                issued.status() == InvoiceStatus.ISSUED && creditNotes.existsForInvoice(id));
         invoices.markCancelled(cancelled);
         events.publishEvent(new InvoiceCancelledEvent(cancelled.id(), cancelled.number(), cancelled.client().name(),
                 cancelled.totals().totalTtc(), cancelled.cancellationReason(), actorId, tenantId, now));

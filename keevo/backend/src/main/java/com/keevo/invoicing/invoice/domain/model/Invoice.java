@@ -41,11 +41,23 @@ public record Invoice(
         Instant createdAt,
         Instant updatedAt,
         InvoiceDelivery delivery,
-        UUID sourceSaleId) {
+        UUID sourceSaleId,
+        Instant supersededAt) {
 
     public Invoice {
         lines = lines == null ? List.of() : List.copyOf(lines);
         delivery = delivery == null ? InvoiceDelivery.NONE : delivery;
+    }
+
+    /** Story 14.4 shape: not superseded (Story 14.7). */
+    public Invoice(UUID id, String number, InvoiceStatus status, LocalDate issueDate, ClientInfo client,
+                   SellerSnapshot seller, boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                   String vatMention, List<InvoiceLine> lines, InvoiceTotals totals, Instant issuedAt, Instant paidAt,
+                   String paymentMethod, Instant cancelledAt, String cancellationReason, UUID createdBy,
+                   Instant createdAt, Instant updatedAt, InvoiceDelivery delivery, UUID sourceSaleId) {
+        this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
+                lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
+                updatedAt, delivery, sourceSaleId, null);
     }
 
     /** Story 14.2 shape: not created from a sale. */
@@ -146,7 +158,7 @@ public record Invoice(
         return new Invoice(id, invoiceNumber, InvoiceStatus.ISSUED, date, client, SellerSnapshot.of(settings),
                 settings.vatRegistered(), settings.vatRate(), settings.pricesIncludeVat(),
                 VatCalculator.vatMention(settings.vatRegistered()), computed, VatCalculator.totals(computed), now,
-                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId);
+                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
     }
 
     /** ISSUED → PAID. */
@@ -156,13 +168,25 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, now, InvoicingSettings.trimToNull(method),
-                null, null, createdBy, createdAt, now, delivery, sourceSaleId);
+                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
     }
 
-    /** ISSUED → CANCELLED, number kept. */
+    /** ISSUED → CANCELLED, number kept (an invoice without credit note). */
     public Invoice cancel(String reason, Instant now) {
+        return cancel(reason, now, false);
+    }
+
+    /**
+     * ISSUED → CANCELLED, number kept. Story 14.7: an invoice that already has a credit note cannot be cancelled any
+     * more ({@code INVOICE_INVALID_TRANSITION}): its remaining part is credited by another credit note.
+     */
+    public Invoice cancel(String reason, Instant now, boolean hasCreditNotes) {
         if (status != InvoiceStatus.ISSUED) {
             throw invalidTransition();
+        }
+        if (hasCreditNotes) {
+            throw new DomainException(ErrorCode.INVOICE_INVALID_TRANSITION, "Invoice has credit notes",
+                    Map.of("status", "ayant déjà un avoir"));
         }
         String why = InvoicingSettings.trimToNull(reason);
         if (why == null) {
@@ -171,7 +195,7 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
-                now, delivery, sourceSaleId);
+                now, delivery, sourceSaleId, supersededAt);
     }
 
     /**
@@ -218,7 +242,7 @@ public record Invoice(
     private Invoice touched(Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, now, delivery, sourceSaleId);
+                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
     }
 
     /**
@@ -229,7 +253,7 @@ public record Invoice(
         assertEditable();
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery, saleId);
+                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt);
     }
 
     /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
@@ -239,7 +263,7 @@ public record Invoice(
         }
         return new Invoice(id, number, status, issueDate, client, seller.withIdentityFlags(nameFromDisplayName,
                 hasLogo), vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt,
-                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId);
+                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt);
     }
 
     /**
@@ -265,7 +289,7 @@ public record Invoice(
     public Invoice recordSending(String phone, Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId);
+                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt);
     }
 
     private DomainException invalidTransition() {

@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 196 — gated: 103, exempt: 93.
+Handlers: 199 — gated: 106, exempt: 93.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -91,6 +91,8 @@ Handlers: 196 — gated: 103, exempt: 93.
 | DELETE | `/api/v1/clients/{id}` | `crm` | WRITE | — |  | ClientController#archiveClient |
 | GET | `/api/v1/clients/{id}` | `crm` | READ | — |  | ClientController#getClientProfile |
 | PATCH | `/api/v1/clients/{id}` | `crm` | WRITE | — |  | ClientController#updateClient |
+| GET | `/api/v1/credit-notes/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | CreditNoteController#get |
+| GET | `/api/v1/credit-notes/{id}/pdf` | `invoicing` | READ | `INVOICE_VIEW` |  | CreditNoteController#pdf |
 | GET | `/api/v1/dashboard/summary` | `reporting` | READ | — |  | DashboardController#getSummary |
 | GET | `/api/v1/day-closures` | `pos` | READ | — |  | DayClosureController#getClosure |
 | POST | `/api/v1/day-closures` | `pos` | WRITE | — |  | DayClosureController#closeDay |
@@ -135,6 +137,7 @@ Handlers: 196 — gated: 103, exempt: 93.
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
 | PUT | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#update |
 | POST | `/api/v1/invoices/{id}/cancel` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoiceController#cancel |
+| POST | `/api/v1/invoices/{id}/credit-notes` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | CreditNoteController#create |
 | POST | `/api/v1/invoices/{id}/issue` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#issue |
 | POST | `/api/v1/invoices/{id}/pay` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#pay |
 | GET | `/api/v1/invoices/{id}/pdf` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#pdf |

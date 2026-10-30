@@ -128,10 +128,12 @@ public class CorrectSaleService implements CorrectSaleUseCase {
         saleRepository.save(correctedSale);
 
         String tenantId = TenantContext.getCurrentTenant();
+        // Story 14.7: the corrected lines, total, client and payment mode, for the new invoice of the sale
         eventPublisher.publishEvent(new SaleCorrectedEvent(
                 sale.getId(), command.actorId(), command.justification(),
                 beforeSnapshot, serializeItems(correctedItems, sale.getId()), tenantId, Instant.now(),
-                sale.getStoreId()));
+                sale.getStoreId(), SaleCompletedLines.of(correctedSale), (long) newTotal, sale.getClientId(),
+                SaleCompletedLines.paymentMode(sale)));
     }
 
     private String serializeItems(List<SaleItem> items, UUID saleId) {

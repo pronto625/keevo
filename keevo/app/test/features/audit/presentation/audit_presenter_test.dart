@@ -618,7 +618,8 @@ void main() {
     test('14.2: invoice sent by WhatsApp and company identity change', () {
       expect(said('INVOICE_SENT', 'Invoice', 'FAC-2026-000001'),
           'Vous avez envoyé la facture FAC-2026-000001');
-      expect(AuditPresenter.actionInfo('INVOICE_SENT').label, 'Facture envoyée');
+      expect(
+          AuditPresenter.actionInfo('INVOICE_SENT').label, 'Facture envoyée');
       expect(said('COMPANY_PROFILE_UPDATED', 'Tenant', 'Tech Centre SARL'),
           'Vous avez modifié l\'identité de l\'entreprise');
       expect(AuditPresenter.actionInfo('COMPANY_PROFILE_UPDATED').label,
@@ -634,6 +635,15 @@ void main() {
       expect(AuditPresenter.objectTypeLabel('InvoicingSettings'),
           'Paramètres de facturation');
       expect(AuditPresenter.typeNouns['Invoice'], 'Facture');
+    });
+
+    test('14.7: credit note issued', () {
+      expect(said('CREDIT_NOTE_ISSUED', 'CreditNote', 'AV-2026-000001'),
+          'Vous avez émis l\'avoir AV-2026-000001');
+      expect(
+          AuditPresenter.actionInfo('CREDIT_NOTE_ISSUED').label, 'Avoir émis');
+      expect(AuditPresenter.objectTypeLabel('CreditNote'), 'Avoirs');
+      expect(AuditPresenter.typeNouns['CreditNote'], 'Avoir');
     });
   });
 }

@@ -94,6 +94,8 @@ public final class AuditLabels {
             entry("INVOICE_CANCELLED", "Facture annulée"),
             entry("INVOICING_SETTINGS_UPDATED", "Paramètres de facturation modifiés"),
             entry("INVOICE_SENT", "Facture envoyée"),
+            // Credit notes (Story 14.7)
+            entry("CREDIT_NOTE_ISSUED", "Avoir émis"),
             entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
@@ -117,7 +119,8 @@ public final class AuditLabels {
             entry("Export", "Export de données"),
             entry("Module", "Module"),
             entry("Invoice", "Facture"),
-            entry("InvoicingSettings", "Paramètres de facturation"));
+            entry("InvoicingSettings", "Paramètres de facturation"),
+            entry("CreditNote", "Avoir"));
 
     /** French label of each before/after field key. */
     public static final Map<String, String> FIELDS = Map.ofEntries(
@@ -214,7 +217,9 @@ public final class AuditLabels {
             // Invoice sending, company identity (Story 14.2)
             entry("sentTo", "Envoyée au"),
             entry("designation", "Désignation"),
-            entry("logo", "Logo"));
+            entry("logo", "Logo"),
+            // Credit notes (Story 14.7)
+            entry("creditNoteNumber", "Numéro d'avoir"));
 
     /** French label of each code value (statuses, types, roles, sectors, export modes…). */
     public static final Map<String, String> VALUES = Map.ofEntries(
@@ -273,7 +278,9 @@ public final class AuditLabels {
             entry("forcedProducts", "Produits forcés"),
             // v1s-16-23: other store of a transfer
             entry("destinationStoreName", "Vers"),
-            entry("sourceStoreName", "Depuis"));
+            entry("sourceStoreName", "Depuis"),
+            // Story 14.7: the invoice a credit note is issued on (« sur la facture FAC-… »)
+            entry("detail", "Détail"));
 
     /**
      * Keys never shown (technical or pure context ids). Any key named {@code id} or ending with

@@ -63,8 +63,9 @@ import static org.awaitility.Awaitility.await;
 class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
 
     private static final Duration WAIT = Duration.ofSeconds(20);
-    private static final List<String> TABLES = List.of("invoice_counters", "invoice_items", "invoices",
-            "invoicing_settings");
+    private static final List<String> TABLES = List.of("credit_note_counters", "credit_note_items",
+            "credit_notes", "invoice_counters", "invoice_items", "invoices", "invoicing_settings",
+            "sale_invoice_states");
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -133,7 +134,8 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
     }
 
     private void dropInvoicingTables() {
-        jdbc.execute("DROP TABLE IF EXISTS \"" + schema + "\".invoice_items, \"" + schema + "\".invoices, \""
+        jdbc.execute("DROP TABLE IF EXISTS \"" + schema + "\".credit_note_items, \"" + schema + "\".credit_notes, \""
+                + schema + "\".credit_note_counters, \"" + schema + "\".sale_invoice_states, \"" + schema + "\".invoice_items, \"" + schema + "\".invoices, \""
                 + schema + "\".invoice_counters, \"" + schema + "\".invoicing_settings, \"" + schema
                 + "\".flyway_history_invoicing CASCADE");
     }

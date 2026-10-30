@@ -49,8 +49,9 @@ class InvoicingMigrationPostgresIntegrationTest {
     private static final String A = "kv_inva01";
     private static final String B = "kv_invb02";
     private static final Map<String, UUID> IDS = Map.of(A, UUID.randomUUID(), B, UUID.randomUUID());
-    private static final List<String> TABLES = List.of("invoice_counters", "invoice_items", "invoices",
-            "invoicing_settings");
+    private static final List<String> TABLES = List.of("credit_note_counters", "credit_note_items",
+            "credit_notes", "invoice_counters", "invoice_items", "invoices", "invoicing_settings",
+            "sale_invoice_states");
 
     private static DataSource dataSource;
     private static JdbcTemplate jdbc;
@@ -116,18 +117,18 @@ class InvoicingMigrationPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("trial tenant without row: tables + history V1..V3 (14.4), no tenant_modules row; re-provision is a no-op")
+    @DisplayName("trial tenant without row: tables + history V1..V5 (14.7), no tenant_modules row; re-provision is a no-op")
     void trialTenantNoRow() {
         assertThat(tables(A)).isEmpty();
         assertThat(migrations.currentVersion(A, "invoicing")).isNull();
-        assertThat(migrations.latestVersion("invoicing")).isEqualTo("3");
+        assertThat(migrations.latestVersion("invoicing")).isEqualTo("5");
 
         ProvisioningResult result = provisioner.provision(A, "invoicing");
 
-        assertThat(result.migrationsApplied()).isEqualTo(3);
-        assertThat(result.toVersion()).isEqualTo("3");
+        assertThat(result.migrationsApplied()).isEqualTo(5);
+        assertThat(result.toVersion()).isEqualTo("5");
         assertThat(tables(A)).containsExactlyElementsOf(TABLES);
-        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("3");
+        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("5");
         assertThat(rows(A)).isZero();
         assertThat(tables(B)).as("other tenants untouched").isEmpty();
 
@@ -142,7 +143,7 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM')", IDS.get(A));
         provisioner.provision(A, "invoicing");
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("3");
+                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("5");
     }
 
     @Test

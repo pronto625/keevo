@@ -16,6 +16,7 @@ import com.keevo.shared.event.catalog.category.CategoryRenamedEvent;
 import com.keevo.shared.event.catalog.contact.ClientArchivedEvent;
 import com.keevo.shared.event.catalog.contact.ClientUnarchivedEvent;
 import com.keevo.shared.event.catalog.contact.ClientCreatedEvent;
+import com.keevo.shared.event.catalog.invoicing.CreditNoteIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
@@ -796,6 +797,17 @@ public class AuditEventListener {
                         "totalAmount", event.totalTtc()),
                 null, event.number(), map("reason", event.reason()), null);
         log.info("AUDIT: invoice_cancelled number={} tenantId={} actorId={}", event.number(), event.tenantId(),
+                event.actorId());
+    }
+
+    /** Story 14.7 — label = the credit note number, detail « sur la facture FAC-… » (never a UUID). */
+    @EventListener
+    public void on(CreditNoteIssuedEvent event) {
+        write(event.actorId(), event.tenantId(), "CREDIT_NOTE_ISSUED", "CreditNote", event.creditNoteId(),
+                null, map("creditNoteNumber", event.number(), "invoiceNumber", event.invoiceNumber(),
+                        "totalAmount", event.totalTtc()),
+                null, event.number(), map("detail", "sur la facture " + event.invoiceNumber()), null);
+        log.info("AUDIT: credit_note_issued number={} tenantId={} actorId={}", event.number(), event.tenantId(),
                 event.actorId());
     }
 

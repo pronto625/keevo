@@ -14,6 +14,10 @@ final class InvoicingTables {
     static final String INVOICES = "invoices";
     static final String ITEMS = "invoice_items";
     static final String COUNTERS = "invoice_counters";
+    static final String CREDIT_NOTES = "credit_notes";
+    static final String CREDIT_NOTE_ITEMS = "credit_note_items";
+    static final String CREDIT_NOTE_COUNTERS = "credit_note_counters";
+    static final String SALE_STATES = "sale_invoice_states";
 
     private InvoicingTables() {
     }

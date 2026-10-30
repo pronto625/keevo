@@ -361,6 +361,9 @@ class AuditPresenter {
         Icons.receipt_long_outlined, AuditCategory.sale),
     'INVOICE_SENT': AuditActionInfo('Facture envoyée', 'envoyé la facture',
         Icons.send_outlined, AuditCategory.sale),
+    // Credit notes (Story 14.7)
+    'CREDIT_NOTE_ISSUED': AuditActionInfo('Avoir émis', 'émis l\'avoir',
+        Icons.receipt_long_outlined, AuditCategory.sale),
     'COMPANY_PROFILE_UPDATED': AuditActionInfo(
         'Identité de l\'entreprise modifiée',
         'modifié l\'identité de l\'entreprise',
@@ -414,6 +417,7 @@ class AuditPresenter {
     'Module': 'Modules',
     'Invoice': 'Factures',
     'InvoicingSettings': 'Paramètres de facturation',
+    'CreditNote': 'Avoirs',
   };
 
   /// Singular noun of each object type (contract `audit_log.entityType`).

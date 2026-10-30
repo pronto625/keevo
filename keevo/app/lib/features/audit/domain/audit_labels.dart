@@ -20,6 +20,7 @@ const auditActionLabels = <String, String>{
   'CLIENT_CREATED': 'Client créé',
   'CLIENT_UNARCHIVED': 'Client désarchivé',
   'COMPANY_PROFILE_UPDATED': 'Identité de l\'entreprise modifiée',
+  'CREDIT_NOTE_ISSUED': 'Avoir émis',
   'DATA_EXPORTED': 'Données exportées',
   'DAY_CLOSED': 'Journée clôturée',
   'EMPLOYEE_CREATED': 'Employé ajouté',
@@ -77,6 +78,7 @@ const auditActionLabels = <String, String>{
 const auditEntityTypeLabels = <String, String>{
   'Category': 'Catégorie',
   'Client': 'Client',
+  'CreditNote': 'Avoir',
   'DayClosure': 'Clôture de journée',
   'Employee': 'Employé',
   'Export': 'Export de données',
@@ -119,6 +121,7 @@ const auditFieldLabels = <String, String>{
   'clientName': 'Client',
   'costPrice': 'Prix de revient',
   'createdAt': 'Créé le',
+  'creditNoteNumber': 'Numéro d\'avoir',
   'currentQuantity': 'Quantité actuelle',
   'deactivated': 'Désactivée',
   'description': 'Description',
@@ -241,6 +244,8 @@ const auditValueLabels = <String, String>{
 const auditContextLabels = <String, String>{
   // v1s-16-23: other store of a transfer.
   'destinationStoreName': 'Vers',
+  // Story 14.7: the invoice a credit note is issued on.
+  'detail': 'Détail',
   'forcedProducts': 'Produits forcés',
   'isAutomatic': 'Déclenchement',
   'justification': 'Justification',

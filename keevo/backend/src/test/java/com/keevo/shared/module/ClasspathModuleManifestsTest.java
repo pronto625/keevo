@@ -31,10 +31,12 @@ class ClasspathModuleManifestsTest {
             // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
             // 14.4: pos publishes sale.completed (1.3.0), invoicing consumes it (1.1.0)
             // 14.5: invoicing fills the POS checkout slot (1.2.0)
+            // 14.7: invoicing publishes credit-note.issued and consumes sale.cancelled / sale.corrected (1.3.0),
+            //       pos publishes them (1.4.0)
             String expected = switch (m.id()) {
                 case "crm" -> "1.2.0";
-                case "pos" -> "1.3.0";
-                case "invoicing" -> "1.2.0";
+                case "pos" -> "1.4.0";
+                case "invoicing" -> "1.3.0";
                 default -> "1.0.0";
             };
             assertThat(m.version()).isEqualTo(expected);
@@ -69,11 +71,13 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("invoicing").permissions()).containsExactly("INVOICE_CREATE", "INVOICE_VIEW",
                 "INVOICE_SEND", "INVOICE_MANAGE");
         assertThat(byId.get("invoicing").publishes()).containsExactly("invoice.created", "invoice.issued",
-                "invoice.paid", "invoice.cancelled", "invoice.sent");
+                "invoice.paid", "invoice.cancelled", "invoice.sent", "credit-note.issued");
         assertThat(byId.get("invoicing").displayName()).isEqualTo("Facturation");
         // 14.4: the POS → Invoicing bridge — pos publishes sale.completed, invoicing consumes it
-        assertThat(byId.get("pos").publishes()).containsExactly("sale.completed");
-        assertThat(byId.get("invoicing").consumes()).containsExactly("sale.completed");
+        assertThat(byId.get("pos").publishes()).containsExactly("sale.completed", "sale.cancelled",
+                "sale.corrected");
+        assertThat(byId.get("invoicing").consumes()).containsExactly("sale.completed", "sale.cancelled",
+                "sale.corrected");
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
                 .allSatisfy(m -> assertThat(m.consumes()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))

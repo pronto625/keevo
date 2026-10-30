@@ -38,6 +38,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             + "total_ht, total_vat, total_ttc, issued_at, paid_at, payment_method, cancelled_at, cancellation_reason, "
             + "created_by, created_at, updated_at, last_sent_at, last_sent_to, send_count, seller_name_from_display, "
             + "seller_has_logo, source_sale_id";
+    /** Story 14.7 — read only: set by {@link #markSuperseded}, never inserted. */
+    private static final String SELECT_COLUMNS = COLUMNS + ", superseded_at";
 
     private final JdbcTemplate jdbc;
 
@@ -56,7 +58,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     private Optional<Invoice> findOne(UUID id, String lock) {
-        List<Row> rows = jdbc.query("SELECT " + COLUMNS + " FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+        List<Row> rows = jdbc.query("SELECT " + SELECT_COLUMNS + " FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
                 + " WHERE id = ?" + lock, (rs, n) -> row(rs), id);
         if (rows.isEmpty()) {
             return Optional.empty();
@@ -70,6 +72,19 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 + InvoicingTables.qualified(InvoicingTables.INVOICES) + " WHERE source_sale_id = ?)", Boolean.class,
                 saleId);
         return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public Optional<Invoice> findActiveBySourceSaleForUpdate(UUID saleId) {
+        List<UUID> ids = jdbc.queryForList("SELECT id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " WHERE source_sale_id = ? AND superseded_at IS NULL FOR UPDATE", UUID.class, saleId);
+        return ids.isEmpty() ? Optional.empty() : findById(ids.get(0));
+    }
+
+    @Override
+    public void markSuperseded(UUID id, Instant at) {
+        expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " SET superseded_at = ? WHERE id = ? AND superseded_at IS NULL", ts(at), id), "supersede");
     }
 
     @Override
@@ -168,7 +183,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             filter.add(status.name());
         }
         if (saleId != null) {
-            conditions.add("source_sale_id = ?");
+            conditions.add("source_sale_id = ? AND superseded_at IS NULL");
             filter.add(saleId);
         }
         String where = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
@@ -176,7 +191,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         List<Object> args = new ArrayList<>(filter);
         args.add(size);
         args.add((long) page * size);
-        List<Row> rows = jdbc.query("SELECT " + COLUMNS + " FROM " + table + where
+        List<Row> rows = jdbc.query("SELECT " + SELECT_COLUMNS + " FROM " + table + where
                 + " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", (rs, n) -> row(rs), args.toArray());
         Map<UUID, List<InvoiceLine>> lines = rows.isEmpty() ? Map.of() : lines(rows.stream().map(Row::id).toList());
         List<Invoice> items = rows.stream().map(r -> r.with(lines.getOrDefault(r.id(), List.of()))).toList();
@@ -262,7 +277,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             return new Invoice(i.id(), i.number(), i.status(), i.issueDate(), i.client(), i.seller(), i.vatRegistered(),
                     i.vatRate(), i.pricesIncludeVat(), i.vatMention(), lines, i.totals(), i.issuedAt(), i.paidAt(),
                     i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdBy(), i.createdAt(),
-                    i.updatedAt(), i.delivery(), i.sourceSaleId());
+                    i.updatedAt(), i.delivery(), i.sourceSaleId(), i.supersededAt());
         }
     }
 
@@ -286,7 +301,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 instant(rs, "cancelled_at"), rs.getString("cancellation_reason"),
                 rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
                 new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
-                rs.getObject("source_sale_id", UUID.class));
+                rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"));
         return new Row(id, invoice);
     }
 }

@@ -6,6 +6,7 @@ import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
 import com.keevo.invoicing.invoice.domain.model.LineInput;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
+import com.keevo.invoicing.invoice.domain.port.out.SaleInvoiceStateRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
 import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
@@ -46,7 +47,19 @@ public class InvoiceSaleUseCase {
         /** An invoice already exists for the sale (replay): nothing done. */
         ALREADY_INVOICED,
         /** The sale cannot be invoiced (no line, totals inconsistent with its lines, content refused): nothing done. */
-        NOT_INVOICEABLE
+        NOT_INVOICEABLE,
+        /** Story 14.7 — the sale was cancelled before its completion was delivered (events reordered): nothing done. */
+        SALE_CANCELLED
+    }
+
+    /**
+     * Story 14.7 — the domain refused the content of a sale's invoice after the mapper accepted it (permanent: retrying
+     * would fail for ever). Thrown before anything is written; the message carries the domain reason.
+     */
+    public static final class SaleInvoiceRefused extends RuntimeException {
+        SaleInvoiceRefused(String reason) {
+            super("invoice content refused: " + reason);
+        }
     }
 
     private static final Logger log = LoggerFactory.getLogger(InvoiceSaleUseCase.class);
@@ -57,10 +70,12 @@ public class InvoiceSaleUseCase {
     private final InvoiceClientResolver clients;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final SaleInvoiceStateRepository saleStates;
 
     public InvoiceSaleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                               InvoiceLifecycleUseCase lifecycle, InvoiceClientResolver clients,
-                              ApplicationEventPublisher events, Clock clock) {
+                              ApplicationEventPublisher events, Clock clock, SaleInvoiceStateRepository saleStates) {
+        this.saleStates = saleStates;
         this.invoices = invoices;
         this.settings = settings;
         this.lifecycle = lifecycle;
@@ -73,8 +88,15 @@ public class InvoiceSaleUseCase {
     public Outcome invoice(SaleCompletedEvent sale) {
         UUID saleId = sale.getSaleId();
         String tenant = sale.tenantId();
+        // Story 14.7: the sale's bridge deliveries are serialised on its state row (events may arrive reordered)
+        SaleInvoiceStateRepository.State state = saleStates.lock(saleId);
         if (invoices.existsBySourceSale(saleId)) {
-            return Outcome.ALREADY_INVOICED;
+            return Outcome.ALREADY_INVOICED; // replay, or a correction delivered first already invoiced the sale
+        }
+        if (state.cancelledAt() != null) {
+            log.info("[invoicing] sale of tenant {} not invoiced: cancelled before its completion was delivered",
+                    tenant);
+            return Outcome.SALE_CANCELLED;
         }
         List<LineInput> lines;
         try {
@@ -83,8 +105,26 @@ public class InvoiceSaleUseCase {
             log.warn("[invoicing] sale of tenant {} not invoiced: {}", tenant, e.getMessage());
             return Outcome.NOT_INVOICEABLE;
         }
-        ClientInfo client = SaleInvoiceMapper.client(clients.saleClient(sale.getClientId(), tenant));
-        UUID actor = sale.getActorId();
+        try {
+            paidInvoice(saleId, sale.getClientId(), sale.getPaymentMode(), lines, sale.getActorId(), tenant);
+        } catch (SaleInvoiceRefused e) {
+            log.warn("[invoicing] sale of tenant {} not invoiced: {}", tenant, e.getMessage());
+            return Outcome.NOT_INVOICEABLE;
+        }
+        return Outcome.INVOICED;
+    }
+
+    /**
+     * Creates, issues and pays the automatic invoice of the sale {@code saleId} in the caller's transaction (Story
+     * 14.4; reused by 14.7 for the new invoice of a corrected sale): VAT-inclusive prices, the CRM client when known,
+     * the created / issued / paid events under {@code actor}.
+     *
+     * @throws SaleInvoiceRefused the domain refuses the content (nothing written) — retrying would fail for ever
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void paidInvoice(UUID saleId, UUID clientId, String paymentMode, List<LineInput> lines, UUID actor,
+                               String tenant) {
+        ClientInfo client = SaleInvoiceMapper.client(clients.saleClient(clientId, tenant));
         Instant now = clock.instant();
         InvoicingSettings vatIncluded = InvoiceLifecycleUseCase.withPricesIncludingVat(
                 settings.find().orElseGet(InvoicingSettings::defaults));
@@ -94,16 +134,14 @@ public class InvoiceSaleUseCase {
                     vatIncluded, actor, now)).fromSale(saleId);
         } catch (DomainException e) {
             // content refused by the domain after the mapper accepted it: retrying would fail for ever
-            log.warn("[invoicing] sale of tenant {} not invoiced: invoice content refused ({})", tenant,
-                    e.getMessage());
-            return Outcome.NOT_INVOICEABLE;
+            Object reason = e.getDetails() == null ? null : e.getDetails().get("reason");
+            throw new SaleInvoiceRefused(reason != null ? reason.toString() : e.getMessage());
         }
-        invoices.insert(draft); // unique source_sale_id: a concurrent replay fails here, before any number
+        invoices.insert(draft); // unique active source_sale_id: a concurrent replay fails here, before any number
         events.publishEvent(new InvoiceCreatedEvent(draft.id(), draft.client().name(), draft.totals().totalTtc(),
                 actor, tenant, now));
         lifecycle.issue(draft.id(), actor, tenant, true);
-        lifecycle.pay(draft.id(), SaleInvoiceMapper.paymentMethod(sale.getPaymentMode()), actor, tenant);
-        return Outcome.INVOICED;
+        lifecycle.pay(draft.id(), SaleInvoiceMapper.paymentMethod(paymentMode), actor, tenant);
     }
 
     /** Whether an invoice exists for the sale (read outside any failed transaction, after a duplicate key). */

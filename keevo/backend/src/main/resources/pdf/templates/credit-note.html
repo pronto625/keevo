@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  « Avoir » (Story 14.7) - A4, French; the invoice layout (invoice.html). Seller identity = the snapshot of the
+  credited invoice, its client, the reference « Avoir sur la facture FAC-… du … », the reason, the credited lines and
+  totals printed negative (leading « − »), « TVA non applicable » when the invoice carried it. Versioned with the
+  code; data only through th:text (escaped), never th:utext. No identifier other than the two numbers is printed.
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${title}">Avoir</title>
+<style>
+@page {
+  size: A4 portrait;
+  margin: 14mm 14mm 16mm 14mm;
+  @bottom-right {
+    content: "Page " counter(page) " / " counter(pages);
+    font-family: 'Keevo Sans'; font-size: 8pt; color: #555555;
+  }
+}
+body { font-family: 'Keevo Sans'; font-size: 9.5pt; color: #1a1a1a; }
+table { width: 100%; border-collapse: collapse; }
+.top td { vertical-align: top; border: none; padding: 0; }
+.seller { width: 55%; }
+.seller .name { font-size: 13pt; font-weight: bold; color: #0f766e; }
+.doc { width: 45%; text-align: right; }
+.doc .title { font-size: 15pt; font-weight: bold; color: #0f766e; }
+img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
+.line { font-size: 9pt; color: #333333; }
+.client { margin-top: 7mm; border: 0.8pt solid #0f766e; padding: 2.5mm 3mm; width: 60%; }
+.client .label { font-size: 8pt; color: #0f766e; font-weight: bold; text-transform: uppercase; }
+.client .name { font-size: 11pt; font-weight: bold; }
+.items { margin-top: 7mm; -fs-table-paginate: paginate; }
+.items thead { display: table-header-group; }
+.items tr { page-break-inside: avoid; }
+.items th { background-color: #e6f2f1; font-weight: bold; text-align: left; padding: 1.5mm; border-bottom: 0.8pt solid #0f766e; font-size: 8.5pt; }
+.items td { padding: 1.3mm 1.5mm; border-bottom: 0.4pt solid #dddddd; vertical-align: top; }
+.num { text-align: right; white-space: nowrap; }
+.totals { margin-top: 4mm; width: 45%; margin-left: 55%; }
+.totals td { padding: 1.2mm 1.5mm; border-bottom: 0.4pt solid #dddddd; }
+.totals .grand td { font-weight: bold; font-size: 11pt; border-top: 0.8pt solid #0f766e; background-color: #f4f4f4; }
+.mention { margin-top: 3mm; font-weight: bold; }
+.stamp { margin-top: 6mm; font-size: 16pt; font-weight: bold; text-align: center; border: 2pt solid #0f766e; color: #0f766e; padding: 2mm; }
+.stamp.void { color: #b42318; border-color: #b42318; }
+.stamp.paid { color: #15803d; border-color: #15803d; }
+.stamp-detail { text-align: center; margin-top: 1.5mm; font-size: 9pt; }
+.block { margin-top: 6mm; font-size: 9pt; }
+.block .label { font-weight: bold; color: #0f766e; }
+.footer { margin-top: 8mm; font-size: 8.5pt; color: #555555; text-align: center; }
+.note { font-size: 8pt; color: #555555; margin-top: 1.5mm; }
+</style>
+</head>
+<body>
+
+<table class="top">
+  <tr>
+    <td class="seller">
+      <div th:if="${logo != null}"><img class="logo" th:src="${logo}" alt=""/></div>
+      <div class="name" th:text="${sellerName}">Commerce</div>
+      <div class="line" th:if="${sellerAddress != null}" th:text="${sellerAddress}">Adresse</div>
+      <div class="line" th:if="${sellerPhone != null}" th:text="${'Tél. : ' + sellerPhone}">Téléphone</div>
+      <div class="line" th:if="${sellerNiu != null}" th:text="${'NIU : ' + sellerNiu}">NIU</div>
+      <div class="line" th:if="${sellerRccm != null}" th:text="${'RCCM : ' + sellerRccm}">RCCM</div>
+    </td>
+    <td class="doc">
+      <div class="title" th:text="${title}">AVOIR</div>
+      <div class="line" th:text="${'Date : ' + issueDate}">Date</div>
+      <div class="line" th:text="${reference}">Avoir sur la facture</div>
+    </td>
+  </tr>
+</table>
+
+<div class="client">
+  <div class="label">Client</div>
+  <div class="name" th:text="${clientName}">Client</div>
+  <div class="line" th:if="${clientNiu != null}" th:text="${'NIU : ' + clientNiu}">NIU</div>
+  <div class="line" th:if="${clientAddress != null}" th:text="${clientAddress}">Adresse</div>
+  <div class="line" th:if="${clientPhone != null}" th:text="${'Tél. : ' + clientPhone}">Téléphone</div>
+</div>
+
+<div class="block"><span class="label">Motif : </span><span th:text="${reason}">Motif</span></div>
+
+<table class="items">
+  <thead>
+    <tr>
+      <th>Désignation</th>
+      <th class="num">Qté</th>
+      <th class="num" th:text="${unitPriceLabel}">Prix unitaire</th>
+      <th class="num">Taux TVA</th>
+      <th class="num">Montant HT</th>
+      <th class="num">TVA</th>
+      <th class="num">Montant TTC</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr th:each="l : ${lines}">
+      <td th:text="${l.description()}">Article</td>
+      <td class="num" th:text="${l.quantity()}">1</td>
+      <td class="num" th:text="${l.unitPrice()}">0</td>
+      <td class="num" th:text="${l.vat()}">0 %</td>
+      <td class="num" th:text="${l.totalHt()}">0</td>
+      <td class="num" th:text="${l.totalVat()}">0</td>
+      <td class="num" th:text="${l.totalTtc()}">0</td>
+    </tr>
+  </tbody>
+</table>
+<div class="note">Montants en francs CFA (XAF)</div>
+
+<table class="totals">
+  <tr><td>Total HT</td><td class="num" th:text="${totalHt}">0 XAF</td></tr>
+  <tr><td>Total TVA</td><td class="num" th:text="${totalVat}">0 XAF</td></tr>
+  <tr class="grand"><td>Total TTC</td><td class="num" th:text="${totalTtc}">0 XAF</td></tr>
+</table>
+<div class="mention" th:if="${vatMention != null}" th:text="${vatMention}">TVA non applicable</div>
+
+<div class="footer" th:if="${footer != null}" th:text="${footer}">Merci</div>
+
+</body>
+</html>

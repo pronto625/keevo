@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.application.usecase;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
+import com.keevo.invoicing.invoice.domain.port.out.SaleInvoiceStateRepository;
 import com.keevo.shared.event.catalog.sale.SaleCompletedEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -36,11 +37,13 @@ class InvoiceSaleUseCaseTest {
         InvoiceLifecycleUseCase lifecycle = mock(InvoiceLifecycleUseCase.class);
         InvoiceClientResolver clients = mock(InvoiceClientResolver.class);
         ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        SaleInvoiceStateRepository states = mock(SaleInvoiceStateRepository.class);
+        when(states.lock(any())).thenReturn(new SaleInvoiceStateRepository.State(null, null));
         when(invoices.existsBySourceSale(any())).thenReturn(false);
         when(settings.find()).thenReturn(Optional.empty());
         when(clients.saleClient(any(), any())).thenReturn(Optional.empty());
         InvoiceSaleUseCase useCase = new InvoiceSaleUseCase(invoices, settings, lifecycle, clients, events,
-                Clock.fixed(Instant.parse("2026-10-30T10:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-10-30T10:00:00Z"), ZoneOffset.UTC), states);
         SaleCompletedEvent sale = new SaleCompletedEvent(UUID.randomUUID(), UUID.randomUUID(), "kv_abc123",
                 UUID.randomUUID(), 1000, 0, "[]", Instant.now(), null, "CASH",
                 List.of(new SaleCompletedEvent.Line("Savon", 1000, 1)));
