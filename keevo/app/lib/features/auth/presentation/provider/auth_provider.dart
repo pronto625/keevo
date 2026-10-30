@@ -13,6 +13,7 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/network/api_base_url.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/log_redaction.dart';
+import '../../../../core/network/module_entitlement_exception.dart';
 import '../../../../core/network/retry_interceptor.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
@@ -159,6 +160,10 @@ final dioProvider = Provider<Dio>((ref) {
     onAccountSuspended: () => showSuspendedSessionNotice(
         suspendedNotice, rootScaffoldMessengerKey.currentState),
   ));
+
+  // 13.10b: 403 MODULE_NOT_ENTITLED / MODULE_READ_ONLY → typed
+  // ModuleEntitlementException (no logout, no renewal, no retry).
+  dio.interceptors.add(ModuleEntitlementInterceptor());
 
   // LogInterceptor — debug-only; redacts the Authorization header and the
   // secrets of bodies / query strings (passwords, codes, tokens) even in debug

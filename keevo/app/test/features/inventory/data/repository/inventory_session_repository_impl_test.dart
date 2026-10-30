@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/inventory/data/datasource/local_inventory_session_datasource.dart';
@@ -148,5 +149,52 @@ void main() {
 
     verify(() => local.upsert(server)).called(1);
     verifyNever(() => local.insert(any()));
+  });
+
+  // 13.10b — a Free tenant: 403 MODULE_NOT_ENTITLED reaches the screen, no
+  // local fallback / ghost session.
+  group('module refusal', () {
+    DioException refusal() {
+      final options = RequestOptions(path: '/api/v1/inventory/sessions');
+      return DioException(
+        requestOptions: options,
+        response: Response(
+            requestOptions: options,
+            statusCode: 403,
+            data: {'domainCode': 'MODULE_NOT_ENTITLED'}),
+      );
+    }
+
+    final isRefusal =
+        throwsA(predicate((e) => ModuleEntitlementException.of(e) != null));
+
+    test('create: rethrown, nothing written or queued', () async {
+      stubRemoteCreate(() async => throw refusal());
+      await expectLater(
+          repo.create(storeId: 's1', scope: 'FULL'), isRefusal);
+      verifyNever(() => local.insert(any()));
+      verifyNever(() => sync.queueOperation(
+            operation: any(named: 'operation'),
+            payload: any(named: 'payload'),
+            entityId: any(named: 'entityId'),
+          ));
+    });
+
+    test('getActive / getHistory / cancel: rethrown, no local fallback',
+        () async {
+      when(() => remote.getActive(any())).thenThrow(refusal());
+      when(() => remote.getHistory(
+          page: any(named: 'page'),
+          size: any(named: 'size'))).thenThrow(refusal());
+      when(() => remote.cancel(any())).thenThrow(refusal());
+
+      await expectLater(repo.getActiveByStoreId('s1'), isRefusal);
+      await expectLater(repo.getHistory(), isRefusal);
+      await expectLater(repo.cancel('session-1'), isRefusal);
+      verifyNever(() => local.findActiveByStoreId(any()));
+      verifyNever(() => local.updateStatus(any(), any(),
+          cancelledBy: any(named: 'cancelledBy'),
+          cancelledAt: any(named: 'cancelledAt')));
+    });
   });
 }

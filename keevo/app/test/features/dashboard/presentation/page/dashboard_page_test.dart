@@ -13,6 +13,8 @@ import 'package:keevo/features/dashboard/domain/repository/dashboard_repository.
 import 'package:keevo/features/dashboard/presentation/page/dashboard_page.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo/features/dashboard/presentation/widget/total_revenue_card.dart';
+import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
+import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -465,5 +467,58 @@ void main() {
         expect(find.text('Données de cet appareil'), findsOneWidget);
       });
     });
-  });
+  
+    // 13.10b — the real « Stock Bas » tile: Free → local list of every store
+    // (the tile counts them all), Premium → multi-store overview.
+    group('« Stock Bas » tile', () {
+      Future<String> tapTile(WidgetTester tester, String multiStore) async {
+        SharedPreferences.setMockInitialValues({kUserFirstNameKey: 'Simon'});
+        final prefs = await SharedPreferences.getInstance();
+        final router = GoRouter(
+          initialLocation: '/dashboard',
+          routes: [
+            GoRoute(
+                path: '/dashboard', builder: (_, __) => const DashboardPage()),
+            GoRoute(
+                path: '/stock/overview',
+                builder: (_, s) => Scaffold(body: Text('OVERVIEW ${s.uri}'))),
+            GoRoute(
+                path: kLocalLowStockRoute,
+                builder: (_, s) => Scaffold(body: Text('LOCAL ${s.uri}'))),
+          ],
+        );
+        addTearDown(router.dispose);
+        await tester.pumpWidget(ProviderScope(
+          overrides: [
+            dashboardSnapshotProvider.overrideWith((_) async => snapshot),
+            storeOverviewsProvider
+                .overrideWith((_) => Future.value(const <StoreOverview>[])),
+            chartDataProvider
+                .overrideWith((_) => Future.value(snapshot.dailyCALast30)),
+            sharedPreferencesProvider.overrideWithValue(prefs),
+            tenantModuleStatesProvider.overrideWith(
+                (_) async => TenantModuleStates({'multi-store': multiStore})),
+          ],
+          child: MaterialApp.router(routerConfig: router),
+        ));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Stock Bas'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Stock Bas'));
+        await tester.pumpAndSettle();
+        final shown = find.textContaining(RegExp('^(LOCAL|OVERVIEW) '));
+        return tester.widget<Text>(shown).data!.split(' ').last;
+      }
+
+      testWidgets('Free → local list, all stores', (tester) async {
+        expect(await tapTile(tester, 'DISABLED'), '/stock/low?all=true');
+      });
+
+      testWidgets('Premium → multi-store overview filtered on low stock',
+          (tester) async {
+        expect(await tapTile(tester, 'ENABLED'),
+            '/stock/overview?showLowOnly=true');
+      });
+    });
+});
 }

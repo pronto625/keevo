@@ -10,6 +10,7 @@ import '../provider/inventory_session_provider.dart';
 import '../widget/active_session_banner.dart';
 import '../widget/inventory_config_bottom_sheet.dart';
 import '../widget/session_history_card.dart';
+import '../../../../core/widget/entitlement_upgrade.dart';
 
 /// InventoryLaunchPage — entry point for inventory counting (Story 6.1).
 ///
@@ -202,15 +203,16 @@ class InventoryLaunchPage extends ConsumerWidget {
           FilledButton(
             onPressed: () async {
               final messenger = ScaffoldMessenger.of(context);
+              // 13.10b: built before the await (« Passer à Premium » for a
+              // module refusal).
+              final errorSnackBar = appErrorSnackBarFor(context);
               Navigator.pop(ctx);
               try {
                 await ref
                     .read(cancelSessionNotifierProvider.notifier)
                     .cancel(sessionId);
               } catch (e) {
-                messenger.showSnackBar(
-                  SnackBar(content: Text(appErrorMessage(e))),
-                );
+                messenger.showSnackBar(errorSnackBar(e));
               }
             },
             child: const Text('Oui, annuler'),

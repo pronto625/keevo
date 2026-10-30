@@ -16,6 +16,7 @@ import '../../domain/model/stock_transfer_model.dart';
 import '../provider/global_stock_provider.dart';
 import '../provider/stock_transfer_provider.dart';
 import '../widget/transfer_form_bottom_sheet.dart';
+import '../../../../core/widget/entitlement_upgrade.dart';
 
 /// TransferHistoryPage — paginated list of inter-store stock transfers.
 ///
@@ -516,6 +517,8 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
     setState(() => _isReceiving = true);
 
     final messenger = ScaffoldMessenger.of(context);
+    // 13.10b: built before the await (the context may be gone after it).
+    final errorSnackBar = appErrorSnackBarFor(context);
     try {
       // Call repository directly — avoids AutoDispose "Bad state" from the
       // shared CompleteTransferNotifier being disposed mid-await.
@@ -557,18 +560,18 @@ class _TransferTileState extends ConsumerState<_TransferTile> {
       }
 
       // v1s-16-20: never the raw server text (ids, status codes).
-      final msg = appErrorMessage(e);
+      // 13.10b: a module refusal carries « Passer à Premium ».
       if (mounted) {
-        messenger.showSnackBar(SnackBar(
-          content: Text(msg),
+        messenger.showSnackBar(errorSnackBar(
+          e,
           backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
         ));
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(SnackBar(
-          content: Text(appErrorMessage(e)),
+        messenger.showSnackBar(errorSnackBar(
+          e,
           backgroundColor: AppTheme.errorStrong,
           behavior: SnackBarBehavior.floating,
         ));

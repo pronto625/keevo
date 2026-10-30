@@ -235,10 +235,14 @@ class LowStockProduct {
   final int quantity;
   final int threshold;
 
+  /// Store of the row — only in the all-stores list (13.10b).
+  final String? storeName;
+
   const LowStockProduct({
     required this.productId,
     required this.name,
     required this.quantity,
     required this.threshold,
+    this.storeName,
   });
 }

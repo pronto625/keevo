@@ -3,6 +3,7 @@ import 'dart:developer' as dev;
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/network/module_entitlement_exception.dart';
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/inventory_session_model.dart';
@@ -108,6 +109,8 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
         }
         return session;
       } catch (e) {
+        // 13.10b: a module refusal is shown, never hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote getActive failed, falling back to local: $e',
             name: 'InventorySessionRepo');
       }
@@ -123,6 +126,8 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
         await _local.upsert(cancelled);
         return;
       } catch (e) {
+        // 13.10b: a module refusal is shown, never hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote cancel failed, falling back to local: $e',
             name: 'InventorySessionRepo');
       }
@@ -151,6 +156,8 @@ class InventorySessionRepositoryImpl implements InventorySessionRepository {
         }
         return sessions;
       } catch (e) {
+        // 13.10b: a module refusal is shown, never hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote getHistory failed, falling back to local: $e',
             name: 'InventorySessionRepo');
       }

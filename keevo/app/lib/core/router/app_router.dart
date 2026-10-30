@@ -58,6 +58,7 @@ import '../../features/sync_indicator/presentation/page/sync_settings_page.dart'
 import '../sync/sync_trigger_notifier.dart';
 import '../../features/stores/presentation/page/stores_list_page.dart';
 import '../../features/inventory/presentation/page/global_stock_overview_page.dart';
+import '../../features/inventory/presentation/page/local_low_stock_page.dart';
 import '../../features/inventory/presentation/page/inventory_counting_page.dart';
 import '../../features/inventory/presentation/page/inventory_gap_report_page.dart';
 import '../../features/inventory/presentation/page/inventory_launch_page.dart';
@@ -790,6 +791,12 @@ final GoRouter appRouter = GoRouter(
             state.uri.queryParameters['showLowOnly'] == 'true';
         return GlobalStockOverviewPage(showLowOnly: showLowOnly);
       },
+    ),
+    // ── Free local « stock bas » list (13.10b — Free tenant, employee) ──
+    GoRoute(
+      path: kLocalLowStockRoute,
+      builder: (_, state) => LocalLowStockPage(
+          allStores: state.uri.queryParameters['all'] == 'true'),
     ),    // ── Transfer history (Story 3.3) ─────────────────────────────────
     GoRoute(
       path: '/stock/transfers',

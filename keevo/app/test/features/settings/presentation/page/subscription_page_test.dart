@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/page/subscription_page.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
+import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
 
 void main() {
   group('SubscriptionPage', () {
@@ -64,5 +65,42 @@ void main() {
       expect(find.textContaining('Expire'), findsOneWidget);
       expect(find.textContaining('∞'), findsWidgets);
     });
-  });
+  
+    // 13.10b — a fresh subscription (after a purchase / plan change) makes
+    // the cached module states stale.
+    testWidgets('loading the subscription re-reads the module states',
+        (tester) async {
+      var moduleReads = 0;
+      final container = ProviderContainer(overrides: [
+        subscriptionInfoProvider.overrideWith(
+          (ref) async => const SubscriptionInfo(
+            planType: 'PREMIUM',
+            status: 'ACTIVE',
+            currentStores: 1,
+            maxStores: null,
+            currentProducts: 1,
+            maxProducts: null,
+            currentEmployees: 0,
+            maxEmployees: null,
+          ),
+        ),
+        tenantModuleStatesProvider.overrideWith((ref) async {
+          moduleReads++;
+          return TenantModuleStates.none;
+        }),
+      ]);
+      addTearDown(container.dispose);
+      await container.read(tenantModuleStatesProvider.future);
+      expect(moduleReads, 1);
+
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: SubscriptionPage()),
+      ));
+      await tester.pumpAndSettle();
+
+      await container.read(tenantModuleStatesProvider.future);
+      expect(moduleReads, 2);
+    });
+});
 }

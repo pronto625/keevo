@@ -7,6 +7,7 @@ import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/subscription_info.dart';
 import '../provider/subscription_info_provider.dart';
+import '../provider/tenant_modules_provider.dart';
 
 /// SubscriptionPage — Paramètres > Abonnement.
 ///
@@ -18,6 +19,11 @@ class SubscriptionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncSub = ref.watch(subscriptionInfoProvider);
+    // 13.10b: a fresh subscription (after a purchase / plan change) makes the
+    // cached module states stale.
+    ref.listen(subscriptionInfoProvider, (_, next) {
+      if (next is AsyncData) ref.invalidate(tenantModuleStatesProvider);
+    });
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerLowest,

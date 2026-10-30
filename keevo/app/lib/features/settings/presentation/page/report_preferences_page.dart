@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../identity/presentation/provider/report_preferences_provider.dart';
+import '../../../../core/widget/entitlement_upgrade.dart';
 
 /// ReportPreferencesPage — Paramètres › Rapports & WhatsApp
 ///
@@ -53,9 +54,11 @@ class _ReportPreferencesPageState
         notifier.clearMessages();
       }
       if (next.error != null && next.error != prev?.error) {
+        // 13.10b: a module refusal carries « Passer à Premium ».
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(next.error ?? ''),
+          appErrorSnackBar(
+            context,
+            next.error!,
             backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
           ),

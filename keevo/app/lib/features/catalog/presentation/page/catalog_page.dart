@@ -17,6 +17,7 @@ import '../../domain/model/category_model.dart';
 import '../../domain/model/product_model.dart';
 import '../widget/draft_validation_banner.dart';
 import '../widget/product_card.dart';
+import '../../../inventory/presentation/page/local_low_stock_page.dart';
 
 enum CatalogTab { active, archived, outOfStock, lowStock }
 /// CatalogPage — product catalogue with search and 4 tabs.
@@ -175,7 +176,10 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                           SoftIconButton(
                             icon: Icons.warehouse_outlined,
                             tooltip: 'Vue stock multi-boutiques',
-                            onPressed: () => context.push('/stock/overview'),
+                            // 13.10b: free local low-stock list unless the
+                            // multi-store overview is available.
+                            onPressed: () => openLowStockView(context,
+                                overviewRoute: '/stock/overview'),
                           ),
                           const SizedBox(width: 6),
                           // Bouton de synchronisation

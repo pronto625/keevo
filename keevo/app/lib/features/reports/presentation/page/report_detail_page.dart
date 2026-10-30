@@ -10,6 +10,7 @@ import '../../../../core/di/providers.dart';
 import '../provider/report_history_providers.dart';
 import '../../domain/exception/report_exception.dart';
 import '../../domain/model/report_history_model.dart';
+import '../../../../core/widget/entitlement_upgrade.dart';
 
 /// ReportDetailPage — displays the full content of a single end-of-day report
 /// and provides a "Renvoyer" action for OWNER users.
@@ -92,9 +93,11 @@ class _DetailScaffold extends ConsumerWidget {
         final message = err is ReportException
             ? err.message
             : 'Échec du renvoi. Réessayez plus tard.';
+        // 13.10b: a module refusal carries « Passer à Premium ».
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
+          appErrorSnackBar(
+            context,
+            message,
             backgroundColor: AppTheme.errorStrong,
             behavior: SnackBarBehavior.floating,
           ),

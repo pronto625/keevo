@@ -1,4 +1,6 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/features/reports/data/datasource/local_report_history_datasource.dart';
 import 'package:keevo/features/reports/data/datasource/remote_report_history_datasource.dart';
 import 'package:keevo/features/reports/data/repository/report_history_repository_impl.dart';
@@ -131,5 +133,22 @@ void main() {
         throwsA(isA<Exception>()),
       );
     });
+  });
+
+  // 13.10b — weekly report refused (advanced-reports off): the Premium
+  // refusal reaches the detail page, the cached copy is not shown.
+  test('getReportById — module refusal rethrown, no local copy', () async {
+    final o = RequestOptions(path: '/api/v1/reports/rpt-1');
+    when(() => mockRemote.fetchById('rpt-1')).thenThrow(DioException(
+      requestOptions: o,
+      response: Response(
+          requestOptions: o,
+          statusCode: 403,
+          data: {'domainCode': 'MODULE_NOT_ENTITLED'}),
+    ));
+
+    await expectLater(repo.getReportById('rpt-1'),
+        throwsA(predicate((e) => ModuleEntitlementException.of(e) != null)));
+    verifyNever(() => mockLocal.getById(any()));
   });
 }

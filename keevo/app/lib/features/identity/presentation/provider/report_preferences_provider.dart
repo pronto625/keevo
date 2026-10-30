@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/model/tenant_preferences_model.dart';
 import 'tenant_preferences_provider.dart';
+import '../../../../core/widget/app_error_widget.dart' show appErrorMessage;
 
 /// State for report preferences editing.
 class ReportPreferencesState {
@@ -60,7 +61,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
         preferences: prefs,
       );
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: appErrorMessage(e));
     }
   }
 
@@ -100,7 +101,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
       // Invalidate the main preferences cache
       _ref.invalidate(tenantPreferencesProvider);
     } catch (e) {
-      state = state.copyWith(isSaving: false, error: e.toString());
+      state = state.copyWith(isSaving: false, error: appErrorMessage(e));
     }
   }
 
@@ -117,7 +118,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
             : 'Échec de l\'envoi WhatsApp. Vérifiez votre numéro.',
       );
     } catch (e) {
-      state = state.copyWith(testSending: false, error: e.toString());
+      state = state.copyWith(testSending: false, error: appErrorMessage(e));
     }
   }
 
@@ -133,7 +134,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
       );
       return reportId;
     } catch (e) {
-      state = state.copyWith(weeklyPreviewing: false, error: e.toString());
+      state = state.copyWith(weeklyPreviewing: false, error: appErrorMessage(e));
       return null;
     }
   }

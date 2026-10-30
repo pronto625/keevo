@@ -257,7 +257,9 @@ class LocalDashboardDatasource {
     final result = await _db.customSelect(
       'SELECT COUNT(DISTINCT sl.product_id) AS cnt FROM stock_levels sl '
       'JOIN products p ON p.id = sl.product_id AND p.archived = 0 '
-      'WHERE sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), '
+      // 13.10b: same rows as the « stock bas » list (active stores only).
+      'LEFT JOIN stores s ON s.id = sl.store_id '
+      'WHERE COALESCE(s.is_active, 1) = 1 AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), '
       'NULLIF(sl.minimum_threshold, 0), 5)',
     ).getSingle();
     return result.read<int>('cnt');
@@ -682,6 +684,37 @@ class LocalDashboardDatasource {
       quantity: r.read<int>('quantity'),
       threshold: r.read<int>('threshold'),
     )).toList();
+  }
+
+  /// 13.10b — free local « stock bas » list: products of [storeId]
+  /// ([getStoreLowStockProducts]) or, when null, of every active store with
+  /// the store name — the same rows [getLowStockCount] counts. Lowest
+  /// quantity first.
+  Future<List<LowStockProduct>> getLowStockProducts({String? storeId}) async {
+    if (storeId != null) return getStoreLowStockProducts(storeId);
+    final rows = await _db.customSelect(
+      'SELECT p.id AS product_id, p.name AS product_name, '
+      's.name AS store_name, sl.quantity, '
+      'COALESCE(NULLIF(p.minimum_threshold, 0), '
+      'NULLIF(sl.minimum_threshold, 0), 5) AS threshold '
+      'FROM stock_levels sl '
+      'JOIN products p ON p.id = sl.product_id AND p.archived = 0 '
+      'LEFT JOIN stores s ON s.id = sl.store_id '
+      'WHERE COALESCE(s.is_active, 1) = 1 '
+      'AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), '
+      'NULLIF(sl.minimum_threshold, 0), 5) '
+      'ORDER BY sl.quantity ASC, p.name ASC',
+    ).get();
+
+    return rows
+        .map((r) => LowStockProduct(
+              productId: r.read<String>('product_id'),
+              name: r.read<String>('product_name'),
+              quantity: r.read<int>('quantity'),
+              threshold: r.read<int>('threshold'),
+              storeName: r.readNullable<String>('store_name'),
+            ))
+        .toList();
   }
 
   /// Assemble full DashboardSnapshot from all queries (Builder pattern).

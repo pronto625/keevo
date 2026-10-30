@@ -9,6 +9,8 @@ import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/presentation/page/catalog_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
+import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
+import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
 
 /// Builds CatalogPage wrapped with ProviderScope + GoRouter.
 Widget _buildPage({
@@ -462,5 +464,62 @@ void main() {
     expect(find.text('Riz parfumé'), findsOneWidget);
     expect(lowStockCalls, 2);
     expect(activeCalls, activeBefore);
+  });
+
+  // 13.10b — the real catalogue « Vue stock multi-boutiques » button: Free /
+  // employee → local list of the active store, Premium → overview.
+  group('CatalogPage — stock view button', () {
+    Future<String> tapButton(WidgetTester tester, TenantModuleStates modules,
+        {String role = 'OWNER'}) async {
+      final prefs = await _setupPrefs(role: role);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWithValue(prefs),
+          productListProvider.overrideWith((ref) async => const []),
+          archivedProductListProvider.overrideWith((ref) async => const []),
+          outOfStockProductListProvider.overrideWith((ref) async => const []),
+          lowStockProductListProvider.overrideWith((ref) async => const []),
+          tenantModuleStatesProvider.overrideWith((_) async => modules),
+        ],
+        child: MaterialApp.router(
+          routerConfig: GoRouter(
+            initialLocation: '/catalog',
+            routes: [
+              GoRoute(path: '/catalog', builder: (_, __) => const CatalogPage()),
+              GoRoute(
+                  path: '/stock/overview',
+                  builder: (_, s) => Scaffold(body: Text('OVERVIEW ${s.uri}'))),
+              GoRoute(
+                  path: kLocalLowStockRoute,
+                  builder: (_, s) => Scaffold(body: Text('LOCAL ${s.uri}'))),
+            ],
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Vue stock multi-boutiques'));
+      await tester.pumpAndSettle();
+      final shown = find.textContaining(RegExp('^(LOCAL|OVERVIEW) '));
+      return tester.widget<Text>(shown).data!;
+    }
+
+    testWidgets('Free → local list of the active store', (tester) async {
+      expect(
+          await tapButton(tester,
+              const TenantModuleStates({'multi-store': 'DISABLED'})),
+          'LOCAL /stock/low');
+    });
+
+    testWidgets('employee → local list', (tester) async {
+      expect(await tapButton(tester, TenantModuleStates.none, role: 'EMPLOYEE'),
+          'LOCAL /stock/low');
+    });
+
+    testWidgets('Premium → whole multi-store overview', (tester) async {
+      expect(
+          await tapButton(tester,
+              const TenantModuleStates({'multi-store': 'ENABLED'})),
+          'OVERVIEW /stock/overview');
+    });
   });
 }

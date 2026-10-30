@@ -8,6 +8,7 @@ import '../../domain/model/seller_leaderboard_model.dart';
 import '../../domain/repository/profitability_repository.dart';
 import '../datasource/local_profitability_datasource.dart';
 import '../datasource/remote_profitability_datasource.dart';
+import '../../../../core/network/module_entitlement_exception.dart';
 
 /// ProfitabilityRepositoryImpl — Backend-First-When-Online strategy.
 ///
@@ -44,6 +45,8 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
           storeId: params.storeId,
         );
       } catch (e) {
+        // 13.10b: a premium refusal is shown, not hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote profitability failed, using local: $e',
             name: 'ProfitabilityRepository');
       }
@@ -106,6 +109,8 @@ class ProfitabilityRepositoryImpl implements ProfitabilityRepository {
           metric: params.metric.toQueryParam(),
         );
       } catch (e) {
+        // 13.10b: a premium refusal is shown, not hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote store performance failed, using local: $e',
             name: 'ProfitabilityRepository');
       }

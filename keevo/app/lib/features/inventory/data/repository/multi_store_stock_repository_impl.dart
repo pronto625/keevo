@@ -1,3 +1,4 @@
+import '../../../../core/network/module_entitlement_exception.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
@@ -36,7 +37,9 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
     }
     try {
       return await _remote.getOverview();
-    } catch (_) {
+    } catch (e) {
+      // 13.10b: a module refusal is shown, never hidden by local data.
+      if (ModuleEntitlementException.of(e) != null) rethrow;
       return _local.getStoreOverviews();
     }
   }
@@ -79,7 +82,9 @@ class MultiStoreStockRepositoryImpl implements MultiStoreStockRepository {
         size: size,
         sortLowFirst: sortLowFirst,
       );
-    } catch (_) {
+    } catch (e) {
+      // 13.10b: a module refusal is shown, never hidden by local data.
+      if (ModuleEntitlementException.of(e) != null) rethrow;
       return _local.getStoreStockDetail(
         storeId,
         page: page,

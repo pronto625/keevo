@@ -6,7 +6,9 @@ import 'package:drift/native.dart' show SqliteException;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 
+import '../network/module_entitlement_exception.dart';
 import '../sync/account_read_only_exception.dart';
+import 'entitlement_upgrade.dart';
 import 'soft_icon_badge.dart';
 
 /// Generic French message when nothing readable can be shown.
@@ -57,13 +59,17 @@ String? _readable(String? message) {
 /// v1s-16-20: never returns an id, a raw code, an HTTP status code or an
 /// exception text — such messages fall back to a generic French message.
 String appErrorMessage(Object error) {
+  // 13.10b: module entitlement refusal (403 MODULE_NOT_ENTITLED /
+  // MODULE_READ_ONLY), whatever wraps it.
+  final refusal = ModuleEntitlementException.of(error);
+  if (refusal != null) return refusal.message;
   if (error is DioException) {
     final body = error.response?.data;
     if (body is Map) {
       final domainCode = _text(body['domainCode']);
       if (domainCode != null) return _domainMessage(domainCode, body);
-      final msg = _readable(_text(body['error'])) ??
-          _readable(_text(body['message']));
+      final msg =
+          _readable(_text(body['error'])) ?? _readable(_text(body['message']));
       if (msg != null) return msg;
     }
     if (error.type == DioExceptionType.connectionTimeout ||
@@ -123,6 +129,9 @@ String _domainMessage(String code, Map<dynamic, dynamic> body) {
     case 'ACCOUNT_SUSPENDED':
     case 'ACCOUNT_DELETION_PENDING':
       return AccountReadOnlyException.forDomainCode(code)!.message;
+    case ModuleEntitlementException.notEntitledCode:
+    case ModuleEntitlementException.readOnlyCode:
+      return ModuleEntitlementException.forDomainCode(code)!.message;
     default:
       return _readable(_text(body['error'])) ??
           _readable(_text(body['message'])) ??
@@ -187,6 +196,9 @@ class _AppErrorWidgetState extends State<AppErrorWidget> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
+    // 13.10b: a module refusal is not a failure — premium badge, its own
+    // title and the « Passer à Premium » action next to « Réessayer ».
+    final refusal = ModuleEntitlementException.of(widget.error);
     return Center(
       child: SingleChildScrollView(
         child: Padding(
@@ -195,8 +207,10 @@ class _AppErrorWidgetState extends State<AppErrorWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               SoftIconBadge(
-                icon: Icons.error_outline_rounded,
-                color: cs.error,
+                icon: refusal != null
+                    ? Icons.workspace_premium_rounded
+                    : Icons.error_outline_rounded,
+                color: refusal != null ? cs.primary : cs.error,
                 size: 72,
               ),
               const SizedBox(height: 16),
@@ -207,10 +221,17 @@ class _AppErrorWidgetState extends State<AppErrorWidget> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(widget.title ?? 'Un problème est survenu',
-                        style: tt.titleMedium, textAlign: TextAlign.center),
+                    Text(
+                        refusal != null
+                            ? _refusalTitle(refusal)
+                            : widget.title ?? 'Un problème est survenu',
+                        style: tt.titleMedium,
+                        textAlign: TextAlign.center),
                     const SizedBox(height: 8),
-                    Text(widget.message ?? appErrorMessage(widget.error),
+                    Text(
+                        refusal?.message ??
+                            widget.message ??
+                            appErrorMessage(widget.error),
                         style:
                             tt.bodySmall?.copyWith(color: cs.onSurfaceVariant),
                         textAlign: TextAlign.center),
@@ -218,6 +239,10 @@ class _AppErrorWidgetState extends State<AppErrorWidget> {
                 ),
               ),
               const SizedBox(height: 24),
+              if (refusal != null) ...[
+                const PremiumUpgradeButton(),
+                const SizedBox(height: 8),
+              ],
               FilledButton.tonalIcon(
                 onPressed: _retry,
                 icon: Icon(_retrying
@@ -232,6 +257,14 @@ class _AppErrorWidgetState extends State<AppErrorWidget> {
     );
   }
 }
+
+/// Title of the full-page state for a module refusal (the page's own title,
+/// e.g. « Impossible de charger … », would read as a failure).
+String _refusalTitle(ModuleEntitlementException refusal) =>
+    switch (refusal.reason) {
+      ModuleRefusalReason.notEntitled => 'Fonctionnalité Premium',
+      ModuleRefusalReason.readOnly => 'Abonnement expiré',
+    };
 
 // ── Compact inline error (for bottom-sheets / small containers) ───────────────
 
@@ -256,6 +289,8 @@ class AppErrorInline extends StatelessWidget {
               style: TextStyle(color: cs.error, fontSize: 13),
             ),
           ),
+          if (ModuleEntitlementException.of(error) != null)
+            const PremiumUpgradeButton(compact: true),
         ],
       ),
     );

@@ -1,3 +1,5 @@
+import '../../../../core/network/module_entitlement_exception.dart';
+
 /// ExportException — every export failure, mapped to a French message in one
 /// place (v1s-18-4).
 class ExportException implements Exception {
@@ -52,6 +54,11 @@ class ExportException implements Exception {
 
     final message = switch (code) {
       'PLAN_FEATURE_REQUIRED' => 'Cette option est réservée au plan Premium',
+      // 13.10b: module gating (13.10a) — XLSX / PDF / premium datasets.
+      ModuleEntitlementException.notEntitledCode =>
+        ModuleEntitlementException.notEntitledMessage,
+      ModuleEntitlementException.readOnlyCode =>
+        ModuleEntitlementException.readOnlyMessage,
       'RATE_LIMIT_EXCEEDED' ||
       'EXPORT_QUEUE_FULL' =>
         'Trop d\'exports en cours, réessayez dans quelques minutes',
@@ -85,7 +92,11 @@ class ExportException implements Exception {
         _ => 'UNKNOWN',
       };
 
-  bool get isPlanGate => domainCode == 'PLAN_FEATURE_REQUIRED';
+  /// The upgrade sheet opens: V1 `PLAN_FEATURE_REQUIRED` or, since 13.10a,
+  /// `MODULE_NOT_ENTITLED` (both accepted).
+  bool get isPlanGate =>
+      domainCode == 'PLAN_FEATURE_REQUIRED' ||
+      domainCode == ModuleEntitlementException.notEntitledCode;
 
   bool get isExpired => domainCode == 'EXPORT_EXPIRED' || statusCode == 410;
 

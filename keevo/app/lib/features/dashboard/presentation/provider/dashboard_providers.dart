@@ -401,6 +401,15 @@ final storeLowStockProductsProvider = FutureProvider.family<List<LowStockProduct
   return ref.watch(localDashboardDatasourceProvider).getStoreLowStockProducts(storeId);
 });
 
+/// 13.10b — free local « stock bas » list (Drift) of a store, or of every
+/// store when null. Re-read each time the list opens.
+final localLowStockProductsProvider = FutureProvider.autoDispose
+    .family<List<LowStockProduct>, String?>((ref, storeId) {
+  return ref
+      .watch(localDashboardDatasourceProvider)
+      .getLowStockProducts(storeId: storeId);
+});
+
 /// Current user first name from SharedPreferences.
 final currentUserFirstNameProvider = Provider<String?>((ref) {
   return ref.watch(sharedPreferencesProvider).getString(kUserFirstNameKey);

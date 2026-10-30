@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/network/module_entitlement_exception.dart';
+import 'package:keevo/features/reports/domain/exception/report_exception.dart';
 import 'package:keevo/features/reports/domain/model/report_history_model.dart';
 import 'package:keevo/features/reports/presentation/page/report_detail_page.dart';
 import 'package:keevo/features/reports/presentation/provider/report_history_providers.dart';
@@ -41,5 +43,25 @@ void main() {
 
     expect(find.byType(AppBar), findsOneWidget);
     expect(find.byType(Scaffold), findsOneWidget);
+  });
+
+  // 13.10b — weekly report detail refused for a Free tenant.
+  testWidgets('weekly report refused: Premium title and upgrade action',
+      (tester) async {
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        currentUserRoleProvider.overrideWithValue('OWNER'),
+        isOwnerSessionProvider.overrideWithValue(true),
+        reportDetailProvider('r1').overrideWith((ref) async =>
+            throw const ReportException(
+                domainCode: 'MODULE_NOT_ENTITLED', message: 'Ce module…')),
+      ],
+      child: const MaterialApp(home: ReportDetailPage(reportId: 'r1')),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fonctionnalité Premium'), findsOneWidget);
+    expect(find.text(ModuleEntitlementException.notEntitledMessage),
+        findsOneWidget);
   });
 }

@@ -1,6 +1,7 @@
 import '../../../../core/services/api_service.dart';
 import '../../domain/model/tenant_preferences_model.dart';
 import '../../domain/repository/tenant_preferences_repository.dart';
+import '../../../../core/network/module_entitlement_exception.dart';
 
 /// TenantPreferencesRepositoryImpl — Implémentation du repository.
 class TenantPreferencesRepositoryImpl implements TenantPreferencesRepository {
@@ -35,7 +36,10 @@ class TenantPreferencesRepositoryImpl implements TenantPreferencesRepository {
           await _apiService.post('/api/v1/tenant/report-test', data: {});
       final data = response['data'] as Map<String, dynamic>? ?? {};
       return data['testSent'] as bool? ?? false;
-    } catch (_) {
+    } catch (e) {
+      // 13.10b: a module refusal is shown as such, not as a failed send.
+      final refusal = ModuleEntitlementException.of(e);
+      if (refusal != null) throw refusal;
       return false;
     }
   }
@@ -50,7 +54,9 @@ class TenantPreferencesRepositoryImpl implements TenantPreferencesRepository {
       final items = data['items'] as List<dynamic>? ?? [];
       if (items.isEmpty) return null;
       return (items.first as Map<String, dynamic>)['id'] as String?;
-    } catch (_) {
+    } catch (e) {
+      final refusal = ModuleEntitlementException.of(e);
+      if (refusal != null) throw refusal;
       return null;
     }
   }

@@ -30,6 +30,11 @@ class _InventoryConfigBottomSheetState
   String _scope = 'FULL';
   final Set<String> _selectedCategoryIds = {};
 
+  /// Last start failure, shown inside the sheet (13.10b: a SnackBar would
+  /// open under the modal sheet, unseen) — with « Passer à Premium » for a
+  /// module refusal.
+  Object? _startError;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +55,7 @@ class _InventoryConfigBottomSheetState
 
   Future<void> _startSession() async {
     if (!_isValid) return;
+    setState(() => _startError = null);
     try {
       final session =
           await ref.read(createSessionNotifierProvider.notifier).create(
@@ -62,11 +68,7 @@ class _InventoryConfigBottomSheetState
       // notifier may be gone by the time the caller reads it.
       if (mounted) Navigator.of(context).pop(session.id);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(appErrorMessage(e))),
-        );
-      }
+      if (mounted) setState(() => _startError = e);
     }
   }
 
@@ -177,6 +179,12 @@ class _InventoryConfigBottomSheetState
               ),
               const SizedBox(height: 16),
             ],
+
+            if (_startError != null)
+              KeyedSubtree(
+                key: const Key('inventory-start-error'),
+                child: AppErrorInline(error: _startError!),
+              ),
 
             // ── Start button ──
             SizedBox(

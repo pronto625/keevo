@@ -17,6 +17,7 @@ import '../widget/sales_evolution_chart.dart';
 import '../widget/shop_status_card.dart';
 import '../widget/top_products_section.dart';
 import '../widget/total_revenue_card.dart';
+import '../../../inventory/presentation/page/local_low_stock_page.dart';
 
 /// DashboardPage — morning dashboard for OWNER role.
 ///
@@ -318,7 +319,10 @@ class _MetricGrid extends ConsumerWidget {
               MetricBadgeCard.yesterdayCA(amount: snapshot.yesterdayCA),
               MetricBadgeCard.lowStock(
                 count: snapshot.lowStockCount,
-                onTap: () => context.push('/stock/overview?showLowOnly=true'),
+                // 13.10b: multi-store overview for Premium, free local list
+                // otherwise.
+                // The tile counts every store: the local list too.
+                onTap: () => openLowStockView(context, allStores: true),
               ),
               MetricBadgeCard.monthlyTransactions(
                 count: snapshot.totalTransactionsMonth,

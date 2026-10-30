@@ -9,6 +9,7 @@ import '../../../account/presentation/provider/account_deletion_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
+import '../../../settings/presentation/provider/tenant_modules_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import 'auth_provider.dart';
 
@@ -83,6 +84,12 @@ class SessionClaimsApplier {
     // Only when mounted: Ref.invalidate mounts (and fetches) it in debug.
     if (newSession && _ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
+    }
+    // 13.10b: module states are cached per session — and re-read after every
+    // token (a renewal follows a plan change / purchase): lazily, on the next
+    // read.
+    if (_ref.exists(tenantModuleStatesProvider)) {
+      _ref.invalidate(tenantModuleStatesProvider);
     }
     // Same for the account-deletion banner (cached per process) — on every
     // token: a renewal after a deletion request / cancellation carries the

@@ -99,6 +99,9 @@ void main() {
 
   for (final (status, code, expected) in [
     (403, 'PLAN_FEATURE_REQUIRED', null),
+    // 13.10b: module gating code (13.10a) opens the same upgrade sheet.
+    (403, 'MODULE_NOT_ENTITLED',
+        'Cette fonctionnalité fait partie de l\'offre Premium'),
     (
       410,
       'EXPORT_EXPIRED',
@@ -128,7 +131,8 @@ void main() {
       expect(e.domainCode, code);
       expect(e.statusCode, status);
       if (expected != null) expect(e.message, expected);
-      expect(e.isPlanGate, code == 'PLAN_FEATURE_REQUIRED');
+      expect(e.isPlanGate,
+          code == 'PLAN_FEATURE_REQUIRED' || code == 'MODULE_NOT_ENTITLED');
       expect(e.isExpired, code == 'EXPORT_EXPIRED');
     });
   }

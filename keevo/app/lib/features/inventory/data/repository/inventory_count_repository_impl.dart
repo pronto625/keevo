@@ -2,6 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:uuid/uuid.dart';
 
+import '../../../../core/network/module_entitlement_exception.dart';
 import '../../../../core/sync/connectivity_service.dart';
 import '../../../../core/sync/sync_service.dart';
 import '../../../../core/sync/sync_trigger_dispatcher.dart';
@@ -49,6 +50,8 @@ class InventoryCountRepositoryImpl implements InventoryCountRepository {
         // Cache remote counts locally for resume support
         return remote;
       } catch (e) {
+        // 13.10b: a module refusal is shown, never hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote getCountingProducts failed, falling back to offline: $e',
             name: 'InventoryCountRepo');
       }
@@ -94,6 +97,8 @@ class InventoryCountRepositoryImpl implements InventoryCountRepository {
         await _localCount.upsert(remote.copyWith(synced: true));
         return remote;
       } catch (e) {
+        // 13.10b: a module refusal is shown, never hidden by local data.
+        if (ModuleEntitlementException.of(e) != null) rethrow;
         dev.log('Remote saveCount failed, falling back to offline: $e',
             name: 'InventoryCountRepo');
       }

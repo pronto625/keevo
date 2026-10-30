@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
 
+import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/core/storage/app_database.dart';
 
 import 'package:keevo/core/sync/connectivity_service.dart';
@@ -135,5 +136,61 @@ void main() {
 
     // A count saved but never queued would be silently ignored at validation.
     expect(await db.select(db.inventoryCounts).get(), isEmpty);
+  });
+
+  // 13.10b — 403 MODULE_NOT_ENTITLED / MODULE_READ_ONLY: shown, not queued
+  // or rebuilt from local data.
+  test('module refusal: saveCount / getCountingProducts rethrow, nothing '
+      'queued', () async {
+    final local = _MockLocalCount();
+    final localSession = _MockLocalSession();
+    final remote = _MockRemote();
+    final connectivity = _MockConnectivity();
+    final sync = _MockSyncService();
+    final options = RequestOptions(path: '/api/v1/inventory/sessions');
+    final refusal = DioException(
+      requestOptions: options,
+      response: Response(
+          requestOptions: options,
+          statusCode: 403,
+          data: {'domainCode': 'MODULE_READ_ONLY'}),
+    );
+    when(() => connectivity.isOnline()).thenAnswer((_) async => true);
+    when(() => remote.saveCount(
+          sessionId: any(named: 'sessionId'),
+          productId: any(named: 'productId'),
+          variantId: any(named: 'variantId'),
+          productName: any(named: 'productName'),
+          variantLabel: any(named: 'variantLabel'),
+          theoretical: any(named: 'theoretical'),
+          physical: any(named: 'physical'),
+        )).thenThrow(refusal);
+    when(() => remote.getCountingProducts(any())).thenThrow(refusal);
+    final repo = InventoryCountRepositoryImpl(
+      localCount: local,
+      localSession: localSession,
+      remote: remote,
+      connectivity: connectivity,
+      syncService: sync,
+      syncTriggerDispatcher: _MockDispatcher(),
+    );
+    final isRefusal =
+        throwsA(predicate((e) => ModuleEntitlementException.of(e) != null));
+
+    await expectLater(
+        repo.saveCount(
+            sessionId: 's',
+            productId: 'p',
+            productName: 'Riz',
+            theoretical: 1,
+            physical: 1),
+        isRefusal);
+    await expectLater(repo.getCountingProducts('s'), isRefusal);
+    verifyNever(() => sync.queueOperation(
+          operation: any(named: 'operation'),
+          payload: any(named: 'payload'),
+          entityId: any(named: 'entityId'),
+        ));
+    verifyNever(() => localSession.findById(any()));
   });
 }

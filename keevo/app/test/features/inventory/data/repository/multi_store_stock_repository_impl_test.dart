@@ -1,4 +1,6 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/core/sync/sync_service.dart';
@@ -144,6 +146,39 @@ void main() {
 
       expect(await repo.getStoreStockDetail('s1'), products);
       verify(() => local.upsertStockLevels('s1', products)).called(1);
+    });
+  });
+
+  // 13.10b — Free tenant: the multi-store refusal is shown, not replaced by
+  // the local totals.
+  group('module refusal', () {
+    DioException refusal() {
+      final o = RequestOptions(path: '/api/v1/stock/overview');
+      return DioException(
+        requestOptions: o,
+        response: Response(
+            requestOptions: o,
+            statusCode: 403,
+            data: {'domainCode': 'MODULE_NOT_ENTITLED'}),
+      );
+    }
+
+    final isRefusal =
+        throwsA(predicate((e) => ModuleEntitlementException.of(e) != null));
+
+    test('getOverview rethrows, no local fallback', () async {
+      when(() => remote.getOverview()).thenThrow(refusal());
+      await expectLater(repo.getOverview(), isRefusal);
+      verifyNever(() => local.getStoreOverviews());
+    });
+
+    test('getStoreStockDetail rethrows', () async {
+      when(() => remote.getStoreStockDetail(any(),
+          page: any(named: 'page'),
+          size: any(named: 'size'),
+          sortLowFirst: any(named: 'sortLowFirst'),
+          lowOnly: any(named: 'lowOnly'))).thenThrow(refusal());
+      await expectLater(repo.getStoreStockDetail('s1'), isRefusal);
     });
   });
 }

@@ -552,6 +552,43 @@ void main() {
     expect(ds.requests.last.datasets, ['sales']);
   });
 
+  // 13.10b — since 13.10a the server refuses with MODULE_NOT_ENTITLED.
+  testWidgets('XLSX refused with MODULE_NOT_ENTITLED opens the upgrade sheet',
+      (tester) async {
+    premium = null;
+    ds.onRequest = (r) async => r.format == ExportFormat.xlsx
+        ? throw const ExportException(
+            domainCode: 'MODULE_NOT_ENTITLED', message: 'x', statusCode: 403)
+        : ExportFileReady(tempFile());
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'sales'})));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-format-xlsx');
+    await tapKey(tester, 'export-submit');
+    expect(find.text('Excel est réservé au plan Premium'), findsOneWidget);
+    expect(find.byKey(const Key('premium_feature_cta')), findsOneWidget);
+    expect(find.byKey(const Key('export-error')), findsNothing);
+    await tester.tap(find.text('Plus tard'));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-submit');
+    expect(ds.requests.last.format, ExportFormat.csv);
+  });
+
+  testWidgets('CSV of premium data refused → premium data sheet',
+      (tester) async {
+    ds.onRequest = (r) async => throw const ExportException(
+        domainCode: 'MODULE_NOT_ENTITLED', message: 'x', statusCode: 403);
+    await pumpApp(
+        tester, app(prefill: const ExportPrefill(datasets: {'sales'})));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-submit');
+    expect(find.text('Données réservées au plan Premium'), findsOneWidget);
+    expect(find.byKey(const Key('premium_feature_cta')), findsOneWidget);
+  });
+
   testWidgets('prefilled keys missing from the catalogue are dropped',
       (tester) async {
     ds.onRequest = (_) async => ExportFileReady(tempFile());

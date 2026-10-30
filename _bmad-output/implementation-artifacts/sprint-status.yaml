@@ -245,7 +245,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 13: Moteur de Modularité — le Socle (Phase 3)
   # ─────────────────────────────────────────────────────────
-  epic-13: in-progress  # 2026-10-29 démarrage (refonte/modulaire)
+  epic-13: done  # 2026-10-30 13-1→13-10 done | 2026-10-29 démarrage (refonte/modulaire)
   13-1-modele-donnees-registre-manifest-seed: done  # 2026-10-29 done — V29 module_definitions + tenant_modules, 10 manifests keevo/modules, seed idempotent sans downgrade, fail-fast prouvé sur le jar ; 3 858 tests | 2026-10-29 bmad-build-auto (spec-13-1-registre-modules-manifest-seed.md)
   13-2-module-registry: done  # 2026-10-29 done — ModuleRegistry (règle effective core/ligne/free, cache par requête, evict), ModuleCatalog, V30, modulith-core hors du jar de prod (enforcer + profil prod-classpath en CI) ; 3 903 tests | 2026-10-29 bmad-build-auto (spec-13-2-module-registry.md)
   13-3-dependency-resolver: done  # 2026-10-29 done — plan d’activation (Kahn, cascade, réparation), check de désactivation (dépendants actifs, core), éligibilité gratuite par défaut | 2026-10-29 bmad-build-auto (spec-13-3-dependency-resolver.md)
@@ -255,7 +255,7 @@ development_status:
   13-7-extension-registry: done  # 2026-10-30 done — ExtensionRegistry (points déclarés par manifest, contributions @ContributesExtension, vues immuables, modules activés seulement), slot POS déclaré (pos 1.1.0) | 2026-10-29 bmad-build-auto (spec-13-7-extension-registry.md)
   13-8-module-lifecycle-service-api-admin: done  # 2026-10-30 done — 13-8a API super-admin activer/désactiver (plan, verrou, provisioning, audit) + 13-8b app : opérations en attente visibles, stock local conservé ; test live Redmi OK | 2026-10-30 bmad-build-auto : 13-8a backend (spec-13-8a-module-lifecycle-api.md) puis 13-8b app (opérations en attente visibles)
   13-9-conversion-crm-reporting-keevomodule: done  # 2026-10-30 done — contrat KeevoModule (hooks, registrars), CRM (capacité par code, migrations module avec baseline sans DDL sur l’existant), Reporting (@ModuleScoped + tâches planifiées) ; aucun changement de schéma au déploiement ; Redmi OK | 2026-10-30 bmad-build-auto (spec-13-9-keevomodule-crm-reporting.md)
-  13-10-passe-gating-entitlement-endpoints-existants: in-progress  # 2026-10-30 bmad-build-auto : 13-10a backend (spec-13-10a-gating-all-endpoints.md) puis 13-10b app (403 en français, entrées masquées)
+  13-10-passe-gating-entitlement-endpoints-existants: done  # 2026-10-30 done — 13-10a backend (modules payants §6.1, tous les endpoints annotés, sync/jobs/exports) + 13-10b app (refus en français, « Passer à Premium », stock bas local) ; test live Redmi OK | 2026-10-30 bmad-build-auto : 13-10a backend (spec-13-10a-gating-all-endpoints.md) puis 13-10b app (403 en français, entrées masquées)
   epic-13-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

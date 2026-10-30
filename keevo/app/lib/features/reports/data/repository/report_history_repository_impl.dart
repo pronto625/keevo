@@ -4,6 +4,7 @@ import '../../domain/model/report_history_model.dart';
 import '../../domain/repository/report_history_repository.dart';
 import '../datasource/local_report_history_datasource.dart';
 import '../datasource/remote_report_history_datasource.dart';
+import '../../../../core/network/module_entitlement_exception.dart';
 
 /// ReportHistoryRepositoryImpl — Backend-First-When-Online strategy.
 /// Story 7.2 — Task 18.
@@ -50,6 +51,9 @@ class ReportHistoryRepositoryImpl implements ReportHistoryRepository {
       await _local.upsertReport(report);
       return report;
     } catch (e) {
+      // 13.10b: a weekly report refused (advanced-reports) is not replaced by
+      // its cached copy — the Premium message is shown.
+      if (ModuleEntitlementException.of(e) != null) rethrow;
       dev.log('Remote fetchById failed, using local: $e',
           name: 'ReportHistoryRepository');
       return _local.getById(reportId);

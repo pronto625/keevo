@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/inventory/domain/repository/inventory_session_repository.dart';
@@ -111,5 +114,58 @@ void main() {
         w.constraints?.maxWidth == 40 &&
         w.constraints?.maxHeight == 4);
     expect(selfDrawn, findsNothing);
+  });
+
+  // 13.10b — live bug: a Free tenant tapping « Démarrer l'inventaire » got a
+  // 403 MODULE_NOT_ENTITLED and saw nothing (SnackBar under the sheet).
+  testWidgets('module refusal: Premium message in the sheet, « Passer à '
+      'Premium » closes it and opens the subscription screen', (tester) async {
+    final repo = _MockSessionRepo();
+    when(() => repo.create(
+              storeId: any(named: 'storeId'),
+              scope: any(named: 'scope'),
+              categoryIds: any(named: 'categoryIds'),
+            ))
+        .thenThrow(
+            const ModuleEntitlementException(ModuleRefusalReason.notEntitled));
+    final router = GoRouter(routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, _) => Scaffold(
+          body: TextButton(
+            onPressed: () => showInventoryConfigBottomSheet(context),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/settings/subscription',
+        builder: (_, __) => const Scaffold(body: Text('ÉCRAN ABONNEMENT')),
+      ),
+    ]);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        inventorySessionRepositoryProvider.overrideWithValue(repo),
+        activeStoreIdProvider
+            .overrideWith(() => _FixedActiveStore('store-open')),
+        storeListNotifierProvider.overrideWith(_FakeStoreList.new),
+        categoriesProvider.overrideWith((_) async => []),
+        isOwnerSessionProvider.overrideWithValue(true),
+      ],
+      child: MaterialApp.router(theme: AppTheme.light(), routerConfig: router),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Démarrer l\'inventaire'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('inventory-start-error')), findsOneWidget);
+    expect(find.text(ModuleEntitlementException.notEntitledMessage),
+        findsOneWidget);
+
+    await tester.tap(find.text('Passer à Premium'));
+    await tester.pumpAndSettle();
+    expect(find.text('ÉCRAN ABONNEMENT'), findsOneWidget);
+    expect(find.text('Démarrer l\'inventaire'), findsNothing);
   });
 }

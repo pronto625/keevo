@@ -203,6 +203,67 @@ void main() {
       expect(count, 1); // only prod-nothresh (qty 3 <= default 5)
     });
 
+    // 13.10b — free local « stock bas » list.
+    test('getLowStockProducts lists the store rows at/below threshold, '
+        'every active store with its name when none is given — the rows '
+        'getLowStockCount counts', () async {
+      await db.into(db.stores).insert(StoresCompanion.insert(
+            id: 'store-2',
+            name: 'Annexe',
+            tenantId: 'tenant-001',
+            createdAt: now,
+            updatedAt: now,
+          ));
+      await db.into(db.stores).insert(StoresCompanion.insert(
+            id: 'store-closed',
+            name: 'Fermée',
+            isActive: const Value(false),
+            tenantId: 'tenant-001',
+            createdAt: now,
+            updatedAt: now,
+          ));
+      Future<void> stock(String id, String name, String store, int qty,
+          {bool archived = false}) async {
+        await db.into(db.products).insert(
+              ProductsCompanion.insert(
+                id: id,
+                name: name,
+                archived: Value(archived),
+                createdAt: now,
+                updatedAt: now,
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+        await db.into(db.stockLevels).insert(StockLevelsCompanion.insert(
+              id: 'sl-$id-$store',
+              productId: id,
+              storeId: store,
+              quantity: qty,
+              minimumThreshold: const Value(5),
+              updatedAt: now,
+            ));
+      }
+
+      await stock('p-low', 'Riz', storeId, 2);
+      await stock('p-out', 'Huile', storeId, 0);
+      await stock('p-ok', 'Sucre', storeId, 50);
+      await stock('p-arch', 'Ancien', storeId, 1, archived: true);
+      await stock('p-other', 'Savon', 'store-2', 4);
+      await stock('p-closed', 'Lait', 'store-closed', 0);
+
+      final active = await datasource.getLowStockProducts(storeId: storeId);
+      expect(active.map((e) => e.name), ['Huile', 'Riz']);
+      expect(active.first.threshold, 5);
+      expect(active.every((e) => e.storeName == null), isTrue);
+
+      final all = await datasource.getLowStockProducts();
+      expect(all.map((e) => e.name), ['Huile', 'Riz', 'Savon']);
+      expect(all.last.storeName, 'Annexe');
+      // Same products as the dashboard tile (inactive store excluded).
+      expect(await datasource.getLowStockCount(),
+          all.map((e) => e.productId).toSet().length);
+    });
+
     test('getDashboardSnapshot assembles all fields', () async {
       final today = DateTime(now.year, now.month, now.day, 11);
       await _insertSale(occurredAt: today, totalAmount: 10000);

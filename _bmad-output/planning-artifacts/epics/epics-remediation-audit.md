@@ -1463,3 +1463,5 @@ As an owner, I want to tap an audit line and see its full detail.
 - [ ] Story 14.1 variant scope (Vêtements-first vs all sectors).
 - [ ] Story 14.10 batching window default (5 min).
 - [ ] Décider cherry-pick vs native re-implémentation par story pour la **refonte absorption** (noté par story).
+
+- [ ] [Deferred-from: live test 13-10b, 2026-10-30] « Abonnement » shows the raw limit `2147483647` for unlimited plans (e.g. « 0, Boutiques / 1 / 2147483647 ») — display « Illimité » [subscription screen]

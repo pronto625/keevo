@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../domain/exception/report_exception.dart';
 import '../../domain/model/report_history_model.dart';
+import '../../../../core/network/module_entitlement_exception.dart';
 
 /// RemoteReportHistoryDataSource — fetches reports from the backend REST API.
 /// Story 7.2 — Task 17.
@@ -55,6 +56,12 @@ class RemoteReportHistoryDataSource {
 
   ReportException _mapError(DioException e) {
     final data = e.response?.data;
+    // 13.10b: module refusal → its French message.
+    final refusal = ModuleEntitlementException.of(e);
+    if (refusal != null) {
+      return ReportException(
+          domainCode: refusal.code, message: refusal.message);
+    }
     final domainCode =
         (data is Map ? data['domainCode'] as String? : null) ?? 'REPORT_ERROR';
     final message =

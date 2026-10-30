@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/features/profitability/data/datasource/local_profitability_datasource.dart';
 import 'package:keevo/features/profitability/data/datasource/remote_profitability_datasource.dart';
@@ -298,6 +299,59 @@ void main() {
             from: any(named: 'from'),
             to: any(named: 'to'),
           ));
+    });
+  });
+
+  // 13.10b — a Free tenant online: the premium refusal is shown, the local
+  // aggregation does not hide it.
+  group('module refusal', () {
+    DioException refusal() {
+      final request = RequestOptions(path: '/api/v1/profitability/products');
+      return DioException(
+        requestOptions: request,
+        response: Response(
+          requestOptions: request,
+          statusCode: 403,
+          data: {'domainCode': 'MODULE_NOT_ENTITLED'},
+        ),
+      );
+    }
+
+    test('product list rethrows, no local fallback', () async {
+      when(() => connectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => remote.fetchProducts(
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            sort: any(named: 'sort'),
+            storeId: any(named: 'storeId'),
+          )).thenThrow(refusal());
+
+      await expectLater(
+        sut.getProductProfitability(
+            params: ProfitabilityParams(from: from, to: to)),
+        throwsA(predicate((e) => ModuleEntitlementException.of(e) != null)),
+      );
+      verifyNever(() => local.getProductProfitability(
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            sort: any(named: 'sort'),
+            storeId: any(named: 'storeId'),
+          ));
+    });
+
+    test('store performance rethrows, no local fallback', () async {
+      when(() => connectivity.isOnline()).thenAnswer((_) async => true);
+      when(() => remote.fetchStores(
+            from: any(named: 'from'),
+            to: any(named: 'to'),
+            metric: any(named: 'metric'),
+          )).thenThrow(refusal());
+
+      await expectLater(
+        sut.getStorePerformance(
+            params: StorePerformanceParams(from: from, to: to)),
+        throwsA(predicate((e) => ModuleEntitlementException.of(e) != null)),
+      );
     });
   });
 }

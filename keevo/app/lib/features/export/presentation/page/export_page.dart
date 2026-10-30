@@ -145,22 +145,32 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         _clearError();
       });
 
-  Future<void> _showOffer(ExportFormat format) => format == ExportFormat.pdf
-      ? showPremiumFeatureSheet(
+  Future<void> _showOffer(ExportFormat format) => switch (format) {
+        // 13.10b: a CSV refused (MODULE_NOT_ENTITLED) — premium data
+        // (inventaires, transferts) selected.
+        ExportFormat.csv => showPremiumFeatureSheet(
+            context: context,
+            title: 'Données réservées au plan Premium',
+            message: 'Une partie des données choisies fait partie de l\'offre '
+                'Premium (inventaires, transferts…). Retirez-les ou passez au '
+                'plan Premium pour les exporter.',
+          ),
+        ExportFormat.pdf => showPremiumFeatureSheet(
           context: context,
           title: 'Le PDF est réservé au plan Premium',
           message: 'Le CSV reste disponible sur tous les plans. Passez au '
               'plan Premium pour obtenir les documents PDF : fin de '
               'journée, rapport d\'inventaire, état de stock et liste des '
               'ventes.',
-        )
-      : showPremiumFeatureSheet(
+          ),
+        _ => showPremiumFeatureSheet(
           context: context,
           title: 'Excel est réservé au plan Premium',
           message: 'Le CSV reste disponible sur tous les plans. Passez au '
               'plan Premium pour exporter en Excel et préparer les gros '
               'exports en arrière-plan.',
-        );
+          ),
+      };
 
   /// Datasets the request is built from: the chosen template for PDF.
   Set<String> get _requestSelection => _format == ExportFormat.pdf
@@ -214,6 +224,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
       if (e.isPlanGate) {
         planGate = true;
         // Unknown plan let Excel / PDF through: fall back to the free format.
+        // (A CSV refused — 13.10b premium dataset — keeps its format.)
         if (mounted) setState(() => _format = ExportFormat.csv);
       } else if (mounted) {
         setState(() => _error = e);

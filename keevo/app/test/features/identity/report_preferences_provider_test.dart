@@ -2,6 +2,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:keevo/core/network/module_entitlement_exception.dart';
+import 'package:keevo/core/services/api_service.dart';
 import 'package:keevo/features/identity/domain/model/tenant_preferences_model.dart';
 import 'package:keevo/features/identity/domain/repository/tenant_preferences_repository.dart';
 import 'package:keevo/features/identity/presentation/provider/report_preferences_provider.dart';
@@ -91,7 +93,8 @@ void main() {
       expect(state.preferences!.eodReportEnabled, isTrue);
     });
 
-    test('save() — calls updateReportPreferences with correct payload', () async {
+    test('save() — calls updateReportPreferences with correct payload',
+        () async {
       when(() => mockRepo.getCurrentTenantPreferences())
           .thenAnswer((_) async => _testPrefs());
       final updated = _testPrefs().copyWith(eodReportEnabled: true);
@@ -165,6 +168,43 @@ void main() {
 
       final state = container.read(reportPreferencesProvider);
       expect(state.error, isNull);
+    });
+
+    // 13.10b — a Free tenant saving report preferences (report-config) or
+    // asking a weekly preview (advanced-reports) reads the French refusal.
+    test('save() — module refusal → French message, no code', () async {
+      when(() => mockRepo.updateReportPreferences(any())).thenThrow(
+          ApiException('Ce module…', 403, domainCode: 'MODULE_NOT_ENTITLED'));
+      final container = ProviderContainer(overrides: [
+        tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
+      ]);
+      addTearDown(container.dispose);
+      when(() => mockRepo.getCurrentTenantPreferences())
+          .thenAnswer((_) async => _testPrefs());
+      final notifier = container.read(reportPreferencesProvider.notifier);
+      await notifier.load();
+
+      await notifier.save();
+
+      expect(container.read(reportPreferencesProvider).error,
+          ModuleEntitlementException.notEntitledMessage);
+    });
+
+    test('previewWeeklyReport() — module refusal → French message', () async {
+      when(() => mockRepo.triggerWeeklyPreview()).thenThrow(
+          const ModuleEntitlementException(ModuleRefusalReason.readOnly));
+      final container = ProviderContainer(overrides: [
+        tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
+      ]);
+      addTearDown(container.dispose);
+
+      final id = await container
+          .read(reportPreferencesProvider.notifier)
+          .previewWeeklyReport();
+
+      expect(id, isNull);
+      expect(container.read(reportPreferencesProvider).error,
+          ModuleEntitlementException.readOnlyMessage);
     });
   });
 }
