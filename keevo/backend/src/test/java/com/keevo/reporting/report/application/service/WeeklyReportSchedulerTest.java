@@ -410,4 +410,30 @@ class WeeklyReportSchedulerTest {
                 .toInstant();
         return Clock.fixed(fixedInstant, zone);
     }
+
+    @Test
+    void story139_reportingDisabled_tenantSkipped_readOnlyStillGenerated() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository),
+                StoreApiTestSupport.queryPort(storeRepository), reportRepository, weeklyReportGenerator,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                new WeeklyReportWindowResolver(reportRepository), fixedClockAt(SUNDAY_DATE, "20:05:00", WAT), modules);
+        var tenant = activeTenant();
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(modules.moduleState(TENANT_SCHEMA, "reporting")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
+
+        scheduler.runWeeklyReport();
+        verifyNoInteractions(weeklyReportGenerator);
+        verifyNoInteractions(tenantPreferencesRepository);
+
+        when(modules.moduleState(TENANT_SCHEMA, "reporting")).thenReturn(com.keevo.shared.module.ModuleState.READ_ONLY);
+        when(storeRepository.findAllActive()).thenReturn(List.of(activeStore()));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(prefs(0, "20:00:00", true)));
+        when(reportRepository.findByDateAndTenant(any(LocalDate.class), eq(TENANT_SCHEMA), eq(ReportType.WEEKLY)))
+                .thenReturn(List.of());
+        when(weeklyReportGenerator.generateWeeklyReport(any())).thenReturn(mock(EndOfDayReport.class));
+        scheduler.runWeeklyReport();
+        verify(weeklyReportGenerator).generateWeeklyReport(any());
+    }
 }

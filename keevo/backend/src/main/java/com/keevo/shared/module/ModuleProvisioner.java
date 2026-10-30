@@ -47,4 +47,16 @@ public interface ModuleProvisioner {
      * @throws IllegalArgumentException unknown module
      */
     ProvisioningReport provisionAll(String moduleId);
+
+    /**
+     * Story 13.9 — provisions, for one tenant, every installed module (category {@code platform} excluded) that ships
+     * migrations and is active for it, each after its {@code requires} (module id order otherwise). Used at tenant
+     * registration, once the core DDL exists. A failure of one module is logged (module id, tenant code, exception
+     * class) and the others continue; never throws for a module failure.
+     *
+     * @param tenantSchema a tenant schema name ({@code kv_xxxxxx})
+     * @return the result of each module provisioned (failed or inactive modules are absent)
+     * @throws IllegalArgumentException invalid/platform schema
+     */
+    java.util.List<ProvisioningResult> provisionActiveModules(String tenantSchema);
 }

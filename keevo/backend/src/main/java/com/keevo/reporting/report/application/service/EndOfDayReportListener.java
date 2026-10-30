@@ -7,6 +7,7 @@ import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase;
 import com.keevo.reporting.report.domain.port.in.GenerateEndOfDayReportUseCase.GenerateReportCommand;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.ModuleScoped;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -26,8 +27,13 @@ import java.util.UUID;
  *   <li>One store-level report (actorId = null) → visible to owner only</li>
  *   <li>One personal report per employee who made sales in the window (actorId = employeeId)</li>
  * </ol>
+ *
+ * <p>Story 13.9 — {@code @ModuleScoped("reporting")}: for a tenant whose « Rapports » module is DISABLED, the
+ * closure produces no report (the publication is completed, nothing generated); READ_ONLY still generates (a report
+ * is a read of past data).
  */
 @Component
+@ModuleScoped("reporting")
 public class EndOfDayReportListener {
 
     private static final Logger log = LoggerFactory.getLogger(EndOfDayReportListener.class);

@@ -67,7 +67,11 @@ public final class ModuleManifestLoader {
 
     /** Module id syntax: lower-case words separated by single hyphens, at most {@value #ID_MAX} characters. */
     public static final Pattern ID_PATTERN = Pattern.compile("^[a-z][a-z0-9]*(-[a-z0-9]+)*$");
-    public static final int ID_MAX = 50;
+    /**
+     * Story 13.9 (routed 13.4): 48, so the module's Flyway history table {@code flyway_history_<id>} (15 + id) fits a
+     * PostgreSQL identifier (63 characters) — checked here, at load.
+     */
+    public static final int ID_MAX = 48;
 
     /** Entitlement key syntax. */
     public static final Pattern ENTITLEMENT_PATTERN = Pattern.compile("^module\\.[a-z0-9-]+$");

@@ -9,9 +9,11 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.module.ActivationPlan;
+import com.keevo.shared.module.ActorRef;
 import com.keevo.shared.module.BlockReason;
 import com.keevo.shared.module.DeactivationCheck;
 import com.keevo.shared.module.DependencyResolver;
+import com.keevo.shared.module.KeevoModule;
 import com.keevo.shared.module.ModuleActivationEligibility;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleLifecycle;
@@ -19,12 +21,14 @@ import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ModuleState;
+import com.keevo.shared.module.ModuleTenantContext;
 import com.keevo.shared.module.TenantModuleStatus;
 import com.keevo.shared.module.application.port.TenantModuleLifecyclePort;
 import com.keevo.shared.module.application.port.TenantModuleLifecyclePort.StoredRow;
 import com.keevo.shared.module.application.port.TenantModuleLifecyclePort.TenantRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -67,6 +71,15 @@ import java.util.stream.Collectors;
  * audited, but is still provisioned (no-op when up to date): a free module without a row is active by the free rule
  * (Story 13.2) yet may never have had its tables created.
  *
+ * <p><b>Module hooks (Story 13.9).</b> For a module implemented by a {@link KeevoModule} bean, the call invokes
+ * {@link KeevoModule#onActivate} for each step that goes from inactive (DISABLED) to active, right after its
+ * provisioning — never for a renewal, a status / expiry change of an already active module, nor a free module
+ * already active by the free rule — and {@link KeevoModule#onDeactivate} right after the {@code DISABLED} write,
+ * inside the same transaction and lock. A hook exception rolls the whole call back ({@code MODULE_ACTIVATION_FAILED}
+ * / {@code MODULE_DEACTIVATION_FAILED}, French message without technical detail): the {@code tenant_modules} rows,
+ * but <b>not</b> DDL already committed by the module's migrations (Flyway runs on its own connection). An idempotent
+ * call (already enabled / already disabled) writes nothing and calls no hook.
+ *
  * <p><b>Scope.</b> {@code platform} modules are not tenant modules ({@code MODULE_NOT_FOUND}); modules of category
  * {@code core} ({@code core}, {@code sync}) are never deactivated ({@code CORE_MODULE_REQUIRED}).
  */
@@ -98,10 +111,22 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     private final TransactionLockPort locks;
     private final AuditPort audit;
     private final Clock clock;
+    private final KeevoModuleDirectory modules;
 
+    /** Without module beans (no hook called) — tests and catalogues without converted modules. */
     public ModuleLifecycleService(ModuleCatalog catalog, ModuleRegistry registry, DependencyResolver resolver,
                                   ModuleProvisioner provisioner, TenantModuleLifecyclePort store,
                                   TransactionLockPort locks, AuditPort audit, Clock clock) {
+        this(catalog, registry, resolver, provisioner, store, locks, audit, clock,
+                KeevoModuleDirectory.empty(catalog));
+    }
+
+    @Autowired
+    public ModuleLifecycleService(ModuleCatalog catalog, ModuleRegistry registry, DependencyResolver resolver,
+                                  ModuleProvisioner provisioner, TenantModuleLifecyclePort store,
+                                  TransactionLockPort locks, AuditPort audit, Clock clock,
+                                  KeevoModuleDirectory modules) {
+        this.modules = modules;
         this.catalog = catalog;
         this.registry = registry;
         this.resolver = resolver;
@@ -183,6 +208,9 @@ public class ModuleLifecycleService implements ModuleLifecycle {
                     module.free() ? TIER_FREE : TIER_PAID, now, wasActive, stepExpiry, grace);
             registry.evict(schema);
             provision(tenant, module);
+            if (!wasActive) { // only an inactive → active transition (not a renewal / status change)
+                onActivate(tenant, actor, module);
+            }
             written.add(new Written(rowId, module, stepStatus, stepExpiry));
         }
         if (!toWrite.contains(target.id())) {
@@ -277,6 +305,47 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         }
     }
 
+    /** The module's {@link KeevoModule#onActivate} hook, if it has a bean; a failure rolls the call back. */
+    private void onActivate(TenantRef tenant, Actor actor, ModuleManifest module) {
+        KeevoModule bean = modules.module(module.id()).orElse(null);
+        if (bean == null) {
+            return;
+        }
+        try {
+            bean.onActivate(context(tenant, actor));
+        } catch (DomainException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            log.warn("Module '{}' activation hook failed for tenant {} ({}) — activation rolled back", module.id(),
+                    tenant.code(), e.getClass().getSimpleName());
+            throw new DomainException(ErrorCode.MODULE_ACTIVATION_FAILED, "Le module « " + module.displayName()
+                    + " » n'a pas été activé : sa mise en service a échoué. Vous pouvez réessayer.");
+        }
+    }
+
+    /** The module's {@link KeevoModule#onDeactivate} hook, if it has a bean; a failure rolls the call back. */
+    private void onDeactivate(TenantRef tenant, Actor actor, ModuleManifest module) {
+        KeevoModule bean = modules.module(module.id()).orElse(null);
+        if (bean == null) {
+            return;
+        }
+        try {
+            bean.onDeactivate(context(tenant, actor));
+        } catch (DomainException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            log.warn("Module '{}' deactivation hook failed for tenant {} ({}) — deactivation rolled back",
+                    module.id(), tenant.code(), e.getClass().getSimpleName());
+            throw new DomainException(ErrorCode.MODULE_DEACTIVATION_FAILED, "Le module « " + module.displayName()
+                    + " » n'a pas été désactivé : sa mise hors service a échoué. Vous pouvez réessayer.");
+        }
+    }
+
+    private static ModuleTenantContext context(TenantRef tenant, Actor actor) {
+        return new ModuleTenantContext(tenant.tenantSchema(), tenant.code(),
+                new ActorRef(actor.userId(), actor.superAdmin()));
+    }
+
     private DomainException blocked(ActivationPlan plan) {
         List<String> reasons = new ArrayList<>();
         for (BlockReason reason : plan.reasons()) {
@@ -325,6 +394,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         }
         UUID rowId = store.upsertDisabled(tenant.id(), target.id(), target.free() ? TIER_FREE : TIER_PAID, now);
         registry.evict(schema);
+        onDeactivate(tenant, actor, target);
         afterCommit(() -> {
             log.info("[ADMIN AUDIT] Module deactivated: actor={} tenant={} module={}", actor.userId(), tenant.code(),
                     target.id());

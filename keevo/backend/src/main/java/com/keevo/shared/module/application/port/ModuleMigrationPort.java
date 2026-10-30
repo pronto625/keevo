@@ -17,7 +17,18 @@ public interface ModuleMigrationPort {
      * @return the versions before/after and the number of migrations applied
      * @throws com.keevo.shared.module.ModuleProvisioningException on a migration failure
      */
-    Outcome migrate(String tenantSchema, String moduleId);
+    default Outcome migrate(String tenantSchema, String moduleId) {
+        return migrate(tenantSchema, moduleId, null);
+    }
+
+    /**
+     * Same, adopting an existing schema (Story 13.9): when the module's history table does not exist yet and the
+     * baseline's probe table exists in the schema, the history is created with a baseline at the baseline's version and
+     * the scripts up to it are not executed.
+     *
+     * @param baseline the module's existing-schema baseline, {@code null} for none
+     */
+    Outcome migrate(String tenantSchema, String moduleId, com.keevo.shared.module.ExistingSchemaBaseline baseline);
 
     /**
      * @param fromVersion highest applied version before the run ({@code null}: none)

@@ -115,4 +115,20 @@ class ReportDeliveryRetryServiceTest {
         service.retryFailedDeliveries();
         verify(reportRepository, times(2)).save(any(EndOfDayReport.class));
     }
+
+    @Test
+    void story139_reportingDisabled_tenantSkipped_readOnlyStillRetried() {
+        com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
+        ReportDeliveryRetryService gated = new ReportDeliveryRetryService(reportRepository, whatsAppSender,
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), ownerRecipientResolver, modules);
+        when(modules.moduleState("kv_test01", "reporting")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
+        gated.retryFailedDeliveries();
+        verify(reportRepository, never()).findPendingRetries(anyInt());
+
+        when(modules.moduleState("kv_test01", "reporting")).thenReturn(com.keevo.shared.module.ModuleState.READ_ONLY);
+        EndOfDayReport report = failedReport(1);
+        when(reportRepository.findPendingRetries(anyInt())).thenReturn(List.of(report));
+        gated.retryFailedDeliveries();
+        assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
+    }
 }

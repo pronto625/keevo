@@ -18,6 +18,9 @@
  * cases / controllers declaratively. Since Story 13.6 {@link com.keevo.shared.module.CapabilityRegistry} resolves, per
  * tenant, the optional {@link com.keevo.shared.module.Capability capabilities} that provider beans declare with
  * {@link com.keevo.shared.module.ProvidesCapability} (cross-checked with the manifests' {@code provides} at boot).
- * Activation itself comes with Story 13.8.
+ * Activation itself comes with Story 13.8. Since Story 13.9 a converted module implements
+ * {@link com.keevo.shared.module.KeevoModule} (lifecycle hooks, programmatic capability / extension registration;
+ * the manifest stays JSON-only), its event listeners are gated per tenant by
+ * {@link com.keevo.shared.module.ModuleScoped}, and its tables come from {@code db/modules/<id>/} migrations.
  */
 package com.keevo.shared.module;

@@ -543,4 +543,127 @@ class ModuleLifecycleServiceTest {
         assertThat(code(() -> lifecycle.tenantModules(UUID.randomUUID()))).isEqualTo("TENANT_NOT_FOUND");
         verify(locks, never()).lock(anyString());
     }
+
+    // ── Story 13.9 — KeevoModule hooks ──────────────────────────────────────
+
+    /** Records its hook calls; optionally throws. */
+    static final class HookModule implements com.keevo.shared.module.KeevoModule {
+        private final String id;
+        final List<String> calls = new ArrayList<>();
+        final List<com.keevo.shared.module.ModuleTenantContext> contexts = new ArrayList<>();
+        RuntimeException failure;
+
+        HookModule(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public void onActivate(com.keevo.shared.module.ModuleTenantContext ctx) {
+            calls.add("activate");
+            contexts.add(ctx);
+            if (failure != null) {
+                throw failure;
+            }
+        }
+
+        @Override
+        public void onDeactivate(com.keevo.shared.module.ModuleTenantContext ctx) {
+            calls.add("deactivate");
+            contexts.add(ctx);
+            if (failure != null) {
+                throw failure;
+            }
+        }
+    }
+
+    private ModuleLifecycle withModules(com.keevo.shared.module.KeevoModule... modules) {
+        ModuleCatalog catalog = TestModuleCatalogs.lifecycleCatalog();
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        ModuleRegistryService registry = new ModuleRegistryService(catalog, rows,
+                new RequestScopedActiveModulesCache(), clock);
+        DependencyResolverService resolver = new DependencyResolverService(catalog, registry,
+                new EntitlementActivationEligibility());
+        return new ModuleLifecycleService(catalog, registry, resolver, provisioner, rows, locks, audit, clock,
+                KeevoModuleDirectory.of(catalog, List.of(modules)));
+    }
+
+    @Test
+    @DisplayName("hooks: onActivate once per activated step, after its provisioning; onDeactivate once; context")
+    void hooksCalledOnce() {
+        HookModule base = new HookModule("lcbase");
+        HookModule top = new HookModule("lctop");
+        ModuleLifecycle service = withModules(base, top);
+        rows.put("lcbase", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lctop", TenantModuleStatus.DISABLED, null, null);
+        List<String> order = new ArrayList<>();
+        when(provisioner.provision(anyString(), anyString())).thenAnswer(inv -> {
+            order.add("provision:" + inv.getArgument(1));
+            return new ProvisioningResult(inv.getArgument(1), null, "1", 1);
+        });
+
+        service.activate(TENANT, "lctop", ActivationRequest.active(), SUPER_ADMIN);
+        assertThat(base.calls).containsExactly("activate");
+        assertThat(top.calls).containsExactly("activate");
+        assertThat(base.contexts.get(0)).isEqualTo(new com.keevo.shared.module.ModuleTenantContext(SCHEMA, CODE,
+                new com.keevo.shared.module.ActorRef(ADMIN, true)));
+
+        service.activate(TENANT, "lctop", ActivationRequest.active(), SUPER_ADMIN); // already enabled: no hook
+        assertThat(top.calls).containsExactly("activate");
+
+        service.deactivate(TENANT, "lctop", SUPER_ADMIN);
+        service.deactivate(TENANT, "lctop", SUPER_ADMIN); // already disabled: no hook
+        assertThat(top.calls).containsExactly("activate", "deactivate");
+        assertThat(order).startsWith("provision:lcbase", "provision:lctop");
+    }
+
+    @Test
+    @DisplayName("a module without bean (lcplain) → no hook, lifecycle unchanged")
+    void moduleWithoutBean() {
+        HookModule base = new HookModule("lcbase");
+        ModuleLifecycle service = withModules(base);
+        service.deactivate(TENANT, "lcplain", SUPER_ADMIN);
+        assertThat(base.calls).isEmpty();
+        assertThat(rows.stored.get("lcplain").status()).isEqualTo(TenantModuleStatus.DISABLED);
+    }
+
+    @Test
+    @DisplayName("a throwing hook → MODULE_ACTIVATION_FAILED / MODULE_DEACTIVATION_FAILED, French, no audit")
+    void hookFailure() {
+        HookModule plain = new HookModule("lcplain");
+        plain.failure = new IllegalStateException("SQL kv_lcu001 boom");
+        ModuleLifecycle service = withModules(plain);
+
+        DomainException deactivation = (DomainException) org.assertj.core.api.Assertions.catchThrowable(() ->
+                service.deactivate(TENANT, "lcplain", SUPER_ADMIN));
+        assertThat(deactivation.getDomainCode()).isEqualTo("MODULE_DEACTIVATION_FAILED");
+        assertThat(deactivation.getMessage()).contains("« Module simple »").doesNotContain("kv_", "boom", "lcplain");
+
+        rows.put("lcplain", TenantModuleStatus.DISABLED, null, null);
+        DomainException activation = (DomainException) org.assertj.core.api.Assertions.catchThrowable(() ->
+                service.activate(TENANT, "lcplain", ActivationRequest.active(), SUPER_ADMIN));
+        assertThat(activation.getDomainCode()).isEqualTo("MODULE_ACTIVATION_FAILED");
+        assertThat(activation.getMessage()).contains("« Module simple »").doesNotContain("kv_", "boom");
+        verifyNoInteractions(audit);
+    }
+
+    @Test
+    @DisplayName("onActivate only on inactive → active: a paid renewal (new end date) writes the row, no hook")
+    void noHookOnRenewal() {
+        HookModule paid = new HookModule("lcpaid");
+        ModuleLifecycle service = withModules(paid);
+        rows.put("lcbuyer", TenantModuleStatus.DISABLED, null, null); // else it requires lcpaid (free rule)
+        service.activate(TENANT, "lcpaid", new ActivationRequest(TenantModuleStatus.ACTIVE,
+                NOW.plus(Duration.ofDays(30))), SUPER_ADMIN);
+        assertThat(paid.calls).containsExactly("activate");
+
+        service.activate(TENANT, "lcpaid", new ActivationRequest(TenantModuleStatus.ACTIVE,
+                NOW.plus(Duration.ofDays(60))), SUPER_ADMIN);
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(60)));
+        assertThat(paid.calls).containsExactly("activate");
+    }
 }

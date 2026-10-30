@@ -2,7 +2,9 @@ package com.keevo.shared.module.application;
 
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.Capability;
+import com.keevo.shared.module.CapabilityRegistrar;
 import com.keevo.shared.module.CapabilityRegistry;
+import com.keevo.shared.module.KeevoModule;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ProvidesCapability;
@@ -37,6 +39,12 @@ import java.util.Set;
  * immutable. Resolution delegates the module state to {@link ModuleRegistry#moduleState} (request-cached), with no
  * transaction of its own. Provider beans are not autowire candidates
  * ({@code shared.module.infrastructure.ModuleBeanAutowireExclusion}): {@link #find} is the only way in.
+ *
+ * <p><b>Programmatic providers (Story 13.9).</b> Each {@link KeevoModule} of the {@link KeevoModuleDirectory} is
+ * asked once, at initialization, to {@link KeevoModule#registerCapabilities register its capabilities}; what it
+ * provides goes into the same index with the same validation (capability interface implemented, duplicates across
+ * annotated and programmatic providers, manifest {@code provides} both ways). A {@link CapabilityRegistrar} used
+ * after that call is refused.
  */
 @Service
 @Lazy(false) // always validated at startup, even with spring.main.lazy-initialization=true
@@ -84,16 +92,18 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
                 if (beans == null) {
                     throw new IllegalStateException("CapabilityRegistry has no bean factory and was not initialized");
                 }
-                buildOnce(ModuleBeans.collect(beans, ProvidesCapability.class, "capability provider"));
+                KeevoModuleDirectory directory = beans.getBeanProvider(KeevoModuleDirectory.class).getIfAvailable();
+                buildOnce(ModuleBeans.collect(beans, ProvidesCapability.class, "capability provider"),
+                        directory != null ? List.copyOf(directory.all()) : List.of());
             }
             return provisions;
         }
     }
 
     /** Builds the index, caching a failure. Caller holds the lock. */
-    private void buildOnce(List<Found<ProvidesCapability>> found) {
+    private void buildOnce(List<Found<ProvidesCapability>> found, List<KeevoModule> modules) {
         try {
-            provisions = build(found);
+            provisions = build(found, modules);
         } catch (RuntimeException e) {
             failure = e;
             throw e;
@@ -101,8 +111,9 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
     }
 
     /**
-     * Indexes and validates already-created provider beans (tests, tooling): each must carry
-     * {@link ProvidesCapability} on its class. Once only.
+     * Indexes and validates already-created providers (tests, tooling): each is either a {@link KeevoModule} (its
+     * {@link KeevoModule#registerCapabilities} is called) or a bean carrying {@link ProvidesCapability} on its class.
+     * Once only.
      *
      * @throws IllegalStateException listing every problem found (nothing is indexed then), or when already
      *         initialized
@@ -112,10 +123,15 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
             throw new IllegalStateException("CapabilityRegistry already initialized");
         }
         List<Found<ProvidesCapability>> candidates = new ArrayList<>();
+        List<KeevoModule> modules = new ArrayList<>();
         for (Object bean : providers) {
-            candidates.add(ModuleBeans.ofInstance(bean, ProvidesCapability.class));
+            if (bean instanceof KeevoModule module) {
+                modules.add(module);
+            } else {
+                candidates.add(ModuleBeans.ofInstance(bean, ProvidesCapability.class));
+            }
         }
-        buildOnce(candidates);
+        buildOnce(candidates, modules);
     }
 
     @Override
@@ -135,7 +151,8 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
 
     // ── validation ──────────────────────────────────────────────────────────────────────────────────────
 
-    private Map<Class<? extends Capability>, Provision> build(List<Found<ProvidesCapability>> candidates) {
+    private Map<Class<? extends Capability>, Provision> build(List<Found<ProvidesCapability>> candidates,
+                                                              List<KeevoModule> modules) {
         List<String> problems = new ArrayList<>();
         Map<Class<? extends Capability>, Provision> index = new LinkedHashMap<>();
         Map<String, Set<String>> skippedDuplicates = new LinkedHashMap<>(); // module → names already reported
@@ -143,6 +160,11 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
         sorted.sort(Comparator.comparing(c -> c.name()));
         for (Found<ProvidesCapability> candidate : sorted) {
             index(candidate, index, skippedDuplicates, problems);
+        }
+        List<KeevoModule> sortedModules = new ArrayList<>(modules);
+        sortedModules.sort(Comparator.comparing(KeevoModuleDirectory::className));
+        for (KeevoModule module : sortedModules) {
+            indexProgrammatic(module, index, skippedDuplicates, problems);
         }
         checkManifests(index, skippedDuplicates, problems);
         if (!problems.isEmpty()) {
@@ -197,6 +219,69 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
             }
             if (installed) {
                 index.put(capability, new Provision(capability, module, bean, name));
+            }
+        }
+    }
+
+    /** One {@code provide(type, implementation)} call of a module's registrar. */
+    private record Provided(Class<?> type, Object implementation) {
+    }
+
+    /** Asks the module for its capabilities (once) and indexes them like annotated providers. */
+    private void indexProgrammatic(KeevoModule module, Map<Class<? extends Capability>, Provision> index,
+                                   Map<String, Set<String>> skippedDuplicates, List<String> problems) {
+        String className = KeevoModuleDirectory.className(module);
+        String id = module.id();
+        String name = className + " (module '" + id + "', registerCapabilities)";
+        List<Provided> provided = new ArrayList<>();
+        boolean[] open = {true};
+        CapabilityRegistrar registrar = new CapabilityRegistrar() {
+            @Override
+            public <T extends Capability> void provide(Class<T> type, T implementation) {
+                if (!open[0]) {
+                    throw new IllegalStateException("Capabilities are registered at startup only");
+                }
+                provided.add(new Provided(type, implementation));
+            }
+        };
+        try {
+            module.registerCapabilities(registrar);
+        } catch (RuntimeException e) {
+            problems.add(name + " failed (" + e.getClass().getSimpleName() + ": " + e.getMessage() + ")");
+            return;
+        } finally {
+            open[0] = false;
+        }
+        boolean installed = catalog.contains(id);
+        if (!installed) {
+            problems.add(name + " provides for module '" + id + "', which is not installed");
+        }
+        for (Provided p : provided) {
+            if (p.type() == null || p.implementation() == null) {
+                problems.add(name + " provides a null " + (p.type() == null ? "capability type" : "implementation"));
+                continue;
+            }
+            if (!isCapabilityInterface(p.type())) {
+                problems.add(name + " provides " + p.type().getName() + ", which is not an interface extending "
+                        + Capability.class.getSimpleName());
+                continue;
+            }
+            if (!p.type().isInstance(p.implementation())) {
+                problems.add(name + " provides " + p.type().getName() + " with an implementation that does not "
+                        + "implement it");
+                continue;
+            }
+            @SuppressWarnings("unchecked")
+            Class<? extends Capability> capability = (Class<? extends Capability>) p.type();
+            Provision previous = index.get(capability);
+            if (previous != null) {
+                problems.add("capability " + capability.getName() + " provided twice: by " + previous.providerName()
+                        + " (module '" + previous.module() + "') and " + name + " (module '" + id + "')");
+                skippedDuplicates.computeIfAbsent(id, m -> new HashSet<>()).add(capability.getSimpleName());
+                continue;
+            }
+            if (installed) {
+                index.put(capability, new Provision(capability, id, p.implementation(), name));
             }
         }
     }
@@ -264,7 +349,8 @@ public class CapabilityRegistryService implements CapabilityRegistry, SmartIniti
                 if (!provided.containsKey(entry) && !skipped.contains(entry)) {
                     problems.add("the manifest of module '" + manifest.id() + "' lists '" + entry
                             + "' in 'provides' but no bean annotated @ProvidesCapability(module = \""
-                            + manifest.id() + "\") implements it");
+                            + manifest.id() + "\") implements it, and its KeevoModule does not provide it in "
+                            + "registerCapabilities");
                 }
             }
         }

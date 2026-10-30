@@ -3,7 +3,9 @@ package com.keevo.shared.module.application;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.ContributesExtension;
 import com.keevo.shared.module.Extension;
+import com.keevo.shared.module.ExtensionRegistrar;
 import com.keevo.shared.module.ExtensionRegistry;
+import com.keevo.shared.module.KeevoModule;
 import com.keevo.shared.module.ExtensionView;
 import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.ModuleManifest;
@@ -40,6 +42,11 @@ import java.util.TreeSet;
  * (request-cached), with no transaction of its own; the listed elements are immutable {@link ExtensionView}
  * snapshots built at initialization, never the beans. Contribution beans are not autowire candidates
  * ({@code shared.module.infrastructure.ModuleBeanAutowireExclusion}).
+ *
+ * <p><b>Programmatic contributions (Story 13.9).</b> Each {@link KeevoModule} of the {@link KeevoModuleDirectory} is
+ * asked once, at initialization, to {@link KeevoModule#registerExtensions register its contributions}; they are
+ * validated exactly like the annotated ones (same checks, same index). An {@link ExtensionRegistrar} used after
+ * that call is refused.
  */
 @Service
 @Lazy(false) // always validated at startup, even with spring.main.lazy-initialization=true
@@ -121,16 +128,18 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
                 if (beans == null) {
                     throw new IllegalStateException("ExtensionRegistry has no bean factory and was not initialized");
                 }
-                buildOnce(ModuleBeans.collect(beans, ContributesExtension.class, "extension contribution"));
+                KeevoModuleDirectory directory = beans.getBeanProvider(KeevoModuleDirectory.class).getIfAvailable();
+                buildOnce(ModuleBeans.collect(beans, ContributesExtension.class, "extension contribution"),
+                        directory != null ? List.copyOf(directory.all()) : List.of());
             }
             return contributions;
         }
     }
 
     /** Builds the index, caching a failure. Caller holds the lock. */
-    private void buildOnce(List<Found<ContributesExtension>> found) {
+    private void buildOnce(List<Found<ContributesExtension>> found, List<KeevoModule> modules) {
         try {
-            contributions = build(found);
+            contributions = build(found, modules);
         } catch (RuntimeException e) {
             failure = e;
             throw e;
@@ -138,8 +147,9 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
     }
 
     /**
-     * Indexes and validates already-created contribution beans (tests, tooling): each must carry
-     * {@link ContributesExtension} on its class. Once only.
+     * Indexes and validates already-created contributions (tests, tooling): each is either a {@link KeevoModule} (its
+     * {@link KeevoModule#registerExtensions} is called) or a bean carrying {@link ContributesExtension} on its class.
+     * Once only.
      *
      * @throws IllegalStateException listing every problem found (nothing is indexed then), or when already
      *         initialized
@@ -149,10 +159,15 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
             throw new IllegalStateException("ExtensionRegistry already initialized");
         }
         List<Found<ContributesExtension>> found = new ArrayList<>();
+        List<KeevoModule> modules = new ArrayList<>();
         for (Object bean : contributionBeans) {
-            found.add(ModuleBeans.ofInstance(bean, ContributesExtension.class));
+            if (bean instanceof KeevoModule module) {
+                modules.add(module);
+            } else {
+                found.add(ModuleBeans.ofInstance(bean, ContributesExtension.class));
+            }
         }
-        buildOnce(found);
+        buildOnce(found, modules);
     }
 
     @Override
@@ -187,7 +202,8 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
 
     // ── validation ──────────────────────────────────────────────────────────────────────────────────────
 
-    private Map<String, List<Contribution>> build(List<Found<ContributesExtension>> found) {
+    private Map<String, List<Contribution>> build(List<Found<ContributesExtension>> found,
+                                                  List<KeevoModule> modules) {
         List<String> problems = new ArrayList<>(declarationClashes);
         Map<String, List<Contribution>> byPoint = new LinkedHashMap<>();
         Map<String, Set<String>> reported = new HashMap<>(); // module → points already accounted for
@@ -196,13 +212,18 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
         for (Found<ContributesExtension> candidate : sorted) {
             index(candidate, byPoint, reported, problems);
         }
+        List<KeevoModule> sortedModules = new ArrayList<>(modules);
+        sortedModules.sort(Comparator.comparing(KeevoModuleDirectory::className));
+        for (KeevoModule module : sortedModules) {
+            indexProgrammatic(module, byPoint, reported, problems);
+        }
         for (ModuleManifest manifest : catalog.manifests()) {
             Set<String> filled = reported.getOrDefault(manifest.id(), Set.of());
             for (String point : manifest.extensionPoints().fills()) {
                 if (!filled.contains(point)) {
                     problems.add("the manifest of module '" + manifest.id() + "' lists '" + point
                             + "' in 'extensionPoints.fills' but no @ContributesExtension bean of module '"
-                            + manifest.id() + "' contributes to it");
+                            + manifest.id() + "' contributes to it (nor its KeevoModule in registerExtensions)");
                 }
             }
         }
@@ -225,6 +246,38 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
         return Map.copyOf(index);
     }
 
+    /** Asks the module for its contributions (once) and validates each like an annotated bean. */
+    private void indexProgrammatic(KeevoModule module, Map<String, List<Contribution>> byPoint,
+                                   Map<String, Set<String>> reported, List<String> problems) {
+        String id = module.id();
+        String name = KeevoModuleDirectory.className(module) + " (registerExtensions)";
+        List<Object[]> contributed = new ArrayList<>();
+        boolean[] open = {true};
+        ExtensionRegistrar registrar = (pointId, contribution) -> {
+            if (!open[0]) {
+                throw new IllegalStateException("Extensions are registered at startup only");
+            }
+            contributed.add(new Object[]{pointId, contribution});
+        };
+        try {
+            module.registerExtensions(registrar);
+        } catch (RuntimeException e) {
+            problems.add(name + " of module '" + id + "' failed (" + e.getClass().getSimpleName() + ": "
+                    + e.getMessage() + ")");
+            return;
+        } finally {
+            open[0] = false;
+        }
+        for (Object[] c : contributed) {
+            String point = (String) c[0];
+            if (point == null || point.isBlank()) {
+                problems.add(name + " of module '" + id + "' contributes to a blank extension point");
+                continue;
+            }
+            indexOne(name, id, point, c[1], byPoint, reported, problems);
+        }
+    }
+
     private void index(Found<ContributesExtension> candidate, Map<String, List<Contribution>> byPoint,
                        Map<String, Set<String>> reported, List<String> problems) {
         ContributesExtension annotation = candidate.annotation();
@@ -240,11 +293,16 @@ public class ExtensionRegistryService implements ExtensionRegistry, SmartInitial
             problems.add(name + " is not annotated @ContributesExtension");
             return;
         }
-        String module = annotation.module();
-        String point = annotation.point();
+        indexOne(name, annotation.module(), annotation.point(), candidate.bean(), byPoint, reported, problems);
+    }
+
+    /** Validates and indexes one contribution of {@code module} to {@code point} (annotated or programmatic). */
+    private void indexOne(String name, String module, String point, Object bean,
+                          Map<String, List<Contribution>> byPoint, Map<String, Set<String>> reported,
+                          List<String> problems) {
         String where = name + " (module '" + module + "', point '" + point + "')";
         reported.computeIfAbsent(module, m -> new HashSet<>()).add(point);
-        if (!(candidate.bean() instanceof Extension extension)) {
+        if (!(bean instanceof Extension extension)) {
             problems.add(where + " does not implement " + Extension.class.getName());
             return;
         }

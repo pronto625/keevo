@@ -254,7 +254,7 @@ development_status:
   13-6-capability-registry: done  # 2026-10-29 done — CapabilityRegistry tenant-aware, @ProvidesCapability (non injectable + règle ArchUnit), validation manifests provides/needs, ClientLookupPort CRM (crm 1.1.0) | 2026-10-29 bmad-build-auto (spec-13-6-capability-registry.md)
   13-7-extension-registry: done  # 2026-10-30 done — ExtensionRegistry (points déclarés par manifest, contributions @ContributesExtension, vues immuables, modules activés seulement), slot POS déclaré (pos 1.1.0) | 2026-10-29 bmad-build-auto (spec-13-7-extension-registry.md)
   13-8-module-lifecycle-service-api-admin: done  # 2026-10-30 done — 13-8a API super-admin activer/désactiver (plan, verrou, provisioning, audit) + 13-8b app : opérations en attente visibles, stock local conservé ; test live Redmi OK | 2026-10-30 bmad-build-auto : 13-8a backend (spec-13-8a-module-lifecycle-api.md) puis 13-8b app (opérations en attente visibles)
-  13-9-conversion-crm-reporting-keevomodule: backlog
+  13-9-conversion-crm-reporting-keevomodule: done  # 2026-10-30 done — contrat KeevoModule (hooks, registrars), CRM (capacité par code, migrations module avec baseline sans DDL sur l’existant), Reporting (@ModuleScoped + tâches planifiées) ; aucun changement de schéma au déploiement ; Redmi OK | 2026-10-30 bmad-build-auto (spec-13-9-keevomodule-crm-reporting.md)
   13-10-passe-gating-entitlement-endpoints-existants: backlog
   epic-13-retrospective: optional
 

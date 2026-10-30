@@ -498,4 +498,66 @@ class ExtensionRegistryServiceTest {
             assertThatThrownBy(() -> service.initialize(List.of())).isInstanceOf(IllegalStateException.class);
         }
     }
+
+    // ── Story 13.9 — programmatic contributions through KeevoModule.registerExtensions ───────────────────
+
+    static final class ContributingModule implements com.keevo.shared.module.KeevoModule {
+        private final String id;
+        private final java.util.function.Consumer<com.keevo.shared.module.ExtensionRegistrar> register;
+
+        ContributingModule(String id, java.util.function.Consumer<com.keevo.shared.module.ExtensionRegistrar> register) {
+            this.id = id;
+            this.register = register;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public void registerExtensions(com.keevo.shared.module.ExtensionRegistrar registrar) {
+            register.accept(registrar);
+        }
+    }
+
+    /** Not annotated: contributed programmatically. */
+    static final class PlainInvoice extends Action {
+        PlainInvoice() {
+            super("invoicing.create-invoice", "Facturer", 20, "invoicing.create-from-sale");
+        }
+    }
+
+    @Nested
+    @DisplayName("programmatic contributions (Story 13.9)")
+    class Programmatic {
+
+        @Test
+        @DisplayName("contributed by the module → listed while declarer and contributor are ENABLED")
+        void listed() {
+            ExtensionRegistryService service = service(catalog(List.of(SLOT), List.of(SLOT)), new Loyalty(),
+                    new ContributingModule("invoicing", r -> r.contribute(SLOT, new PlainInvoice())));
+            enabled("pos", "invoicing", "crm");
+            assertThat(ids(service.contributions(SLOT, TENANT)))
+                    .containsExactly("crm.loyalty", "invoicing.create-invoice");
+            states.put("invoicing", ModuleState.DISABLED);
+            assertThat(ids(service.contributions(SLOT, TENANT))).containsExactly("crm.loyalty");
+        }
+
+        @Test
+        @DisplayName("same validation as the annotation: point not in 'fills', duplicate id, missing contribution")
+        void validated() {
+            assertThat(bootFailure(catalog(List.of(), List.of()),
+                    new ContributingModule("invoicing", r -> r.contribute(SLOT, new PlainInvoice()))))
+                    .contains("does not list it in 'extensionPoints.fills'");
+            assertThat(bootFailure(catalog(List.of(SLOT), List.of()), new Invoice(),
+                    new ContributingModule("invoicing", r -> r.contribute(SLOT, new PlainInvoice()))))
+                    .contains("contributed twice");
+            assertThat(bootFailure(catalog(List.of(SLOT), List.of()), new ContributingModule("invoicing", r -> { })))
+                    .contains("lists '" + SLOT + "' in 'extensionPoints.fills'");
+            assertThat(bootFailure(catalog(List.of(SLOT), List.of()),
+                    new ContributingModule("invoicing", r -> r.contribute(" ", new PlainInvoice()))))
+                    .contains("blank extension point");
+        }
+    }
 }

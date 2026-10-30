@@ -4,8 +4,6 @@ import com.keevo.crm.api.ClientLookupPort;
 import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.module.ProvidesCapability;
-import org.springframework.stereotype.Component;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -15,14 +13,16 @@ import java.util.UUID;
  * read as {@code ClientQueryPort.existsById}). Clients have no soft-delete (only {@code archived}, included on
  * purpose). No {@code @Transactional} here: {@code findById} goes through Spring Data, which joins the caller's
  * transaction or opens a short read-only one when there is none.
+ *
+ * <p>Story 13.9: not a bean any more — {@code crm.module.CrmModule} creates it and provides it in
+ * {@code registerCapabilities} (one registration path per capability), so it is reachable only through
+ * {@code CapabilityRegistry.find}.
  */
-@Component
-@ProvidesCapability(module = "crm")
-class ClientLookupAdapter implements ClientLookupPort {
+public final class ClientLookupAdapter implements ClientLookupPort {
 
     private final ClientRepository clientRepository;
 
-    ClientLookupAdapter(ClientRepository clientRepository) {
+    public ClientLookupAdapter(ClientRepository clientRepository) {
         this.clientRepository = clientRepository;
     }
 

@@ -37,7 +37,8 @@ import java.util.UUID;
  * <p>ZERO business logic: parsing, then {@link ModuleLifecycle}. {@link CurrentActor#requireSuperAdmin()} in every
  * method (second barrier behind the SecurityConfig {@code /api/v1/admin/**} rule). Errors: {@code TENANT_NOT_FOUND}
  * / {@code MODULE_NOT_FOUND} 404, {@code MODULE_ACTIVATION_BLOCKED} / {@code MODULE_HAS_DEPENDENTS} /
- * {@code CORE_MODULE_REQUIRED} 409, {@code MODULE_PROVISIONING_FAILED} 500, {@code VALIDATION_ERROR} 422 — French
+ * {@code CORE_MODULE_REQUIRED} 409, {@code MODULE_PROVISIONING_FAILED} / {@code MODULE_ACTIVATION_FAILED} /
+ * {@code MODULE_DEACTIVATION_FAILED} 500, {@code VALIDATION_ERROR} 422 — French
  * messages naming modules by display name.
  */
 @Tag(name = "Admin — Modules", description = "Super Admin module catalogue and per-tenant activation")

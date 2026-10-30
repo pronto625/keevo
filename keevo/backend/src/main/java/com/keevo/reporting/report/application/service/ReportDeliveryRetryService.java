@@ -11,6 +11,8 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.keevo.shared.module.ModuleRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -34,10 +36,24 @@ public class ReportDeliveryRetryService {
     private final WhatsAppSender whatsAppSender;
     private final TenantQueryPort tenantQuery;
     private final OwnerRecipientResolver ownerRecipientResolver;
+    private final ModuleRegistry modules;
+
+    /** Without module gate (every tenant processed) — unit tests. */
     public ReportDeliveryRetryService(EndOfDayReportRepository reportRepository,
                                        WhatsAppSender whatsAppSender,
                                        TenantQueryPort tenantQuery,
                                        OwnerRecipientResolver ownerRecipientResolver) {
+        this(reportRepository, whatsAppSender, tenantQuery, ownerRecipientResolver, null);
+    }
+
+    /** Story 13.9: tenants whose « Rapports » module is DISABLED are skipped (READ_ONLY still retried). */
+    @Autowired
+    public ReportDeliveryRetryService(EndOfDayReportRepository reportRepository,
+                                       WhatsAppSender whatsAppSender,
+                                       TenantQueryPort tenantQuery,
+                                       OwnerRecipientResolver ownerRecipientResolver,
+                                       ModuleRegistry modules) {
+        this.modules = modules;
         this.reportRepository = reportRepository;
         this.whatsAppSender = whatsAppSender;
         this.tenantQuery = tenantQuery;
@@ -51,6 +67,7 @@ public class ReportDeliveryRetryService {
 
         for (TenantView tenant : tenantQuery.findAll()) {
             if (tenant.status() != TenantStatus.ACTIVE) continue;
+            if (ReportingModuleGate.disabled(modules, tenant.schemaName(), "ReportDeliveryRetryService")) continue;
 
             try {
                 TenantContext.setCurrentTenant(tenant.schemaName());

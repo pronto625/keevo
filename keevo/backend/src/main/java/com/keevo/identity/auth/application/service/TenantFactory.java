@@ -7,7 +7,13 @@ import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
+import com.keevo.shared.module.ModuleProvisioner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -26,19 +32,32 @@ import java.util.UUID;
 @Component
 public class TenantFactory {
 
+    private static final Logger log = LoggerFactory.getLogger(TenantFactory.class);
+
     private final TenantCodeGenerator codeGenerator;
     private final TenantRepository tenantRepository;
     private final TenantSchemaProvisioner schemaProvisioner;
     private final PlanChangeRecorder planChangeRecorder;
+    private final ModuleProvisioner moduleProvisioner;
 
     public TenantFactory(TenantCodeGenerator codeGenerator,
                          TenantRepository tenantRepository,
                          TenantSchemaProvisioner schemaProvisioner,
                          PlanChangeRecorder planChangeRecorder) {
+        this(codeGenerator, tenantRepository, schemaProvisioner, planChangeRecorder, null);
+    }
+
+    @Autowired
+    public TenantFactory(TenantCodeGenerator codeGenerator,
+                         TenantRepository tenantRepository,
+                         TenantSchemaProvisioner schemaProvisioner,
+                         PlanChangeRecorder planChangeRecorder,
+                         ModuleProvisioner moduleProvisioner) {
         this.codeGenerator    = codeGenerator;
         this.tenantRepository = tenantRepository;
         this.schemaProvisioner = schemaProvisioner;
         this.planChangeRecorder = planChangeRecorder;
+        this.moduleProvisioner = moduleProvisioner;
     }
 
     /**
@@ -85,6 +104,35 @@ public class TenantFactory {
             throw e;
         }
 
+        // Story 13.9 — the module migrations of the active (free) modules, once the core DDL exists: after the
+        // registration commits (the module provisioner reads the committed tenant row); a failure never fails the
+        // registration — the tables already exist (core DDL) and the next start provisions it again.
+        afterCommit(() -> moduleProvisioner.provisionActiveModules(schemaName), savedTenant.getCode());
+
         return savedTenant;
+    }
+
+    private void afterCommit(Runnable action, String tenantCode) {
+        if (moduleProvisioner == null) {
+            return;
+        }
+        Runnable safe = () -> {
+            try {
+                action.run();
+            } catch (RuntimeException e) {
+                log.warn("Module provisioning of new tenant {} failed ({}) — retried at the next start", tenantCode,
+                        e.getClass().getSimpleName());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    safe.run();
+                }
+            });
+        } else {
+            safe.run();
+        }
     }
 }

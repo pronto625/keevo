@@ -1,6 +1,7 @@
 package com.keevo.shared.module.adapter.out.persistence;
 
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.module.ExistingSchemaBaseline;
 import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.ModuleProvisioningException;
 import com.keevo.shared.module.application.port.ModuleMigrationPort;
@@ -23,6 +24,9 @@ import org.springframework.stereotype.Component;
 import javax.sql.DataSource;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -43,6 +47,16 @@ import java.util.regex.Pattern;
  * <p><b>{@code baselineVersion("0")}</b> (deviation from the §2.3 snippet, same choice as the public Flyway): a
  * tenant schema is never empty, so with Flyway's default baseline version {@code 1} the first run would record a
  * baseline at 1 and silently skip the module's {@code V1}. The baseline row is ignored for the version.
+ *
+ * <p><b>Existing-schema baseline (Story 13.9).</b> A converted module may declare an {@link ExistingSchemaBaseline}:
+ * on a schema without the module's history table but with its probe table, the baseline version is that one (the
+ * scripts up to it are not executed — the existing tables are adopted untouched) instead of {@code 0}.
+ *
+ * <p><b>Migration policy (Story 13.9).</b> {@code validateOnMigrate} on, {@code outOfOrder} off: an applied script
+ * is immutable — editing it makes the next provisioning fail (checksum mismatch, {@code ModuleProvisioningException},
+ * module unchanged) until the original is restored; a change always ships as a new versioned script. The manual
+ * {@code flyway repair} procedure is documented in the 13.9 spec. {@code core} ships no migration (its tables are the
+ * core DDL), so it has no history table.
  *
  * <p>Concurrency: Flyway's lock on the history table serialises concurrent runs on the same (schema, module); each
  * migration runs in its own transaction (PostgreSQL DDL is transactional), so a failed script leaves the previous
@@ -124,20 +138,24 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
     }
 
     @Override
-    public Outcome migrate(String tenantSchema, String moduleId) {
+    public Outcome migrate(String tenantSchema, String moduleId, ExistingSchemaBaseline baseline) {
         String schema = TenantSchema.validate(tenantSchema);
         String table = historyTable(moduleId);
         String[] locations = roots.stream().map(root -> "classpath:" + root + "/" + moduleId).toArray(String[]::new);
+        DataSource flywayDataSource = dedicatedDataSource();
+        String baselineVersion = baselineVersion(flywayDataSource, schema, table, baseline, moduleId);
         Flyway flyway = Flyway.configure()
-                .dataSource(dedicatedDataSource())
+                .dataSource(flywayDataSource)
                 .schemas(schema)
                 .defaultSchema(schema)
                 .table(table)
                 .locations(locations)
                 .baselineOnMigrate(true)
-                .baselineVersion("0")
+                .baselineVersion(baselineVersion)
                 .createSchemas(false)
                 .validateMigrationNaming(true)
+                .validateOnMigrate(true) // Story 13.9: an edited applied script fails loudly (checksum mismatch)
+                .outOfOrder(false)       // Story 13.9: a version lower than the applied one is never run late
                 .load();
         String from = null;
         try {
@@ -147,6 +165,37 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
             return new Outcome(from, to, result.migrationsExecuted);
         } catch (RuntimeException e) {
             throw new ModuleProvisioningException(moduleId, schema, failureCode(e), appliedAfterFailure(flyway, from));
+        }
+    }
+
+    /**
+     * Story 13.9 — {@code "0"} (every script runs), or the module's existing-schema baseline version when its history
+     * table does not exist yet and its probe table already exists in the schema (the existing tables are adopted
+     * as they are: Flyway records a baseline at that version and runs only the later scripts).
+     */
+    static String baselineVersion(DataSource dataSource, String schema, String historyTable,
+                                  ExistingSchemaBaseline baseline, String moduleId) {
+        if (baseline == null) {
+            return "0";
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            if (tableExists(connection, schema, historyTable) || !tableExists(connection, schema, baseline.probeTable())) {
+                return "0";
+            }
+            return baseline.version();
+        } catch (SQLException e) {
+            throw new ModuleProvisioningException(moduleId, schema, "PROBE/" + failureCode(e), null);
+        }
+    }
+
+    private static boolean tableExists(Connection connection, String schema, String table) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("SELECT 1 FROM information_schema.tables "
+                + "WHERE table_schema = ? AND table_name = ?")) {
+            statement.setString(1, schema);
+            statement.setString(2, table);
+            try (ResultSet rows = statement.executeQuery()) {
+                return rows.next();
+            }
         }
     }
 
@@ -198,13 +247,18 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
                 + dataSource.getClass().getSimpleName());
     }
 
-    /** Highest successfully applied versioned migration, the baseline row excluded; {@code null} when none. */
+    /**
+     * Highest successfully applied versioned migration; a baseline row counts only above {@code 0} (an adopted
+     * existing schema, Story 13.9 — the {@code 0} baseline of a fresh history means "nothing"); {@code null} when none.
+     */
     static String highestApplied(MigrationInfo[] applied) {
         MigrationVersion highest = null;
         for (MigrationInfo info : applied) {
             MigrationVersion version = info.getVersion();
             MigrationState state = info.getState();
-            if (version == null || state == MigrationState.BASELINE || state.isFailed() || !state.isApplied()) {
+            boolean emptyBaseline = state == MigrationState.BASELINE
+                    && version != null && version.compareTo(MigrationVersion.fromVersion("0")) <= 0;
+            if (version == null || emptyBaseline || state.isFailed() || !state.isApplied()) {
                 continue;
             }
             if (highest == null || version.compareTo(highest) > 0) {

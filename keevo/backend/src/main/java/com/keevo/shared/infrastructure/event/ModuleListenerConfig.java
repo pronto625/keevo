@@ -2,6 +2,7 @@ package com.keevo.shared.infrastructure.event;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.event.DeliverOnce;
+import com.keevo.shared.module.ModuleRegistry;
 import org.springframework.aop.Advisor;
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.support.ComposablePointcut;
@@ -35,6 +36,20 @@ public class ModuleListenerConfig {
                 .union(new AnnotationMatchingPointcut(null, DeliverOnce.class, true));
         DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(pointcut, interceptor);
         advisor.setOrder(ModuleListenerInterceptor.ORDER);
+        return advisor;
+    }
+
+    /**
+     * Story 13.9 — the per-tenant {@code @ModuleScoped} gate around event listeners, async and synchronous (see
+     * {@link ModuleScopedListenerInterceptor}). The registry is resolved on first use.
+     */
+    @Bean
+    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+    static Advisor moduleScopedListenerAdvisor(ObjectProvider<ModuleRegistry> registry) {
+        ModuleScopedListenerInterceptor interceptor = new ModuleScopedListenerInterceptor(registry::getObject);
+        DefaultPointcutAdvisor advisor = new DefaultPointcutAdvisor(new ModuleScopedListenerInterceptor.Pointcut(),
+                interceptor);
+        advisor.setOrder(ModuleScopedListenerInterceptor.ORDER);
         return advisor;
     }
 }

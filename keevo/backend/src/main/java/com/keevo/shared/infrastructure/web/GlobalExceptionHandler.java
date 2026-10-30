@@ -111,6 +111,8 @@ public class GlobalExceptionHandler {
             Map.entry("MODULE_HAS_DEPENDENTS",    "Désactivation impossible : ce module est utilisé par {dependents}"),
             Map.entry("CORE_MODULE_REQUIRED",     "Ce module fait partie du socle et ne peut pas être désactivé"),
             Map.entry("MODULE_PROVISIONING_FAILED", "Le module n'a pas été activé : la création de ses tables a échoué. Vous pouvez réessayer."),
+            Map.entry("MODULE_ACTIVATION_FAILED", "Le module n'a pas été activé : sa mise en service a échoué. Vous pouvez réessayer."),
+            Map.entry("MODULE_DEACTIVATION_FAILED", "Le module n'a pas été désactivé : sa mise hors service a échoué. Vous pouvez réessayer."),
             Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
             Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
@@ -382,7 +384,9 @@ public class GlobalExceptionHandler {
                  "EXPORT_FORMAT_UNSUPPORTED" -> HttpStatus.BAD_REQUEST;
             case "EXPORT_EXPIRED" -> HttpStatus.GONE;  // v1s-18-1 — expired export file
             case "TENANT_PROVISION_FAILED",
-                 "MODULE_PROVISIONING_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+                 "MODULE_PROVISIONING_FAILED",
+                 "MODULE_ACTIVATION_FAILED",
+                 "MODULE_DEACTIVATION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",
                  "ACCOUNT_SUSPENDED",

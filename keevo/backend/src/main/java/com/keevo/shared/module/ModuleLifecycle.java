@@ -13,7 +13,8 @@ import java.util.UUID;
  *
  * <p>Refusals are {@code DomainException}s with a French message: {@code TENANT_NOT_FOUND},
  * {@code MODULE_NOT_FOUND}, {@code MODULE_ACTIVATION_BLOCKED}, {@code MODULE_HAS_DEPENDENTS},
- * {@code CORE_MODULE_REQUIRED}, {@code MODULE_PROVISIONING_FAILED} (whole transaction rolled back),
+ * {@code CORE_MODULE_REQUIRED}, {@code MODULE_PROVISIONING_FAILED}, {@code MODULE_ACTIVATION_FAILED} /
+ * {@code MODULE_DEACTIVATION_FAILED} (a {@code KeevoModule} hook failed, Story 13.9) (whole transaction rolled back),
  * {@code VALIDATION_ERROR} for a bad request. Modules are named by their display name in every message and audit
  * detail, never by id.
  */

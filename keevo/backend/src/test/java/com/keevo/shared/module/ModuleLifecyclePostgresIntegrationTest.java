@@ -116,7 +116,7 @@ class ModuleLifecyclePostgresIntegrationTest {
     }
 
     /** The lifecycle behind a Spring transaction proxy, its registry on {@code cache}. */
-    private ModuleLifecycle build(ActiveModulesCache cache) {
+    private ModuleLifecycle build(ActiveModulesCache cache, KeevoModule... modules) {
         ModuleCatalog catalog = TestModuleCatalogs.lifecycleCatalog();
         JdbcTenantModuleStateStore states = new JdbcTenantModuleStateStore(dataSource);
         registry = new ModuleRegistryService(catalog, states, cache, Clock.systemUTC());
@@ -148,7 +148,8 @@ class ModuleLifecyclePostgresIntegrationTest {
             }
         };
         ModuleLifecycleService target = new ModuleLifecycleService(catalog, registry, resolver, provisioner,
-                new JdbcTenantModuleLifecycleStore(dataSource), locks, audit, Clock.systemUTC());
+                new JdbcTenantModuleLifecycleStore(dataSource), locks, audit, Clock.systemUTC(),
+                com.keevo.shared.module.application.KeevoModuleDirectory.of(catalog, List.of(modules)));
         transactionManager = new DataSourceTransactionManager(dataSource);
         ProxyFactory proxy = new ProxyFactory(target);
         proxy.addInterface(ModuleLifecycle.class);
@@ -462,5 +463,91 @@ class ModuleLifecyclePostgresIntegrationTest {
         assertThat(paid.status()).isEqualTo(TenantModuleStatus.ACTIVE);
         assertThat(paid.graceUntil()).isNotNull();
         assertThat(views).extracting(ModuleLifecycle.TenantModuleView::moduleId).doesNotContain("lcadmin");
+    }
+
+    // ── Story 13.9 — KeevoModule hooks inside the lifecycle transaction ───────────────────────────────
+
+    /** A test module whose hooks throw (activation, deactivation or both), counting its calls. */
+    static final class ThrowingHooks implements KeevoModule {
+        private final String id;
+        private final boolean onActivate;
+        private final boolean onDeactivate;
+        final java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+
+        ThrowingHooks(String id, boolean onActivate, boolean onDeactivate) {
+            this.id = id;
+            this.onActivate = onActivate;
+            this.onDeactivate = onDeactivate;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public void onActivate(ModuleTenantContext ctx) {
+            calls.incrementAndGet();
+            if (onActivate) {
+                throw new IllegalStateException("seed failed");
+            }
+        }
+
+        @Override
+        public void onDeactivate(ModuleTenantContext ctx) {
+            calls.incrementAndGet();
+            if (onDeactivate) {
+                throw new IllegalStateException("cleanup failed");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("13.9 — onActivate throws: MODULE_ACTIVATION_FAILED, every row of the cascade rolled back, no audit")
+    void activationHookThrowsRollsBack() {
+        ThrowingHooks top = new ThrowingHooks("lctop", true, false);
+        lifecycle = build(new RequestScopedActiveModulesCache(), top);
+        insertRow("lcbase", "DISABLED");
+        insertRow("lctop", "DISABLED");
+        Map<String, Object> baseBefore = row("lcbase");
+        Map<String, Object> topBefore = row("lctop");
+
+        assertThat(code(() -> lifecycle.activate(TENANT, "lctop", null, ADMIN))).isEqualTo("MODULE_ACTIVATION_FAILED");
+
+        assertThat(top.calls).hasValue(1);
+        assertThat(row("lcbase")).isEqualTo(baseBefore);
+        assertThat(row("lctop")).isEqualTo(topBefore);
+        assertThat(audits).isEmpty();
+    }
+
+    @Test
+    @DisplayName("13.9 — onDeactivate throws: MODULE_DEACTIVATION_FAILED, the row stays ACTIVE, no audit")
+    void deactivationHookThrowsRollsBack() {
+        ThrowingHooks top = new ThrowingHooks("lctop", false, true);
+        lifecycle = build(new RequestScopedActiveModulesCache(), top);
+        insertRow("lctop", "DISABLED"); // a free module without row is already active: no activation to hook
+        lifecycle.activate(TENANT, "lctop", null, ADMIN);
+        audits.clear();
+
+        assertThat(code(() -> lifecycle.deactivate(TENANT, "lctop", ADMIN))).isEqualTo("MODULE_DEACTIVATION_FAILED");
+
+        assertThat(top.calls).hasValue(2); // onActivate (ok), then onDeactivate (throws)
+        assertThat(row("lctop")).containsEntry("status", "ACTIVE").containsEntry("disabled_at", null);
+        assertThat(audits).isEmpty();
+    }
+
+    @Test
+    @DisplayName("13.9 — hooks once per change: activate → onActivate, re-activate → none, deactivate → onDeactivate")
+    void hooksOnce() {
+        ThrowingHooks top = new ThrowingHooks("lctop", false, false);
+        lifecycle = build(new RequestScopedActiveModulesCache(), top);
+        insertRow("lctop", "DISABLED");
+        lifecycle.activate(TENANT, "lctop", null, ADMIN);
+        lifecycle.activate(TENANT, "lctop", null, ADMIN);
+        assertThat(top.calls).hasValue(1);
+        lifecycle.deactivate(TENANT, "lctop", ADMIN);
+        lifecycle.deactivate(TENANT, "lctop", ADMIN);
+        assertThat(top.calls).hasValue(2);
+        assertThat(row("lctop")).containsEntry("status", "DISABLED");
     }
 }

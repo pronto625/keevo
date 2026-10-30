@@ -14,6 +14,8 @@ import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
+import com.keevo.shared.module.ModuleRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -51,8 +53,9 @@ public class WeeklyReportScheduler {
     private final TenantPreferencesQueryPort preferencesQuery;
     private final WeeklyReportWindowResolver windowResolver;
     private final Clock clock;
+    private final ModuleRegistry modules;
 
-    /** Production constructor — the shared {@code Clock} bean (ClockConfig), as CloseDayService (v1s-13-11 follow-up). */
+    /** Without module gate (every tenant processed) — unit tests. */
     public WeeklyReportScheduler(TenantQueryPort tenantQuery,
                            StoreQueryPort storeQuery,
                            EndOfDayReportRepository reportRepository,
@@ -60,6 +63,24 @@ public class WeeklyReportScheduler {
                            TenantPreferencesQueryPort preferencesQuery,
                            WeeklyReportWindowResolver windowResolver,
                            Clock clock) {
+        this(tenantQuery, storeQuery, reportRepository, weeklyReportGenerator, preferencesQuery, windowResolver,
+                clock, null);
+    }
+
+    /**
+     * Production constructor — the shared {@code Clock} bean (ClockConfig), as CloseDayService (v1s-13-11
+     * follow-up). Story 13.9: tenants whose « Rapports » module is DISABLED are skipped (READ_ONLY still runs).
+     */
+    @Autowired
+    public WeeklyReportScheduler(TenantQueryPort tenantQuery,
+                           StoreQueryPort storeQuery,
+                           EndOfDayReportRepository reportRepository,
+                           GenerateWeeklyReportUseCase weeklyReportGenerator,
+                           TenantPreferencesQueryPort preferencesQuery,
+                           WeeklyReportWindowResolver windowResolver,
+                           Clock clock,
+                           ModuleRegistry modules) {
+        this.modules = modules;
         this.tenantQuery = tenantQuery;
         this.storeQuery = storeQuery;
         this.reportRepository = reportRepository;
@@ -77,6 +98,9 @@ public class WeeklyReportScheduler {
 
         tenantQuery.findAll().forEach(tenant -> {
             if (tenant.status() != TenantStatus.ACTIVE) {
+                return;
+            }
+            if (ReportingModuleGate.disabled(modules, tenant.schemaName(), "WeeklyReportScheduler")) {
                 return;
             }
             TenantContext.setCurrentTenant(tenant.schemaName());

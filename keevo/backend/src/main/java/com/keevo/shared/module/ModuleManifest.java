@@ -4,11 +4,17 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * A validated module manifest ({@code keevo/modules/<id>/module.json}, spec-socle §3). Instances are only built by
- * {@link ModuleManifestLoader}, which guarantees the invariants documented on each component; every list is
- * immutable and never null.
+ * A validated module manifest ({@code keevo/modules/<id>/module.json}, spec-socle §3). Production instances are only
+ * built by {@link ModuleManifestLoader}, which guarantees the invariants documented on each component (cross-file
+ * rules included). Since Story 13.9 the compact constructor enforces the per-instance invariants itself, so a
+ * hand-built instance (tests, tooling) cannot be invalid either: {@code id} matches
+ * {@link ModuleManifestLoader#ID_PATTERN} within {@link ModuleManifestLoader#ID_MAX} characters, {@code version},
+ * {@code category} and {@code entitlement} are present, {@code displayName} is not blank, every list (and every list
+ * entry) is non-null and the lists are immutable copies — otherwise {@link IllegalArgumentException} (or
+ * {@link NullPointerException} for a missing component).
  *
- * @param id              module id ({@link ModuleManifestLoader#ID_PATTERN}, ≤ 50 chars), equal to its manifest directory
+ * @param id              module id ({@link ModuleManifestLoader#ID_PATTERN}, ≤ {@value ModuleManifestLoader#ID_MAX}
+ *                        chars), equal to its manifest directory
  * @param version         semver {@code MAJOR.MINOR.PATCH}
  * @param displayName     French label shown to users
  * @param category        module category
@@ -50,15 +56,32 @@ public record ModuleManifest(
         Objects.requireNonNull(displayName, "displayName");
         Objects.requireNonNull(category, "category");
         Objects.requireNonNull(entitlement, "entitlement");
-        requires = List.copyOf(requires);
-        enhances = List.copyOf(enhances);
-        publishes = List.copyOf(publishes);
-        consumes = List.copyOf(consumes);
-        provides = List.copyOf(provides);
-        needs = List.copyOf(needs);
+        if (id.length() > ModuleManifestLoader.ID_MAX || !ModuleManifestLoader.ID_PATTERN.matcher(id).matches()) {
+            throw new IllegalArgumentException("Invalid module id '" + id + "': it must match "
+                    + ModuleManifestLoader.ID_PATTERN.pattern() + " (at most " + ModuleManifestLoader.ID_MAX
+                    + " characters)");
+        }
+        if (displayName.isBlank()) {
+            throw new IllegalArgumentException("Module '" + id + "': the display name must not be blank");
+        }
+        requires = immutable(requires, "requires", id);
+        enhances = immutable(enhances, "enhances", id);
+        publishes = immutable(publishes, "publishes", id);
+        consumes = immutable(consumes, "consumes", id);
+        provides = immutable(provides, "provides", id);
+        needs = immutable(needs, "needs", id);
         extensionPoints = extensionPoints == null ? ExtensionPoints.NONE : extensionPoints;
-        permissions = List.copyOf(permissions);
-        routes = List.copyOf(routes);
+        permissions = immutable(permissions, "permissions", id);
+        routes = immutable(routes, "routes", id);
+    }
+
+    /** An immutable copy; a null list or entry → {@link IllegalArgumentException} naming the field. */
+    private static List<String> immutable(List<String> list, String field, String id) {
+        if (list == null || list.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("Module '" + id + "': '" + field
+                    + "' must be a list without null entries");
+        }
+        return List.copyOf(list);
     }
 
     /** Whether this is the core module. */
@@ -77,6 +100,11 @@ public record ModuleManifest(
         public static final ExtensionPoints NONE = new ExtensionPoints(List.of(), List.of());
 
         public ExtensionPoints {
+            if (declares == null || fills == null || declares.stream().anyMatch(Objects::isNull)
+                    || fills.stream().anyMatch(Objects::isNull)) {
+                throw new IllegalArgumentException("extensionPoints: 'declares' and 'fills' must be lists without "
+                        + "null entries");
+            }
             declares = List.copyOf(declares);
             fills = List.copyOf(fills);
         }

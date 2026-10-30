@@ -371,4 +371,119 @@ class CapabilityRegistryServiceTest {
                     .isInstanceOf(IllegalStateException.class);
         }
     }
+
+    // ── Story 13.9 — programmatic registration through KeevoModule.registerCapabilities ────────────────
+
+    /** A module providing what its lambda registers. */
+    static final class TestModule implements com.keevo.shared.module.KeevoModule {
+        private final String id;
+        private final java.util.function.Consumer<com.keevo.shared.module.CapabilityRegistrar> register;
+        com.keevo.shared.module.CapabilityRegistrar captured;
+
+        TestModule(String id, java.util.function.Consumer<com.keevo.shared.module.CapabilityRegistrar> register) {
+            this.id = id;
+            this.register = register;
+        }
+
+        @Override
+        public String id() {
+            return id;
+        }
+
+        @Override
+        public void registerCapabilities(com.keevo.shared.module.CapabilityRegistrar registrar) {
+            captured = registrar;
+            register.accept(registrar);
+        }
+    }
+
+    static final class PlainNames implements NameLookupPort {
+        @Override
+        public String name() {
+            return "programmatic";
+        }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void provideRaw(com.keevo.shared.module.CapabilityRegistrar registrar, Class type, Object impl) {
+        registrar.provide(type, (Capability) impl);
+    }
+
+    @Nested
+    @DisplayName("programmatic registration (Story 13.9)")
+    class Programmatic {
+
+        private String bootFailure(ModuleCatalog catalog, Object... providers) {
+            CapabilityRegistryService service = new CapabilityRegistryService(registry, catalog, null);
+            Throwable thrown = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> service.initialize(List.of(providers)));
+            assertThat(thrown).isInstanceOf(IllegalStateException.class)
+                    .hasMessageStartingWith("Invalid capability providers: ");
+            return thrown.getMessage();
+        }
+
+        @Test
+        @DisplayName("module ENABLED → its programmatic implementation; DISABLED → empty")
+        void resolvesPerTenant() {
+            PlainNames impl = new PlainNames();
+            CapabilityRegistryService service = service(catalog(List.of("NameLookupPort"), List.of()),
+                    new TestModule("crm", r -> r.provide(NameLookupPort.class, impl)));
+            when(registry.moduleState(TENANT, "crm")).thenReturn(ModuleState.ENABLED);
+            assertThat(service.find(NameLookupPort.class, TENANT)).containsSame(impl);
+            when(registry.moduleState(TENANT, "crm")).thenReturn(ModuleState.DISABLED);
+            assertThat(service.find(NameLookupPort.class, TENANT)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("the registrar is closed once the registration call returned")
+        void registrarClosedAfterBoot() {
+            TestModule module = new TestModule("crm", r -> r.provide(NameLookupPort.class, new PlainNames()));
+            service(catalog(List.of("NameLookupPort"), List.of()), module);
+            assertThatThrownBy(() -> module.captured.provide(NameLookupPort.class, new PlainNames()))
+                    .isInstanceOf(IllegalStateException.class);
+        }
+
+        @Test
+        @DisplayName("annotated and programmatic providers of the same type → boot fails (one path per capability)")
+        void annotatedAndProgrammatic() {
+            assertThat(bootFailure(catalog(List.of("NameLookupPort"), List.of()), new CrmNames(),
+                    new TestModule("crm", r -> r.provide(NameLookupPort.class, new PlainNames()))))
+                    .contains("provided twice").contains("registerCapabilities");
+        }
+
+        @Test
+        @DisplayName("not in the manifest 'provides' → boot fails; manifest entry not provided → boot fails")
+        void manifestCrossCheck() {
+            assertThat(bootFailure(catalog(List.of(), List.of()),
+                    new TestModule("crm", r -> r.provide(NameLookupPort.class, new PlainNames()))))
+                    .contains("does not list 'NameLookupPort' in 'provides'");
+            assertThat(bootFailure(catalog(List.of("NameLookupPort"), List.of()), new TestModule("crm", r -> { })))
+                    .contains("lists 'NameLookupPort' in 'provides'");
+        }
+
+        @Test
+        @DisplayName("not a capability interface / not implemented / null / throwing module → boot fails")
+        void invalidRegistrations() {
+            ModuleCatalog catalog = catalog(List.of(), List.of());
+            assertThat(bootFailure(catalog, new TestModule("crm",
+                    r -> provideRaw(r, AbstractCapability.class, new DeclaresAClass()))))
+                    .contains("not an interface extending Capability");
+            assertThat(bootFailure(catalog, new TestModule("crm",
+                    r -> provideRaw(r, PriceLookupPort.class, new PlainNames()))))
+                    .contains("does not implement it");
+            assertThat(bootFailure(catalog, new TestModule("crm", r -> r.provide(NameLookupPort.class, null))))
+                    .contains("null implementation");
+            assertThat(bootFailure(catalog, new TestModule("crm", r -> {
+                throw new IllegalStateException("boom");
+            }))).contains("registerCapabilities").contains("failed");
+        }
+
+        @Test
+        @DisplayName("module not installed → boot fails")
+        void notInstalled() {
+            assertThat(bootFailure(catalog(List.of(), List.of()),
+                    new TestModule("ghost", r -> r.provide(NameLookupPort.class, new PlainNames()))))
+                    .contains("module 'ghost', which is not installed");
+        }
+    }
 }

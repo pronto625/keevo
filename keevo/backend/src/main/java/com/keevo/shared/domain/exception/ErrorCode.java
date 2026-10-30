@@ -119,6 +119,8 @@ public enum ErrorCode {
     MODULE_HAS_DEPENDENTS,         // Story 13.8a — HTTP 409: active modules require the module being deactivated
     CORE_MODULE_REQUIRED,          // Story 13.8a — HTTP 409: the core module can never be deactivated
     MODULE_PROVISIONING_FAILED,    // Story 13.8a — HTTP 500: a module's tables could not be created; nothing changed
+    MODULE_ACTIVATION_FAILED,      // Story 13.9 — HTTP 500: a module's activation hook failed; the call is rolled back
+    MODULE_DEACTIVATION_FAILED,    // Story 13.9 — HTTP 500: a module's deactivation hook failed; the call is rolled back
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

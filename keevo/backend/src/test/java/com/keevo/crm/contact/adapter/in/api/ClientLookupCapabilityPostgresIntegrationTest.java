@@ -58,6 +58,9 @@ class ClientLookupCapabilityPostgresIntegrationTest extends FullContextIntegrati
     void setUp() {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
+        // Story 13.9: registration provisions the free modules with migrations (crm), which materialises their
+        // ACTIVE/FREE row — this test starts from the free rule without any row
+        jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId);
         jdbc.update("INSERT INTO \"" + schema + "\".clients (id, name, phone) VALUES (?, 'Awa Ndiaye', '+237690000002')",
                 clientId);
         TenantContext.setCurrentTenant(schema);
