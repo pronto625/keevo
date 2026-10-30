@@ -44,6 +44,8 @@ void main() {
     SharedPreferences.setMockInitialValues({
       kUserRoleKey: 'EMPLOYEE',
       kLocalDataOwnerKey: 'u1@kv_a',
+      kEntitlementsSnapshotKey:
+          '{"owner":"u1@kv_a","states":{"multi-store":"ENABLED"}}',
     });
     FlutterSecureStorage.setMockInitialValues({
       'jwt_token': 'access',
@@ -134,6 +136,9 @@ void main() {
       expect(container.read(cartProvider), isEmpty);
       // Kept: tells the next sign-in whether it is the same account.
       expect(prefs.getString(kLocalDataOwnerKey), 'u1@kv_a');
+      // 15.1: the owner-tagged module snapshot stays — the baseline of this
+      // account if it signs back in (an account switch clears it).
+      expect(prefs.getString(kEntitlementsSnapshotKey), isNotNull);
     });
 
     test('offline: the server revocation fails but the device is signed out', () async {

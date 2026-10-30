@@ -1,5 +1,7 @@
 package com.keevo.shared.module.adapter.in.rest;
 
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -18,8 +20,11 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * TenantModulesController — the current tenant's modules for its owner (Story 13.8a, spec-socle §10; feeds the
- * Flutter module UI of 15.1/15.6). OWNER only; the tenant is the one bound to the request ({@link TenantContext}).
+ * TenantModulesController — the current tenant's modules (Story 13.8a, spec-socle §10; feeds the Flutter
+ * {@code entitlementsProvider} of 15.1 and the « Mes modules » screen of 15.6). OWNER and EMPLOYEE (Story 15.1):
+ * employees gate their UI too, so they read every module's state; the subscription dates ({@code expiresAt},
+ * {@code graceUntil}) stay the owner's business and are {@code null} for them. The tenant is the one bound to the
+ * request ({@link TenantContext}).
  */
 @Tag(name = "Tenant — Modules", description = "Modules of the current tenant and their subscription state")
 @EntitlementExempt("liste des modules du commerçant")
@@ -37,22 +42,25 @@ public class TenantModulesController {
      * One module of the current tenant.
      *
      * @param state      {@code ENABLED} | {@code READ_ONLY} (subscription ended, grace running) | {@code DISABLED}
-     * @param expiresAt  end of the trial / subscription ({@code null}: none)
-     * @param graceUntil end of the read-only grace ({@code null}: none)
+     * @param expiresAt  end of the trial / subscription ({@code null}: none, or a non-owner caller)
+     * @param graceUntil end of the read-only grace ({@code null}: none, or a non-owner caller)
      */
     public record TenantModuleDto(String moduleId, String displayName, String state, Instant expiresAt,
                                   Instant graceUntil) {
     }
 
-    @Operation(summary = "Modules of the current tenant with their state and subscription dates (owner)",
+    @Operation(summary = "Modules of the current tenant with their state; subscription dates for the owner only",
             security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/modules")
     public ResponseEntity<ApiResponseWrapper<List<TenantModuleDto>>> modules() {
-        CurrentActor.requireOwner("Modules are restricted to the owner");
+        boolean owner = CurrentActor.isOwner();
+        if (!owner && !CurrentActor.isEmployee()) {
+            throw new DomainException(ErrorCode.FORBIDDEN, "Modules are restricted to the tenant's users");
+        }
         String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(lifecycle.tenantModules(schema).stream()
-                .map(v -> new TenantModuleDto(v.moduleId(), v.displayName(), v.state().name(), v.expiresAt(),
-                        v.graceUntil()))
+                .map(v -> new TenantModuleDto(v.moduleId(), v.displayName(), v.state().name(),
+                        owner ? v.expiresAt() : null, owner ? v.graceUntil() : null))
                 .toList()));
     }
 }

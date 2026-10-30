@@ -19,6 +19,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
+import com.keevo.shared.module.EntitlementService;
 import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -76,29 +77,39 @@ public class ExportController {
     private final DownloadExportUseCase downloadExportUseCase;
     private final ExportDatasetRegistry datasetRegistry;
     private final ExportRendererRegistry rendererRegistry;
+    private final EntitlementService entitlements;
 
     public ExportController(RequestExportUseCase requestExportUseCase,
                             ListExportsUseCase listExportsUseCase,
                             DownloadExportUseCase downloadExportUseCase,
                             ExportDatasetRegistry datasetRegistry,
-                            ExportRendererRegistry rendererRegistry) {
+                            ExportRendererRegistry rendererRegistry,
+                            EntitlementService entitlements) {
         this.requestExportUseCase = requestExportUseCase;
         this.listExportsUseCase = listExportsUseCase;
         this.downloadExportUseCase = downloadExportUseCase;
         this.datasetRegistry = datasetRegistry;
         this.rendererRegistry = rendererRegistry;
+        this.entitlements = entitlements;
     }
 
+    /**
+     * Story 15.1 (routed from 13.10a) — only the datasets the tenant can actually export: a dataset whose owning
+     * module ({@link com.keevo.shared.application.port.export.ExportDatasetProvider#moduleId()}) is not readable
+     * (DISABLED) is left out, the same check as the export request itself; READ_ONLY (grace) stays listed.
+     */
     @Operation(summary = "Jeux de données exportables")
     @RequiresEntitlement(value = "reporting", access = RequiresEntitlement.Access.READ)
     @GetMapping("/datasets")
     public ResponseEntity<ApiResponseWrapper<List<ExportDatasetDto>>> datasets() {
         CurrentActor.requireOwner(OWNER_ONLY);
+        String tenant = TenantContext.getCurrentTenant();
         // Story v1s-18-3 — the PDF document made from each dataset, if any (app template list).
         var pdf = rendererRegistry.find(ExportFormat.PDF)
                 .filter(DocumentExportRenderer.class::isInstance)
                 .map(DocumentExportRenderer.class::cast);
         return ResponseEntity.ok(ApiResponseWrapper.ok(datasetRegistry.all().stream()
+                .filter(p -> entitlements.isEnabled(tenant, p.moduleId()))
                 .map(p -> ExportDatasetDto.from(p, pdf.flatMap(r -> r.templateLabel(p.key())).orElse(null)))
                 .toList()));
     }

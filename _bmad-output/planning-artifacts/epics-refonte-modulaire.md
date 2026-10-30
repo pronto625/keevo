@@ -1210,7 +1210,7 @@ So that **l'UI s'adapte aux modules souscrits (MOD-FR15, MOD-FR18)**.
 - Lire le claim `modules` (Epic 16.3) ; fallback `GET /tenants/me/modules`.
 - Offline : respecter le dernier état signé (cohérent gate 7 jours).
 
-- [ ] [Deferred-from: review 13-10a, 2026-10-30] When a module becomes ENABLED again for the tenant, the app must re-pull that module's entities from scratch (the 13.10a pull skips DISABLED providers but advances the cursor, so rows changed meanwhile are never re-sent); hide premium export datasets the tenant cannot use (`GET /exports/datasets` is not filtered) [Flutter entitlements / sync]
+- [x] [Deferred-from: review 13-10a, 2026-10-30] When a module becomes ENABLED again for the tenant, the app must re-pull that module's entities from scratch (the 13.10a pull skips DISABLED providers but advances the cursor, so rows changed meanwhile are never re-sent); hide premium export datasets the tenant cannot use (`GET /exports/datasets` is not filtered) [Flutter entitlements / sync] — ✅ 15.1 (2026-10-31): full-pull marker raised by `entitlementsProvider` and consumed by `RestSyncService._pull`; `GET /exports/datasets` filtered by readable module
 
 ### Story 15.2 : Routing dynamique go_router selon les modules actifs
 

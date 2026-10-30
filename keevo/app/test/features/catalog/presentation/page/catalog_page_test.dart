@@ -10,7 +10,8 @@ import 'package:keevo/features/catalog/presentation/page/catalog_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
-import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 /// Builds CatalogPage wrapped with ProviderScope + GoRouter.
 Widget _buildPage({
@@ -469,7 +470,7 @@ void main() {
   // 13.10b — the real catalogue « Vue stock multi-boutiques » button: Free /
   // employee → local list of the active store, Premium → overview.
   group('CatalogPage — stock view button', () {
-    Future<String> tapButton(WidgetTester tester, TenantModuleStates modules,
+    Future<String> tapButton(WidgetTester tester, Map<String, String> modules,
         {String role = 'OWNER'}) async {
       final prefs = await _setupPrefs(role: role);
       await tester.pumpWidget(ProviderScope(
@@ -479,7 +480,7 @@ void main() {
           archivedProductListProvider.overrideWith((ref) async => const []),
           outOfStockProductListProvider.overrideWith((ref) async => const []),
           lowStockProductListProvider.overrideWith((ref) async => const []),
-          tenantModuleStatesProvider.overrideWith((_) async => modules),
+          entitlementsOverride(modules),
         ],
         child: MaterialApp.router(
           routerConfig: GoRouter(
@@ -506,19 +507,19 @@ void main() {
     testWidgets('Free → local list of the active store', (tester) async {
       expect(
           await tapButton(tester,
-              const TenantModuleStates({'multi-store': 'DISABLED'})),
+              const {'multi-store': 'DISABLED'}),
           'LOCAL /stock/low');
     });
 
     testWidgets('employee → local list', (tester) async {
-      expect(await tapButton(tester, TenantModuleStates.none, role: 'EMPLOYEE'),
+      expect(await tapButton(tester, const <String, String>{}, role: 'EMPLOYEE'),
           'LOCAL /stock/low');
     });
 
     testWidgets('Premium → whole multi-store overview', (tester) async {
       expect(
           await tapButton(tester,
-              const TenantModuleStates({'multi-store': 'ENABLED'})),
+              const {'multi-store': 'ENABLED'}),
           'OVERVIEW /stock/overview');
     });
   });

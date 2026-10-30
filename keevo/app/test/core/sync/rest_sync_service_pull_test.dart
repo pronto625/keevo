@@ -1373,4 +1373,82 @@ void main() {
       expect((await pullParams(service))?['since'], isNotNull);
     });
   });
+
+  // Story 15.1 — a module became readable again: the entitlements provider
+  // asks for one full pull (the delta skipped it while DISABLED).
+  group('full pull requested by the entitlements', () {
+    final lastSync = DateTime.utc(2026, 3, 20, 10).millisecondsSinceEpoch;
+
+    Future<RestSyncService> serviceWith(Map<String, Object> prefsValues) async {
+      await secureStorage.write(
+          key: kLastSyncTimestampKey, value: lastSync.toString());
+      SharedPreferences.setMockInitialValues({
+        kPullTzFixDoneKey: true,
+        kLastSyncAtKey: lastSync,
+        ...prefsValues,
+      });
+      return RestSyncService(
+        database: db,
+        remoteProducts: MockRemoteProductDataSource(),
+        dio: mockDio,
+        secureStorage: secureStorage,
+        prefs: await SharedPreferences.getInstance(),
+      );
+    }
+
+    Map<String, dynamic>? lastParams() =>
+        verify(() => mockDio.get<Map<String, dynamic>>(
+              any(),
+              queryParameters: captureAny(named: 'queryParameters'),
+              options: any(named: 'options'),
+            )).captured.last as Map<String, dynamic>?;
+
+    test('marker set → full pull, then cleared; the next pull is a delta',
+        () async {
+      final service = await serviceWith({kFullPullRequestedKey: 1});
+      stubPull();
+
+      await service.pull();
+      expect(lastParams(), isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(kFullPullRequestedKey), isNull);
+
+      await service.pull();
+      expect(lastParams()?['since'], isNotNull);
+    });
+
+    test('marker raised during a pull survives it', () async {
+      final service = await serviceWith({kFullPullRequestedKey: 1});
+      final prefs = await SharedPreferences.getInstance();
+      when(() => mockDio.get<Map<String, dynamic>>(
+            any(),
+            queryParameters: any(named: 'queryParameters'),
+            options: any(named: 'options'),
+          )).thenAnswer((_) async {
+        // A module is re-enabled while this pull runs.
+        await prefs.setInt(kFullPullRequestedKey, 2);
+        return pullResponse();
+      });
+
+      await service.pull();
+
+      expect(prefs.getInt(kFullPullRequestedKey), 2);
+    });
+
+    test('failed pull keeps the marker and the cursor', () async {
+      final service = await serviceWith({kFullPullRequestedKey: 1});
+      when(() => mockDio.get<Map<String, dynamic>>(
+            any(),
+            queryParameters: any(named: 'queryParameters'),
+            options: any(named: 'options'),
+          )).thenThrow(Exception('hors ligne'));
+
+      await expectLater(service.pull(), throwsException);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt(kFullPullRequestedKey), 1);
+      expect(await secureStorage.read(key: kLastSyncTimestampKey),
+          lastSync.toString());
+    });
+  });
 }

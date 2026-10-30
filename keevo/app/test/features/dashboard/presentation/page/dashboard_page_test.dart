@@ -14,9 +14,10 @@ import 'package:keevo/features/dashboard/presentation/page/dashboard_page.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo/features/dashboard/presentation/widget/total_revenue_card.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
-import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 class _MockRepo extends Mock implements DashboardRepository {}
 
@@ -496,8 +497,7 @@ void main() {
             chartDataProvider
                 .overrideWith((_) => Future.value(snapshot.dailyCALast30)),
             sharedPreferencesProvider.overrideWithValue(prefs),
-            tenantModuleStatesProvider.overrideWith(
-                (_) async => TenantModuleStates({'multi-store': multiStore})),
+            entitlementsOverride({'multi-store': multiStore}),
           ],
           child: MaterialApp.router(routerConfig: router),
         ));

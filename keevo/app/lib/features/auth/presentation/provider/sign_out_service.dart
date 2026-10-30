@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/entitlements/entitlements_provider.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
 import '../../../notifications/presentation/provider/notification_provider.dart';
@@ -9,7 +10,6 @@ import '../../../account/presentation/provider/account_deletion_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
-import '../../../settings/presentation/provider/tenant_modules_provider.dart';
 import 'auth_provider.dart';
 
 /// Ends the session on this device.
@@ -98,6 +98,8 @@ class SignOutService {
     await prefs.remove(kPasswordChangeRequiredKey);
     await prefs.remove(kOnboardingWizardSeenKey);
     await prefs.remove(kAnnouncementsFetchedAtKey);
+    // 15.1: the owner-tagged module snapshot is kept — the same account
+    // signing back in still has its baseline (an account switch clears it).
 
     _ref.read(cartProvider.notifier).clearCart();
     _ref.invalidate(currentUserRoleProvider);
@@ -109,9 +111,9 @@ class SignOutService {
     if (_ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
     }
-    // 13.10b: module states are cached per session.
-    if (_ref.exists(tenantModuleStatesProvider)) {
-      _ref.invalidate(tenantModuleStatesProvider);
+    // 15.1: module states are per session.
+    if (_ref.exists(entitlementsProvider)) {
+      _ref.invalidate(entitlementsProvider);
     }
     // Same for the account-deletion banner (cached per process).
     if (_ref.exists(deletionPendingStatusProvider)) {

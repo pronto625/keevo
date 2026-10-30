@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/entitlements/entitlements_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/model/subscription_info.dart';
 import '../provider/subscription_info_provider.dart';
-import '../provider/tenant_modules_provider.dart';
 
 /// SubscriptionPage — Paramètres > Abonnement.
 ///
@@ -19,10 +19,12 @@ class SubscriptionPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncSub = ref.watch(subscriptionInfoProvider);
-    // 13.10b: a fresh subscription (after a purchase / plan change) makes the
-    // cached module states stale.
+    // 13.10b / 15.1: a fresh subscription (after a purchase / plan change)
+    // makes the known module states stale: ask the server again.
     ref.listen(subscriptionInfoProvider, (_, next) {
-      if (next is AsyncData) ref.invalidate(tenantModuleStatesProvider);
+      if (next is AsyncData) {
+        ref.read(entitlementsProvider.notifier).refresh().ignore();
+      }
     });
 
     return Scaffold(

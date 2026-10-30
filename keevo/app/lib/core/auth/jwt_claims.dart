@@ -56,4 +56,19 @@ class JwtClaims {
 
   /// Setup wizard done. Null for tokens issued before the claim existed.
   bool? get onboardingCompleted => _data['onboardingCompleted'] as bool?;
+
+  /// When the token was issued (`iat`), null when absent.
+  DateTime? get issuedAt {
+    final iat = _data['iat'];
+    return iat is int ? DateTime.fromMillisecondsSinceEpoch(iat * 1000) : null;
+  }
+
+  /// Story 15.1 — ids of the tenant's usable modules (claim `modules`, emitted
+  /// from Epic 16.3). Null when the claim is absent or is not a list of
+  /// strings: the app then relies on the server answer / persisted snapshot.
+  List<String>? get modules {
+    final raw = _data['modules'];
+    if (raw is! List || raw.any((e) => e is! String)) return null;
+    return List.unmodifiable(raw.cast<String>());
+  }
 }

@@ -14,6 +14,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
+import com.keevo.shared.module.EntitlementService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -64,16 +66,18 @@ class ExportControllerTest {
     @Mock RequestExportUseCase requestUseCase;
     @Mock ListExportsUseCase listUseCase;
     @Mock DownloadExportUseCase downloadUseCase;
+    @Mock EntitlementService entitlements;
 
     private MockMvc mvc;
     private final UUID actor = UUID.randomUUID();
 
     @BeforeEach
     void setUp() {
+        lenient().when(entitlements.isEnabled(any(), any())).thenReturn(true);
         ExportDatasetRegistry registry = new ExportDatasetRegistry(
                 List.of(new SyntheticExportProvider("stores", "Boutiques", 1)));
         mvc = MockMvcBuilders.standaloneSetup(
-                        new ExportController(requestUseCase, listUseCase, downloadUseCase, registry, NO_RENDERERS),
+                        new ExportController(requestUseCase, listUseCase, downloadUseCase, registry, NO_RENDERERS, entitlements),
                         new ExportDownloadController(downloadUseCase))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -135,6 +139,29 @@ class ExportControllerTest {
     }
 
     @Test
+    @DisplayName("GET /datasets → a dataset whose module is not readable (DISABLED) is left out, READ_ONLY kept (15.1)")
+    void datasetsFilteredByModule() throws Exception {
+        as("OWNER");
+        SyntheticExportProvider transfers = new SyntheticExportProvider("stock_transfers", "Transferts", 1) {
+            @Override public String moduleId() { return "multi-store"; }
+        };
+        SyntheticExportProvider counts = new SyntheticExportProvider("inventory_counts", "Inventaires", 1) {
+            @Override public String moduleId() { return "counting"; }
+        };
+        // isEnabled: ENABLED or READ_ONLY (grace) → true; DISABLED → false.
+        when(entitlements.isEnabled(TENANT, "multi-store")).thenReturn(false);
+        when(entitlements.isEnabled(TENANT, "counting")).thenReturn(true);
+        MockMvc m = MockMvcBuilders.standaloneSetup(new ExportController(requestUseCase, listUseCase, downloadUseCase,
+                        new ExportDatasetRegistry(List.of(new SyntheticExportProvider("stores", "Boutiques", 1),
+                                transfers, counts)), NO_RENDERERS, entitlements))
+                .setControllerAdvice(new GlobalExceptionHandler()).build();
+        m.perform(get("/api/v1/exports/datasets"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].key").value(
+                        org.hamcrest.Matchers.containsInAnyOrder("stores", "inventory_counts")));
+    }
+
+    @Test
     @DisplayName("GET /datasets → store / period filter flags and criteria keys (sorted) per dataset (v1s-18-2)")
     void datasetsFilterMetadata() throws Exception {
         as("OWNER");
@@ -146,7 +173,7 @@ class ExportControllerTest {
             @Override public java.util.Set<String> criteriaKeys() { return java.util.Set.of("userId", "q", "action"); }
         };
         MockMvc m = MockMvcBuilders.standaloneSetup(new ExportController(requestUseCase, listUseCase, downloadUseCase,
-                        new ExportDatasetRegistry(List.of(reference, audit)), NO_RENDERERS))
+                        new ExportDatasetRegistry(List.of(reference, audit)), NO_RENDERERS, entitlements))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         m.perform(get("/api/v1/exports/datasets"))
                 .andExpect(status().isOk())
@@ -322,7 +349,7 @@ class ExportControllerTest {
         MockMvc m = MockMvcBuilders.standaloneSetup(new ExportController(requestUseCase, listUseCase, downloadUseCase,
                         new ExportDatasetRegistry(List.of(new SyntheticExportProvider("sales", "Ventes", 1),
                                 new SyntheticExportProvider("stores", "Boutiques", 1))),
-                        new ExportRendererRegistry(List.of(pdf))))
+                        new ExportRendererRegistry(List.of(pdf)), entitlements))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
         m.perform(get("/api/v1/exports/datasets"))
                 .andExpect(status().isOk())

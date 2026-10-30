@@ -11,12 +11,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/entitlements/entitlements.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 void _overrideSqlite3ForLinuxTesting() {
   if (!Platform.isLinux) return;
@@ -137,9 +141,14 @@ void main() {
           quantity: 1,
         ));
 
+    await prefs.setString(kEntitlementsSnapshotKey,
+        '{"owner":"u1@kv_a","states":{"multi-store":"ENABLED"}}');
+
     await applier().apply(_owner('o2', tenant: 'kv_b'), newSession: true);
 
     expect(await db.select(db.categories).get(), isEmpty);
+    // 15.1: the previous account's module states are gone.
+    expect(prefs.getString(kEntitlementsSnapshotKey), isNull);
     expect(container.read(cartProvider), isEmpty);
     // Full pull for the new account instead of a delta from the previous one.
     expect(
@@ -238,6 +247,46 @@ void main() {
 
   // v1s-16-13: a sign-in may be another tenant (shared POS device) — the
   // subscription is fetched again; a silent renewal does not refetch it.
+  test('every token mounts the module states (15.1): seeded at once', () async {
+    expect(container.exists(entitlementsProvider), isFalse);
+
+    await applier().apply(_owner('u1'));
+
+    expect(container.exists(entitlementsProvider), isTrue);
+    final seed = await container.read(entitlementsProvider.future);
+    expect(seed.status, EntitlementsStatus.unknown,
+        reason: 'no claim, no snapshot, no stored session: nothing asked');
+  });
+
+  test('a renewal re-asks the server: the new module states win (15.1)',
+      () async {
+    var states = {kMultiStoreModuleId: 'ENABLED'};
+    final fake = FakeEntitlementsNotifier(() async => states);
+    final c = ProviderContainer(overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      appDatabaseProvider.overrideWithValue(db),
+      entitlementsProvider.overrideWith(() => fake),
+    ]);
+    addTearDown(c.dispose);
+    final applier = c.read(sessionClaimsApplierProvider);
+    bool multiStoreReadable() => c
+        .read(entitlementsProvider)
+        .requireValue
+        .isReadable(kMultiStoreModuleId);
+
+    await applier.apply(_owner('u1'), newSession: true);
+    await c.read(entitlementsProvider.notifier).ensureServerState();
+    expect(multiStoreReadable(), isTrue);
+
+    // Disabled server-side, then the token is renewed.
+    states = {kMultiStoreModuleId: 'DISABLED'};
+    await applier.apply(_owner('u1'));
+    await c.read(entitlementsProvider.notifier).ensureServerState();
+
+    expect(fake.fetchCalls, 2);
+    expect(multiStoreReadable(), isFalse);
+  });
+
   test('a new session invalidates the subscription, a renewal does not',
       () async {
     var fetches = 0;

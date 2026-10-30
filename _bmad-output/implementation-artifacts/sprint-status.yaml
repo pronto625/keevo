@@ -274,8 +274,8 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 15: Frontend Modulaire (Phase 5)
   # ─────────────────────────────────────────────────────────
-  epic-15: backlog
-  15-1-entitlements-provider-flutter: backlog
+  epic-15: in-progress
+  15-1-entitlements-provider-flutter: done  # 2026-10-31 build-auto done (spec-15-1-entitlements-provider-flutter.md) — entitlementsProvider tous rôles, snapshot hors ligne, full pull sur réactivation, datasets export filtrés ; 36 constats (5 medium corrigés)
   15-2-routing-dynamique-go-router: backlog
   15-3-extension-slot-lazy-loading: backlog
   15-4a-workspace-melos-keevo-core: backlog

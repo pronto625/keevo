@@ -1000,6 +1000,14 @@ class RestSyncService implements SyncService {
         await _prefs.setBool(kPullTzFixDoneKey, true);
       }
 
+      // Story 15.1 — a module became readable again: one full pull. The
+      // cursor is kept (a failed pull leaves the request for the next one).
+      final fullPullRequest = _prefs.getInt(kFullPullRequestedKey);
+      if (fullPullRequest != null && lastSyncMs != null) {
+        dev.log('Module re-enabled — forcing one full sync', name: 'RestSync');
+        lastSyncMs = null;
+      }
+
       String? since;
       if (lastSyncMs != null) {
         final lastSync =
@@ -1044,6 +1052,11 @@ class RestSyncService implements SyncService {
       // 5. Update SharedPreferences gate key (synchronous access for gate check)
       await _prefs.setInt(
           kLastSyncAtKey, serverInstant.millisecondsSinceEpoch);
+      // Raised again during this pull: kept for the next one.
+      if (fullPullRequest != null &&
+          _prefs.getInt(kFullPullRequestedKey) == fullPullRequest) {
+        await _prefs.remove(kFullPullRequestedKey);
+      }
     } catch (e) {
       dev.log('Pull sync failed: $e', name: 'RestSync');
       rethrow;

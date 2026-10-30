@@ -21,6 +21,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.keevo.shared.module.EntitlementService;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -52,6 +53,7 @@ class ExportControllerSecurityTest {
     @MockitoBean DownloadExportUseCase downloadUseCase;
     @MockitoBean ExportDatasetRegistry datasetRegistry;
     @MockitoBean ExportRendererRegistry rendererRegistry;
+    @MockitoBean EntitlementService entitlements;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     @AfterEach

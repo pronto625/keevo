@@ -32,7 +32,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(TenantModulesController.class)
 @Import(com.keevo.shared.infrastructure.security.SecurityConfig.class)
-@DisplayName("TenantModulesController — GET /api/v1/tenants/me/modules (Story 13.8a)")
+@DisplayName("TenantModulesController — GET /api/v1/tenants/me/modules (Story 13.8a, 15.1)")
 class TenantModulesControllerTest {
 
     private static final String SCHEMA = "kv_own001";
@@ -63,6 +63,7 @@ class TenantModulesControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].displayName").value("Clients et fournisseurs"))
                 .andExpect(jsonPath("$.data[0].state").value("READ_ONLY"))
+                .andExpect(jsonPath("$.data[0].expiresAt").value("2026-10-29T10:00:00Z"))
                 .andExpect(jsonPath("$.data[0].graceUntil").value("2026-11-05T10:00:00Z"))
                 .andExpect(jsonPath("$.data[0].status").doesNotExist())
                 .andExpect(jsonPath("$.data[0].provisionedVersion").doesNotExist())
@@ -70,9 +71,30 @@ class TenantModulesControllerTest {
     }
 
     @Test
-    @DisplayName("EMPLOYEE → 403, nothing read")
+    @DisplayName("EMPLOYEE → 200 with every module's state, subscription dates hidden (Story 15.1)")
     void employee() throws Exception {
         as("ROLE_EMPLOYEE");
+        when(lifecycle.tenantModules(SCHEMA)).thenReturn(List.of(
+                new ModuleLifecycle.TenantModuleView("crm", "Clients et fournisseurs", ModuleState.READ_ONLY,
+                        TenantModuleStatus.ACTIVE, Instant.parse("2026-10-29T10:00:00Z"),
+                        Instant.parse("2026-11-05T10:00:00Z"), "1"),
+                new ModuleLifecycle.TenantModuleView("multi-store", "Multi-boutiques et transferts",
+                        ModuleState.DISABLED, null, null, null, null)));
+
+        mockMvc.perform(get("/api/v1/tenants/me/modules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].moduleId").value("crm"))
+                .andExpect(jsonPath("$.data[0].displayName").value("Clients et fournisseurs"))
+                .andExpect(jsonPath("$.data[0].state").value("READ_ONLY"))
+                .andExpect(jsonPath("$.data[0].expiresAt").doesNotExist())
+                .andExpect(jsonPath("$.data[0].graceUntil").doesNotExist())
+                .andExpect(jsonPath("$.data[1].state").value("DISABLED"));
+    }
+
+    @Test
+    @DisplayName("SUPER_ADMIN (no tenant user) → 403, nothing read")
+    void superAdmin() throws Exception {
+        as("ROLE_SUPER_ADMIN");
 
         mockMvc.perform(get("/api/v1/tenants/me/modules")).andExpect(status().isForbidden());
 

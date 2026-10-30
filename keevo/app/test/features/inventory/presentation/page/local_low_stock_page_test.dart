@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
-import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 // 13.10b — the dashboard « stock bas » tile / catalogue button open the free
 // local list unless the multi-store overview (premium) is available.
@@ -27,7 +29,7 @@ const _items = [
 ];
 
 Widget _app({
-  required Future<TenantModuleStates> Function() modules,
+  required Future<Map<String, String>> Function() modules,
   List<LowStockProduct> items = _items,
   String overviewRoute = '/stock/overview?showLowOnly=true',
   bool allStores = false,
@@ -59,7 +61,8 @@ Widget _app({
   ]);
   return ProviderScope(
     overrides: [
-      tenantModuleStatesProvider.overrideWith((ref) => modules()),
+      entitlementsProvider
+          .overrideWith(() => FakeEntitlementsNotifier(modules)),
       activeStoreIdProvider.overrideWith(() => _FixedStore('store-1')),
       localLowStockProductsProvider.overrideWith((ref, storeId) async {
         listedStores?.add(storeId);
@@ -77,7 +80,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_app(
         modules: () async =>
-            const TenantModuleStates({'multi-store': 'DISABLED'})));
+            const {'multi-store': 'DISABLED'}));
     await tester.tap(find.text('stock bas'));
     await tester.pumpAndSettle();
 
@@ -96,7 +99,7 @@ void main() {
       'kept', (tester) async {
     await tester.pumpWidget(_app(
         modules: () async =>
-            const TenantModuleStates({'multi-store': 'ENABLED'})));
+            const {'multi-store': 'ENABLED'}));
     await tester.tap(find.text('stock bas'));
     await tester.pumpAndSettle();
 
@@ -108,7 +111,7 @@ void main() {
       (tester) async {
     await tester.pumpWidget(_app(
         modules: () async =>
-            const TenantModuleStates({'multi-store': 'READ_ONLY'}),
+            const {'multi-store': 'READ_ONLY'},
         overviewRoute: '/stock/overview'));
     await tester.tap(find.text('stock bas'));
     await tester.pumpAndSettle();
@@ -116,8 +119,8 @@ void main() {
     expect(find.text('VUE MULTI-BOUTIQUES {}'), findsOneWidget);
   });
 
-  testWidgets('employee (no module read) → local list', (tester) async {
-    await tester.pumpWidget(_app(modules: () async => TenantModuleStates.none));
+  testWidgets('no module readable → local list', (tester) async {
+    await tester.pumpWidget(_app(modules: () async => const <String, String>{}));
     await tester.tap(find.text('stock bas'));
     await tester.pumpAndSettle();
 
@@ -136,7 +139,7 @@ void main() {
 
   testWidgets('empty list → French empty state', (tester) async {
     await tester.pumpWidget(
-        _app(modules: () async => TenantModuleStates.none, items: const []));
+        _app(modules: () async => const <String, String>{}, items: const []));
     await tester.tap(find.text('stock bas'));
     await tester.pumpAndSettle();
 
@@ -147,7 +150,7 @@ void main() {
       (tester) async {
     final listed = <String?>[];
     await tester.pumpWidget(_app(
-        modules: () async => TenantModuleStates.none,
+        modules: () async => const <String, String>{},
         allStores: true,
         listedStores: listed));
     await tester.tap(find.text('stock bas'));
@@ -160,7 +163,7 @@ void main() {
   testWidgets('a product low in 2 stores counts once (as the tile)',
       (tester) async {
     await tester.pumpWidget(_app(
-      modules: () async => TenantModuleStates.none,
+      modules: () async => const <String, String>{},
       allStores: true,
       items: const [
         LowStockProduct(
@@ -179,13 +182,13 @@ void main() {
   });
 
   testWidgets('double tap while the modules load → one push', (tester) async {
-    final gate = Completer<TenantModuleStates>();
+    final gate = Completer<Map<String, String>>();
     await tester.pumpWidget(_app(modules: () => gate.future));
     await tester.tap(find.text('stock bas'));
     await tester.pump();
     await tester.tap(find.text('stock bas'));
     await tester.pump();
-    gate.complete(TenantModuleStates.none);
+    gate.complete(const <String, String>{});
     await tester.pumpAndSettle();
 
     expect(find.text('Stock bas'), findsOneWidget);

@@ -2,23 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/entitlements/entitlements.dart';
+import '../../../../core/entitlements/entitlements_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../dashboard/domain/model/dashboard_snapshot.dart';
 import '../../../dashboard/presentation/provider/dashboard_providers.dart';
-import '../../../settings/presentation/provider/tenant_modules_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 
 /// Route of the free local « stock bas » list (`?all=true`: every store).
 const kLocalLowStockRoute = '/stock/low';
 
+/// True when the multi-store stock overview is available to this session: the
+/// server confirmed (in this session) that the tenant's `multi-store` module
+/// is readable. Owner and employee alike (15.1: the overview serves both).
+/// Any failure, an offline device or a slow answer (> [timeout]) → false: the
+/// caller opens the free local list. A slow answer is kept for the next call;
+/// a failure is not, the next call asks the server again.
+Future<bool> isMultiStoreOverviewAvailable(
+  ProviderContainer container, {
+  Duration timeout = const Duration(seconds: 3),
+}) async {
+  try {
+    final entitlements = await container
+        .read(entitlementsProvider.notifier)
+        .ensureServerState()
+        .timeout(timeout);
+    return entitlements.isReadable(kMultiStoreModuleId);
+  } catch (_) {
+    // Timeout (the answer is kept for the next call) or failure.
+    return false;
+  }
+}
+
 /// A tap is already being routed (no double push on a quick double tap).
 bool _lowStockViewOpening = false;
 
 /// 13.10b — opens the low-stock view the session is entitled to: the
-/// multi-store overview (premium `multi-store` readable, owner) or the free
-/// local list ([LocalLowStockPage]) — Free tenant, employee, offline.
+/// multi-store overview (premium `multi-store` readable) or the free local
+/// list ([LocalLowStockPage]) — Free tenant, offline.
 ///
 /// [overviewRoute] is the premium destination (the dashboard tile filters on
 /// low stock, the catalogue button opens the whole overview). [allStores]:
@@ -59,8 +82,7 @@ class LocalLowStockPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final String? storeId =
-        allStores ? null : ref.watch(activeStoreIdProvider);
+    final String? storeId = allStores ? null : ref.watch(activeStoreIdProvider);
     final async = ref.watch(localLowStockProductsProvider(storeId));
     final cs = Theme.of(context).colorScheme;
 

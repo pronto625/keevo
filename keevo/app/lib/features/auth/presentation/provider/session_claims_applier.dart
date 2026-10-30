@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/auth/jwt_claims.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/entitlements/entitlements_provider.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
@@ -9,7 +10,6 @@ import '../../../account/presentation/provider/account_deletion_provider.dart';
 import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
-import '../../../settings/presentation/provider/tenant_modules_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import 'auth_provider.dart';
 
@@ -85,12 +85,15 @@ class SessionClaimsApplier {
     if (newSession && _ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
     }
-    // 13.10b: module states are cached per session — and re-read after every
-    // token (a renewal follows a plan change / purchase): lazily, on the next
-    // read.
-    if (_ref.exists(tenantModuleStatesProvider)) {
-      _ref.invalidate(tenantModuleStatesProvider);
+    // 15.1: every token re-seeds the module states (its `modules` claim, or
+    // this account's snapshot) and asks the server again — a renewal follows a
+    // plan change / purchase, and is how a module disabled server-side
+    // disappears. Mounted now, not on the next read, so a re-enabled module's
+    // pull-cursor reset happens before the next sync.
+    if (_ref.exists(entitlementsProvider)) {
+      _ref.invalidate(entitlementsProvider);
     }
+    _ref.read(entitlementsProvider);
     // Same for the account-deletion banner (cached per process) — on every
     // token: a renewal after a deletion request / cancellation carries the
     // new tenantStatus (A50).
@@ -110,6 +113,7 @@ class SessionClaimsApplier {
     kLastSyncAtKey,
     kAutoClosureNotifiedIds,
     kOnboardingWizardCompletedKey,
+    kEntitlementsSnapshotKey,
   ];
 
   Future<void> _isolateFromPreviousAccount(

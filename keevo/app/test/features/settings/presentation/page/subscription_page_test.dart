@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/page/subscription_page.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
-import 'package:keevo/features/settings/presentation/provider/tenant_modules_provider.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 void main() {
   group('SubscriptionPage', () {
@@ -70,7 +72,7 @@ void main() {
     // the cached module states stale.
     testWidgets('loading the subscription re-reads the module states',
         (tester) async {
-      var moduleReads = 0;
+      final fake = FakeEntitlementsNotifier(() async => const {});
       final container = ProviderContainer(overrides: [
         subscriptionInfoProvider.overrideWith(
           (ref) async => const SubscriptionInfo(
@@ -84,14 +86,11 @@ void main() {
             maxEmployees: null,
           ),
         ),
-        tenantModuleStatesProvider.overrideWith((ref) async {
-          moduleReads++;
-          return TenantModuleStates.none;
-        }),
+        entitlementsProvider.overrideWith(() => fake),
       ]);
       addTearDown(container.dispose);
-      await container.read(tenantModuleStatesProvider.future);
-      expect(moduleReads, 1);
+      await container.read(entitlementsProvider.notifier).ensureServerState();
+      expect(fake.fetchCalls, 1);
 
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
@@ -99,8 +98,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      await container.read(tenantModuleStatesProvider.future);
-      expect(moduleReads, 2);
+      expect(fake.fetchCalls, 2);
     });
 });
 }

@@ -83,3 +83,16 @@ const String kDefaultPhoneCountryCode = 'CM';
 /// Secure-storage key of this install's sync device id (written by the sync
 /// service, read to tell « Cet appareil » apart — v1s-16-20).
 const String kDeviceIdKey = 'keevo_device_id';
+
+/// Story 15.1 — last `GET /api/v1/tenants/me/modules` answer (JSON: owner
+/// `<userId>@<tenantId>` + module states + fetch date), so the app keeps the
+/// tenant's module states offline / across restarts. Only read back for the
+/// same [kLocalDataOwnerKey]; cleared on sign-out and account switch.
+const String kEntitlementsSnapshotKey = 'entitlements_snapshot';
+
+/// Story 15.1 — set (to a unique int) when the next pull must be a full one
+/// (a module became readable again: the delta pull skipped it while DISABLED
+/// but advanced the cursor). Read by `RestSyncService` at the start of a pull,
+/// cleared after it saved its cursor only if it still holds the value read at
+/// start — a request raised during a pull survives it.
+const String kFullPullRequestedKey = 'full_pull_requested';
