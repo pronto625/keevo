@@ -114,6 +114,11 @@ public enum ErrorCode {
     MODULE_INACTIVE,               // Story 12.7 — the operation's module is not active for the tenant (sync push: REJECTED)
     MODULE_NOT_ENTITLED,           // Story 13.5 — HTTP 403: the module is not in the tenant's subscription (@RequiresEntitlement)
     MODULE_READ_ONLY,              // Story 13.5 — HTTP 403: subscription expired, read-only grace (writes refused; sync push: REJECTED)
+    MODULE_NOT_FOUND,              // Story 13.8a — HTTP 404: unknown (or not tenant-assignable) module id
+    MODULE_ACTIVATION_BLOCKED,     // Story 13.8a — HTTP 409: the activation plan is blocked (a step is not eligible)
+    MODULE_HAS_DEPENDENTS,         // Story 13.8a — HTTP 409: active modules require the module being deactivated
+    CORE_MODULE_REQUIRED,          // Story 13.8a — HTTP 409: the core module can never be deactivated
+    MODULE_PROVISIONING_FAILED,    // Story 13.8a — HTTP 500: a module's tables could not be created; nothing changed
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

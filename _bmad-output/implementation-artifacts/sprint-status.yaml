@@ -253,7 +253,7 @@ development_status:
   13-5-entitlement-service-gating: done  # 2026-10-29 done — état ENABLED/READ_ONLY/DISABLED en temps réel, EntitlementService + @RequiresEntitlement (validé au démarrage), MODULE_NOT_ENTITLED/READ_ONLY 403, sync + app (en attente) ; test live Redmi OK | 2026-10-29 bmad-build-auto (spec-13-5-entitlement-service.md)
   13-6-capability-registry: done  # 2026-10-29 done — CapabilityRegistry tenant-aware, @ProvidesCapability (non injectable + règle ArchUnit), validation manifests provides/needs, ClientLookupPort CRM (crm 1.1.0) | 2026-10-29 bmad-build-auto (spec-13-6-capability-registry.md)
   13-7-extension-registry: done  # 2026-10-30 done — ExtensionRegistry (points déclarés par manifest, contributions @ContributesExtension, vues immuables, modules activés seulement), slot POS déclaré (pos 1.1.0) | 2026-10-29 bmad-build-auto (spec-13-7-extension-registry.md)
-  13-8-module-lifecycle-service-api-admin: backlog
+  13-8-module-lifecycle-service-api-admin: in-progress  # 2026-10-30 bmad-build-auto : 13-8a backend (spec-13-8a-module-lifecycle-api.md) puis 13-8b app (opérations en attente visibles)
   13-9-conversion-crm-reporting-keevomodule: backlog
   13-10-passe-gating-entitlement-endpoints-existants: backlog
   epic-13-retrospective: optional

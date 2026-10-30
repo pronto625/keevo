@@ -106,6 +106,11 @@ public class GlobalExceptionHandler {
             Map.entry("MODULE_INACTIVE",          "Module non activé pour votre compte"),
             Map.entry("MODULE_NOT_ENTITLED",      "Ce module n'est pas inclus dans votre abonnement"),
             Map.entry("MODULE_READ_ONLY",         "Ce module est en lecture seule : abonnement expiré"),
+            Map.entry("MODULE_NOT_FOUND",         "Module introuvable"),
+            Map.entry("MODULE_ACTIVATION_BLOCKED", "Activation impossible : {reasons}"),
+            Map.entry("MODULE_HAS_DEPENDENTS",    "Désactivation impossible : ce module est utilisé par {dependents}"),
+            Map.entry("CORE_MODULE_REQUIRED",     "Ce module fait partie du socle et ne peut pas être désactivé"),
+            Map.entry("MODULE_PROVISIONING_FAILED", "Le module n'a pas été activé : la création de ses tables a échoué. Vous pouvez réessayer."),
             Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
             Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
@@ -323,6 +328,7 @@ public class GlobalExceptionHandler {
                  "REPORT_NOT_FOUND",
                  "AUDIT_ENTRY_NOT_FOUND",
                  "EXPORT_NOT_FOUND",
+                 "MODULE_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -347,6 +353,9 @@ public class GlobalExceptionHandler {
                  "DELETION_ALREADY_REQUESTED",
                  "DELETION_NOT_PENDING",
                  "INVALID_STATE",
+                 "MODULE_ACTIVATION_BLOCKED",
+                 "MODULE_HAS_DEPENDENTS",
+                 "CORE_MODULE_REQUIRED",
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
@@ -372,7 +381,8 @@ public class GlobalExceptionHandler {
                  "EXPORT_DATASET_UNKNOWN",
                  "EXPORT_FORMAT_UNSUPPORTED" -> HttpStatus.BAD_REQUEST;
             case "EXPORT_EXPIRED" -> HttpStatus.GONE;  // v1s-18-1 — expired export file
-            case "TENANT_PROVISION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
+            case "TENANT_PROVISION_FAILED",
+                 "MODULE_PROVISIONING_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",
                  "ACCOUNT_SUSPENDED",

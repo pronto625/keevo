@@ -170,7 +170,14 @@ class SchedulerLockCoverageTest {
                 // v1s-14-13
                 Map.entry(com.keevo.identity.employee.application.service.ReactivateEmployeeService.class, "execute"),
                 // v1s-14-13 (quick-add)
-                Map.entry(com.keevo.inventory.counting.application.service.QuickAddProductService.class, "execute"));
+                Map.entry(com.keevo.inventory.counting.application.service.QuickAddProductService.class, "execute"),
+                // 13.8a — module-lifecycle:<tenant UUID>, first statement (deactivate checked below: one entry per class)
+                Map.entry(com.keevo.shared.module.application.ModuleLifecycleService.class, "activate"));
+        assertThat(Arrays.stream(com.keevo.shared.module.application.ModuleLifecycleService.class.getDeclaredMethods())
+                .filter(m -> m.getName().equals("deactivate") && !m.isSynthetic() && !m.isBridge())
+                .toList())
+                .as("@Transactional on ModuleLifecycleService.deactivate").isNotEmpty()
+                .allMatch(m -> m.isAnnotationPresent(org.springframework.transaction.annotation.Transactional.class));
         lockTakers.forEach((type, methodName) -> {
             List<Method> methods = Arrays.stream(type.getDeclaredMethods())
                     .filter(m -> m.getName().equals(methodName) && !m.isSynthetic() && !m.isBridge())

@@ -124,4 +124,42 @@ public final class TestModuleCatalogs {
                 new ModuleManifest.ExtensionPoints(declares, fills), List.of(), List.of(), "module." + id, true);
         return new LoadedModuleManifest("test:" + id, manifest, "{}");
     }
+
+    /**
+     * Story 13.8a — modules of the lifecycle tests, with French display names (messages and audit name modules by
+     * display name). Migrations under {@code src/test/resources/db/modules/<id>/}:
+     * <ul>
+     *   <li>{@code lcbase} « Base de test » (free, V1) ← {@code lctop} « Module supérieur » (free, V1) and
+     *       {@code lcbroken} « Module cassé » (free, V1 invalid SQL) require it;</li>
+     *   <li>{@code lcpaid} « Module payant » (premium, paid, V1) ← {@code lcbuyer} « Acheteur » (free) requires it;</li>
+     *   <li>{@code lcplain} « Module simple » (free, no migrations), {@code lcsync} « Synchronisation » (category
+     *       core, free), {@code lcadmin} « Plateforme » (platform).</li>
+     * </ul>
+     */
+    public static ModuleCatalog lifecycleCatalog() {
+        ModuleCategory b = ModuleCategory.BUSINESS;
+        return new ModuleCatalog(List.of(
+                named("core", "Socle", ModuleCategory.CORE, true, List.of()),
+                named("lcbase", "Base de test", b, true, List.of()),
+                named("lctop", "Module supérieur", b, true, List.of("lcbase")),
+                named("lcbroken", "Module cassé", b, true, List.of("lcbase")),
+                named("lcpaid", "Module payant", ModuleCategory.PREMIUM, false, List.of()),
+                named("lcbuyer", "Acheteur", b, true, List.of("lcpaid")),
+                named("lcplain", "Module simple", b, true, List.of()),
+                named("lcsync", "Synchronisation", ModuleCategory.CORE, true, List.of()),
+                named("lcadmin", "Plateforme", ModuleCategory.PLATFORM, true, List.of())));
+    }
+
+    /** Story 13.8a — a manifest with a display name ({@code core} added to the requires of non-core modules). */
+    public static LoadedModuleManifest named(String id, String displayName, ModuleCategory category, boolean free,
+                                             List<String> requires) {
+        List<String> all = new ArrayList<>();
+        if (!id.equals(ModuleManifest.CORE_ID)) {
+            all.add(ModuleManifest.CORE_ID);
+        }
+        all.addAll(requires);
+        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", displayName, category, all, List.of(), List.of(),
+                List.of(), List.of(), List.of(), null, List.of(), List.of(), "module." + id, free);
+        return new LoadedModuleManifest("test:" + id, manifest, "{}");
+    }
 }

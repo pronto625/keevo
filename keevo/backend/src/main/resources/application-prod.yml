@@ -16,6 +16,9 @@ logging:
   level:
     root: WARN
     com.keevo: INFO
+    # Story 13.8a: Flyway INFO lines name the tenant schema ("Migrating schema \"kv_…\"") during module
+    # provisioning — WARN keeps them out of prod logs (application logs name tenants by code)
+    org.flywaydb: WARN
   # Story 11.1 (MOD-NFR4): one JSON object per console line (Spring Boot native structured
   # logging, logstash layout). Every MDC entry (traceId, tenantId, userId) becomes a root field.
   # Dev/test keep the human-readable pattern — this block lives only in prod/staging.
