@@ -9,8 +9,8 @@ import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:keevo_core/widget/entitlement_upgrade.dart';
 
-// 13.10b — module refusals show a French message and « Passer à Premium »
-// (owner), which opens the subscription screen.
+// 13.10b — module refusals show a French message and « Voir mes modules »
+// (owner), which opens « Mes modules » (Story 15.6).
 
 const _notEntitled =
     ModuleEntitlementException(ModuleRefusalReason.notEntitled);
@@ -20,8 +20,8 @@ Widget _app(Widget page, {bool owner = true}) {
   final router = GoRouter(routes: [
     GoRoute(path: '/', builder: (_, __) => Scaffold(body: page)),
     GoRoute(
-      path: '/settings/subscription',
-      builder: (_, __) => const Scaffold(body: Text('ÉCRAN ABONNEMENT')),
+      path: '/settings/modules',
+      builder: (_, __) => const Scaffold(body: Text('ÉCRAN MES MODULES')),
     ),
   ]);
   return ProviderScope(
@@ -36,7 +36,7 @@ void main() {
 
   testWidgets(
       'full-page refusal: premium title, message, upgrade opens '
-      'the subscription screen', (tester) async {
+      '« Mes modules »', (tester) async {
     await tester.pumpWidget(_app(AppErrorWidget(
       error: _notEntitled,
       title: 'Impossible de charger les stocks',
@@ -44,14 +44,14 @@ void main() {
     )));
     await tester.pumpAndSettle();
 
-    expect(find.text('Fonctionnalité Premium'), findsOneWidget);
+    expect(find.text('Fonctionnalité non incluse'), findsOneWidget);
     expect(find.text(ModuleEntitlementException.notEntitledMessage),
         findsOneWidget);
     expect(find.text('Réessayer'), findsOneWidget);
 
-    await tester.tap(find.text('Passer à Premium'));
+    await tester.tap(find.text('Voir mes modules'));
     await tester.pumpAndSettle();
-    expect(find.text('ÉCRAN ABONNEMENT'), findsOneWidget);
+    expect(find.text('ÉCRAN MES MODULES'), findsOneWidget);
   });
 
   testWidgets('read-only refusal: expired title and message', (tester) async {
@@ -64,7 +64,7 @@ void main() {
     expect(find.text('Abonnement expiré'), findsOneWidget);
     expect(
         find.text(ModuleEntitlementException.readOnlyMessage), findsOneWidget);
-    expect(find.text('Passer à Premium'), findsOneWidget);
+    expect(find.text('Voir mes modules'), findsOneWidget);
   });
 
   testWidgets('employee: message without the upgrade action', (tester) async {
@@ -76,7 +76,7 @@ void main() {
 
     expect(find.text(ModuleEntitlementException.notEntitledMessage),
         findsOneWidget);
-    expect(find.text('Passer à Premium'), findsNothing);
+    expect(find.text('Voir mes modules'), findsNothing);
   });
 
   testWidgets('other errors: no upgrade action', (tester) async {
@@ -87,7 +87,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Un problème est survenu'), findsOneWidget);
-    expect(find.text('Passer à Premium'), findsNothing);
+    expect(find.text('Voir mes modules'), findsNothing);
   });
 
   testWidgets('inline refusal carries the compact action', (tester) async {
@@ -96,7 +96,7 @@ void main() {
 
     expect(
         find.text(ModuleEntitlementException.readOnlyMessage), findsOneWidget);
-    expect(find.text('Passer à Premium'), findsOneWidget);
+    expect(find.text('Voir mes modules'), findsOneWidget);
   });
 
   testWidgets(
@@ -121,7 +121,7 @@ void main() {
     await tester.tap(find.text('autre'));
     await tester.pump();
     expect(find.text('Stock introuvable'), findsOneWidget);
-    expect(find.text('Passer à Premium'), findsNothing);
+    expect(find.text('Voir mes modules'), findsNothing);
     ScaffoldMessenger.of(tester.element(find.text('autre')))
         .removeCurrentSnackBar();
     await tester.pumpAndSettle();
@@ -130,9 +130,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(ModuleEntitlementException.notEntitledMessage),
         findsOneWidget);
-    await tester.tap(find.text('Passer à Premium'));
+    await tester.tap(find.text('Voir mes modules'));
     await tester.pumpAndSettle();
-    expect(find.text('ÉCRAN ABONNEMENT'), findsOneWidget);
+    expect(find.text('ÉCRAN MES MODULES'), findsOneWidget);
   });
 
   testWidgets('snackbar builder captured before an await works once the '
@@ -159,8 +159,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(ModuleEntitlementException.readOnlyMessage),
         findsOneWidget);
-    await tester.tap(find.text('Passer à Premium'));
+    await tester.tap(find.text('Voir mes modules'));
     await tester.pumpAndSettle();
-    expect(find.text('ÉCRAN ABONNEMENT'), findsOneWidget);
+    expect(find.text('ÉCRAN MES MODULES'), findsOneWidget);
   });
 }

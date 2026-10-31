@@ -11,10 +11,15 @@ class FakeEntitlementsNotifier extends EntitlementsNotifier {
 
   /// French names sent with every answer (Story 15.2).
   final Map<String, String> displayNames;
+
+  /// Subscription details sent with every answer (Story 15.6).
+  final Map<String, ModuleDetails> details;
   int fetchCalls = 0;
 
   FakeEntitlementsNotifier(this.fetch,
-      {this.seed = Entitlements.unknown, this.displayNames = const {}});
+      {this.seed = Entitlements.unknown,
+      this.displayNames = const {},
+      this.details = const {}});
 
   @override
   Future<Entitlements> loadSeed() async => seed;
@@ -25,7 +30,11 @@ class FakeEntitlementsNotifier extends EntitlementsNotifier {
   @override
   Future<ModulesAnswer> fetchModules() async {
     fetchCalls++;
-    return (states: await fetch(), displayNames: displayNames);
+    return (
+      states: await fetch(),
+      displayNames: displayNames,
+      details: details,
+    );
   }
 
   @override
@@ -34,7 +43,9 @@ class FakeEntitlementsNotifier extends EntitlementsNotifier {
 
 /// Override answering [states] from the server.
 Override entitlementsOverride(Map<String, String> states,
-        {Map<String, String> displayNames = const {}}) =>
+        {Map<String, String> displayNames = const {},
+        Map<String, ModuleDetails> details = const {}}) =>
     entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
         () async => states,
-        displayNames: displayNames));
+        displayNames: displayNames,
+        details: details));

@@ -72,6 +72,7 @@ import '../../features/reports/presentation/page/report_detail_page.dart';
 import '../../features/reports/presentation/page/report_history_page.dart';
 import '../../features/settings/presentation/page/account_page.dart';
 import '../../features/settings/presentation/page/company_page.dart';
+import '../../features/settings/presentation/page/my_modules_page.dart';
 import '../../features/settings/presentation/page/report_preferences_page.dart';
 import '../../features/settings/presentation/page/settings_page.dart';
 import '../../features/settings/presentation/page/subscription_page.dart';
@@ -178,6 +179,7 @@ const _ownerOnlyPrefixes = [
   '/suppliers',
   '/stores',
   '/settings/subscription',
+  '/settings/modules',
   '/settings/team',
   '/settings/sync',
   '/settings/categories',
@@ -739,6 +741,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/settings/subscription',
       builder: (_, __) => const SubscriptionPage(),
+    ),
+    // ── Settings > Mes modules (Story 15.6 — owner only) ─────────────────
+    GoRoute(
+      path: '/settings/modules',
+      builder: (_, __) => const MyModulesPage(),
     ),
     // ── Settings > Team (Story 3.5 — full-screen, nav bar hidden) ────────
     GoRoute(

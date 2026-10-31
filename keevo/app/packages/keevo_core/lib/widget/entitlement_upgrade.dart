@@ -6,11 +6,12 @@ import '../di/core_providers.dart' show isOwnerSessionProvider;
 import '../network/module_entitlement_exception.dart';
 import 'app_error_widget.dart' show appErrorMessage;
 
-/// 13.10b — the « Passer à Premium » affordance shown next to a module
-/// entitlement refusal (403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`).
+/// 13.10b — the upgrade affordance shown next to a module entitlement refusal
+/// (403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`). Since Story 15.6 it reads
+/// « Voir mes modules » and opens the owner's « Mes modules » screen.
 ///
-/// Only the owner can open the subscription screen (owner-only route): an
-/// employee reads the message without the action.
+/// Only the owner can open that screen (owner-only route): an employee reads
+/// the message without the action.
 
 /// True when [context] can offer the upgrade action: a router is mounted and
 /// the session is not an employee one. An unreadable role (no ProviderScope,
@@ -25,7 +26,7 @@ bool canOfferPremiumUpgrade(BuildContext context) {
   }
 }
 
-/// Opens the subscription / upgrade screen. From inside a bottom sheet or a
+/// Opens « Mes modules » (Story 15.6). From inside a bottom sheet or a
 /// dialog, closes it first (the screen must not open behind it).
 void openPremiumUpgrade(BuildContext context) {
   final router = GoRouter.maybeOf(context);
@@ -34,7 +35,7 @@ void openPremiumUpgrade(BuildContext context) {
 }
 
 /// A SnackBar for [error]: its French message (`appErrorMessage`) and, for a
-/// module entitlement refusal, the « Passer à Premium » action.
+/// module entitlement refusal, the « Voir mes modules » action.
 ///
 /// [context] must be mounted: after an `await`, use [appErrorSnackBarFor]
 /// built before it.
@@ -87,7 +88,7 @@ AppErrorSnackBarBuilder appErrorSnackBarFor(BuildContext context) {
   };
 }
 
-/// The « Passer à Premium » button (screens and inline errors).
+/// The « Voir mes modules » button (screens and inline errors).
 class PremiumUpgradeButton extends StatelessWidget {
   /// Tonal filled button (full-page state) or text button (inline row).
   final bool compact;
@@ -105,7 +106,7 @@ class PremiumUpgradeButton extends StatelessWidget {
     }
     return FilledButton.icon(
       onPressed: () => openPremiumUpgrade(context),
-      icon: const Icon(Icons.workspace_premium_rounded),
+      icon: const Icon(Icons.extension_outlined),
       label: const Text(ModuleEntitlementException.upgradeLabel),
     );
   }

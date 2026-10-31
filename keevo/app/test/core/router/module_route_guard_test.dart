@@ -299,8 +299,8 @@ void main() {
               path: '/pos',
               builder: (_, __) => const Scaffold(body: Text('Caisse'))),
           GoRoute(
-              path: '/settings/subscription',
-              builder: (_, __) => const Scaffold(body: Text('Abonnement'))),
+              path: '/settings/modules',
+              builder: (_, __) => const Scaffold(body: Text('MES MODULES'))),
           GoRoute(
               path: '/inventory/counting/:sessionId',
               builder: (_, __) => const Scaffold(body: Text('Comptage'))),
@@ -334,7 +334,7 @@ void main() {
 
     testWidgets(
         'owner: notification deep link of a disabled module → screen '
-        'naming it in French, « Passer à Premium » opens the subscription',
+        'naming it in French, « Voir mes modules » opens « Mes modules »',
         (tester) async {
       final router = await pumpApp(tester, states: {'counting': 'DISABLED'});
 
@@ -352,9 +352,9 @@ void main() {
       expect(find.textContaining('counting'), findsNothing);
       expect(find.text(ModuleUnavailablePage.employeeMessage), findsNothing);
 
-      await tester.tap(find.text('Passer à Premium'));
+      await tester.tap(find.text('Voir mes modules'));
       await tester.pumpAndSettle();
-      expect(find.text('Abonnement'), findsOneWidget);
+      expect(find.text('MES MODULES'), findsOneWidget);
     });
 
     testWidgets('employee: message without the upgrade action; home = /pos',
@@ -366,7 +366,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(ModuleUnavailablePage.employeeMessage), findsOneWidget);
-      expect(find.text('Passer à Premium'), findsNothing);
+      expect(find.text('Voir mes modules'), findsNothing);
 
       await tester.tap(find.text(ModuleUnavailablePage.homeLabel));
       await tester.pumpAndSettle();

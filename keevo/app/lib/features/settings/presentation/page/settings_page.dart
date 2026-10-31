@@ -15,6 +15,7 @@ import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
+import 'my_modules_page.dart';
 
 /// SettingsPage — "Plus" tab → Paramètres.
 ///
@@ -178,6 +179,14 @@ class SettingsPage extends ConsumerWidget {
                         title: 'Abonnement',
                         subtitle: 'Plan actif, limites et mise à niveau',
                         onTap: () => context.push('/settings/subscription'),
+                      ),
+                      _SettingsTile(
+                        key: const Key('settings-my-modules'),
+                        icon: Icons.extension_outlined,
+                        iconColor: AppTheme.iconTeal,
+                        title: MyModulesPage.title,
+                        subtitle: 'Modules inclus, essais et abonnements',
+                        onTap: () => context.push('/settings/modules'),
                       ),
                       _SettingsTile(
                         icon: Icons.group_outlined,

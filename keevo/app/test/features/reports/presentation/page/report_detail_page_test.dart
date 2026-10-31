@@ -63,7 +63,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('Fonctionnalité Premium'), findsOneWidget);
+    expect(find.text('Fonctionnalité non incluse'), findsOneWidget);
     expect(find.text(ModuleEntitlementException.notEntitledMessage),
         findsOneWidget);
   });

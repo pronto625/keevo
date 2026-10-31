@@ -50,8 +50,13 @@ class _Adapter implements HttpClientAdapter {
                 'moduleId': e.key,
                 'displayName': 'Module',
                 'state': e.value,
-                'expiresAt': null,
+                'expiresAt':
+                    e.key == 'invoicing' ? '2026-11-05T10:00:00Z' : null,
                 'graceUntil': null,
+                // 15.6: subscription status, free offer, category.
+                'status': e.key == 'invoicing' ? 'TRIAL' : null,
+                'free': e.key == 'catalog',
+                'category': e.key == 'catalog' ? 'business' : 'premium',
               }
           ]
         }),
@@ -480,7 +485,84 @@ void main() {
     });
   });
 
+  test('15.6: subscription details exposed and persisted with the snapshot',
+      () async {
+    final c = await setUpContainer(
+      token: _token(),
+      server: {'invoicing': 'ENABLED', 'catalog': 'ENABLED'},
+    );
+    await c.read(entitlementsProvider.future);
+    await settle();
+
+    final e = c.read(entitlementsProvider).requireValue;
+    final invoicing = e.detailsOf('invoicing')!;
+    expect(invoicing.status, kSubscriptionTrial);
+    expect(invoicing.free, isFalse);
+    expect(invoicing.category, 'premium');
+    expect(invoicing.expiresAt, DateTime.utc(2026, 11, 5, 10));
+    expect(e.detailsOf('catalog')!.isIncluded, isTrue);
+    expect(e.detailsOf('catalog')!.status, isNull);
+    // Offline restart: the snapshot carries the same details.
+    expect(persisted()!.details, e.details);
+  });
+
   group('Entitlements', () {
+    test('15.6: snapshot JSON round trip keeps the details', () {
+      final e = Entitlements(
+        states: const {'multi-store': 'READ_ONLY', 'catalog': 'ENABLED'},
+        status: EntitlementsStatus.server,
+        fetchedAt: DateTime.utc(2026, 10, 30, 8),
+        details: {
+          'multi-store': ModuleDetails(
+            status: kSubscriptionActive,
+            category: 'premium',
+            expiresAt: DateTime.utc(2026, 10, 29, 10),
+            graceUntil: DateTime.utc(2026, 11, 5, 10),
+          ),
+          'catalog': const ModuleDetails(free: true, category: 'business'),
+        },
+      );
+      final back = Entitlements.fromJson(jsonDecode(jsonEncode(e.toJson())));
+      expect(back, e.withStatus(EntitlementsStatus.cached));
+      expect(back!.detailsOf('multi-store')!.graceUntil,
+          DateTime.utc(2026, 11, 5, 10));
+      expect(back.detailsOf('catalog')!.isIncluded, isTrue);
+    });
+
+    test('15.6: snapshot of 2.0.15 (no details) reads back without details',
+        () {
+      final back = Entitlements.fromJson({
+        'states': {'crm': 'ENABLED'},
+      });
+      expect(back!.details, isEmpty);
+      expect(back.detailsOf('crm'), isNull);
+    });
+
+    test('15.6: details parsed from the API answer', () {
+      final details = Entitlements.parseApiDetails([
+        {
+          'moduleId': 'invoicing',
+          'state': 'ENABLED',
+          'status': 'TRIAL',
+          'free': false,
+          'category': 'premium',
+          'expiresAt': '2026-11-05T10:00:00Z',
+          'graceUntil': null,
+        },
+        {'moduleId': 'profitability', 'state': 'DISABLED'},
+        'oops',
+      ]);
+      expect(
+          details['invoicing'],
+          ModuleDetails(
+              status: 'TRIAL',
+              category: 'premium',
+              expiresAt: DateTime.utc(2026, 11, 5, 10)));
+      expect(details['profitability'], const ModuleDetails());
+      expect(details['profitability']!.wasSubscribed, isFalse);
+      expect(Entitlements.parseApiDetails({'oops': 1}), isEmpty);
+    });
+
     test('snapshot JSON round trip', () {
       final e = Entitlements(
         states: const {'pos': 'ENABLED', 'crm': 'READ_ONLY'},

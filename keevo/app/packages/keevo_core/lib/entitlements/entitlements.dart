@@ -28,6 +28,88 @@ enum EntitlementsStatus {
   server,
 }
 
+/// Stored subscription status values sent with the module states (Story 15.6).
+const kSubscriptionTrial = 'TRIAL';
+const kSubscriptionActive = 'ACTIVE';
+const kSubscriptionExpired = 'EXPIRED';
+const kSubscriptionDisabled = 'DISABLED';
+const kSubscriptionAvailable = 'AVAILABLE';
+
+/// Story 15.6 — what the server says about one module beyond its state: the
+/// stored subscription [status] (null: never subscribed), whether it is part of
+/// the free offer, its manifest [category] and the subscription dates (owner
+/// only; null for an employee or when there is none). Immutable.
+@immutable
+class ModuleDetails {
+  /// `TRIAL` | `ACTIVE` | `EXPIRED` | `DISABLED` | `AVAILABLE`, null when the
+  /// tenant never had a subscription row for it.
+  final String? status;
+  final bool free;
+
+  /// `core` | `business` | `premium` (null when not sent).
+  final String? category;
+  final DateTime? expiresAt;
+  final DateTime? graceUntil;
+
+  const ModuleDetails({
+    this.status,
+    this.free = false,
+    this.category,
+    this.expiresAt,
+    this.graceUntil,
+  });
+
+  /// Part of the offer at no cost: free in the manifest, or the core.
+  bool get isIncluded => free || category == 'core';
+
+  /// The tenant had (or has) a subscription for it.
+  bool get wasSubscribed => status != null && status != kSubscriptionAvailable;
+
+  Map<String, dynamic> toJson() => {
+        if (status != null) 'status': status,
+        'free': free,
+        if (category != null) 'category': category,
+        if (expiresAt != null)
+          'expiresAt': expiresAt!.toUtc().toIso8601String(),
+        if (graceUntil != null)
+          'graceUntil': graceUntil!.toUtc().toIso8601String(),
+      };
+
+  /// From a snapshot entry or an API item; null when [json] is not a map.
+  static ModuleDetails? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final status = json['status'];
+    final free = json['free'];
+    final category = json['category'];
+    return ModuleDetails(
+      status: status is String && status.isNotEmpty ? status : null,
+      free: free == true,
+      category: category is String && category.isNotEmpty ? category : null,
+      expiresAt: _date(json['expiresAt']),
+      graceUntil: _date(json['graceUntil']),
+    );
+  }
+
+  static DateTime? _date(Object? raw) =>
+      raw is String ? DateTime.tryParse(raw)?.toUtc() : null;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ModuleDetails &&
+      other.status == status &&
+      other.free == free &&
+      other.category == category &&
+      other.expiresAt == expiresAt &&
+      other.graceUntil == graceUntil;
+
+  @override
+  int get hashCode =>
+      Object.hash(status, free, category, expiresAt, graceUntil);
+
+  @override
+  String toString() => 'ModuleDetails($status, free: $free, $category)';
+}
+
 /// Story 15.1 — the tenant's module states (module id → `ENABLED` |
 /// `READ_ONLY` | `DISABLED`). Immutable.
 @immutable
@@ -39,24 +121,30 @@ class Entitlements {
   /// with the snapshot). Empty for a claim seed or an older snapshot.
   final Map<String, String> displayNames;
 
+  /// Story 15.6 — module id → subscription details (server answer, persisted
+  /// with the snapshot). Empty for a claim seed or an older snapshot.
+  final Map<String, ModuleDetails> details;
+
   /// When the server answered (server / cached), or when the token carrying
   /// the claim was issued (claim). Null when unknown.
   final DateTime? fetchedAt;
 
-  const Entitlements._(
-      this.states, this.status, this.fetchedAt, this.displayNames);
+  const Entitlements._(this.states, this.status, this.fetchedAt,
+      this.displayNames, this.details);
 
   Entitlements({
     required Map<String, String> states,
     required this.status,
     this.fetchedAt,
     Map<String, String> displayNames = const {},
+    Map<String, ModuleDetails> details = const {},
   })  : states = Map.unmodifiable(states),
-        displayNames = Map.unmodifiable(displayNames);
+        displayNames = Map.unmodifiable(displayNames),
+        details = Map.unmodifiable(details);
 
   /// Nothing known yet.
-  static const unknown = Entitlements._(
-      <String, String>{}, EntitlementsStatus.unknown, null, <String, String>{});
+  static const unknown = Entitlements._(<String, String>{},
+      EntitlementsStatus.unknown, null, <String, String>{}, <String, ModuleDetails>{});
 
   /// From the token's `modules` claim: the listed modules are usable.
   factory Entitlements.fromClaim(List<String> modules, {DateTime? issuedAt}) =>
@@ -94,13 +182,18 @@ class Entitlements {
       states: states,
       status: status,
       fetchedAt: fetchedAt,
-      displayNames: displayNames);
+      displayNames: displayNames,
+      details: details);
 
   /// Snapshot form (states + fetch date; the status is not stored: a snapshot
   /// read back is always [EntitlementsStatus.cached]).
   Map<String, dynamic> toJson() => {
         'states': states,
         if (displayNames.isNotEmpty) 'displayNames': displayNames,
+        if (details.isNotEmpty)
+          'details': {
+            for (final e in details.entries) e.key: e.value.toJson(),
+          },
         if (fetchedAt != null)
           'fetchedAt': fetchedAt!.toUtc().toIso8601String(),
       };
@@ -125,12 +218,23 @@ class Entitlements {
         }
       }
     }
+    final details = <String, ModuleDetails>{};
+    final rawDetails = json['details'];
+    if (rawDetails is Map) {
+      for (final entry in rawDetails.entries) {
+        final parsed = ModuleDetails.fromJson(entry.value);
+        if (entry.key is String && parsed != null) {
+          details[entry.key as String] = parsed;
+        }
+      }
+    }
     final at = json['fetchedAt'];
     return Entitlements(
       states: states,
       status: EntitlementsStatus.cached,
       fetchedAt: at is String ? DateTime.tryParse(at) : null,
       displayNames: names,
+      details: details,
     );
   }
 
@@ -170,13 +274,33 @@ class Entitlements {
     return names;
   }
 
+  /// Story 15.6 — module id → [ModuleDetails] of the same `data` list
+  /// (`status`, `free`, `category`, `expiresAt`, `graceUntil`). Call after
+  /// [parseApiStates].
+  static Map<String, ModuleDetails> parseApiDetails(Object? data) {
+    final details = <String, ModuleDetails>{};
+    if (data is! List) return details;
+    for (final item in data) {
+      if (item is Map) {
+        final id = item['moduleId'];
+        final parsed = ModuleDetails.fromJson(item);
+        if (id is String && parsed != null) details[id] = parsed;
+      }
+    }
+    return details;
+  }
+
+  /// [details] of [moduleId], null when the server never sent them.
+  ModuleDetails? detailsOf(String moduleId) => details[moduleId];
+
   @override
   bool operator ==(Object other) =>
       other is Entitlements &&
       other.status == status &&
       other.fetchedAt == fetchedAt &&
       mapEquals(other.states, states) &&
-      mapEquals(other.displayNames, displayNames);
+      mapEquals(other.displayNames, displayNames) &&
+      mapEquals(other.details, details);
 
   @override
   int get hashCode => Object.hash(
@@ -184,7 +308,9 @@ class Entitlements {
       fetchedAt,
       Object.hashAllUnordered(states.entries.map((e) => '${e.key}=${e.value}')),
       Object.hashAllUnordered(
-          displayNames.entries.map((e) => '${e.key}=${e.value}')));
+          displayNames.entries.map((e) => '${e.key}=${e.value}')),
+      Object.hashAllUnordered(
+          details.entries.map((e) => Object.hash(e.key, e.value))));
 
   @override
   String toString() => 'Entitlements($status, $states)';

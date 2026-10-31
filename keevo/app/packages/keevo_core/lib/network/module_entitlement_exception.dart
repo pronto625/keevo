@@ -18,7 +18,8 @@ enum ModuleRefusalReason {
 /// Neither an auth problem nor a network one: it never ends the session,
 /// renews the token or retries the request. [message] is the French text
 /// shown to the user (`appErrorMessage` reads it); the screens add a
-/// « Passer à Premium » action opening the subscription screen.
+/// « Voir mes modules » action opening the owner's « Mes modules » screen
+/// (Story 15.6).
 class ModuleEntitlementException implements Exception {
   final ModuleRefusalReason reason;
 
@@ -29,11 +30,12 @@ class ModuleEntitlementException implements Exception {
   static const readOnlyMessage =
       'Abonnement expiré : ce module est en lecture seule';
 
-  /// Label of the upgrade action next to the message.
-  static const upgradeLabel = 'Passer à Premium';
+  /// Label of the upgrade action next to the message (Story 15.6: the owner
+  /// sees his modules and asks support; no self-service purchase in V1).
+  static const upgradeLabel = 'Voir mes modules';
 
-  /// Route of the existing subscription / upgrade screen.
-  static const upgradeRoute = '/settings/subscription';
+  /// Route of the owner's « Mes modules » screen (Story 15.6).
+  static const upgradeRoute = '/settings/modules';
 
   static const notEntitledCode = 'MODULE_NOT_ENTITLED';
   static const readOnlyCode = 'MODULE_READ_ONLY';

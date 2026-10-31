@@ -119,8 +119,8 @@ void main() {
 
   // 13.10b — live bug: a Free tenant tapping « Démarrer l'inventaire » got a
   // 403 MODULE_NOT_ENTITLED and saw nothing (SnackBar under the sheet).
-  testWidgets('module refusal: Premium message in the sheet, « Passer à '
-      'Premium » closes it and opens the subscription screen', (tester) async {
+  testWidgets('module refusal: Premium message in the sheet, « Voir mes '
+      'modules » closes it and opens « Mes modules » (15.6)', (tester) async {
     final repo = _MockSessionRepo();
     when(() => repo.create(
               storeId: any(named: 'storeId'),
@@ -140,8 +140,8 @@ void main() {
         ),
       ),
       GoRoute(
-        path: '/settings/subscription',
-        builder: (_, __) => const Scaffold(body: Text('ÉCRAN ABONNEMENT')),
+        path: '/settings/modules',
+        builder: (_, __) => const Scaffold(body: Text('ÉCRAN MES MODULES')),
       ),
     ]);
     await tester.pumpWidget(ProviderScope(
@@ -165,9 +165,9 @@ void main() {
     expect(find.text(ModuleEntitlementException.notEntitledMessage),
         findsOneWidget);
 
-    await tester.tap(find.text('Passer à Premium'));
+    await tester.tap(find.text('Voir mes modules'));
     await tester.pumpAndSettle();
-    expect(find.text('ÉCRAN ABONNEMENT'), findsOneWidget);
+    expect(find.text('ÉCRAN MES MODULES'), findsOneWidget);
     expect(find.text('Démarrer l\'inventaire'), findsNothing);
   });
 }

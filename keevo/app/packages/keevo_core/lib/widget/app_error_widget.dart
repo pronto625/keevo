@@ -262,7 +262,7 @@ class _AppErrorWidgetState extends State<AppErrorWidget> {
 /// e.g. « Impossible de charger … », would read as a failure).
 String _refusalTitle(ModuleEntitlementException refusal) =>
     switch (refusal.reason) {
-      ModuleRefusalReason.notEntitled => 'Fonctionnalité Premium',
+      ModuleRefusalReason.notEntitled => 'Fonctionnalité non incluse',
       ModuleRefusalReason.readOnly => 'Abonnement expiré',
     };
 

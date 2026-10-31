@@ -11,8 +11,8 @@ import '../entitlements/entitlements_provider.dart';
 /// a module the tenant cannot read (direct navigation or deep link).
 ///
 /// Names the module in French (display name sent by the server with the
-/// module states, never its id). The owner gets « Passer à Premium »
-/// (subscription screen); an employee is told to ask the owner.
+/// module states, never its id). The owner gets « Voir mes modules »
+/// (Story 15.6, « Mes modules » screen); an employee is told to ask the owner.
 class ModuleUnavailablePage extends ConsumerWidget {
   /// Module id from the route (`?module=`), never displayed.
   final String? moduleId;

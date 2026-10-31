@@ -105,7 +105,14 @@ jobs:
         working-directory: keevo/app
         env:
           API_BASE_URL: ${{ steps.api.outputs.url }}
-        run: flutter build apk --release --dart-define=API_BASE_URL="${API_BASE_URL}"
+          # Story 15.6 — Keevo support WhatsApp number (« Mes modules » activation requests);
+          # empty → WhatsApp asks the owner for the recipient.
+          SUPPORT_WHATSAPP: ${{ vars.SUPPORT_WHATSAPP }}
+        run: |
+          if [ -z "${SUPPORT_WHATSAPP}" ]; then
+            echo "::warning::vars.SUPPORT_WHATSAPP est vide — « Demander l'activation » ouvrira WhatsApp sans destinataire."
+          fi
+          flutter build apk --release --dart-define=API_BASE_URL="${API_BASE_URL}" --dart-define=SUPPORT_WHATSAPP="${SUPPORT_WHATSAPP}"
 
       - name: Check the backend answers on that URL
         # Non-blocking: the backend may be deploying in parallel (same push). A warning makes a

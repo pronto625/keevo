@@ -93,6 +93,14 @@ void main() {
       }
     });
 
+    test('15.6: « Mes modules » is owner-only', () async {
+      expect(
+          await redirect('/settings/modules', session: true, role: 'EMPLOYEE'),
+          '/pos');
+      expect(await redirect('/settings/modules', session: true, role: 'OWNER'),
+          isNull);
+    });
+
     test('an owner reaches owner-only routes', () async {
       expect(await redirect('/dashboard', session: true, role: 'OWNER'), isNull);
     });

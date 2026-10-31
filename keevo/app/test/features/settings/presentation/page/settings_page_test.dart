@@ -143,6 +143,12 @@ Widget _buildPage({
               body: Center(child: Text('HelpPage')),
             ),
           ),
+          GoRoute(
+            path: '/settings/modules',
+            builder: (_, __) => const Scaffold(
+              body: Center(child: Text('MyModulesPage')),
+            ),
+          ),
         ],
       ),
     ),
@@ -520,6 +526,45 @@ void main() {
       await scrollToEnd(tester);
       expect(find.text('Clients'), findsOneWidget);
       expect(find.text('Fournisseurs'), findsOneWidget);
+    });
+  });
+
+  group('SettingsPage — « Mes modules » tile (Story 15.6)', () {
+    testWidgets('OWNER sees « Mes modules » in « Gestion », it opens the screen',
+        (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+      ));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('settings-my-modules')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Mes modules'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('settings-my-modules')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings-my-modules')));
+      await tester.pumpAndSettle();
+      expect(find.text('MyModulesPage'), findsOneWidget);
+    });
+
+    testWidgets('EMPLOYEE does not', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+      ));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('Se déconnecter'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.byKey(const Key('settings-my-modules')), findsNothing);
     });
   });
 

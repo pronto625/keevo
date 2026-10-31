@@ -1,7 +1,9 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:keevo/core/router/app_router.dart';
+import 'package:keevo/features/settings/presentation/page/my_modules_page.dart';
 
 /// Full paths of every [GoRoute] under [routes]. Shell routes add no path
 /// segment; a relative child path is joined to its parent's full path.
@@ -20,6 +22,24 @@ List<String> _fullPaths(List<RouteBase> routes, [String parent = '']) {
     }
   }
   return paths;
+}
+
+/// The [GoRoute] whose full path is [path], null when absent.
+GoRoute? _routeAt(List<RouteBase> routes, String path, [String parent = '']) {
+  for (final route in routes) {
+    if (route is GoRoute) {
+      final full = route.path.startsWith('/')
+          ? route.path
+          : '${parent == '/' ? '' : parent}/${route.path}';
+      if (full == path) return route;
+      final child = _routeAt(route.routes, path, full);
+      if (child != null) return child;
+    } else {
+      final child = _routeAt(route.routes, path, parent);
+      if (child != null) return child;
+    }
+  }
+  return null;
 }
 
 /// Shape of [path] as the router matches it: every `:param` segment becomes
@@ -94,5 +114,30 @@ void main() {
       ),
     ]);
     expect(_duplicates(dup), {'/x/:_'});
+  });
+
+  testWidgets('15.6: the real appRouter serves « Mes modules » at '
+      '/settings/modules', (tester) async {
+    const path = '/settings/modules';
+    final route = _routeAt(appRouter.configuration.routes, path);
+    expect(route, isNotNull);
+    expect(route!.builder, isNotNull);
+
+    late Widget built;
+    await tester.pumpWidget(Builder(builder: (context) {
+      built = route.builder!(
+        context,
+        GoRouterState(
+          appRouter.configuration,
+          uri: Uri.parse(path),
+          matchedLocation: path,
+          fullPath: path,
+          pathParameters: const {},
+          pageKey: const ValueKey(path),
+        ),
+      );
+      return const SizedBox.shrink();
+    }));
+    expect(built, isA<MyModulesPage>());
   });
 }

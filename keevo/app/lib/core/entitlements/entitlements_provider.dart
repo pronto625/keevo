@@ -15,6 +15,7 @@ import '../../features/auth/presentation/provider/auth_provider.dart';
 typedef ModulesAnswer = ({
   Map<String, String> states,
   Map<String, String> displayNames,
+  Map<String, ModuleDetails> details,
 });
 
 /// Story 15.1 — the tenant's module states, for every session role.
@@ -109,6 +110,7 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
       status: EntitlementsStatus.server,
       fetchedAt: DateTime.now(),
       displayNames: answer.displayNames,
+      details: answer.details,
     );
     // Another token / account since the request: its own build fetches.
     // A newer request was started: its answer wins.
@@ -163,8 +165,9 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
     }
   }
 
-  /// `GET /api/v1/tenants/me/modules` → module id → state, and module id →
-  /// French display name (Story 15.2, « module non activé » screen).
+  /// `GET /api/v1/tenants/me/modules` → module id → state, module id →
+  /// French display name (Story 15.2, « module non activé » screen) and
+  /// module id → subscription details (Story 15.6, « Mes modules »).
   @protected
   Future<ModulesAnswer> fetchModules() async {
     final resp = await ref
@@ -174,6 +177,7 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
     return (
       states: Entitlements.parseApiStates(data),
       displayNames: Entitlements.parseApiDisplayNames(data),
+      details: Entitlements.parseApiDetails(data),
     );
   }
 
