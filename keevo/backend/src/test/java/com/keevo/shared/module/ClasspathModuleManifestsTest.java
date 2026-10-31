@@ -34,11 +34,12 @@ class ClasspathModuleManifestsTest {
             // 14.7: invoicing publishes credit-note.issued and consumes sale.cancelled / sale.corrected (1.3.0),
             //       pos publishes them (1.4.0)
             // 15.2: routes declared for crm (1.3.0), multi-store, counting, profitability, exports, report-config (1.1.0)
+            // 15.5: invoicing declares its new screens' routes (1.4.0)
             String expected = switch (m.id()) {
                 case "crm" -> "1.3.0";
                 case "multi-store", "counting", "profitability", "exports", "report-config" -> "1.1.0";
                 case "pos" -> "1.4.0";
-                case "invoicing" -> "1.3.0";
+                case "invoicing" -> "1.4.0";
                 default -> "1.0.0";
             };
             assertThat(m.version()).isEqualTo(expected);

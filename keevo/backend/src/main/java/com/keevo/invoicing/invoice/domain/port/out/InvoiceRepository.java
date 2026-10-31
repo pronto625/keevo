@@ -60,11 +60,18 @@ public interface InvoiceRepository {
     /** Deletes a DRAFT (and its lines); returns false when no draft has this id. */
     boolean deleteDraft(UUID id);
 
+    /** Newest first, every criterion of {@code filter} applied. */
+    Page list(Filter filter, int page, int size);
+
     /**
-     * Newest first; {@code status} null = every status; {@code saleId} non-null = only the invoice created from that
-     * sale (Story 14.5 — at most one, {@code source_sale_id} is unique).
+     * Criteria of the invoice list, each one optional ({@code null} = not filtered): {@code status}; {@code saleId} =
+     * only the active invoice created from that sale (Story 14.5 — at most one); Story 15.5: {@code search} = part of the number or of the client name,
+     * case-insensitive, already trimmed; {@code from} / {@code to} = issue date range, inclusive (a draft has no issue
+     * date: excluded as soon as one bound is given).
      */
-    Page list(InvoiceStatus status, UUID saleId, int page, int size);
+    record Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
+                  java.time.LocalDate to) {
+    }
 
     /**
      * Next number of the year's gapless sequence, incremented in the caller's transaction (a rollback gives the

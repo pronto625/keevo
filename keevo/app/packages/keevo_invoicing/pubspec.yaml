@@ -1,5 +1,5 @@
 name: keevo_invoicing
-description: Keevo — module Facturation (écran facture, action « Facturer » du point de vente). Dépend uniquement de keevo_core (+ paquets tiers), jamais de l'app ni d'un autre module.
+description: Keevo — module Facturation (écrans factures et avoirs, informations vendeur, action « Facturer » du point de vente). Dépend uniquement de keevo_core (+ paquets tiers), jamais de l'app ni d'un autre module.
 publish_to: 'none'
 version: 0.1.0
 

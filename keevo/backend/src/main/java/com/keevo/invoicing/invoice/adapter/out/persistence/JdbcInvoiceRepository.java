@@ -174,17 +174,32 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
-    public Page list(InvoiceStatus status, UUID saleId, int page, int size) {
+    public Page list(Filter criteria, int page, int size) {
         String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
         List<String> conditions = new ArrayList<>();
         List<Object> filter = new ArrayList<>();
-        if (status != null) {
+        if (criteria.status() != null) {
             conditions.add("status = ?");
-            filter.add(status.name());
+            filter.add(criteria.status().name());
         }
-        if (saleId != null) {
+        if (criteria.saleId() != null) {
             conditions.add("source_sale_id = ? AND superseded_at IS NULL");
-            filter.add(saleId);
+            filter.add(criteria.saleId());
+        }
+        if (criteria.search() != null && !criteria.search().isEmpty()) {
+            // Story 15.5 — number or client name, case-insensitive; LIKE wildcards typed by the user are literal
+            conditions.add("(number ILIKE ? ESCAPE '\\' OR client_name ILIKE ? ESCAPE '\\')");
+            String pattern = "%" + escapeLike(criteria.search()) + "%";
+            filter.add(pattern);
+            filter.add(pattern);
+        }
+        if (criteria.from() != null) {
+            conditions.add("issue_date >= ?");
+            filter.add(Date.valueOf(criteria.from()));
+        }
+        if (criteria.to() != null) {
+            conditions.add("issue_date <= ?");
+            filter.add(Date.valueOf(criteria.to()));
         }
         String where = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
         Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter.toArray());
@@ -303,5 +318,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
                 rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"));
         return new Row(id, invoice);
+    }
+
+    /** Backslash, {@code %} and {@code _} taken literally in a LIKE pattern (escape character: backslash). */
+    static String escapeLike(String text) {
+        return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }

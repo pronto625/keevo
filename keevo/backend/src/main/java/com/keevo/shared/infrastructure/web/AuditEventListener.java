@@ -780,12 +780,13 @@ public class AuditEventListener {
                 event.actorId());
     }
 
+    /** Story 15.5 — detail « payée le 30/10/2026 » (the day the client paid, Africa/Douala; may be back-dated). */
     @EventListener
     public void on(InvoicePaidEvent event) {
         write(event.actorId(), event.tenantId(), "INVOICE_PAID", "Invoice", event.invoiceId(),
                 null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
                         "totalAmount", event.totalTtc(), "paymentMethod", event.paymentMethod()),
-                null, event.number(), null, null);
+                null, event.number(), map("detail", paidDetail(event.paidAt())), null);
         log.info("AUDIT: invoice_paid number={} tenantId={} actorId={}", event.number(), event.tenantId(),
                 event.actorId());
     }
@@ -926,6 +927,15 @@ public class AuditEventListener {
                 ctx.deviceId(),
                 ctx.source(),
                 metadata.isEmpty() ? null : toJson(metadata)));
+    }
+
+    private static final java.time.format.DateTimeFormatter PAID_DAY =
+            java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    /** « payée le 30/10/2026 », null when the payment time is unknown. */
+    static String paidDetail(java.time.Instant paidAt) {
+        return paidAt == null ? null
+                : "payée le " + PAID_DAY.format(paidAt.atZone(com.keevo.shared.domain.time.KeevoZones.WAT));
     }
 
     /** Insertion-ordered map that tolerates null values (unlike {@code Map.of}). */

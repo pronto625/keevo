@@ -98,12 +98,18 @@ public class InvoiceLifecycleUseCase {
 
     @Transactional
     public Invoice pay(UUID id, String paymentMethod, UUID actorId, String tenantId) {
+        return pay(id, paymentMethod, null, actorId, tenantId);
+    }
+
+    /** Story 15.5 — {@code paidOn}: the day the client paid ({@code null} = now), see {@link Invoice#pay}. */
+    @Transactional
+    public Invoice pay(UUID id, String paymentMethod, LocalDate paidOn, UUID actorId, String tenantId) {
         Invoice issued = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         Instant now = clock.instant();
-        Invoice paid = issued.pay(paymentMethod, now);
+        Invoice paid = issued.pay(paymentMethod, paidOn, now);
         invoices.markPaid(paid);
         events.publishEvent(new InvoicePaidEvent(paid.id(), paid.number(), paid.client().name(),
-                paid.totals().totalTtc(), paid.paymentMethod(), actorId, tenantId, now));
+                paid.totals().totalTtc(), paid.paymentMethod(), paid.paidAt(), actorId, tenantId, now));
         return paid;
     }
 

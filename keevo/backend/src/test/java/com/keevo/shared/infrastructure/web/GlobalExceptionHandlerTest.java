@@ -59,6 +59,27 @@ class GlobalExceptionHandlerTest {
         assertThat(resp.getBody().domainCode()).isEqualTo("RATE_LIMIT_EXCEEDED");
     }
 
+    @Test
+    @DisplayName("15.5 — invalid parameter: 400, its French user message when given, else « Paramètre invalide : x »")
+    void invalidParameter_userMessage() {
+        var precise = handler.handleInvalidParameter(new InvalidRequestParameterException("from", "from after to",
+                "La date de début doit précéder la date de fin"));
+        assertThat(precise.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(precise.getBody().error()).isEqualTo("La date de début doit précéder la date de fin");
+        assertThat(precise.getBody().domainCode()).isEqualTo("VALIDATION_ERROR");
+        var generic = handler.handleInvalidParameter(new InvalidRequestParameterException("size", "size too big"));
+        assertThat(generic.getBody().error()).isEqualTo("Paramètre invalide : size");
+    }
+
+    @Test
+    @DisplayName("15.5 — INVOICE_PAYMENT_DATE_INVALID maps to 400 with its French reason")
+    void invoicePaymentDateInvalid_mapsTo400() {
+        var resp = handler.handleDomainException(new DomainException(ErrorCode.INVOICE_PAYMENT_DATE_INVALID, "x",
+                java.util.Map.of("reason", "elle ne peut pas être dans le futur")));
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(resp.getBody().error()).isEqualTo("Date de paiement invalide : elle ne peut pas être dans le futur");
+    }
+
     // ── H2 fix: FORBIDDEN must map to 403 (not 401) ──────────────────────────
 
     @Test

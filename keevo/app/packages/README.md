@@ -5,7 +5,7 @@
 | Package | Rôle | Peut importer |
 |---------|------|---------------|
 | `keevo_core` | noyau partagé : thème, base Drift, sync, réseau, widgets, contrat des modules (`module/`) | paquets tiers uniquement |
-| `keevo_invoicing` | module Facturation (écran facture, action « Facturer ») — pilote 15.4c | `keevo_core` + paquets tiers |
+| `keevo_invoicing` | module Facturation (liste, création, facture, paiement, envoi WhatsApp, avoirs, informations vendeur — 15.5 ; action « Facturer ») — pilote 15.4c | `keevo_core` + paquets tiers |
 | app (`keevo`, `../lib`) | composition, « app shell », features pas encore extraites | tout |
 
 `test/architecture/package_boundary_test.dart` (côté app) échoue si un fichier

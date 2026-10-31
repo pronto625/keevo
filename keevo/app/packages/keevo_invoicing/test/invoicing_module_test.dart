@@ -16,11 +16,18 @@ import 'package:keevo_invoicing/presentation/provider/invoicing_providers.dart';
 /// would keep this one's `loadLibrary` pending.
 void main() {
   group('invoicingModuleUi (15.4c descriptor)', () {
-    test('module id, route /invoicing/:id, « Facturer » handler', () {
+    test('module id, routes (15.5: static paths before /invoicing/:id), '
+        '« Facturer » handler', () {
       expect(invoicingModuleUi.id, 'invoicing');
       expect(
         invoicingModuleUi.routes.map((r) => (r as GoRoute).path).toList(),
-        ['/invoicing/:id'],
+        [
+          '/invoicing',
+          '/invoicing/new',
+          '/invoicing/settings',
+          '/invoicing/:id',
+          '/invoicing/:id/edit',
+        ],
       );
       expect(invoicingModuleUi.actions.keys, [kOpenSaleInvoiceAction]);
       expect(kOpenSaleInvoiceAction, 'invoicing.open-sale-invoice');

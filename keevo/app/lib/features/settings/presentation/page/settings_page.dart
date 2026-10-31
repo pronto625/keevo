@@ -224,6 +224,9 @@ class SettingsPage extends ConsumerWidget {
                         subtitle: 'Historique, appareils et file d\'attente',
                         onTap: () => context.push('/settings/sync'),
                       ),
+                      // Story 15.5 — module Facturation (route guard 15.2).
+                      if (isRouteAvailable(ref, '/invoicing'))
+                        _invoicingTile(context),
                       if (isRouteAvailable(ref, '/clients'))
                         _SettingsTile(
                           icon: Icons.people_outline_rounded,
@@ -262,9 +265,14 @@ class SettingsPage extends ConsumerWidget {
 
                 // ── Section : Consultation stock (EMPLOYEE — read-only) ──
                 // Story 15.2: hidden when none of its modules is readable.
+                // Story 15.5: « Factures » (employees create, view and send).
                 if (!isOwner &&
-                    const ['/stock/overview', '/inventory', '/stock/transfers']
-                        .any((r) => isRouteAvailable(ref, r))) ...[
+                    const [
+                      '/stock/overview',
+                      '/inventory',
+                      '/stock/transfers',
+                      '/invoicing',
+                    ].any((r) => isRouteAvailable(ref, r))) ...[
                   const _SectionLabel('Consultation'),
                   const SizedBox(height: 8),
                   _SettingsCard(
@@ -294,6 +302,8 @@ class SettingsPage extends ConsumerWidget {
                           subtitle: 'Historique des transferts de stock',
                           onTap: () => context.push('/stock/transfers'),
                         ),
+                      if (isRouteAvailable(ref, '/invoicing'))
+                        _invoicingTile(context),
                     ]),
                   ),
                   const SizedBox(height: 20),
@@ -611,6 +621,18 @@ class _SettingsCard extends StatelessWidget {
     );
   }
 }
+
+/// Story 15.5 — « Factures » (module Facturation), in « Gestion » for the
+/// owner and « Consultation » for an employee; shown when `/invoicing` is
+/// available (15.2 guard).
+Widget _invoicingTile(BuildContext context) => _SettingsTile(
+      key: const Key('settings-invoicing'),
+      icon: Icons.receipt_long_outlined,
+      iconColor: AppTheme.iconBlue,
+      title: 'Factures',
+      subtitle: 'Créer, envoyer et suivre vos factures',
+      onTap: () => context.push('/invoicing'),
+    );
 
 class _SettingsTile extends StatelessWidget {
   final IconData icon;

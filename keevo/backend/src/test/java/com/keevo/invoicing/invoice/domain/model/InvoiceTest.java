@@ -131,6 +131,38 @@ class InvoiceTest {
     }
 
     @Test
+    @DisplayName("15.5 — pay on a chosen day: today → now; earlier → noon of that day (Douala); future / before issue → 400 code")
+    void payOnChosenDay() {
+        // issued on 2026-10-28, now = 2026-10-30 10:00Z (11:00 in Douala)
+        Invoice issued = draft().issue("FAC-2026-000001", LocalDate.of(2026, 10, 28), SELLER, T0);
+        assertThat(issued.pay("Espèces", null, T1).paidAt()).isEqualTo(T1);
+        assertThat(issued.pay("Espèces", LocalDate.of(2026, 10, 30), T1).paidAt()).isEqualTo(T1);
+        Invoice backDated = issued.pay("Espèces", LocalDate.of(2026, 10, 29), T1);
+        assertThat(backDated.status()).isEqualTo(InvoiceStatus.PAID);
+        assertThat(backDated.paidAt()).isEqualTo(Instant.parse("2026-10-29T11:00:00Z"));
+        assertThat(backDated.updatedAt()).isEqualTo(T1);
+        assertThat(issued.pay(null, LocalDate.of(2026, 10, 28), T1).paidAt())
+                .as("the issue day itself is allowed").isEqualTo(Instant.parse("2026-10-28T11:00:00Z"));
+
+        assertThatThrownBy(() -> issued.pay(null, LocalDate.of(2026, 10, 31), T1)).satisfies(e -> {
+            assertThat(code(e)).isEqualTo("INVOICE_PAYMENT_DATE_INVALID");
+            assertThat(((DomainException) e).getDetails().get("reason").toString()).contains("futur");
+        });
+        assertThatThrownBy(() -> issued.pay(null, LocalDate.of(2026, 10, 27), T1)).satisfies(e -> {
+            assertThat(code(e)).isEqualTo("INVOICE_PAYMENT_DATE_INVALID");
+            assertThat(((DomainException) e).getDetails().get("reason").toString()).contains("date d'émission");
+        });
+        // issued on 2026-10-29 at 15:00 Douala, paid « that day » recorded the next day: not before the issue time
+        Instant issuedAfternoon = Instant.parse("2026-10-29T14:00:00Z");
+        Invoice lateIssue = draft().issue("FAC-2026-000002", LocalDate.of(2026, 10, 29), SELLER, issuedAfternoon);
+        assertThat(lateIssue.pay(null, LocalDate.of(2026, 10, 29), T1).paidAt()).isEqualTo(issuedAfternoon);
+
+        // the status is checked first
+        assertThatThrownBy(() -> draft().pay(null, LocalDate.of(2026, 10, 31), T1))
+                .satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
+    }
+
+    @Test
     @DisplayName("assertIssuable: not a draft → INVALID_TRANSITION; blockers → NOT_ISSUABLE; issuable → no error")
     void assertIssuable() {
         draft().assertIssuable(SELLER);

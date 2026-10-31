@@ -2,6 +2,7 @@ package com.keevo.invoicing.invoice.domain.model;
 
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.domain.time.KeevoZones;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -161,14 +162,46 @@ public record Invoice(
                 null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
     }
 
-    /** ISSUED → PAID. */
+    /** ISSUED → PAID, paid now. */
     public Invoice pay(String method, Instant now) {
+        return pay(method, null, now);
+    }
+
+    /**
+     * ISSUED → PAID. Story 15.5: {@code paidOn} = the day the client paid (calendar day in Africa/Douala), for a payment
+     * recorded later; {@code null} or today = paid {@code now}; an earlier day = paid at noon of that day (a time that
+     * shows the same day in any time zone of the region), or at the issue time when the invoice was issued that day
+     * after noon. Refused ({@code INVOICE_PAYMENT_DATE_INVALID}): a day after
+     * today, or before the issue date.
+     */
+    public Invoice pay(String method, LocalDate paidOn, Instant now) {
         if (status != InvoiceStatus.ISSUED) {
             throw invalidTransition();
         }
+        LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
+        Instant paidAt = now;
+        if (paidOn != null && !paidOn.equals(today)) {
+            if (paidOn.isAfter(today)) {
+                throw invalidPaymentDate("elle ne peut pas être dans le futur");
+            }
+            if (issueDate != null && paidOn.isBefore(issueDate)) {
+                throw invalidPaymentDate("elle ne peut pas précéder la date d'émission de la facture");
+            }
+            paidAt = paidOn.atTime(12, 0).atZone(KeevoZones.WAT).toInstant();
+            // issued that same day after noon: never paid before it was issued (the day stays the chosen one)
+            if (issuedAt != null && paidAt.isBefore(issuedAt)
+                    && LocalDate.ofInstant(issuedAt, KeevoZones.WAT).equals(paidOn)) {
+                paidAt = issuedAt;
+            }
+        }
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
-                pricesIncludeVat, vatMention, lines, totals, issuedAt, now, InvoicingSettings.trimToNull(method),
+                pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt, InvoicingSettings.trimToNull(method),
                 null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
+    }
+
+    private static DomainException invalidPaymentDate(String reason) {
+        return new DomainException(ErrorCode.INVOICE_PAYMENT_DATE_INVALID, "Invalid payment date",
+                Map.of("reason", reason));
     }
 
     /** ISSUED → CANCELLED, number kept (an invoice without credit note). */

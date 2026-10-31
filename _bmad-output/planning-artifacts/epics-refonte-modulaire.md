@@ -1300,13 +1300,25 @@ So that **j'utilise la facturation depuis l'app (UX-DR5)**.
 - Sélecteur client conditionné par la présence de la capability CRM côté backend (14.3).
 
 ### Deferred items routed 2026-10-30
-- [ ] [Deferred-from: spec 14-1, 2026-10-30] Offline-first invoices: sync operations (`CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE`) with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (issue needs the server counter, offline issue = held until sync) [sync / invoicing]
-- [ ] [Deferred-from: review 14-1, 2026-10-30] Invoice list needs search (client name, number) and issue-date range; payment date selectable (back-dated payment received earlier) instead of `paidAt = now` [`InvoiceController` list / `PayInvoiceRequestDto`]
-- [ ] [Deferred-from: spec 14-1, 2026-10-30] Settings screen for the seller fiscal profile (legal name, address, NIU, RCCM, VAT-registered, rate, prices incl. VAT, payment details); show `complianceWarnings` before issuing [app]
+- [x] [Deferred-from: spec 14-1, 2026-10-30] Offline-first invoices: sync operations (`CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE`) with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (issue needs the server counter, offline issue = held until sync) [sync / invoicing] — ↪ split to Story 15.5b (2026-10-31)
+- [x] [Deferred-from: review 14-1, 2026-10-30] Invoice list needs search (client name, number) and issue-date range; payment date selectable (back-dated payment received earlier) instead of `paidAt = now` [`InvoiceController` list / `PayInvoiceRequestDto`] — ✅ 15.5 (2026-10-31)
+- [x] [Deferred-from: spec 14-1, 2026-10-30] Settings screen for the seller fiscal profile (legal name, address, NIU, RCCM, VAT-registered, rate, prices incl. VAT, payment details); show `complianceWarnings` before issuing [app] — ✅ 15.5 (2026-10-31)
 
 - [x] [Deferred-from: review 14-5, 2026-10-30] Checkout « Facturer » (`invoicing.open-sale-invoice`): open the sale's auto invoice via `GET /api/v1/invoices?saleId=`; when the page is empty show « Facture en cours de création » (sale offline or bridge pending) and let the user retry; cache the slot (`GET /api/v1/tenants/me/extensions/pos.checkout.post-sale-actions`) per session and refresh it with the entitlements [app invoicing / pos checkout] — ✅ 15.3 (2026-10-31): slot + lookup sheet + minimal invoice screen; 15.5 extends the invoice screen
 
-- [ ] [Deferred-from: review 14-7, 2026-10-30] Credit notes in the app: on an issued/paid invoice, « Faire un avoir » (owner, full or by line with quantities, reason required), list of the invoice's credit notes with PDF preview, « Remplacée » badge for superseded invoices (`supersededAt`) and « Entièrement créditée » (`fullyCredited`); backend has no credit-note list endpoint nor export dataset yet — add `GET /api/v1/credit-notes` (paged, year filter) and a credit-notes export dataset when the screen needs them [app invoicing / invoicing api]
+- [x] [Deferred-from: review 14-7, 2026-10-30] Credit notes in the app: on an issued/paid invoice, « Faire un avoir » (owner, full or by line with quantities, reason required), list of the invoice's credit notes with PDF preview, « Remplacée » badge for superseded invoices (`supersededAt`) and « Entièrement créditée » (`fullyCredited`); backend has no credit-note list endpoint nor export dataset yet — add `GET /api/v1/credit-notes` (paged, year filter) and a credit-notes export dataset when the screen needs them [app invoicing / invoicing api] — ✅ 15.5 (2026-10-31): screens done; list endpoint/export routed to 15.5b (optional)
+
+### Story 15.5b : Factures hors ligne (opérations de synchro)
+
+As a **commerçant**, I want **créer et encaisser mes factures même sans réseau**, So that **la facturation suit le modèle offline-first du reste de l'app**.
+
+**Scope:** sync operations `CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE` (handlers in the invoicing module, `moduleId() = "invoicing"`, gated like the other module ops), an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry) so invoices are pulled to the device, and the app side in `keevo_invoicing` (local table or cache, queued operations, « En attente de synchronisation » state). Numbering stays server-side: an invoice issued offline is held until sync and shows « Numéro attribué à la synchronisation ».
+
+**Items (routed):**
+- [ ] [Deferred-from: spec 14-1, 2026-10-30, via 15.5] Offline-first invoices: sync operations with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (offline issue held until sync) [sync / invoicing]
+- [ ] [Deferred-from: review 14-7 via 15.5, 2026-10-31] Optional: `GET /api/v1/credit-notes` (paged, year filter) and a credit-notes export dataset if a screen or the accountant export needs them [invoicing api]
+
+**AC (interim):** Given no network, when the merchant creates, issues or pays an invoice, then the operation is queued and applied at the next sync with the server-side number; every routed item is resolved or explicitly rejected with a reason.
 
 ### Story 15.6 : Écran « Mes modules » (owner)
 

@@ -183,6 +183,10 @@ Future<void> _tapLogoutAndConfirm(WidgetTester tester) async {
     200,
     scrollable: find.byType(Scrollable).first,
   );
+  // Fully on screen: a tile half under the edge may miss the tap (15.5 added
+  // the « Factures » tile above it).
+  await tester.ensureVisible(find.text('Se déconnecter'));
+  await tester.pumpAndSettle();
   await tester.tap(find.text('Se déconnecter'));
   await tester.pumpAndSettle();
 
@@ -450,6 +454,45 @@ void main() {
 
       expect(find.text('Consultation'), findsNothing);
       expect(find.text('Transferts'), findsNothing);
+    });
+
+    testWidgets('Story 15.5 — invoicing ENABLED: « Factures » for the owner '
+        '(Gestion) and the employee (Consultation)', (tester) async {
+      for (final role in const ['OWNER', 'EMPLOYEE']) {
+        await tester.pumpWidget(_buildPage(
+          mockFcmService: mockFcm,
+          mockTokenDataSource: mockTokenDs,
+          prefs: prefs,
+          role: role,
+          overrides: [
+            entitlementsOverride({...all('DISABLED'), 'invoicing': 'ENABLED'}),
+          ],
+        ));
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+        expect(find.byKey(const Key('settings-invoicing')), findsOneWidget,
+            reason: role);
+        expect(find.text('Factures'), findsOneWidget, reason: role);
+      }
+    });
+
+    testWidgets('Story 15.5 — invoicing DISABLED: no « Factures » entry',
+        (tester) async {
+      for (final role in const ['OWNER', 'EMPLOYEE']) {
+        await tester.pumpWidget(_buildPage(
+          mockFcmService: mockFcm,
+          mockTokenDataSource: mockTokenDs,
+          prefs: prefs,
+          role: role,
+          overrides: [
+            entitlementsOverride({...all('ENABLED'), 'invoicing': 'DISABLED'}),
+          ],
+        ));
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+        expect(find.byKey(const Key('settings-invoicing')), findsNothing,
+            reason: role);
+      }
     });
 
     testWidgets('module re-enabled (new server answer): entries reappear',

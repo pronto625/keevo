@@ -31,7 +31,10 @@ const kModuleRoutes = <String, List<String>>{
   ],
   'invoicing': [
     '/invoicing',
+    '/invoicing/new',
+    '/invoicing/settings',
     '/invoicing/:id',
+    '/invoicing/:id/edit',
   ],
   'multi-store': [
     '/stock/overview',

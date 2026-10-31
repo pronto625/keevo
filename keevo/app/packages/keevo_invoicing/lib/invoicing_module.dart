@@ -6,6 +6,10 @@ import 'package:keevo_core/widget/deferred_widget.dart';
 // descriptor is the only library of the package the app imports eagerly.
 import 'presentation/open_sale_invoice.dart' deferred as invoicing_actions;
 import 'presentation/page/invoice_detail_page.dart' deferred as invoice_detail;
+import 'presentation/page/invoice_form_page.dart' deferred as invoice_form;
+import 'presentation/page/invoice_list_page.dart' deferred as invoice_list;
+import 'presentation/page/invoicing_settings_page.dart'
+    deferred as invoicing_settings;
 
 /// Module id of the backend manifest (`keevo/modules/invoicing/module.json`).
 const kInvoicingModuleId = 'invoicing';
@@ -16,12 +20,35 @@ const kInvoicingModuleId = 'invoicing';
 const kOpenSaleInvoiceAction = 'invoicing.open-sale-invoice';
 
 /// Story 15.4c — the Invoicing module's UI, registered by the app shell
-/// (`lib/core/modules/registered_modules.dart`): the invoice screen
-/// `/invoicing/:id` (manifest route, 15.2 guard) and the « Facturer » handler.
+/// (`lib/core/modules/registered_modules.dart`): its screens (manifest
+/// routes, 15.2 guard) and the « Facturer » handler. Story 15.5: list
+/// `/invoicing`, creation `/invoicing/new`, seller settings
+/// `/invoicing/settings`, invoice `/invoicing/:id`, draft edit
+/// `/invoicing/:id/edit` — the static paths come before `/invoicing/:id`.
 final invoicingModuleUi = KeevoModuleUi(
   id: kInvoicingModuleId,
   routes: [
-    // Minimal read-only invoice screen (15.3); full UI in 15.5.
+    GoRoute(
+      path: '/invoicing',
+      builder: (_, _) => DeferredWidget(
+        loader: invoice_list.loadLibrary,
+        builder: (_) => invoice_list.InvoiceListPage(),
+      ),
+    ),
+    GoRoute(
+      path: '/invoicing/new',
+      builder: (_, _) => DeferredWidget(
+        loader: invoice_form.loadLibrary,
+        builder: (_) => invoice_form.InvoiceFormPage(),
+      ),
+    ),
+    GoRoute(
+      path: '/invoicing/settings',
+      builder: (_, _) => DeferredWidget(
+        loader: invoicing_settings.loadLibrary,
+        builder: (_) => invoicing_settings.InvoicingSettingsPage(),
+      ),
+    ),
     GoRoute(
       path: '/invoicing/:id',
       builder: (_, state) {
@@ -29,6 +56,16 @@ final invoicingModuleUi = KeevoModuleUi(
         return DeferredWidget(
           loader: invoice_detail.loadLibrary,
           builder: (_) => invoice_detail.InvoiceDetailPage(invoiceId: id),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/invoicing/:id/edit',
+      builder: (_, state) {
+        final id = state.pathParameters['id']!;
+        return DeferredWidget(
+          loader: invoice_form.loadLibrary,
+          builder: (_) => invoice_form.InvoiceFormPage(invoiceId: id),
         );
       },
     ),

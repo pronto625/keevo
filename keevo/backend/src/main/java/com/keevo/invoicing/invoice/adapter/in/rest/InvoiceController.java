@@ -5,6 +5,7 @@ import com.keevo.invoicing.invoice.application.usecase.InvoiceClientResolver;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceDocumentUseCase;
 import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
 import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -49,6 +50,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,6 +66,9 @@ import java.util.UUID;
 public class InvoiceController {
 
     static final int MAX_PAGE_SIZE = 100;
+
+    /** Story 15.5 — longest {@code search} text of the list. */
+    static final int MAX_SEARCH_LENGTH = 100;
 
     /** Canonical UUID text (UUID.fromString alone accepts misplaced dashes). */
     private static final java.util.regex.Pattern CANONICAL_UUID =
@@ -102,8 +107,11 @@ public class InvoiceController {
     }
 
     /**
-     * GET /api/v1/invoices?status=&saleId=&page=&size= — newest first. Story 14.5: {@code saleId} = only the invoice
-     * created from that sale by the POS bridge (0 or 1 item; empty while not created yet).
+     * GET /api/v1/invoices?status=&saleId=&search=&from=&to=&page=&size= — newest first. Story 14.5: {@code saleId} =
+     * only the invoice created from that sale by the POS bridge (0 or 1 item; empty while not created yet). Story 15.5:
+     * {@code search} = part of the number or of the client name (case-insensitive, trimmed, at most
+     * {@value #MAX_SEARCH_LENGTH} characters); {@code from} / {@code to} = issue date range ({@code yyyy-MM-dd},
+     * Africa/Douala calendar day, inclusive, {@code from <= to}) — drafts, not issued yet, are left out by a range.
      */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
@@ -111,6 +119,9 @@ public class InvoiceController {
     public ResponseEntity<ApiResponseWrapper<List<InvoiceResponseDto>>> list(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String saleId,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (page < 0) {
@@ -119,8 +130,21 @@ public class InvoiceController {
         if (size < 1 || size > MAX_PAGE_SIZE) {
             throw new InvalidRequestParameterException("size", "size must be between 1 and " + MAX_PAGE_SIZE);
         }
-        InvoiceStatus filter = parseStatus(status);
-        InvoiceRepository.Page result = queries.list(filter, parseSaleId(saleId), page, size);
+        String text = search == null || search.isBlank() ? null : search.strip();
+        if (text != null && text.indexOf('\0') >= 0) {
+            throw new InvalidRequestParameterException("search", "NUL character in search",
+                    "La recherche contient un caractère non autorisé");
+        }
+        if (text != null && text.length() > MAX_SEARCH_LENGTH) {
+            throw new InvalidRequestParameterException("search", "search too long",
+                    "La recherche ne doit pas dépasser " + MAX_SEARCH_LENGTH + " caractères");
+        }
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new InvalidRequestParameterException("from", "from must not be after to",
+                    "La date de début doit précéder la date de fin");
+        }
+        InvoiceRepository.Page result = queries.list(
+                new InvoiceRepository.Filter(parseStatus(status), parseSaleId(saleId), text, from, to), page, size);
         InvoicingSettings current = settings.current();
         var credits = queries.credits(result.items());
         List<InvoiceResponseDto> items = result.items().stream()
@@ -180,14 +204,18 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(issued)));
     }
 
-    /** POST /api/v1/invoices/{id}/pay — records the payment of an issued invoice. */
+    /**
+     * POST /api/v1/invoices/{id}/pay {@code {paymentMethod?, paidAt?}} — records the payment of an issued invoice.
+     * Story 15.5: {@code paidAt} = the day the client paid (today by default; never in the future nor before the issue
+     * date → 400 {@code INVOICE_PAYMENT_DATE_INVALID}).
+     */
     @RequiresPermission(InvoicingModule.INVOICE_SEND)
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping("/{id}/pay")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> pay(
             @PathVariable UUID id, @Valid @RequestBody(required = false) PayInvoiceRequestDto request) {
-        Invoice paid = lifecycle.pay(id, request == null ? null : request.paymentMethod(), CurrentActor.actorId(),
-                TenantContext.getCurrentTenant());
+        Invoice paid = lifecycle.pay(id, request == null ? null : request.paymentMethod(),
+                request == null ? null : request.paidAt(), CurrentActor.actorId(), TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(paid)));
     }
 

@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/module/module_ports.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_invoicing/data/remote_invoice_datasource.dart';
@@ -47,6 +48,10 @@ class _FakeDataSource implements RemoteInvoiceDataSource {
   @override
   Future<InvoicePdf> pdf(String id, {required String fallbackName}) async =>
       (bytes: const [37, 80, 68, 70], fileName: 'FAC-0007.pdf');
+
+  // Story 15.5 calls are covered by invoicing_screens_test.dart.
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 DioException _http(int status, Map<String, dynamic> body) {
@@ -334,6 +339,8 @@ void main() {
                 byId: byId ?? () async => _invoice,
               ),
             ),
+            // 15.5: the screen's actions depend on the session role.
+            isOwnerSessionProvider.overrideWithValue(true),
             invoicePdfOpenerProvider.overrideWithValue(
               opener ??
                   (i) async {

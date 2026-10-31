@@ -281,7 +281,8 @@ development_status:
   15-4a-workspace-melos-keevo-core: done  # 2026-10-31 build-auto done (spec-15-4a-workspace-melos-keevo-core.md) — workspace Melos 7, 79 fichiers core → packages/keevo_core (closure), shell app conservé ; 33 constats (lows corrigés)
   15-4b-migration-riverpod-3: done  # 2026-10-31 build-auto done (spec-15-4b-migration-riverpod-3.md) — Riverpod 3 + freezed 3, plus de legacy, audit ref.mounted, retry off ; 33 constats (1 high + 8 medium corrigés) ; routé → 15-4c
   15-4c-extraction-keevo-invoicing: done  # 2026-10-31 build-auto done (spec-15-4c-extraction-keevo-invoicing.md) — package keevo_invoicing (dépend de keevo_core seul), contrat module + ports, deferred ; 30 constats (lows corrigés)
-  15-5-ui-module-facturation: backlog
+  15-5-ui-module-facturation: done  # 2026-10-31 build-auto done (spec-15-5-ui-module-facturation.md) — UI facturation complète (liste, création, émission, paiement antidaté, WhatsApp, PDF, avoirs, profil vendeur) ; 41 constats (6 medium corrigés) ; hors ligne → 15-5b
+  15-5b-facturation-hors-ligne: backlog  # 2026-10-31 split from 15-5 (offline invoices) — 1 item
   15-6-ecran-mes-modules-owner: backlog
   15-7-dashboard-nextjs-ci-tests-epic9: backlog  # 2026-10-11 : 1 items deferred routés dans le brief de la story (epics-refonte-modulaire.md) ; story file à créer par bmad-create-story
   15-8-mapping-features-flutter-modules-gating: backlog

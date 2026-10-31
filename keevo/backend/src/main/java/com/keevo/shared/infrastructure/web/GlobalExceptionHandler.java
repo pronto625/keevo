@@ -137,6 +137,7 @@ public class GlobalExceptionHandler {
             Map.entry("INVOICE_NOT_EDITABLE",        "Cette facture a été émise : elle ne peut plus être modifiée ni supprimée"),
             Map.entry("INVOICE_INVALID_TRANSITION",  "Cette action n'est pas possible pour une facture {status}"),
             Map.entry("INVOICE_NOT_ISSUABLE",        "La facture ne peut pas être émise : {reason}"),
+            Map.entry("INVOICE_PAYMENT_DATE_INVALID", "Date de paiement invalide : {reason}"),
             Map.entry("INVOICE_PHONE_REQUIRED",      "Indiquez le numéro WhatsApp du client"),
             Map.entry("INVOICE_PHONE_INVALID",       "Le numéro WhatsApp du client n'est pas valide"),
             Map.entry("INVOICE_LINK_INVALID",        "Ce lien de facture n'est pas valide"),
@@ -221,7 +222,8 @@ public class GlobalExceptionHandler {
         countDomainError("VALIDATION_ERROR");
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponseWrapper.error(
-                        "Paramètre invalide : " + ex.getParameter(),
+                        ex.getUserMessage() != null ? ex.getUserMessage()
+                                : "Paramètre invalide : " + ex.getParameter(),
                         HttpStatus.BAD_REQUEST.name(),
                         "VALIDATION_ERROR",
                         null
@@ -405,7 +407,8 @@ public class GlobalExceptionHandler {
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case "JUSTIFICATION_REQUIRED",
-                 "JUSTIFICATION_TOO_SHORT" -> HttpStatus.BAD_REQUEST;
+                 "JUSTIFICATION_TOO_SHORT",
+                 "INVOICE_PAYMENT_DATE_INVALID" -> HttpStatus.BAD_REQUEST;  // 15.5 — back-dated payment out of range
             case "SECTOR_TEMPLATE_NOT_FOUND",
                  "ONBOARDING_ALREADY_COMPLETED",
                  "INVENTORY_INVALID_CATEGORIES",

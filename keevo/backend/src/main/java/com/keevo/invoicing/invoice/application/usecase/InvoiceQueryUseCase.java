@@ -2,7 +2,6 @@ package com.keevo.invoicing.invoice.application.usecase;
 
 import com.keevo.invoicing.invoice.domain.model.CreditNote;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
-import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 import com.keevo.invoicing.invoice.domain.port.out.CreditNoteRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.shared.domain.exception.DomainException;
@@ -57,9 +56,10 @@ public class InvoiceQueryUseCase {
         return invoices.findById(id).orElseThrow(InvoiceQueryUseCase::notFound);
     }
 
+    /** The list, newest first, with every criterion of {@code filter} (Story 15.5: search, issue date range). */
     @Transactional(readOnly = true)
-    public InvoiceRepository.Page list(InvoiceStatus status, UUID saleId, int page, int size) {
-        return invoices.list(status, saleId, page, size);
+    public InvoiceRepository.Page list(InvoiceRepository.Filter filter, int page, int size) {
+        return invoices.list(filter, page, size);
     }
 
     static DomainException notFound() {

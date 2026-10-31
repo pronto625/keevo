@@ -104,6 +104,16 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
         return call(ownerToken, method, path, body);
     }
 
+    /** GET /api/v1/invoices as the owner, {@code k=v&k=v} sent as raw request parameters (no URL encoding). */
+    private MvcResult list(String query) throws Exception {
+        var request = MockMvcRequestBuilders.get("/api/v1/invoices").header("Authorization", "Bearer " + ownerToken);
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            request.param(pair.substring(0, eq), pair.substring(eq + 1));
+        }
+        return mockMvc.perform(request).andReturn();
+    }
+
     private static String body(MvcResult r) throws Exception {
         return r.getResponse().getContentAsString(StandardCharsets.UTF_8);
     }
@@ -419,6 +429,105 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
         }
         assertThat(jdbc.queryForObject("SELECT last_number FROM \"" + schema + "\".invoice_counters WHERE year = ?",
                 Integer.class, Integer.parseInt(year))).isEqualTo(20);
+    }
+
+    @Test
+    @DisplayName("15.5 — list: search (number / client name, case-insensitive, LIKE wildcards literal), issue date range, French 400s")
+    void listSearchAndDateRange() throws Exception {
+        ownerSettings(true, null);
+        String ndolo = createDraft(ownerToken); // client « Société Ndolo »
+        JsonNode first = data(owner(HttpMethod.POST, "/api/v1/invoices/" + ndolo + "/issue", null), 200);
+        String awa = data(owner(HttpMethod.POST, "/api/v1/invoices", draft("Boutique 100% Awa",
+                List.of(line("Pagne", 1, 5_000, "STANDARD")))), 201).path("id").asText();
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + awa + "/issue", null), 200);
+        String draftOnly = data(owner(HttpMethod.POST, "/api/v1/invoices", draft("Ndolo Junior",
+                List.of(line("Riz", 1, 1_000, "STANDARD")))), 201).path("id").asText();
+        // back-date the first invoice's issue date by 10 days (range filter)
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Douala"));
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET issue_date = ? WHERE id = ?::uuid",
+                java.sql.Date.valueOf(today.minusDays(10)), ndolo);
+
+        java.util.function.Function<String, List<String>> ids = query -> {
+            try {
+                List<String> out = new ArrayList<>();
+                data(list(query), 200).forEach(n -> out.add(n.path("id").asText()));
+                return out;
+            } catch (Exception e) {
+                throw new IllegalStateException(e);
+            }
+        };
+        // client name, case-insensitive, trimmed — the draft matches too (no date bound)
+        assertThat(ids.apply("search= nDoLo ")).containsExactly(draftOnly, ndolo);
+        // number part
+        assertThat(ids.apply("search=" + first.path("number").asText().toLowerCase())).containsExactly(ndolo);
+        // « % » is literal, not a wildcard
+        assertThat(ids.apply("search=100%")).containsExactly(awa);
+        assertThat(ids.apply("search=%%%")).isEmpty();
+        // « _ » and a backslash are literal too: no number nor client name contains them
+        assertThat(ids.apply("search=_")).isEmpty();
+        assertThat(ids.apply("search=\\")).isEmpty();
+        MvcResult nul = list("search=nd\u0000olo");
+        assertError(nul, 400, "VALIDATION_ERROR");
+        assertThat(body(nul)).contains("La recherche contient un caractère non autorisé");
+        // issue date range, inclusive; drafts excluded
+        assertThat(ids.apply("from=" + today + "&to=" + today)).containsExactly(awa);
+        assertThat(ids.apply("from=" + today.minusDays(10) + "&to=" + today.minusDays(10))).containsExactly(ndolo);
+        assertThat(ids.apply("to=" + today.minusDays(1))).containsExactly(ndolo);
+        assertThat(ids.apply("search=ndolo&from=" + today.minusDays(30))).containsExactly(ndolo);
+        assertThat(ids.apply("search=ndolo&status=DRAFT")).containsExactly(draftOnly);
+        // pagination meta follows the filter
+        MvcResult page = list("search=ndolo&size=1");
+        assertThat(objectMapper.readTree(body(page)).path("meta").path("totalElements").asLong()).isEqualTo(2);
+
+        MvcResult reversed = list("from=" + today + "&to=" + today.minusDays(1));
+        assertError(reversed, 400, "VALIDATION_ERROR");
+        assertThat(body(reversed)).contains("La date de début doit précéder la date de fin");
+        MvcResult tooLong = list("search=" + "a".repeat(101));
+        assertError(tooLong, 400, "VALIDATION_ERROR");
+        assertThat(body(tooLong)).contains("La recherche ne doit pas dépasser 100 caractères");
+        assertThat(ids.apply("search=" + "a".repeat(100))).isEmpty();
+        MvcResult badDate = list("from=31-10-2026");
+        assertThat(badDate.getResponse().getStatus()).isEqualTo(400);
+        assertThat(body(badDate)).contains("Paramètre invalide");
+    }
+
+    @Test
+    @DisplayName("15.5 — pay with a payment date: yesterday → PAID that day; future / before issue → 400 French")
+    void payBackDated() throws Exception {
+        ownerSettings(true, null);
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Douala"));
+        String id = createDraft(ownerToken);
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/issue", null), 200);
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET issue_date = ? WHERE id = ?::uuid",
+                java.sql.Date.valueOf(today.minusDays(3)), id);
+
+        MvcResult future = owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/pay",
+                Map.of("paidAt", today.plusDays(1).toString()));
+        assertError(future, 400, "INVOICE_PAYMENT_DATE_INVALID");
+        assertThat(body(future)).contains("Date de paiement invalide : elle ne peut pas être dans le futur");
+        MvcResult beforeIssue = owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/pay",
+                Map.of("paidAt", today.minusDays(4).toString()));
+        assertError(beforeIssue, 400, "INVOICE_PAYMENT_DATE_INVALID");
+        assertThat(body(beforeIssue)).contains("précéder la date d'émission");
+
+        JsonNode paid = data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/pay",
+                Map.of("paymentMethod", "Espèces", "paidAt", today.minusDays(1).toString())), 200);
+        assertThat(paid.path("status").asText()).isEqualTo("PAID");
+        assertThat(paid.path("paymentMethod").asText()).isEqualTo("Espèces");
+        assertThat(java.time.Instant.parse(paid.path("paidAt").asText()).atZone(ZoneId.of("Africa/Douala"))
+                .toLocalDate()).isEqualTo(today.minusDays(1));
+        // audit: the chosen payment day in French, no technical data
+        String meta = jdbc.queryForObject("SELECT metadata::text FROM \"" + schema + "\".audit_log WHERE action = "
+                + "'INVOICE_PAID' AND entity_id = ?::uuid", String.class, id);
+        assertThat(meta).contains("payée le " + today.minusDays(1)
+                .format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")));
+        assertThat(meta).doesNotContainPattern("[0-9a-f]{8}-[0-9a-f]{4}-");
+        // without paidAt: paid now (today)
+        String second = createDraft(ownerToken);
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + second + "/issue", null), 200);
+        JsonNode now = data(owner(HttpMethod.POST, "/api/v1/invoices/" + second + "/pay", null), 200);
+        assertThat(java.time.Instant.parse(now.path("paidAt").asText()).atZone(ZoneId.of("Africa/Douala"))
+                .toLocalDate()).isEqualTo(today);
     }
 
     @Test
