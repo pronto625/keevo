@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/module_routes.dart';
 import '../../../export/domain/model/export_models.dart';
 import '../../../export/presentation/widget/export_entry_button.dart';
 import '../../../profitability/presentation/page/product_profitability_list_page.dart';
@@ -25,23 +26,56 @@ import 'reports_page.dart';
 /// DefaultTabController is embedded in a ConsumerWidget that rebuilds.
 ///
 /// EMPLOYEE route `/reports` points to [EmployeeReportsPage] (Jour + Brouillons).
-class OwnerReportsPage extends ConsumerStatefulWidget {
+class OwnerReportsPage extends ConsumerWidget {
   /// Tab opened first (AC7 deep links): 0 Jour, 1 Historique,
   /// 2 Rentabilité (`/reports/rentabilite`), 3 Boutiques (`/reports/boutiques`),
-  /// 4 Équipe.
+  /// 4 Équipe. Logical index: a tab hidden for its module (Story 15.2) opens
+  /// « Jour » instead.
   final int initialTab;
 
   const OwnerReportsPage({super.key, this.initialTab = 0});
 
+  static const tabJour = 0;
+  static const tabHistorique = 1;
   static const tabRentabilite = 2;
   static const tabBoutiques = 3;
   static const tabEquipe = 4;
 
   @override
-  ConsumerState<OwnerReportsPage> createState() => _OwnerReportsPageState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Story 15.2 — the Rentabilité / Boutiques tabs are the screens of the
+    // `profitability` / `multi-store` routes: hidden when the module cannot
+    // be read.
+    final visible = [
+      tabJour,
+      tabHistorique,
+      if (isRouteAvailable(ref, '/reports/rentabilite')) tabRentabilite,
+      if (isRouteAvailable(ref, '/reports/boutiques')) tabBoutiques,
+      tabEquipe,
+    ];
+    final initial = visible.indexOf(initialTab.clamp(0, tabEquipe));
+    return _OwnerReportsHub(
+      // A new tab set rebuilds the hub (its TabController has a fixed length).
+      key: ValueKey(visible.join(',')),
+      tabs: visible,
+      initialIndex: initial < 0 ? 0 : initial,
+    );
+  }
 }
 
-class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
+class _OwnerReportsHub extends ConsumerStatefulWidget {
+  /// Logical tab ids shown, in order.
+  final List<int> tabs;
+  final int initialIndex;
+
+  const _OwnerReportsHub(
+      {super.key, required this.tabs, required this.initialIndex});
+
+  @override
+  ConsumerState<_OwnerReportsHub> createState() => _OwnerReportsHubState();
+}
+
+class _OwnerReportsHubState extends ConsumerState<_OwnerReportsHub>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
 
@@ -49,9 +83,9 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
   void initState() {
     super.initState();
     _tabController = TabController(
-      length: 5,
+      length: widget.tabs.length,
       vsync: this,
-      initialIndex: widget.initialTab.clamp(0, 4),
+      initialIndex: widget.initialIndex,
     );
   }
 
@@ -60,6 +94,33 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
     _tabController.dispose();
     super.dispose();
   }
+
+  Widget _tab(int id) => switch (id) {
+        OwnerReportsPage.tabJour => _hubTab(Icons.today_outlined, 'Jour'),
+        OwnerReportsPage.tabHistorique =>
+          _hubTab(Icons.history_outlined, 'Historique'),
+        OwnerReportsPage.tabRentabilite =>
+          _hubTab(Icons.trending_up_outlined, 'Marges'),
+        OwnerReportsPage.tabBoutiques =>
+          _hubTab(Icons.storefront_outlined, 'Boutiques'),
+        _ => _hubTab(Icons.groups_outlined, 'Équipe'),
+      };
+
+  Widget _page(int id, String? activeStoreId) => switch (id) {
+        OwnerReportsPage.tabJour =>
+          _KeepAliveTab(key: const ValueKey('tab-jour'), child: ReportsPage()),
+        OwnerReportsPage.tabHistorique => _KeepAliveTab(
+            key: const ValueKey('tab-historique'),
+            child: ReportHistoryPage(storeId: activeStoreId)),
+        OwnerReportsPage.tabRentabilite => _KeepAliveTab(
+            key: const ValueKey('tab-rentabilite'),
+            child: ProductProfitabilityListPage(storeId: activeStoreId)),
+        OwnerReportsPage.tabBoutiques => const _KeepAliveTab(
+            key: ValueKey('tab-boutiques'), child: StorePerformancePage()),
+        _ => _KeepAliveTab(
+            key: const ValueKey('tab-equipe'),
+            child: SellerLeaderboardPage(storeId: activeStoreId)),
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -70,8 +131,8 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
         automaticallyImplyLeading: false,
         leading: context.canPop()
             ? IconButton(
-                icon: Icon(Icons.arrow_back_ios_new_rounded,
-                    color: cs.onSurface),
+                icon:
+                    Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
                 onPressed: () => context.pop(),
               )
             : null,
@@ -115,13 +176,7 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
               const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
           unselectedLabelStyle:
               const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-          tabs: [
-            _hubTab(Icons.today_outlined, 'Jour'),
-            _hubTab(Icons.history_outlined, 'Historique'),
-            _hubTab(Icons.trending_up_outlined, 'Marges'),
-            _hubTab(Icons.storefront_outlined, 'Boutiques'),
-            _hubTab(Icons.groups_outlined, 'Équipe'),
-          ],
+          tabs: [for (final id in widget.tabs) _tab(id)],
         ),
       ),
       body: TabBarView(
@@ -129,18 +184,7 @@ class _OwnerReportsPageState extends ConsumerState<OwnerReportsPage>
         // Stable ValueKeys prevent Flutter from confusing instances across
         // rebuilds, especially with AutomaticKeepAliveClientMixin active.
         children: [
-          _KeepAliveTab(key: const ValueKey('tab-jour'), child: ReportsPage()),
-          _KeepAliveTab(
-              key: const ValueKey('tab-historique'),
-              child: ReportHistoryPage(storeId: activeStoreId)),
-          _KeepAliveTab(
-              key: const ValueKey('tab-rentabilite'),
-              child: ProductProfitabilityListPage(storeId: activeStoreId)),
-          const _KeepAliveTab(
-              key: ValueKey('tab-boutiques'), child: StorePerformancePage()),
-          _KeepAliveTab(
-              key: const ValueKey('tab-equipe'),
-              child: SellerLeaderboardPage(storeId: activeStoreId)),
+          for (final id in widget.tabs) _page(id, activeStoreId),
         ],
       ),
     );
@@ -210,8 +254,8 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
         automaticallyImplyLeading: false,
         leading: context.canPop()
             ? IconButton(
-                icon: Icon(Icons.arrow_back_ios_new_rounded,
-                    color: cs.onSurface),
+                icon:
+                    Icon(Icons.arrow_back_ios_new_rounded, color: cs.onSurface),
                 onPressed: () => context.pop(),
               )
             : null,
@@ -240,8 +284,7 @@ class _EmployeeReportsPageState extends ConsumerState<EmployeeReportsPage>
       body: TabBarView(
         controller: _tabController,
         children: const [
-          _KeepAliveTab(
-              key: ValueKey('emp-tab-jour'), child: ReportsPage()),
+          _KeepAliveTab(key: ValueKey('emp-tab-jour'), child: ReportsPage()),
         ],
       ),
     );

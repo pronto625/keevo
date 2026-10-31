@@ -8,9 +8,13 @@ import 'package:keevo/core/entitlements/entitlements_provider.dart';
 class FakeEntitlementsNotifier extends EntitlementsNotifier {
   final Future<Map<String, String>> Function() fetch;
   final Entitlements seed;
+
+  /// French names sent with every answer (Story 15.2).
+  final Map<String, String> displayNames;
   int fetchCalls = 0;
 
-  FakeEntitlementsNotifier(this.fetch, {this.seed = Entitlements.unknown});
+  FakeEntitlementsNotifier(this.fetch,
+      {this.seed = Entitlements.unknown, this.displayNames = const {}});
 
   @override
   Future<Entitlements> loadSeed() async => seed;
@@ -19,9 +23,9 @@ class FakeEntitlementsNotifier extends EntitlementsNotifier {
   Future<bool> hasSession() async => true;
 
   @override
-  Future<Map<String, String>> fetchStates() {
+  Future<ModulesAnswer> fetchModules() async {
     fetchCalls++;
-    return fetch();
+    return (states: await fetch(), displayNames: displayNames);
   }
 
   @override
@@ -29,6 +33,8 @@ class FakeEntitlementsNotifier extends EntitlementsNotifier {
 }
 
 /// Override answering [states] from the server.
-Override entitlementsOverride(Map<String, String> states) =>
-    entitlementsProvider
-        .overrideWith(() => FakeEntitlementsNotifier(() async => states));
+Override entitlementsOverride(Map<String, String> states,
+        {Map<String, String> displayNames = const {}}) =>
+    entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
+        () async => states,
+        displayNames: displayNames));

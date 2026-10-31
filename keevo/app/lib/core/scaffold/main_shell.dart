@@ -14,6 +14,7 @@ import '../../features/stores/presentation/provider/active_store_provider.dart';
 import '../../features/stores/presentation/provider/store_provider.dart';
 import '../di/providers.dart';
 import '../router/app_router.dart';
+import '../router/module_routes.dart';
 import '../theme/app_theme.dart';
 import '../sync/auto_closure_notification_checker.dart';
 import '../sync/sync_trigger_notifier.dart';
@@ -274,7 +275,13 @@ class _MainShellState extends ConsumerState<MainShell> {
     final location = GoRouterState.of(context).uri.toString();
     final role = ref.watch(currentUserRoleProvider);
     final isEmployee = role == 'EMPLOYEE';
-    final routes = isEmployee ? _employeeRoutes : _ownerRoutes;
+    // Story 15.2 — a tab whose route belongs to a module the tenant cannot
+    // read is not shown (none of today's tabs is gated: their modules are
+    // always on; the filter keeps the bar right when one becomes a module).
+    final routes = [
+      for (final r in isEmployee ? _employeeRoutes : _ownerRoutes)
+        if (isRouteAvailable(ref, r)) r
+    ];
     final index = _tabIndex(location, routes);
     final draftCountAsync = ref.watch(pendingDraftsCountProvider);
     final draftCount = draftCountAsync.valueOrNull ?? 0;
@@ -308,20 +315,20 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ?.fold<int>(0, (sum, s) => sum + s.lowStockCount) ??
             0);
 
-    final destinations = <NavigationDestination>[
+    final allDestinations = <String, NavigationDestination>{
       if (!isEmployee)
-        const NavigationDestination(
+        '/dashboard': const NavigationDestination(
           icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(Icons.dashboard_rounded),
           label: 'Dashboard',
         ),
-      NavigationDestination(
+      '/pos': NavigationDestination(
         icon: const Icon(Icons.point_of_sale_outlined),
         selectedIcon: const Icon(Icons.point_of_sale_rounded),
         label: 'Caisse',
       ),
       // Catalogue — read-only for EMPLOYEE (mutation actions hidden in CatalogPage itself)
-      NavigationDestination(
+      '/products': NavigationDestination(
         icon: Badge(
           label: Text(lowStockCount > 9 ? '9+' : '$lowStockCount'),
           isLabelVisible: lowStockCount > 0 && !isEmployee,
@@ -350,17 +357,18 @@ class _MainShellState extends ConsumerState<MainShell> {
         ),
         label: 'Catalogue',
       ),
-      const NavigationDestination(
+      '/reports': const NavigationDestination(
         icon: Icon(Icons.bar_chart_outlined),
         selectedIcon: Icon(Icons.bar_chart_rounded),
         label: 'Rapports',
       ),
-      const NavigationDestination(
+      '/settings': const NavigationDestination(
         icon: Icon(Icons.more_horiz_outlined),
         selectedIcon: Icon(Icons.more_horiz_rounded),
         label: 'Plus',
       ),
-    ];
+    };
+    final destinations = [for (final r in routes) allDestinations[r]!];
 
     final cs = Theme.of(context).colorScheme;
 

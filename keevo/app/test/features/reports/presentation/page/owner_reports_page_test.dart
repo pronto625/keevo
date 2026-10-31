@@ -13,6 +13,8 @@ import 'package:keevo/features/profitability/presentation/page/seller_leaderboar
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
 import 'package:keevo/features/reports/presentation/page/owner_reports_page.dart';
 
+import '../../../../helpers/fake_entitlements.dart';
+
 class _MockRepo extends Mock implements ProfitabilityRepository {}
 
 /// The hubs read `context.canPop()` → they need a GoRouter.
@@ -103,5 +105,35 @@ void main() {
 
     expect(find.text('Équipe'), findsNothing);
     expect(find.byType(SellerLeaderboardPage), findsNothing);
+  });
+
+  // Story 15.2 — the Marges / Boutiques tabs are the profitability /
+  // multi-store routes: hidden when the module cannot be read.
+  testWidgets('OWNER hub hides the tabs of unreadable modules; « Équipe » '
+      'opened at its new index', (tester) async {
+    SharedPreferences.setMockInitialValues(
+        {kActiveStoreIdKey: 's1', kUserRoleKey: 'OWNER'});
+    final prefs = await SharedPreferences.getInstance();
+    final repo = _MockRepo();
+    when(() => repo.getSellerLeaderboard(params: any(named: 'params')))
+        .thenAnswer((_) async =>
+            const SellerLeaderboardResult(fromLocal: false, entries: []));
+
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        profitabilityRepositoryProvider.overrideWithValue(repo),
+        entitlementsOverride(
+            {'profitability': 'DISABLED', 'multi-store': 'READ_ONLY'}),
+      ],
+      child: _routed(
+          const OwnerReportsPage(initialTab: OwnerReportsPage.tabEquipe)),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Marges'), findsNothing);
+    expect(find.text('Boutiques'), findsOneWidget, reason: 'READ_ONLY');
+    expect(find.byType(Tab), findsNWidgets(4));
+    expect(find.byType(SellerLeaderboardPage), findsOneWidget);
   });
 }

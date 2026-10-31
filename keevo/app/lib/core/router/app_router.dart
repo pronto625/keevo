@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -80,8 +81,12 @@ import '../../features/team/domain/model/employee_model.dart';
 import '../../features/team/presentation/page/create_employee_page.dart';
 import '../../features/team/presentation/page/edit_employee_page.dart';
 import '../di/providers.dart';
+import '../entitlements/entitlements.dart';
+import '../entitlements/entitlements_provider.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
+import 'module_routes.dart';
+import 'module_unavailable_page.dart';
 import 'session_presence_cache.dart';
 import 'startup_route.dart';
 import 'deep_link_entity_page.dart';
@@ -229,6 +234,73 @@ Future<String?> globalAuthRedirect(
   }
 }
 
+/// Story 15.2 — module guard, run after [globalAuthRedirect] (role guard
+/// first). A route of a module that is not readable (DISABLED, or absent from
+/// known states) goes to the « module non activé » screen naming it; READ_ONLY
+/// (grace) modules stay reachable. Nothing known yet ([Entitlements.unknown])
+/// lets the route through: the backend still answers 403 and the 13.10b
+/// French message stays the fallback.
+String? moduleRouteRedirect(String location, Entitlements entitlements) {
+  final module = moduleOfPath(location);
+  if (module == null || isRouteReadable(entitlements, location)) return null;
+  return Uri(
+    path: kModuleUnavailableRoute,
+    queryParameters: {'module': module},
+  ).toString();
+}
+
+/// The router's redirect: the auth / role guard ([globalAuthRedirect]) first,
+/// then the module guard ([moduleRouteRedirect]) on the routes it lets
+/// through.
+Future<String?> appRouteRedirect(
+  String path, {
+  required Future<bool> Function() hasSession,
+  required Future<String?> Function() readRole,
+  required Entitlements Function() entitlements,
+}) async {
+  final authRedirect = await globalAuthRedirect(path,
+      hasSession: hasSession, readRole: readRole);
+  if (authRedirect != null) return authRedirect;
+  return moduleRouteRedirect(path, entitlements());
+}
+
+/// Pinged when the module states change: [appRouter] re-runs its redirect
+/// (a module disabled while one of its screens is open leaves it, a
+/// re-enabled one opens again without restart). Fed by `KeevoApp`.
+class ModuleGateRefresh extends ChangeNotifier {
+  void ping() => notifyListeners();
+}
+
+final moduleGateRefresh = ModuleGateRefresh();
+
+/// Whether new module states change what the guard decides: known-ness or
+/// the set of readable modules (not the fetch date / source).
+bool shouldPingModuleGate(Entitlements? prev, Entitlements? next) {
+  final a = prev ?? Entitlements.unknown;
+  final b = next ?? Entitlements.unknown;
+  return a.isKnown != b.isKnown ||
+      !setEquals(a.readableModules, b.readableModules);
+}
+
+/// Wires [entitlementsProvider] to [refresh] (default [moduleGateRefresh]):
+/// call from the `build` of the widget hosting the router (`KeevoApp`).
+void listenModuleGate(WidgetRef ref, {ModuleGateRefresh? refresh}) {
+  ref.listen<AsyncValue<Entitlements>>(entitlementsProvider, (prev, next) {
+    if (shouldPingModuleGate(prev?.valueOrNull, next.valueOrNull)) {
+      (refresh ?? moduleGateRefresh).ping();
+    }
+  });
+}
+
+Entitlements _entitlementsOf(ProviderContainer container) {
+  try {
+    return container.read(entitlementsProvider).valueOrNull ??
+        Entitlements.unknown;
+  } catch (_) {
+    return Entitlements.unknown;
+  }
+}
+
 /// Route extra the splash passes to `/auth/login` when it failed.
 const kSplashFailedExtra = {'splashFailed': true};
 
@@ -291,14 +363,18 @@ final GoRouter appRouter = GoRouter(
       body: Center(child: CircularProgressIndicator()),
     );
   },
+  refreshListenable: moduleGateRefresh,
   redirect: (context, state) async {
-    final sessionCache = ProviderScope.containerOf(context, listen: false)
-        .read(sessionPresenceCacheProvider);
-    return globalAuthRedirect(
+    final container = ProviderScope.containerOf(context, listen: false);
+    final sessionCache = container.read(sessionPresenceCacheProvider);
+    // Deep links (notifications, FCM) are pushed through this router: they
+    // go through the same guards.
+    return appRouteRedirect(
       state.uri.path,
       hasSession: sessionCache.hasSession,
       readRole: () async =>
           (await SharedPreferences.getInstance()).getString(kUserRoleKey),
+      entitlements: () => _entitlementsOf(container),
     );
   },
   routes: [
@@ -345,8 +421,7 @@ final GoRouter appRouter = GoRouter(
       path: '/auth/reset-password',
       redirect: (_, state) => resetPasswordRedirect(state.extra),
       builder: (_, state) => ResetPasswordPage(
-        phoneNumber:
-            (state.extra as Map?)?['phoneNumber'] as String?,
+        phoneNumber: (state.extra as Map?)?['phoneNumber'] as String?,
       ),
     ),
 
@@ -465,7 +540,6 @@ final GoRouter appRouter = GoRouter(
       builder: (_, __) => const CategoriesPage(),
     ),
 
-
     // ── Report history (full-screen, no nav bar) — Story 7.2 ─────────────
     GoRoute(
       path: '/reports/history',
@@ -488,13 +562,13 @@ final GoRouter appRouter = GoRouter(
     // the right tab. OWNER-only via _ownerOnlyPrefixes.
     GoRoute(
       path: '/reports/rentabilite',
-      builder: (_, __) => const OwnerReportsPage(
-          initialTab: OwnerReportsPage.tabRentabilite),
+      builder: (_, __) =>
+          const OwnerReportsPage(initialTab: OwnerReportsPage.tabRentabilite),
     ),
     GoRoute(
       path: '/reports/boutiques',
-      builder: (_, __) => const OwnerReportsPage(
-          initialTab: OwnerReportsPage.tabBoutiques),
+      builder: (_, __) =>
+          const OwnerReportsPage(initialTab: OwnerReportsPage.tabBoutiques),
     ),
 
     // ── Profitability detail (full-screen, no nav bar) — Story 7.4 ────────
@@ -577,8 +651,7 @@ final GoRouter appRouter = GoRouter(
           load: (ref) => ref.read(productRepositoryProvider).getById(id),
           formBuilder: (p) => ProductFormPage(product: p),
           fallback: const CatalogPage(),
-          notFoundMessage:
-              'Ce produit n\'est pas disponible sur cet appareil.',
+          notFoundMessage: 'Ce produit n\'est pas disponible sur cet appareil.',
         );
       },
     ),
@@ -599,8 +672,7 @@ final GoRouter appRouter = GoRouter(
           load: (ref) => ref.read(clientRepositoryProvider).getById(id),
           formBuilder: (c) => ClientFormPage(existing: c),
           fallback: const ClientListPage(),
-          notFoundMessage:
-              'Ce client n\'est pas disponible sur cet appareil.',
+          notFoundMessage: 'Ce client n\'est pas disponible sur cet appareil.',
         );
       },
     ),
@@ -762,18 +834,16 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/exports/new',
       builder: (_, state) => ExportPage(
-        prefill: state.extra is ExportPrefill
-            ? state.extra as ExportPrefill
-            : null,
+        prefill:
+            state.extra is ExportPrefill ? state.extra as ExportPrefill : null,
       ),
     ),
     // On-device CSV (v1s-18-5) — also before `/exports/:id`.
     GoRoute(
       path: '/exports/local',
       builder: (_, state) => LocalExportPage(
-        prefill: state.extra is ExportPrefill
-            ? state.extra as ExportPrefill
-            : null,
+        prefill:
+            state.extra is ExportPrefill ? state.extra as ExportPrefill : null,
       ),
     ),
     GoRoute(
@@ -785,6 +855,12 @@ final GoRouter appRouter = GoRouter(
       builder: (_, state) =>
           MyExportsPage(highlightId: state.pathParameters['id']),
     ),
+    // ── « Module non activé » (Story 15.2 — module guard target) ─────────
+    GoRoute(
+      path: kModuleUnavailableRoute,
+      builder: (_, state) =>
+          ModuleUnavailablePage(moduleId: state.uri.queryParameters['module']),
+    ),
     // ── Notifications (Story 8.0 — full-screen, no nav bar) ──────────────
     GoRoute(
       path: '/notifications',
@@ -794,8 +870,7 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/stock/overview',
       builder: (context, state) {
-        final showLowOnly =
-            state.uri.queryParameters['showLowOnly'] == 'true';
+        final showLowOnly = state.uri.queryParameters['showLowOnly'] == 'true';
         return GlobalStockOverviewPage(showLowOnly: showLowOnly);
       },
     ),
@@ -804,11 +879,11 @@ final GoRouter appRouter = GoRouter(
       path: kLocalLowStockRoute,
       builder: (_, state) => LocalLowStockPage(
           allStores: state.uri.queryParameters['all'] == 'true'),
-    ),    // ── Transfer history (Story 3.3) ─────────────────────────────────
+    ), // ── Transfer history (Story 3.3) ─────────────────────────────────
     GoRoute(
       path: '/stock/transfers',
       builder: (_, __) => const TransferHistoryPage(),
-    ),    // ── Debug > Categories ──────────────────────────────────────
+    ), // ── Debug > Categories ──────────────────────────────────────
     GoRoute(
       path: '/debug/categories',
       builder: (_, __) => const CategoryDebugPage(),

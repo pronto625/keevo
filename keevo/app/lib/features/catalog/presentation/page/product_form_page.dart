@@ -1,3 +1,4 @@
+import '../../../../core/router/module_routes.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/discard_changes_dialog.dart';
@@ -1390,15 +1391,20 @@ class _NoSupplierCard extends StatelessWidget {
   }
 }
 
-class _SupplierCard extends StatelessWidget {
+class _SupplierCard extends ConsumerWidget {
   final SupplierModel supplier;
   final ThemeData theme;
   const _SupplierCard({required this.supplier, required this.theme});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final path = '/suppliers/${supplier.id}';
     return InkWell(
-      onTap: () => context.push('/suppliers/${supplier.id}', extra: supplier),
+      // Story 15.2 — the supplier sheet belongs to CRM: no link when the
+      // module cannot be read (the card still shows the supplier).
+      onTap: isRouteAvailable(ref, path)
+          ? () => context.push(path, extra: supplier)
+          : null,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),

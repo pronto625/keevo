@@ -1,6 +1,6 @@
 {
   "id": "crm",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "displayName": "Clients et fournisseurs",
   "category": "business",
   "requires": [
@@ -20,7 +20,14 @@
     "fills": []
   },
   "permissions": [],
-  "routes": [],
+  "routes": [
+    "/clients",
+    "/clients/new",
+    "/clients/:id",
+    "/suppliers",
+    "/suppliers/new",
+    "/suppliers/:id"
+  ],
   "entitlement": "module.crm",
   "free": true
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/module_routes.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
@@ -312,12 +313,14 @@ class _ExportPageState extends ConsumerState<ExportPage> {
           ),
         ),
         actions: [
-          IconButton(
-            key: const Key('export-my-exports'),
-            icon: Icon(Icons.folder_zip_outlined, color: cs.primary),
-            tooltip: 'Mes exports',
-            onPressed: () => context.push('/exports'),
-          ),
+          // Story 15.2 — « Mes exports » belongs to the paid exports module.
+          if (isRouteAvailable(ref, '/exports'))
+            IconButton(
+              key: const Key('export-my-exports'),
+              icon: Icon(Icons.folder_zip_outlined, color: cs.primary),
+              tooltip: 'Mes exports',
+              onPressed: () => context.push('/exports'),
+            ),
         ],
       ),
       bottomNavigationBar: SafeArea(

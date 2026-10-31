@@ -452,6 +452,47 @@ class ModuleManifestLoaderTest {
     }
 
     @Test
+    @DisplayName("15.2 routes: leading '/', literal or ':name' segments; one module per route (parameter names ignored)")
+    void routes() {
+        String req = "[\"core\"]";
+        List<LoadedModuleManifest> ok = ModuleManifestLoader.load(withCore(src("crm", module("crm", req,
+                ",\"routes\":[\"/clients\",\"/clients/new\",\"/clients/:id\",\"/gap-report/:sessionId\"]"))));
+        assertThat(ok.get(1).manifest().routes())
+                .containsExactly("/clients", "/clients/new", "/clients/:id", "/gap-report/:sessionId");
+
+        for (String bad : List.of("clients", "/", "/clients/", "//clients", "/Clients", "/clients/:", "/clients/:1d",
+                "/clients/*", "/clients?x=1", "/a--b", "/-a", " /clients")) {
+            assertThat(problemsOf(withCore(src("crm", module("crm", req, ",\"routes\":[\"" + bad + "\"]")))))
+                    .as(bad).singleElement().asString()
+                    .contains(loc("crm"), "'routes'", "'" + bad + "'", "module 'crm'");
+        }
+
+        assertThat(problemsOf(withCore(
+                src("crm", module("crm", req, ",\"routes\":[\"/clients/:id\"]")),
+                src("invoicing", module("invoicing", req, ",\"routes\":[\"/clients/:clientId\"]")))))
+                .singleElement().asString()
+                .contains(loc("invoicing"), "'/clients/:clientId'", "module 'invoicing'", "overlaps '/clients/:id'",
+                        "already declared by module 'crm'");
+        // a literal of one module against a parameter of another: same locations reachable from both
+        assertThat(problemsOf(withCore(
+                src("crm", module("crm", req, ",\"routes\":[\"/x/:id\"]")),
+                src("invoicing", module("invoicing", req, ",\"routes\":[\"/x/new\"]")))))
+                .singleElement().asString()
+                .contains("'/x/new'", "module 'invoicing'", "overlaps '/x/:id'", "module 'crm'");
+        // no overlap: other length, or a differing literal
+        assertThat(ModuleManifestLoader.load(withCore(
+                src("crm", module("crm", req, ",\"routes\":[\"/x/:id\",\"/y/new\"]")),
+                src("invoicing", module("invoicing", req, ",\"routes\":[\"/x\",\"/x/:id/edit\",\"/y/old\"]")))))
+                .hasSize(3);
+        // within one module, /x/new next to /x/:id is the usual layout
+        assertThat(ModuleManifestLoader.load(withCore(src("crm", module("crm", req,
+                ",\"routes\":[\"/x/new\",\"/x/:id\"]"))))).hasSize(2);
+        assertThat(problemsOf(withCore(src("crm", module("crm", req,
+                ",\"routes\":[\"/clients/:id\",\"/clients/:other\"]")))))
+                .singleElement().asString().contains("'/clients/:other'", "same locations as '/clients/:id'");
+    }
+
+    @Test
     void cycleFinders() {
         assertThat(ModuleManifestLoader.findRequiresCycle(Map.of(
                 "pos", List.of("catalog", "inventory"), "inventory", List.of("catalog"),

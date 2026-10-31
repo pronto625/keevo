@@ -11,6 +11,7 @@ import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/export/presentation/page/export_page.dart';
 import 'package:keevo/features/export/presentation/provider/export_providers.dart';
 
+import '../../../helpers/fake_entitlements.dart';
 import '../export_test_helpers.dart';
 
 /// v1s-18-4 — « Exporter » screen; v1s-18-3 — PDF templates.
@@ -29,8 +30,10 @@ void main() {
     localPrefill = null;
   });
 
-  Widget app({ExportPrefill? prefill}) => ProviderScope(
+  Widget app({ExportPrefill? prefill, List<Override> extra = const []}) =>
+      ProviderScope(
         overrides: [
+          ...extra,
           exportDataSourceProvider.overrideWithValue(ds),
           exportTempDirProvider.overrideWith((_) async => Directory.systemTemp),
           exportFileSharerProvider
@@ -93,6 +96,34 @@ void main() {
       ..writeAsStringSync('a;b');
     return f;
   }
+
+  // Story 15.2 — « Mes exports » belongs to the paid exports module.
+  testWidgets(
+      'exports DISABLED: no « Mes exports » icon; the free export '
+      'screen stays', (tester) async {
+    await pumpApp(
+        tester,
+        app(extra: [
+          entitlementsOverride({'exports': 'DISABLED'})
+        ]));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('export-my-exports')), findsNothing);
+    expect(find.text('Produits'), findsOneWidget);
+  });
+
+  testWidgets('exports ENABLED: the « Mes exports » icon opens the list',
+      (tester) async {
+    await pumpApp(
+        tester,
+        app(extra: [
+          entitlementsOverride({'exports': 'ENABLED'})
+        ]));
+    await tester.pumpAndSettle();
+
+    await tapKey(tester, 'export-my-exports');
+    expect(find.text('MES EXPORTS'), findsOneWidget);
+  });
 
   testWidgets('datasets from the server, « Tout », direct export is shared',
       (tester) async {
@@ -383,7 +414,8 @@ void main() {
     expect(find.text('Réessayer'), findsOneWidget);
   });
 
-  testWidgets('offline: banner, launch disabled, local CSV entry opens '
+  testWidgets(
+      'offline: banner, launch disabled, local CSV entry opens '
       '/exports/local with the current choices (v1s-18-5)', (tester) async {
     online = false;
     final from = DateTime(2026, 10, 1);

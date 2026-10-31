@@ -9,6 +9,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/notification/fcm_service.dart';
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/sync/sync_service.dart';
@@ -20,6 +21,8 @@ import 'package:keevo/features/notifications/data/datasource/remote_device_token
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:keevo/features/settings/presentation/page/settings_page.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────
 
@@ -92,9 +95,11 @@ Widget _buildPage({
   required RemoteDeviceTokenDataSource mockTokenDataSource,
   required SharedPreferences prefs,
   String role = 'EMPLOYEE',
+  List<Override> overrides = const [],
 }) {
   return ProviderScope(
     overrides: [
+      ...overrides,
       fcmServiceProvider.overrideWithValue(mockFcmService),
       remoteDeviceTokenDataSourceProvider
           .overrideWithValue(mockTokenDataSource),
@@ -345,6 +350,133 @@ void main() {
     });
   });
 
+  group('SettingsPage — module entries (Story 15.2)', () {
+    Future<void> scrollToEnd(WidgetTester tester) => tester.scrollUntilVisible(
+          find.text('Se déconnecter'),
+          200,
+          scrollable: find.byType(Scrollable).first,
+        );
+
+    Map<String, String> all(String state) => {
+          for (final id in const [
+            'crm',
+            'multi-store',
+            'counting',
+            'exports',
+            'report-config',
+            'profitability',
+          ])
+            id: state,
+        };
+
+    testWidgets('OWNER, crm DISABLED: Clients / Fournisseurs hidden, the rest '
+        'unchanged', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+        overrides: [
+          entitlementsOverride({...all('ENABLED'), 'crm': 'DISABLED'}),
+        ],
+      ));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      expect(find.text('Clients'), findsNothing);
+      expect(find.text('Fournisseurs'), findsNothing);
+      expect(find.text('Stock multi-boutiques'), findsOneWidget);
+      expect(find.text('Transferts'), findsOneWidget);
+      expect(find.text('Catégories'), findsOneWidget);
+      expect(find.text('Rapports & WhatsApp'), findsOneWidget);
+    });
+
+    testWidgets('OWNER, premium modules DISABLED: their tiles hidden, the free '
+        'export kept', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+        overrides: [
+          entitlementsOverride({...all('DISABLED'), 'crm': 'ENABLED'}),
+        ],
+      ));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      for (final title in const [
+        'Stock multi-boutiques',
+        'Inventaire',
+        'Transferts',
+        'Mes exports',
+        'Rapports & WhatsApp',
+      ]) {
+        expect(find.text(title), findsNothing, reason: title);
+      }
+      expect(find.text('Exporter mes données'), findsOneWidget);
+      expect(find.text('Clients'), findsOneWidget);
+    });
+
+    testWidgets('READ_ONLY (grace) modules keep their entries', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+        overrides: [entitlementsOverride(all('READ_ONLY'))],
+      ));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      expect(find.text('Transferts'), findsOneWidget);
+      expect(find.text('Mes exports'), findsOneWidget);
+      expect(find.text('Clients'), findsOneWidget);
+    });
+
+    testWidgets('EMPLOYEE, every stock module DISABLED: no « Consultation » '
+        'section', (tester) async {
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        overrides: [entitlementsOverride(all('DISABLED'))],
+      ));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      expect(find.text('Consultation'), findsNothing);
+      expect(find.text('Transferts'), findsNothing);
+    });
+
+    testWidgets('module re-enabled (new server answer): entries reappear',
+        (tester) async {
+      var states = {...all('ENABLED'), 'crm': 'DISABLED'};
+      await tester.pumpWidget(_buildPage(
+        mockFcmService: mockFcm,
+        mockTokenDataSource: mockTokenDs,
+        prefs: prefs,
+        role: 'OWNER',
+        overrides: [
+          entitlementsProvider.overrideWith(
+              () => FakeEntitlementsNotifier(() async => states)),
+        ],
+      ));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+      expect(find.text('Clients'), findsNothing);
+
+      states = all('ENABLED');
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(SettingsPage)));
+      await container.read(entitlementsProvider.notifier).refresh();
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+      expect(find.text('Clients'), findsOneWidget);
+      expect(find.text('Fournisseurs'), findsOneWidget);
+    });
+  });
+
   group('SettingsPage — Entreprise tile (Story 14.2)', () {
     testWidgets('OWNER sees « Entreprise »', (tester) async {
       await tester.pumpWidget(_buildPage(
@@ -525,6 +657,12 @@ void main() {
           tokenStorageProvider.overrideWithValue(mockTokenStorage),
           syncServiceProvider.overrideWithValue(_EmptyQueueSyncService()),
           authRepositoryProvider.overrideWithValue(_authRepository()),
+          // 15.2: the page reads the module states — kept off the token
+          // storage whose calls this test counts.
+          entitlementsOverride(const {
+            'multi-store': 'ENABLED',
+            'counting': 'ENABLED',
+          }),
         ],
       );
       addTearDown(container.dispose);

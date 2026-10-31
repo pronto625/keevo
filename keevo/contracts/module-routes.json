@@ -1,0 +1,35 @@
+{
+  "counting" : [
+    "/inventory",
+    "/inventory/counting/:sessionId",
+    "/inventory/gap-report/:sessionId"
+  ],
+  "crm" : [
+    "/clients",
+    "/clients/new",
+    "/clients/:id",
+    "/suppliers",
+    "/suppliers/new",
+    "/suppliers/:id"
+  ],
+  "exports" : [
+    "/exports",
+    "/exports/:id"
+  ],
+  "invoicing" : [
+    "/invoicing",
+    "/invoicing/:id"
+  ],
+  "multi-store" : [
+    "/stock/overview",
+    "/stock/transfers",
+    "/reports/boutiques"
+  ],
+  "profitability" : [
+    "/reports/rentabilite",
+    "/reports/rentabilite/:productId"
+  ],
+  "report-config" : [
+    "/settings/reports"
+  ]
+}

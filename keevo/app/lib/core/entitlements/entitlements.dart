@@ -35,21 +35,28 @@ class Entitlements {
   final Map<String, String> states;
   final EntitlementsStatus status;
 
+  /// Story 15.2 — module id → French display name (server answer, persisted
+  /// with the snapshot). Empty for a claim seed or an older snapshot.
+  final Map<String, String> displayNames;
+
   /// When the server answered (server / cached), or when the token carrying
   /// the claim was issued (claim). Null when unknown.
   final DateTime? fetchedAt;
 
-  const Entitlements._(this.states, this.status, this.fetchedAt);
+  const Entitlements._(
+      this.states, this.status, this.fetchedAt, this.displayNames);
 
   Entitlements({
     required Map<String, String> states,
     required this.status,
     this.fetchedAt,
-  }) : states = Map.unmodifiable(states);
+    Map<String, String> displayNames = const {},
+  })  : states = Map.unmodifiable(states),
+        displayNames = Map.unmodifiable(displayNames);
 
   /// Nothing known yet.
-  static const unknown =
-      Entitlements._(<String, String>{}, EntitlementsStatus.unknown, null);
+  static const unknown = Entitlements._(
+      <String, String>{}, EntitlementsStatus.unknown, null, <String, String>{});
 
   /// From the token's `modules` claim: the listed modules are usable.
   factory Entitlements.fromClaim(List<String> modules, {DateTime? issuedAt}) =>
@@ -77,13 +84,23 @@ class Entitlements {
           if (isReadable(id)) id
       };
 
-  Entitlements withStatus(EntitlementsStatus status) =>
-      Entitlements(states: states, status: status, fetchedAt: fetchedAt);
+  /// French name of [moduleId] as the server sent it, null when unknown.
+  String? displayNameOf(String moduleId) {
+    final name = displayNames[moduleId]?.trim();
+    return name == null || name.isEmpty ? null : name;
+  }
+
+  Entitlements withStatus(EntitlementsStatus status) => Entitlements(
+      states: states,
+      status: status,
+      fetchedAt: fetchedAt,
+      displayNames: displayNames);
 
   /// Snapshot form (states + fetch date; the status is not stored: a snapshot
   /// read back is always [EntitlementsStatus.cached]).
   Map<String, dynamic> toJson() => {
         'states': states,
+        if (displayNames.isNotEmpty) 'displayNames': displayNames,
         if (fetchedAt != null)
           'fetchedAt': fetchedAt!.toUtc().toIso8601String(),
       };
@@ -99,11 +116,21 @@ class Entitlements {
         states[entry.key as String] = entry.value as String;
       }
     }
+    final names = <String, String>{};
+    final rawNames = json['displayNames'];
+    if (rawNames is Map) {
+      for (final entry in rawNames.entries) {
+        if (entry.key is String && entry.value is String) {
+          names[entry.key as String] = entry.value as String;
+        }
+      }
+    }
     final at = json['fetchedAt'];
     return Entitlements(
       states: states,
       status: EntitlementsStatus.cached,
       fetchedAt: at is String ? DateTime.tryParse(at) : null,
+      displayNames: names,
     );
   }
 
@@ -126,19 +153,38 @@ class Entitlements {
     return states;
   }
 
+  /// Story 15.2 — module id → `displayName` of the same `data` list (entries
+  /// without a non-blank name skipped). Call after [parseApiStates].
+  static Map<String, String> parseApiDisplayNames(Object? data) {
+    final names = <String, String>{};
+    if (data is! List) return names;
+    for (final item in data) {
+      if (item is Map) {
+        final id = item['moduleId'];
+        final name = item['displayName'];
+        if (id is String && name is String && name.trim().isNotEmpty) {
+          names[id] = name.trim();
+        }
+      }
+    }
+    return names;
+  }
+
   @override
   bool operator ==(Object other) =>
       other is Entitlements &&
       other.status == status &&
       other.fetchedAt == fetchedAt &&
-      mapEquals(other.states, states);
+      mapEquals(other.states, states) &&
+      mapEquals(other.displayNames, displayNames);
 
   @override
   int get hashCode => Object.hash(
       status,
       fetchedAt,
+      Object.hashAllUnordered(states.entries.map((e) => '${e.key}=${e.value}')),
       Object.hashAllUnordered(
-          states.entries.map((e) => '${e.key}=${e.value}')));
+          displayNames.entries.map((e) => '${e.key}=${e.value}')));
 
   @override
   String toString() => 'Entitlements($status, $states)';

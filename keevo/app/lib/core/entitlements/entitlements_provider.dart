@@ -11,6 +11,12 @@ import '../di/providers.dart';
 import '../storage/app_constants.dart';
 import 'entitlements.dart';
 
+/// One answer of `GET /api/v1/tenants/me/modules`.
+typedef ModulesAnswer = ({
+  Map<String, String> states,
+  Map<String, String> displayNames,
+});
+
 /// Story 15.1 — the tenant's module states, for every session role.
 ///
 /// The value is available at once from what the device knows — the access
@@ -93,11 +99,12 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
   }
 
   Future<Entitlements> _fetch(int generation, int seq) async {
-    final states = await fetchStates();
+    final answer = await fetchModules();
     final fresh = Entitlements(
-      states: states,
+      states: answer.states,
       status: EntitlementsStatus.server,
       fetchedAt: DateTime.now(),
+      displayNames: answer.displayNames,
     );
     // Another token / account since the request: its own build fetches.
     // A newer request was started: its answer wins.
@@ -152,13 +159,18 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
     }
   }
 
-  /// `GET /api/v1/tenants/me/modules` → module id → state.
+  /// `GET /api/v1/tenants/me/modules` → module id → state, and module id →
+  /// French display name (Story 15.2, « module non activé » screen).
   @protected
-  Future<Map<String, String>> fetchStates() async {
+  Future<ModulesAnswer> fetchModules() async {
     final resp = await ref
         .read(dioProvider)
         .get<Map<String, dynamic>>('/api/v1/tenants/me/modules');
-    return Entitlements.parseApiStates(resp.data?['data']);
+    final data = resp.data?['data'];
+    return (
+      states: Entitlements.parseApiStates(data),
+      displayNames: Entitlements.parseApiDisplayNames(data),
+    );
   }
 
   /// Persists the answer for this account and, when needed, asks the sync for
@@ -182,9 +194,8 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
               .read(key: kLastSyncTimestampKey) !=
           null;
     } else {
-      fullPull = fresh.readableModules
-          .difference(previous.readableModules)
-          .isNotEmpty;
+      fullPull =
+          fresh.readableModules.difference(previous.readableModules).isNotEmpty;
     }
     if (fullPull) {
       await prefs.setInt(

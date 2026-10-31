@@ -276,7 +276,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   epic-15: in-progress
   15-1-entitlements-provider-flutter: done  # 2026-10-31 build-auto done (spec-15-1-entitlements-provider-flutter.md) — entitlementsProvider tous rôles, snapshot hors ligne, full pull sur réactivation, datasets export filtrés ; 36 constats (5 medium corrigés)
-  15-2-routing-dynamique-go-router: backlog
+  15-2-routing-dynamique-go-router: done  # 2026-10-31 build-auto done (spec-15-2-routing-dynamique-go-router.md) — routes par module (manifestes + contrat), garde go_router, écran « module non activé », entrées masquées ; 32 constats (4 medium corrigés) ; routés → 15-8, 16-3
   15-3-extension-slot-lazy-loading: backlog
   15-4a-workspace-melos-keevo-core: backlog
   15-4b-migration-riverpod-3: backlog

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/router/module_routes.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../auth/presentation/provider/sign_out_service.dart';
@@ -132,169 +133,166 @@ class SettingsPage extends ConsumerWidget {
 
                 // ── Section : Gestion (OWNER only — AC5) ────────────────
                 if (isOwner) ...[
-                const _SectionLabel('Gestion'),
-                const SizedBox(height: 8),
-                _SettingsCard(
-                  children: [
-                    _SettingsTile(
-                      icon: Icons.storefront_outlined,
-                      iconColor: AppTheme.primary,
-                      title: 'Mes boutiques',
-                      subtitle: 'Boutiques, entrepôts et types',
-                      onTap: () => context.push('/stores'),
-                    ),
-                    const _Divider(),
-                    const _ActiveStoreTile(),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.inventory_2_outlined,
-                      iconColor: AppTheme.iconTeal,
-                      title: 'Stock multi-boutiques',
-                      subtitle: 'Vue centralisée des stocks par boutique',
-                      onTap: () => context.push('/stock/overview'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.assignment_outlined,
-                      iconColor: AppTheme.iconAmber,
-                      title: 'Inventaire',
-                      subtitle: 'Lancer et suivre les sessions d\'inventaire',
-                      onTap: () => context.push('/inventory'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      key: const Key('settings-company'),
-                      icon: Icons.business_outlined,
-                      iconColor: AppTheme.iconIndigo,
-                      title: 'Entreprise',
-                      subtitle: 'Nom et logo sur vos factures et exports',
-                      onTap: () => context.push('/settings/company'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.card_membership_outlined,
-                      iconColor: AppTheme.iconPurple,
-                      title: 'Abonnement',
-                      subtitle: 'Plan actif, limites et mise à niveau',
-                      onTap: () => context.push('/settings/subscription'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.group_outlined,
-                      iconColor: AppTheme.iconBlue,
-                      title: 'Équipe',
-                      subtitle: 'Employés, rôles et accès',
-                      onTap: () => context.push('/settings/team'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.history_rounded,
-                      iconColor: AppTheme.iconIndigo,
-                      title: 'Historique des actions',
-                      subtitle: 'Qui a fait quoi, où et quand',
-                      onTap: () => context.push('/audit'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      key: const Key('settings-export-new'),
-                      icon: Icons.ios_share_rounded,
-                      iconColor: AppTheme.iconTeal,
-                      title: 'Exporter mes données',
-                      subtitle: 'CSV ou Excel, toutes vos données',
-                      onTap: () => context.push('/exports/new'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      key: const Key('settings-exports'),
-                      icon: Icons.folder_zip_outlined,
-                      iconColor: AppTheme.iconBlue,
-                      title: 'Mes exports',
-                      subtitle: 'Exports préparés en arrière-plan',
-                      onTap: () => context.push('/exports'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.swap_vert_rounded,
-                      iconColor: AppTheme.iconTeal,
-                      title: 'Mouvements de stock',
-                      subtitle: 'Entrées, sorties et ajustements de stock',
-                      onTap: () => context.push('/audit/stock-movements'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.sync_rounded,
-                      iconColor: AppTheme.iconBlue,
-                      title: 'Synchronisation',
-                      subtitle: 'Historique, appareils et file d\'attente',
-                      onTap: () => context.push('/settings/sync'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.people_outline_rounded,
-                      iconColor: AppTheme.iconCyan,
-                      title: 'Clients',
-                      subtitle: 'Gérez votre carnet de clients',
-                      onTap: () => context.push('/clients'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.local_shipping_outlined,
-                      iconColor: AppTheme.iconOrange,
-                      title: 'Fournisseurs',
-                      subtitle: 'Contacts et approvisionnement',
-                      onTap: () => context.push('/suppliers'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.category_outlined,
-                      iconColor: AppTheme.iconPurple,
-                      title: 'Catégories',
-                      subtitle: 'Gérez les catégories de produits',
-                      onTap: () => context.push('/settings/categories'),
-                    ),
-                    const _Divider(),
-                    _SettingsTile(
-                      icon: Icons.swap_horiz_rounded,
-                      iconColor: AppTheme.iconTeal,
-                      title: 'Transferts',
-                      subtitle: 'Historique des transferts de stock',
-                      onTap: () => context.push('/stock/transfers'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
+                  const _SectionLabel('Gestion'),
+                  const SizedBox(height: 8),
+                  _SettingsCard(
+                    children: _divided([
+                      _SettingsTile(
+                        icon: Icons.storefront_outlined,
+                        iconColor: AppTheme.primary,
+                        title: 'Mes boutiques',
+                        subtitle: 'Boutiques, entrepôts et types',
+                        onTap: () => context.push('/stores'),
+                      ),
+                      const _ActiveStoreTile(),
+                      if (isRouteAvailable(ref, '/stock/overview'))
+                        _SettingsTile(
+                          icon: Icons.inventory_2_outlined,
+                          iconColor: AppTheme.iconTeal,
+                          title: 'Stock multi-boutiques',
+                          subtitle: 'Vue centralisée des stocks par boutique',
+                          onTap: () => context.push('/stock/overview'),
+                        ),
+                      if (isRouteAvailable(ref, '/inventory'))
+                        _SettingsTile(
+                          icon: Icons.assignment_outlined,
+                          iconColor: AppTheme.iconAmber,
+                          title: 'Inventaire',
+                          subtitle:
+                              'Lancer et suivre les sessions d\'inventaire',
+                          onTap: () => context.push('/inventory'),
+                        ),
+                      _SettingsTile(
+                        key: const Key('settings-company'),
+                        icon: Icons.business_outlined,
+                        iconColor: AppTheme.iconIndigo,
+                        title: 'Entreprise',
+                        subtitle: 'Nom et logo sur vos factures et exports',
+                        onTap: () => context.push('/settings/company'),
+                      ),
+                      _SettingsTile(
+                        icon: Icons.card_membership_outlined,
+                        iconColor: AppTheme.iconPurple,
+                        title: 'Abonnement',
+                        subtitle: 'Plan actif, limites et mise à niveau',
+                        onTap: () => context.push('/settings/subscription'),
+                      ),
+                      _SettingsTile(
+                        icon: Icons.group_outlined,
+                        iconColor: AppTheme.iconBlue,
+                        title: 'Équipe',
+                        subtitle: 'Employés, rôles et accès',
+                        onTap: () => context.push('/settings/team'),
+                      ),
+                      _SettingsTile(
+                        icon: Icons.history_rounded,
+                        iconColor: AppTheme.iconIndigo,
+                        title: 'Historique des actions',
+                        subtitle: 'Qui a fait quoi, où et quand',
+                        onTap: () => context.push('/audit'),
+                      ),
+                      _SettingsTile(
+                        key: const Key('settings-export-new'),
+                        icon: Icons.ios_share_rounded,
+                        iconColor: AppTheme.iconTeal,
+                        title: 'Exporter mes données',
+                        subtitle: 'CSV ou Excel, toutes vos données',
+                        onTap: () => context.push('/exports/new'),
+                      ),
+                      if (isRouteAvailable(ref, '/exports'))
+                        _SettingsTile(
+                          key: const Key('settings-exports'),
+                          icon: Icons.folder_zip_outlined,
+                          iconColor: AppTheme.iconBlue,
+                          title: 'Mes exports',
+                          subtitle: 'Exports préparés en arrière-plan',
+                          onTap: () => context.push('/exports'),
+                        ),
+                      _SettingsTile(
+                        icon: Icons.swap_vert_rounded,
+                        iconColor: AppTheme.iconTeal,
+                        title: 'Mouvements de stock',
+                        subtitle: 'Entrées, sorties et ajustements de stock',
+                        onTap: () => context.push('/audit/stock-movements'),
+                      ),
+                      _SettingsTile(
+                        icon: Icons.sync_rounded,
+                        iconColor: AppTheme.iconBlue,
+                        title: 'Synchronisation',
+                        subtitle: 'Historique, appareils et file d\'attente',
+                        onTap: () => context.push('/settings/sync'),
+                      ),
+                      if (isRouteAvailable(ref, '/clients'))
+                        _SettingsTile(
+                          icon: Icons.people_outline_rounded,
+                          iconColor: AppTheme.iconCyan,
+                          title: 'Clients',
+                          subtitle: 'Gérez votre carnet de clients',
+                          onTap: () => context.push('/clients'),
+                        ),
+                      if (isRouteAvailable(ref, '/suppliers'))
+                        _SettingsTile(
+                          icon: Icons.local_shipping_outlined,
+                          iconColor: AppTheme.iconOrange,
+                          title: 'Fournisseurs',
+                          subtitle: 'Contacts et approvisionnement',
+                          onTap: () => context.push('/suppliers'),
+                        ),
+                      _SettingsTile(
+                        icon: Icons.category_outlined,
+                        iconColor: AppTheme.iconPurple,
+                        title: 'Catégories',
+                        subtitle: 'Gérez les catégories de produits',
+                        onTap: () => context.push('/settings/categories'),
+                      ),
+                      if (isRouteAvailable(ref, '/stock/transfers'))
+                        _SettingsTile(
+                          icon: Icons.swap_horiz_rounded,
+                          iconColor: AppTheme.iconTeal,
+                          title: 'Transferts',
+                          subtitle: 'Historique des transferts de stock',
+                          onTap: () => context.push('/stock/transfers'),
+                        ),
+                    ]),
+                  ),
+                  const SizedBox(height: 20),
                 ],
 
                 // ── Section : Consultation stock (EMPLOYEE — read-only) ──
-                if (!isOwner) ...[
+                // Story 15.2: hidden when none of its modules is readable.
+                if (!isOwner &&
+                    const ['/stock/overview', '/inventory', '/stock/transfers']
+                        .any((r) => isRouteAvailable(ref, r))) ...[
                   const _SectionLabel('Consultation'),
                   const SizedBox(height: 8),
                   _SettingsCard(
-                    children: [
-                      _SettingsTile(
-                        icon: Icons.inventory_2_outlined,
-                        iconColor: AppTheme.iconTeal,
-                        title: 'Stock multi-boutiques',
-                        subtitle: 'Vue centralisée des stocks par boutique',
-                        onTap: () => context.push('/stock/overview'),
-                      ),
-                      const _Divider(),
-                      _SettingsTile(
-                        icon: Icons.assignment_outlined,
-                        iconColor: AppTheme.iconAmber,
-                        title: 'Inventaire',
-                        subtitle: 'Lancer et suivre les sessions d\'inventaire',
-                        onTap: () => context.push('/inventory'),
-                      ),
-                      const _Divider(),
-                      _SettingsTile(
-                        icon: Icons.swap_horiz_rounded,
-                        iconColor: AppTheme.iconTeal,
-                        title: 'Transferts',
-                        subtitle: 'Historique des transferts de stock',
-                        onTap: () => context.push('/stock/transfers'),
-                      ),
-                    ],
+                    children: _divided([
+                      if (isRouteAvailable(ref, '/stock/overview'))
+                        _SettingsTile(
+                          icon: Icons.inventory_2_outlined,
+                          iconColor: AppTheme.iconTeal,
+                          title: 'Stock multi-boutiques',
+                          subtitle: 'Vue centralisée des stocks par boutique',
+                          onTap: () => context.push('/stock/overview'),
+                        ),
+                      if (isRouteAvailable(ref, '/inventory'))
+                        _SettingsTile(
+                          icon: Icons.assignment_outlined,
+                          iconColor: AppTheme.iconAmber,
+                          title: 'Inventaire',
+                          subtitle:
+                              'Lancer et suivre les sessions d\'inventaire',
+                          onTap: () => context.push('/inventory'),
+                        ),
+                      if (isRouteAvailable(ref, '/stock/transfers'))
+                        _SettingsTile(
+                          icon: Icons.swap_horiz_rounded,
+                          iconColor: AppTheme.iconTeal,
+                          title: 'Transferts',
+                          subtitle: 'Historique des transferts de stock',
+                          onTap: () => context.push('/stock/transfers'),
+                        ),
+                    ]),
                   ),
                   const SizedBox(height: 20),
                 ],
@@ -303,7 +301,7 @@ class SettingsPage extends ConsumerWidget {
                 const _SectionLabel('Préférences'),
                 const SizedBox(height: 8),
                 _SettingsCard(
-                  children: [
+                  children: _divided([
                     _SettingsTile(
                       icon: Icons.notifications_outlined,
                       iconColor: AppTheme.iconOrange,
@@ -312,16 +310,15 @@ class SettingsPage extends ConsumerWidget {
                       onTap: () {},
                       badge: 'Bientôt',
                     ),
-                    const _Divider(),
-                    if (isOwner)
-                    _SettingsTile(
-                      icon: Icons.bar_chart_rounded,
-                      iconColor: cs.success,
-                      title: 'Rapports & WhatsApp',
-                      subtitle: 'Configurer les rapports automatiques',
-                      onTap: () => context.push('/settings/reports'),
-                    ),
-                  ],
+                    if (isOwner && isRouteAvailable(ref, '/settings/reports'))
+                      _SettingsTile(
+                        icon: Icons.bar_chart_rounded,
+                        iconColor: cs.success,
+                        title: 'Rapports & WhatsApp',
+                        subtitle: 'Configurer les rapports automatiques',
+                        onTap: () => context.push('/settings/reports'),
+                      ),
+                  ]),
                 ),
 
                 const SizedBox(height: 20),
@@ -467,9 +464,9 @@ class SettingsPage extends ConsumerWidget {
                       'ce téléphone. Elles seront perdues si un autre compte '
                       's’y connecte.'
                   : "Certaines opérations n'ont pas encore été envoyées au serveur. "
-                  'Elles seront envoyées à votre prochaine connexion sur ce '
-                  'téléphone avec ce compte, mais seront perdues si un autre '
-                  'compte s’y connecte.'),
+                      'Elles seront envoyées à votre prochaine connexion sur ce '
+                      'téléphone avec ce compte, mais seront perdues si un autre '
+                      'compte s’y connecte.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -669,7 +666,8 @@ class _SettingsTile extends StatelessWidget {
               const SizedBox(width: 8),
               if (badge != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: cs.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(20),
@@ -684,8 +682,7 @@ class _SettingsTile extends StatelessWidget {
                   ),
                 )
               else
-                Icon(Icons.chevron_right_rounded,
-                    color: cs.muted, size: 20),
+                Icon(Icons.chevron_right_rounded, color: cs.muted, size: 20),
             ],
           ),
         ),
@@ -693,6 +690,15 @@ class _SettingsTile extends StatelessWidget {
     );
   }
 }
+
+/// [tiles] separated by [_Divider]s (Story 15.2: tiles of a module the
+/// tenant cannot read are left out, so the dividers follow what is shown).
+List<Widget> _divided(List<Widget> tiles) => [
+      for (var i = 0; i < tiles.length; i++) ...[
+        if (i > 0) const _Divider(),
+        tiles[i],
+      ],
+    ];
 
 class _Divider extends StatelessWidget {
   const _Divider();
@@ -719,7 +725,8 @@ class _ActiveStoreTile extends ConsumerWidget {
         return stores.where((s) => s.id == activeStoreId).firstOrNull?.name ??
             'Boutique inconnue';
       },
-      orElse: () => activeStoreId != null ? 'Chargement...' : 'Toutes les boutiques',
+      orElse: () =>
+          activeStoreId != null ? 'Chargement...' : 'Toutes les boutiques',
     );
 
     return _SettingsTile(

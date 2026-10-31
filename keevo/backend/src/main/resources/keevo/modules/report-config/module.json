@@ -1,6 +1,6 @@
 {
   "id": "report-config",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Configuration des rapports",
   "category": "premium",
   "requires": [
@@ -17,7 +17,9 @@
     "fills": []
   },
   "permissions": [],
-  "routes": [],
+  "routes": [
+    "/settings/reports"
+  ],
   "entitlement": "module.report-config",
   "free": false
 }

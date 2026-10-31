@@ -1,6 +1,6 @@
 {
   "id": "counting",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Inventaire assisté",
   "category": "premium",
   "requires": [
@@ -17,7 +17,11 @@
     "fills": []
   },
   "permissions": [],
-  "routes": [],
+  "routes": [
+    "/inventory",
+    "/inventory/counting/:sessionId",
+    "/inventory/gap-report/:sessionId"
+  ],
   "entitlement": "module.counting",
   "free": false
 }

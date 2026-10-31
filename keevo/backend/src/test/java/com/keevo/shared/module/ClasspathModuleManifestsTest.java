@@ -33,8 +33,10 @@ class ClasspathModuleManifestsTest {
             // 14.5: invoicing fills the POS checkout slot (1.2.0)
             // 14.7: invoicing publishes credit-note.issued and consumes sale.cancelled / sale.corrected (1.3.0),
             //       pos publishes them (1.4.0)
+            // 15.2: routes declared for crm (1.3.0), multi-store, counting, profitability, exports, report-config (1.1.0)
             String expected = switch (m.id()) {
-                case "crm" -> "1.2.0";
+                case "crm" -> "1.3.0";
+                case "multi-store", "counting", "profitability", "exports", "report-config" -> "1.1.0";
                 case "pos" -> "1.4.0";
                 case "invoicing" -> "1.3.0";
                 default -> "1.0.0";
@@ -96,5 +98,10 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.values().stream().filter(m -> m.category() == ModuleCategory.BUSINESS).map(ModuleManifest::id)
                 .toList()).hasSize(7);
         assertThat(List.copyOf(byId.values())).allSatisfy(m -> assertThat(m.displayName()).isNotBlank());
+        // 15.2: route -> module mapping (app guard); the free CSV export screens stay unmapped
+        assertThat(byId.get("exports").routes()).containsExactly("/exports", "/exports/:id");
+        assertThat(byId.get("crm").routes()).contains("/clients", "/suppliers/:id");
+        assertThat(byId.values()).filteredOn(m -> m.free() && !m.id().equals("crm"))
+                .allSatisfy(m -> assertThat(m.routes()).isEmpty());
     }
 }

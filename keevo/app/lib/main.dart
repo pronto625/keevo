@@ -84,6 +84,8 @@ class KeevoApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Story 15.2 — module states changed: the router re-runs its module guard.
+    listenModuleGate(ref);
     return MaterialApp.router(
       title: 'Keevo',
       scaffoldMessengerKey: rootScaffoldMessengerKey,

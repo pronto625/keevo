@@ -46,13 +46,16 @@ import java.util.regex.Pattern;
  *       same id in both; {@code free} is a boolean; {@code entitlement} matches {@link #ENTITLEMENT_PATTERN}
  *       (default {@code module.<id>}); {@code provides} entries match {@link #PROVIDES_PATTERN} and {@code needs} entries
  *       {@link #NEEDS_PATTERN} (a capability simple name, {@code ?} suffix = optional need), no name both hard and
- *       optional — Story 13.6;</li>
+ *       optional — Story 13.6; {@code routes} entries are app route patterns ({@link #ROUTE_PATTERN}: leading
+ *       {@code /}, segments literal or {@code :name}) — Story 15.2;</li>
  *   <li>across the files that parsed (always checked, even when another file is invalid): unique ids and
  *       entitlements; exactly one {@code core} module, which requires nothing; every other module requires
  *       {@code core}; every {@code requires} entry is a known module; the {@code requires} graph is acyclic
  *       (every cycle is listed, one per strongly connected component); {@code provides} names are unique across
  *       manifests; a hard {@code needs} entry (no {@code ?}) is provided by a module of the consumer's transitive
- *       {@code requires} closure (Story 13.6 — an optional need may be absent: WARN when nobody provides it).</li>
+ *       {@code requires} closure (Story 13.6 — an optional need may be absent: WARN when nobody provides it); route
+ *       patterns of two modules never overlap (same length, each segment equal or one side {@code :param}) — Story
+ *       15.2.</li>
  * </ul>
  * Unknown {@code enhances} ids are allowed (a soft dependency may target a module that is not installed) and
  * only logged at WARN. Unknown keys are logged at WARN (typo detection) and dropped: the stored JSON
@@ -89,6 +92,14 @@ public final class ModuleManifestLoader {
      */
     public static final Pattern POINT_PATTERN =
             Pattern.compile("^[a-z][a-z0-9]*(-[a-z0-9]+)*(\\.[a-z][a-z0-9]*(-[a-z0-9]+)*)+$");
+
+    /**
+     * Story 15.2 — app route pattern (go_router syntax): a leading {@code /}, then {@code /}-separated segments, each
+     * a lowercase literal (letters, digits, inner hyphens) or a parameter {@code :name}; no empty segment (no
+     * trailing or double {@code /}), no root {@code /} alone.
+     */
+    public static final Pattern ROUTE_PATTERN =
+            Pattern.compile("^(/([a-z0-9]+(-[a-z0-9]+)*|:[a-zA-Z][a-zA-Z0-9]*))+$");
 
     static final Pattern SEMVER = Pattern.compile("^(0|[1-9]\\d{0,5})\\.(0|[1-9]\\d{0,5})\\.(0|[1-9]\\d{0,5})$");
     static final int DISPLAY_NAME_MAX = 100;
@@ -260,6 +271,12 @@ public final class ModuleManifestLoader {
                         + " (a capability name ending in 'Port', '?' suffix for an optional need)");
             } else if (!need.endsWith("?") && lists.get("needs").contains(need + "?")) {
                 problems.add(at + ": field 'needs' lists '" + need + "' both as a hard and an optional need");
+            }
+        }
+        for (String route : lists.get("routes")) {
+            if (!ROUTE_PATTERN.matcher(route).matches()) {
+                problems.add(at + ": field 'routes' entry '" + route + "' of module '" + id + "' must match "
+                        + ROUTE_PATTERN.pattern() + " (leading '/', segments literal or ':name')");
             }
         }
         if (id != null && lists.get("enhances").contains(id)) {
@@ -476,6 +493,60 @@ public final class ModuleManifestLoader {
         }
         validateCapabilities(byId, graph, problems);
         validateExtensionPoints(byId, problems);
+        validateRoutes(byId, problems);
+    }
+
+    /**
+     * Story 15.2 — a location belongs to one module: the app guard maps a route to a single module. Across modules,
+     * two patterns of the same length overlap when every segment pair is equal or one side is a {@code :param}
+     * ({@code /x/new} and {@code /x/:id}, {@code /clients/:id} and {@code /clients/:clientId}). Within a module only
+     * the same shape twice is refused ({@code /x/new} next to {@code /x/:id} is the usual go_router layout).
+     */
+    private static void validateRoutes(Map<String, LoadedModuleManifest> byId, List<String> problems) {
+        List<LoadedModuleManifest> modules = List.copyOf(byId.values());
+        for (int i = 0; i < modules.size(); i++) {
+            LoadedModuleManifest m = modules.get(i);
+            Map<String, String> firstSpelling = new HashMap<>();
+            for (String route : m.manifest().routes()) {
+                String previous = firstSpelling.putIfAbsent(routeShape(route), route);
+                if (previous != null) {
+                    problems.add(m.location() + ": field 'routes' entry '" + route + "' of module '"
+                            + m.manifest().id() + "' matches the same locations as '" + previous + "'");
+                }
+            }
+            for (int j = 0; j < i; j++) {
+                LoadedModuleManifest other = modules.get(j);
+                for (String route : m.manifest().routes()) {
+                    for (String otherRoute : other.manifest().routes()) {
+                        if (routesOverlap(route, otherRoute)) {
+                            problems.add(m.location() + ": field 'routes' entry '" + route + "' of module '"
+                                    + m.manifest().id() + "' overlaps '" + otherRoute + "' already declared by module '"
+                                    + other.manifest().id() + "' (" + other.location() + ")");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Same segment count, every segment pair equal or one side a {@code :param}. */
+    static boolean routesOverlap(String a, String b) {
+        String[] x = a.split("/");
+        String[] y = b.split("/");
+        if (x.length != y.length) {
+            return false;
+        }
+        for (int k = 0; k < x.length; k++) {
+            if (!x[k].equals(y[k]) && !x[k].startsWith(":") && !y[k].startsWith(":")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** {@code /clients/:id} → {@code /clients/:} (parameter names dropped). */
+    static String routeShape(String route) {
+        return route.replaceAll(":[a-zA-Z0-9]+", ":");
     }
 
     /**

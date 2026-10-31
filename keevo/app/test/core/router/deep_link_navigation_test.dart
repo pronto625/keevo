@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:keevo/core/router/app_router.dart';
+import 'package:keevo/core/entitlements/entitlements.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/router/deep_link_navigation.dart';
+
+import '../../helpers/fake_entitlements.dart';
 
 /// J16 — tapping a notification whose deep link is a bottom-nav tab
 /// (« /products ») pushed a shell route over « Notifications » → duplicate
@@ -47,6 +52,77 @@ void main() {
     expect(normalizeDeepLink('/stock/history'), '/stock/overview');
     expect(normalizeDeepLink('/products/new'), '/products/new');
     expect(normalizeDeepLink('/products/import'), '/products/import');
+  });
+
+  group('15.2: stock overview links without multi-store', () {
+    Entitlements known(String state) => Entitlements(
+        states: {'multi-store': state}, status: EntitlementsStatus.server);
+
+    test('multi-store DISABLED → the free local « stock bas » list', () {
+      for (final link in const [
+        '/stock/history',
+        '/stock/overview',
+        '/stock/overview?showLowOnly=true',
+      ]) {
+        expect(normalizeDeepLink(link, entitlements: known('DISABLED')),
+            '/stock/low?all=true',
+            reason: link);
+      }
+      final match =
+          appRouter.configuration.findMatch(Uri.parse('/stock/low?all=true'));
+      expect(match.isError, isFalse);
+    });
+
+    test('readable or unknown → the overview (backend decides)', () {
+      for (final e in [
+        known('ENABLED'),
+        known('READ_ONLY'),
+        Entitlements.unknown,
+      ]) {
+        expect(normalizeDeepLink('/stock/history', entitlements: e),
+            '/stock/overview',
+            reason: '$e');
+      }
+      expect(
+          normalizeDeepLink('/stock/transfers',
+              entitlements: known('DISABLED')),
+          '/stock/transfers');
+    });
+
+    testWidgets('openDeepLink reads the states from the router scope',
+        (tester) async {
+      final router = GoRouter(
+        initialLocation: '/home',
+        routes: [
+          GoRoute(path: '/home', builder: (_, __) => const Text('HOME')),
+          GoRoute(
+              path: '/stock/overview',
+              builder: (_, __) => const Text('OVERVIEW')),
+          GoRoute(
+              path: '/stock/low',
+              builder: (_, state) =>
+                  Text('LOCAL all=${state.uri.queryParameters['all']}')),
+        ],
+      );
+      addTearDown(router.dispose);
+      late ProviderContainer container;
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          entitlementsOverride({'multi-store': 'DISABLED'})
+        ],
+        child: Consumer(builder: (context, ref, _) {
+          container = ProviderScope.containerOf(context);
+          return MaterialApp.router(routerConfig: router);
+        }),
+      ));
+      await container.read(entitlementsProvider.future);
+      await tester.pumpAndSettle();
+
+      openDeepLink(router, '/stock/history');
+      await tester.pumpAndSettle();
+      expect(find.text('LOCAL all=true'), findsOneWidget);
+      expect(find.text('OVERVIEW'), findsNothing);
+    });
   });
 
   test('shell tab detection ignores query strings and trailing slash', () {

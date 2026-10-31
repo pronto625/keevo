@@ -1232,7 +1232,7 @@ So that **un module désactivé n'est pas accessible (MOD-FR18, MOD-FR14 fronten
 - Registre de routes par module ; `go_router` `redirect`/`routes` conditionnés par `entitlementsProvider`.
 - Guard : `module inactif` → home ou écran « module non activé » (CTA upgrade).
 
-- [ ] [Deferred-from: review 13-1, 2026-10-29] Validate manifest `routes` format (leading `/`, go_router syntax) when routing consumes them [ModuleManifestLoader]
+- [x] [Deferred-from: review 13-1, 2026-10-29] Validate manifest `routes` format (leading `/`, go_router syntax) when routing consumes them [ModuleManifestLoader] — ✅ 15.2 (2026-10-31): `ModuleManifestLoader` validates format + cross-module overlap; contract `keevo/contracts/module-routes.json`
 
 ### Story 15.3 : `ExtensionSlot` + lazy loading
 
@@ -1372,6 +1372,9 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 - **Drift (G14)** : le client conserve ses 21 tables locales (inoffensif si module inactif) ; le gating est UI/route/sync (12.7), pas au niveau du schéma local. Documenter ce choix.
 - Les features restent en dossiers `features/` (gating) jusqu'à extraction incrémentale en packages (post-pilote, après 15.4c).
 
+
+### Deferred items routed 2026-10-31
+- [ ] [Deferred-from: review 15-2, 2026-10-31] Entry points still pushing gated routes without `isRouteAvailable`: `apply_adjustments_button.dart` (`/inventory`, counting), catalog/low-stock overview route (`/stock/overview`); the product-form supplier card keeps its tappable look (chevron) when CRM is off and has no widget test (DISABLED → no navigation, ENABLED → `/suppliers/<id>`) [app entry points]
 ---
 
 ## Epic 16 : Licences, Migration & Go-Live (Phase 6)
@@ -1464,6 +1467,8 @@ So that **le frontend gâte hors-ligne, le backend restant source de vérité (M
 - Étendre la génération JWT (au `select-tenant`, Story 1.7 existante) ; backend continue d'appliquer `@RequiresEntitlement` (défense).
 
 - [ ] [Deferred-from: review 13-5, 2026-10-29] Claim shape must carry read-only modules (`{id: state}` or a separate list) built from `ModuleRegistry.moduleStates` — `enabledModules` mixes ENABLED and READ_ONLY [JWT]
+
+- [ ] [Deferred-from: review 15-2, 2026-10-31] The app's route guard (15.2) treats a module absent from known states as not readable: when the `modules` claim seeds `entitlementsProvider`, it must list every usable module (free ones included, e.g. `crm`), or the app must treat absent free modules as readable [JWT claim / app entitlements]
 
 ### Story 16.4 : Console super-admin « Modules »
 

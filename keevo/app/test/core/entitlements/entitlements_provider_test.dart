@@ -156,6 +156,9 @@ void main() {
     expect(persisted()!.states,
         {'invoicing': 'ENABLED', 'multi-store': 'DISABLED'});
     expect(persisted()!.status, EntitlementsStatus.cached);
+    // 15.2: the French names travel with the states (« module non activé »).
+    expect(e.displayNameOf('multi-store'), 'Module');
+    expect(persisted()!.displayNameOf('multi-store'), 'Module');
     // No baseline yet but a cursor exists (upgrade from 2.0.7): one full pull.
     expect(marker(), isNotNull);
     expect(await cursor(), _cursor, reason: 'the sync consumes the marker');
@@ -482,9 +485,32 @@ void main() {
         states: const {'pos': 'ENABLED', 'crm': 'READ_ONLY'},
         status: EntitlementsStatus.server,
         fetchedAt: DateTime.utc(2026, 10, 30, 8),
+        displayNames: const {'crm': 'Clients et fournisseurs'},
       );
       final back = Entitlements.fromJson(jsonDecode(jsonEncode(e.toJson())));
       expect(back, e.withStatus(EntitlementsStatus.cached));
+      expect(back!.displayNameOf('crm'), 'Clients et fournisseurs');
+    });
+
+    test('15.2: snapshot of 2.0.8 (no displayNames) reads back without names',
+        () {
+      final back = Entitlements.fromJson({
+        'states': {'crm': 'ENABLED'},
+      });
+      expect(back!.displayNames, isEmpty);
+      expect(back.displayNameOf('crm'), isNull);
+    });
+
+    test('15.2: display names parsed from the API answer', () {
+      expect(
+          Entitlements.parseApiDisplayNames([
+            {'moduleId': 'crm', 'displayName': ' Clients et fournisseurs '},
+            {'moduleId': 'pos', 'displayName': ''},
+            {'moduleId': 'x'},
+            'oops',
+          ]),
+          {'crm': 'Clients et fournisseurs'});
+      expect(Entitlements.parseApiDisplayNames({'oops': 1}), isEmpty);
     });
 
     test('malformed API answer → FormatException (states kept)', () {
