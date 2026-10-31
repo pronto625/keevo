@@ -15,6 +15,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
+import 'core/extension/extension_actions.dart';
 import 'core/router/app_router.dart';
 import 'features/feedback/presentation/provider/feedback_provider.dart';
 import 'root_scope.dart';
@@ -59,6 +60,15 @@ void main() async {
     '[DB] Encryption key loaded — ${hexKey.length} chars '
     '(${hexKey.substring(0, 8)}…) ✅',
     name: 'AppDatabase',
+  );
+
+  // Story 15.4c — compose the registered module packages now (router routes,
+  // extension action registry): a duplicate registration throws at launch
+  // instead of on first navigation or first slot tap.
+  dev.log(
+    '[Modules] ${appRouter.configuration.routes.length} routes, '
+    '${kExtensionActions.length} extension actions',
+    name: 'Modules',
   );
 
   // ── 3. Bootstrap app with providers ────────────────────────────────────────

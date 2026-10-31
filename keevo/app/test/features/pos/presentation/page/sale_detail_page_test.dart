@@ -19,6 +19,7 @@ import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_invoicing/invoicing_module.dart';
 import 'package:mocktail/mocktail.dart';
 
 import '../../../../helpers/fake_entitlements.dart';

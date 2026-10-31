@@ -1,15 +1,17 @@
 name: keevo
 description: Keevo — Gestion d'inventaire et de ventes pour commerçants au Cameroun.
 publish_to: 'none'
-version: 2.0.12+84
+version: 2.0.13+85
 
 environment:
   sdk: '>=3.8.0 <4.0.0'
 
 # Story 15.4a — Dart pub workspace (Melos 7): this app is the workspace root;
-# shared kernel in packages/keevo_core. `flutter pub get` here resolves all.
+# shared kernel in packages/keevo_core, module packages next to it (15.4c:
+# keevo_invoicing). `flutter pub get` here resolves all.
 workspace:
   - packages/keevo_core
+  - packages/keevo_invoicing
 
 dependencies:
   flutter:
@@ -20,6 +22,11 @@ dependencies:
   # Shared kernel (theme, Drift storage, sync, network, common widgets).
   keevo_core:
     path: packages/keevo_core
+
+  # Module packages (Story 15.4c) — registered in
+  # lib/core/modules/registered_modules.dart, module code loaded `deferred`.
+  keevo_invoicing:
+    path: packages/keevo_invoicing
 
   # State management — Riverpod 3 (Story 15.4b). Newer riverpod_generator /
   # freezed / json_serializable need Dart 3.12+ or an analyzer that
@@ -130,6 +137,8 @@ melos:
       description: >-
         Code generation, kernel first (Drift database of keevo_core), then the
         app (Riverpod/Freezed/JSON) — the only place this order is written.
+        Module packages (keevo_invoicing) have no generated sources yet: one
+        that gains some adds its build_runner step here, after keevo_core.
       run: >-
         cd packages/keevo_core
         && dart run build_runner build --delete-conflicting-outputs

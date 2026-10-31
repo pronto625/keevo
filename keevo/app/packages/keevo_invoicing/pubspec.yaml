@@ -1,0 +1,26 @@
+name: keevo_invoicing
+description: Keevo — module Facturation (écran facture, action « Facturer » du point de vente). Dépend uniquement de keevo_core (+ paquets tiers), jamais de l'app ni d'un autre module.
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  keevo_core:
+    path: ../keevo_core
+
+  flutter_riverpod: ^3.2.1
+  go_router: ^14.2.0
+  dio: ^5.7.0
+  intl: ^0.20.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0

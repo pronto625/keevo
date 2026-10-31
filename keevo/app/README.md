@@ -17,15 +17,19 @@ Sans `--dart-define=API_BASE_URL=…`, les builds debug et profile visent
 
 ## Workspace (Melos 7 / pub workspace)
 
-`keevo/app` est la racine d'un workspace Dart : l'app (package `keevo`) et
+`keevo/app` est la racine d'un workspace Dart : l'app (package `keevo`),
 `packages/keevo_core` (noyau partagé : thème, base Drift, sync, réseau,
-widgets communs), importé via `package:keevo_core/...`.
+widgets communs, contrat des modules), importé via `package:keevo_core/...`,
+et les packages de module (`packages/keevo_invoicing`, Story 15.4c) — voir
+`packages/README.md` (contrat d'un module, comment extraire la feature
+suivante).
 
 ```
 keevo/app/
 ├── lib/                    app : composition, features, « app shell » (lib/core)
 ├── test/
-└── packages/keevo_core/    noyau sans feature (lib/, test/, build.yaml Drift)
+├── packages/keevo_core/    noyau sans feature (lib/, test/, build.yaml Drift)
+└── packages/keevo_invoicing/  module Facturation (dépend de keevo_core seul)
 ```
 
 Melos est une dev dependency (pas d'installation globale) :
@@ -40,7 +44,7 @@ dart run melos test        # tests package par package, dossier par dossier
 Règle d'extraction (fermeture des dépendances) : un fichier de `lib/core` va
 dans `keevo_core` seulement si tout ce qu'il importe (transitivement) y va
 aussi et que rien n'importe `lib/features/**` ni `package:keevo/...`.
-`test/architecture/core_package_boundary_test.dart` échoue sinon.
+`test/architecture/package_boundary_test.dart` échoue sinon.
 
 Restent dans l'app (`lib/core`, « app shell ») les fichiers couplés aux
 features : routeur (`app_router`, `module_routes`, `deep_link_navigation`,
@@ -49,7 +53,7 @@ features : routeur (`app_router`, `module_routes`, `deep_link_navigation`,
 `currentUserIdProvider`, `currentDeviceIdProvider` — les autres providers
 noyau sont dans `keevo_core/di/core_providers.dart`), `main_shell`,
 `shell_banners`, `session_refresher`, `auth_interceptor`, `entitlements_provider`,
-`extension/`, `fcm_service`, `product_photo_providers` + `widget/product_photo`,
+`extension/`, `modules/` (descripteurs de modules enregistrés), `fcm_service`, `product_photo_providers` + `widget/product_photo`,
 et dans `sync/` : `rest_sync_service`, `sync_trigger_notifier`,
 `riverpod_sync_trigger_dispatcher`, `sync_gate_guard`,
 `sync_monitoring_providers`, `domain/sync_conflict_provider`.

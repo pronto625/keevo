@@ -12,8 +12,10 @@ import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show dioProvider;
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/module/keevo_module_ui.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/widget/deferred_widget.dart';
+import 'package:keevo_invoicing/invoicing_module.dart';
 
 import '../../helpers/fake_entitlements.dart';
 

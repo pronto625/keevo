@@ -45,6 +45,8 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # Pub workspace root: resolves the app and packages/* (keevo_core,
+      # keevo_invoicing — Story 15.4c).
       - name: Install dependencies
         working-directory: keevo/app
         run: flutter pub get

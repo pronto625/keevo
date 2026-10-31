@@ -86,7 +86,8 @@ COPY . .
 
 # ─── Dependencies + code generation ───────────────────────────────────────────
 # Pub workspace (Story 15.4a): one `pub get` resolves the app and
-# packages/keevo_core; `melos generate` runs code generation kernel first.
+# packages/* (keevo_core, keevo_invoicing — 15.4c); `melos generate` runs code
+# generation kernel first.
 RUN flutter pub get \
     && dart run melos generate
 

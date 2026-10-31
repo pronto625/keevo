@@ -4,9 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/module/keevo_module_ui.dart';
 import 'package:keevo_core/router/deep_link_entity_page.dart';
 import 'package:keevo_core/storage/app_constants.dart';
-import 'package:keevo_core/widget/deferred_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/account/presentation/page/delete_account_page.dart';
@@ -51,9 +51,6 @@ import '../../features/inventory/presentation/page/inventory_gap_report_page.dar
 import '../../features/inventory/presentation/page/inventory_launch_page.dart';
 import '../../features/inventory/presentation/page/local_low_stock_page.dart';
 import '../../features/inventory/presentation/page/transfer_history_page.dart';
-// Story 15.3: Invoicing screens are loaded on first use.
-import '../../features/invoicing/presentation/page/invoice_detail_page.dart'
-    deferred as invoice_detail;
 import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/onboarding/domain/model/sector_type.dart';
 import '../../features/onboarding/presentation/page/onboarding_page.dart';
@@ -88,6 +85,7 @@ import '../../features/team/presentation/page/edit_employee_page.dart';
 import '../../features/team/presentation/page/team_page.dart';
 import '../../features/team/presentation/provider/employee_provider.dart';
 import '../entitlements/entitlements_provider.dart';
+import '../modules/registered_modules.dart';
 import '../scaffold/main_shell.dart';
 import '../sync/sync_trigger_notifier.dart';
 import 'module_routes.dart';
@@ -605,17 +603,10 @@ final GoRouter appRouter = GoRouter(
       },
     ),
 
-    // ── Invoicing (module route, Story 15.3; full UI in 15.5) ────────────
-    GoRoute(
-      path: '/invoicing/:id',
-      builder: (_, state) {
-        final id = state.pathParameters['id']!;
-        return DeferredWidget(
-          loader: invoice_detail.loadLibrary,
-          builder: (_) => invoice_detail.InvoiceDetailPage(invoiceId: id),
-        );
-      },
-    ),
+    // ── Module packages (Story 15.4c): routes of the registered module
+    // descriptors (`/invoicing/:id`, …). The 15.2 module guard applies to
+    // them through the route registry (module_routes.dart).
+    ...composeModuleRoutes(kRegisteredModules),
 
     // ── Pending sales (OWNER only) — Story 4.3 ──────────────────────────
     GoRoute(

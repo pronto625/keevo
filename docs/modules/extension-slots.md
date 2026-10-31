@@ -55,18 +55,24 @@ contributions; inject `ExtensionRegistry` and call
 
 ## 3. Handle the action (app)
 
-1. Register the action key in `keevo/app/lib/core/extension/extension_actions.dart`
-   (`kExtensionActions`). The handler signature is
+1. Declare the handler in the module's descriptor (`KeevoModuleUi.actions`,
+   `package:keevo_core/module/keevo_module_ui.dart`), e.g.
+   `invoicingModuleUi` in `keevo/app/packages/keevo_invoicing/lib/invoicing_module.dart`.
+   The app shell composes the registered descriptors
+   (`keevo/app/lib/core/modules/registered_modules.dart`) into the registry
+   `kExtensionActions` (`lib/core/extension/extension_actions.dart`) — never
+   edit that registry by hand. The handler signature (`ExtensionActionHandler`) is
    `Future<void> Function(BuildContext, WidgetRef, Map<String, Object?> args)`.
-2. Load the module code lazily: import the handler's library with
-   `deferred as`, call `loadLibrary()` in the handler, then the real function.
-   A module screen mounted in `app_router.dart` uses the same `deferred as`
-   import wrapped in `DeferredWidget` (`core/widget/deferred_widget.dart`).
+2. Load the module code lazily: inside the module package, import the handler's
+   library with `deferred as`, call `loadLibrary()` in the handler, then the real
+   function. A module screen is a route of the descriptor (`KeevoModuleUi.routes`,
+   mounted by `app_router.dart`) whose builder wraps the same `deferred as`
+   import in `DeferredWidget` (`package:keevo_core/widget/deferred_widget.dart`).
    On Android/iOS, `deferred as` does not split the code without Flutter
-   deferred components configured: today the deferral is structural (module
-   code reached only through `loadLibrary`), ready for the package extraction
-   of Story 15.4c. A handler failure (e.g. `loadLibrary`) shows a French
-   snackbar; a second tap while an action runs is ignored.
+   deferred components configured: the deferral is structural (module code
+   reached only through `loadLibrary`). A handler failure (e.g. `loadLibrary`)
+   shows a French snackbar; a second tap while an action runs is ignored.
+   How to build a module package: `keevo/app/packages/README.md`.
 3. Module screens opened by a handler must be declared in the module manifest's
    `routes` (and so in `core/router/module_routes.dart`) — the 15.2 guard applies.
 

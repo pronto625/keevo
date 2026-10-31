@@ -2,15 +2,15 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/module/module_ports.dart';
 
-import '../../../auth/presentation/provider/auth_provider.dart';
-import '../../../export/presentation/provider/export_providers.dart';
 import '../../data/remote_invoice_datasource.dart';
 import '../../domain/model/invoice.dart';
 
-/// HTTP adapter of the invoices API.
+/// HTTP adapter of the invoices API (the app's API client, [apiDioProvider]
+/// port).
 final invoiceDataSourceProvider = Provider<RemoteInvoiceDataSource>(
-    (ref) => RemoteInvoiceDataSource(dio: ref.watch(dioProvider)));
+    (ref) => RemoteInvoiceDataSource(dio: ref.watch(apiDioProvider)));
 
 /// The automatic invoice of a sale, null while it is being created
 /// (« Facture en cours de création »). Asked again on each open.
@@ -26,7 +26,7 @@ final invoiceByIdProvider =
 });
 
 /// Downloads the PDF of an invoice and hands it to the system share / open
-/// sheet (the export file path, [exportFileSharerProvider]).
+/// sheet (the app's file share path, [fileSharerProvider] port).
 typedef InvoicePdfOpener = Future<void> Function(Invoice invoice);
 
 final invoicePdfOpenerProvider = Provider<InvoicePdfOpener>((ref) {
@@ -36,7 +36,7 @@ final invoicePdfOpenerProvider = Provider<InvoicePdfOpener>((ref) {
     final pdf = await ref
         .read(invoiceDataSourceProvider)
         .pdf(invoice.id, fallbackName: fallback);
-    final temp = await ref.read(exportTempDirProvider.future);
+    final temp = await ref.read(tempDirProvider.future);
     final sep = Platform.pathSeparator;
     // Only the latest PDF stays on the device: earlier downloads (maybe
     // another account's) are removed first. Own subfolder per download, so
@@ -52,6 +52,6 @@ final invoicePdfOpenerProvider = Provider<InvoicePdfOpener>((ref) {
     await dir.create(recursive: true);
     final file = File('${dir.path}$sep${pdf.fileName}');
     await file.writeAsBytes(pdf.bytes, flush: true);
-    await ref.read(exportFileSharerProvider)(file);
+    await ref.read(fileSharerProvider)(file);
   };
 });

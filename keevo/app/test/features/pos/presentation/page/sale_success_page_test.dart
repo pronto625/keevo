@@ -9,6 +9,7 @@ import 'package:keevo/core/extension/extension_actions.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/features/pos/presentation/page/sale_success_page.dart';
 import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_invoicing/invoicing_module.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 

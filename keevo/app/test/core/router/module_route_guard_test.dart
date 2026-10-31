@@ -18,15 +18,15 @@ import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show flutterSecureStorageProvider;
 import 'package:keevo/features/contact/presentation/page/client_list_page.dart';
-import 'package:keevo/features/invoicing/domain/model/invoice.dart';
-import 'package:keevo/features/invoicing/presentation/page/invoice_detail_page.dart';
-import 'package:keevo/features/invoicing/presentation/provider/invoicing_providers.dart';
 import 'package:keevo/features/pos/presentation/page/sale_success_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/widget/deferred_widget.dart';
+import 'package:keevo_invoicing/domain/model/invoice.dart';
+import 'package:keevo_invoicing/presentation/page/invoice_detail_page.dart';
+import 'package:keevo_invoicing/presentation/provider/invoicing_providers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 

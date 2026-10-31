@@ -25,7 +25,8 @@ jobs:
           cache: true
 
       # keevo/app is a Melos 7 / pub workspace root (Story 15.4a):
-      # bootstrap (= pub get at the root) resolves the app and keevo_core.
+      # bootstrap (= pub get at the root) resolves the app, keevo_core and the
+      # module packages (keevo_invoicing, Story 15.4c).
       - name: Install dependencies
         working-directory: keevo/app
         run: dart run melos bootstrap
@@ -42,8 +43,16 @@ jobs:
         working-directory: keevo/app/packages/keevo_core
         run: flutter analyze --no-pub --no-fatal-infos
 
+      - name: Analyze (keevo_invoicing)
+        working-directory: keevo/app/packages/keevo_invoicing
+        run: flutter analyze --no-pub --no-fatal-infos
+
       - name: Test (keevo_core)
         working-directory: keevo/app/packages/keevo_core
+        run: flutter test --no-pub --coverage
+
+      - name: Test (keevo_invoicing)
+        working-directory: keevo/app/packages/keevo_invoicing
         run: flutter test --no-pub --coverage
 
       - name: Test
@@ -58,3 +67,4 @@ jobs:
           path: |
             keevo/app/coverage/
             keevo/app/packages/keevo_core/coverage/
+            keevo/app/packages/keevo_invoicing/coverage/

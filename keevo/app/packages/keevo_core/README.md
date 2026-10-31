@@ -3,7 +3,7 @@
 Noyau partagé de l'app Keevo (Story 15.4a) : thème, base Drift chiffrée,
 sync (hors couches couplées aux features), réseau, widgets communs. Aucune
 dépendance vers `keevo/app` ni vers `lib/features/**`
-(`test/architecture/core_package_boundary_test.dart` côté app).
+(`test/architecture/package_boundary_test.dart` côté app).
 
 ## Ce que l'app hôte doit fournir
 
@@ -24,6 +24,11 @@ mettre en place, sinon la base ou le thème échouent à l'exécution.
 - **Overrides Riverpod** — `dbEncryptionKeyProvider` et
   `sharedPreferencesProvider` (`di/core_providers.dart`) lèvent une erreur
   tant que l'app ne les surcharge pas (`ProviderScope(overrides: …)`).
+- **Ports des modules** (Story 15.4c) — `apiDioProvider`,
+  `fileSharerProvider`, `tempDirProvider` (`module/module_ports.dart`) lèvent
+  une `UnimplementedError` nommant le port tant que l'app ne les surcharge
+  pas (`modulePortOverrides` dans `buildRootScope`). Voir
+  `../README.md`.
 
 ## Commandes (depuis `packages/keevo_core`)
 
