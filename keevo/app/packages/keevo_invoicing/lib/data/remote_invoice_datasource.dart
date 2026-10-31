@@ -10,8 +10,8 @@ typedef InvoicePdf = ({List<int> bytes, String fileName});
 
 /// Story 15.3 — HTTP adapter to `/api/v1/invoices` (read side used by the
 /// checkout « Facturer » action and the invoice screen). Story 15.5: the
-/// whole invoicing API used by the module screens (online only — nothing is
-/// queued offline, Story 15.5b).
+/// whole invoicing API used by the module screens. Story 15.5b: the online
+/// path of `InvoiceRepository` (offline, it writes locally and queues).
 class RemoteInvoiceDataSource {
   static const _base = '/api/v1/invoices';
   static const _creditNotes = '/api/v1/credit-notes';
@@ -95,10 +95,16 @@ class RemoteInvoiceDataSource {
     return InvoicePage(items: items, totalElements: total);
   }
 
-  /// `POST /api/v1/invoices` — a new draft.
-  Future<Invoice> create(InvoiceDraftInput input) async => _invoice(
-    await _dio.post<Map<String, dynamic>>(_base, data: input.toJson()),
-  );
+  /// `POST /api/v1/invoices` — a new draft. Story 15.5b: [id] = the id chosen
+  /// on the device; the server answers the same invoice when it is sent
+  /// again (and its queued `CREATE_INVOICE` uses the same id).
+  Future<Invoice> create(InvoiceDraftInput input, {String? id}) async =>
+      _invoice(
+        await _dio.post<Map<String, dynamic>>(
+          _base,
+          data: {...input.toJson(), if (id != null) 'id': id},
+        ),
+      );
 
   /// `PUT /api/v1/invoices/{id}` — replaces the content of a draft.
   Future<Invoice> update(String id, InvoiceDraftInput input) async => _invoice(

@@ -1,4 +1,4 @@
-package com.keevo.sync.sync.domain.port.in;
+package com.keevo.shared.application.port.sync;
 
 import org.junit.jupiter.api.Test;
 

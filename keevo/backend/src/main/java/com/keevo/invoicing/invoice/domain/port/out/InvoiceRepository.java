@@ -10,7 +10,11 @@ import java.util.UUID;
 /** Invoices of the current tenant (Story 14.1), in the module-owned tables of its schema. */
 public interface InvoiceRepository {
 
+    /** Story 15.5b — a deleted draft is absent. */
     Optional<Invoice> findById(UUID id);
+
+    /** Story 15.5b — the invoice {@code id} even when it is a deleted draft (creation idempotency). */
+    Optional<Invoice> findAnyById(UUID id);
 
     /** Same, row-locked until the end of the caller's transaction (serialises concurrent transitions). */
     Optional<Invoice> findByIdForUpdate(UUID id);
@@ -20,6 +24,12 @@ public interface InvoiceRepository {
      * a duplicate-key failure (unique index — one invoice per sale).
      */
     void insert(Invoice invoice);
+
+    /**
+     * Story 15.5b — inserts the invoice unless one (deleted or not) already has its id: false, nothing written. Safe
+     * against a concurrent insert of the same id (it waits for it, then answers false).
+     */
+    boolean insertIfAbsent(Invoice invoice);
 
     /** Story 14.4 — whether an invoice was already created from the sale {@code saleId} (POS → Invoicing bridge). */
     boolean existsBySourceSale(UUID saleId);
@@ -57,8 +67,11 @@ public interface InvoiceRepository {
      */
     void markSent(Invoice sent);
 
-    /** Deletes a DRAFT (and its lines); returns false when no draft has this id. */
-    boolean deleteDraft(UUID id);
+    /**
+     * Deletes a DRAFT; returns false when no draft has this id. Story 15.5b: a soft delete ({@code deleted_at},
+     * {@code updated_at} moved) so the sync pull sends a tombstone to the other devices.
+     */
+    boolean deleteDraft(UUID id, java.time.Instant at);
 
     /** Newest first, every criterion of {@code filter} applied. */
     Page list(Filter filter, int page, int size);
@@ -80,5 +93,26 @@ public interface InvoiceRepository {
     long nextNumber(int year);
 
     record Page(List<Invoice> items, long totalElements) {
+    }
+
+    /**
+     * Story 15.5b — keyset cursor column of the sync pull of invoices ({@code idx_invoices_sync_keyset}, migration V6
+     * and {@code TenantSchemaProvisioner.SYNC_KEYSET_INDEXES}). Every write the device must see moves it: lifecycle
+     * transitions, draft edits, WhatsApp sendings, replacement by a corrected sale, credit notes.
+     */
+    String SYNC_CURSOR = "updated_at";
+
+    /** Story 15.5b — whether the invoicing tables exist in the tenant schema (never provisioned: no delta). */
+    boolean tablesExist();
+
+    /**
+     * Story 15.5b — the sync pull delta: invoices whose {@link #SYNC_CURSOR} is {@code >= since}, in
+     * ({@code updated_at}, id as text) order, strictly after ({@code afterCursor}, {@code afterId}) when given, at most
+     * {@code limit}, with their lines.
+     */
+    List<DeltaItem> delta(java.time.Instant since, java.time.Instant afterCursor, String afterId, int limit);
+
+    /** One row of the delta: the invoice, or a deleted draft ({@code deleted}: only its id and times matter). */
+    record DeltaItem(Invoice invoice, boolean deleted) {
     }
 }

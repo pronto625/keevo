@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show DateTimeRange;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/storage/search_fold.dart';
 
 import '../../domain/model/invoice.dart';
 import 'invoicing_providers.dart';
@@ -62,119 +63,49 @@ final invoiceListFilterProvider =
       InvoiceListFilterNotifier.new,
     );
 
-/// Loaded pages of the invoice list.
-@immutable
-class InvoiceListState {
-  final List<Invoice> items;
-  final int totalElements;
-  final int nextPage;
-  final bool loadingMore;
-
-  /// Error of the last « load more », shown at the bottom with a retry.
-  final Object? moreError;
-
-  const InvoiceListState({
-    required this.items,
-    required this.totalElements,
-    required this.nextPage,
-    this.loadingMore = false,
-    this.moreError,
+/// Story 15.5b — the invoices of the list screen among [all] (the device's
+/// copy, offline-first): [InvoiceListFilter.status]; the search on the shown
+/// title (number, « Brouillon »…) or the client name (case- and
+/// accent-insensitive, trimmed); the issue date range
+/// (calendar days, inclusive — an invoice without issue date, a draft or one
+/// issued offline, is left out by a range). Newest first (creation, then last
+/// change).
+List<Invoice> filterInvoices(List<Invoice> all, InvoiceListFilter filter) {
+  // accents and case folded like the app's other local searches
+  final search = foldForSearch(filter.search.trim());
+  final range = filter.range;
+  DateTime day(DateTime d) => DateTime(d.year, d.month, d.day);
+  final matching = [
+    for (final i in all)
+      if ((filter.status == null || i.status == filter.status) &&
+          (search.isEmpty ||
+              foldForSearch(i.title).contains(search) ||
+              foldForSearch(i.clientName ?? '').contains(search)) &&
+          (range == null ||
+              (i.issueDate != null &&
+                  !day(i.issueDate!).isBefore(day(range.start)) &&
+                  !day(i.issueDate!).isAfter(day(range.end)))))
+        i,
+  ];
+  final epoch = DateTime.fromMillisecondsSinceEpoch(0);
+  matching.sort((a, b) {
+    final created = (b.createdAt ?? b.updatedAt ?? epoch).compareTo(
+      a.createdAt ?? a.updatedAt ?? epoch,
+    );
+    if (created != 0) return created;
+    return (b.updatedAt ?? epoch).compareTo(a.updatedAt ?? epoch);
   });
-
-  bool get hasMore => items.length < totalElements;
-
-  InvoiceListState copyWith({
-    List<Invoice>? items,
-    int? totalElements,
-    int? nextPage,
-    bool? loadingMore,
-    Object? moreError,
-  }) => InvoiceListState(
-    items: items ?? this.items,
-    totalElements: totalElements ?? this.totalElements,
-    nextPage: nextPage ?? this.nextPage,
-    loadingMore: loadingMore ?? this.loadingMore,
-    moreError: moreError,
-  );
+  return matching;
 }
 
-/// Page size of the invoice list.
-const kInvoicePageSize = 20;
-
-/// Story 15.5 — the invoice list (online only): first page for the current
-/// [invoiceListFilterProvider], next pages with [loadMore] (infinite scroll).
-class InvoiceListNotifier extends AsyncNotifier<InvoiceListState> {
-  @override
-  Future<InvoiceListState> build() async {
-    final filter = ref.watch(invoiceListFilterProvider);
-    final page = await _fetch(filter, 0);
-    return InvoiceListState(
-      items: page.items,
-      totalElements: page.totalElements,
-      nextPage: 1,
-    );
-  }
-
-  Future<InvoicePage> _fetch(InvoiceListFilter filter, int page) {
-    final range = filter.range;
-    return ref
-        .read(invoiceDataSourceProvider)
-        .list(
-          status: filter.status,
-          search: filter.search,
-          from: range?.start,
-          to: range?.end,
-          page: page,
-          size: kInvoicePageSize,
-        );
-  }
-
-  /// The criteria changed (or the list is reloading) since [filter] was used
-  /// for the page that ends: its result is not for the current list.
-  bool _stale(InvoiceListFilter filter, InvoiceListState loading) =>
-      !ref.mounted ||
-      ref.read(invoiceListFilterProvider) != filter ||
-      state.isLoading ||
-      !identical(state.value, loading);
-
-  /// Loads the next page; ignored while one is loading or when everything
-  /// is loaded. After a failed page, only an explicit [retry] (« Réessayer »)
-  /// asks again — not every scroll tick. A result that arrives after the
-  /// criteria changed is dropped.
-  Future<void> loadMore({bool retry = false}) async {
-    final current = state.value;
-    if (current == null || current.loadingMore || !current.hasMore) return;
-    if (state.isLoading) return;
-    if (current.moreError != null && !retry) return;
-    final filter = ref.read(invoiceListFilterProvider);
-    final loading = current.copyWith(loadingMore: true);
-    state = AsyncData(loading);
-    try {
-      final page = await _fetch(filter, current.nextPage);
-      if (_stale(filter, loading)) return;
-      // An invoice created meanwhile shifts the offsets: never twice.
-      final known = {for (final i in current.items) i.id};
-      final items = [
-        ...current.items,
-        for (final i in page.items)
-          if (!known.contains(i.id)) i,
-      ];
-      state = AsyncData(
-        InvoiceListState(
-          items: items,
-          // An empty page (invoices deleted meanwhile) ends the list.
-          totalElements: page.items.isEmpty ? items.length : page.totalElements,
-          nextPage: current.nextPage + 1,
-        ),
-      );
-    } catch (e) {
-      if (_stale(filter, loading)) return;
-      state = AsyncData(current.copyWith(moreError: e));
-    }
-  }
-}
-
-final invoiceListProvider =
-    AsyncNotifierProvider.autoDispose<InvoiceListNotifier, InvoiceListState>(
-      InvoiceListNotifier.new,
-    );
+/// Story 15.5 — the invoice list; Story 15.5b: read from the device (every
+/// invoice the sync brought, plus those written offline), filtered by
+/// [invoiceListFilterProvider], updated by each local write and each pull.
+final invoiceListProvider = Provider.autoDispose<AsyncValue<List<Invoice>>>((
+  ref,
+) {
+  final filter = ref.watch(invoiceListFilterProvider);
+  return ref
+      .watch(localInvoicesProvider)
+      .whenData((all) => filterInvoices(all, filter));
+});

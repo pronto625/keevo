@@ -6,6 +6,8 @@ import 'package:keevo_core/widget/app_error_widget.dart';
 
 import '../domain/model/invoice.dart';
 
+export '../domain/model/invoice.dart' show doualaToday;
+
 /// Story 15.5 — shared presentation helpers of the invoicing screens: FCFA
 /// amounts (same formatter as the POS screens), French dates, quantities and
 /// server error messages.
@@ -16,15 +18,11 @@ final _currency = NumberFormat.currency(
   decimalDigits: 0,
 );
 
+/// Story 15.5b — an invoice written offline, not on the server yet.
+const kPendingSyncLabel = 'En attente de synchronisation';
+
 /// Amount in francs, « 59 625 XAF ».
 String formatXaf(num amount) => _currency.format(amount);
-
-/// Today in Africa/Douala (UTC+1, no daylight saving) — the server's
-/// calendar day for issue and payment dates, whatever the device's zone.
-DateTime doualaToday({DateTime? now}) {
-  final douala = (now ?? DateTime.now()).toUtc().add(const Duration(hours: 1));
-  return DateTime(douala.year, douala.month, douala.day);
-}
 
 /// « 31 oct. 2026 ».
 String formatDay(DateTime day) => DateFormat('d MMM y', 'fr_FR').format(day);

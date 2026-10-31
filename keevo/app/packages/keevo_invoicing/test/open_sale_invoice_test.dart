@@ -5,11 +5,13 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/module/module_ports.dart';
+import 'package:keevo_core/module/module_sync.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_invoicing/data/remote_invoice_datasource.dart';
 import 'package:keevo_invoicing/domain/model/invoice.dart';
@@ -17,6 +19,20 @@ import 'package:keevo_invoicing/invoicing_module.dart';
 import 'package:keevo_invoicing/presentation/open_sale_invoice.dart';
 import 'package:keevo_invoicing/presentation/page/invoice_detail_page.dart';
 import 'package:keevo_invoicing/presentation/provider/invoicing_providers.dart';
+
+import 'helpers/offline_support.dart';
+
+/// Story 15.5b — the device side the screens now read from: an empty
+/// in-memory store, online, an empty sync queue.
+List<Override> _device() {
+  final db = testDatabase();
+  addTearDown(db.close);
+  return [
+    appDatabaseProvider.overrideWithValue(db),
+    connectivityServiceProvider.overrideWithValue(FakeConnectivity()),
+    moduleSyncQueueProvider.overrideWithValue(FakeModuleSyncQueue()),
+  ];
+}
 
 const _invoice = Invoice(
   id: 'inv-1',
@@ -93,7 +109,10 @@ ResponseBody _json(Object body, {int status = 200}) => ResponseBody.fromString(
 );
 
 void main() {
-  setUpAll(() => initializeDateFormatting('fr_FR'));
+  setUpAll(() {
+    useSystemSqlite();
+    return initializeDateFormatting('fr_FR');
+  });
 
   group('RemoteInvoiceDataSource', () {
     RemoteInvoiceDataSource ds(_Adapter adapter) =>
@@ -264,7 +283,10 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           retry: noProviderRetry,
-          overrides: [invoiceDataSourceProvider.overrideWithValue(ds)],
+          overrides: [
+            invoiceDataSourceProvider.overrideWithValue(ds),
+            ..._device(),
+          ],
           child: MaterialApp.router(routerConfig: router),
         ),
       );
@@ -341,6 +363,7 @@ void main() {
             ),
             // 15.5: the screen's actions depend on the session role.
             isOwnerSessionProvider.overrideWithValue(true),
+            ..._device(),
             invoicePdfOpenerProvider.overrideWithValue(
               opener ??
                   (i) async {
@@ -397,7 +420,10 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         retry: noProviderRetry,
-        overrides: [invoiceDataSourceProvider.overrideWithValue(ds)],
+        overrides: [
+          invoiceDataSourceProvider.overrideWithValue(ds),
+          ..._device(),
+        ],
         child: MaterialApp(
           home: Scaffold(
             body: Consumer(
@@ -437,6 +463,7 @@ void main() {
             _FakeDataSource(bySale: () async => null),
           ),
           tempDirProvider.overrideWith((ref) async => temp),
+          ..._device(),
           fileSharerProvider.overrideWithValue((file) async {
             shared.add(file);
           }),

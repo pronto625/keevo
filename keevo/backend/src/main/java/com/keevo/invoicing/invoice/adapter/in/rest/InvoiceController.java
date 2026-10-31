@@ -11,9 +11,7 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
-import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceClientDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceClientSuggestionsDto;
-import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceLineRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceResponseDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.PayInvoiceRequestDto;
@@ -22,12 +20,9 @@ import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase.DraftContent;
-import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
-import com.keevo.invoicing.invoice.domain.model.LineInput;
-import com.keevo.invoicing.invoice.domain.model.VatTreatment;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.module.InvoicingModule;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -97,12 +92,16 @@ public class InvoiceController {
         this.publicBaseUrl = publicBaseUrl;
     }
 
-    /** POST /api/v1/invoices — a new draft. */
+    /**
+     * POST /api/v1/invoices — a new draft. Story 15.5b: {@code id} (optional) = the id chosen by the device; sent again,
+     * the invoice already created with it is returned (201 as well), never a second one.
+     */
     @RequiresPermission(InvoicingModule.INVOICE_CREATE)
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> create(@Valid @RequestBody InvoiceRequestDto request) {
-        Invoice draft = drafts.create(content(request), CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        Invoice draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
+                TenantContext.getCurrentTenant());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(dto(draft)));
     }
 
@@ -300,12 +299,16 @@ public class InvoiceController {
         return UUID.fromString(value);
     }
 
-    private static DraftContent content(InvoiceRequestDto request) {
-        InvoiceClientDto c = request.client();
-        ClientInfo client = new ClientInfo(c.id(), c.name(), c.niu(), c.address(), c.phone());
-        List<InvoiceLineRequestDto> lines = request.lines() == null ? List.of() : request.lines();
-        List<LineInput> inputs = lines.stream().map(l -> new LineInput(l.description(), l.quantity(), l.unitPrice(),
-                l.vatTreatment() == null ? VatTreatment.STANDARD : VatTreatment.valueOf(l.vatTreatment()))).toList();
-        return new DraftContent(client, inputs);
+    /**
+     * The draft content; a line the domain refuses (e.g. an unknown VAT treatment, a quantity out of bounds) → French
+     * 400, never a 500 (Story 15.5b — same rule as the sync path).
+     */
+    static DraftContent content(InvoiceRequestDto request) {
+        try {
+            return request.toDraftContent();
+        } catch (IllegalArgumentException | ArithmeticException e) {
+            throw new InvalidRequestParameterException("lines", "invalid invoice line",
+                    "Une ligne de la facture est invalide (traitement de TVA, quantité ou montant)");
+        }
     }
 }

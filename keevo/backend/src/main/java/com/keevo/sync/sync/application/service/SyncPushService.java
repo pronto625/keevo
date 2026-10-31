@@ -11,7 +11,7 @@ import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
 import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;

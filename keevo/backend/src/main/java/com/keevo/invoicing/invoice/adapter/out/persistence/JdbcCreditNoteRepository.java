@@ -53,6 +53,10 @@ public class JdbcCreditNoteRepository implements CreditNoteRepository {
             jdbc.batchUpdate("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTE_ITEMS) + " ("
                     + ITEM_COLUMNS + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", batch);
         }
+        // Story 15.5b — the credited invoice is sent again by the sync pull (its credit notes, « Entièrement
+        // créditée »): its updated_at moves (never backwards); nothing else of the invoice changes
+        jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " SET updated_at = GREATEST(updated_at, ?) WHERE id = ?", Timestamp.from(c.issuedAt()), c.invoiceId());
     }
 
     @Override

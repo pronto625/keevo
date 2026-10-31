@@ -444,8 +444,11 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
         put.apply("counting").accept(List.of("SAVE_INVENTORY_COUNT", "CREATE_INVENTORY_SESSION", "VALIDATE_INVENTORY"));
         put.apply("core").accept(List.of("CREATE_EMPLOYEE", "REASSIGN_EMPLOYEE", "DEACTIVATE_EMPLOYEE",
                 "REACTIVATE_EMPLOYEE", "SUBMIT_FEEDBACK"));
+        // Story 15.5b: offline invoices (paid module)
+        put.apply("invoicing").accept(List.of("CREATE_INVOICE", "UPDATE_INVOICE", "ISSUE_INVOICE", "PAY_INVOICE",
+                "CANCEL_INVOICE"));
 
-        assertThat(handlers).hasSize(19);
+        assertThat(handlers).hasSize(20);
         assertThat(moduleByType).isEqualTo(expected);
     }
 }

@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.service;
 
 import com.keevo.sync.sync.application.strategy.ConflictStrategyRegistry;
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository;

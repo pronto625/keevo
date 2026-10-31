@@ -7,8 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show dioProvider;
 import 'package:keevo/features/export/presentation/provider/export_providers.dart';
+import 'package:keevo/core/modules/module_sync_queue.dart';
 import 'package:keevo/root_scope.dart';
 import 'package:keevo_core/module/module_ports.dart';
+import 'package:keevo_core/module/module_sync.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 
 final _answer = Provider<int>((ref) => 1);
@@ -63,6 +65,8 @@ void main() {
     );
     expect(container.read(apiDioProvider), same(dio));
     expect(container.read(fileSharerProvider), same(sharer));
+    // Story 15.5b — the sync queue port is the app's queue
+    expect(container.read(moduleSyncQueueProvider), isA<AppModuleSyncQueue>());
     await tester.runAsync(() async {
       expect(await container.read(tempDirProvider.future), same(temp));
     });

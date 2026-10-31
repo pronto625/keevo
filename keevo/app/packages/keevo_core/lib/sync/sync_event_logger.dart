@@ -6,6 +6,10 @@ import '../storage/app_database.dart';
 /// Event type of an abandoned quarantined operation (v1s-16-15).
 const kSyncEventAbandon = 'ABANDON';
 
+/// Story 15.5b — event type of an offline record the server refused for good
+/// and that was removed from the device (e.g. an invoice created offline).
+const kSyncEventReject = 'REJECT';
+
 /// History messages of a failed push / pull (v1s-16-20): shown to the user
 /// in « Historique de synchronisation », so French and without exception
 /// text (the technical detail goes to `dev.log` only).
@@ -30,6 +34,7 @@ String syncEventTitle(String type, String status) {
     ('DIAGNOSTIC', 'OK') => 'Diagnostic : tout va bien',
     ('DIAGNOSTIC', 'WARN') => 'Diagnostic : un problème a été détecté',
     (kSyncEventAbandon, _) => 'Opération abandonnée',
+    (kSyncEventReject, _) => 'Opération refusée par le serveur',
     (_, 'SUCCESS') => 'Synchronisation réussie',
     (_, 'FAILED') => 'Synchronisation échouée',
     (_, 'OK') => 'Synchronisation : tout va bien',
@@ -112,6 +117,12 @@ class SyncEventLogger {
   /// (v1s-16-15). [label] describes it (operation, date, amount).
   Future<void> logOperationAbandoned(String label) =>
       _log(kSyncEventAbandon, 'ABANDONED', 1, label);
+
+  /// Story 15.5b — an offline record refused for good by the server and
+  /// removed from the device; [label] names it in French (e.g. « Facture de
+  /// Awa Traoré — 15 000 FCFA : Données invalides »).
+  Future<void> logOperationRejected(String label) =>
+      _log(kSyncEventReject, 'FAILED', 1, label);
 
   Future<void> _log(
       String type, String status, int opCount, String? error) async {

@@ -1,8 +1,8 @@
 package com.keevo.sync.sync.application.provider;
 
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Page;
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 

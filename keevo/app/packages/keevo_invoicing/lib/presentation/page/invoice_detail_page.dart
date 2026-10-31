@@ -15,7 +15,11 @@ import '../widget/credit_note_form_sheet.dart';
 /// WhatsApp sendings, credit notes) and its actions by status — draft:
 /// edit, issue (compliance warnings first), delete; issued: record the
 /// payment (chosen date), send by WhatsApp, PDF, cancel (owner), credit note
-/// (owner); paid: PDF, WhatsApp, credit note (owner). Online only.
+/// (owner); paid: PDF, WhatsApp, credit note (owner). Story 15.5b: read from
+/// the device; offline, creation, edit, issue, payment and cancellation are
+/// written locally and synced later (« En attente de synchronisation », the
+/// number comes with the sync); PDF, WhatsApp, credit notes and deleting a
+/// draft need the server (« Disponible une fois connecté »).
 class InvoiceDetailPage extends ConsumerWidget {
   final String invoiceId;
 
@@ -81,13 +85,26 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
     if (saved == true && mounted) _refresh();
   }
 
+  Future<bool> _serverReady() async =>
+      await _run('check', () async {
+        await ref.read(invoiceRepositoryProvider).requireServer(_invoice.id);
+        return true;
+      }) ==
+      true;
+
   Future<void> _issue() async {
     final isOwner = ref.read(isOwnerSessionProvider);
+    // Story 15.5b — offline, the server checks compliance at the sync
+    final offline = !await ref
+        .read(invoiceRepositoryProvider)
+        .canReachServer(_invoice.id);
+    if (!mounted) return;
     final choice = await showDialog<_IssueChoice>(
       context: context,
       builder: (_) => _IssueDialog(
         warnings: _invoice.complianceWarnings,
         canEditSettings: isOwner,
+        offline: offline,
       ),
     );
     if (!mounted || choice == null) return;
@@ -98,11 +115,15 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
     }
     final issued = await _run(
       'issue',
-      () => ref.read(invoiceDataSourceProvider).issue(_invoice.id),
+      () => ref.read(invoiceRepositoryProvider).issue(_invoice.id),
     );
     if (issued != null && mounted) {
-      showInvoicingInfo(context, 'Facture n° ${issued.number ?? ''} émise');
-      _refresh();
+      showInvoicingInfo(
+        context,
+        issued.number == null
+            ? 'Facture émise — numéro attribué à la synchronisation'
+            : 'Facture n° ${issued.number} émise',
+      );
     }
   }
 
@@ -126,7 +147,7 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
     );
     if (ok != true || !mounted) return;
     final done = await _run('delete', () async {
-      await ref.read(invoiceDataSourceProvider).delete(_invoice.id);
+      await ref.read(invoiceRepositoryProvider).delete(_invoice.id);
       return true;
     });
     if (done == true && mounted) {
@@ -150,28 +171,35 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
     final paid = await _run(
       'pay',
       () => ref
-          .read(invoiceDataSourceProvider)
-          .pay(_invoice.id, paymentMethod: payment.method, paidOn: payment.day),
+          .read(invoiceRepositoryProvider)
+          .pay(_invoice.id, method: payment.method, paidOn: payment.day),
     );
     if (paid != null && mounted) {
-      showInvoicingInfo(context, 'Paiement enregistré');
-      _refresh();
+      showInvoicingInfo(
+        context,
+        paid.pending
+            ? 'Paiement enregistré — en attente de synchronisation'
+            : 'Paiement enregistré',
+      );
     }
   }
 
   Future<void> _send() async {
+    if (!await _serverReady() || !mounted) return;
     final phone = await showDialog<String>(
       context: context,
       builder: (_) => _SendDialog(initialPhone: _invoice.client.phone),
     );
     if (phone == null || !mounted) return;
-    final sent = await _run(
-      'send',
-      () => ref.read(invoiceDataSourceProvider).send(_invoice.id, phone: phone),
-    );
+    final sent = await _run('send', () async {
+      final sent = await ref
+          .read(invoiceDataSourceProvider)
+          .send(_invoice.id, phone: phone);
+      await ref.read(invoiceRepositoryProvider).saveServer(sent);
+      return sent;
+    });
     if (sent != null && mounted) {
       showInvoicingInfo(context, 'Facture envoyée');
-      _refresh();
     }
   }
 
@@ -190,15 +218,21 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
     if (reason == null || !mounted) return;
     final cancelled = await _run(
       'cancel',
-      () => ref.read(invoiceDataSourceProvider).cancel(_invoice.id, reason),
+      () => ref.read(invoiceRepositoryProvider).cancel(_invoice.id, reason),
     );
     if (cancelled != null && mounted) {
-      showInvoicingInfo(context, 'Facture annulée');
-      _refresh();
+      showInvoicingInfo(
+        context,
+        cancelled.pending
+            ? 'Facture annulée — en attente de synchronisation'
+            : 'Facture annulée',
+      );
     }
   }
 
   Future<void> _creditNote() async {
+    // Credit notes need the server's remaining quantities (online only).
+    if (!await _serverReady() || !mounted) return;
     final note = await showCreditNoteFormSheet(context, _invoice);
     if (note == null || !mounted) return;
     showInvoicingInfo(
@@ -244,7 +278,9 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
           Text(
             invoice.number != null
                 ? 'Facture n° ${invoice.number}'
-                : 'Facture (brouillon)',
+                : invoice.isDraft
+                ? 'Facture (brouillon)'
+                : 'Facture émise',
             key: const Key('invoice-number'),
             style: theme.textTheme.titleLarge?.copyWith(
               fontWeight: FontWeight.w800,
@@ -267,8 +303,21 @@ class _InvoiceContentState extends ConsumerState<_InvoiceContent> {
                   label: 'Entièrement créditée',
                   color: cs.secondary,
                 ),
+              if (invoice.pending)
+                InvoiceBadge(
+                  key: const Key('invoice-pending'),
+                  label: kPendingSyncLabel,
+                  color: cs.outline,
+                ),
             ],
           ),
+          if (invoice.pending && invoice.isDraft) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Montants définitifs calculés à la synchronisation.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ],
           if (invoice.issueDate != null) ...[
             const SizedBox(height: 8),
             Text('Émise le ${formatDay(invoice.issueDate!)}'),
@@ -539,7 +588,14 @@ class _IssueDialog extends StatelessWidget {
   final List<String> warnings;
   final bool canEditSettings;
 
-  const _IssueDialog({required this.warnings, required this.canEditSettings});
+  /// Issued offline: numbered and checked by the server at the sync.
+  final bool offline;
+
+  const _IssueDialog({
+    required this.warnings,
+    required this.canEditSettings,
+    this.offline = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -554,6 +610,14 @@ class _IssueDialog extends StatelessWidget {
             const Text(
               'Elle recevra un numéro et ne pourra plus être modifiée.',
             ),
+            if (offline) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Hors ligne : numéro attribué à la synchronisation. '
+                'Conformité vérifiée à la synchronisation.',
+                key: Key('invoice-issue-offline'),
+              ),
+            ],
             if (warnings.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Text(

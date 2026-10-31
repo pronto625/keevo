@@ -2,22 +2,27 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:keevo_core/module/module_ports.dart';
+import 'package:keevo_core/module/module_sync.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 
+import 'core/modules/module_sync_queue.dart';
 import 'features/auth/presentation/provider/auth_provider.dart';
 import 'features/export/presentation/provider/export_providers.dart';
 
 /// Story 15.4c — the app's implementations of the `keevo_core` ports that
 /// module packages (keevo_invoicing, …) read instead of importing the app:
-/// API client, file sharer, temp directory. Each follows the app provider,
-/// so overriding `dioProvider` / `exportFileSharerProvider` /
-/// `exportTempDirProvider` (tests) also reaches the modules.
+/// API client, file sharer, temp directory, sync queue (15.5b). Each follows
+/// the app provider, so overriding `dioProvider` / `exportFileSharerProvider`
+/// / `exportTempDirProvider` / `syncServiceProvider` (tests) also reaches the
+/// modules.
 final List<Override> modulePortOverrides = [
   apiDioProvider.overrideWith((ref) => ref.watch(dioProvider)),
   fileSharerProvider.overrideWith((ref) => ref.watch(exportFileSharerProvider)),
   tempDirProvider.overrideWith(
     (ref) => ref.watch(exportTempDirProvider.future),
   ),
+  // Story 15.5b — module records sync through the app's queue and trigger.
+  moduleSyncQueueProvider.overrideWith(AppModuleSyncQueue.new),
 ];
 
 /// The app's root [ProviderScope] (built by `main`).

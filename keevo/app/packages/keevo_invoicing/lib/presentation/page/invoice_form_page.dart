@@ -1,12 +1,15 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/contact_validation.dart';
 import 'package:keevo_core/widget/discard_changes_dialog.dart';
 
+import '../../data/invoice_repository.dart';
 import '../../domain/model/invoice.dart';
 import '../../domain/model/invoicing_models.dart';
 import '../invoicing_format.dart';
@@ -16,7 +19,9 @@ import '../provider/invoicing_providers.dart';
 /// draft (`/invoicing/:id/edit`). Client from the CRM picker when the CRM is
 /// available (search as you type), else free-text name + phone; free lines
 /// (designation, quantity, unit price, VAT treatment). Saved as a draft —
-/// issuing is done from the invoice screen.
+/// issuing is done from the invoice screen. Story 15.5b: offline, the draft
+/// is saved on the device and synced later (free-text client: the CRM
+/// picker needs the server).
 class InvoiceFormPage extends ConsumerWidget {
   /// Draft to edit, null for a new invoice.
   final String? invoiceId;
@@ -93,6 +98,10 @@ class _InvoiceFormState extends ConsumerState<_InvoiceForm> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _phone;
+
+  /// Whether the CRM picker is available, from the last answer of the
+  /// server (kept while offline).
+  bool _crmAvailable = false;
   late final TextEditingController _niu;
   late final TextEditingController _address;
   final List<_LineFields> _lines = [];
@@ -184,7 +193,8 @@ class _InvoiceFormState extends ConsumerState<_InvoiceForm> {
   InvoiceDraftInput _input() => InvoiceDraftInput(
     clientId: _clientId,
     clientName: _name.text,
-    clientPhone: _phone.text,
+    // Story 15.5b — « 699000156 » → « +237699000156 », like the clients form
+    clientPhone: normalizeContactPhone(_phone.text),
     clientNiu: _niu.text,
     clientAddress: _address.text,
     lines: [
@@ -201,23 +211,32 @@ class _InvoiceFormState extends ConsumerState<_InvoiceForm> {
   Future<void> _save() async {
     if (_saving || !(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _saving = true);
-    final ds = ref.read(invoiceDataSourceProvider);
+    final repository = ref.read(invoiceRepositoryProvider);
     try {
       final draft = widget.draft;
       if (draft == null) {
-        final created = await ds.create(_input());
+        final created = await repository.create(_input());
         if (!mounted) return;
         _dirty = false;
-        showInvoicingInfo(context, 'Brouillon enregistré');
+        showInvoicingInfo(
+          context,
+          created.pending
+              ? 'Brouillon enregistré — en attente de synchronisation'
+              : 'Brouillon enregistré',
+        );
         context.pushReplacement(
           '/invoicing/${Uri.encodeComponent(created.id)}',
         );
       } else {
-        await ds.update(draft.id, _input());
+        final updated = await repository.update(draft.id, _input());
         if (!mounted) return;
         _dirty = false;
-        ref.invalidate(invoiceByIdProvider(draft.id));
-        showInvoicingInfo(context, 'Brouillon enregistré');
+        showInvoicingInfo(
+          context,
+          updated.pending
+              ? 'Brouillon enregistré — en attente de synchronisation'
+              : 'Brouillon enregistré',
+        );
         context.pop(true);
       }
     } catch (e) {
@@ -244,7 +263,10 @@ class _InvoiceFormState extends ConsumerState<_InvoiceForm> {
   @override
   Widget build(BuildContext context) {
     final suggestions = ref.watch(clientSuggestionsProvider(_clientQuery));
-    final crmAvailable = suggestions.value?.crmAvailable ?? false;
+    // the last answer counts while offline (the picker then says so)
+    final known = suggestions.value?.crmAvailable;
+    if (known != null) _crmAvailable = known;
+    final crmAvailable = _crmAvailable;
     final theme = Theme.of(context);
     return PopScope(
       canPop: !_dirty,
@@ -303,6 +325,9 @@ class _InvoiceFormState extends ConsumerState<_InvoiceForm> {
                 onChanged: (_) => _touch(),
                 keyboardType: TextInputType.phone,
                 maxLength: 30,
+                // optional; when typed, a valid number (stored +237…)
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? null : contactPhoneError(v),
                 decoration: const InputDecoration(
                   labelText: 'Téléphone (WhatsApp)',
                   hintText: '+237 6XX XX XX XX',
@@ -419,6 +444,13 @@ class _InvoiceFormState extends ConsumerState<_InvoiceForm> {
   }
 }
 
+/// No network (or the server unreachable): the CRM search cannot answer.
+bool _offline(Object error) =>
+    error is InvoiceUnavailableException ||
+    (error is DioException &&
+        (error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.connectionTimeout));
+
 class _ClientSuggestionsList extends StatelessWidget {
   final AsyncValue<ClientSuggestions> suggestions;
   final void Function(ClientSuggestion) onPick;
@@ -438,6 +470,15 @@ class _ClientSuggestionsList extends StatelessWidget {
       );
     }
     if (suggestions.hasError && value == null) {
+      if (_offline(suggestions.error!)) {
+        return const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Text(
+            'Hors ligne : le nom saisi sera utilisé.',
+            key: Key('invoice-client-offline'),
+          ),
+        );
+      }
       return AppErrorInline(error: suggestions.error!);
     }
     final clients = value?.clients ?? const [];

@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'module_records.dart';
+
 /// Story 15.3 — runs one extension contribution (a server-driven slot
 /// button). [args] is the slot's context (e.g. `{'saleId': …}` on the
 /// checkout slot).
@@ -36,10 +38,24 @@ class KeevoModuleUi {
   /// `invoicing.open-sale-invoice`).
   final Map<String, ExtensionActionHandler> actions;
 
+  /// Story 15.5b — the module's entities of the sync pull, by pull key (e.g.
+  /// `invoices`): the app shell hands each pulled list to its merger, which
+  /// stores it in the module records (`replaceUnlessPending`). The merger is
+  /// called from the descriptor library: it must stay small (no screen).
+  final Map<String, ModuleEntityMerger> pulledEntities;
+
+  /// Story 15.5b — the API path of one record, by pull key (e.g. `invoices`
+  /// → `/api/v1/invoices/<id>`): after the server refused an operation of a
+  /// record, the app shell reads that record again (answer `{data: row}`,
+  /// stored through the merger; 404 = gone) instead of a full pull.
+  final Map<String, String Function(String id)> recordPaths;
+
   const KeevoModuleUi({
     required this.id,
     this.routes = const [],
     this.actions = const {},
+    this.pulledEntities = const {},
+    this.recordPaths = const {},
   });
 }
 

@@ -1,0 +1,94 @@
+{
+  "description": "Story 15.5b — payloads of the offline invoice sync operations, exactly as the app's InvoiceRepository queues them (keevo_invoicing) and as InvoiceSyncHandler reads them (backend). Both sides test against this file: change it only with both.",
+  "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+  "operations": [
+    {
+      "name": "create",
+      "operationType": "CREATE_INVOICE",
+      "payload": {
+        "id": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "client": {
+          "id": null,
+          "name": "Awa Traoré",
+          "phone": "+237690000001",
+          "niu": null,
+          "address": null
+        },
+        "lines": [
+          {
+            "description": "Sac de riz 25 kg",
+            "quantity": 2,
+            "unitPrice": 11925,
+            "vatTreatment": "STANDARD"
+          },
+          {
+            "description": "Huile 5 L",
+            "quantity": 1.5,
+            "unitPrice": 6500,
+            "vatTreatment": "EXEMPT"
+          }
+        ]
+      }
+    },
+    {
+      "name": "update",
+      "operationType": "UPDATE_INVOICE",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "client": {
+          "id": null,
+          "name": "Awa Traoré",
+          "phone": "+237690000001",
+          "niu": null,
+          "address": null
+        },
+        "lines": [
+          {
+            "description": "Sac de riz 25 kg",
+            "quantity": 2,
+            "unitPrice": 11925,
+            "vatTreatment": "STANDARD"
+          },
+          {
+            "description": "Huile 5 L",
+            "quantity": 1.5,
+            "unitPrice": 6500,
+            "vatTreatment": "EXEMPT"
+          }
+        ]
+      }
+    },
+    {
+      "name": "issue",
+      "operationType": "ISSUE_INVOICE",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44"
+      }
+    },
+    {
+      "name": "payWhileIssueQueued",
+      "operationType": "PAY_INVOICE",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "paymentMethod": "Espèces"
+      }
+    },
+    {
+      "name": "payBackDated",
+      "operationType": "PAY_INVOICE",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "paymentMethod": "Mobile Money",
+        "paidAt": "2026-10-25"
+      }
+    },
+    {
+      "name": "cancel",
+      "operationType": "CANCEL_INVOICE",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "reason": "Erreur de client"
+      }
+    }
+  ]
+}

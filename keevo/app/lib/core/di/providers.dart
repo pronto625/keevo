@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/module/module_sync.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/diagnostics/sync_diagnostic_runner.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 
 import '../../features/auth/presentation/provider/auth_provider.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
+import '../modules/registered_modules.dart';
 import '../sync/rest_sync_service.dart';
 
 /// App-shell providers: they need `dioProvider` (feature `auth`) or the
@@ -42,6 +44,9 @@ final syncServiceProvider = Provider<SyncService>((ref) {
     dio: dio,
     secureStorage: ref.watch(flutterSecureStorageProvider),
     prefs: prefs,
+    // Story 15.5b — pulled module entities (invoices) → module_records.
+    moduleMergers: composeModuleMergers(kRegisteredModules),
+    moduleRecordPaths: composeModuleRecordPaths(kRegisteredModules),
   );
 });
 

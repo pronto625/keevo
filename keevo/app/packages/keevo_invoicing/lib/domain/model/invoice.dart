@@ -1,5 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+/// Today in Africa/Douala (UTC+1, no daylight saving) — the server's
+/// calendar day for issue and payment dates, whatever the device's zone.
+DateTime doualaToday({DateTime? now}) {
+  final douala = (now ?? DateTime.now()).toUtc().add(const Duration(hours: 1));
+  return DateTime(douala.year, douala.month, douala.day);
+}
+
 /// Invoice status values sent by `/api/v1/invoices`.
 const kInvoiceDraft = 'DRAFT';
 const kInvoiceIssued = 'ISSUED';
@@ -41,6 +48,11 @@ num _num(Object? v) => v is num ? v : (v is String ? num.tryParse(v) ?? 0 : 0);
 DateTime? _instant(Object? v) =>
     v is String ? DateTime.tryParse(v)?.toLocal() : null;
 
+String _isoDay(DateTime day) =>
+    '${day.year.toString().padLeft(4, '0')}-'
+    '${day.month.toString().padLeft(2, '0')}-'
+    '${day.day.toString().padLeft(2, '0')}';
+
 /// A calendar day sent as `yyyy-MM-dd` (no time zone shift).
 DateTime? _day(Object? v) {
   if (v is! String) return null;
@@ -59,6 +71,14 @@ class InvoiceClient {
   final String? address;
 
   const InvoiceClient({this.id, this.name, this.phone, this.niu, this.address});
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'phone': phone,
+    'niu': niu,
+    'address': address,
+  };
 
   factory InvoiceClient.fromJson(Object? json) {
     if (json is! Map) return const InvoiceClient();
@@ -95,6 +115,17 @@ class InvoiceLine {
     this.totalTtc = 0,
   });
 
+  Map<String, Object?> toJson() => {
+    'position': position,
+    'description': description,
+    'quantity': quantity,
+    'unitPrice': unitPrice,
+    'vatTreatment': vatTreatment,
+    'totalHt': totalHt,
+    'totalVat': totalVat,
+    'totalTtc': totalTtc,
+  };
+
   factory InvoiceLine.fromJson(Map json) => InvoiceLine(
     position: _int(json['position']),
     description: _string(json['description']) ?? '',
@@ -124,6 +155,14 @@ class CreditNoteSummary {
     this.issuedAt,
     this.reason,
   });
+
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'number': number,
+    'issuedAt': issuedAt?.toUtc().toIso8601String(),
+    'totalTtc': totalTtc,
+    'reason': reason,
+  };
 
   factory CreditNoteSummary.fromJson(Map json) => CreditNoteSummary(
     id: json['id'] is String ? json['id'] as String : '',
@@ -183,6 +222,13 @@ class Invoice {
   /// When the invoice was created (server), null when not sent.
   final DateTime? createdAt;
 
+  /// Story 15.5b — last change (server `updatedAt`, or the local write).
+  final DateTime? updatedAt;
+
+  /// Story 15.5b — changed on this device and not confirmed by the server yet
+  /// (« En attente de synchronisation »). Local state, never sent.
+  final bool pending;
+
   const Invoice({
     required this.id,
     required this.status,
@@ -209,10 +255,84 @@ class Invoice {
     this.saleId,
     this.supersededAt,
     this.createdAt,
+    this.updatedAt,
+    this.pending = false,
   });
 
   /// The server's French label, else the local one — never the raw code.
-  String get statusLabel => serverStatusLabel ?? invoiceStatusLabel(status);
+  /// Story 15.5b: an invoice issued offline has no number until the sync.
+  String get statusLabel => status == kInvoiceIssued && number == null
+      ? 'Émise — numéro attribué à la synchronisation'
+      : serverStatusLabel ?? invoiceStatusLabel(status);
+
+  /// Story 15.5b — issued (or paid / cancelled) on this device, its number not
+  /// allocated by the server yet (numbering is server-side only).
+  bool get awaitingNumber => !isDraft && number == null;
+
+  /// Story 15.5b — what the list shows as the invoice's title.
+  String get title => number ?? (isDraft ? 'Brouillon' : 'Numéro à venir');
+
+  /// The same invoice with the local [pending] flag.
+  Invoice withPending(bool pending) => Invoice(
+    id: id,
+    status: status,
+    totalTtc: totalTtc,
+    number: number,
+    serverStatusLabel: serverStatusLabel,
+    clientName: clientName,
+    client: client,
+    totalHt: totalHt,
+    totalVat: totalVat,
+    lines: lines,
+    issueDate: issueDate,
+    paidAt: paidAt,
+    paymentMethod: paymentMethod,
+    cancelledAt: cancelledAt,
+    cancellationReason: cancellationReason,
+    complianceWarnings: complianceWarnings,
+    lastSentAt: lastSentAt,
+    lastSentTo: lastSentTo,
+    sendCount: sendCount,
+    creditedTtc: creditedTtc,
+    fullyCredited: fullyCredited,
+    creditNotes: creditNotes,
+    saleId: saleId,
+    supersededAt: supersededAt,
+    createdAt: createdAt,
+    updatedAt: updatedAt,
+    pending: pending,
+  );
+
+  /// Story 15.5b — the invoice in the API's shape (`InvoiceResponseDto`
+  /// fields this model reads), as stored on the device. [pending] is not
+  /// part of it (a column of the local store).
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'number': number,
+    'status': status,
+    'statusLabel': serverStatusLabel,
+    'issueDate': issueDate == null ? null : _isoDay(issueDate!),
+    'client': {...client.toJson(), 'name': client.name ?? clientName},
+    'lines': [for (final l in lines) l.toJson()],
+    'totalHt': totalHt,
+    'totalVat': totalVat,
+    'totalTtc': totalTtc,
+    'paidAt': paidAt?.toUtc().toIso8601String(),
+    'paymentMethod': paymentMethod,
+    'cancelledAt': cancelledAt?.toUtc().toIso8601String(),
+    'cancellationReason': cancellationReason,
+    'complianceWarnings': complianceWarnings,
+    'lastSentAt': lastSentAt?.toUtc().toIso8601String(),
+    'lastSentTo': lastSentTo,
+    'sendCount': sendCount,
+    'creditedTtc': creditedTtc,
+    'fullyCredited': fullyCredited,
+    'creditNotes': [for (final n in creditNotes) n.toJson()],
+    'saleId': saleId,
+    'supersededAt': supersededAt?.toUtc().toIso8601String(),
+    'createdAt': createdAt?.toUtc().toIso8601String(),
+    'updatedAt': updatedAt?.toUtc().toIso8601String(),
+  };
 
   bool get isDraft => status == kInvoiceDraft;
 
@@ -277,6 +397,7 @@ class Invoice {
       saleId: saleId as String?,
       supersededAt: _instant(json['supersededAt']),
       createdAt: _instant(json['createdAt']),
+      updatedAt: _instant(json['updatedAt']),
     );
   }
 }

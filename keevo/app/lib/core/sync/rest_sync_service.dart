@@ -7,11 +7,14 @@ import 'package:drift/drift.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:keevo_core/di/core_providers.dart' show kUserRoleKey;
+import 'package:keevo_core/module/module_records.dart';
 import 'package:keevo_core/photo/product_photo_files.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/account_read_only_exception.dart';
 import 'package:keevo_core/sync/product_photo_outbox.dart';
+import 'package:keevo_core/sync/sync_event_logger.dart';
+import 'package:keevo_core/sync/sync_rejection_messages.dart';
 import 'package:keevo_core/sync/sync_rejection_policy.dart';
 import 'package:keevo_core/sync/sync_required_exception.dart';
 import 'package:keevo_core/sync/sync_service.dart';
@@ -48,6 +51,8 @@ class RestSyncService implements SyncService {
     'RECORD_STOCK_ENTRY',
     'STOCK_ADJUST',
     'STOCK_TRANSFER',
+    // Story 15.5b — each draft edit carries the whole new content.
+    'UPDATE_INVOICE',
   };
 
   /// Operations applied at most once per entity: once one is APPLIED, other
@@ -59,7 +64,24 @@ class RestSyncService implements SyncService {
         'VALIDATE_INVENTORY',
         'CANCEL_SALE',
         'PROMOTE_PRODUCT',
+        // Story 15.5b — an invoice is issued, paid or cancelled once.
+        'ISSUE_INVOICE',
+        'PAY_INVOICE',
+        'CANCEL_INVOICE',
       }.contains(operation);
+
+  /// Story 15.5b — pull mergers of the registered module packages, by pull
+  /// entity key (`invoices` → keevo_invoicing): the rows of these keys are
+  /// stored in `module_records` by the module's merger.
+  final Map<String, ModuleEntityMerger> _moduleMergers;
+
+  /// Story 15.5b — API path of one module record, by pull key
+  /// (`KeevoModuleUi.recordPaths`): read again after a refused operation.
+  final Map<String, String Function(String id)> _moduleRecordPaths;
+
+  /// Module records whose operation the server refused during this push:
+  /// read again from the server once the rejection is reconciled.
+  final List<ModuleRecord> _recordsToRefresh = [];
 
   RestSyncService({
     required AppDatabase database,
@@ -68,10 +90,14 @@ class RestSyncService implements SyncService {
     required FlutterSecureStorage secureStorage,
     required SharedPreferences prefs,
     ProductPhotoOutbox? photoOutbox,
+    Map<String, ModuleEntityMerger> moduleMergers = const {},
+    Map<String, String Function(String id)> moduleRecordPaths = const {},
   })  : _database = database,
+        _moduleRecordPaths = moduleRecordPaths,
         _dio = dio,
         _secureStorage = secureStorage,
         _prefs = prefs,
+        _moduleMergers = moduleMergers,
         _photoOutbox = photoOutbox ??
             ProductPhotoOutbox(database: database, dio: dio, prefs: prefs);
 
@@ -493,6 +519,7 @@ class RestSyncService implements SyncService {
           // keeps hasPendingOperations() true, which blocks server refreshes.
           final rolledBack = await _database.transaction(
               () => _reconcileRejection(currentOp, reason, removed, rewritten));
+          await _refreshRefusedModuleRecords();
           if (currentOp.operation == 'CREATE_STORE' &&
               currentOp.entityId != null &&
               _prefs.getString(kActiveStoreIdKey) == currentOp.entityId) {
@@ -619,8 +646,36 @@ class RestSyncService implements SyncService {
     var rolledBack = false;
     final operation = op.operation;
     final entityId = op.entityId;
+    // Story 15.5b — an operation of a module record (e.g. an offline invoice).
+    final moduleRecord = entityId == null
+        ? null
+        : await ModuleRecordStore(_database).findById(entityId);
 
-    if (ghostCreateOperations.contains(operation) && entityId != null) {
+    if (moduleRecord != null) {
+      if (operation.startsWith('CREATE_') && moduleRecord.pending) {
+        // Never created on the server (a creation is idempotent there): the
+        // local record is a ghost, its queued follow-ups can never apply.
+        // The user can still see what was lost in the sync history.
+        await SyncEventLogger(_database).logOperationRejected(
+            _moduleRecordLabel(moduleRecord, reason));
+        await ModuleRecordStore(_database).delete(
+            moduleRecord.module, moduleRecord.entity, moduleRecord.id);
+        toDrop.addAll(
+            queue.where((q) => q.entityId == entityId).map((q) => q.id));
+        rolledBack = true;
+      } else {
+        // The local copy shows a change the server refused: its later queued
+        // operations built on it are dropped too, and the record is read
+        // again from the server (full pull only when that read fails).
+        toDrop.addAll(queue
+            .where((q) =>
+                q.entityId == entityId &&
+                q.id != op.id &&
+                !q.createdAt.isBefore(op.createdAt))
+            .map((q) => q.id));
+        _recordsToRefresh.add(moduleRecord);
+      }
+    } else if (ghostCreateOperations.contains(operation) && entityId != null) {
       await _rollbackGhostEntity(operation, entityId);
       toDrop.addAll(queue.where((q) => q.entityId == entityId).map((q) => q.id));
       if (operation == 'CREATE_PRODUCT' ||
@@ -745,6 +800,73 @@ class RestSyncService implements SyncService {
         .go();
     removed.addAll(toDrop);
     return rolledBack;
+  }
+
+  /// « Facture de Awa Traoré — 15 000 FCFA : Données invalides » — the
+  /// history line of a module record refused for good (no id, no code).
+  static String _moduleRecordLabel(ModuleRecord record, String? reason) {
+    final json = record.json;
+    final client = json['client'];
+    final name = client is Map && client['name'] is String
+        ? client['name'] as String
+        : null;
+    final total = json['totalTtc'];
+    final amount = total is num ? '${_groupThousands(total.round())} FCFA' : null;
+    final what = record.entity == 'invoices' ? 'Facture' : 'Enregistrement';
+    final subject = [
+      if (name != null && name.trim().isNotEmpty) '$what de ${name.trim()}'
+      else what,
+      if (amount != null) amount,
+    ].join(' — ');
+    return '$subject : ${friendlySyncRejectionReason(reason)}';
+  }
+
+  static String _groupThousands(int value) {
+    final digits = value.abs().toString();
+    final out = StringBuffer(value < 0 ? '-' : '');
+    for (var i = 0; i < digits.length; i++) {
+      if (i > 0 && (digits.length - i) % 3 == 0) out.write(' ');
+      out.write(digits[i]);
+    }
+    return out.toString();
+  }
+
+  /// Reads again, from the server, each module record whose operation was
+  /// just refused ([_recordsToRefresh]): stored through its merger, deleted
+  /// on 404; one full pull when it cannot be read.
+  Future<void> _refreshRefusedModuleRecords() async {
+    if (_recordsToRefresh.isEmpty) return;
+    final records = List.of(_recordsToRefresh);
+    _recordsToRefresh.clear();
+    final store = ModuleRecordStore(_database);
+    for (final record in records) {
+      final path = _moduleRecordPaths[record.entity];
+      final merge = _moduleMergers[record.entity];
+      var refreshed = false;
+      if (path != null && merge != null) {
+        try {
+          final response =
+              await _dio.get<Map<String, dynamic>>(path(record.id));
+          final data = response.data?['data'];
+          if (data is Map<String, dynamic>) {
+            await merge(store, [data], await _getPendingEntityIds());
+            refreshed = true;
+          }
+        } on DioException catch (e) {
+          if (e.response?.statusCode == 404 &&
+              !(await _getPendingEntityIds()).contains(record.id)) {
+            await store.delete(record.module, record.entity, record.id);
+            refreshed = true;
+          }
+        } catch (e) {
+          dev.log('Module record refresh failed: $e', name: 'RestSync');
+        }
+      }
+      if (!refreshed) {
+        await _prefs.setInt(
+            kFullPullRequestedKey, DateTime.now().microsecondsSinceEpoch);
+      }
+    }
   }
 
   static Map<String, dynamic> _payloadOf(SyncQueueData op) {
@@ -1000,6 +1122,17 @@ class RestSyncService implements SyncService {
         await _prefs.setBool(kPullTzFixDoneKey, true);
       }
 
+      // Story 15.5b — a device upgraded from a version without the module
+      // records (offline invoices) has a cursor past every record the server
+      // already has: one full pull seeds them (requested once).
+      if (!(_prefs.getBool(kModuleRecordsSeededKey) ?? false)) {
+        if (lastSyncMs != null && _moduleMergers.isNotEmpty) {
+          await _prefs.setInt(
+              kFullPullRequestedKey, DateTime.now().microsecondsSinceEpoch);
+        }
+        await _prefs.setBool(kModuleRecordsSeededKey, true);
+      }
+
       // Story 15.1 — a module became readable again: one full pull. The
       // cursor is kept (a failed pull leaves the request for the next one).
       final fullPullRequest = _prefs.getInt(kFullPullRequestedKey);
@@ -1105,6 +1238,19 @@ class RestSyncService implements SyncService {
           entities['inventoryCounts'] as List<dynamic>? ?? []);
       await _upsertReports(
           entities['reports'] as List<dynamic>? ?? []);
+      // Story 15.5b — module entities (e.g. invoices) go to module_records
+      // through the module's merger; same protection as above.
+      if (_moduleMergers.isNotEmpty) {
+        final store = ModuleRecordStore(_database);
+        for (final entry in _moduleMergers.entries) {
+          final rows = [
+            for (final row in entities[entry.key] as List<dynamic>? ?? const [])
+              if (row is Map<String, dynamic>) row,
+          ];
+          if (rows.isEmpty) continue;
+          await entry.value(store, rows, pendingIds);
+        }
+      }
     });
   }
 

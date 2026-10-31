@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -47,19 +48,27 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         this.jdbc = jdbc;
     }
 
+    /** Story 15.5b — a soft-deleted draft is invisible to every read but {@link #findAnyById} and the delta. */
+    private static final String LIVE = " AND deleted_at IS NULL";
+
     @Override
     public Optional<Invoice> findById(UUID id) {
+        return findOne(id, LIVE);
+    }
+
+    @Override
+    public Optional<Invoice> findAnyById(UUID id) {
         return findOne(id, "");
     }
 
     @Override
     public Optional<Invoice> findByIdForUpdate(UUID id) {
-        return findOne(id, " FOR UPDATE");
+        return findOne(id, LIVE + " FOR UPDATE");
     }
 
-    private Optional<Invoice> findOne(UUID id, String lock) {
+    private Optional<Invoice> findOne(UUID id, String condition) {
         List<Row> rows = jdbc.query("SELECT " + SELECT_COLUMNS + " FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                + " WHERE id = ?" + lock, (rs, n) -> row(rs), id);
+                + " WHERE id = ?" + condition, (rs, n) -> row(rs), id);
         if (rows.isEmpty()) {
             return Optional.empty();
         }
@@ -83,8 +92,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
 
     @Override
     public void markSuperseded(UUID id, Instant at) {
+        // Story 15.5b — updated_at moves too (never backwards): the sync pull sends the replaced invoice again
         expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                + " SET superseded_at = ? WHERE id = ? AND superseded_at IS NULL", ts(at), id), "supersede");
+                + " SET superseded_at = ?, updated_at = GREATEST(updated_at, ?) WHERE id = ? AND superseded_at IS NULL",
+                ts(at), ts(at), id), "supersede");
     }
 
     @Override
@@ -93,6 +104,18 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 values(invoice));
         insertLines(invoice);
+    }
+
+    @Override
+    public boolean insertIfAbsent(Invoice invoice) {
+        int inserted = jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS
+                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
+                + "?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", values(invoice));
+        if (inserted == 0) {
+            return false;
+        }
+        insertLines(invoice);
+        return true;
     }
 
     @Override
@@ -147,10 +170,12 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
 
     @Override
     public void markSent(Invoice sent) {
+        // Story 15.5b — updated_at moves too (never backwards): the sync pull sends the new sending count
         expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                        + " SET last_sent_at = ?, last_sent_to = ?, send_count = send_count + 1 "
-                        + "WHERE id = ?",
-                ts(sent.delivery().lastSentAt()), sent.delivery().lastSentTo(), sent.id()), "sending");
+                        + " SET last_sent_at = ?, last_sent_to = ?, send_count = send_count + 1, "
+                        + "updated_at = GREATEST(updated_at, ?) WHERE id = ?",
+                ts(sent.delivery().lastSentAt()), sent.delivery().lastSentTo(), ts(sent.delivery().lastSentAt()),
+                sent.id()), "sending");
     }
 
     /** Only for a DRAFT edit or the issue itself: an issued invoice's lines are never rewritten. */
@@ -168,9 +193,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     }
 
     @Override
-    public boolean deleteDraft(UUID id) {
-        return jdbc.update("DELETE FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                + " WHERE id = ? AND status = 'DRAFT'", id) == 1;
+    public boolean deleteDraft(UUID id, Instant at) {
+        return jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " SET deleted_at = ?, updated_at = GREATEST(updated_at, ?) WHERE id = ? AND status = 'DRAFT'"
+                + LIVE, ts(at), ts(at), id) == 1;
     }
 
     @Override
@@ -201,7 +227,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             conditions.add("issue_date <= ?");
             filter.add(Date.valueOf(criteria.to()));
         }
-        String where = conditions.isEmpty() ? "" : " WHERE " + String.join(" AND ", conditions);
+        conditions.add("deleted_at IS NULL");
+        String where = " WHERE " + String.join(" AND ", conditions);
         Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter.toArray());
         List<Object> args = new ArrayList<>(filter);
         args.add(size);
@@ -223,6 +250,42 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             throw new IllegalStateException("Invoice counter not incremented");
         }
         return next;
+    }
+
+    @Override
+    public boolean tablesExist() {
+        Boolean exists = jdbc.queryForObject("SELECT to_regclass(?) IS NOT NULL", Boolean.class,
+                InvoicingTables.qualified(InvoicingTables.INVOICES));
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public List<DeltaItem> delta(Instant since, Instant afterCursor, String afterId, int limit) {
+        String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
+        List<Object> args = new ArrayList<>();
+        StringBuilder sql = new StringBuilder("SELECT " + SELECT_COLUMNS + ", deleted_at IS NOT NULL AS deleted FROM "
+                + table + " WHERE " + SYNC_CURSOR + " >= ?");
+        args.add(ts(since));
+        if (afterCursor != null && afterId != null) {
+            // row-value comparison in the index order: the keyset index starts right after the previous page
+            sql.append(" AND (" + SYNC_CURSOR + ", CAST(id AS text)) > (?, ?)");
+            args.add(ts(afterCursor));
+            args.add(afterId);
+        }
+        sql.append(" ORDER BY " + SYNC_CURSOR + ", CAST(id AS text) LIMIT ?");
+        args.add(limit);
+        Set<UUID> deleted = new java.util.HashSet<>();
+        List<Row> rows = jdbc.query(sql.toString(), (rs, n) -> {
+            Row r = row(rs);
+            if (rs.getBoolean("deleted")) {
+                deleted.add(r.id());
+            }
+            return r;
+        }, args.toArray());
+        List<UUID> live = rows.stream().map(Row::id).filter(id -> !deleted.contains(id)).toList();
+        Map<UUID, List<InvoiceLine>> lines = live.isEmpty() ? Map.of() : lines(live);
+        return rows.stream().map(r -> new DeltaItem(r.with(lines.getOrDefault(r.id(), List.of())),
+                deleted.contains(r.id()))).toList();
     }
 
     // ── mapping ─────────────────────────────────────────────────────────────────────────────────────────────

@@ -53,6 +53,18 @@ String friendlySyncRejectionReason(String? reasonCode) {
     'EMPLOYEE_NOT_FOUND' => 'Employé introuvable',
     'CANNOT_DEMOTE_LAST_OWNER' =>
       'Impossible de retirer le dernier propriétaire du compte',
+    // Story 15.5b — offline invoices (server rules applied at sync).
+    'INVOICE_NOT_FOUND' => 'Facture introuvable',
+    'INVOICE_NOT_EDITABLE' => 'Cette facture n\'est plus un brouillon',
+    'INVOICE_INVALID_TRANSITION' =>
+      'Action impossible dans l\'état actuel de la facture',
+    'INVOICE_NOT_ISSUABLE' =>
+      'Facture incomplète : vérifiez le client, les lignes et vos '
+          'informations de facturation',
+    'INVOICE_PAYMENT_DATE_INVALID' =>
+      'Date de paiement invalide : ni dans le futur, ni avant l\'émission',
+    'SERVICE_UNAVAILABLE' =>
+      'Service momentanément indisponible — nouvel essai automatique',
     'VALIDATION_ERROR' || 'VALIDATION_FAILED' => 'Données invalides',
     'FORBIDDEN' => 'Action non autorisée',
     'UNAUTHORIZED' => 'Session expirée',
@@ -110,6 +122,12 @@ String friendlySyncOperationLabel(String operation) {
     'REACTIVATE_EMPLOYEE' => 'Réactivation d\'employé',
     'CREATE_EMPLOYEE' => 'Création d\'employé',
     'SUBMIT_FEEDBACK' => 'Envoi d\'un avis',
+    // Story 15.5b — offline invoices.
+    'CREATE_INVOICE' => 'Création de facture',
+    'UPDATE_INVOICE' => 'Modification de facture',
+    'ISSUE_INVOICE' => 'Émission de facture',
+    'PAY_INVOICE' => 'Paiement de facture',
+    'CANCEL_INVOICE' => 'Annulation de facture',
     _ => 'Opération',
   };
 }

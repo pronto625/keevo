@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 import 'package:keevo_core/module/keevo_module_ui.dart';
+import 'package:keevo_core/module/module_records.dart';
 import 'package:keevo_core/widget/deferred_widget.dart';
 
 // Module code is loaded on first use only (Story 15.3, lazy loading): this
@@ -25,8 +26,22 @@ const kOpenSaleInvoiceAction = 'invoicing.open-sale-invoice';
 /// `/invoicing`, creation `/invoicing/new`, seller settings
 /// `/invoicing/settings`, invoice `/invoicing/:id`, draft edit
 /// `/invoicing/:id/edit` — the static paths come before `/invoicing/:id`.
+/// Story 15.5b: the pulled `invoices` are kept on the device (module
+/// records), so the screens work offline.
 final invoicingModuleUi = KeevoModuleUi(
   id: kInvoicingModuleId,
+  pulledEntities: {
+    // Same names as data/local_invoice_store.dart (kept out of this eager
+    // library: it would pull the invoice model in).
+    'invoices': replaceUnlessPending(
+      module: kInvoicingModuleId,
+      entity: 'invoices',
+    ),
+  },
+  // read again by the app shell after the server refused an invoice operation
+  recordPaths: {
+    'invoices': (id) => '/api/v1/invoices/${Uri.encodeComponent(id)}',
+  },
   routes: [
     GoRoute(
       path: '/invoicing',

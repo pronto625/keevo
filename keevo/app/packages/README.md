@@ -25,10 +25,19 @@ Dans `keevo_core/lib/module/` :
 - Ports (`module_ports.dart`) — ce dont un module a besoin de l'app sans
   pouvoir l'importer : `apiDioProvider` (client API authentifié),
   `fileSharerProvider` (partage/ouverture d'un fichier), `tempDirProvider`
-  (dossier temporaire). Ils lèvent une `UnimplementedError` qui nomme le port
+  (dossier temporaire) ; Story 15.5b : `moduleSyncQueueProvider`
+  (`module_sync.dart` — mettre en file une opération de synchro, ids encore
+  en file, demander une synchro). Ils lèvent une `UnimplementedError` qui nomme le port
   tant que l'app ne les surcharge pas ; l'app les branche dans
   `buildRootScope` (`lib/root_scope.dart`, `modulePortOverrides`). Un test de
   module les surcharge directement (`overrideWithValue`).
+
+- Données hors ligne (15.5b) : `module_records.dart` — table générique
+  `module_records(module, entity, id, json, updated_at, pending)` de
+  `AppDatabase` (schéma 32) via `ModuleRecordStore` ; le descripteur déclare
+  `pulledEntities` (clé du pull → `ModuleEntityMerger`, en général
+  `replaceUnlessPending`) que `RestSyncService` appelle à chaque pull
+  (`composeModuleMergers(kRegisteredModules)`, `lib/core/di/providers.dart`).
 
 Côté app :
 

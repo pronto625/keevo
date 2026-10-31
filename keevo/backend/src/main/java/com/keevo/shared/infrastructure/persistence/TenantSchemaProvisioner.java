@@ -666,11 +666,27 @@ public class TenantSchemaProvisioner {
     /**
      * One keyset pull index: {@code name ON table (cursor, (CAST(id AS text)))}.
      *
-     * @param name   index name (unqualified)
-     * @param table  delta table (unqualified)
-     * @param cursor cursor column or expression, identical to the provider's {@code CURSOR}
+     * @param name     index name (unqualified)
+     * @param table    delta table (unqualified)
+     * @param cursor   cursor column or expression, identical to the provider's {@code CURSOR}
+     * @param moduleId Story 15.5b — the module owning the table when it is a module table (created by the module's
+     *                 own migrations, only in the schemas of tenants that use it, e.g. {@code invoices} of
+     *                 {@code invoicing}), {@code null} for a core table. A module table's index is created by the
+     *                 module migration that creates or follows the table, never at core provisioning (the table does
+     *                 not exist yet); {@link SyncKeysetIndexJob} then checks and repairs it like the others (a
+     *                 schema without the table is skipped).
      */
-    public record SyncKeysetIndex(String name, String table, String cursor) {
+    public record SyncKeysetIndex(String name, String table, String cursor, String moduleId) {
+
+        /** A core table's index. */
+        public SyncKeysetIndex(String name, String table, String cursor) {
+            this(name, table, cursor, null);
+        }
+
+        /** Whether the table is created by a module's migrations rather than by core provisioning. */
+        public boolean moduleTable() {
+            return moduleId != null;
+        }
 
         /** Index key list as written in the DDL; an expression cursor gets its own parentheses. */
         String keys() {
@@ -704,7 +720,7 @@ public class TenantSchemaProvisioner {
         }
     }
 
-    /** Story 11.5 — every keyset pull index, one per table read through DeltaPageQuery. */
+    /** Story 11.5 — every keyset pull index, one per delta table (core tables, then module tables — 15.5b). */
     public static final java.util.List<SyncKeysetIndex> SYNC_KEYSET_INDEXES = java.util.List.of(
             new SyncKeysetIndex("idx_products_sync_keyset", "products", "updated_at"),
             new SyncKeysetIndex("idx_categories_sync_keyset", "categories", "updated_at"),
@@ -721,7 +737,9 @@ public class TenantSchemaProvisioner {
             new SyncKeysetIndex("idx_day_closures_sync_keyset", "day_closures", "received_at"),
             new SyncKeysetIndex("idx_inventory_sessions_sync_keyset", "inventory_sessions", "updated_at"),
             new SyncKeysetIndex("idx_inventory_counts_sync_keyset", "inventory_counts", "updated_at"),
-            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "updated_at"));
+            new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "updated_at"),
+            // Story 15.5b — module table: created by db/modules/invoicing/V6__invoice_sync_keyset.sql
+            new SyncKeysetIndex("idx_invoices_sync_keyset", "invoices", "updated_at", "invoicing"));
 
     // Story 5.1 — sync operations log (idempotency guard)
     static final String DDL_SYNC_OPERATIONS_LOG = """
@@ -1225,6 +1243,7 @@ public class TenantSchemaProvisioner {
     private void createSyncKeysetIndexes(Connection conn, Statement stmt, String schemaName) throws SQLException {
         boolean inTransaction = !conn.getAutoCommit();
         for (SyncKeysetIndex index : syncKeysetIndexes) {
+            if (index.moduleTable()) continue; // created by the module's migration with its table (15.5b)
             java.sql.Savepoint savepoint = inTransaction ? conn.setSavepoint() : null;
             try {
                 stmt.execute(index.createSql());

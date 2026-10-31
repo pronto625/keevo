@@ -117,18 +117,22 @@ class InvoicingMigrationPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("trial tenant without row: tables + history V1..V5 (14.7), no tenant_modules row; re-provision is a no-op")
+    @DisplayName("trial tenant without row: tables + history V1..V7 (15.5b), no tenant_modules row; re-provision is a no-op")
     void trialTenantNoRow() {
         assertThat(tables(A)).isEmpty();
         assertThat(migrations.currentVersion(A, "invoicing")).isNull();
-        assertThat(migrations.latestVersion("invoicing")).isEqualTo("5");
+        assertThat(migrations.latestVersion("invoicing")).isEqualTo("7");
 
         ProvisioningResult result = provisioner.provision(A, "invoicing");
 
-        assertThat(result.migrationsApplied()).isEqualTo(5);
-        assertThat(result.toVersion()).isEqualTo("5");
+        assertThat(result.migrationsApplied()).isEqualTo(7);
+        assertThat(result.toVersion()).isEqualTo("7");
         assertThat(tables(A)).containsExactlyElementsOf(TABLES);
-        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("5");
+        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("7");
+        // Story 15.5b — the keyset index of the invoices sync pull, as SyncKeysetIndexJob expects it
+        assertThat(jdbc.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname = ? AND indexname = ?",
+                String.class, A, "idx_invoices_sync_keyset"))
+                .endsWith("invoices USING btree (updated_at, ((id)::text))");
         assertThat(rows(A)).isZero();
         assertThat(tables(B)).as("other tenants untouched").isEmpty();
 
@@ -143,7 +147,7 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM')", IDS.get(A));
         provisioner.provision(A, "invoicing");
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("5");
+                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("7");
     }
 
     @Test
@@ -183,5 +187,50 @@ class InvoicingMigrationPostgresIntegrationTest {
         Long nextYear = tx.execute(st -> repository.nextNumber(2027));
         assertThat(again).as("rolled-back number reused").isEqualTo(2L);
         assertThat(nextYear).as("new year restarts").isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("15.5b — sync delta keyset: two pages (limit 2) disjoint, complete, in (updated_at, id) order; "
+            + "a deleted draft is a tombstone, still in the delta")
+    void deltaKeysetPages() {
+        provisioner.provision(A, "invoicing");
+        JdbcInvoiceRepository repository = new JdbcInvoiceRepository(new JdbcTemplate(dataSource));
+        TenantContext.setCurrentTenant(A);
+        java.time.Instant t0 = java.time.Instant.parse("2026-10-30T10:00:00Z");
+        // two rows share the same updated_at: the id breaks the tie
+        List<java.time.Instant> times = List.of(t0, t0, t0.plusSeconds(60), t0.plusSeconds(120));
+        List<java.util.UUID> ids = new java.util.ArrayList<>();
+        for (java.time.Instant at : times) {
+            java.util.UUID id = java.util.UUID.randomUUID();
+            ids.add(id);
+            jdbc.update("INSERT INTO \"" + A + "\".invoices (id, client_name, vat_registered, vat_rate, "
+                    + "prices_include_vat, created_at, updated_at) VALUES (?, 'Client', false, 0, true, ?, ?)",
+                    id, java.sql.Timestamp.from(at), java.sql.Timestamp.from(at));
+        }
+        jdbc.update("UPDATE \"" + A + "\".invoices SET deleted_at = updated_at WHERE id = ?", ids.get(3));
+        List<String> expected = new java.util.ArrayList<>(ids.subList(0, 2).stream().map(Object::toString).sorted()
+                .toList());
+        expected.add(ids.get(2).toString());
+        expected.add(ids.get(3).toString());
+
+        var first = repository.delta(java.time.Instant.EPOCH, null, null, 2);
+        var lastOfFirst = first.get(1).invoice();
+        var second = repository.delta(java.time.Instant.EPOCH, lastOfFirst.updatedAt(), lastOfFirst.id().toString(), 2);
+        var third = repository.delta(java.time.Instant.EPOCH, second.get(1).invoice().updatedAt(),
+                second.get(1).invoice().id().toString(), 2);
+
+        List<String> seen = new java.util.ArrayList<>();
+        first.forEach(d -> seen.add(d.invoice().id().toString()));
+        second.forEach(d -> seen.add(d.invoice().id().toString()));
+        assertThat(first).hasSize(2);
+        assertThat(second).hasSize(2);
+        assertThat(third).isEmpty();
+        assertThat(seen).containsExactlyElementsOf(expected);
+        assertThat(second.get(1).deleted()).isTrue();
+        assertThat(first.get(0).deleted()).isFalse();
+        // and the API reads never see it
+        assertThat(repository.findById(ids.get(3))).isEmpty();
+        assertThat(repository.findAnyById(ids.get(3))).isPresent();
+        TenantContext.clear();
     }
 }

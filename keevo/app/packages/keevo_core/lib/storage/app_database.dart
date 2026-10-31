@@ -27,6 +27,7 @@ import 'sync_queue_table.dart';
 import 'users_table.dart';
 import 'inventory_sessions_table.dart';
 import 'inventory_counts_table.dart';
+import 'module_records_table.dart';
 import 'reports_table.dart';
 import 'notifications_table.dart';
 
@@ -57,6 +58,8 @@ part 'app_database.g.dart';
 /// Schema version 23: notifications table added for local notification storage (Story 8.0).
 /// Schema version 25: stock_levels UNIQUE constraint added to Drift uniqueKeys (HF-2 fix).
 /// Schema version 26: stock_movements extended with source, inventorySessionId columns (Story 13.7 — offline inventory audit trail).
+/// Schema version 32: module_records table added — local records of module
+/// packages, e.g. the offline invoices of keevo_invoicing (Story 15.5b).
 @DriftDatabase(tables: [
   SyncQueue,
   Products,
@@ -79,6 +82,7 @@ part 'app_database.g.dart';
   InventoryCounts,
   Reports,
   Notifications,
+  ModuleRecords,
 ])
 class AppDatabase extends _$AppDatabase {
   /// Production constructor — uses SQLCipher encrypted file database.
@@ -96,7 +100,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTestingWith(super.executor);
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -299,6 +303,10 @@ class AppDatabase extends _$AppDatabase {
         // Product-wide low-stock threshold (server: products.minimum_threshold),
         // usable in a store where the product has no stock_levels row yet.
         await migrator.addColumn(products, products.minimumThreshold);
+      }
+      if (from < 32) {
+        // Story 15.5b — local records of module packages (offline invoices).
+        await migrator.createTable(moduleRecords);
       }
     },
   );

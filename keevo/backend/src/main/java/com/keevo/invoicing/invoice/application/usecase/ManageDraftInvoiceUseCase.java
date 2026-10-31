@@ -51,11 +51,36 @@ public class ManageDraftInvoiceUseCase {
 
     @Transactional
     public Invoice create(DraftContent content, UUID actorId, String tenantId) {
+        return create(null, content, actorId, tenantId);
+    }
+
+    /**
+     * Story 15.5b — a new draft with the id chosen by the device ({@code null} = a new random id). Idempotent on that
+     * id: an invoice that already exists with it is returned as it is (whatever its status — a re-sent creation never
+     * makes a second invoice nor touches the first one).
+     */
+    @Transactional
+    public Invoice create(UUID id, DraftContent content, UUID actorId, String tenantId) {
+        if (id != null) {
+            // a deleted draft too: a re-sent creation never resurrects it
+            java.util.Optional<Invoice> existing = invoices.findAnyById(id);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
         ClientInfo client = clients.resolve(content.client(), tenantId);
         Instant now = clock.instant();
-        Invoice draft = valid(() -> Invoice.draft(UUID.randomUUID(), client, content.lines(),
+        UUID invoiceId = id != null ? id : UUID.randomUUID();
+        Invoice draft = valid(() -> Invoice.draft(invoiceId, client, content.lines(),
                 currentSettings(), actorId, now));
-        invoices.insert(draft);
+        if (id != null) {
+            // the same creation sent concurrently (online retry + queued operation): the first one wins, no PK error
+            if (!invoices.insertIfAbsent(draft)) {
+                return invoices.findAnyById(id).orElseThrow(InvoiceQueryUseCase::notFound);
+            }
+        } else {
+            invoices.insert(draft);
+        }
         events.publishEvent(new InvoiceCreatedEvent(draft.id(), draft.client().name(), draft.totals().totalTtc(),
                 actorId, tenantId, now));
         return draft;
@@ -76,7 +101,7 @@ public class ManageDraftInvoiceUseCase {
     public void delete(UUID id) {
         Invoice current = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         current.assertEditable();
-        invoices.deleteDraft(id);
+        invoices.deleteDraft(id, clock.instant());
     }
 
     private InvoicingSettings currentSettings() {

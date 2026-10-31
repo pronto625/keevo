@@ -67,6 +67,8 @@ const transientSyncRejectionReasons = {
   'UNAUTHORIZED',
   'SUBSCRIPTION_NOT_FOUND',
   'TENANT_NOT_FOUND',
+  // Story 15.5b — the module's tables could not be provisioned (503): retried.
+  'SERVICE_UNAVAILABLE',
 };
 
 /// Reason of a held operation (Story 12.7): the module is off for the account.

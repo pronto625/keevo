@@ -33,8 +33,8 @@ void main() {
 
     tearDown(() async => db.close());
 
-    test('schemaVersion is 31 (products.minimumThreshold)', () {
-      expect(db.schemaVersion, 31);
+    test('schemaVersion is 32 (module_records, 15.5b)', () {
+      expect(db.schemaVersion, 32);
     });
 
     test('users table accepts nullable firstName', () async {

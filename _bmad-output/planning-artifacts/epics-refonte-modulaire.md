@@ -1315,8 +1315,8 @@ As a **commerçant**, I want **créer et encaisser mes factures même sans rése
 **Scope:** sync operations `CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE` (handlers in the invoicing module, `moduleId() = "invoicing"`, gated like the other module ops), an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry) so invoices are pulled to the device, and the app side in `keevo_invoicing` (local table or cache, queued operations, « En attente de synchronisation » state). Numbering stays server-side: an invoice issued offline is held until sync and shows « Numéro attribué à la synchronisation ».
 
 **Items (routed):**
-- [ ] [Deferred-from: spec 14-1, 2026-10-30, via 15.5] Offline-first invoices: sync operations with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (offline issue held until sync) [sync / invoicing]
-- [ ] [Deferred-from: review 14-7 via 15.5, 2026-10-31] Optional: `GET /api/v1/credit-notes` (paged, year filter) and a credit-notes export dataset if a screen or the accountant export needs them [invoicing api]
+- [x] [Deferred-from: spec 14-1, 2026-10-30, via 15.5] Offline-first invoices: sync operations with `moduleId() = "invoicing"` and an `invoices` `DeltaEntityProvider` (+ `SYNC_KEYSET_INDEXES` entry); numbering stays server-side (offline issue held until sync) [sync / invoicing] — ✅ 15.5b (2026-10-31): `InvoiceSyncHandler` (5 ops, idempotent create on the device id), `InvoiceDeltaProvider` (SPI `DeltaEntityProvider` moved to `shared.application.port.sync`), `idx_invoices_sync_keyset` (module migration V6 + `SYNC_KEYSET_INDEXES` module entry); app: `module_records` (schema 32), `ModuleSyncQueue` port, pull mergers, local-first `InvoiceRepository`
+- [x] [Deferred-from: review 14-7 via 15.5, 2026-10-31] Optional: `GET /api/v1/credit-notes` (paged, year filter) and a credit-notes export dataset if a screen or the accountant export needs them [invoicing api] — ✗ rejected 15.5b (2026-10-31): no screen nor export needs them — credit notes are shown per invoice (pulled with it); revisit if an accountant export of credit notes is requested
 
 **AC (interim):** Given no network, when the merchant creates, issues or pays an invoice, then the operation is queued and applied at the next sync with the server-side number; every routed item is resolved or explicitly rejected with a reason.
 
@@ -1389,6 +1389,7 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 
 ### Deferred items routed 2026-10-31
 - [ ] [Deferred-from: review 15-2, 2026-10-31] Entry points still pushing gated routes without `isRouteAvailable`: `apply_adjustments_button.dart` (`/inventory`, counting), catalog/low-stock overview route (`/stock/overview`); the product-form supplier card keeps its tappable look (chevron) when CRM is off and has no widget test (DISABLED → no navigation, ENABLED → `/suppliers/<id>`) [app entry points]
+- [ ] [Deferred-from: device test 15-5b, 2026-10-31] The app is not locked to portrait: in landscape the terms screen overflows (« BOTTOM OVERFLOWED BY 17 PIXELS ») — lock portrait on phones or make onboarding/terms screens scroll [app shell / onboarding]
 ---
 
 ## Epic 16 : Licences, Migration & Go-Live (Phase 6)

@@ -105,6 +105,25 @@ void main() {
     expect(ops.map((o) => jsonDecode(o.payload)['price']), [600, 700]);
   });
 
+  test('15.5b — two offline edits of one invoice: both UPDATE_INVOICE '
+      'queued; a second ISSUE_INVOICE is a duplicate', () async {
+    for (final client in ['Awa', 'Awa Traoré']) {
+      await syncService.queueOperation(
+        operation: 'UPDATE_INVOICE',
+        payload: {'invoiceId': 'inv-1', 'client': {'name': client}},
+        entityId: 'inv-1',
+      );
+    }
+    for (var i = 0; i < 2; i++) {
+      await syncService.queueOperation(
+          operation: 'ISSUE_INVOICE',
+          payload: {'invoiceId': 'inv-1'},
+          entityId: 'inv-1');
+    }
+    expect((await queue()).map((o) => o.operation),
+        ['UPDATE_INVOICE', 'UPDATE_INVOICE', 'ISSUE_INVOICE']);
+  });
+
   test('archive → unarchive → archive keeps all three operations', () async {
     for (final op in ['ARCHIVE_PRODUCT', 'UNARCHIVE_PRODUCT', 'ARCHIVE_PRODUCT']) {
       await syncService.queueOperation(

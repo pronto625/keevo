@@ -1,4 +1,4 @@
-package com.keevo.sync.sync.domain.port.in;
+package com.keevo.shared.application.port.sync;
 
 import java.time.Instant;
 import java.util.List;
@@ -12,6 +12,11 @@ import java.util.Map;
  *
  * Adding a new entity type requires only implementing this interface — zero changes to
  * SyncPullService or SyncController (Open/Closed principle).
+ *
+ * <p>Story 15.5b: a public SPI of {@code shared} (moved from {@code sync.sync.domain.port.in}, like
+ * {@link SyncOperationHandler} in 14.3) so that a module owns the delta of its own entities (e.g. {@code invoicing}
+ * for {@code invoices}) without depending on {@code sync}; the pull discovers every {@code @Component}
+ * implementation.
  */
 public interface DeltaEntityProvider {
 

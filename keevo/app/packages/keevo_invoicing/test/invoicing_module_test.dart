@@ -46,7 +46,9 @@ void main() {
         ProviderScope(
           retry: noProviderRetry,
           overrides: [
-            invoiceByIdProvider('inv-7').overrideWith((ref) => pending.future),
+            invoiceByIdProvider(
+              'inv-7',
+            ).overrideWith((ref) => Stream.fromFuture(pending.future)),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),

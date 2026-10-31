@@ -1,6 +1,6 @@
 package com.keevo.sync.sync.application.provider;
 
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.Test;

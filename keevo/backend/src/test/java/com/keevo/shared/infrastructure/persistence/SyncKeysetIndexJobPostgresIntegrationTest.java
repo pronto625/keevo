@@ -41,7 +41,14 @@ import static org.mockito.Mockito.mock;
 @DisplayName("Keyset pull indexes: provisioning + background job (Story 11.5)")
 class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest {
 
-    private static final int INDEX_COUNT = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.size();
+    /** Indexes of core tables: built at provisioning. */
+    private static final int INDEX_COUNT = (int) TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.stream()
+            .filter(i -> !i.moduleTable()).count();
+    /**
+     * Story 15.5b — indexes of module tables (invoices): never built at core provisioning; the job skips them in a
+     * schema without the module's tables (the schemas of this test).
+     */
+    private static final int MODULE_INDEX_COUNT = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.size() - INDEX_COUNT;
 
     @Autowired JdbcTemplate jdbc;
     @Autowired DataSource dataSource;
@@ -68,7 +75,8 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         assertThat(defs.get("idx_stock_transfers_sync_keyset"))
                 .contains("(GREATEST(occurred_at, COALESCE(updated_at, occurred_at)), ((id)::text))");
         // the job recognises what provisioning built: nothing to do
-        assertThat(job().ensureIndexes(schema)).isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT, 0, 0));
+        assertThat(job().ensureIndexes(schema))
+                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT, MODULE_INDEX_COUNT, 0));
     }
 
     @Test
@@ -106,11 +114,12 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         }
 
         SyncKeysetIndexJob.Result first = run.get(60, TimeUnit.SECONDS);
-        assertThat(first).isEqualTo(new SyncKeysetIndexJob.Result(INDEX_COUNT, 0, 0, 0, 0));
+        assertThat(first).isEqualTo(new SyncKeysetIndexJob.Result(INDEX_COUNT, 0, 0, MODULE_INDEX_COUNT, 0));
         assertThat(keysetIndexes(schema)).hasSize(INDEX_COUNT);
         assertThat(invalidKeysetIndexes(schema)).isZero();
 
-        assertThat(job().ensureIndexes(schema)).isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT, 0, 0));
+        assertThat(job().ensureIndexes(schema))
+                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT, MODULE_INDEX_COUNT, 0));
         // the 15-minute build timeout never leaks into the pool
         assertThat(statementTimeout()).isEqualTo(defaultTimeout);
     }
@@ -129,7 +138,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
 
         SyncKeysetIndexJob.Result result = job().ensureIndexes(schema);
 
-        assertThat(result).isEqualTo(new SyncKeysetIndexJob.Result(0, 2, INDEX_COUNT - 2, 0, 0));
+        assertThat(result).isEqualTo(new SyncKeysetIndexJob.Result(0, 2, INDEX_COUNT - 2, MODULE_INDEX_COUNT, 0));
         assertThat(invalidKeysetIndexes(schema)).isZero();
         assertThat(keysetIndexes(schema).get("idx_sales_sync_keyset"))
                 .endsWith("sales USING btree (updated_at, ((id)::text))");
@@ -148,7 +157,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         jdbc.execute("CREATE SEQUENCE \"" + schema + "\".idx_reports_sync_keyset");
 
         assertThat(job().ensureIndexes(schema))
-                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT - 1, 0, 1));
+                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT - 1, MODULE_INDEX_COUNT, 1));
         assertThat(keysetIndexes(schema)).hasSize(INDEX_COUNT - 1).doesNotContainKey("idx_reports_sync_keyset");
     }
 
@@ -206,7 +215,21 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         jdbc.execute("DROP TABLE \"" + schema + "\".reports CASCADE");
 
         assertThat(job().ensureIndexes(schema))
-                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT - 1, 1, 0));
+                .isEqualTo(new SyncKeysetIndexJob.Result(0, 0, INDEX_COUNT - 1, 1 + MODULE_INDEX_COUNT, 0));
+    }
+
+    @Test
+    @DisplayName("module table (15.5b): no index at core provisioning; once the module's table exists the job builds it")
+    void moduleTableIndexBuiltByTheJobOnceTheTableExists() {
+        String schema = provision(randomSchema());
+        assertThat(keysetIndexes(schema)).doesNotContainKey("idx_invoices_sync_keyset");
+        // the module's migration creates the table (and its index, V6): here the table alone, as before V6
+        jdbc.execute("CREATE TABLE \"" + schema + "\".invoices (id UUID PRIMARY KEY, updated_at TIMESTAMPTZ NOT NULL)");
+
+        assertThat(job().ensureIndexes(schema))
+                .isEqualTo(new SyncKeysetIndexJob.Result(MODULE_INDEX_COUNT, 0, INDEX_COUNT, 0, 0));
+        assertThat(keysetIndexes(schema).get("idx_invoices_sync_keyset"))
+                .endsWith("invoices USING btree (updated_at, ((id)::text))");
     }
 
     @Test
@@ -251,7 +274,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
 
     private void dropKeysetIndexes(String schema) {
         for (SyncKeysetIndex index : TenantSchemaProvisioner.SYNC_KEYSET_INDEXES) {
-            jdbc.execute("DROP INDEX \"" + schema + "\"." + index.name());
+            jdbc.execute("DROP INDEX IF EXISTS \"" + schema + "\"." + index.name());
         }
         assertThat(keysetIndexes(schema)).isEmpty();
     }

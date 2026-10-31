@@ -231,7 +231,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(
       retry: noProviderRetry,
       overrides: [
-        invoiceByIdProvider('inv-7').overrideWith((ref) => pending.future),
+        invoiceByIdProvider('inv-7')
+            .overrideWith((ref) => Stream.fromFuture(pending.future)),
       ],
       child: MaterialApp(
         home: Builder(builder: (context) => route.builder!(context, state)),

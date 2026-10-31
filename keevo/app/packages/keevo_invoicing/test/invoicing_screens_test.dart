@@ -9,7 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/module/module_ports.dart';
+import 'package:keevo_core/module/module_sync.dart';
 import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_invoicing/data/remote_invoice_datasource.dart';
 import 'package:keevo_invoicing/domain/model/invoicing_models.dart';
 import 'package:keevo_invoicing/presentation/invoicing_format.dart';
@@ -18,9 +20,12 @@ import 'package:keevo_invoicing/presentation/page/invoice_form_page.dart';
 import 'package:keevo_invoicing/presentation/page/invoice_list_page.dart';
 import 'package:keevo_invoicing/presentation/page/invoicing_settings_page.dart';
 
+import 'helpers/offline_support.dart';
+
 /// Story 15.5 — the invoicing screens against a fake HTTP server (real
 /// [Dio] + adapter, through the `apiDioProvider` port): one group per row of
-/// the spec's I/O matrix.
+/// the spec's I/O matrix. Story 15.5b: with the device's store (in-memory
+/// database), a switchable connectivity and a recording sync queue.
 
 typedef _Handler = ResponseBody Function(RequestOptions request);
 
@@ -125,14 +130,27 @@ Map<String, dynamic> _invoice(
   'createdAt': '2026-10-20T08:00:00Z',
 };
 
+/// The device side of the last [_pump] (15.5b).
+late AppDatabase _db;
+late FakeConnectivity _connectivity;
+late FakeModuleSyncQueue _queue;
+
 /// Pumps [page] with the fake server and the session role; stub routes for
-/// the screens it navigates to.
+/// the screens it navigates to. Story 15.5b: [seed] = invoices already on
+/// the device (as the pull stores them), [online] = the connectivity.
 Future<_Server> _pump(
   WidgetTester tester,
   Widget page,
   _Handler handler, {
   bool owner = true,
+  bool online = true,
+  List<Map<String, dynamic>> seed = const [],
 }) async {
+  _db = testDatabase();
+  addTearDown(_db.close);
+  _connectivity = FakeConnectivity(online: online);
+  _queue = FakeModuleSyncQueue();
+  await tester.runAsync(() => seedInvoices(_db, seed));
   final server = _Server(handler);
   final dio = Dio(BaseOptions(baseUrl: 'https://api.test'))
     ..httpClientAdapter = server;
@@ -170,6 +188,9 @@ Future<_Server> _pump(
       overrides: [
         apiDioProvider.overrideWithValue(dio),
         isOwnerSessionProvider.overrideWithValue(owner),
+        appDatabaseProvider.overrideWithValue(_db),
+        connectivityServiceProvider.overrideWithValue(_connectivity),
+        moduleSyncQueueProvider.overrideWithValue(_queue),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -206,7 +227,10 @@ Map<String, dynamic> _body(RequestOptions r) =>
     Map<String, dynamic>.from(r.data as Map);
 
 void main() {
-  setUpAll(() => initializeDateFormatting('fr_FR'));
+  setUpAll(() {
+    useSystemSqlite();
+    return initializeDateFormatting('fr_FR');
+  });
 
   group('RemoteInvoiceDataSource (15.5 calls)', () {
     late _Server server;
@@ -304,72 +328,112 @@ void main() {
     });
   });
 
-  group('InvoiceListPage — search, filters, infinite scroll', () {
-    _Handler pages(List<Map<String, dynamic>> all) => (r) {
-      final page = r.queryParameters['page'] as int;
-      final size = r.queryParameters['size'] as int;
-      final search = (r.queryParameters['search'] as String?)?.toLowerCase();
-      final matching = [
-        for (final i in all)
-          if (search == null ||
-              (i['number'] as String? ?? '').toLowerCase().contains(search) ||
-              (i['client']['name'] as String).toLowerCase().contains(search))
-            i,
-      ];
-      return _json({
-        'success': true,
-        'data': matching.skip(page * size).take(size).toList(),
-        'meta': {'page': page, 'size': size, 'totalElements': matching.length},
-      });
-    };
+  group('InvoiceListPage — the device copy, search, filters (15.5b)', () {
+    String two(int n) => n.toString().padLeft(2, '0');
+    String day(DateTime d) => '${d.year}-${two(d.month)}-${two(d.day)}';
+    final today = doualaToday();
+    Map<String, dynamic> numbered(int n, {String? client, DateTime? issued}) {
+      final inv = _invoice(
+        'inv-$n',
+        number: 'FAC-2026-${n.toString().padLeft(6, '0')}',
+        client: client ?? 'Client $n',
+      );
+      inv['issueDate'] = day(issued ?? today.subtract(Duration(days: 40 - n)));
+      inv['createdAt'] = DateTime.utc(
+        2026,
+        1,
+        1,
+      ).add(Duration(hours: n)).toIso8601String();
+      return inv;
+    }
 
     final many = [
       for (var n = 1; n <= 30; n++)
-        _invoice(
-          'inv-$n',
-          number: 'FAC-2026-${n.toString().padLeft(6, '0')}',
-          client: n == 7 ? 'Boutique Ndolo' : 'Client $n',
-        ),
+        numbered(n, client: n == 7 ? 'Boutique Ndolo' : null),
     ];
+    ResponseBody noCall(RequestOptions r) =>
+        throw StateError('unexpected ${r.method} ${r.uri}');
 
-    testWidgets('first page, then the next one on scroll; no id on screen', (
-      tester,
-    ) async {
-      final server = await _pump(tester, const InvoiceListPage(), pages(many));
-      expect(find.text('FAC-2026-000001'), findsOneWidget);
+    testWidgets('read from the device, newest first, no request; no id on '
+        'screen', (tester) async {
+      final server = await _pump(
+        tester,
+        const InvoiceListPage(),
+        noCall,
+        seed: many,
+      );
+      expect(find.text('FAC-2026-000030'), findsOneWidget);
       expect(find.textContaining('inv-'), findsNothing);
       expect(find.text('Émise'), findsWidgets);
-
       await tester.scrollUntilVisible(
-        find.text('FAC-2026-000030'),
+        find.text('FAC-2026-000001'),
         300,
         scrollable: find.byType(Scrollable).last,
       );
-      await tester.pumpAndSettle();
-      expect(find.text('FAC-2026-000030'), findsOneWidget);
-      final listCalls = server.where('GET', '/invoices').toList();
-      expect(listCalls.map((r) => r.queryParameters['page']), [0, 1]);
+      expect(find.text('FAC-2026-000001'), findsOneWidget);
+      expect(server.requests, isEmpty);
     });
 
-    testWidgets('search (debounced) sends `search`, matching invoices only', (
+    testWidgets('offline: same list; an invoice written offline shows « En '
+        'attente de synchronisation », an offline issue « Numéro à venir »', (
       tester,
     ) async {
-      final server = await _pump(tester, const InvoiceListPage(), pages(many));
+      final offlineIssued = _invoice('local-1', number: null)
+        ..['createdAt'] = DateTime.utc(2026, 12, 1).toIso8601String();
+      await _pump(
+        tester,
+        const InvoiceListPage(),
+        noCall,
+        online: false,
+        seed: many,
+      );
+      await tester.runAsync(
+        () => seedInvoices(_db, [offlineIssued], pending: true),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Numéro à venir'), findsOneWidget);
+      expect(
+        find.textContaining('En attente de synchronisation'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Émise — numéro attribué à la synchronisation'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('search (debounced): number or client name', (tester) async {
+      await _pump(tester, const InvoiceListPage(), noCall, seed: many);
       await tester.enterText(find.byKey(const Key('invoice-search')), 'ndolo');
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
-      expect(server.requests.last.queryParameters['search'], 'ndolo');
-      expect(find.text('Boutique Ndolo · 20 oct. 2026'), findsOneWidget);
-      expect(find.text('FAC-2026-000001'), findsNothing);
+      expect(find.text('FAC-2026-000007'), findsOneWidget);
+      expect(find.text('FAC-2026-000030'), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('invoice-search')),
+        'fac-2026-000012',
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(find.text('FAC-2026-000012'), findsOneWidget);
+      expect(find.text('FAC-2026-000007'), findsNothing);
     });
 
-    testWidgets('date range → next request carries `from`/`to` (days); '
-        'clearing the chip removes both', (tester) async {
-      final today = doualaToday();
+    testWidgets('date range: issue days inclusive; clearing the chip shows '
+        'everything again', (tester) async {
       final start = today.subtract(const Duration(days: 5));
-      String two(int n) => n.toString().padLeft(2, '0');
       String typed(DateTime d) => '${two(d.month)}/${two(d.day)}/${d.year}';
-      final server = await _pump(tester, const InvoiceListPage(), pages(many));
+      await _pump(
+        tester,
+        const InvoiceListPage(),
+        noCall,
+        seed: [
+          numbered(1, issued: today.subtract(const Duration(days: 10))),
+          numbered(2, issued: start),
+          numbered(3, issued: today),
+          _invoice('d-1', status: 'DRAFT'),
+        ],
+      );
       await tester.scrollUntilVisible(
         find.byKey(const Key('invoice-range')),
         100,
@@ -393,83 +457,51 @@ void main() {
       await tester.enterText(fields.last, typed(today));
       await tester.tap(find.text('Valider'));
       await tester.pumpAndSettle();
-      final q = server.requests.last.queryParameters;
-      expect(q['from'], RemoteInvoiceDataSource.isoDay(start));
-      expect(q['to'], RemoteInvoiceDataSource.isoDay(today));
       expect(
         find.text('${formatDay(start)} – ${formatDay(today)}'),
         findsOneWidget,
       );
+      expect(find.text('FAC-2026-000002'), findsOneWidget);
+      expect(find.text('FAC-2026-000003'), findsOneWidget);
+      expect(find.text('FAC-2026-000001'), findsNothing);
+      expect(find.text('Brouillon'), findsNothing);
 
       await tester.ensureVisible(find.byTooltip('Retirer la période'));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Retirer la période'));
       await tester.pumpAndSettle();
-      final cleared = server.requests.last.queryParameters;
-      expect(cleared.containsKey('from'), isFalse);
-      expect(cleared.containsKey('to'), isFalse);
       expect(find.text('Période'), findsOneWidget);
+      expect(find.text('FAC-2026-000001'), findsOneWidget);
+      expect(find.text('Brouillon'), findsWidgets);
     });
 
-    testWidgets('status chip → `status`; nothing matching → empty state', (
-      tester,
-    ) async {
-      final server = await _pump(
-        tester,
-        const InvoiceListPage(),
-        (r) => r.queryParameters['status'] == 'PAID'
-            ? _json({
-                'success': true,
-                'data': [],
-                'meta': {'page': 0, 'size': 20, 'totalElements': 0},
-              })
-            : pages(many)(r),
-      );
+    testWidgets('status chip; nothing matching → empty state', (tester) async {
+      await _pump(tester, const InvoiceListPage(), noCall, seed: many);
       await tester.tap(find.text('Payées'));
       await tester.pumpAndSettle();
-      expect(server.requests.last.queryParameters['status'], 'PAID');
       expect(find.text('Aucune facture ne correspond'), findsOneWidget);
     });
 
-    testWidgets('server: from > to → its French 400 message', (tester) async {
-      await _pump(
-        tester,
-        const InvoiceListPage(),
-        (_) => _error(
-          400,
-          'La date de début doit précéder la date de fin',
-          'VALIDATION_ERROR',
-        ),
+    testWidgets('pull to refresh runs a sync cycle', (tester) async {
+      await _pump(tester, const InvoiceListPage(), noCall, seed: many);
+      await tester.fling(
+        find.text('FAC-2026-000030'),
+        const Offset(0, 400),
+        1000,
       );
-      expect(
-        find.text('La date de début doit précéder la date de fin'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('offline → French offline message with « Réessayer », '
-        'nothing queued', (tester) async {
-      final server = await _pump(
-        tester,
-        const InvoiceListPage(),
-        (r) => throw DioException.connectionError(
-          requestOptions: r,
-          reason: 'offline',
-        ),
-      );
-      expect(
-        find.text(
-          'Impossible de se connecter au serveur. Vérifiez votre réseau.',
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Réessayer'), findsOneWidget);
-      expect(server.requests.every((r) => r.method == 'GET'), isTrue);
+      await tester.pumpAndSettle();
+      expect(_queue.syncNowCalls, 1);
     });
 
     testWidgets('employee: no seller settings action, « Nouvelle facture » '
         'kept', (tester) async {
-      await _pump(tester, const InvoiceListPage(), pages(many), owner: false);
+      await _pump(
+        tester,
+        const InvoiceListPage(),
+        noCall,
+        owner: false,
+        seed: many,
+      );
       expect(find.byKey(const Key('invoicing-settings')), findsNothing);
       expect(find.text('Nouvelle facture'), findsOneWidget);
     });
@@ -573,6 +605,70 @@ void main() {
       expect(client['id'], isNull);
       expect(client['name'], 'Société Ndolo');
       expect(client['phone'], '+237690000002');
+    });
+
+    testWidgets('free-text phone: 9 local digits stored +237…; an invalid '
+        'number refused in French before any call', (tester) async {
+      final server = await _pump(tester, const InvoiceFormPage(), (r) {
+        if (r.uri.path.endsWith('/clients')) {
+          return _ok({'crmAvailable': false, 'clients': []});
+        }
+        return _ok(_invoice('new-3', status: 'DRAFT'));
+      });
+      await tester.enterText(
+        find.byKey(const Key('invoice-client-name')),
+        'Paul',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invoice-line-0-description')),
+        'Pagne',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invoice-line-0-price')),
+        '5000',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invoice-client-phone')),
+        '12',
+      );
+      await _tap(tester, find.byKey(const Key('invoice-save')));
+      expect(
+        find.text('Numéro invalide. Exemple : 6 99 11 22 33'),
+        findsOneWidget,
+      );
+      expect(server.where('POST', '/invoices'), isEmpty);
+
+      await tester.enterText(
+        find.byKey(const Key('invoice-client-phone')),
+        '6 99 00 01 56',
+      );
+      await _tap(tester, find.byKey(const Key('invoice-save')));
+      final client = _body(server.where('POST', '/invoices').single)['client'];
+      expect(client['phone'], '+237699000156');
+    });
+
+    testWidgets('CRM known, then offline: « Hors ligne : le nom saisi sera '
+        'utilisé. », no request', (tester) async {
+      final server = await _pump(tester, const InvoiceFormPage(), (r) {
+        if (r.uri.path.endsWith('/clients')) {
+          return _ok({'crmAvailable': true, 'clients': []});
+        }
+        throw StateError('unexpected ${r.uri}');
+      });
+      final before = server.requests.length;
+      _connectivity.online = false;
+      await tester.enterText(
+        find.byKey(const Key('invoice-client-name')),
+        'Awa',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Hors ligne : le nom saisi sera utilisé.'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Aucun client trouvé'), findsNothing);
+      expect(server.requests.length, before);
     });
 
     testWidgets('unknown CRM client → the server French message', (
@@ -1023,6 +1119,163 @@ void main() {
       await tester.pumpAndSettle();
       expect(server.where('DELETE', '/d-1'), hasLength(1));
       expect(find.text('LIST'), findsOneWidget);
+    });
+  });
+
+  group('Offline (15.5b)', () {
+    ResponseBody offline(RequestOptions r) =>
+        throw DioException.connectionError(requestOptions: r, reason: 'off');
+
+    testWidgets('issue offline: « Émise — numéro attribué à la '
+        'synchronisation », pending, ISSUE_INVOICE queued, no call', (
+      tester,
+    ) async {
+      final server = await _pump(
+        tester,
+        const InvoiceDetailPage(invoiceId: 'd-1'),
+        offline,
+        online: false,
+        seed: [_invoice('d-1', status: 'DRAFT')],
+      );
+      expect(find.text('Facture (brouillon)'), findsOneWidget);
+      await _tap(tester, find.byKey(const Key('invoice-issue')));
+      expect(
+        find.textContaining('Conformité vérifiée à la synchronisation'),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('invoice-issue-confirm')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Facture émise — numéro attribué à la synchronisation'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Émise — numéro attribué à la synchronisation'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('invoice-pending')), findsOneWidget);
+      expect(_queue.operations, ['ISSUE_INVOICE']);
+      expect(server.requests, isEmpty);
+    });
+
+    testWidgets('pay offline: « Payée », queued with the method', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const InvoiceDetailPage(invoiceId: 'i-1'),
+        offline,
+        online: false,
+        seed: [_invoice('i-1')],
+      );
+      await _tap(tester, find.byKey(const Key('invoice-pay')));
+      await tester.tap(find.text('Espèces'));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('pay-confirm')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Paiement enregistré — en attente de synchronisation'),
+        findsOneWidget,
+      );
+      expect(find.text('Payée'), findsOneWidget);
+      expect(_queue.queued.single.operation, 'PAY_INVOICE');
+      expect(_queue.queued.single.payload['paymentMethod'], 'Espèces');
+    });
+
+    testWidgets('PDF and WhatsApp offline: « Disponible une fois connecté »', (
+      tester,
+    ) async {
+      final server = await _pump(
+        tester,
+        const InvoiceDetailPage(invoiceId: 'i-1'),
+        offline,
+        online: false,
+        seed: [_invoice('i-1')],
+      );
+      await _tap(tester, find.text('Voir le PDF'));
+      expect(find.text('Disponible une fois connecté'), findsOneWidget);
+      ScaffoldMessenger.of(
+        tester.element(find.byType(InvoiceDetailPage)),
+      ).clearSnackBars();
+      await tester.pumpAndSettle();
+      await _tap(tester, find.byKey(const Key('invoice-send')));
+      expect(find.byKey(const Key('send-phone')), findsNothing);
+      expect(find.text('Disponible une fois connecté'), findsOneWidget);
+      expect(server.requests, isEmpty);
+    });
+
+    testWidgets('online, but changes still queued: PDF « Disponible une fois '
+        'la facture synchronisée », no server read', (tester) async {
+      await _pump(
+        tester,
+        const InvoiceDetailPage(invoiceId: 'local-1'),
+        (r) => throw StateError('unexpected ${r.uri}'),
+        seed: [_invoice('local-1', number: null)],
+      );
+      // the offline issue of local-1 is still queued
+      _queue.queued.add((
+        operation: 'ISSUE_INVOICE',
+        payload: const {'invoiceId': 'local-1'},
+        entityId: 'local-1',
+      ));
+      await _tap(tester, find.text('Voir le PDF'));
+      expect(
+        find.text('Disponible une fois la facture synchronisée'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('create offline: saved on the device, CREATE_INVOICE '
+        'queued, the invoice opened', (tester) async {
+      final server = await _pump(
+        tester,
+        const InvoiceFormPage(),
+        offline,
+        online: false,
+      );
+      await tester.enterText(
+        find.byKey(const Key('invoice-client-name')),
+        'Société Ndolo',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invoice-line-0-description')),
+        'Pagne',
+      );
+      await tester.enterText(
+        find.byKey(const Key('invoice-line-0-price')),
+        '5000',
+      );
+      await _tap(tester, find.byKey(const Key('invoice-save')));
+      final op = _queue.queued.single;
+      expect(op.operation, 'CREATE_INVOICE');
+      expect(find.text('INVOICE ${op.entityId}'), findsOneWidget);
+      expect(server.where('POST', '/invoices'), isEmpty);
+    });
+  });
+
+  group('Local copy first (15.5b review)', () {
+    testWidgets('online but the server fails: the device copy is shown, no '
+        'error screen', (tester) async {
+      await _pump(
+        tester,
+        const InvoiceDetailPage(invoiceId: 'i-1'),
+        (_) => _error(500, 'Erreur', 'INTERNAL_ERROR'),
+        seed: [_invoice('i-1')],
+      );
+      expect(find.text('Facture n° FAC-2026-000007'), findsOneWidget);
+      expect(find.byKey(const Key('invoice-pay')), findsOneWidget);
+    });
+
+    testWidgets('online: the server copy replaces the device one', (
+      tester,
+    ) async {
+      await _pump(
+        tester,
+        const InvoiceDetailPage(invoiceId: 'i-1'),
+        (_) => _ok(_invoice('i-1', sendCount: 2)),
+        seed: [_invoice('i-1')],
+      );
+      expect(find.textContaining('Envoyée 2 fois'), findsOneWidget);
     });
   });
 

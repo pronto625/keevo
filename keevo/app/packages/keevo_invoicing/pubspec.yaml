@@ -19,8 +19,11 @@ dependencies:
   go_router: ^14.2.0
   dio: ^5.7.0
   intl: ^0.20.2
+  uuid: ^4.4.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  sqlite3: ^2.4.7
+  drift: ^2.18.0
   flutter_lints: ^4.0.0

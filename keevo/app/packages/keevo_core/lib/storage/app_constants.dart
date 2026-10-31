@@ -96,3 +96,8 @@ const String kEntitlementsSnapshotKey = 'entitlements_snapshot';
 /// cleared after it saved its cursor only if it still holds the value read at
 /// start — a request raised during a pull survives it.
 const String kFullPullRequestedKey = 'full_pull_requested';
+
+/// Story 15.5b — set once the device asked for the full pull that seeds the
+/// module records (`module_records`, e.g. invoices): a device upgraded from a
+/// version without them holds a delta cursor past every existing invoice.
+const String kModuleRecordsSeededKey = 'module_records_seeded_v1';

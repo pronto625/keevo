@@ -58,7 +58,7 @@ class PremiumGatingFullContextTest extends FullContextIntegrationTest {
     @Autowired CreateProductUseCase createProduct;
     @Autowired TenantPreferencesRepository preferencesRepository;
     @Autowired List<com.keevo.shared.application.port.export.ExportDatasetProvider> exportDatasets;
-    @Autowired List<com.keevo.sync.sync.domain.port.in.DeltaEntityProvider> deltaProviders;
+    @Autowired List<com.keevo.shared.application.port.sync.DeltaEntityProvider> deltaProviders;
 
     private final UUID ownerId = UUID.randomUUID();
     private String schema;
@@ -352,7 +352,7 @@ class PremiumGatingFullContextTest extends FullContextIntegrationTest {
         Map<String, String> deltas = new java.util.TreeMap<>();
         deltaProviders.forEach(d -> deltas.put(d.entityKey(), d.moduleId()));
         assertThat(deltas).containsAllEntriesOf(Map.of("inventorySessions", "counting", "stockTransfers", "multi-store",
-                "products", "catalog", "clients", "crm"));
-        assertThat(deltas).hasSize(15);
+                "products", "catalog", "clients", "crm", "invoices", "invoicing")); // 15.5b: invoices (premium)
+        assertThat(deltas).hasSize(16);
     }
 }

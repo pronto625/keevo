@@ -5,7 +5,7 @@ import com.keevo.reporting.report.adapter.out.persistence.EndOfDayReportSpringRe
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
-import com.keevo.sync.sync.domain.port.in.DeltaEntityProvider;
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

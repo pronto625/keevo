@@ -4,17 +4,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/module/module_sync.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:keevo_core/widget/date_range_clamp.dart';
 
 import '../../domain/model/invoice.dart';
 import '../invoicing_format.dart';
 import '../provider/invoice_list_provider.dart';
+import '../provider/invoicing_providers.dart';
 
 /// Story 15.5 — « Factures » (`/invoicing`): the tenant's invoices, newest
-/// first, with status chips, a search on number / client name, an issue
-/// date range and infinite scroll. Online only: offline, the French error
-/// state with « Réessayer ».
+/// first, with status chips, a search on number / client name and an issue
+/// date range. Story 15.5b: read from the device (works offline; invoices
+/// written offline show « En attente de synchronisation »); pulling down
+/// runs a sync.
 class InvoiceListPage extends ConsumerStatefulWidget {
   const InvoiceListPage({super.key});
 
@@ -32,28 +35,13 @@ const _statusFilters = <(String?, String)>[
 
 class _InvoiceListPageState extends ConsumerState<InvoiceListPage> {
   final _search = TextEditingController();
-  final _scroll = ScrollController();
   Timer? _debounce;
-
-  @override
-  void initState() {
-    super.initState();
-    _scroll.addListener(_onScroll);
-  }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _search.dispose();
-    _scroll.dispose();
     super.dispose();
-  }
-
-  void _onScroll() {
-    if (!_scroll.hasClients) return;
-    if (_scroll.position.extentAfter < 400) {
-      ref.read(invoiceListProvider.notifier).loadMore();
-    }
   }
 
   void _onSearchChanged(String text) {
@@ -101,8 +89,8 @@ class _InvoiceListPageState extends ConsumerState<InvoiceListPage> {
   }
 
   Future<void> _open(String location) async {
+    // The list follows the device's copy: nothing to reload on return.
     await context.push(location);
-    if (mounted) ref.invalidate(invoiceListProvider);
   }
 
   @override
@@ -193,27 +181,19 @@ class _InvoiceListPageState extends ConsumerState<InvoiceListPage> {
           ),
           Expanded(
             child: list.when(
-              data: (state) => _InvoiceList(
-                state: state,
+              data: (items) => _InvoiceList(
+                items: items,
                 filtered: filter.isFiltered,
-                controller: _scroll,
                 onOpen: (i) => _open('/invoicing/${Uri.encodeComponent(i.id)}'),
-                onRefresh: () async {
-                  ref.invalidate(invoiceListProvider);
-                  await ref.read(invoiceListProvider.future);
-                },
-                onLoadMore: () =>
-                    ref.read(invoiceListProvider.notifier).loadMore(),
-                onRetryMore: () => ref
-                    .read(invoiceListProvider.notifier)
-                    .loadMore(retry: true),
+                // A sync cycle: queued changes sent, the server's pulled.
+                onRefresh: () => ref.read(moduleSyncQueueProvider).syncNow(),
               ),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => AppErrorWidget(
                 error: e,
                 title: 'Impossible de charger les factures',
                 message: invoicingErrorMessage(e),
-                onRetry: () => ref.invalidate(invoiceListProvider),
+                onRetry: () => ref.invalidate(localInvoicesProvider),
               ),
             ),
           ),
@@ -224,28 +204,22 @@ class _InvoiceListPageState extends ConsumerState<InvoiceListPage> {
 }
 
 class _InvoiceList extends StatelessWidget {
-  final InvoiceListState state;
+  final List<Invoice> items;
   final bool filtered;
-  final ScrollController controller;
   final void Function(Invoice) onOpen;
   final Future<void> Function() onRefresh;
-  final VoidCallback onLoadMore;
-  final VoidCallback onRetryMore;
 
   const _InvoiceList({
-    required this.state,
+    required this.items,
     required this.filtered,
-    required this.controller,
     required this.onOpen,
     required this.onRefresh,
-    required this.onLoadMore,
-    required this.onRetryMore,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (state.items.isEmpty) {
+    if (items.isEmpty) {
       return RefreshIndicator(
         onRefresh: onRefresh,
         child: ListView(
@@ -277,36 +251,15 @@ class _InvoiceList extends StatelessWidget {
         ),
       );
     }
-    final footer = state.hasMore || state.moreError != null;
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: ListView.separated(
-        controller: controller,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.only(bottom: 96),
-        itemCount: state.items.length + (footer ? 1 : 0),
+        itemCount: items.length,
         separatorBuilder: (_, _) => const Divider(height: 1),
         itemBuilder: (context, index) {
-          if (index == state.items.length) {
-            final error = state.moreError;
-            if (error != null) {
-              return Padding(
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  children: [
-                    AppErrorInline(error: error),
-                    TextButton.icon(
-                      onPressed: onRetryMore,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Réessayer'),
-                    ),
-                  ],
-                ),
-              );
-            }
-            return _LoadMoreTrigger(onVisible: onLoadMore);
-          }
-          final invoice = state.items[index];
+          final invoice = items[index];
           return _InvoiceTile(invoice: invoice, onTap: () => onOpen(invoice));
         },
       ),
@@ -329,15 +282,19 @@ class _InvoiceTile extends StatelessWidget {
     return ListTile(
       onTap: onTap,
       title: Text(
-        invoice.number ?? 'Brouillon',
+        invoice.title,
         style: const TextStyle(fontWeight: FontWeight.w700),
       ),
       subtitle: Text(
         [
-          client == null || client.isEmpty ? 'Client non renseigné' : client,
-          if (date != null) formatDay(date),
-        ].join(' · '),
-        maxLines: 1,
+          [
+            client == null || client.isEmpty ? 'Client non renseigné' : client,
+            if (date != null) formatDay(date),
+          ].join(' · '),
+          // Story 15.5b — written offline, not on the server yet.
+          if (invoice.pending) kPendingSyncLabel,
+        ].join('\n'),
+        maxLines: invoice.pending ? 2 : 1,
         overflow: TextOverflow.ellipsis,
       ),
       trailing: Column(
@@ -359,31 +316,4 @@ class _InvoiceTile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Bottom spinner of the list; asks for the next page when it is built (a
-/// first page shorter than the screen never scrolls).
-class _LoadMoreTrigger extends StatefulWidget {
-  final VoidCallback onVisible;
-
-  const _LoadMoreTrigger({required this.onVisible});
-
-  @override
-  State<_LoadMoreTrigger> createState() => _LoadMoreTriggerState();
-}
-
-class _LoadMoreTriggerState extends State<_LoadMoreTrigger> {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) widget.onVisible();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.all(16),
-    child: Center(child: CircularProgressIndicator()),
-  );
 }
