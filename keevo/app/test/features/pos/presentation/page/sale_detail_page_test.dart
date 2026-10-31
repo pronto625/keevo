@@ -7,6 +7,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/extension/extension_actions.dart';
+import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
@@ -15,6 +17,8 @@ import 'package:keevo/features/pos/presentation/page/sale_detail_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:mocktail/mocktail.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 class MockSaleRepository extends Mock implements SaleRepository {}
 
@@ -825,6 +829,71 @@ void main() {
 
       expect(find.text('Awa Ndiaye'), findsOneWidget);
       expect(find.textContaining('3f2b9c1e'), findsNothing);
+    });
+  });
+
+  group('SaleDetailPage — post-sale slot (15.3)', () {
+    Sale sale(String status) => Sale(
+          id: 'sale-9',
+          storeId: 'store-1',
+          employeeId: 'emp-1',
+          occurredAt: DateTime(2026, 3, 19, 14, 30),
+          totalAmount: 1000,
+          discountAmount: 0,
+          paymentMode: PaymentModeEnum.cash,
+          status: status,
+          items: const [],
+          createdAt: DateTime(2026, 3, 19, 14, 30),
+        );
+
+    Future<List<Map<String, Object?>>> pump(
+        WidgetTester tester, String status) async {
+      final runs = <Map<String, Object?>>[];
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
+          entitlementsOverride({'invoicing': 'ENABLED'}),
+          extensionContributionsFetcherProvider
+              .overrideWithValue((_) async => const [
+                    ExtensionContribution(
+                        id: 'invoicing.invoice-sale',
+                        label: 'Facturer',
+                        order: 100,
+                        action: kOpenSaleInvoiceAction),
+                  ]),
+          extensionActionsProvider.overrideWithValue({
+            kOpenSaleInvoiceAction: (context, ref, args) async =>
+                runs.add(args),
+          }),
+        ],
+        child: MaterialApp(
+          home: SaleDetailPage(saleId: 'sale-9', sale: sale(status)),
+        ),
+      ));
+      await tester.pumpAndSettle();
+      return runs;
+    }
+
+    testWidgets('completed sale: « Facturer » runs with the sale id',
+        (tester) async {
+      final runs = await pump(tester, 'COMPLETED');
+      await tester.ensureVisible(find.text('Facturer'));
+      await tester.tap(find.text('Facturer'));
+      await tester.pump();
+      expect(runs, [
+        {'saleId': 'sale-9'}
+      ]);
+    });
+
+    testWidgets('cancelled sale: slot shown (invoice with its credit note)',
+        (tester) async {
+      await pump(tester, 'CANCELLED');
+      expect(find.text('Facturer'), findsOneWidget);
+    });
+
+    testWidgets('pending sale: no slot', (tester) async {
+      await pump(tester, 'PENDING_VALIDATION');
+      expect(find.text('Facturer'), findsNothing);
     });
   });
 }

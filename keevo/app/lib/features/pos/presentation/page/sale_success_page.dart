@@ -1,12 +1,20 @@
 import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../../core/extension/extension_actions.dart';
+import '../../../../core/extension/extension_slot.dart';
 import '../../domain/model/sale_status.dart';
 
 /// SaleSuccessPage — full-screen confirmation after a sale is recorded.
-class SaleSuccessPage extends StatefulWidget {
+///
+/// Story 15.3: a completed sale with its id shows the post-sale actions of
+/// the active modules ([kPosCheckoutPostSaleActions], e.g. « Facturer »).
+/// Without any, the page returns to the POS by itself after
+/// [autoReturnDelay]; with some, it stays and offers « Nouvelle vente ».
+class SaleSuccessPage extends ConsumerStatefulWidget {
   final int totalAmount;
   final String saleStatus;
 
@@ -14,18 +22,29 @@ class SaleSuccessPage extends StatefulWidget {
   /// validate (EMPLOYEE seller). The sale itself is recorded normally.
   final bool hasDraftsToValidate;
 
+  /// Id of the recorded sale (the server keeps the device's id).
+  final String? saleId;
+
+  /// Time before the automatic return to the POS.
+  static const autoReturnDelay = Duration(milliseconds: 1800);
+
+  /// Longest extra wait for the post-sale actions still loading at
+  /// [autoReturnDelay] before returning anyway.
+  static const slotWait = Duration(seconds: 3);
+
   const SaleSuccessPage({
     super.key,
     required this.totalAmount,
     this.saleStatus = SaleStatus.completedValue,
     this.hasDraftsToValidate = false,
+    this.saleId,
   });
 
   @override
-  State<SaleSuccessPage> createState() => _SaleSuccessPageState();
+  ConsumerState<SaleSuccessPage> createState() => _SaleSuccessPageState();
 }
 
-class _SaleSuccessPageState extends State<SaleSuccessPage>
+class _SaleSuccessPageState extends ConsumerState<SaleSuccessPage>
     with TickerProviderStateMixin {
   late final AnimationController _fadeCtrl;
   late final AnimationController _scaleCtrl;
@@ -54,9 +73,45 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
     _fadeCtrl.forward();
     _scaleCtrl.forward();
 
-    Future.delayed(const Duration(milliseconds: 1800), () {
-      if (mounted) context.go('/pos');
-    });
+    _autoReturn();
+  }
+
+  /// The post-sale slot is shown for a completed sale whose id is known.
+  bool get _showsSlot =>
+      widget.saleId != null &&
+      widget.saleStatus == SaleStatus.completedValue;
+
+  Future<void> _autoReturn() async {
+    await Future<void>.delayed(SaleSuccessPage.autoReturnDelay);
+    if (!mounted) return;
+    if (_showsSlot && await _hasPostSaleActions()) {
+      // Stays on screen: « Nouvelle vente » is kept from now on, even if the
+      // actions disappear (module change), so the user is never trapped.
+      if (mounted) setState(() => _returnCancelled = true);
+      return;
+    }
+    if (mounted) context.go('/pos');
+  }
+
+  /// The automatic return was cancelled (post-sale actions shown).
+  bool _returnCancelled = false;
+
+  /// Whether the slot shows at least one action (waits up to
+  /// [SaleSuccessPage.slotWait] for an answer still loading). A failure is
+  /// « none »: the page returns to the POS as before.
+  Future<bool> _hasPostSaleActions() async {
+    try {
+      final contributions = await ref
+          .read(extensionContributionsProvider(kPosCheckoutPostSaleActions)
+              .future)
+          .timeout(SaleSuccessPage.slotWait);
+      if (!mounted) return false;
+      return renderableContributions(
+              contributions, ref.read(extensionActionsProvider))
+          .isNotEmpty;
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -69,6 +124,10 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
   @override
   Widget build(BuildContext context) {
     final isPending = widget.saleStatus == SaleStatus.pendingValidation.value;
+    final hasActions = _returnCancelled ||
+        _showsSlot &&
+            visibleExtensionContributions(ref, kPosCheckoutPostSaleActions)
+                .isNotEmpty;
     // Aplat sémantique plein (plus de dégradé) ; le vert est la teinte la
     // plus foncée de l'ancien dégradé pour garder le contraste du blanc. Sur
     // l'ambre, le blanc est illisible : texte et icône passent en onWarning.
@@ -134,6 +193,34 @@ class _SaleSuccessPageState extends State<SaleSuccessPage>
                           .bodyMedium
                           ?.copyWith(color: fg, fontWeight: FontWeight.w600),
                     ),
+                  ),
+                ],
+                if (_showsSlot) ...[
+                  const SizedBox(height: 32),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: ExtensionSlot(
+                      pointId: kPosCheckoutPostSaleActions,
+                      args: {'saleId': widget.saleId},
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: fg,
+                        side: BorderSide(color: fg),
+                        minimumSize: const Size(160, 48),
+                      ),
+                    ),
+                  ),
+                ],
+                if (hasActions) ...[
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    key: const Key('new-sale'),
+                    onPressed: () => context.go('/pos'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: fg,
+                      foregroundColor: AppTheme.successStrong,
+                      minimumSize: const Size(160, 48),
+                    ),
+                    child: const Text('Nouvelle vente'),
                   ),
                 ],
               ],

@@ -13,6 +13,7 @@ import 'package:sqlite3/open.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
+import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
@@ -285,6 +286,40 @@ void main() {
 
     expect(fake.fetchCalls, 2);
     expect(multiStoreReadable(), isFalse);
+  });
+
+  test('15.3: a new session drops the extension slot cache, a renewal keeps it',
+      () async {
+    var fetches = 0;
+    final c = ProviderContainer(overrides: [
+      sharedPreferencesProvider.overrideWithValue(prefs),
+      appDatabaseProvider.overrideWithValue(db),
+      entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
+          () async => const {},
+          seed: Entitlements(
+              states: const {}, status: EntitlementsStatus.cached))),
+      extensionContributionsFetcherProvider.overrideWithValue((_) async {
+        fetches++;
+        return const [];
+      }),
+    ]);
+    addTearDown(c.dispose);
+    final applier = c.read(sessionClaimsApplierProvider);
+    final point = extensionContributionsProvider(kPosCheckoutPostSaleActions);
+    final sub = c.listen(point, (_, __) {});
+    addTearDown(sub.close);
+    await c.read(point.future);
+    expect(fetches, 1);
+
+    await applier.apply(_owner('u1'));
+    await pumpEventQueue();
+    await c.read(point.future);
+    expect(fetches, 1, reason: 'renewal: same session');
+
+    await applier.apply(_owner('u1'), newSession: true);
+    await pumpEventQueue();
+    await c.read(point.future);
+    expect(fetches, 2);
   });
 
   test('a new session invalidates the subscription, a renewal does not',

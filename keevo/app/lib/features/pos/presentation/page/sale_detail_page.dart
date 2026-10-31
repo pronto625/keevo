@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/extension/extension_slot.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/widget/app_error_widget.dart';
 import '../../../../core/widget/soft_icon_badge.dart';
@@ -10,6 +11,7 @@ import 'package:intl/intl.dart';
 
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';
+import '../../domain/model/sale_status.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
 import '../../../dashboard/presentation/provider/dashboard_providers.dart';
 import '../provider/day_closure_providers.dart';
@@ -173,6 +175,17 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
             sale.totalAmount,
             isTotal: true,
           ),
+          // Story 15.3 — post-sale actions of the active modules
+          // (« Facturer » with Invoicing), as on the checkout success page.
+          if (sale.status == SaleStatus.completedValue ||
+              sale.status == SaleStatus.cancelledValue)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: ExtensionSlot(
+                pointId: kPosCheckoutPostSaleActions,
+                args: {'saleId': sale.id},
+              ),
+            ),
           // Story v1s-13-5 (AC8) — OWNER-only Annuler/Corriger on COMPLETED sales.
           if (isOwner && sale.status == 'COMPLETED') ...[
             const SizedBox(height: 16),

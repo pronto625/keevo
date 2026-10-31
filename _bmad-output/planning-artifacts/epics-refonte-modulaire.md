@@ -1256,9 +1256,9 @@ So that **les modules enrichissent l'UI d'autres modules et l'app reste légère
 
 > **Stories 15.4a → 15.4c** : la mise en place du monorepo + extraction est découpée. La migration Riverpod est faite **tôt** (transversale) avant l'extraction.
 
-- [ ] [Deferred-from: review 13-7, 2026-10-29] Decide who owns slot contributions: server-driven (`GET` endpoint over `ExtensionRegistry.contributions`, DTO from the immutable views incl. module id) vs a Flutter-side registry fed by active modules (spec-socle §11) — avoid defining « Facturer » label/action twice [Flutter ExtensionSlot]
+- [x] [Deferred-from: review 13-7, 2026-10-29] Decide who owns slot contributions: server-driven (`GET` endpoint over `ExtensionRegistry.contributions`, DTO from the immutable views incl. module id) vs a Flutter-side registry fed by active modules (spec-socle §11) — avoid defining « Facturer » label/action twice [Flutter ExtensionSlot] — ✅ 15.3 (2026-10-31): server-driven; app keeps only action handlers (`docs/modules/extension-slots.md`)
 
-- [ ] [Deferred-from: review 13-7 / 14-5, 2026-10-30] A `@Bean`-method `List<Extension>` parameter outside `shared.module` silently receives an empty list (contribution beans are not autowire candidates) — document it in the `ExtensionSlot` integration guide or fail fast at boot [shared.module / ModuleBeanAutowireExclusion]
+- [x] [Deferred-from: review 13-7 / 14-5, 2026-10-30] A `@Bean`-method `List<Extension>` parameter outside `shared.module` silently receives an empty list (contribution beans are not autowire candidates) — document it in the `ExtensionSlot` integration guide or fail fast at boot [shared.module / ModuleBeanAutowireExclusion] — ✅ 15.3 (2026-10-31): documented in `docs/modules/extension-slots.md`
 
 ### Story 15.4a : Workspace Melos + package `keevo_core`
 
@@ -1302,7 +1302,7 @@ So that **j'utilise la facturation depuis l'app (UX-DR5)**.
 - [ ] [Deferred-from: review 14-1, 2026-10-30] Invoice list needs search (client name, number) and issue-date range; payment date selectable (back-dated payment received earlier) instead of `paidAt = now` [`InvoiceController` list / `PayInvoiceRequestDto`]
 - [ ] [Deferred-from: spec 14-1, 2026-10-30] Settings screen for the seller fiscal profile (legal name, address, NIU, RCCM, VAT-registered, rate, prices incl. VAT, payment details); show `complianceWarnings` before issuing [app]
 
-- [ ] [Deferred-from: review 14-5, 2026-10-30] Checkout « Facturer » (`invoicing.open-sale-invoice`): open the sale's auto invoice via `GET /api/v1/invoices?saleId=`; when the page is empty show « Facture en cours de création » (sale offline or bridge pending) and let the user retry; cache the slot (`GET /api/v1/tenants/me/extensions/pos.checkout.post-sale-actions`) per session and refresh it with the entitlements [app invoicing / pos checkout]
+- [x] [Deferred-from: review 14-5, 2026-10-30] Checkout « Facturer » (`invoicing.open-sale-invoice`): open the sale's auto invoice via `GET /api/v1/invoices?saleId=`; when the page is empty show « Facture en cours de création » (sale offline or bridge pending) and let the user retry; cache the slot (`GET /api/v1/tenants/me/extensions/pos.checkout.post-sale-actions`) per session and refresh it with the entitlements [app invoicing / pos checkout] — ✅ 15.3 (2026-10-31): slot + lookup sheet + minimal invoice screen; 15.5 extends the invoice screen
 
 - [ ] [Deferred-from: review 14-7, 2026-10-30] Credit notes in the app: on an issued/paid invoice, « Faire un avoir » (owner, full or by line with quantities, reason required), list of the invoice's credit notes with PDF preview, « Remplacée » badge for superseded invoices (`supersededAt`) and « Entièrement créditée » (`fullyCredited`); backend has no credit-note list endpoint nor export dataset yet — add `GET /api/v1/credit-notes` (paged, year filter) and a credit-notes export dataset when the screen needs them [app invoicing / invoicing api]
 

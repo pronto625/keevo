@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/auth/jwt_claims.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/entitlements/entitlements_provider.dart';
+import '../../../../core/extension/extension_slot.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/storage/app_database.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
@@ -94,6 +95,9 @@ class SessionClaimsApplier {
       _ref.invalidate(entitlementsProvider);
     }
     _ref.read(entitlementsProvider);
+    // 15.3: a sign-in (maybe another account / tenant) starts a new slot
+    // cache; a renewal keeps it (it follows the readable module set).
+    if (newSession) _ref.invalidate(extensionContributionsProvider);
     // Same for the account-deletion banner (cached per process) — on every
     // token: a renewal after a deletion request / cancellation carries the
     // new tenantStatus (A50).

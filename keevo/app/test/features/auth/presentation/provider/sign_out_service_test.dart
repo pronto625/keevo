@@ -10,6 +10,9 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo/core/entitlements/entitlements.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
+import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
@@ -20,6 +23,8 @@ import 'package:keevo/core/notification/fcm_service.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 class _MockSync extends Mock implements SyncService {}
 
@@ -279,6 +284,38 @@ void main() {
 
       await c.read(signOutServiceProvider).signOut();
       await c.read(deletionPendingStatusProvider.future);
+
+      expect(fetches, 2);
+    });
+
+    // 15.3: the extension slot cache belongs to the session.
+    test('drops the extension slot cache', () async {
+      var fetches = 0;
+      final c = ProviderContainer(overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        syncServiceProvider.overrideWithValue(sync),
+        authRepositoryProvider.overrideWithValue(auth),
+        fcmServiceProvider.overrideWithValue(fcm),
+        remoteDeviceTokenDataSourceProvider
+            .overrideWithValue(_MockDeviceTokens()),
+        // Same readable set before and after: only the sign-out refetches.
+        entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
+            () async => const {},
+            seed: Entitlements(
+                states: const {}, status: EntitlementsStatus.cached))),
+        extensionContributionsFetcherProvider.overrideWithValue((_) async {
+          fetches++;
+          return const [];
+        }),
+      ]);
+      addTearDown(c.dispose);
+      final point = extensionContributionsProvider(kPosCheckoutPostSaleActions);
+      final sub = c.listen(point, (_, __) {});
+      addTearDown(sub.close);
+      await c.read(point.future);
+
+      await c.read(signOutServiceProvider).signOut();
+      await c.read(point.future);
 
       expect(fetches, 2);
     });

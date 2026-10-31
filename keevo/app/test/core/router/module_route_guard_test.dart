@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -20,9 +21,14 @@ import 'package:keevo/core/router/module_unavailable_page.dart';
 import 'package:keevo/core/router/session_presence_cache.dart';
 import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
+import 'package:keevo/core/widget/deferred_widget.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show flutterSecureStorageProvider;
 import 'package:keevo/features/contact/presentation/page/client_list_page.dart';
+import 'package:keevo/features/invoicing/domain/model/invoice.dart';
+import 'package:keevo/features/invoicing/presentation/page/invoice_detail_page.dart';
+import 'package:keevo/features/invoicing/presentation/provider/invoicing_providers.dart';
+import 'package:keevo/features/pos/presentation/page/sale_success_page.dart';
 
 import '../../helpers/fake_entitlements.dart';
 
@@ -203,6 +209,57 @@ void main() {
     final page = route.builder!(_FakeContext(), state);
     expect(page, isA<ModuleUnavailablePage>());
     expect((page as ModuleUnavailablePage).moduleId, 'crm');
+  });
+
+  test('15.3: appRouter mounts /invoicing/:id (invoicing module, deferred)',
+      () {
+    expect(moduleOfPath('/invoicing/abc'), 'invoicing');
+    final match = appRouter.configuration.findMatch(Uri.parse('/invoicing/abc'));
+    final route = match.matches.last.route as GoRoute;
+    expect(route.path, '/invoicing/:id');
+    final state = appRouter.configuration.buildTopLevelGoRouterState(match);
+    expect(route.builder!(_FakeContext(), state), isA<DeferredWidget>());
+  });
+
+  testWidgets('15.3: /invoicing/:id builds InvoiceDetailPage with its id',
+      (tester) async {
+    final match =
+        appRouter.configuration.findMatch(Uri.parse('/invoicing/inv-7'));
+    final route = match.matches.last.route as GoRoute;
+    final state = appRouter.configuration.buildTopLevelGoRouterState(match);
+    final pending = Completer<Invoice>();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        invoiceByIdProvider('inv-7').overrideWith((ref) => pending.future),
+      ],
+      child: MaterialApp(
+        home: Builder(builder: (context) => route.builder!(context, state)),
+      ),
+    ));
+    // loadLibrary completes outside the fake clock.
+    for (var i = 0;
+        i < 20 && find.byType(InvoiceDetailPage).evaluate().isEmpty;
+        i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 20)));
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    final page =
+        tester.widget<InvoiceDetailPage>(find.byType(InvoiceDetailPage));
+    expect(page.invoiceId, 'inv-7');
+  });
+
+  test('15.3: /pos/success passes the sale id to the success page', () {
+    SaleSuccessPage build(String uri) {
+      final match = appRouter.configuration.findMatch(Uri.parse(uri));
+      final route = match.matches.last.route as GoRoute;
+      final state = appRouter.configuration.buildTopLevelGoRouterState(match);
+      return route.builder!(_FakeContext(), state) as SaleSuccessPage;
+    }
+
+    expect(build('/pos/success?total=10&status=COMPLETED&sale=s-1').saleId,
+        's-1');
+    expect(build('/pos/success?total=10&status=COMPLETED').saleId, isNull);
   });
 
   group('deep link + screen', () {

@@ -74,6 +74,9 @@ import '../../features/export/domain/model/export_models.dart';
 import '../../features/export/presentation/page/export_page.dart';
 import '../../features/export/presentation/page/local_export_page.dart';
 import '../../features/export/presentation/page/my_exports_page.dart';
+// Story 15.3: Invoicing screens are loaded on first use.
+import '../../features/invoicing/presentation/page/invoice_detail_page.dart'
+    deferred as invoice_detail;
 import '../../features/notifications/presentation/page/notifications_page.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
 import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
@@ -85,6 +88,7 @@ import '../entitlements/entitlements.dart';
 import '../entitlements/entitlements_provider.dart';
 import '../scaffold/main_shell.dart';
 import '../storage/app_constants.dart';
+import '../widget/deferred_widget.dart';
 import 'module_routes.dart';
 import 'module_unavailable_page.dart';
 import 'session_presence_cache.dart';
@@ -591,10 +595,24 @@ final GoRouter appRouter = GoRouter(
         final totalStr = state.uri.queryParameters['total'];
         final total = int.tryParse(totalStr ?? '') ?? 0;
         final status = state.uri.queryParameters['status'] ?? 'COMPLETED';
+        final sale = state.uri.queryParameters['sale'];
         return SaleSuccessPage(
           totalAmount: total,
           saleStatus: status,
           hasDraftsToValidate: state.uri.queryParameters['drafts'] == '1',
+          saleId: sale == null || sale.isEmpty ? null : sale,
+        );
+      },
+    ),
+
+    // ── Invoicing (module route, Story 15.3; full UI in 15.5) ────────────
+    GoRoute(
+      path: '/invoicing/:id',
+      builder: (_, state) {
+        final id = state.pathParameters['id']!;
+        return DeferredWidget(
+          loader: invoice_detail.loadLibrary,
+          builder: (_) => invoice_detail.InvoiceDetailPage(invoiceId: id),
         );
       },
     ),

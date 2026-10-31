@@ -80,8 +80,11 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
       if (state is RecordSaleSuccess) {
         final draftsToValidate = state.sale.originalDraftProductIds.isNotEmpty &&
             !state.sale.promoteDraftProducts;
+        // 15.3: the device's sale id is the server's (CREATE_SALE keeps it),
+        // so the post-sale actions can look the sale up once it is synced.
         context.go('/pos/success?total=${state.sale.totalAmount}'
             '&status=${state.sale.status}'
+            '&sale=${Uri.encodeQueryComponent(state.sale.id)}'
             '${draftsToValidate ? '&drafts=1' : ''}');
       } else if (state is RecordSaleBlockedByGate) {
         SyncRequiredModal.show(context);

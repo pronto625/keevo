@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
@@ -8,10 +9,37 @@ import 'package:keevo/features/contact/presentation/provider/contact_provider.da
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/page/checkout_page.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
+import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/record_sale_notifier.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+
+/// Records the sale at once (15.3: the success URI carries its id).
+class _SucceedingRecordSale extends RecordSaleNotifier {
+  @override
+  Future<void> submit({
+    required List<CartItem> cart,
+    required PaymentModeEnum mode,
+    required String storeId,
+    required String employeeId,
+    String? clientId,
+    String? mobileRef,
+  }) async {
+    state = RecordSaleSuccess(Sale(
+      id: 'sale-42',
+      storeId: storeId,
+      employeeId: employeeId,
+      occurredAt: DateTime(2026, 10, 31),
+      totalAmount: 10000,
+      discountAmount: 0,
+      paymentMode: mode,
+      status: 'COMPLETED',
+      items: const [],
+      createdAt: DateTime(2026, 10, 31),
+    ));
+  }
+}
 
 class _FixedStore extends ActiveStoreNotifier {
   @override
@@ -271,6 +299,51 @@ void main() {
       expect(_CapturingRecordSale.called, isTrue);
       expect(_CapturingRecordSale.mode, PaymentModeEnum.cash);
       expect(_CapturingRecordSale.mobileRef, isNull);
+    });
+
+    testWidgets('15.3: recorded sale → success URI carries sale=<id>',
+        (tester) async {
+      Uri? success;
+      final router = GoRouter(routes: [
+        GoRoute(
+          path: '/',
+          builder: (_, __) => Consumer(builder: (context, ref, _) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final cart = ref.read(cartProvider.notifier);
+              if (ref.read(cartProvider).isEmpty) {
+                cart.addItem(_item(price: 10000, qty: 1));
+              }
+            });
+            return const CheckoutPage();
+          }),
+        ),
+        GoRoute(
+          path: '/pos/success',
+          builder: (_, state) {
+            success = state.uri;
+            return const Text('SUCCESS');
+          },
+        ),
+      ]);
+      addTearDown(router.dispose);
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          activeStoreIdProvider.overrideWith(_FixedStore.new),
+          activeEmployeeIdProvider.overrideWith((ref) async => 'emp-1'),
+          recordSaleNotifierProvider.overrideWith(_SucceedingRecordSale.new),
+        ],
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Espèces'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Valider la vente'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('SUCCESS'), findsOneWidget);
+      expect(success!.queryParameters['sale'], 'sale-42');
+      expect(success!.queryParameters['status'], 'COMPLETED');
     });
 
     testWidgets('client autocomplete is accent-insensitive (v1s-16-16)',

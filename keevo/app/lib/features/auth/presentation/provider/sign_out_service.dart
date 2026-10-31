@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/entitlements/entitlements_provider.dart';
+import '../../../../core/extension/extension_slot.dart';
 import '../../../../core/storage/app_constants.dart';
 import '../../../../core/storage/secure_storage_provider.dart';
 import '../../../notifications/presentation/provider/notification_provider.dart';
@@ -115,6 +116,8 @@ class SignOutService {
     if (_ref.exists(entitlementsProvider)) {
       _ref.invalidate(entitlementsProvider);
     }
+    // 15.3: the extension slot contents too (every point id).
+    _ref.invalidate(extensionContributionsProvider);
     // Same for the account-deletion banner (cached per process).
     if (_ref.exists(deletionPendingStatusProvider)) {
       _ref.invalidate(deletionPendingStatusProvider);
