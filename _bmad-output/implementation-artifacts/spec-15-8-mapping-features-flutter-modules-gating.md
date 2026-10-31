@@ -2,9 +2,10 @@
 title: '15.8 — Map every Flutter feature to a module + frontend gating'
 type: 'feature'
 created: '2026-10-31'
-status: 'draft'
+status: 'done'
+baseline_revision: 'd421821dbacd76a46f455d301c23d96c6762ba11'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-15-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-15-2-routing-dynamique-go-router.md'
@@ -64,6 +65,40 @@ deferred: []
 - Given a release build, then no `/debug` route exists.
 - Given a phone rotated to landscape, then the app stays in portrait.
 
+## Review Triage Log
+
+### 2026-10-31 — Review pass
+- verdicts: 30 findings — high 0, medium 3, low 19, false 8, maybe-false 0
+- findings:
+  - `[medium]` `[patch]` (blind/edge/claim) checkout still sends a client chosen before CRM turned unavailable — clear the selection / send no `clientId` when CRM is not readable; test.
+  - `[medium]` `[patch]` (blind/edge/claim) weekly report and trend settings stay editable without `advanced-reports` (the scheduler skips the tenant) — hide that section; test.
+  - `[medium]` `[patch]` (vg) `ApplyAdjustmentsButton` caller path untested (dropping the flag passes) — widget test with `counting` DISABLED ending on Plus; read availability at completion, not before the async gap.
+  - `[low]` `[patch]` (blind) weekly preview shown in READ_ONLY although the endpoint needs write access — write actions gated on `isActive`.
+  - `[low]` `[patch]` (blind/edge/vg other) catalogue tooltip and tap disagree when states are unknown — same predicate for both.
+  - `[low]` `[patch]` (blind/edge) `isMultiStoreOverviewAvailable` fails open for an unregistered route — require the route's module and readability.
+  - `[low]` `[patch]` (vg) `/reports/equipe` owner-only redirect untested — tests for `/reports/equipe`, `/reports/rentabilite`, `/reports/boutiques`.
+  - `[low]` `[patch]` (blind/edge) debug link test only matches single quotes — quote-insensitive.
+  - `[low]` `[patch]` (blind/edge) `feature_modules_test`: unclear error on a manifest without id; paid modules without routes never checked — explicit failure; every paid module mapped.
+  - `[low]` `[patch]` (blind) Android `sensorPortrait` allows upside-down while iPhone does not; unreachable test branch — Android `portrait`; test branch cleaned.
+  - `[low]` `[patch]` (blind) `owner_reports_page_test` fixed pumps instead of settling; no fallback check for a hidden initial tab — settle + fallback assertion.
+  - `[low]` `[patch]` (blind) `isModuleAvailable` / `isRouteAvailableNow` lack unit tests (unknown, READ_ONLY) — unit tests.
+  - `[low]` `[reject]` (blind) `kFeatureModules` drives nothing at runtime / doc table unchecked — the table is the reviewed mapping the AC asks for; enforcement stays in the 15.2 registry; consistency test exists.
+  - `[low]` `[reject]` (blind) `CategoryDebugPage` still compiled in release — the route is not mounted and nothing links to it; binary size impact negligible.
+  - `[low]` `[reject]` (blind) `UIRequiresFullScreen` deprecated in iPadOS 26 — still honoured; revisit with a tablet layout.
+  - `[low]` `[reject]` (blind) `returnToInventory` uses `go('/settings')` — Plus tab root, intended stack reset.
+  - `[low]` `[reject]` (blind) `deep_link_navigation` checks the multi-store module id directly — equivalent today (single module for the route).
+  - `[low]` `[reject]` (blind) manifests parsed twice in the test — test-only cost.
+  - `[low]` `[reject]` (edge) entitlements changing mid-validation — covered by reading at completion (patch row).
+  - `[false]` `[reject]` (intent) table not read at runtime — R1 is the defensible reading; per-feature runtime gating of free modules would be a no-op.
+  - `[false]` `[reject]` (intent) hidden without CTA — the AC allows hidden or blocked; blocked routes keep the « module non activé » CTA.
+  - `[false]` `[reject]` (intent) no Free-plan walkthrough test — per-module overrides exercise each surface; device check done.
+  - `[false]` `[reject]` (intent) debug code still in the binary — the AC is about the release app exposing it; routes excluded and tested.
+  - `[false]` `[reject]` (intent) supplier card tested alone — patched? no: the card is the gated widget; form wiring unchanged.
+  - `[false]` `[reject]` (intent) portrait lock instead of layout fix — the routed item allows either; verified on the Redmi (ROTATION_0 with auto-rotate on).
+  - `[false]` `[reject]` (intent) 21 folders vs 18 listed — "map what exists" (products is part of catalog).
+  - `[false]` `[reject]` (intent) G14 doc only — the intent asks to document it.
+  - `[false]` `[reject]` (intent) slots not tested here — slots are server-driven (15.3) and filtered server-side by module.
+
 ## Verification
 
 **Commands:**
@@ -73,3 +108,15 @@ deferred: []
 
 **Manual checks:**
 - Redmi: rotate the phone → app stays portrait; a Free-like tenant (temporary DISABLED rows) sees no premium entries.
+
+## Auto Run Result
+
+Status: done
+
+**Summary:** Every Flutter feature folder (21) plus `keevo_invoicing` is attached to a manifest module in `kFeatureModules` (`lib/core/modules/feature_modules.dart`, documented in `docs/modules/flutter-feature-modules.md` with the G14 Drift choice), checked by a test against folders and manifests (every paid module mapped). Remaining premium surfaces gated: « Équipe » leaderboard (`/reports/equipe`, `advanced-reports` manifest 1.1.0, contract regenerated, owner-only), weekly report + trend settings and preview (`advanced-reports`, write actions need ENABLED), « Alertes Stock Bas » channel (`alerts`), checkout client selector and `clientId` (CRM), supplier card (CRM), inventory return path (counting, read at completion), stock overview entry (single predicate for tooltip and tap, fail-closed for unregistered routes). `debug` routes only in debug builds (test). Portrait lock: Android `portrait`, iPhone portrait, iPad portrait/upside-down + `UIRequiresFullScreen`. Helpers `isModuleReadable/Writable`, `isModuleAvailable[Now]`, `isModuleActive`, `isRouteAvailableNow`. App 2.0.17+89.
+
+**Review:** 30 findings — 3 medium patched (stale checkout client, weekly settings without module, untested inventory return path), 9 lows patched (+ alerts channel gating decided at review), rest rejected with reasons.
+
+**Follow-up review recommended:** true — 3 medium patches.
+
+**Verification:** backend shared 1054 / architecture 32 — 0 failures; analyze 0 errors/warnings; keevo_core, keevo_invoicing and app chunked tests all pass; `flutter build apk --debug` OK. Device (Redmi): app stays portrait with auto-rotate on (rotation 0); with `advanced-reports` temporarily DISABLED the « Équipe » tab disappears from Rapports (present when enabled); row removed (tenant_modules 331).

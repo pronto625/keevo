@@ -1,4 +1,7 @@
 {
+  "advanced-reports" : [
+    "/reports/equipe"
+  ],
   "counting" : [
     "/inventory",
     "/inventory/counting/:sessionId",

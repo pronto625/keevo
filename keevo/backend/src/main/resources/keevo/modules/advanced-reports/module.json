@@ -1,6 +1,6 @@
 {
   "id": "advanced-reports",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "Rapports avancés",
   "category": "premium",
   "requires": [
@@ -17,7 +17,9 @@
     "fills": []
   },
   "permissions": [],
-  "routes": [],
+  "routes": [
+    "/reports/equipe"
+  ],
   "entitlement": "module.advanced-reports",
   "free": false
 }

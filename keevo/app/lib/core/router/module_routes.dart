@@ -12,6 +12,9 @@ import '../entitlements/entitlements_provider.dart';
 /// pos, inventory, store, sync, reporting) have no entry: their routes are
 /// never gated.
 const kModuleRoutes = <String, List<String>>{
+  'advanced-reports': [
+    '/reports/equipe',
+  ],
   'counting': [
     '/inventory',
     '/inventory/counting/:sessionId',
@@ -105,3 +108,47 @@ bool isRouteAvailable(WidgetRef ref, String location) {
       ref.watch(entitlementsProvider).value ?? Entitlements.unknown;
   return isRouteReadable(entitlements, location);
 }
+
+/// Story 15.8 — same answer as [isRouteAvailable] read once, without
+/// rebuilding the caller: for a callback deciding where to navigate.
+bool isRouteAvailableNow(WidgetRef ref, String location) {
+  final entitlements =
+      ref.read(entitlementsProvider).value ?? Entitlements.unknown;
+  return isRouteReadable(entitlements, location);
+}
+
+/// Module id of the « Rapports avancés » (leaderboard, weekly report).
+const kAdvancedReportsModuleId = 'advanced-reports';
+
+/// Story 15.8 — [moduleId] may be read with [entitlements]: nothing known
+/// yet (the backend still decides) or ENABLED / READ_ONLY.
+bool isModuleReadable(Entitlements entitlements, String moduleId) =>
+    !entitlements.isKnown || entitlements.isReadable(moduleId);
+
+/// Story 15.8 — [moduleId] may be written with [entitlements]: nothing known
+/// yet or ENABLED (READ_ONLY grace refuses writes).
+bool isModuleWritable(Entitlements entitlements, String moduleId) =>
+    !entitlements.isKnown || entitlements.isActive(moduleId);
+
+Entitlements _watch(WidgetRef ref) =>
+    ref.watch(entitlementsProvider).value ?? Entitlements.unknown;
+
+Entitlements _read(WidgetRef ref) =>
+    ref.read(entitlementsProvider).value ?? Entitlements.unknown;
+
+/// Story 15.8 — whether an in-page entry of [moduleId] that opens no route of
+/// its own (e.g. the CRM client picker at checkout) is shown: same rule as
+/// [isRouteAvailable] (nothing known yet → shown, the backend 403 stays the
+/// fallback; READ_ONLY → shown). Rebuilds the caller.
+bool isModuleAvailable(WidgetRef ref, String moduleId) =>
+    isModuleReadable(_watch(ref), moduleId);
+
+/// [isModuleAvailable] read once, without rebuilding the caller (callbacks).
+bool isModuleAvailableNow(WidgetRef ref, String moduleId) =>
+    isModuleReadable(_read(ref), moduleId);
+
+/// Story 15.8 — whether an in-page action of [moduleId] that WRITES (e.g. the
+/// « Aperçu du rapport hebdomadaire » of `advanced-reports`) or edits its
+/// settings is shown: nothing known yet or ENABLED; hidden in READ_ONLY grace.
+bool isModuleActive(WidgetRef ref, String moduleId) =>
+    isModuleWritable(_watch(ref), moduleId);

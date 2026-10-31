@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/router/module_routes.dart';
 import '../../../contact/domain/model/client_model.dart';
 import '../../../contact/presentation/provider/contact_provider.dart';
 import '../../domain/model/payment_mode_enum.dart';
@@ -374,7 +375,9 @@ class _CheckoutPageState extends ConsumerState<CheckoutPage> {
           mode: _selectedMode!,
           storeId: storeId,
           employeeId: employeeId,
-          clientId: _selectedClient?.id,
+          // Story 15.8 — a client picked while CRM was readable is not
+          // sent once the module is no longer readable.
+          clientId: isModuleAvailableNow(ref, 'crm') ? _selectedClient?.id : null,
           // A reference typed before switching to Espèces must not leak.
           mobileRef: _selectedMode == PaymentModeEnum.mobileMoney
               ? _mobileMoneyRef
@@ -458,6 +461,9 @@ class _ClientAutocomplete extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Story 15.8 — the client list is CRM's: no selector when the module
+    // cannot be read.
+    if (!isModuleAvailable(ref, 'crm')) return const SizedBox.shrink();
     final cs = Theme.of(context).colorScheme;
     final clientsAsync = ref.watch(clientListNotifierProvider);
 

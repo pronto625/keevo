@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
@@ -16,6 +17,8 @@ import 'package:keevo/features/pos/presentation/provider/record_sale_notifier.da
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/state/provider_retry.dart';
+
+import '../../../../helpers/fake_entitlements.dart';
 
 /// Records the sale at once (15.3: the success URI carries its id).
 class _SucceedingRecordSale extends RecordSaleNotifier {
@@ -71,6 +74,7 @@ class _FakeClients extends ClientListNotifier {
 class _CapturingRecordSale extends RecordSaleNotifier {
   static PaymentModeEnum? mode;
   static String? mobileRef;
+  static String? clientId;
   static bool called = false;
 
   @override
@@ -85,6 +89,7 @@ class _CapturingRecordSale extends RecordSaleNotifier {
     called = true;
     _CapturingRecordSale.mode = mode;
     _CapturingRecordSale.mobileRef = mobileRef;
+    _CapturingRecordSale.clientId = clientId;
   }
 }
 
@@ -366,6 +371,109 @@ void main() {
 
       expect(find.text('Hélène Ngo — 690000001'), findsOneWidget);
       expect(find.text('Paul Biya — 690000002'), findsNothing);
+    });
+
+    // Story 15.8 — the client selector is CRM's.
+    testWidgets('CRM DISABLED: no client selector', (tester) async {
+      await tester.pumpWidget(_buildApp(
+        items: [_item(price: 10000, qty: 1)],
+        overrides: [
+          clientListNotifierProvider.overrideWith(_FakeClients.new),
+          entitlementsOverride({'crm': 'DISABLED'}),
+        ],
+      ));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Client (optionnel)'), findsNothing);
+    });
+
+    testWidgets('CRM ENABLED: client selector shown', (tester) async {
+      await tester.pumpWidget(_buildApp(
+        items: [_item(price: 10000, qty: 1)],
+        overrides: [
+          clientListNotifierProvider.overrideWith(_FakeClients.new),
+          entitlementsOverride({'crm': 'ENABLED'}),
+        ],
+      ));
+      await tester.pumpAndSettle();
+      expect(
+          find.widgetWithText(TextField, 'Client (optionnel)'), findsOneWidget);
+    });
+
+    testWidgets('client picked, then CRM disabled: no clientId sent',
+        (tester) async {
+      _CapturingRecordSale.called = false;
+      _CapturingRecordSale.clientId = 'stale';
+      var crm = 'ENABLED';
+      await tester.pumpWidget(_buildApp(
+        items: [_item(price: 10000, qty: 1)],
+        overrides: [
+          activeStoreIdProvider.overrideWith(_FixedStore.new),
+          activeEmployeeIdProvider.overrideWith((ref) async => 'emp-1'),
+          recordSaleNotifierProvider.overrideWith(_CapturingRecordSale.new),
+          clientListNotifierProvider.overrideWith(_FakeClients.new),
+          entitlementsProvider.overrideWith(
+              () => FakeEntitlementsNotifier(() async => {'crm': crm})),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      final field = find.widgetWithText(TextField, 'Client (optionnel)');
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.enterText(field, 'helene');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hélène Ngo — 690000001'));
+      await tester.pumpAndSettle();
+
+      crm = 'DISABLED';
+      final container =
+          ProviderScope.containerOf(tester.element(find.byType(CheckoutPage)));
+      await container.read(entitlementsProvider.notifier).refresh();
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(TextField, 'Client (optionnel)'), findsNothing);
+
+      await tester.tap(find.text('Espèces'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Valider la vente'));
+      await tester.tap(find.text('Valider la vente'));
+      await tester.pumpAndSettle();
+
+      expect(_CapturingRecordSale.called, isTrue);
+      expect(_CapturingRecordSale.clientId, isNull);
+    });
+
+    testWidgets('client picked with CRM enabled: clientId sent',
+        (tester) async {
+      _CapturingRecordSale.called = false;
+      _CapturingRecordSale.clientId = null;
+      await tester.pumpWidget(_buildApp(
+        items: [_item(price: 10000, qty: 1)],
+        overrides: [
+          activeStoreIdProvider.overrideWith(_FixedStore.new),
+          activeEmployeeIdProvider.overrideWith((ref) async => 'emp-1'),
+          recordSaleNotifierProvider.overrideWith(_CapturingRecordSale.new),
+          clientListNotifierProvider.overrideWith(_FakeClients.new),
+          entitlementsOverride({'crm': 'ENABLED'}),
+        ],
+      ));
+      await tester.pumpAndSettle();
+
+      final field = find.widgetWithText(TextField, 'Client (optionnel)');
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.enterText(field, 'helene');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hélène Ngo — 690000001'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Espèces'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Valider la vente'));
+      await tester.tap(find.text('Valider la vente'));
+      await tester.pumpAndSettle();
+
+      expect(_CapturingRecordSale.called, isTrue);
+      expect(_CapturingRecordSale.clientId, 'c1');
     });
   });
 }

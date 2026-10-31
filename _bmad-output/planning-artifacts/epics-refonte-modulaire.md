@@ -1388,8 +1388,8 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 
 
 ### Deferred items routed 2026-10-31
-- [ ] [Deferred-from: review 15-2, 2026-10-31] Entry points still pushing gated routes without `isRouteAvailable`: `apply_adjustments_button.dart` (`/inventory`, counting), catalog/low-stock overview route (`/stock/overview`); the product-form supplier card keeps its tappable look (chevron) when CRM is off and has no widget test (DISABLED → no navigation, ENABLED → `/suppliers/<id>`) [app entry points]
-- [ ] [Deferred-from: device test 15-5b, 2026-10-31] The app is not locked to portrait: in landscape the terms screen overflows (« BOTTOM OVERFLOWED BY 17 PIXELS ») — lock portrait on phones or make onboarding/terms screens scroll [app shell / onboarding]
+- [x] [Deferred-from: review 15-2, 2026-10-31] Entry points still pushing gated routes without `isRouteAvailable`: `apply_adjustments_button.dart` (`/inventory`, counting), catalog/low-stock overview route (`/stock/overview`); the product-form supplier card keeps its tappable look (chevron) when CRM is off and has no widget test (DISABLED → no navigation, ENABLED → `/suppliers/<id>`) [app entry points] — ✅ 15.8 (2026-10-31)
+- [x] [Deferred-from: device test 15-5b, 2026-10-31] The app is not locked to portrait: in landscape the terms screen overflows (« BOTTOM OVERFLOWED BY 17 PIXELS ») — lock portrait on phones or make onboarding/terms screens scroll [app shell / onboarding] — ✅ 15.8 (2026-10-31): portrait lock
 ---
 
 ## Epic 16 : Licences, Migration & Go-Live (Phase 6)
@@ -1398,9 +1398,9 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 
 - [ ] [Deferred-from: review 13-8b, 2026-10-30] **Blocking before disabling `pos`/`crm` (or letting them expire) in prod**: while operations are held — (a) inventory session reads are server-first (`InventorySessionRepositoryImpl.getActiveByStoreId`: an online device with a held session sees « aucun inventaire en cours »; `getCountingProducts` shows the server's expected stock); (b) held stock ops (adjust/entry/transfer) have no badge in their lists; (c) the owner dashboard and day summary read server totals only and a day closed while a sale is held misses that sale when it later applies with an `occurredAt` inside the closed day [Flutter sync / reports]
 
-- [ ] [Deferred-from: review 13-10a, 2026-10-30] The leaderboard is gated `advanced-reports` but shown inside the profitability feature in the app — align the feature→module mapping [Flutter gating]
+- [x] [Deferred-from: review 13-10a, 2026-10-30] The leaderboard is gated `advanced-reports` but shown inside the profitability feature in the app — align the feature→module mapping [Flutter gating] — ✅ 15.8 (2026-10-31): leaderboard mapped to `advanced-reports` (`/reports/equipe`, « Équipe » tab gated)
 
-- [ ] [Deferred-from: review 13-10b, 2026-10-30] Hide premium entry points for tenants without the module (Inventaire, transferts, vue multi-boutiques in settings, catalogue « Vue stock multi-boutiques » tooltip); upgrade action on Audit/Product/Contact feature exceptions; persisted entitlements so an offline cold-start Premium owner keeps premium entries; XLSX refused for a premium dataset (Premium tenant with a DISABLED row) must not say « Excel est réservé » [Flutter gating]
+- [ ] [Deferred-from: review 13-10b, 2026-10-30] Hide premium entry points for tenants without the module (Inventaire, transferts, vue multi-boutiques in settings, catalogue « Vue stock multi-boutiques » tooltip); upgrade action on Audit/Product/Contact feature exceptions; persisted entitlements so an offline cold-start Premium owner keeps premium entries; XLSX refused for a premium dataset (Premium tenant with a DISABLED row) must not say « Excel est réservé » [Flutter gating] — partly done 2026-10-31: entry points hidden (15.2/15.8), tooltip aligned (15.8), persisted entitlements for offline cold start (15.1); remaining: upgrade action on Audit/Product/Contact feature exceptions and the XLSX premium-dataset wording
 
 ### Story 16.1 : Cycle de vie des licences (trial hybride, grâce lecture seule, temps réel)
 

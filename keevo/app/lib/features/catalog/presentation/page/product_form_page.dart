@@ -1343,7 +1343,7 @@ class _SupplierTile extends ConsumerWidget {
       ),
       data: (supplier) => supplier == null
           ? _NoSupplierCard(theme: theme)
-          : _SupplierCard(supplier: supplier, theme: theme),
+          : ProductSupplierCard(supplier: supplier, theme: theme),
     );
   }
 }
@@ -1389,20 +1389,22 @@ class _NoSupplierCard extends StatelessWidget {
   }
 }
 
-class _SupplierCard extends ConsumerWidget {
+/// The product's linked supplier. Story 15.2 / 15.8 — the supplier sheet
+/// (`/suppliers/:id`) belongs to CRM: when the module cannot be read the card
+/// still shows the supplier but is not a link (no tap, no chevron).
+@visibleForTesting
+class ProductSupplierCard extends ConsumerWidget {
   final SupplierModel supplier;
   final ThemeData theme;
-  const _SupplierCard({required this.supplier, required this.theme});
+  const ProductSupplierCard(
+      {super.key, required this.supplier, required this.theme});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final path = '/suppliers/${supplier.id}';
+    final linked = isRouteAvailable(ref, path);
     return InkWell(
-      // Story 15.2 — the supplier sheet belongs to CRM: no link when the
-      // module cannot be read (the card still shows the supplier).
-      onTap: isRouteAvailable(ref, path)
-          ? () => context.push(path, extra: supplier)
-          : null,
+      onTap: linked ? () => context.push(path, extra: supplier) : null,
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -1448,11 +1450,12 @@ class _SupplierCard extends ConsumerWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            if (linked)
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
           ],
         ),
       ),

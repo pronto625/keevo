@@ -101,6 +101,19 @@ void main() {
           isNull);
     });
 
+    test('15.8: the owner report hub tabs are owner-only', () async {
+      for (final path in [
+        '/reports/equipe',
+        '/reports/rentabilite',
+        '/reports/boutiques',
+      ]) {
+        expect(await redirect(path, session: true, role: 'EMPLOYEE'), '/pos',
+            reason: path);
+        expect(await redirect(path, session: true, role: 'OWNER'), isNull,
+            reason: path);
+      }
+    });
+
     test('an owner reaches owner-only routes', () async {
       expect(await redirect('/dashboard', session: true, role: 'OWNER'), isNull);
     });

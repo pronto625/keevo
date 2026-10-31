@@ -474,7 +474,7 @@ void main() {
   // employee → local list of the active store, Premium → overview.
   group('CatalogPage — stock view button', () {
     Future<String> tapButton(WidgetTester tester, Map<String, String> modules,
-        {String role = 'OWNER'}) async {
+        {String role = 'OWNER', String tooltip = 'Stock bas'}) async {
       final prefs = await _setupPrefs(role: role);
       await tester.pumpWidget(ProviderScope(
         retry: noProviderRetry,
@@ -502,7 +502,8 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Vue stock multi-boutiques'));
+      // Story 15.8 — the tooltip names what the button opens.
+      await tester.tap(find.byTooltip(tooltip));
       await tester.pumpAndSettle();
       final shown = find.textContaining(RegExp('^(LOCAL|OVERVIEW) '));
       return tester.widget<Text>(shown).data!;
@@ -522,8 +523,8 @@ void main() {
 
     testWidgets('Premium → whole multi-store overview', (tester) async {
       expect(
-          await tapButton(tester,
-              const {'multi-store': 'ENABLED'}),
+          await tapButton(tester, const {'multi-store': 'ENABLED'},
+              tooltip: 'Vue stock multi-boutiques'),
           'OVERVIEW /stock/overview');
     });
   });

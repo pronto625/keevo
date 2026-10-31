@@ -7,6 +7,8 @@ import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../../identity/presentation/provider/report_preferences_provider.dart';
 import 'package:keevo_core/widget/entitlement_upgrade.dart';
 
+import '../../../../core/router/module_routes.dart';
+
 /// ReportPreferencesPage — Paramètres › Rapports & WhatsApp
 ///
 /// Story 7.5 — Permet au OWNER de configurer:
@@ -37,6 +39,8 @@ class _ReportPreferencesPageState
   Widget build(BuildContext context) {
     final state = ref.watch(reportPreferencesProvider);
     final notifier = ref.read(reportPreferencesProvider.notifier);
+    final advancedReports = isModuleActive(ref, kAdvancedReportsModuleId);
+    final stockAlerts = isModuleActive(ref, 'alerts');
 
     // Show feedback snackbars
     ref.listen<ReportPreferencesState>(
@@ -153,9 +157,13 @@ class _ReportPreferencesPageState
                     ],
                   ]),
 
-                  const SizedBox(height: 20),
-
                   // ── Section 2 : Rapport Hebdomadaire ───────────────────
+                  // Story 15.8 — the weekly report (settings and preview,
+                  // `/reports/trigger-weekly`) is `advanced-reports`: hidden
+                  // unless the module is active (READ_ONLY grace refuses the
+                  // writes).
+                  if (advancedReports) ...[
+                  const SizedBox(height: 20),
                   const _SectionHeader(
                     icon: Icons.calendar_month_outlined,
                     iconColor: AppTheme.iconTeal,
@@ -232,6 +240,7 @@ class _ReportPreferencesPageState
                       ),
                     ),
                   ],
+                  ],
 
                   const SizedBox(height: 20),
 
@@ -261,9 +270,11 @@ class _ReportPreferencesPageState
                     ],
                   ]),
 
-                  const SizedBox(height: 20),
-
                   // ── Section 4 : Alertes Stock ───────────────────────────
+                  // Story 15.8 — stock alerts are sent by the paid `alerts`
+                  // module: hidden unless it is active.
+                  if (stockAlerts) ...[
+                  const SizedBox(height: 20),
                   const _SectionHeader(
                     icon: Icons.notifications_active_outlined,
                     iconColor: AppTheme.secondary,
@@ -277,10 +288,12 @@ class _ReportPreferencesPageState
                           (p) => p.copyWith(stockAlertChannel: v)),
                     ),
                   ]),
-
-                  const SizedBox(height: 20),
+                  ],
 
                   // ── Section 5 : Tendances de Ventes ─────────────────────
+                  // Story 15.8 — trend alerts are `advanced-reports` too.
+                  if (advancedReports) ...[
+                  const SizedBox(height: 20),
                   const _SectionHeader(
                     icon: Icons.trending_up_rounded,
                     iconColor: AppTheme.iconTeal,
@@ -296,6 +309,7 @@ class _ReportPreferencesPageState
                           (p) => p.copyWith(trendNotificationEnabled: v)),
                     ),
                   ]),
+                  ],
 
                   const SizedBox(height: 28),
 

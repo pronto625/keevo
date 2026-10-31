@@ -12,6 +12,8 @@ import 'package:keevo_core/di/core_providers.dart';
 import '../provider/product_provider.dart';
 import '../provider/category_provider.dart';
 import '../provider/csv_import_provider.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import '../../../../core/entitlements/entitlements_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/category_model.dart';
@@ -180,7 +182,13 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                           // Vue Stock multi-boutiques (Story 3.2)
                           SoftIconButton(
                             icon: Icons.warehouse_outlined,
-                            tooltip: 'Vue stock multi-boutiques',
+                            // Story 15.8 — named after what it opens (same
+                            // predicate as the tap, [openLowStockView]).
+                            tooltip: canOpenStockOverview(
+                                    ref.watch(entitlementsProvider).value ??
+                                        Entitlements.unknown)
+                                ? 'Vue stock multi-boutiques'
+                                : 'Stock bas',
                             // 13.10b: free local low-stock list unless the
                             // multi-store overview is available.
                             onPressed: () => openLowStockView(context,

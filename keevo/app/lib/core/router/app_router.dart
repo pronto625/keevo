@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart' show setEquals;
+import 'package:flutter/foundation.dart' show kDebugMode, setEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -187,6 +187,7 @@ const _ownerOnlyPrefixes = [
   '/exports',
   '/reports/rentabilite',
   '/reports/boutiques',
+  '/reports/equipe',
   '/settings/reports',
   '/settings/company',
 ];
@@ -381,7 +382,14 @@ final GoRouter appRouter = GoRouter(
       entitlements: () => _entitlementsOf(container),
     );
   },
-  routes: [
+  routes: buildAppRoutes(),
+);
+
+/// Every route of [appRouter]. [includeDebug]: the `debug` feature's screens
+/// (`/debug/...`), mounted in debug builds only (Story 15.8) — a release
+/// build has no `/debug` route and nothing in the app links to one.
+@visibleForTesting
+List<RouteBase> buildAppRoutes({bool includeDebug = kDebugMode}) => [
     // ── Splash / redirect logique premier lancement ──────────
     GoRoute(
       path: '/splash',
@@ -573,6 +581,12 @@ final GoRouter appRouter = GoRouter(
       path: '/reports/boutiques',
       builder: (_, __) =>
           const OwnerReportsPage(initialTab: OwnerReportsPage.tabBoutiques),
+    ),
+    // Story 15.8 — « Équipe » (seller leaderboard, `advanced-reports`).
+    GoRoute(
+      path: '/reports/equipe',
+      builder: (_, __) =>
+          const OwnerReportsPage(initialTab: OwnerReportsPage.tabEquipe),
     ),
 
     // ── Profitability detail (full-screen, no nav bar) — Story 7.4 ────────
@@ -899,10 +913,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/stock/transfers',
       builder: (_, __) => const TransferHistoryPage(),
-    ), // ── Debug > Categories ──────────────────────────────────────
-    GoRoute(
-      path: '/debug/categories',
-      builder: (_, __) => const CategoryDebugPage(),
     ),
-  ],
-);
+    // ── Debug > Categories — debug builds only (Story 15.8) ──────────────
+    if (includeDebug)
+      GoRoute(
+        path: '/debug/categories',
+        builder: (_, __) => const CategoryDebugPage(),
+      ),
+    ];

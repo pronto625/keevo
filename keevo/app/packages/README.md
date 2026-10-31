@@ -82,7 +82,9 @@ Côté app :
 5. **Brancher dans l'app** : `workspace:` et `dependencies:` du
    `pubspec.yaml` racine, le descripteur dans `kRegisteredModules`, retirer
    les routes/handlers écrits à la main (`app_router.dart`), vérifier les
-   routes dans `module_routes.dart`.
+   routes dans `module_routes.dart`, renommer la clé de la feature en nom de
+   package dans `kFeatureModules` (`lib/core/modules/feature_modules.dart`,
+   Story 15.8 — `docs/modules/flutter-feature-modules.md`).
 6. **Outillage** : étapes analyze/test du package dans
    `.github/workflows/flutter-ci.yml` (+ couverture) ; script `generate` du
    `pubspec.yaml` racine si le package a du code généré (après `keevo_core`).

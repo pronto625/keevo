@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/module_routes.dart';
 import '../../domain/model/inventory_gap_report_model.dart';
 import '../provider/validate_inventory_provider.dart';
 import 'inventory_validation_success_overlay.dart';
@@ -15,9 +16,17 @@ import 'inventory_validation_success_overlay.dart';
 ///
 /// Si `/inventory` n'est pas dans la pile (ouverture directe), on la recrée
 /// au-dessus de l'onglet Plus, d'où elle est normalement ouverte.
+///
+/// Story 15.8 — `/inventory` appartient au module `counting` : quand il ne
+/// peut plus être lu ([inventoryAvailable] faux), on revient sur Plus sans
+/// rouvrir « Inventaire » (qui mènerait à « module non activé »).
 @visibleForTesting
-void returnToInventory(GoRouter router) {
+void returnToInventory(GoRouter router, {bool inventoryAvailable = true}) {
   String location() => router.routerDelegate.currentConfiguration.uri.path;
+  if (!inventoryAvailable) {
+    router.go('/settings');
+    return;
+  }
   while (location() != '/inventory' && router.canPop()) {
     router.pop();
   }
@@ -165,7 +174,10 @@ class _ApplyAdjustmentsButtonState
           ref
               .read(validateInventoryNotifierProvider.notifier)
               .invalidateAll();
-          returnToInventory(router);
+          // Story 15.8 — read when leaving (the states may have changed
+          // while validating).
+          returnToInventory(router,
+              inventoryAvailable: isRouteAvailableNow(ref, '/inventory'));
         },
       );
     } catch (e) {

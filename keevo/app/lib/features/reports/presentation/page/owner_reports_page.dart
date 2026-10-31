@@ -29,8 +29,8 @@ import 'reports_page.dart';
 class OwnerReportsPage extends ConsumerWidget {
   /// Tab opened first (AC7 deep links): 0 Jour, 1 Historique,
   /// 2 Rentabilité (`/reports/rentabilite`), 3 Boutiques (`/reports/boutiques`),
-  /// 4 Équipe. Logical index: a tab hidden for its module (Story 15.2) opens
-  /// « Jour » instead.
+  /// 4 Équipe (`/reports/equipe`). Logical index: a tab hidden for its module
+  /// (Story 15.2) opens « Jour » instead.
   final int initialTab;
 
   const OwnerReportsPage({super.key, this.initialTab = 0});
@@ -45,13 +45,13 @@ class OwnerReportsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Story 15.2 — the Rentabilité / Boutiques tabs are the screens of the
     // `profitability` / `multi-store` routes: hidden when the module cannot
-    // be read.
+    // be read. Story 15.8 — same for Équipe (`advanced-reports`).
     final visible = [
       tabJour,
       tabHistorique,
       if (isRouteAvailable(ref, '/reports/rentabilite')) tabRentabilite,
       if (isRouteAvailable(ref, '/reports/boutiques')) tabBoutiques,
-      tabEquipe,
+      if (isRouteAvailable(ref, '/reports/equipe')) tabEquipe,
     ];
     final initial = visible.indexOf(initialTab.clamp(0, tabEquipe));
     return _OwnerReportsHub(

@@ -7,6 +7,7 @@ import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:keevo_core/widget/soft_icon_badge.dart';
 
 import '../../../../core/entitlements/entitlements_provider.dart';
+import '../../../../core/router/module_routes.dart';
 import '../../../dashboard/domain/model/dashboard_snapshot.dart';
 import '../../../dashboard/presentation/provider/dashboard_providers.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -14,22 +15,38 @@ import '../../../stores/presentation/provider/active_store_provider.dart';
 /// Route of the free local « stock bas » list (`?all=true`: every store).
 const kLocalLowStockRoute = '/stock/low';
 
+/// Story 15.8 — [overviewRoute] (a `multi-store` route of the registry) may
+/// be opened with [entitlements]: known states only (unknown → the free local
+/// list), a route of the registry only (not fail-open on a free route), its
+/// module readable. Shared by [isMultiStoreOverviewAvailable] (tap) and the
+/// catalogue button's tooltip.
+bool canOpenStockOverview(Entitlements entitlements,
+    {String overviewRoute = '/stock/overview'}) {
+  final module = moduleOfPath(overviewRoute);
+  return entitlements.isKnown &&
+      module != null &&
+      entitlements.isReadable(module);
+}
+
 /// True when the multi-store stock overview is available to this session: the
 /// server confirmed (in this session) that the tenant's `multi-store` module
 /// is readable. Owner and employee alike (15.1: the overview serves both).
 /// Any failure, an offline device or a slow answer (> [timeout]) → false: the
 /// caller opens the free local list. A slow answer is kept for the next call;
 /// a failure is not, the next call asks the server again.
+///
+/// Story 15.8 — decided by [canOpenStockOverview] on the server answer.
 Future<bool> isMultiStoreOverviewAvailable(
   ProviderContainer container, {
   Duration timeout = const Duration(seconds: 3),
+  String overviewRoute = '/stock/overview',
 }) async {
   try {
     final entitlements = await container
         .read(entitlementsProvider.notifier)
         .ensureServerState()
         .timeout(timeout);
-    return entitlements.isReadable(kMultiStoreModuleId);
+    return canOpenStockOverview(entitlements, overviewRoute: overviewRoute);
   } catch (_) {
     // Timeout (the answer is kept for the next call) or failure.
     return false;
@@ -60,7 +77,8 @@ Future<void> openLowStockView(
   try {
     final router = GoRouter.of(context);
     final container = ProviderScope.containerOf(context, listen: false);
-    final premium = await isMultiStoreOverviewAvailable(container);
+    final premium = await isMultiStoreOverviewAvailable(container,
+        overviewRoute: overviewRoute);
     router.push(premium
         ? overviewRoute
         : allStores

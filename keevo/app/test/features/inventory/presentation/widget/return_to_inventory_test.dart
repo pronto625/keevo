@@ -89,4 +89,21 @@ void main() {
     expect(await pressBack(tester), isTrue);
     expect(find.text('PLUS'), findsOneWidget);
   });
+
+  // Story 15.8 — `/inventory` is the `counting` module's route: without it,
+  // back to Plus, « Inventaire » not reopened.
+  testWidgets('counting not readable: back to Plus, Inventaire not reopened',
+      (tester) async {
+    final router = await pump(tester);
+    router.push('/inventory');
+    await tester.pumpAndSettle();
+    router.push('/inventory/gap-report/s1');
+    await tester.pumpAndSettle();
+
+    returnToInventory(router, inventoryAvailable: false);
+    await tester.pumpAndSettle();
+    expect(find.text('PLUS'), findsOneWidget);
+    expect(find.text('INVENTAIRE'), findsNothing);
+    expect(router.canPop(), isFalse);
+  });
 }

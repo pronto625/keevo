@@ -165,7 +165,9 @@ void main() {
       }
     });
 
-    test('iOS orientations match Android', () {
+    // Story 15.8 — onboarding / terms screens overflow in landscape: the app
+    // stays portrait when the phone is rotated.
+    test('the app is locked to portrait, iOS matching Android', () {
       final dartLocks = [Directory('lib'), Directory('packages/keevo_core/lib')]
           .expand((d) => d.listSync(recursive: true))
           .whereType<File>()
@@ -177,26 +179,26 @@ void main() {
           reason: 'lib/ now locks orientation from Dart; redo the iOS/Android '
               'orientation parity by hand (Info.plist, AndroidManifest) and '
               'update this test');
-      final manifest = read('android/app/src/main/AndroidManifest.xml');
-      final iphone = plistArray(
-          read('ios/Runner/Info.plist'), 'UISupportedInterfaceOrientations');
-      final lockedPortrait = RegExp(
-        r'android:screenOrientation="(portrait|sensorPortrait|userPortrait)"',
-      ).hasMatch(manifest);
-      if (lockedPortrait) {
-        expect(iphone, ['UIInterfaceOrientationPortrait']);
-      } else {
-        expect(manifest, isNot(contains('android:screenOrientation')),
-            reason: 'unhandled Android orientation lock');
-        expect(
-          iphone,
-          unorderedEquals([
-            'UIInterfaceOrientationPortrait',
-            'UIInterfaceOrientationLandscapeLeft',
-            'UIInterfaceOrientationLandscapeRight',
-          ]),
-        );
-      }
+      expect(
+        read('android/app/src/main/AndroidManifest.xml'),
+        contains('android:screenOrientation="portrait"'),
+      );
+      final plist = read('ios/Runner/Info.plist');
+      expect(plistArray(plist, 'UISupportedInterfaceOrientations'),
+          ['UIInterfaceOrientationPortrait']);
+      // No tablet layout: portrait on iPad too (full screen, so no
+      // multitasking requirement for all orientations).
+      expect(
+        plistArray(plist, 'UISupportedInterfaceOrientations~ipad'),
+        unorderedEquals([
+          'UIInterfaceOrientationPortrait',
+          'UIInterfaceOrientationPortraitUpsideDown',
+        ]),
+      );
+      expect(
+        RegExp(r'<key>UIRequiresFullScreen</key>\s*<true/>').hasMatch(plist),
+        isTrue,
+      );
     });
   });
 }

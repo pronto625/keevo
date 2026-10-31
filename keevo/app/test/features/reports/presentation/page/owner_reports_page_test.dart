@@ -7,6 +7,7 @@ import 'package:keevo/features/profitability/domain/repository/profitability_rep
 import 'package:keevo/features/profitability/presentation/page/seller_leaderboard_page.dart';
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
 import 'package:keevo/features/reports/presentation/page/owner_reports_page.dart';
+import 'package:keevo/features/reports/presentation/page/reports_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
@@ -126,8 +127,11 @@ void main() {
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         profitabilityRepositoryProvider.overrideWithValue(repo),
-        entitlementsOverride(
-            {'profitability': 'DISABLED', 'multi-store': 'READ_ONLY'}),
+        entitlementsOverride({
+          'profitability': 'DISABLED',
+          'multi-store': 'READ_ONLY',
+          'advanced-reports': 'ENABLED',
+        }),
       ],
       child: _routed(
           const OwnerReportsPage(initialTab: OwnerReportsPage.tabEquipe)),
@@ -138,5 +142,43 @@ void main() {
     expect(find.text('Boutiques'), findsOneWidget, reason: 'READ_ONLY');
     expect(find.byType(Tab), findsNWidgets(4));
     expect(find.byType(SellerLeaderboardPage), findsOneWidget);
+  });
+
+  // Story 15.8 — « Équipe » is the `advanced-reports` route
+  // (`/reports/equipe`): hidden without the module.
+  testWidgets('OWNER hub hides « Équipe » when advanced-reports is disabled',
+      (tester) async {
+    SharedPreferences.setMockInitialValues(
+        {kActiveStoreIdKey: 's1', kUserRoleKey: 'OWNER'});
+    final prefs = await SharedPreferences.getInstance();
+    final repo = _MockRepo();
+    when(() => repo.getSellerLeaderboard(params: any(named: 'params')))
+        .thenAnswer((_) async =>
+            const SellerLeaderboardResult(fromLocal: false, entries: []));
+
+    await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        profitabilityRepositoryProvider.overrideWithValue(repo),
+        entitlementsOverride({
+          'profitability': 'ENABLED',
+          'multi-store': 'ENABLED',
+          'advanced-reports': 'DISABLED',
+        }),
+      ],
+      child: _routed(
+          const OwnerReportsPage(initialTab: OwnerReportsPage.tabEquipe)),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Équipe'), findsNothing);
+    expect(find.text('Marges'), findsOneWidget);
+    expect(find.byType(Tab), findsNWidgets(4));
+    expect(find.byType(SellerLeaderboardPage), findsNothing);
+    // The hidden initial tab falls back to « Jour ».
+    final bar = tester.widget<TabBar>(find.byType(TabBar));
+    expect(bar.controller!.index, 0);
+    expect(find.byType(ReportsPage), findsOneWidget);
   });
 }

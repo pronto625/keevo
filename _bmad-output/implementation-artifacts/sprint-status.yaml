@@ -274,7 +274,7 @@ development_status:
   # ─────────────────────────────────────────────────────────
   # Epic 15: Frontend Modulaire (Phase 5)
   # ─────────────────────────────────────────────────────────
-  epic-15: in-progress
+  epic-15: done  # 2026-10-31 15.1→15.8 (+15.4a/b/c, 15.5b) done
   15-1-entitlements-provider-flutter: done  # 2026-10-31 build-auto done (spec-15-1-entitlements-provider-flutter.md) — entitlementsProvider tous rôles, snapshot hors ligne, full pull sur réactivation, datasets export filtrés ; 36 constats (5 medium corrigés)
   15-2-routing-dynamique-go-router: done  # 2026-10-31 build-auto done (spec-15-2-routing-dynamique-go-router.md) — routes par module (manifestes + contrat), garde go_router, écran « module non activé », entrées masquées ; 32 constats (4 medium corrigés) ; routés → 15-8, 16-3
   15-3-extension-slot-lazy-loading: done  # 2026-10-31 build-auto done (spec-15-3-extension-slot-lazy-loading.md) — ExtensionSlot serveur, « Facturer » après vente, écran facture minimal, deferred ; 36 constats (6 medium corrigés)
@@ -285,7 +285,7 @@ development_status:
   15-5b-facturation-hors-ligne: done  # 2026-10-31 build-auto done (spec-15-5b-facturation-hors-ligne.md) — factures hors ligne (5 ops sync, pull + tombstones, file locale), testé sur Redmi ; 44 constats (9 medium corrigés) + 1 bug trouvé sur appareil corrigé ; routé → 15-8
   15-6-ecran-mes-modules-owner: done  # 2026-10-31 build-auto done (spec-15-6-ecran-mes-modules-owner.md) — écran « Mes modules », CTA support WhatsApp, statut owner-only ; 30 constats (3 medium corrigés) ; testé sur Redmi
   15-7-dashboard-nextjs-ci-tests-epic9: done  # 2026-10-31 build-auto done (spec-15-7-dashboard-nextjs-ci-tests-epic9.md) — CI/tests/écrans Epic 9 déjà livrés (vérifiés), pages route en coquille serveur + titres FR ; 24 constats (1 medium corrigé)
-  15-8-mapping-features-flutter-modules-gating: backlog
+  15-8-mapping-features-flutter-modules-gating: done  # 2026-10-31 build-auto done (spec-15-8-mapping-features-flutter-modules-gating.md) — table feature→module (21 + invoicing), surfaces premium restantes gâtées, debug exclu en release, portrait ; 30 constats (3 medium corrigés) ; testé sur Redmi
   epic-15-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
