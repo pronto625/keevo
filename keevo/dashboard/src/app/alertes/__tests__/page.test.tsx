@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import AlertesPage from "@/app/alertes/page";
+import AlertesPageClient from "@/app/alertes/AlertesPageClient";
 import { getAlerts, markAlertHandled } from "@/lib/api/admin-alerts";
 import type { AdminAlert } from "@/types/alerts";
 
@@ -50,7 +50,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <AlertesPage />
+      <AlertesPageClient />
     </QueryClientProvider>,
   );
 }

@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import SyncMonitoringPage from "@/app/monitoring/sync/page";
+import SyncMonitoringPageClient from "@/app/monitoring/sync/SyncMonitoringPageClient";
 import { getSyncOverview, getTenantSyncDetail, getTenantSyncHealth } from "@/lib/api/admin-sync";
 
 vi.mock("@/lib/api/admin-sync", () => ({
@@ -24,7 +24,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <SyncMonitoringPage />
+      <SyncMonitoringPageClient />
     </QueryClientProvider>,
   );
 }

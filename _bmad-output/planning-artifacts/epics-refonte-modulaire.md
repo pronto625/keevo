@@ -1357,7 +1357,7 @@ So that **je pilote la plateforme et la monétisation (FR79/80/83, dette dashboa
 - La **console Modules** (activer/désactiver) est en Epic 16.4.
 
 **Items (routed 2026-10-11 from deferred-work):**
-- [ ] [Deferred-from: legacy CR 9-1, 2026-05-04] TenantsPage 'use client' directly on route page [keevo/dashboard/app/tenants/page.tsx] — spec wanted Server shell + client component
+- [x] [Deferred-from: legacy CR 9-1, 2026-05-04] TenantsPage 'use client' directly on route page [keevo/dashboard/app/tenants/page.tsx] — spec wanted Server shell + client component — ✅ 15.7 (2026-10-31): server shell + `TenantsPageClient` (and 9 other route pages), guard test
 
 **AC (interim):** every routed item above is resolved or explicitly rejected with a reason, in addition to the epic's own ACs.
 

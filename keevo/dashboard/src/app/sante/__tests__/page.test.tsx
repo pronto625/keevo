@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import SantePage from "@/app/sante/page";
+import SantePageClient from "@/app/sante/SantePageClient";
 import { getSystemHealth } from "@/lib/api/admin-health";
 import type { SystemHealth } from "@/types/health";
 
@@ -40,7 +40,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <SantePage />
+      <SantePageClient />
     </QueryClientProvider>,
   );
 }

@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import RetoursPage from "@/app/retours/page";
+import RetoursPageClient from "@/app/retours/RetoursPageClient";
 import { getFeedback, markFeedbackHandled, markFeedbackUnhandled } from "@/lib/api/admin-feedback";
 import type { AdminFeedback, FeedbackPage } from "@/types/feedback";
 
@@ -46,7 +46,7 @@ function renderPage() {
   const invalidate = vi.spyOn(client, "invalidateQueries");
   render(
     <QueryClientProvider client={client}>
-      <RetoursPage />
+      <RetoursPageClient />
     </QueryClientProvider>,
   );
   return { client, invalidate };

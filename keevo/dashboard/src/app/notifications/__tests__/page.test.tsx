@@ -3,7 +3,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import NotificationsPage from "@/app/notifications/page";
+import NotificationsPageClient from "@/app/notifications/NotificationsPageClient";
 import {
   cancelGlobalNotification,
   getGlobalNotifications,
@@ -52,7 +52,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <NotificationsPage />
+      <NotificationsPageClient />
     </QueryClientProvider>,
   );
 }

@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import RevenusPage from "@/app/revenus/page";
+import RevenusPageClient from "@/app/revenus/RevenusPageClient";
 import { downloadChurnCsv, getChurnReport, getRevenueSummary, getRevenueTrend } from "@/lib/api/admin-revenue";
 import { currentMonth, monthRange } from "@/lib/period";
 
@@ -32,7 +32,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <RevenusPage />
+      <RevenusPageClient />
     </QueryClientProvider>,
   );
 }

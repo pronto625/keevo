@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import ActivityPage from "@/app/monitoring/activity/page";
+import ActivityPageClient from "@/app/monitoring/activity/ActivityPageClient";
 import {
   getGmvTrend,
   getInactiveTenants,
@@ -58,7 +58,7 @@ function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ActivityPage />
+      <ActivityPageClient />
     </QueryClientProvider>,
   );
 }
