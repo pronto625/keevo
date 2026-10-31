@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
-import '../../../../core/storage/sql_like.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/storage/sql_like.dart';
 import '../../domain/model/audit_entry_dto.dart';
 import '../../domain/model/audit_filter.dart';
 

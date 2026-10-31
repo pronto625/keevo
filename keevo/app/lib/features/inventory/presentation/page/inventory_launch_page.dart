@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
@@ -10,7 +10,7 @@ import '../provider/inventory_session_provider.dart';
 import '../widget/active_session_banner.dart';
 import '../widget/inventory_config_bottom_sheet.dart';
 import '../widget/session_history_card.dart';
-import '../../../../core/widget/entitlement_upgrade.dart';
+import 'package:keevo_core/widget/entitlement_upgrade.dart';
 
 /// InventoryLaunchPage — entry point for inventory counting (Story 6.1).
 ///

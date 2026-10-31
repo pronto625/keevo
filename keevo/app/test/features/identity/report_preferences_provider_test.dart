@@ -1,13 +1,12 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/network/module_entitlement_exception.dart';
-import 'package:keevo/core/services/api_service.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/identity/domain/model/tenant_preferences_model.dart';
 import 'package:keevo/features/identity/domain/repository/tenant_preferences_repository.dart';
 import 'package:keevo/features/identity/presentation/provider/report_preferences_provider.dart';
 import 'package:keevo/features/identity/presentation/provider/tenant_preferences_provider.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/services/api_service.dart';
+import 'package:mocktail/mocktail.dart';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 

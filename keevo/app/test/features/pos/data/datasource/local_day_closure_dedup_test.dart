@@ -2,9 +2,9 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/pos/data/datasource/local_day_closure_datasource.dart';
 import 'package:keevo/features/pos/domain/model/day_closure_model.dart' as domain;
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
 domain.DayClosure _closure(String id, DateTime at, {bool automatic = false}) =>

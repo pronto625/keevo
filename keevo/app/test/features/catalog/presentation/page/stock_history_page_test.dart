@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
 import 'package:keevo/features/catalog/domain/model/stock_movement_model.dart';
 import 'package:keevo/features/catalog/domain/repository/stock_repository.dart';
@@ -11,6 +8,8 @@ import 'package:keevo/features/catalog/domain/usecase/get_stock_history_usecase.
 import 'package:keevo/features/catalog/domain/usecase/get_stock_level_usecase.dart';
 import 'package:keevo/features/catalog/presentation/page/stock_history_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../helpers/no_technical_text.dart';
 

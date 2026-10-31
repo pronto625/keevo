@@ -1,8 +1,7 @@
 // ignore_for_file: avoid_redundant_argument_values
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/profitability/domain/model/product_profitability_model.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 void main() {
   // ── ProductProfitabilityEntry ───────────────────────────────────────────────

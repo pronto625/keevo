@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/export/presentation/widget/export_entry_button.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
 /// v1s-18-4 — « Exporter » entry button (used as-is by Rapports, whose page
 /// is too heavy to pump here): OWNER only, pushes its prefill.

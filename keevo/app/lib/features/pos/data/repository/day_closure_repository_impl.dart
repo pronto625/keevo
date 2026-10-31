@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 
-import '../../../../core/sync/connectivity_service.dart';
-import '../../../../core/sync/sync_service.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import '../../domain/exception/day_already_closed_exception.dart';
 import '../../domain/model/day_closure_model.dart';
 import '../../domain/model/payment_mode_enum.dart';

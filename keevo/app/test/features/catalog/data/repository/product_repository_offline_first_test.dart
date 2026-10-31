@@ -7,9 +7,6 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/catalog/data/datasource/local_product_datasource.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_csv_import_datasource.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_product_datasource.dart';
@@ -18,6 +15,9 @@ import 'package:keevo/features/catalog/domain/exception/product_exception.dart';
 import 'package:keevo/features/catalog/domain/model/csv_import_result.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/domain/model/product_response_dto.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalProductDataSource extends Mock implements LocalProductDataSource {}

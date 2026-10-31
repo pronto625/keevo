@@ -2,7 +2,7 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 
-import '../../../../core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 import '../../data/datasource/local_audit_datasource.dart';
 import '../../data/datasource/remote_audit_datasource.dart';
 import '../../domain/exception/audit_exception.dart';

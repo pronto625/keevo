@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';

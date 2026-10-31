@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
 import 'package:keevo/features/catalog/domain/repository/stock_repository.dart';
 import 'package:keevo/features/catalog/domain/usecase/get_stock_level_usecase.dart';
@@ -11,6 +8,8 @@ import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart
 import 'package:keevo/features/catalog/presentation/widget/stock_level_widget.dart';
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeStockRepository implements StockRepository {
   @override

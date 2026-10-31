@@ -1,5 +1,5 @@
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,7 +14,7 @@ import '../../../dashboard/presentation/provider/dashboard_providers.dart';
 import '../provider/day_closure_providers.dart';
 import '../provider/pos_providers.dart';
 import '../widget/pos_app_bar.dart';
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
 /// PendingSaleDetailPage — OWNER views sale details + validates/cancels.
 /// Story 4.3 AC6-AC7.

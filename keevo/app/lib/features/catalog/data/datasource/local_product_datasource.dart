@@ -1,11 +1,12 @@
-import 'package:drift/drift.dart';
-import 'package:uuid/uuid.dart';
 import 'dart:developer' as dev;
 
-import '../../../../core/storage/app_database.dart';
-import '../../../../core/storage/search_fold.dart';
-import '../../../../core/storage/sql_like.dart';
-import '../../../../core/sync/sync_service.dart';
+import 'package:drift/drift.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/storage/search_fold.dart';
+import 'package:keevo_core/storage/sql_like.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:uuid/uuid.dart';
+
 import '../../domain/model/product_model.dart';
 import '../../domain/model/product_status.dart';
 

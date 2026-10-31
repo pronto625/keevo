@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 /// SectorType — Domain enum representing the merchant's business sector.
 ///

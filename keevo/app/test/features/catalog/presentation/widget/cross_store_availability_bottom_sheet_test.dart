@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/cross_store_availability_model.dart';
 import 'package:keevo/features/catalog/domain/repository/stock_repository.dart';
 import 'package:keevo/features/catalog/presentation/provider/cross_store_availability_provider.dart';
@@ -12,6 +9,8 @@ import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart
 import 'package:keevo/features/catalog/presentation/widget/cross_store_availability_bottom_sheet.dart';
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockStockRepository extends Mock implements StockRepository {}

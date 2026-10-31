@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
 import '../../domain/exception/audit_exception.dart';
 import '../../domain/model/audit_entry_dto.dart';
 import '../audit_presenter.dart';

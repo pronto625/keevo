@@ -6,16 +6,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/network/api_base_url.dart';
+import 'package:keevo_core/storage/db_encryption_key_service.dart';
+import 'package:keevo_core/storage/secure_storage_provider.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
-import 'core/di/providers.dart';
-import 'core/network/api_base_url.dart';
 import 'core/router/app_router.dart';
-import 'core/storage/db_encryption_key_service.dart';
-import 'core/storage/secure_storage_provider.dart';
-import 'core/theme/app_theme.dart';
 import 'features/feedback/presentation/provider/feedback_provider.dart';
 
 void main() async {

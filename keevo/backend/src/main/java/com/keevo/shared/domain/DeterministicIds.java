@@ -14,7 +14,7 @@ import java.util.UUID;
  * <p>Used for the stock movements written by an owner cancel/correct of a COMPLETED sale: the
  * device writes its local movement and the backend its own with the same id, so the pull's
  * {@code INSERT OR IGNORE} keeps a single history row. The app mirror is
- * {@code lib/core/sync/stock_movement_ids.dart}; namespace and names must stay byte-identical.</p>
+ * {@code keevo/app/packages/keevo_core/lib/sync/stock_movement_ids.dart}; namespace and names must stay byte-identical.</p>
  *
  * <p>Pure Java — NO Spring/JPA imports.</p>
  */

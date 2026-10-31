@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../../domain/model/inventory_scope.dart';
 import '../../domain/model/inventory_session_model.dart';
 

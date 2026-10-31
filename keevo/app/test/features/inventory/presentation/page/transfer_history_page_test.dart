@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/inventory/domain/model/stock_transfer_model.dart';
 import 'package:keevo/features/inventory/domain/repository/stock_transfer_repository.dart';
@@ -15,6 +12,8 @@ import 'package:keevo/features/inventory/presentation/provider/stock_transfer_pr
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:mocktail/mocktail.dart';
 
 import '../../../../helpers/no_technical_text.dart';
 

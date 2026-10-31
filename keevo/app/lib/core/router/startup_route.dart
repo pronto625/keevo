@@ -1,11 +1,11 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:keevo_core/auth/jwt_claims.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/storage/secure_storage_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../auth/jwt_claims.dart';
 import '../auth/session_refresher.dart';
-import '../di/providers.dart';
-import '../storage/app_constants.dart';
-import '../storage/secure_storage_provider.dart';
 
 /// Secure-storage key of the access token.
 const kAccessTokenKey = 'jwt_token';

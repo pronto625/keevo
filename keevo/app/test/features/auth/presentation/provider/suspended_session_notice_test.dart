@@ -8,7 +8,7 @@ import 'package:keevo/core/network/auth_interceptor.dart';
 import 'package:keevo/core/router/app_router.dart';
 import 'package:keevo/features/auth/domain/repository/token_storage.dart';
 
-import 'package:keevo/core/widget/notice_throttle.dart';
+import 'package:keevo_core/widget/notice_throttle.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 
 class _MockTokenStorage extends Mock implements TokenStorage {}

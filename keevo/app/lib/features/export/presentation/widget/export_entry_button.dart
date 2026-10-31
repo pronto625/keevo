@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../../domain/model/export_models.dart';
 
 /// « Exporter » app-bar button (v1s-18-4): opens the « Exporter » screen

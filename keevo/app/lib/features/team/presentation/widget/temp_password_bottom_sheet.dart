@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../util/employee_whatsapp.dart';
 
 /// Shows the one-time temporary password bottom sheet (Story 3.5, AC1).

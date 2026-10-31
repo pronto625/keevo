@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_constants.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 
 /// Persists the ID of the store chosen as the active context in Settings.
 ///

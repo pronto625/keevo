@@ -1,14 +1,13 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../../team/presentation/provider/employee_provider.dart';
 import '../../data/datasource/local_report_history_datasource.dart';
 import '../../data/datasource/remote_report_history_datasource.dart';
 import '../../data/repository/report_history_repository_impl.dart';
 import '../../domain/model/report_history_model.dart';
 import '../../domain/repository/report_history_repository.dart';
-import '../../../team/presentation/provider/employee_provider.dart';
 
 part 'report_history_providers.g.dart';
 

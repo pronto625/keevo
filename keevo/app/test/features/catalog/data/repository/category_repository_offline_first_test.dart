@@ -8,12 +8,12 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
-import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/features/catalog/data/repository/category_repository_impl.dart';
 import 'package:keevo/features/catalog/domain/repository/category_repository.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
 

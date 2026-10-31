@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../../domain/model/sector_type.dart';
 import '../widget/onboarding_progress_dots.dart';
 import '../widget/sector_tile.dart';

@@ -1,8 +1,8 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
-import '../../../../core/storage/search_fold.dart';
-import '../../../../core/storage/sql_like.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/storage/search_fold.dart';
+import 'package:keevo_core/storage/sql_like.dart';
 import '../../domain/model/client_model.dart';
 
 /// LocalClientDataSource — Drift-backed offline-first client store (Story 2.5).

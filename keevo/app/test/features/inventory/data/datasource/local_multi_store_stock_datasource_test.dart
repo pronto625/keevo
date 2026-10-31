@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/inventory/data/datasource/local_multi_store_stock_datasource.dart';
 import 'package:keevo/features/inventory/domain/model/store_product_stock_model.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
 void _overrideSqlite3ForLinuxTesting() {

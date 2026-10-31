@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../../domain/model/store_product_stock_model.dart';
 
 /// StoreProductStockTile — a single product-stock row inside an expanded StoreStockCard.

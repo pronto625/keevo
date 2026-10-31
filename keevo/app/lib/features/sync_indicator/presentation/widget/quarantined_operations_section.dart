@@ -3,19 +3,19 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/storage/search_fold.dart';
+import 'package:keevo_core/sync/held_operations.dart';
+import 'package:keevo_core/sync/sync_quarantine_service.dart';
+import 'package:keevo_core/sync/sync_rejection_messages.dart';
+import 'package:keevo_core/sync/sync_rejection_policy.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_database.dart';
-import '../../../../core/storage/search_fold.dart';
-import '../../../../core/sync/held_operations.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
-import '../../../../core/sync/sync_quarantine_service.dart';
-import '../../../../core/sync/sync_rejection_messages.dart';
-import '../../../../core/sync/sync_rejection_policy.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
 
 /// Shares an export text and tells whether it left the device: false when
 /// the share sheet was dismissed. Overridden in tests.

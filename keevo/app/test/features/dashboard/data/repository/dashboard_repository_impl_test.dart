@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/features/dashboard/data/datasource/local_dashboard_datasource.dart';
 import 'package:keevo/features/dashboard/data/datasource/remote_dashboard_datasource.dart';
 import 'package:keevo/features/dashboard/data/repository/dashboard_repository_impl.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockLocalDashboardDatasource extends Mock

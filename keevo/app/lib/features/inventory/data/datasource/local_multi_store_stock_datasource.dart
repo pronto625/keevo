@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
-import '../../../../core/storage/search_fold.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/storage/search_fold.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
 

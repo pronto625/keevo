@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';
 

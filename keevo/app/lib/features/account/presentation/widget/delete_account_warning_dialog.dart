@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 /// Step 1 of the FR91 flow (Story 14.5, AC7): irreversible-action warning.
 ///

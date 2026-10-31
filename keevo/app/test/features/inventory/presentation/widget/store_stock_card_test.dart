@@ -2,16 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
-
 import 'package:keevo/features/inventory/domain/model/store_product_stock_model.dart';
 import 'package:keevo/features/inventory/domain/model/store_stock_summary_model.dart';
 import 'package:keevo/features/inventory/domain/repository/multi_store_stock_repository.dart';
 import 'package:keevo/features/inventory/presentation/provider/global_stock_provider.dart';
 import 'package:keevo/features/inventory/presentation/widget/store_stock_card.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockRepo extends Mock implements MultiStoreStockRepository {}
 

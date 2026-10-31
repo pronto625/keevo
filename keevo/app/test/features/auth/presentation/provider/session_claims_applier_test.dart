@@ -5,21 +5,20 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/features/settings/domain/model/subscription_info.dart';
-import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqlite3/open.dart';
-
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
-import 'package:keevo/core/storage/app_constants.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
+import 'package:keevo/features/settings/domain/model/subscription_info.dart';
+import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/open.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 

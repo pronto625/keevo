@@ -2,11 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/lang_toggle.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import '../../../../core/storage/app_constants.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/lang_toggle.dart';
 
 /// Onboarding welcome screen — affiché uniquement au premier lancement.
 ///

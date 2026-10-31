@@ -1,15 +1,16 @@
 import 'dart:typed_data';
 
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
+import 'package:keevo_core/utils/server_date.dart';
+
 import '../../domain/exception/product_exception.dart';
 import '../../domain/model/csv_import_result.dart';
 import '../../domain/model/product_model.dart';
 import '../../domain/model/product_response_dto.dart';
 import '../../domain/model/product_status.dart';
 import '../../domain/repository/product_repository.dart';
-import '../../../../core/sync/connectivity_service.dart';
-import '../../../../core/sync/sync_service.dart';
-import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../datasource/local_product_datasource.dart';
 import '../datasource/remote_csv_import_datasource.dart';
 import '../datasource/remote_product_datasource.dart';

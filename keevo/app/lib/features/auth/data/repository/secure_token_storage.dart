@@ -1,6 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../../../../core/storage/secure_storage_provider.dart';
+import 'package:keevo_core/storage/secure_storage_provider.dart';
 import '../../domain/repository/token_storage.dart';
 
 /// SecureTokenStorage — Implementation of [TokenStorage] using flutter_secure_storage.

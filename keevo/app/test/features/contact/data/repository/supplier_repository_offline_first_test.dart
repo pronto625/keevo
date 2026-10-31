@@ -9,13 +9,13 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/contact/data/datasource/local_supplier_datasource.dart';
 import 'package:keevo/features/contact/data/datasource/remote_supplier_datasource.dart';
 import 'package:keevo/features/contact/data/repository/supplier_repository_impl.dart';
 import 'package:keevo/features/contact/domain/model/supplier_model.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
 

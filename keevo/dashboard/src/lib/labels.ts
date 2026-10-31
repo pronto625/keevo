@@ -43,7 +43,7 @@ function lookup(map: Record<string, string>, code: string | null | undefined, fa
   return isCode(key.toUpperCase()) ? humanizeCode(key) : fallback;
 }
 
-// Copied from keevo/app/lib/core/sync/sync_rejection_messages.dart (friendlySyncOperationLabel).
+// Copied from keevo/app/packages/keevo_core/lib/sync/sync_rejection_messages.dart (friendlySyncOperationLabel).
 const OPERATION_LABELS: Record<string, string> = {
   CREATE_PRODUCT: "Création de produit",
   CREATE_DRAFT_PRODUCT: "Création de produit brouillon",
@@ -86,7 +86,7 @@ export function operationLabel(code: string | null | undefined): string {
   return lookup(OPERATION_LABELS, code, "Opération");
 }
 
-// Copied from keevo/app/lib/core/sync/sync_rejection_messages.dart (friendlySyncRejectionReason).
+// Copied from keevo/app/packages/keevo_core/lib/sync/sync_rejection_messages.dart (friendlySyncRejectionReason).
 const REJECTION_REASON_LABELS: Record<string, string> = {
   PRODUCT_NAME_ALREADY_EXISTS: "Un produit avec ce nom existe déjà",
   PLAN_LIMIT_EXCEEDED: "Limite du forfait atteinte",

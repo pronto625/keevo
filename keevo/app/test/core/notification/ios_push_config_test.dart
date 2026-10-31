@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:keevo/core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 // v1s-16-2 / v1s-16-18: iOS push and release configuration that cannot be
 // checked by a build on the Linux host.
@@ -166,8 +166,8 @@ void main() {
     });
 
     test('iOS orientations match Android', () {
-      final dartLocks = Directory('lib')
-          .listSync(recursive: true)
+      final dartLocks = [Directory('lib'), Directory('packages/keevo_core/lib')]
+          .expand((d) => d.listSync(recursive: true))
           .whereType<File>()
           .where((f) => f.path.endsWith('.dart'))
           .where((f) => f.readAsStringSync().contains('setPreferredOrientations'))

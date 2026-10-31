@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/team/data/datasource/local_employee_datasource.dart';
 import 'package:keevo/features/team/data/datasource/remote_employee_datasource.dart';
 import 'package:keevo/features/team/data/repository/employee_repository_impl.dart';
 import 'package:keevo/features/team/domain/model/create_employee_result.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockRemoteEmployeeDataSource extends Mock

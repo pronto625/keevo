@@ -7,10 +7,11 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/reports/presentation/page/reports_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

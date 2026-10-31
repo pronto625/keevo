@@ -1,6 +1,6 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 
 part 'client_model.freezed.dart';
 part 'client_model.g.dart';

@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
-import 'package:keevo/core/photo/product_photo_cache.dart';
 import 'package:keevo/core/photo/product_photo_providers.dart';
 import 'package:keevo/core/widget/product_photo.dart';
+import 'package:keevo_core/photo/product_photo_cache.dart';
 
 /// Resolves server URLs from a fixed map — no network, no path_provider.
 class _FakeCache extends ProductPhotoCache {

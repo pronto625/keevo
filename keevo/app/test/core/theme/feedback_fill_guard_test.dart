@@ -32,12 +32,13 @@ void main() {
       multiLine: true,
     );
     final lineComment = RegExp(r'(^|\s)//[^\n]*');
-    const themeFile = 'lib/core/theme/app_theme.dart';
+    const themeFile = 'packages/keevo_core/lib/theme/app_theme.dart';
     final offenders = <String>[];
 
     expect(Directory('lib').existsSync(), isTrue, reason: 'run from keevo/app');
-    final files = Directory('lib')
-        .listSync(recursive: true)
+    // Story 15.4a — the app and the keevo_core kernel package.
+    final files = [Directory('lib'), Directory('packages/keevo_core/lib')]
+        .expand((d) => d.listSync(recursive: true))
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))
         .toList();

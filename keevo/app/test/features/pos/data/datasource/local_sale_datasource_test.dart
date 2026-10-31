@@ -3,18 +3,17 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/stock_movement_ids.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:sqlite3/open.dart';
-
 // LocalSaleDataSource depends on AppDatabase which requires Drift in-memory.
 // These tests use mocktail to verify the datasource contract without a real DB.
 // Full integration tests with in-memory Drift are in smoke/integration suites.
 
-import 'package:keevo/core/storage/app_database.dart' hide Sale, SaleItem;
+import 'package:keevo_core/storage/app_database.dart' hide Sale, SaleItem;
+import 'package:keevo_core/sync/stock_movement_ids.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 class MockAppDatabase extends Mock implements AppDatabase {}
 

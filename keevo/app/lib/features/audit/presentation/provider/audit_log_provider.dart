@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart' show OrderingTerm;
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../domain/model/audit_entry_dto.dart';
 import '../../domain/model/audit_filter.dart';
 import 'audit_provider.dart';

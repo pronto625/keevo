@@ -3,9 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../provider/dashboard_providers.dart';
 import '../widget/sales_evolution_chart.dart';

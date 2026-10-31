@@ -1,13 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/photo/company_logo_compressor.dart';
+import 'package:keevo_core/photo/product_photo_cache.dart';
+import 'package:keevo_core/photo/product_photo_compressor.dart';
+import 'package:keevo_core/photo/product_photo_files.dart';
+import 'package:keevo_core/sync/product_photo_outbox.dart';
 
 import '../../features/auth/presentation/provider/auth_provider.dart';
-import '../di/providers.dart';
-import '../sync/product_photo_outbox.dart';
-import 'company_logo_compressor.dart';
-import 'product_photo_cache.dart';
-import 'product_photo_compressor.dart';
-import 'product_photo_files.dart';
 
 /// Camera / gallery picker of product photos (overridden in tests).
 final productPhotoPickerProvider =

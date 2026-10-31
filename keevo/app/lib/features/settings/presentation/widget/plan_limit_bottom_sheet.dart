@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 
 /// FREE plan limits per entity — mirror of the backend `PlanType.FREE(1, 500,
 /// 3)` (stores, products, employees). v1s-16-13: the single source for the

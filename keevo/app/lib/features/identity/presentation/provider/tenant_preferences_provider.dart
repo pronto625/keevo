@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/services/api_service.dart';
+import 'package:keevo_core/services/api_service.dart';
 import '../../data/repository/tenant_preferences_repository_impl.dart';
 import '../../domain/model/tenant_preferences_model.dart';
 import '../../domain/repository/tenant_preferences_repository.dart';

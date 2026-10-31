@@ -6,13 +6,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/auth/jwt_claims.dart';
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
-import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
+import 'package:keevo_core/auth/jwt_claims.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../helpers/fake_entitlements.dart';

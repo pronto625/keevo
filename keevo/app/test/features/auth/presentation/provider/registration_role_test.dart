@@ -2,14 +2,13 @@ import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/domain/model/registration_result.dart';
 import 'package:keevo/features/auth/domain/usecase/register_user_usecase.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockRegisterUseCase extends Mock implements RegisterUserUseCase {}
 

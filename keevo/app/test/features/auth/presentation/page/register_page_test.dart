@@ -3,14 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/domain/model/registration_result.dart';
 import 'package:keevo/features/auth/domain/usecase/register_user_usecase.dart';
 import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 

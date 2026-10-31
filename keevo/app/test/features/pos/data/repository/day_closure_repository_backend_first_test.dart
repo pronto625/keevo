@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/pos/data/datasource/local_day_closure_datasource.dart';
 import 'package:keevo/features/pos/data/datasource/remote_day_closure_datasource.dart';
 import 'package:keevo/features/pos/data/repository/day_closure_repository_impl.dart';
 import 'package:keevo/features/pos/domain/exception/day_already_closed_exception.dart';
 import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalDayClosureDataSource extends Mock

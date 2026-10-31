@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/date_range_clamp.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/date_range_clamp.dart';
 import '../export_presenter.dart';
 
 /// Shared pieces of the export forms — « Exporter » (v1s-18-4) and « Données

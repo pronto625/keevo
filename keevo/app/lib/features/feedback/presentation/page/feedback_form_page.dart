@@ -6,9 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../data/service/screenshot_compressor.dart';
 import '../../domain/model/feedback_submission.dart';
 import '../../domain/model/feedback_type.dart';

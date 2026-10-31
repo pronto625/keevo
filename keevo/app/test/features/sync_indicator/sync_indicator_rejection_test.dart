@@ -3,14 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/sync/sync_gate_provider.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
-import 'package:keevo/core/sync/sync_status.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
-import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_status.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 /// v1s-16-12: a rejection whose local change was undone says so.
 void main() {

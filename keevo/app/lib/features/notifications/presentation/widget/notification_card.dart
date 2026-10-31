@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../domain/model/notification_model.dart';
 
 /// A single notification card — Story 8.0.

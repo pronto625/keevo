@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_gap_report_model.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_gap_row_model.dart';
 import 'package:keevo/features/inventory/presentation/page/inventory_gap_report_page.dart';
 import 'package:keevo/features/inventory/presentation/provider/gap_report_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 InventoryGapReportModel _makeReport({
   String sessionStatus = 'IN_PROGRESS',

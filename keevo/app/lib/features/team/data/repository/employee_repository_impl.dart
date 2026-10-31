@@ -2,8 +2,8 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 
-import '../../../../core/sync/connectivity_service.dart';
-import '../../../../core/sync/sync_service.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import '../../domain/exception/employee_action_requires_connection_exception.dart';
 import '../../domain/model/create_employee_result.dart';
 import '../../domain/model/employee_activity.dart';

@@ -5,7 +5,7 @@ import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/day_summary_bottom_sheet.dart';
 import 'package:keevo/features/pos/domain/usecase/close_day_usecase.dart';
-import 'package:keevo/core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockCloseDayUseCase extends Mock implements CloseDayUseCase {}

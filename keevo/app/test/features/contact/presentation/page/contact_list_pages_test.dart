@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/sync/held_operations.dart';
+import 'package:keevo/features/catalog/domain/model/product_model.dart';
+import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/domain/model/supplier_model.dart';
 import 'package:keevo/features/contact/domain/repository/client_repository.dart';
@@ -12,9 +11,9 @@ import 'package:keevo/features/contact/presentation/page/client_form_page.dart';
 import 'package:keevo/features/contact/presentation/page/client_list_page.dart';
 import 'package:keevo/features/contact/presentation/page/supplier_form_page.dart';
 import 'package:keevo/features/contact/presentation/page/supplier_list_page.dart';
-import 'package:keevo/features/catalog/domain/model/product_model.dart';
-import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
+import 'package:keevo_core/sync/held_operations.dart';
+import 'package:mocktail/mocktail.dart';
 
 class _MockClientRepository extends Mock implements ClientRepository {}
 

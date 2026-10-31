@@ -1,4 +1,4 @@
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,10 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/sync/domain/sync_conflict_provider.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
-import '../../../../core/sync/sync_status.dart';
-import '../../../../core/sync/sync_status_provider.dart';
+import 'package:keevo_core/sync/sync_status.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
-import '../../../../core/storage/app_constants.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 
 /// Enhanced bottom sheet with sync monitoring details (AC1).
 ///

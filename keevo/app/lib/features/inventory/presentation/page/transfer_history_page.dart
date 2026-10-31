@@ -1,8 +1,8 @@
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/di/providers.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
-import '../../../../core/widget/soft_icon_button.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/widget/soft_icon_button.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,7 +16,7 @@ import '../../domain/model/stock_transfer_model.dart';
 import '../provider/global_stock_provider.dart';
 import '../provider/stock_transfer_provider.dart';
 import '../widget/transfer_form_bottom_sheet.dart';
-import '../../../../core/widget/entitlement_upgrade.dart';
+import 'package:keevo_core/widget/entitlement_upgrade.dart';
 
 /// TransferHistoryPage — paginated list of inter-store stock transfers.
 ///

@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../../../../core/notification/fcm_service.dart';
 import '../../../../features/auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_notification_datasource.dart';

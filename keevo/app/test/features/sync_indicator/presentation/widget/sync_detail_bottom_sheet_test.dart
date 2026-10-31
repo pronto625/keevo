@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
-import 'package:keevo/core/sync/sync_status.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
+import 'package:keevo_core/sync/sync_status.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/domain/sync_conflict_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_detail_bottom_sheet.dart';
 

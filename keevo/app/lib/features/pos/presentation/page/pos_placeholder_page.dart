@@ -2,11 +2,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_constants.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../../features/sync_indicator/presentation/widget/sync_indicator.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
 import '../widget/pos_app_bar.dart';

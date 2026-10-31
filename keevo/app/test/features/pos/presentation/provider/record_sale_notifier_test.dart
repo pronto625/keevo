@@ -3,15 +3,15 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/account_read_only_exception.dart';
+import 'package:keevo_core/sync/account_read_only_exception.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
-import 'package:keevo/core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:keevo/core/storage/app_database.dart'
+import 'package:keevo_core/storage/app_database.dart'
     show AppDatabase, ProductsCompanion;
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_gate_provider.dart';
-import 'package:keevo/core/storage/app_constants.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:keevo/features/catalog/data/datasource/local_product_datasource.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';

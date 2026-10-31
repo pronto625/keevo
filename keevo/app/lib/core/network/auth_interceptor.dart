@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:keevo_core/auth/jwt_claims.dart';
 
 import '../../features/auth/domain/repository/token_storage.dart';
-import '../auth/jwt_claims.dart';
 import '../auth/session_refresher.dart';
 
 /// AuthInterceptor — Dio interceptor handling JWT injection and session renewal.

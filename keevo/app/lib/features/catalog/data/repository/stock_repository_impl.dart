@@ -1,13 +1,13 @@
 import 'dart:developer' as dev;
 
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';
 import '../../domain/repository/stock_repository.dart';
-import '../../../../core/sync/sync_service.dart';
-import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../datasource/local_stock_datasource.dart';
 import '../datasource/remote_stock_datasource.dart';
 

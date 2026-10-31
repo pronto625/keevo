@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/sync/sync_status.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/features/pos/presentation/page/pos_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/sync_status.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

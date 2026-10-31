@@ -5,13 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/storage/app_constants.dart';
-import 'package:keevo/core/sync/sync_gate_provider.dart';
-import 'package:keevo/core/sync/sync_gate_state.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_required_modal.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_gate_state.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Fake SyncTriggerNotifier ──────────────────────────────────────────────────

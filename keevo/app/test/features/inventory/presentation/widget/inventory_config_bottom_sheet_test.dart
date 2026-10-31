@@ -3,11 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/network/module_entitlement_exception.dart';
-import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/inventory/domain/repository/inventory_session_repository.dart';
 import 'package:keevo/features/inventory/presentation/provider/inventory_session_provider.dart';
@@ -15,6 +10,10 @@ import 'package:keevo/features/inventory/presentation/widget/inventory_config_bo
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:mocktail/mocktail.dart';
 
 class _MockSessionRepo extends Mock implements InventorySessionRepository {}
 

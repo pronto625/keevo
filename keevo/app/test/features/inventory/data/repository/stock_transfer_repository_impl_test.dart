@@ -2,15 +2,15 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:sqlite3/open.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/inventory/data/datasource/local_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/stock_transfer_repository_impl.dart';
 import 'package:keevo/features/inventory/domain/model/stock_transfer_model.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 class _MockLocal extends Mock implements LocalStockTransferDataSource {
   // Runs the transactional block directly (no database behind the mock).

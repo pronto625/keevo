@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/held_operations.dart';
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/widget/store_card.dart';
+import 'package:keevo_core/sync/held_operations.dart';
 
 /// Story 13.8b — a store created/changed while its module is off stays listed
 /// with a French badge (no code); the address line is kept.

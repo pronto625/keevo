@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/domain/sync_conflict.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
+import 'package:keevo_core/sync/domain/sync_conflict.dart';
 
 /// Story 5.3 Task 13.1 — Tests for conflict handling in push flow.
 ///

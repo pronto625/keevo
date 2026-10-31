@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../../core/router/startup_route.dart';
-import '../../../../core/storage/app_constants.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../domain/model/sector_type.dart';
 import '../provider/onboarding_provider.dart';

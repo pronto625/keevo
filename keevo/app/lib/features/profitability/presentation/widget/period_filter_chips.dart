@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/widget/date_range_clamp.dart';
+import 'package:keevo_core/widget/date_range_clamp.dart';
 
 /// Period preset of the profitability screens.
 enum PeriodPreset { today, last7, last30, custom }

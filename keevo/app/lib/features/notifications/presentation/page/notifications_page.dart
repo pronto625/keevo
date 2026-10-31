@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 
 import '../../domain/model/notification_model.dart';
 import '../provider/notification_provider.dart';

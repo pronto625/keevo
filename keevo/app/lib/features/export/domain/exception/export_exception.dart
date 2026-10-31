@@ -1,4 +1,4 @@
-import '../../../../core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 
 /// ExportException — every export failure, mapped to a French message in one
 /// place (v1s-18-4).

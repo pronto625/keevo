@@ -3,13 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/page/checkout_page.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/cart_bottom_sheet.dart';
 import 'package:keevo/features/pos/presentation/widget/pos_speed_dial.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 /// v1s-16-17 — POS feedback fills: every speed-dial option icon and the
 /// disabled cart CTA label use the foreground matching their own fill

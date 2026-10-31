@@ -1,4 +1,4 @@
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 
 /// CategoryModel — Domain model for hierarchical categories.
 ///

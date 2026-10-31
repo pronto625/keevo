@@ -9,13 +9,14 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/extension/extension_actions.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
-import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/domain/repository/sale_repository.dart';
 import 'package:keevo/features/pos/presentation/page/sale_detail_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 import '../../../../helpers/fake_entitlements.dart';

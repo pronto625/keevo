@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';

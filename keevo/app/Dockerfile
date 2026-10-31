@@ -85,8 +85,10 @@ WORKDIR /app
 COPY . .
 
 # ─── Dependencies + code generation ───────────────────────────────────────────
+# Pub workspace (Story 15.4a): one `pub get` resolves the app and
+# packages/keevo_core; `melos generate` runs code generation kernel first.
 RUN flutter pub get \
-    && flutter pub run build_runner build --delete-conflicting-outputs
+    && dart run melos generate
 
 # ─── Release APK build ────────────────────────────────────────────────────────
 # key.properties is read by android/app/build.gradle.kts at build time.

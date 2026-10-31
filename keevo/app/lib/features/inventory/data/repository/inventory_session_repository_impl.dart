@@ -1,11 +1,11 @@
 import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/network/module_entitlement_exception.dart';
-import '../../../../core/sync/connectivity_service.dart';
-import '../../../../core/sync/sync_service.dart';
 import '../../domain/model/inventory_session_model.dart';
 import '../../domain/repository/inventory_session_repository.dart';
 import '../datasource/local_inventory_session_datasource.dart';

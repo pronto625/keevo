@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../../audit/domain/audit_format.dart';
 import '../../domain/local/local_export_schema.dart';
 

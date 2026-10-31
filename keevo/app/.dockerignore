@@ -41,3 +41,7 @@ coverage/
 
 # ─── Documentation ────────────────────────────────────────────────────────────
 README.md
+
+# ─── Workspace packages (Story 15.4a) — nested build / tool dirs ─────────────
+**/build/
+**/.dart_tool/

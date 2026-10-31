@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/audit/domain/exception/audit_exception.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
@@ -13,6 +12,7 @@ import 'package:keevo/features/audit/presentation/page/audit_log_page.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_log_provider.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
 import '../../../../helpers/no_technical_text.dart';
 import 'audit_test_helpers.dart';

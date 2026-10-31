@@ -6,10 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
-import '../../../../core/storage/app_constants.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../provider/auth_provider.dart';
-import '../../../../core/widget/phone_validation.dart';
+import 'package:keevo_core/widget/phone_validation.dart';
 
 /// ForgotPasswordPage — Story 14.12 — Forgot password OTP request screen.
 ///

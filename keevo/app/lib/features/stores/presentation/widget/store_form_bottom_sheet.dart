@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 import '../../domain/exception/store_exception.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/sync/held_operations.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/held_operation_badge.dart';
+import 'package:keevo_core/sync/held_operations.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/held_operation_badge.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';
 import 'store_type_icon.dart';

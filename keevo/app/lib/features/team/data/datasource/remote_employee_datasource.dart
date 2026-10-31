@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 import '../../domain/model/create_employee_result.dart';
 import '../../domain/model/employee_activity.dart';
 import '../../domain/model/employee_model.dart';

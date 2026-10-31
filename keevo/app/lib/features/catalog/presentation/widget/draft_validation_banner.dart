@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../provider/product_provider.dart';
 
 /// DraftValidationBanner — shown in [CatalogPage] AppBar when pending drafts exist.

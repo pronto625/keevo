@@ -17,11 +17,12 @@ void main() {
     // A `//` starts a comment only at line start or after whitespace, so a
     // URL inside a string ('https://…') does not hide the rest of the line.
     final lineComment = RegExp(r'(^|\s)//');
-    const themeFile = 'lib/core/theme/app_theme.dart';
+    const themeFile = 'packages/keevo_core/lib/theme/app_theme.dart';
     final offenders = <String>[];
 
-    final files = Directory('lib')
-        .listSync(recursive: true)
+    // Story 15.4a — the app and the keevo_core kernel package.
+    final files = [Directory('lib'), Directory('packages/keevo_core/lib')]
+        .expand((d) => d.listSync(recursive: true))
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))
         .toList();

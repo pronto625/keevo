@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../domain/exception/report_exception.dart';
 import '../../domain/model/report_history_model.dart';
-import '../../../../core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 
 /// RemoteReportHistoryDataSource — fetches reports from the backend REST API.
 /// Story 7.2 — Task 17.

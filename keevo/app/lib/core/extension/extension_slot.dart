@@ -2,12 +2,12 @@ import 'dart:async' show DeferredLoadException;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/deferred_widget.dart';
 
 import '../../features/auth/presentation/provider/auth_provider.dart';
-import '../entitlements/entitlements.dart';
 import '../entitlements/entitlements_provider.dart';
-import '../widget/app_error_widget.dart';
-import '../widget/deferred_widget.dart';
 import 'extension_actions.dart';
 
 /// Extension point of the POS checkout, filled after a completed sale

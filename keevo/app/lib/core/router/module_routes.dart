@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../entitlements/entitlements.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
 import '../entitlements/entitlements_provider.dart';
 
 /// Story 15.2 — route registry: module id → the app route patterns of that

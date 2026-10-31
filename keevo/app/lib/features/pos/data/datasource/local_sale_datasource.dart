@@ -1,10 +1,10 @@
 import 'dart:math';
 
 import 'package:drift/drift.dart';
+import 'package:keevo_core/storage/app_database.dart' hide Sale, SaleItem;
+import 'package:keevo_core/sync/stock_movement_ids.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
-import '../../../../core/sync/stock_movement_ids.dart';
 import '../../domain/model/sale_model.dart';
 
 /// LocalSaleDataSource — persists sale data in Drift (SQLCipher).

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/inventory_session_model.dart';
 
 /// LocalInventorySessionDataSource — Drift-backed offline store for inventory sessions.

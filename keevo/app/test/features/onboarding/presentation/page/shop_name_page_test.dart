@@ -3,11 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:keevo/core/auth/session_refresher.dart';
-import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/onboarding/domain/exception/onboarding_exception.dart';
 import 'package:keevo/features/onboarding/domain/model/onboarding_result.dart';
@@ -15,6 +11,9 @@ import 'package:keevo/features/onboarding/domain/model/sector_type.dart';
 import 'package:keevo/features/onboarding/domain/usecase/complete_onboarding_usecase.dart';
 import 'package:keevo/features/onboarding/presentation/page/shop_name_page.dart';
 import 'package:keevo/features/onboarding/presentation/provider/onboarding_provider.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 

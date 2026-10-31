@@ -3,12 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/sync/held_operations.dart';
-import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
@@ -19,6 +14,11 @@ import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart
 import 'package:keevo/features/catalog/presentation/widget/product_card.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/held_operations.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeStockRepository implements StockRepository {
   final List<StockLevelModel> levels;

@@ -1,10 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/features/reports/data/datasource/local_report_history_datasource.dart';
 import 'package:keevo/features/reports/data/datasource/remote_report_history_datasource.dart';
 import 'package:keevo/features/reports/data/repository/report_history_repository_impl.dart';
 import 'package:keevo/features/reports/domain/model/report_history_model.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 import 'package:mocktail/mocktail.dart';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────

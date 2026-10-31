@@ -7,13 +7,13 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/domain/repository/dashboard_repository.dart';
 import 'package:keevo/features/dashboard/presentation/page/dashboard_page.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo/features/dashboard/presentation/widget/total_revenue_card.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

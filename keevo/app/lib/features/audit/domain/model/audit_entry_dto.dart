@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:freezed_annotation/freezed_annotation.dart';
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 
 part 'audit_entry_dto.freezed.dart';
 part 'audit_entry_dto.g.dart';

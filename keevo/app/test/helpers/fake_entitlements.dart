@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
 
 /// Story 15.1 — [EntitlementsNotifier] with the device and the network
 /// replaced: the seed is [seed], the server answer comes from [fetch] (throw to

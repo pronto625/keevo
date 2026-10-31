@@ -1,7 +1,7 @@
-import '../../../../core/services/api_service.dart';
+import 'package:keevo_core/services/api_service.dart';
 import '../../domain/model/tenant_preferences_model.dart';
 import '../../domain/repository/tenant_preferences_repository.dart';
-import '../../../../core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 
 /// TenantPreferencesRepositoryImpl — Implémentation du repository.
 class TenantPreferencesRepositoryImpl implements TenantPreferencesRepository {

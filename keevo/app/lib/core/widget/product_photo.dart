@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../photo/product_photo_files.dart';
+import 'package:keevo_core/photo/product_photo_files.dart';
 import '../photo/product_photo_providers.dart';
 
 /// A product photo thumbnail (catalogue, POS grid, inventory rows) or

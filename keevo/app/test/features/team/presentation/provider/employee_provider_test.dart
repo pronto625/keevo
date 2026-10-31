@@ -1,13 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/sync/account_read_only_exception.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo/features/team/domain/model/create_employee_result.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
+import 'package:keevo_core/sync/account_read_only_exception.dart';
+import 'package:mocktail/mocktail.dart';
 
 class _MockEmployeeRepository extends Mock implements EmployeeRepository {}
 

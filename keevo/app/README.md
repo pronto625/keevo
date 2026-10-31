@@ -5,8 +5,8 @@ Application mobile Keevo (Flutter).
 ## Développement local
 
 ```bash
-flutter pub get
-dart run build_runner build --delete-conflicting-outputs
+dart run melos bootstrap   # = flutter pub get (workspace)
+dart run melos generate    # build_runner : keevo_core puis l'app
 flutter run
 ```
 
@@ -14,6 +14,45 @@ Sans `--dart-define=API_BASE_URL=…`, les builds debug et profile visent
 `http://localhost:4500` (backend local ; sur un appareil physique :
 `adb reverse tcp:4500 tcp:4500`). Une autre URL peut être passée avec
 `--dart-define=API_BASE_URL=http://<hôte>:4500`.
+
+## Workspace (Melos 7 / pub workspace)
+
+`keevo/app` est la racine d'un workspace Dart : l'app (package `keevo`) et
+`packages/keevo_core` (noyau partagé : thème, base Drift, sync, réseau,
+widgets communs), importé via `package:keevo_core/...`.
+
+```
+keevo/app/
+├── lib/                    app : composition, features, « app shell » (lib/core)
+├── test/
+└── packages/keevo_core/    noyau sans feature (lib/, test/, build.yaml Drift)
+```
+
+Melos est une dev dependency (pas d'installation globale) :
+
+```bash
+dart run melos bootstrap   # = flutter pub get à la racine
+dart run melos generate    # build_runner, keevo_core d'abord puis l'app
+dart run melos analyze     # flutter analyze lib test, package par package
+dart run melos test        # tests package par package, dossier par dossier
+```
+
+Règle d'extraction (fermeture des dépendances) : un fichier de `lib/core` va
+dans `keevo_core` seulement si tout ce qu'il importe (transitivement) y va
+aussi et que rien n'importe `lib/features/**` ni `package:keevo/...`.
+`test/architecture/core_package_boundary_test.dart` échoue sinon.
+
+Restent dans l'app (`lib/core`, « app shell ») les fichiers couplés aux
+features : routeur (`app_router`, `module_routes`, `deep_link_navigation`,
+`startup_route`, `session_presence_cache`, `module_unavailable_page`),
+`di/providers.dart` (`syncServiceProvider`, `syncDiagnosticRunnerProvider`,
+`currentUserIdProvider`, `currentDeviceIdProvider` — les autres providers
+noyau sont dans `keevo_core/di/core_providers.dart`), `main_shell`,
+`shell_banners`, `session_refresher`, `auth_interceptor`, `entitlements_provider`,
+`extension/`, `fcm_service`, `product_photo_providers` + `widget/product_photo`,
+et dans `sync/` : `rest_sync_service`, `sync_trigger_notifier`,
+`riverpod_sync_trigger_dispatcher`, `sync_gate_guard`,
+`sync_monitoring_providers`, `domain/sync_conflict_provider`.
 
 ## Build release (Play Store)
 

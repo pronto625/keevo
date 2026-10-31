@@ -3,12 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/router/app_router.dart';
 import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo/features/onboarding/presentation/page/terms_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// v1s-16-13: read-only CGU view opened from the register form.
 void main() {

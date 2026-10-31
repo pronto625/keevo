@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/scaffold/shell_tab_back_scope.dart';
+import 'package:keevo_core/sync/auto_closure_notification_checker.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 import '../../features/catalog/presentation/provider/product_provider.dart';
 import '../../features/inventory/presentation/provider/global_stock_provider.dart';
@@ -15,11 +19,8 @@ import '../../features/stores/presentation/provider/store_provider.dart';
 import '../di/providers.dart';
 import '../router/app_router.dart';
 import '../router/module_routes.dart';
-import '../theme/app_theme.dart';
-import '../sync/auto_closure_notification_checker.dart';
 import '../sync/sync_trigger_notifier.dart';
 import 'shell_banners.dart';
-import 'shell_tab_back_scope.dart';
 
 /// MainShell — persistent bottom navigation scaffold wrapping the main sections.
 ///

@@ -3,8 +3,8 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/inventory/data/datasource/local_inventory_count_datasource.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
 /// buildOfflineProductRows: the counting scope is driven by the products, so a

@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../../domain/model/seller_leaderboard_model.dart';
 

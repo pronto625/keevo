@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/day_closure_model.dart' as domain;
 
 /// LocalDayClosureDataSource — Drift operations for day closures.

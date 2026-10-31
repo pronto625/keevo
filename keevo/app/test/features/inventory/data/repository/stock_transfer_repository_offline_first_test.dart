@@ -6,9 +6,9 @@ library;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/inventory/domain/exception/insufficient_stock_exception.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/inventory/data/datasource/local_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_stock_transfer_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/stock_transfer_repository_impl.dart';

@@ -1,11 +1,11 @@
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/sync/domain/sync_conflict.dart';
+import 'package:keevo_core/sync/domain/sync_conflict.dart';
 import '../../../../core/sync/domain/sync_conflict_provider.dart';
 
 /// SyncConflictLogPage — Displays the list of sync conflicts for OWNER review.

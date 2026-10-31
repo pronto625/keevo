@@ -3,15 +3,14 @@ import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/features/profitability/domain/repository/profitability_repository.dart';
 import 'package:keevo/features/profitability/presentation/page/seller_leaderboard_page.dart';
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
 import 'package:keevo/features/reports/presentation/page/owner_reports_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 

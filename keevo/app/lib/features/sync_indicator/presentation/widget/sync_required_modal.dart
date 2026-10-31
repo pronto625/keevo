@@ -1,14 +1,14 @@
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/sync/sync_gate_provider.dart';
-import '../../../../core/sync/sync_gate_state.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_gate_state.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
-import '../../../../core/sync/sync_status_provider.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
 
 /// SyncRequiredModal — blocking dialog shown when [SyncGateState.blocked].
 ///

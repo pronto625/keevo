@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/module_routes.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
 import '../../../auth/presentation/provider/sign_out_service.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';

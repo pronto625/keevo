@@ -1,7 +1,7 @@
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/sync/sync_service.dart';
-import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/feedback_submission.dart';
 import '../../domain/repository/feedback_repository.dart';
 

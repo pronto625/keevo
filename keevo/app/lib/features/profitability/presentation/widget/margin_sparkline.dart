@@ -1,6 +1,6 @@
 import 'dart:math' show min;
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 import '../../domain/model/product_profitability_model.dart';

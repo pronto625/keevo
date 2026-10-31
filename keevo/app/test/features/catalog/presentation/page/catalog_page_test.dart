@@ -2,14 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/presentation/page/catalog_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 

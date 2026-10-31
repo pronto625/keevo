@@ -1,15 +1,9 @@
 import 'dart:ffi';
 
 import 'package:dio/dio.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:sqlite3/open.dart';
-
+import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/catalog/data/repository/category_repository_impl.dart';
 import 'package:keevo/features/catalog/domain/model/category_model.dart';
@@ -17,6 +11,12 @@ import 'package:keevo/features/catalog/domain/repository/category_repository.dar
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo/features/identity/domain/model/tenant_preferences_model.dart';
 import 'package:keevo/features/identity/presentation/provider/tenant_preferences_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 /// Simple mock implementation of CategoryRepository for testing
 class MockCategoryRepository implements CategoryRepository {

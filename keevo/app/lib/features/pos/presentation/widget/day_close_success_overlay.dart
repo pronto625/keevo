@@ -1,4 +1,4 @@
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';

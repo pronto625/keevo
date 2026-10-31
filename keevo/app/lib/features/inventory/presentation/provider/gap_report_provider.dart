@@ -1,9 +1,8 @@
 import 'dart:developer' as dev;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_gap_report_datasource.dart';
 import '../../domain/model/inventory_gap_report_model.dart';

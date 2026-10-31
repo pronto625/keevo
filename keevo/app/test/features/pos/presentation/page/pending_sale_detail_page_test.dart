@@ -4,7 +4,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/catalog/domain/repository/product_repository.dart';
@@ -14,6 +13,7 @@ import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/domain/repository/sale_repository.dart';
 import 'package:keevo/features/pos/presentation/page/pending_sale_detail_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

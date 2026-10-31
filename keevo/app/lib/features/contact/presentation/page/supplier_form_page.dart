@@ -4,11 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/storage/search_fold.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/contact_validation.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/storage/search_fold.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/contact_validation.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../../catalog/domain/model/product_model.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../domain/model/supplier_model.dart';

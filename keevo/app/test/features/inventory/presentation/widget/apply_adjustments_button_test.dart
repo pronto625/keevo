@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_gap_report_model.dart';
 import 'package:keevo/features/inventory/presentation/widget/apply_adjustments_button.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
 void main() {
   final summary = const InventoryGapSummaryModel(

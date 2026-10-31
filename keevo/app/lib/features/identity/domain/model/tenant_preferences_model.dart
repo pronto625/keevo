@@ -1,4 +1,4 @@
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 import '../../../onboarding/domain/model/sector_type.dart';
 
 /// Normalise une heure en format HH:mm:ss — Java sérialise LocalTime.of(20,0) → "20:00" sans secondes.

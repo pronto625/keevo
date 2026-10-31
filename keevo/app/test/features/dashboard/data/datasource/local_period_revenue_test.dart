@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/dashboard/data/datasource/local_dashboard_datasource.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
 /// « Chiffre d'affaires total » computed offline: period boundaries, status

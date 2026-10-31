@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../../account/presentation/page/delete_account_page.dart';
 import '../../../account/presentation/widget/delete_account_warning_dialog.dart';
 import '../../../account/presentation/widget/deletion_pending_banner.dart';

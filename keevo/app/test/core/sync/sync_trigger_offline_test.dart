@@ -3,18 +3,18 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:keevo/core/auth/session_refresher.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/sync/account_read_only_exception.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_event_logger.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/account_read_only_exception.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_event_logger.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockSyncService extends Mock implements SyncService {}
 

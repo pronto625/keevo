@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_button.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_button.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../provider/product_provider.dart';
 import '../provider/category_provider.dart';
 import '../provider/csv_import_provider.dart';

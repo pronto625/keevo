@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/cross_store_availability_model.dart';
 import '../../domain/model/stock_level_model.dart';
 import '../../domain/model/stock_movement_model.dart';

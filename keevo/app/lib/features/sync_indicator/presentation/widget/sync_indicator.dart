@@ -1,18 +1,19 @@
-import '../../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_gate_state.dart';
+import 'package:keevo_core/sync/sync_rejection_messages.dart';
+import 'package:keevo_core/sync/sync_status.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/sync/sync_gate_provider.dart';
-import '../../../../core/sync/sync_gate_state.dart';
 import '../../../../core/sync/sync_monitoring_providers.dart';
-import '../../../../core/sync/sync_rejection_messages.dart';
+import '../../../../core/sync/sync_trigger_notifier.dart';
 import 'sync_detail_bottom_sheet.dart';
 import 'sync_required_modal.dart';
-import '../../../../core/sync/sync_status.dart';
-import '../../../../core/sync/sync_status_provider.dart';
-import '../../../../core/sync/sync_trigger_notifier.dart';
 
 /// SyncIndicator — AppBar widget showing real-time connectivity + sync state.
 ///

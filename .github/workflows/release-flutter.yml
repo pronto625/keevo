@@ -49,9 +49,10 @@ jobs:
         working-directory: keevo/app
         run: flutter pub get
 
-      - name: Run code generation (Freezed / Drift / Riverpod)
+      # Story 15.4a — kernel (keevo_core, Drift) first, then the app.
+      - name: Run code generation (keevo_core, then app)
         working-directory: keevo/app
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: dart run melos generate
 
       - name: Decode release keystore
         working-directory: keevo/app/android/app
@@ -151,9 +152,9 @@ jobs:
   #       working-directory: keevo/app
   #       run: flutter pub get
 
-  #     - name: Run code generation
+  #     - name: Run code generation (keevo_core, then app)
   #       working-directory: keevo/app
-  #       run: flutter pub run build_runner build --delete-conflicting-outputs
+  #       run: dart run melos generate
 
   #     - name: Import distribution certificate & provisioning profile
   #       env:

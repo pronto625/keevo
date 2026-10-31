@@ -1,6 +1,6 @@
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../../features/auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_audit_datasource.dart';
 import '../../data/datasource/remote_audit_datasource.dart';

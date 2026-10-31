@@ -1,7 +1,7 @@
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/held_operation_badge.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/held_operation_badge.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,6 +15,7 @@ import '../provider/stock_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../pos/presentation/provider/pos_providers.dart';
 import '../../../pos/presentation/provider/day_closure_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../../../../core/di/providers.dart';
 import 'cross_store_availability_bottom_sheet.dart';
 import '../../../../core/widget/product_photo.dart';

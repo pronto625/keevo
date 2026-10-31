@@ -2,10 +2,10 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
 import '../../data/remote_export_datasource.dart';

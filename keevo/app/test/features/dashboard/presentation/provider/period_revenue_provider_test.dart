@@ -1,11 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/dashboard/data/datasource/local_dashboard_datasource.dart';
 import 'package:keevo/features/dashboard/data/datasource/remote_dashboard_datasource.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

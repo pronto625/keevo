@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../di/providers.dart';
-import 'connectivity_service.dart';
-import 'sync_trigger_dispatcher.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'sync_trigger_notifier.dart';
 
 /// Concrete implementation: delegates to [SyncTriggerNotifier.triggerPush()]

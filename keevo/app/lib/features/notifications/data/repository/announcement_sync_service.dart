@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/storage/app_constants.dart';
 import '../../domain/model/notification_model.dart';
 import '../datasource/local_notification_datasource.dart';
 import '../datasource/remote_announcement_datasource.dart';

@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -8,8 +8,8 @@ import '../../data/datasource/remote_inventory_session_datasource.dart';
 import '../../data/repository/inventory_session_repository_impl.dart';
 import '../../domain/model/inventory_session_model.dart';
 import '../../domain/repository/inventory_session_repository.dart';
-import '../../domain/usecase/create_inventory_session_usecase.dart';
 import '../../domain/usecase/cancel_inventory_session_usecase.dart';
+import '../../domain/usecase/create_inventory_session_usecase.dart';
 
 part 'inventory_session_provider.g.dart';
 

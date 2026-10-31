@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
+import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../../core/auth/jwt_claims.dart';
 import '../../../auth/domain/repository/token_storage.dart';
 import '../../domain/model/deletion_pending_status.dart';
 import '../../domain/repository/account_deletion_repository.dart';

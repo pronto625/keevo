@@ -1,16 +1,25 @@
 name: keevo
 description: Keevo — Gestion d'inventaire et de ventes pour commerçants au Cameroun.
 publish_to: 'none'
-version: 2.0.10+82
+version: 2.0.11+83
 
 environment:
-  sdk: '>=3.3.0 <4.0.0'
+  sdk: '>=3.6.0 <4.0.0'
+
+# Story 15.4a — Dart pub workspace (Melos 7): this app is the workspace root;
+# shared kernel in packages/keevo_core. `flutter pub get` here resolves all.
+workspace:
+  - packages/keevo_core
 
 dependencies:
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+
+  # Shared kernel (theme, Drift storage, sync, network, common widgets).
+  keevo_core:
+    path: packages/keevo_core
 
   # State management
   flutter_riverpod: ^2.5.1
@@ -103,8 +112,37 @@ dev_dependencies:
   # sqlite3 is now a main dependency — kept here only for the record.
   # sqlite3: ^2.4.7  # moved to dependencies
 
+  # Workspace tooling (run: dart run melos <script>)
+  melos: ^7.0.0
+
   # App icon generation (run: dart run flutter_launcher_icons)
   flutter_launcher_icons: ^0.14.3
+
+# Melos 7 reads its config here (workspace root pubspec). Melos is a dev
+# dependency, not a global tool: run `dart run melos <command>` from here.
+melos:
+  # The app (this root package) is a workspace package too.
+  useRootAsPackage: true
+  scripts:
+    generate:
+      description: >-
+        Code generation, kernel first (Drift database of keevo_core), then the
+        app (Riverpod/Freezed/JSON) — the only place this order is written.
+      run: >-
+        cd packages/keevo_core
+        && dart run build_runner build --delete-conflicting-outputs
+        && cd "$MELOS_ROOT_PATH"
+        && dart run build_runner build --delete-conflicting-outputs
+    analyze:
+      description: flutter analyze (lib + test) in each package, one at a time.
+      run: dart run melos exec --concurrency 1 -- flutter analyze --no-fatal-infos lib test
+    test:
+      description: >-
+        Tests of each package, one package at a time and one test folder at
+        a time (never the whole suite in one run) — tool/test_chunked.sh.
+      run: >-
+        dart run melos exec --concurrency 1 --fail-fast --dir-exists=test --
+        bash "$MELOS_ROOT_PATH/tool/test_chunked.sh"
 
 flutter_launcher_icons:
   android: "ic_launcher"

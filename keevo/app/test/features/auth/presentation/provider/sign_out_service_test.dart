@@ -1,28 +1,28 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:keevo/features/auth/domain/repository/token_storage.dart';
-import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
-import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/features/settings/domain/model/subscription_info.dart';
-import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
-import 'package:keevo/core/storage/app_constants.dart';
-import 'package:keevo/core/sync/sync_service.dart';
+import 'package:keevo/core/notification/fcm_service.dart';
+import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
+import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
+import 'package:keevo/features/auth/domain/repository/token_storage.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/auth/presentation/provider/sign_out_service.dart';
 import 'package:keevo/features/notifications/data/datasource/remote_device_token_datasource.dart';
-import 'package:keevo/core/notification/fcm_service.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
+import 'package:keevo/features/settings/domain/model/subscription_info.dart';
+import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 

@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:keevo_core/storage/secure_storage_provider.dart';
 
 import '../../features/auth/presentation/provider/auth_provider.dart';
-import '../storage/secure_storage_provider.dart';
 import 'startup_route.dart';
 
 /// Router-side cache of the session secrets, so the global auth guard does

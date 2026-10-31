@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../domain/model/tenant_preferences_model.dart';
 import 'tenant_preferences_provider.dart';
-import '../../../../core/widget/app_error_widget.dart' show appErrorMessage;
+import 'package:keevo_core/widget/app_error_widget.dart' show appErrorMessage;
 
 /// State for report preferences editing.
 class ReportPreferencesState {

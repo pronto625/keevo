@@ -1,10 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../../core/sync/sync_gate_guard.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
+import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../data/datasource/local_product_datasource.dart';
 import '../../data/datasource/remote_csv_import_datasource.dart';
 import '../../data/datasource/remote_product_datasource.dart';
@@ -12,7 +14,6 @@ import '../../data/repository/product_repository_impl.dart';
 import '../../domain/model/product_model.dart';
 import '../../domain/model/product_status.dart';
 import '../../domain/repository/product_repository.dart';
-import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/usecase/archive_product_usecase.dart';
 import '../../domain/usecase/create_product_usecase.dart';
 import '../../domain/usecase/get_products_usecase.dart';

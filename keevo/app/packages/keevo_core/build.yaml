@@ -1,0 +1,11 @@
+targets:
+  $default:
+    builders:
+      # Drift code generation (same options as the app — storage moved here
+      # in Story 15.4a).
+      drift_dev:
+        options:
+          sql:
+            dialects:
+              - sqlite
+          store_date_time_values_as_text: true

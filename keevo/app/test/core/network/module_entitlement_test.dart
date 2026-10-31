@@ -3,14 +3,13 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-
 import 'package:keevo/core/network/auth_interceptor.dart';
-import 'package:keevo/core/network/module_entitlement_exception.dart';
-import 'package:keevo/core/network/retry_interceptor.dart';
-import 'package:keevo/core/services/api_service.dart';
-import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/features/auth/domain/repository/token_storage.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/network/retry_interceptor.dart';
+import 'package:keevo_core/services/api_service.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:mocktail/mocktail.dart';
 
 // 13.10b — 403 MODULE_NOT_ENTITLED / MODULE_READ_ONLY become a typed
 // refusal with a French message; never a logout, a renewal or a retry.

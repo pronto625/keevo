@@ -8,20 +8,13 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sqlite3/open.dart';
-
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/router/app_router.dart';
 import 'package:keevo/core/router/deep_link_navigation.dart';
 import 'package:keevo/core/router/module_routes.dart';
 import 'package:keevo/core/router/module_unavailable_page.dart';
 import 'package:keevo/core/router/session_presence_cache.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
-import 'package:keevo/core/widget/deferred_widget.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show flutterSecureStorageProvider;
 import 'package:keevo/features/contact/presentation/page/client_list_page.dart';
@@ -29,6 +22,12 @@ import 'package:keevo/features/invoicing/domain/model/invoice.dart';
 import 'package:keevo/features/invoicing/presentation/page/invoice_detail_page.dart';
 import 'package:keevo/features/invoicing/presentation/provider/invoicing_providers.dart';
 import 'package:keevo/features/pos/presentation/page/sale_success_page.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/widget/deferred_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqlite3/open.dart';
 
 import '../../helpers/fake_entitlements.dart';
 

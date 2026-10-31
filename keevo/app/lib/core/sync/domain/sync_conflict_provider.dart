@@ -1,7 +1,7 @@
+import 'package:keevo_core/sync/domain/sync_conflict.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../features/auth/presentation/provider/auth_provider.dart';
-import 'sync_conflict.dart';
 
 part 'sync_conflict_provider.g.dart';
 

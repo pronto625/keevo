@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../entitlements/entitlements.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
 import '../entitlements/entitlements_provider.dart';
 
 /// Locations of the bottom-navigation tabs (the `ShellRoute` in

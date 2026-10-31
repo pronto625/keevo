@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-
-import 'package:keevo/core/router/app_router.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
+import 'package:keevo/core/router/app_router.dart';
 import 'package:keevo/core/router/deep_link_navigation.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
 
 import '../../helpers/fake_entitlements.dart';
 

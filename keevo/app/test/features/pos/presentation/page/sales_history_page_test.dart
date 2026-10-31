@@ -8,8 +8,9 @@ import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/presentation/page/sales_history_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/sync/held_operations.dart';
+import 'package:keevo_core/sync/held_operations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

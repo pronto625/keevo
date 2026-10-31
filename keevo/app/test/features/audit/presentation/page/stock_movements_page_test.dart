@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/audit/presentation/page/stock_movements_page.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/audit/presentation/widget/stock_history_widget.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audit_test_helpers.dart';
 

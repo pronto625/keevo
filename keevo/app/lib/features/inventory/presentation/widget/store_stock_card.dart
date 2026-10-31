@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/di/providers.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../../catalog/presentation/widget/cross_store_availability_bottom_sheet.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';

@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/sync/account_read_only_exception.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
 
 import '../../features/settings/presentation/provider/account_status_provider.dart';
-import 'account_read_only_exception.dart';
-import 'sync_gate_provider.dart';
 
-export 'account_read_only_exception.dart';
+export 'package:keevo_core/sync/account_read_only_exception.dart';
 
 /// SyncGateGuard — Template Method pattern for write protection.
 ///

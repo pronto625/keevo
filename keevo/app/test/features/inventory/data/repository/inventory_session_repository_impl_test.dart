@@ -1,12 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/network/module_entitlement_exception.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/inventory/data/datasource/local_inventory_session_datasource.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_inventory_session_datasource.dart';
 import 'package:keevo/features/inventory/data/repository/inventory_session_repository_impl.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_session_model.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockLocal extends Mock implements LocalInventorySessionDataSource {

@@ -1,8 +1,8 @@
-import '../../../../core/di/providers.dart';
-import '../../../../core/storage/search_fold.dart';
-import '../../../../core/sync/account_read_only_exception.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/search_fold.dart';
+import 'package:keevo_core/sync/account_read_only_exception.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

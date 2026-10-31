@@ -1,15 +1,14 @@
-export '../../../../core/storage/app_constants.dart' show kUserFirstNameKey;
-
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_constants.dart';
-import '../../../../core/sync/connectivity_service.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_dashboard_datasource.dart';
 import '../../data/datasource/remote_dashboard_datasource.dart';
@@ -17,6 +16,8 @@ import '../../data/repository/dashboard_repository_impl.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../../domain/model/motivational_message_service.dart';
 import '../../domain/repository/dashboard_repository.dart';
+
+export 'package:keevo_core/storage/app_constants.dart' show kUserFirstNameKey;
 
 /// SharedPreferences key for motivational message dismissal date.
 const kMotivationalDismissedDate = 'motivational_dismissed_date';

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../../domain/model/sector_type.dart';
 
 /// Static, presentation-only captions for each [SectorType] — purely

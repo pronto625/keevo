@@ -1,5 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 import 'inventory_gap_row_model.dart';
 
 part 'inventory_gap_report_model.freezed.dart';

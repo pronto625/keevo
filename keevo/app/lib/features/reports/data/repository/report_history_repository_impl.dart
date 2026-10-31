@@ -4,7 +4,7 @@ import '../../domain/model/report_history_model.dart';
 import '../../domain/repository/report_history_repository.dart';
 import '../datasource/local_report_history_datasource.dart';
 import '../datasource/remote_report_history_datasource.dart';
-import '../../../../core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 
 /// ReportHistoryRepositoryImpl — Backend-First-When-Online strategy.
 /// Story 7.2 — Task 18.

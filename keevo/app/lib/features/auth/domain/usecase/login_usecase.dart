@@ -1,4 +1,4 @@
-import '../../../../core/auth/jwt_claims.dart';
+import 'package:keevo_core/auth/jwt_claims.dart';
 import '../exception/auth_exception.dart';
 import '../model/login_result.dart';
 import '../repository/auth_repository.dart';

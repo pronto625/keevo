@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../../data/local/local_export_reader.dart';
 import '../../data/local/local_export_service.dart';
 

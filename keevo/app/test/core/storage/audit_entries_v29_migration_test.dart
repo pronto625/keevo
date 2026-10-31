@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/audit/data/datasource/local_audit_datasource.dart';
 import 'package:keevo/features/audit/domain/model/audit_filter.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
 /// v1s-18-7 — a device at schema 28 upgrades to 29: the five audit

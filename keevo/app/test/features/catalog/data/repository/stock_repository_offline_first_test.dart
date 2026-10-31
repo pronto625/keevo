@@ -5,13 +5,13 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/catalog/data/datasource/local_stock_datasource.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_stock_datasource.dart';
 import 'package:keevo/features/catalog/data/repository/stock_repository_impl.dart';
 import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
 import 'package:keevo/features/catalog/domain/model/stock_movement_model.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalStockDataSource extends Mock implements LocalStockDataSource {

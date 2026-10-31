@@ -1,11 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/feedback/data/repository/feedback_repository_impl.dart';
 import 'package:keevo/features/feedback/domain/model/feedback_submission.dart';
 import 'package:keevo/features/feedback/domain/model/feedback_type.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
+import 'package:mocktail/mocktail.dart';
 
 class _MockSyncService extends Mock implements SyncService {}
 

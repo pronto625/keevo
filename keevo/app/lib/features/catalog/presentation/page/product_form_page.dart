@@ -1,20 +1,18 @@
-import '../../../../core/router/module_routes.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/discard_changes_dialog.dart';
-import '../../../../core/widget/soft_icon_button.dart';
-import '../../../../core/photo/product_photo_compressor.dart';
-import '../../../../core/photo/product_photo_providers.dart';
-import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
-import '../../../../core/widget/product_photo.dart';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:keevo_core/photo/product_photo_compressor.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/discard_changes_dialog.dart';
+import 'package:keevo_core/widget/soft_icon_button.dart';
 
+import '../../../../core/photo/product_photo_providers.dart';
+import '../../../../core/router/module_routes.dart';
+import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
+import '../../../../core/widget/product_photo.dart';
 import '../../../contact/domain/model/supplier_model.dart';
 import '../../../contact/presentation/provider/contact_provider.dart';
 import '../../domain/exception/product_exception.dart';

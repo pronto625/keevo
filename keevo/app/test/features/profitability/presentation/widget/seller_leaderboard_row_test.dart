@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:keevo/core/theme/app_theme.dart';
 import 'package:keevo/features/profitability/domain/model/seller_leaderboard_model.dart';
 import 'package:keevo/features/profitability/presentation/widget/seller_leaderboard_row.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 /// v1s-14-2 — one row of the « Équipe » leaderboard.
 void main() {

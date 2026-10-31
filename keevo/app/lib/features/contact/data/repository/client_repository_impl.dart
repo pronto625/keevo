@@ -1,10 +1,10 @@
 import 'dart:developer' as dev;
 
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/storage/app_database.dart';
-import '../../../../core/sync/sync_service.dart';
-import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/model/client_model.dart';
 import '../../domain/repository/client_repository.dart';
 import '../datasource/local_client_datasource.dart';

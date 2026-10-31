@@ -1,11 +1,11 @@
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart';
-import '../../../../core/widget/soft_icon_badge.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
+import 'package:keevo_core/widget/soft_icon_badge.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../../../catalog/domain/model/product_model.dart';
 import '../../../catalog/presentation/provider/product_provider.dart';
 import '../../../catalog/presentation/provider/stock_provider.dart';
@@ -13,7 +13,7 @@ import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../../sync_indicator/presentation/widget/sync_required_modal.dart';
-import '../../../../core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
 import '../provider/global_stock_provider.dart';
 import '../provider/stock_transfer_provider.dart';
 import '../../domain/exception/insufficient_stock_exception.dart';

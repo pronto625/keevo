@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
 /// TotalRevenueCard — « Chiffre d'affaires total » of the owner dashboard:

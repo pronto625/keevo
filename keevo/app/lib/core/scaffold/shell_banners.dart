@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/scaffold/offline_gate_banner.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_gate_state.dart';
 
 import '../../features/account/presentation/provider/account_deletion_provider.dart';
 import '../../features/account/presentation/widget/deletion_pending_banner.dart';
 import '../../features/settings/presentation/provider/account_status_provider.dart';
 import '../../features/settings/presentation/widget/suspension_banner.dart';
 import '../../features/sync_indicator/presentation/widget/sync_warning_banner.dart';
-import '../sync/sync_gate_provider.dart';
-import '../sync/sync_gate_state.dart';
 import '../sync/sync_trigger_notifier.dart';
-import 'offline_gate_banner.dart';
 
 /// The banners [MainShell] can show above the page, highest priority first
 /// (v1s-16-13). Only one shows at a time so the content stays visible on

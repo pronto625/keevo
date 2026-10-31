@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-
-import 'package:keevo/core/sync/sync_status.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
-import 'package:keevo/features/profitability/presentation/widget/offline_data_banner.dart';
-import 'package:keevo/features/profitability/domain/model/product_profitability_model.dart';
 import 'package:keevo/features/profitability/domain/repository/profitability_repository.dart';
 import 'package:keevo/features/profitability/presentation/page/store_performance_page.dart';
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
+import 'package:keevo/features/profitability/presentation/widget/offline_data_banner.dart';
+import 'package:keevo_core/sync/sync_status.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
+import 'package:mocktail/mocktail.dart';
 
 class MockProfitabilityRepository extends Mock implements ProfitabilityRepository {}
 

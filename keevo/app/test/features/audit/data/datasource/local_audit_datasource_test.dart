@@ -2,11 +2,10 @@ import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/open.dart';
-
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/audit/data/datasource/local_audit_datasource.dart';
 import 'package:keevo/features/audit/domain/model/audit_filter.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:sqlite3/open.dart';
 
 /// v1s-18-7 — offline history: same filters as REST, offset paging, names
 /// resolved from the local stores / employees tables.

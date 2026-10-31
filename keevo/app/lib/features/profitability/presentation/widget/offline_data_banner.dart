@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 
 /// OfflineDataBanner — discreet banner shown by the report rankings
 /// (Boutiques, Équipe) when the data comes from the local Drift database.

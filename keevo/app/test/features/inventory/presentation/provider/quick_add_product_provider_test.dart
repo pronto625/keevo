@@ -3,15 +3,15 @@ import 'dart:ffi';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:sqlite3/open.dart';
-
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/sync_service.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_quick_add_datasource.dart';
 import 'package:keevo/features/inventory/presentation/provider/quick_add_product_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 void _overrideSqlite3ForLinuxTesting() {
   open.overrideFor(OperatingSystem.linux, () {

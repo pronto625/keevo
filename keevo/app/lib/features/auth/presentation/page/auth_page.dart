@@ -5,11 +5,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:intl_phone_field/phone_number.dart';
 
-import '../../../../core/di/providers.dart';
-import '../../../../core/storage/app_constants.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/lang_toggle.dart';
-import '../../../../core/widget/phone_validation.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/lang_toggle.dart';
+import 'package:keevo_core/widget/phone_validation.dart';
 import '../../domain/exception/auth_exception.dart';
 import '../../domain/model/login_result.dart';
 import '../provider/auth_provider.dart';

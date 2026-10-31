@@ -2,9 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/widget/app_error_widget.dart';
 import '../../domain/model/audit_entry_dto.dart';
 import '../audit_presenter.dart';
 import '../provider/audit_provider.dart';

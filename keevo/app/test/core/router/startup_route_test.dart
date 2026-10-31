@@ -2,13 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 import 'package:keevo/core/auth/session_refresher.dart';
 import 'package:keevo/core/router/startup_route.dart';
-import 'package:keevo/core/storage/app_constants.dart';
-import 'package:keevo/core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockRefresher extends Mock implements SessionRefresher {}
 

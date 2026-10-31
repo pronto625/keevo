@@ -10,10 +10,10 @@ import 'package:keevo/features/pos/data/datasource/remote_sale_datasource.dart';
 import 'package:keevo/features/pos/data/repository/sale_repository_impl.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
-import 'package:keevo/core/storage/app_database.dart' hide Sale, SaleItem;
-import 'package:keevo/core/sync/connectivity_service.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
+import 'package:keevo_core/storage/app_database.dart' hide Sale, SaleItem;
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockLocalSaleDataSource extends Mock implements LocalSaleDataSource {}

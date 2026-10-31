@@ -5,11 +5,11 @@ import 'dart:io';
 import 'package:drift/drift.dart' hide isNull;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/core/sync/riverpod_sync_trigger_dispatcher.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:sqlite3/open.dart';
 
 class _Online implements ConnectivityService {

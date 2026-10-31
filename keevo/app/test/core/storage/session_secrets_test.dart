@@ -1,8 +1,8 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_constants.dart';
-import 'package:keevo/core/storage/secure_storage_provider.dart';
 import 'package:keevo/features/auth/data/repository/secure_token_storage.dart';
+import 'package:keevo_core/storage/app_constants.dart';
+import 'package:keevo_core/storage/secure_storage_provider.dart';
 
 const _deviceSecrets = {
   kDbEncryptionKey: 'db-key',

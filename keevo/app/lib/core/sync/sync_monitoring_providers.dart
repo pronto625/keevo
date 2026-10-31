@@ -1,10 +1,10 @@
 import 'package:drift/drift.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_rejection_policy.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../features/auth/presentation/provider/auth_provider.dart';
-import '../di/providers.dart';
-import '../storage/app_database.dart';
-import 'sync_rejection_policy.dart';
 
 part 'sync_monitoring_providers.g.dart';
 

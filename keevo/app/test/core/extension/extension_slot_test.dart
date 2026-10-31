@@ -6,13 +6,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/entitlements/entitlements.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/extension/extension_actions.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
-import 'package:keevo/core/widget/deferred_widget.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show dioProvider;
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/widget/deferred_widget.dart';
 
 import '../../helpers/fake_entitlements.dart';
 

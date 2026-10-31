@@ -1,6 +1,6 @@
 import 'package:drift/drift.dart';
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/report_history_model.dart';
 
 /// LocalReportHistoryDataSource — reads/writes reports from local Drift DB.

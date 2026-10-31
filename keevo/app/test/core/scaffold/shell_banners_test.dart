@@ -2,14 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/scaffold/shell_banners.dart';
-import 'package:keevo/core/sync/sync_gate_provider.dart';
-import 'package:keevo/core/sync/sync_gate_state.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/account/domain/model/deletion_pending_status.dart';
 import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/sync_gate_provider.dart';
+import 'package:keevo_core/sync/sync_gate_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _IdleSyncTrigger extends SyncTriggerNotifier {

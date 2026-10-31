@@ -7,15 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
-
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/photo/company_logo_compressor.dart';
 import 'package:keevo/core/photo/product_photo_providers.dart';
-import 'package:keevo/core/sync/connectivity_service.dart';
 import 'package:keevo/features/settings/data/datasource/company_profile_api.dart';
 import 'package:keevo/features/settings/domain/model/company_profile.dart';
 import 'package:keevo/features/settings/presentation/page/company_page.dart';
 import 'package:keevo/features/settings/presentation/provider/company_profile_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/photo/company_logo_compressor.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 
 class _Connectivity implements ConnectivityService {
   _Connectivity(this.online);

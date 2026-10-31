@@ -2,18 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
-import 'package:keevo/features/pos/presentation/page/checkout_page.dart';
 import 'package:keevo/features/pos/domain/model/payment_mode_enum.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
+import 'package:keevo/features/pos/presentation/page/checkout_page.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/record_sale_notifier.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
 /// Records the sale at once (15.3: the success URI carries its id).
 class _SucceedingRecordSale extends RecordSaleNotifier {

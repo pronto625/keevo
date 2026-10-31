@@ -3,10 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:keevo/core/sync/domain/sync_conflict.dart';
 import 'package:keevo/core/sync/domain/sync_conflict_provider.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
-import 'package:keevo/core/widget/app_error_widget.dart';
 import 'package:keevo/features/pos/domain/model/sale_model.dart';
 import 'package:keevo/features/pos/presentation/page/sale_detail_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
@@ -16,6 +13,9 @@ import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/page/subscription_page.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
+import 'package:keevo_core/sync/domain/sync_conflict.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
+import 'package:keevo_core/widget/app_error_widget.dart';
 
 /// v1s-16-11 — error → tap "Réessayer" → data shown, on representative
 /// screens: a plain provider, a family provider, a sliver site and migrated

@@ -1,4 +1,4 @@
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../data/datasource/local_notification_datasource.dart';
 import '../../domain/model/notification_model.dart';
 import '../../domain/repository/notification_repository.dart';

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/di/core_providers.dart' show isOwnerSessionProvider;
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/widget/entitlement_upgrade.dart';
 
-import '../di/providers.dart' show isOwnerSessionProvider;
-import '../entitlements/entitlements.dart';
 import '../entitlements/entitlements_provider.dart';
-import '../widget/entitlement_upgrade.dart';
 
 /// Story 15.2 — « module non activé »: where the route guard sends a route of
 /// a module the tenant cannot read (direct navigation or deep link).

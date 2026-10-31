@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:keevo/core/storage/app_database.dart';
 import 'package:keevo/features/dashboard/data/datasource/local_dashboard_datasource.dart';
 import 'package:keevo/features/profitability/data/datasource/local_profitability_datasource.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
 String _d(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'

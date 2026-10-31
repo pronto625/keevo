@@ -1,7 +1,7 @@
-import '../../../../core/theme/app_theme.dart';
+import 'package:keevo_core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../core/utils/percent_format.dart';
+import 'package:keevo_core/utils/percent_format.dart';
 
 /// Widget de calcul de marge en temps réel.
 ///

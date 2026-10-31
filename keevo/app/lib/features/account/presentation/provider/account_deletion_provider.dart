@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../data/datasource/remote_account_deletion_datasource.dart';

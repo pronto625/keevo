@@ -3,12 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/network/module_entitlement_exception.dart';
 import 'package:keevo/features/reports/domain/exception/report_exception.dart';
 import 'package:keevo/features/reports/domain/model/report_history_model.dart';
 import 'package:keevo/features/reports/presentation/page/report_detail_page.dart';
 import 'package:keevo/features/reports/presentation/provider/report_history_providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 
 void main() {
   setUpAll(() async {

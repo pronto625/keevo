@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:keevo/core/storage/app_constants.dart';
 import 'package:keevo/features/onboarding/presentation/page/onboarding_page.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Widget _buildPage({ThemeMode themeMode = ThemeMode.light}) {

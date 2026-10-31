@@ -2,12 +2,13 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/di/providers.dart';
-import 'package:keevo/core/sync/sync_event_logger.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/sync/sync_event_logger.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 

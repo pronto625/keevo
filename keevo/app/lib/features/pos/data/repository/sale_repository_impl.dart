@@ -3,12 +3,12 @@ import 'dart:math';
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:keevo_core/storage/app_database.dart' hide Sale, SaleItem;
+import 'package:keevo_core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../../../core/storage/app_database.dart' hide Sale, SaleItem;
-import '../../../../core/sync/connectivity_service.dart';
-import '../../../../core/sync/sync_service.dart';
-import '../../../../core/sync/sync_trigger_dispatcher.dart';
 import '../../domain/exception/offline_action_not_supported_exception.dart';
 import '../../domain/model/payment_mode_enum.dart';
 import '../../domain/model/sale_model.dart';

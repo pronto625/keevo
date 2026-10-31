@@ -3,12 +3,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/photo/company_logo_compressor.dart';
+import 'package:keevo_core/theme/app_theme.dart';
+import 'package:keevo_core/widget/app_error_widget.dart' show appErrorMessage;
 
-import '../../../../core/di/providers.dart';
-import '../../../../core/photo/company_logo_compressor.dart';
 import '../../../../core/photo/product_photo_providers.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widget/app_error_widget.dart' show appErrorMessage;
 import '../../domain/model/company_profile.dart';
 import '../provider/company_profile_provider.dart';
 

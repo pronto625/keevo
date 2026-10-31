@@ -24,17 +24,27 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # keevo/app is a Melos 7 / pub workspace root (Story 15.4a):
+      # bootstrap (= pub get at the root) resolves the app and keevo_core.
       - name: Install dependencies
         working-directory: keevo/app
-        run: flutter pub get
+        run: dart run melos bootstrap
 
-      - name: Run code generation
+      - name: Run code generation (keevo_core, then app)
         working-directory: keevo/app
-        run: flutter pub run build_runner build --delete-conflicting-outputs
+        run: dart run melos generate
 
       - name: Analyze
         working-directory: keevo/app
         run: flutter analyze --no-pub --no-fatal-infos
+
+      - name: Analyze (keevo_core)
+        working-directory: keevo/app/packages/keevo_core
+        run: flutter analyze --no-pub --no-fatal-infos
+
+      - name: Test (keevo_core)
+        working-directory: keevo/app/packages/keevo_core
+        run: flutter test --no-pub --coverage
 
       - name: Test
         working-directory: keevo/app
@@ -45,4 +55,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: flutter-coverage
-          path: keevo/app/coverage/
+          path: |
+            keevo/app/coverage/
+            keevo/app/packages/keevo_core/coverage/

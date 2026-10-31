@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
 
-import '../../../../core/utils/server_date.dart';
+import 'package:keevo_core/utils/server_date.dart';
 import '../../domain/exception/store_exception.dart';
 import '../../domain/model/store_model.dart';
 import '../../domain/model/store_type.dart';

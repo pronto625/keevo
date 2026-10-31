@@ -4,8 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:mocktail/mocktail.dart';
-
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/domain/model/store_type.dart';
@@ -18,6 +16,8 @@ import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
 import 'package:keevo/features/team/presentation/widget/employee_card.dart';
 import 'package:keevo/features/team/presentation/widget/set_password_bottom_sheet.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:mocktail/mocktail.dart';
 
 class _MockEmployeeRepo extends Mock implements EmployeeRepository {}
 

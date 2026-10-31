@@ -1,5 +1,5 @@
-import '../../../../core/network/module_entitlement_exception.dart';
-import '../../../../core/sync/sync_service.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import '../../domain/model/store_product_stock_model.dart';
 import '../../domain/model/store_stock_summary_model.dart';
 import '../../domain/repository/multi_store_stock_repository.dart';

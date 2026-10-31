@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
-import '../../../../core/storage/app_database.dart';
+import 'package:keevo_core/storage/app_database.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 
 /// SQL expression giving the shop's local day (`YYYY-MM-DD`) of a Drift

@@ -2,13 +2,13 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 
-import '../../../../core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 import '../../domain/model/product_profitability_model.dart';
 import '../../domain/model/seller_leaderboard_model.dart';
 import '../../domain/repository/profitability_repository.dart';
 import '../datasource/local_profitability_datasource.dart';
 import '../datasource/remote_profitability_datasource.dart';
-import '../../../../core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/network/module_entitlement_exception.dart';
 
 /// ProfitabilityRepositoryImpl — Backend-First-When-Online strategy.
 ///

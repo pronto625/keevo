@@ -3,13 +3,13 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/auth/jwt_claims.dart';
+import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../features/auth/presentation/provider/auth_provider.dart';
-import '../auth/jwt_claims.dart';
-import '../di/providers.dart';
-import '../storage/app_constants.dart';
-import 'entitlements.dart';
 
 /// One answer of `GET /api/v1/tenants/me/modules`.
 typedef ModulesAnswer = ({

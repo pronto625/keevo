@@ -3,12 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/storage/search_fold.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../../../../core/storage/search_fold.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
 import '../../domain/model/csv_import_result.dart';
 import '../../domain/repository/product_repository.dart';

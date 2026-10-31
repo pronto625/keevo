@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../../../core/sync/connectivity_service.dart';
+import 'package:keevo_core/sync/connectivity_service.dart';
 import '../../domain/model/dashboard_snapshot.dart';
 import '../../domain/repository/dashboard_repository.dart';
 import '../datasource/local_dashboard_datasource.dart';

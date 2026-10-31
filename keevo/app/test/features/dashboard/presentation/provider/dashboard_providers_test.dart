@@ -7,7 +7,7 @@ import 'package:keevo/features/dashboard/domain/repository/dashboard_repository.
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:keevo/core/di/providers.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
 class _MockDashboardRepository extends Mock implements DashboardRepository {}
 

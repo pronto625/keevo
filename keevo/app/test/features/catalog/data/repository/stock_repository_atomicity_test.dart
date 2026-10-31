@@ -1,15 +1,14 @@
 import 'dart:ffi';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:sqlite3/open.dart';
-
-import 'package:keevo/core/storage/app_database.dart';
-import 'package:keevo/core/sync/sync_service.dart';
-import 'package:keevo/core/sync/sync_trigger_dispatcher.dart';
 import 'package:keevo/features/catalog/data/datasource/local_stock_datasource.dart';
 import 'package:keevo/features/catalog/data/datasource/remote_stock_datasource.dart';
 import 'package:keevo/features/catalog/data/repository/stock_repository_impl.dart';
+import 'package:keevo_core/storage/app_database.dart';
+import 'package:keevo_core/sync/sync_service.dart';
+import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:sqlite3/open.dart';
 
 class _MockRemote extends Mock implements RemoteStockDataSource {}
 
