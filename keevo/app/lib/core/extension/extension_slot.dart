@@ -136,7 +136,7 @@ final extensionContributionsProvider = FutureProvider.autoDispose
   // Kept for the session once it succeeded; released on failure.
   final keep = ref.keepAlive();
   ref.watch(entitlementsProvider
-      .select((value) => extensionCacheKey(value.valueOrNull)));
+      .select((value) => extensionCacheKey(value.value)));
   final fetch = ref.watch(extensionContributionsFetcherProvider);
   if (!ref.read(entitlementsProvider).hasValue) {
     // Module states still loading (app start): their first value changes
@@ -173,7 +173,7 @@ List<ExtensionContribution> renderableContributions(
 List<ExtensionContribution> visibleExtensionContributions(
     WidgetRef ref, String pointId) {
   final contributions =
-      ref.watch(extensionContributionsProvider(pointId)).valueOrNull;
+      ref.watch(extensionContributionsProvider(pointId)).value;
   if (contributions == null) return const [];
   return renderableContributions(
       contributions, ref.watch(extensionActionsProvider));

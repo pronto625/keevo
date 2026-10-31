@@ -7,7 +7,7 @@ part 'onboarding_result.freezed.dart';
 /// Immutable Freezed value object returned by [CompleteOnboardingUseCase].
 /// Mirrors the backend OnboardingResult record.
 @freezed
-class OnboardingResult with _$OnboardingResult {
+abstract class OnboardingResult with _$OnboardingResult {
   const factory OnboardingResult({
     required String tenantId,
     required String sectorType,

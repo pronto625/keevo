@@ -8,6 +8,7 @@ import 'package:keevo/features/catalog/presentation/provider/category_provider.d
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
@@ -22,6 +23,7 @@ Widget _buildPage({
   required SharedPreferences prefs,
 }) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       currentUserRoleProvider.overrideWith((ref) => currentUserRole),
@@ -59,7 +61,7 @@ Widget _buildPage({
   String? currentUserRole,
   required SharedPreferences prefs,
 }) {
-  final container = ProviderContainer(overrides: [
+  final container = ProviderContainer(retry: noProviderRetry, overrides: [
     sharedPreferencesProvider.overrideWithValue(prefs),
     currentUserRoleProvider.overrideWith((ref) => currentUserRole),
     productListProvider.overrideWith((ref) async => activeProducts),
@@ -374,6 +376,7 @@ void main() {
   testWidgets('category sheet shows a single drag handle', (tester) async {
     final prefs = await _setupPrefs(role: 'OWNER');
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWith((ref) => 'OWNER'),
@@ -421,6 +424,7 @@ void main() {
     var failing = true;
     final now = DateTime(2026);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWith((ref) => 'OWNER'),
@@ -473,6 +477,7 @@ void main() {
         {String role = 'OWNER'}) async {
       final prefs = await _setupPrefs(role: role);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           productListProvider.overrideWith((ref) async => const []),

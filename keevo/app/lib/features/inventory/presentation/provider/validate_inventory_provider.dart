@@ -62,10 +62,12 @@ class ValidateInventoryNotifier extends _$ValidateInventoryNotifier {
         adjustmentsApplied = await _validateOffline(sessionId);
       }
 
-      state = const AsyncData(null);
+      // Kept alive by [link]; guarded anyway (Riverpod 3 throws on a disposed
+      // notifier, e.g. container disposed at sign-out).
+      if (ref.mounted) state = const AsyncData(null);
       return adjustmentsApplied;
     } catch (e, st) {
-      state = AsyncError(e, st);
+      if (ref.mounted) state = AsyncError(e, st);
       rethrow;
     } finally {
       link.close();

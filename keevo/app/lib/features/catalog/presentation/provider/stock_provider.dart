@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -159,10 +160,11 @@ class StockNotifier extends _$StockNotifier {
       final levels = await ref
           .read(getStockLevelUseCaseProvider)
           .execute(productId);
-      if (generation != _loadGeneration) return; // superseded
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted || generation != _loadGeneration) return; // superseded
       state = state.copyWith(levels: levels, isLoading: false);
     } catch (e) {
-      if (generation != _loadGeneration) return; // superseded
+      if (!ref.mounted || generation != _loadGeneration) return; // superseded
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
@@ -188,6 +190,7 @@ class StockNotifier extends _$StockNotifier {
               from: from,
               to: to,
               page: page);
+      if (!ref.mounted) return;
       final hasMore = movements.length == 20;
       state = state.copyWith(
         movements: page == 0 ? movements : [...state.movements, ...movements],
@@ -195,6 +198,7 @@ class StockNotifier extends _$StockNotifier {
         hasMoreHistory: hasMore,
       );
     } catch (e) {
+      if (!ref.mounted) return;
       state = state.copyWith(isLoadingHistory: false, error: e.toString());
     }
   }
@@ -222,9 +226,10 @@ class StockNotifier extends _$StockNotifier {
             quantity: quantity,
             notes: notes,
           );
-      await _loadLevels();
+      if (ref.mounted) await _loadLevels();
       return true;
     } on AccountReadOnlyException catch (e) {
+      if (!ref.mounted) return false;
       // Backstop of the sync queue: nothing was written.
       state = state.copyWith(isLoading: false, readOnlyMessage: e.message);
       return false;
@@ -232,6 +237,7 @@ class StockNotifier extends _$StockNotifier {
       final msg = e is DioException && e.response?.statusCode == 404
           ? 'Produit introuvable sur le serveur. Validez le brouillon d\'abord.'
           : e.toString();
+      if (!ref.mounted) return false;
       state = state.copyWith(isLoading: false, error: msg);
       return false;
     }
@@ -260,12 +266,14 @@ class StockNotifier extends _$StockNotifier {
             newQuantity: newQuantity,
             notes: notes,
           );
-      await _loadLevels();
+      if (ref.mounted) await _loadLevels();
       return true;
     } on AccountReadOnlyException catch (e) {
+      if (!ref.mounted) return false;
       state = state.copyWith(isLoading: false, readOnlyMessage: e.message);
       return false;
     } catch (e) {
+      if (!ref.mounted) return false;
       state = state.copyWith(isLoading: false, error: e.toString());
       return false;
     }
@@ -279,9 +287,10 @@ class StockNotifier extends _$StockNotifier {
             productId: productId,
             minimumThreshold: minimumThreshold,
           );
-      await _loadLevels();
+      if (ref.mounted) await _loadLevels();
       return true;
     } catch (e) {
+      if (!ref.mounted) return false;
       state = state.copyWith(isLoading: false, error: e.toString());
       return false;
     }

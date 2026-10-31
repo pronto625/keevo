@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -228,6 +229,11 @@ class PeriodRevenueView {
 /// the dashboard summary when online; otherwise the device's aggregation,
 /// flagged [PeriodRevenueView.onDeviceOnly].
 final periodRevenueProvider = FutureProvider<PeriodRevenueView>((ref) async {
+  // Riverpod 3: dependencies are watched before the first await, except the
+  // local datasource — watching it opens the encrypted database, needed only
+  // on the device fallback. If this provider was rebuilt / disposed during
+  // the await, that late watch throws and ends a stale build Riverpod
+  // discards anyway.
   final period = ref.watch(revenuePeriodProvider);
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
   final fromSnapshot = snapshot.periodRevenue[period];
@@ -249,21 +255,29 @@ final periodRevenueProvider = FutureProvider<PeriodRevenueView>((ref) async {
 // ── Chart period providers ──────────────────────────────────
 
 /// Current chart period selection for the main dashboard.
-final chartPeriodProvider = StateProvider<ChartPeriod>((ref) => ChartPeriod.daily);
+final chartPeriodProvider =
+    NotifierProvider<SettableNotifier<ChartPeriod>, ChartPeriod>(
+  () => SettableNotifier(ChartPeriod.daily),
+);
 
 /// Number of days to display when period == daily (7 / 14 / 30).
-final chartDaysProvider = StateProvider<int>((ref) => 7);
+final chartDaysProvider = NotifierProvider<SettableNotifier<int>, int>(
+  () => SettableNotifier(7),
+);
 
 /// Chart data for the selected period (all stores).
 /// Online-first: uses the dashboard snapshot (remote → local fallback).
 /// Daily data is always zero-filled so every day appears in the chart.
 final chartDataProvider = FutureProvider<List<DailyCA>>((ref) async {
+  // Dependencies are watched before the first await: Riverpod 3 throws on a
+  // ref used after its provider was disposed / rebuilt meanwhile.
   final period = ref.watch(chartPeriodProvider);
+  final clock = ref.watch(dashboardClockProvider);
+  final days = ref.watch(chartDaysProvider);
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
-  final now = ref.watch(dashboardClockProvider)();
+  final now = clock();
   switch (period) {
     case ChartPeriod.daily:
-      final days = ref.watch(chartDaysProvider);
       // Zero-fill so days with no sales still appear as empty bars.
       final all = _zeroFillDailyCA(snapshot.dailyCALast30, 30, now);
       return all.length > days ? all.sublist(all.length - days) : all;
@@ -324,6 +338,11 @@ List<DailyCA> _zeroFillDailyCA(List<DailyCA> data, int totalDays, DateTime now) 
 /// Top 5 best-selling products this week — toutes boutiques confondues.
 /// Online-first: uses backend data from snapshot; falls back to local DB.
 final topProductsProvider = FutureProvider<List<TopProduct>>((ref) async {
+  // Riverpod 3: dependencies are watched before the first await, except the
+  // local datasource — watching it opens the encrypted database, needed only
+  // on the device fallback. If this provider was rebuilt / disposed during
+  // the await, that late watch throws and ends a stale build Riverpod
+  // discards anyway.
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
   if (snapshot.weeklyTopProducts.isNotEmpty) return snapshot.weeklyTopProducts;
   return ref.watch(localDashboardDatasourceProvider).getWeeklyTopProducts();
@@ -332,6 +351,11 @@ final topProductsProvider = FutureProvider<List<TopProduct>>((ref) async {
 /// Top 5 least-selling products this week — toutes boutiques confondues.
 /// Online-first: uses backend data from snapshot; falls back to local DB.
 final worstProductsProvider = FutureProvider<List<TopProduct>>((ref) async {
+  // Riverpod 3: dependencies are watched before the first await, except the
+  // local datasource — watching it opens the encrypted database, needed only
+  // on the device fallback. If this provider was rebuilt / disposed during
+  // the await, that late watch throws and ends a stale build Riverpod
+  // discards anyway.
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
   if (snapshot.weeklyWorstProducts.isNotEmpty) return snapshot.weeklyWorstProducts;
   return ref.watch(localDashboardDatasourceProvider).getWeeklyWorstProducts();
@@ -340,20 +364,29 @@ final worstProductsProvider = FutureProvider<List<TopProduct>>((ref) async {
 // ── Per-store providers (for store detail page) ─────────────
 
 /// Current chart period for a specific store detail.
-final storeChartPeriodProvider = StateProvider.family<ChartPeriod, String>(
-  (ref, storeId) => ChartPeriod.daily,
+final storeChartPeriodProvider =
+    NotifierProvider.family<SettableNotifier<ChartPeriod>, ChartPeriod, String>(
+  (storeId) => SettableNotifier(ChartPeriod.daily),
 );
 
 /// Day range for a specific store's daily chart (7 / 14 / 30).
-final storeChartDaysProvider = StateProvider.family<int, String>(
-  (ref, storeId) => 7,
+final storeChartDaysProvider =
+    NotifierProvider.family<SettableNotifier<int>, int, String>(
+  (storeId) => SettableNotifier(7),
 );
 
 /// Chart data for a specific store.
 /// When the remote snapshot has no per-store chart data (offline fallback),
 /// queries the local datasource directly.
 final storeChartDataProvider = FutureProvider.family<List<DailyCA>, String>((ref, storeId) async {
+  // Riverpod 3: dependencies are watched before the first await, except the
+  // local datasource — watching it opens the encrypted database, needed only
+  // on the device fallback. If this provider was rebuilt / disposed during
+  // the await, that late watch throws and ends a stale build Riverpod
+  // discards anyway.
   final period = ref.watch(storeChartPeriodProvider(storeId));
+  final clock = ref.watch(dashboardClockProvider);
+  final days = ref.watch(storeChartDaysProvider(storeId));
   final snapshot = await ref.watch(dashboardSnapshotProvider.future);
   final store = snapshot.storeOverviews
       .where((s) => s.storeId == storeId)
@@ -361,7 +394,7 @@ final storeChartDataProvider = FutureProvider.family<List<DailyCA>, String>((ref
   if (store == null) return [];
 
   final local = ref.watch(localDashboardDatasourceProvider);
-  final now = ref.watch(dashboardClockProvider)();
+  final now = clock();
 
   // Remote series are sparse (only periods with sales): zero-fill them onto
   // the same slots as the local datasource (v1s-16-19).
@@ -370,7 +403,6 @@ final storeChartDataProvider = FutureProvider.family<List<DailyCA>, String>((ref
       final fullData = store.dailyCA.isNotEmpty
           ? _zeroFillDailyCA(store.dailyCA, 30, now)
           : await local.getStoreDailyCA(storeId);
-      final days = ref.watch(storeChartDaysProvider(storeId));
       return fullData.length > days ? fullData.sublist(fullData.length - days) : fullData;
     case ChartPeriod.weekly:
       return store.weeklyCA.isNotEmpty

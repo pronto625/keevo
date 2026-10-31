@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
@@ -10,6 +11,7 @@ import 'package:keevo/features/audit/domain/repository/audit_repository.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/audit/presentation/widget/stock_history_widget.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Mock repository ────────────────────────────────────────────────────────
@@ -77,6 +79,7 @@ Widget _buildWidget(
   String? entityId,
 }) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: _baseOverrides(entries),
     child: MaterialApp(
       home: Scaffold(
@@ -151,6 +154,7 @@ class _ScriptedAuditRepository implements AuditRepository {
 }
 
 Widget _buildWithRepo(AuditRepository repo) => ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(_prefs),
         currentUserIdProvider.overrideWith((_) => Future.value('me')),
@@ -208,6 +212,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(_prefs),
             currentUserIdProvider

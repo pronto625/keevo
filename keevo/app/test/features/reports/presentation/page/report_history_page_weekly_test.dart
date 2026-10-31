@@ -6,6 +6,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/features/reports/domain/model/report_history_model.dart';
 import 'package:keevo/features/reports/presentation/page/report_history_page.dart';
 import 'package:keevo/features/reports/presentation/provider/report_history_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Widget tests for ReportHistoryPage — weekly report visibility and filter tabs.
 /// Story 7.3 — AC6 + AC7.
@@ -31,6 +32,7 @@ void main() {
 
   Widget _buildPage(Future<List<ReportHistoryModel>> future) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         reportHistoryProvider().overrideWith((_) => future),
       ],

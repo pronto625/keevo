@@ -7,6 +7,7 @@ import 'package:keevo/features/help/domain/repository/tutorial_repository.dart';
 import 'package:keevo/features/help/presentation/page/help_tutorials_page.dart';
 import 'package:keevo/features/help/presentation/provider/help_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -56,6 +57,7 @@ void main() {
   });
 
   Widget page() => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           tutorialRepositoryProvider.overrideWithValue(repo),
           connectivityServiceProvider.overrideWithValue(connectivity),

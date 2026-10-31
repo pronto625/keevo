@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/core/network/auth_interceptor.dart';
@@ -54,7 +55,7 @@ void main() {
       scaffoldMessengerKey: key,
       home: const Scaffold(body: SizedBox()),
     ));
-    final container = ProviderContainer();
+    final container = ProviderContainer(retry: noProviderRetry);
     addTearDown(container.dispose);
     expect(container.read(suspendedSessionNoticeThrottleProvider),
         same(container.read(suspendedSessionNoticeThrottleProvider)),
@@ -113,7 +114,7 @@ void main() {
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       home: const Scaffold(body: SizedBox()),
     ));
-    final container = ProviderContainer();
+    final container = ProviderContainer(retry: noProviderRetry);
     addTearDown(container.dispose);
     final interceptor = container
         .read(dioProvider)

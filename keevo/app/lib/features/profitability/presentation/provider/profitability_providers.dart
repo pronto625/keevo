@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
 import '../../data/datasource/local_profitability_datasource.dart';
 import '../../data/datasource/remote_profitability_datasource.dart';
@@ -54,20 +55,27 @@ final profitabilityRepositoryProvider =
 /// Selected period — shared between Rentabilité + Boutiques tabs (session-only).
 /// Read the concrete window with `.range()` at build time.
 final selectedProfitabilityPeriodProvider =
-    StateProvider<PeriodSelection>((ref) => PeriodSelection.last30);
+    NotifierProvider<SettableNotifier<PeriodSelection>, PeriodSelection>(
+  () => SettableNotifier(PeriodSelection.last30),
+);
 
 /// Store filter of the profitability list, carried to the product detail
 /// (the detail route only has the product id). null = all stores.
-final profitabilityStoreFilterProvider = StateProvider<String?>((_) => null);
+final profitabilityStoreFilterProvider =
+    NotifierProvider<SettableNotifier<String?>, String?>(
+  () => SettableNotifier(null),
+);
 
 /// Selected sort option for product profitability list.
-final selectedSortProvider = StateProvider<SortOption>(
-  (_) => SortOption.marginPctDesc,
+final selectedSortProvider =
+    NotifierProvider<SettableNotifier<SortOption>, SortOption>(
+  () => SettableNotifier(SortOption.marginPctDesc),
 );
 
 /// Selected ranking metric for store performance.
-final selectedMetricProvider = StateProvider<RankingMetric>(
-  (_) => RankingMetric.ca,
+final selectedMetricProvider =
+    NotifierProvider<SettableNotifier<RankingMetric>, RankingMetric>(
+  () => SettableNotifier(RankingMetric.ca),
 );
 
 // ── Reactive data providers ───────────────────────────────────────────────────
@@ -167,11 +175,14 @@ final storePerformanceProvider = FutureProvider.autoDispose
 /// Period of the « Équipe » tab — its own state so the Rentabilité/Boutiques
 /// tabs keep their 30-day default. Defaults to today (Story 4.6).
 final selectedLeaderboardPeriodProvider =
-    StateProvider<PeriodSelection>((ref) => PeriodSelection.today);
+    NotifierProvider<SettableNotifier<PeriodSelection>, PeriodSelection>(
+  () => SettableNotifier(PeriodSelection.today),
+);
 
 /// Ranking metric of the « Équipe » tab (default CA).
-final selectedLeaderboardMetricProvider = StateProvider<RankingMetric>(
-  (_) => RankingMetric.ca,
+final selectedLeaderboardMetricProvider =
+    NotifierProvider<SettableNotifier<RankingMetric>, RankingMetric>(
+  () => SettableNotifier(RankingMetric.ca),
 );
 
 /// Ranks [entries] by [metric] locally (the toggle never re-fetches) and

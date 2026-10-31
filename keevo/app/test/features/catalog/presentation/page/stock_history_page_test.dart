@@ -9,6 +9,7 @@ import 'package:keevo/features/catalog/domain/usecase/get_stock_level_usecase.da
 import 'package:keevo/features/catalog/presentation/page/stock_history_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../helpers/no_technical_text.dart';
@@ -57,6 +58,7 @@ Future<_FakeStockRepository> _pump(
   final prefs = await SharedPreferences.getInstance();
   final repo = _FakeStockRepository(movements);
   await tester.pumpWidget(ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       getStockHistoryUseCaseProvider

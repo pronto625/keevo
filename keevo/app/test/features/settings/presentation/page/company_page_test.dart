@@ -14,6 +14,7 @@ import 'package:keevo/features/settings/presentation/page/company_page.dart';
 import 'package:keevo/features/settings/presentation/provider/company_profile_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/photo/company_logo_compressor.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/connectivity_service.dart';
 
 class _Connectivity implements ConnectivityService {
@@ -121,6 +122,7 @@ Uint8List _png() {
 
 Widget _app(_FakeApi api, _Connectivity connectivity, {bool pickerFails = false}) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       companyProfileApiProvider.overrideWithValue(api),
       connectivityServiceProvider.overrideWithValue(connectivity),

@@ -7,7 +7,7 @@ part 'inventory_gap_row_model.g.dart';
 /// Mirrors InventoryGapRow backend record.
 /// Story 6.3 — Gap Analysis Report.
 @freezed
-class InventoryGapRowModel with _$InventoryGapRowModel {
+abstract class InventoryGapRowModel with _$InventoryGapRowModel {
   const InventoryGapRowModel._();
 
   const factory InventoryGapRowModel({

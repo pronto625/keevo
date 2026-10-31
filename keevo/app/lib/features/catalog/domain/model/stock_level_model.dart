@@ -12,7 +12,7 @@ part 'stock_level_model.g.dart';
 ///
 /// Story 2.3.
 @freezed
-class StockLevelModel with _$StockLevelModel {
+abstract class StockLevelModel with _$StockLevelModel {
   const StockLevelModel._();
 
   const factory StockLevelModel({

@@ -27,11 +27,11 @@ class SellerLeaderboardPage extends ConsumerWidget {
     // source). Only a real offline → online transition re-fetches: the first
     // status emission (loading → online) must not double the initial fetch.
     ref.listen<AsyncValue<SyncStatus>>(syncStatusProvider, (prev, next) {
-      final wasOffline = switch (prev?.valueOrNull) {
+      final wasOffline = switch (prev?.value) {
         SyncStatus.offlineOk || SyncStatus.offlineCritical => true,
         _ => false,
       };
-      if (wasOffline && next.valueOrNull == SyncStatus.online) {
+      if (wasOffline && next.value == SyncStatus.online) {
         ref.invalidate(sellerLeaderboardProvider);
       }
     });
@@ -40,7 +40,7 @@ class SellerLeaderboardPage extends ConsumerWidget {
     final selection = ref.watch(selectedLeaderboardPeriodProvider);
     final period = selection.range();
     final metric = ref.watch(selectedLeaderboardMetricProvider);
-    final isOffline = switch (ref.watch(syncStatusProvider).valueOrNull) {
+    final isOffline = switch (ref.watch(syncStatusProvider).value) {
       SyncStatus.offlineOk || SyncStatus.offlineCritical => true,
       _ => false,
     };
@@ -84,14 +84,14 @@ class SellerLeaderboardPage extends ConsumerWidget {
                       selected: selection,
                       onChanged: (s) => ref
                           .read(selectedLeaderboardPeriodProvider.notifier)
-                          .state = s,
+                          .set(s),
                     ),
                     const SizedBox(height: 4),
                     RankingMetricToggle(
                       selected: metric,
                       onChanged: (m) => ref
                           .read(selectedLeaderboardMetricProvider.notifier)
-                          .state = m,
+                          .set(m),
                     ),
                   ],
                 ),
@@ -100,7 +100,7 @@ class SellerLeaderboardPage extends ConsumerWidget {
           ),
           // Banner whenever the shown data is the local Drift aggregation:
           // device offline, or online but the backend was unreachable.
-          if (isOffline || (dataAsync.valueOrNull?.fromLocal ?? false))
+          if (isOffline || (dataAsync.value?.fromLocal ?? false))
             const SliverToBoxAdapter(child: OfflineDataBanner()),
           dataAsync.when(
             loading: () => const SliverFillRemaining(

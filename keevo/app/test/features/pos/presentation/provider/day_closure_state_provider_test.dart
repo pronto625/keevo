@@ -4,6 +4,7 @@ import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/domain/repository/day_closure_repository.dart';
 import 'package:keevo/features/pos/domain/usecase/close_day_usecase.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockRepo extends Mock implements DayClosureRepository {}
@@ -43,6 +44,7 @@ void main() {
     when(() => repo.getTodaySalesCount('store-1')).thenAnswer((_) async => 5);
 
     final container = ProviderContainer(
+      retry: noProviderRetry,
       overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
     );
     addTearDown(container.dispose);
@@ -71,6 +73,7 @@ void main() {
       when(() => repo.getLastClosure('store-1'))
           .thenAnswer((_) async => _closure(closedAt));
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
       );
       addTearDown(container.dispose);
@@ -82,6 +85,7 @@ void main() {
     test('yields null when the store has no closure', () async {
       when(() => repo.getLastClosure('store-1')).thenAnswer((_) async => null);
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
       );
       addTearDown(container.dispose);
@@ -93,6 +97,7 @@ void main() {
     test('refreshes when lastClosureProvider is invalidated', () async {
       when(() => repo.getLastClosure('store-1')).thenAnswer((_) async => null);
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [dayClosureRepositoryProvider.overrideWithValue(repo)],
       );
       addTearDown(container.dispose);

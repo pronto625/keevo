@@ -10,7 +10,7 @@ part 'auth_tokens.freezed.dart';
 /// AC1: returned after successful login or token refresh.
 /// AC3: refreshToken is used to silently renew the access token.
 @freezed
-class AuthTokens with _$AuthTokens {
+abstract class AuthTokens with _$AuthTokens {
   const factory AuthTokens({
     /// RS256-signed JWT (24h expiry). Sent as Authorization: Bearer header.
     required String accessToken,

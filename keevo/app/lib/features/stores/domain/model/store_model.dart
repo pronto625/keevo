@@ -10,7 +10,7 @@ part 'store_model.g.dart';
 /// Mirrors [Stores] Drift table and StoreResponseDto (backend).
 /// Story 3.1 — AC1–AC6.
 @freezed
-class StoreModel with _$StoreModel {
+abstract class StoreModel with _$StoreModel {
   const factory StoreModel({
     required String id,
     required String name,

@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/features/onboarding/domain/model/sector_type.dart';
 import 'package:keevo/features/onboarding/presentation/page/sector_selection_page.dart';
 import 'package:keevo/features/onboarding/presentation/page/shop_name_page.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ GoRouter _testRouter() {
 
 Widget _buildPage() {
   return ProviderScope(
+    retry: noProviderRetry,
     child: MaterialApp.router(
       routerConfig: _testRouter(),
     ),

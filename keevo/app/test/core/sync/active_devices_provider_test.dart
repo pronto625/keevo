@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Story 5.5 — Task 7.3: Active devices provider tests.
 void main() {
@@ -23,6 +24,7 @@ void main() {
       });
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           dioProvider.overrideWithValue(dio),
         ],
@@ -40,6 +42,7 @@ void main() {
       dio.httpClientAdapter = _MockAdapter(shouldThrow: true);
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           dioProvider.overrideWithValue(dio),
         ],

@@ -7,6 +7,7 @@ import 'package:keevo/features/auth/domain/usecase/login_usecase.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -58,7 +59,7 @@ void main() {
         .thenAnswer((_) async {});
     when(() => applier.abandonSignIn()).thenAnswer((_) async {});
 
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       loginUseCaseProvider.overrideWithValue(useCase),
       sessionClaimsApplierProvider.overrideWithValue(applier),
@@ -85,7 +86,7 @@ void main() {
 
     await container.read(loginProvider.notifier).discardPreviousAccountDataAndContinue();
 
-    expect(container.read(loginProvider).valueOrNull, isA<AuthenticatedResult>());
+    expect(container.read(loginProvider).value, isA<AuthenticatedResult>());
     expect(sync.startups, 1);
   });
 
@@ -97,7 +98,7 @@ void main() {
     verify(() => applier.abandonSignIn()).called(1);
     verifyNever(() => applier.apply('access-b',
         newSession: true, discardPreviousAccountData: true));
-    expect(container.read(loginProvider).valueOrNull, isNull);
+    expect(container.read(loginProvider).value, isNull);
   });
 
   test('a storage failure ends in an error, never an endless spinner', () async {

@@ -13,6 +13,7 @@ import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import '../../../../helpers/no_technical_text.dart';
@@ -77,6 +78,7 @@ void main() {
   });
 
   Widget buildPage({bool storesLoaded = false}) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           stockTransferRepositoryProvider.overrideWithValue(repo),
           activeStoreIdProvider.overrideWith(_FixedActiveStore.new),
@@ -172,6 +174,7 @@ void main() {
             _transfer('t-it').copyWith(status: 'IN_TRANSIT'),
           ]);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           stockTransferRepositoryProvider.overrideWithValue(repo),
           activeStoreIdProvider.overrideWith(() => _ActiveStore(activeStoreId)),

@@ -12,6 +12,7 @@ import 'package:keevo/features/stores/presentation/provider/active_store_provide
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -48,6 +49,7 @@ void main() {
 
   Widget buildApp(String activeStoreId, InventorySessionRepository repo) =>
       ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           inventorySessionRepositoryProvider.overrideWithValue(repo),
           activeStoreIdProvider
@@ -143,6 +145,7 @@ void main() {
       ),
     ]);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         inventorySessionRepositoryProvider.overrideWithValue(repo),
         activeStoreIdProvider

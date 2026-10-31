@@ -10,6 +10,7 @@ import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 
@@ -60,6 +61,7 @@ Widget _app({
     ),
   ]);
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       entitlementsProvider
           .overrideWith(() => FakeEntitlementsNotifier(modules)),

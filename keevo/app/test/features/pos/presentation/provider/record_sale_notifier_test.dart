@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/account_read_only_exception.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
@@ -77,6 +78,7 @@ void main() {
   ProviderContainer createContainer(
       {List<CartItem> cart = const [], String? role = 'OWNER'}) {
     final container = ProviderContainer(
+      retry: noProviderRetry,
       overrides: [
         // Gate is open (0 days — no sync required)
         daysSinceLastSyncProvider.overrideWithValue(0),
@@ -192,6 +194,7 @@ void main() {
       // Gate is BLOCKED — 7+ days without sync. SyncGateGuard.assertWriteAllowed()
       // throws WriteBlockedException before any repo or stock check is called.
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           daysSinceLastSyncProvider.overrideWithValue(7),
           saleRepositoryProvider.overrideWithValue(mockRepo),
@@ -235,7 +238,7 @@ void main() {
       });
 
       ProviderContainer gateContainer() {
-        final c = ProviderContainer(overrides: [
+        final c = ProviderContainer(retry: noProviderRetry, overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
           saleRepositoryProvider.overrideWithValue(mockRepo),
@@ -297,6 +300,7 @@ void main() {
       test('submit while the account is $status → French error, nothing recorded',
           () async {
         final container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [
             daysSinceLastSyncProvider.overrideWithValue(0),
             tenantStatusClaimProvider.overrideWith((_) async => status),
@@ -665,7 +669,7 @@ void main() {
           status: const Value('DRAFT'),
           createdAt: now,
           updatedAt: now));
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         daysSinceLastSyncProvider.overrideWithValue(0),
         currentUserRoleProvider.overrideWithValue('OWNER'),
         appDatabaseProvider.overrideWithValue(db),
@@ -754,7 +758,7 @@ void main() {
       final productDs = MockLocalProductDataSource();
       when(() => productDs.promoteToActive(any()))
           .thenThrow(Exception('constraint'));
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         daysSinceLastSyncProvider.overrideWithValue(0),
         currentUserRoleProvider.overrideWithValue('OWNER'),
         appDatabaseProvider.overrideWithValue(db),

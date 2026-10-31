@@ -9,7 +9,7 @@ part 'inventory_session_model.g.dart';
 /// Mirrors InventorySession backend domain model.
 /// Story 6.1. GoF: Value Object.
 @freezed
-class InventorySessionModel with _$InventorySessionModel {
+abstract class InventorySessionModel with _$InventorySessionModel {
   const InventorySessionModel._();
 
   const factory InventorySessionModel({

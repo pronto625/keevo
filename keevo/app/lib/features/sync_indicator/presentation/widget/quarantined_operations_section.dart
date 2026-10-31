@@ -57,9 +57,11 @@ class QuarantinedChainView {
 /// Quarantined operations grouped in chains (v1s-16-15), oldest first.
 final quarantinedChainsProvider =
     FutureProvider.autoDispose<List<QuarantinedChainView>>((ref) async {
+  // Watched before the await: Riverpod 3 throws on a ref used after its
+  // provider was disposed / rebuilt meanwhile.
+  final service = ref.watch(syncQuarantineServiceProvider);
   final ops = await ref.watch(quarantinedSyncQueueProvider.future);
   if (ops.isEmpty) return const [];
-  final service = ref.watch(syncQuarantineServiceProvider);
   final quarantinedSales = {
     for (final o in ops)
       if (o.operation == 'CREATE_SALE' && o.entityId != null) o.entityId!,

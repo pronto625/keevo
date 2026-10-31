@@ -2,9 +2,12 @@ import 'dart:developer' as dev;
 
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/keep_alive_while.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/storage/search_fold.dart';
+import 'package:keevo_core/sync/sync_service.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -32,13 +35,35 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
   /// Quick-add a product during inventory counting.
   /// Returns the result on success; null on dedup error (caller handles dialog).
   /// Throws on other errors.
+  ///
+  /// Riverpod 3: only read by the sheet (no listener) — kept alive for the
+  /// call, or the local caching / offline fallback would hit a disposed ref.
   Future<QuickAddResult?> quickAdd({
     required String sessionId,
     required String name,
     required String categoryId,
     required int physicalQty,
     int? sellingPrice,
+  }) =>
+      ref.keepAliveWhile(() => _quickAdd(
+            sessionId: sessionId,
+            name: name,
+            categoryId: categoryId,
+            physicalQty: physicalQty,
+            sellingPrice: sellingPrice,
+          ));
+
+  Future<QuickAddResult?> _quickAdd({
+    required String sessionId,
+    required String name,
+    required String categoryId,
+    required int physicalQty,
+    int? sellingPrice,
   }) async {
+    // Read before the first await: an invalidation mid-call drops the
+    // keep-alive and Riverpod 3 throws on a disposed ref.
+    final db = ref.read(appDatabaseProvider);
+    final syncService = ref.read(syncServiceProvider);
     try {
       // Online: POST to backend
       final result = await ref.read(remoteQuickAddDatasourceProvider).quickAdd(
@@ -53,7 +78,7 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
       // Non-fatal: the backend POST already succeeded, so we return the
       // result even if local caching fails.
       try {
-        await _cacheLocally(result, sessionId, sellingPrice: sellingPrice);
+        await _cacheLocally(db, result, sessionId, sellingPrice: sellingPrice);
       } catch (cacheError) {
         dev.log('Local cache failed (non-fatal): $cacheError',
             name: 'QuickAddProduct');
@@ -68,6 +93,8 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
       // Offline fallback for network errors
       if (_isNetworkError(e)) {
         return _createOffline(
+          db,
+          syncService,
           sessionId: sessionId,
           name: name,
           categoryId: categoryId,
@@ -80,6 +107,8 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
       // Offline fallback
       if (_isNetworkError(e)) {
         return _createOffline(
+          db,
+          syncService,
           sessionId: sessionId,
           name: name,
           categoryId: categoryId,
@@ -98,8 +127,9 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
             e.type == DioExceptionType.receiveTimeout);
   }
 
-  Future<void> _cacheLocally(QuickAddResult result, String sessionId, {int? sellingPrice}) async {
-    final db = ref.read(appDatabaseProvider);
+  Future<void> _cacheLocally(
+      AppDatabase db, QuickAddResult result, String sessionId,
+      {int? sellingPrice}) async {
     final now = DateTime.now();
 
     // Resolve storeId from session
@@ -153,16 +183,16 @@ class QuickAddProductNotifier extends _$QuickAddProductNotifier {
         );
   }
 
-  Future<QuickAddResult?> _createOffline({
+  Future<QuickAddResult?> _createOffline(
+    AppDatabase db,
+    SyncService syncService, {
     required String sessionId,
     required String name,
     required String categoryId,
     required int physicalQty,
     int? sellingPrice,
   }) async {
-    final db = ref.read(appDatabaseProvider);
-    final syncService = ref.read(syncServiceProvider);
-    final uuid = const Uuid();
+    const uuid = Uuid();
     final now = DateTime.now();
 
     final productId = uuid.v4();

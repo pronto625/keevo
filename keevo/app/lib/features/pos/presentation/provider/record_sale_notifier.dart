@@ -97,6 +97,8 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       for (final item in cart) {
         final available =
             await localDs.getAvailableStock(item.productId, storeId);
+        // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+        if (!ref.mounted) return;
         final initialEntry =
             item.isDraft ? (initialStockEntries[item.productId] ?? 0) : 0;
         if (available + initialEntry < item.quantity) {
@@ -154,8 +156,9 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
           return record();
         });
       }
+      if (!ref.mounted) return;
       // Cleared after every successful sale (stale entries included).
-      ref.read(draftInitialStocksProvider.notifier).state = {};
+      ref.read(draftInitialStocksProvider.notifier).set({});
 
       ref.read(cartProvider.notifier).clearCart();
       ref.invalidate(frequentProductsProvider);
@@ -168,6 +171,7 @@ class RecordSaleNotifier extends Notifier<RecordSaleState> {
       }
       state = RecordSaleSuccess(sale);
     } catch (e) {
+      if (!ref.mounted) return;
       state = RecordSaleError(e.toString());
     }
   }

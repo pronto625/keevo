@@ -23,7 +23,7 @@ class SyncGateGuard {
   /// [daysSinceLastSync] >= 7. No-op otherwise (open, warning, critical —
   /// writes permitted).
   static void assertWriteAllowed(Ref ref) {
-    assertAccountWritable(ref.read(tenantStatusClaimProvider).valueOrNull);
+    assertAccountWritable(ref.read(tenantStatusClaimProvider).value);
     var gate = ref.read(syncGateStateProvider);
     if (gate.isWriteBlocked) {
       // J23: the last-sync time may have been written by a sync (or a pull
@@ -37,7 +37,7 @@ class SyncGateGuard {
 
   /// Throws [AccountReadOnlyException] when [tenantStatus] makes the account
   /// read-only. For callers holding a `WidgetRef`: pass
-  /// `ref.read(tenantStatusClaimProvider).valueOrNull`.
+  /// `ref.read(tenantStatusClaimProvider).value`.
   static void assertAccountWritable(String? tenantStatus) {
     final readOnly = AccountReadOnlyException.forTenantStatus(tenantStatus);
     if (readOnly != null) throw readOnly;

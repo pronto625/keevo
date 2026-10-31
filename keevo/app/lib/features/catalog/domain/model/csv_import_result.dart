@@ -10,7 +10,7 @@ part 'csv_import_result.g.dart';
 /// file with a skipped row failed to parse and a successful import was shown
 /// as an error (found on device).
 @freezed
-class CsvImportResult with _$CsvImportResult {
+abstract class CsvImportResult with _$CsvImportResult {
   const factory CsvImportResult({
     required int imported,
     required int skipped,
@@ -25,7 +25,7 @@ class CsvImportResult with _$CsvImportResult {
 
 /// CsvRowError — validation error for a single CSV row.
 @freezed
-class CsvRowError with _$CsvRowError {
+abstract class CsvRowError with _$CsvRowError {
   const factory CsvRowError({
     @JsonKey(name: 'lineNumber') required int line,
     required String column,

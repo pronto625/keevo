@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
@@ -11,6 +12,7 @@ import 'package:keevo/features/auth/domain/usecase/login_usecase.dart';
 import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -22,6 +24,7 @@ class MockLoginUseCase extends Mock implements LoginUseCase {}
 
 Widget _wrap(Widget child, {List<Override> overrides = const []}) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: overrides,
     child: MaterialApp.router(
       routerConfig: GoRouter(

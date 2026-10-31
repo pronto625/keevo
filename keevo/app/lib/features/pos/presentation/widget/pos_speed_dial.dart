@@ -104,7 +104,7 @@ class _PosSpeedDialState extends State<PosSpeedDial>
                           return userIdAsync.when(
                             data: (userId) {
                               if (userId == null) return const SizedBox.shrink();
-                              final isClosed = closureState.valueOrNull ==
+                              final isClosed = closureState.value ==
                                   DayClosureState.closed;
                               return _SpeedDialOption(
                                 icon: isClosed

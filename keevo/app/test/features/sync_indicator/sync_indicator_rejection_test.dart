@@ -7,6 +7,8 @@ import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
@@ -18,7 +20,7 @@ void main() {
 
   testWidgets('rejection SnackBars carry the rollback suffix only when undone',
       (tester) async {
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
       daysOfflineProvider.overrideWithValue(0),
       daysSinceLastSyncProvider.overrideWithValue(0),
@@ -100,7 +102,7 @@ void main() {
   testWidgets(
       'v1s-16-15: a quarantined notice says "action requise" and "Voir" opens '
       '/sync/blocked', (tester) async {
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
       daysOfflineProvider.overrideWithValue(0),
       daysSinceLastSyncProvider.overrideWithValue(0),
@@ -160,7 +162,7 @@ void main() {
   // v1s-16-12 follow-up: /settings/sync is OWNER-only — an employee gets no
   // « Voir » on a plain rejection, but keeps it on a blocked operation.
   testWidgets('employee: « Voir » only on blocked operations', (tester) async {
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
       daysOfflineProvider.overrideWithValue(0),
       daysSinceLastSyncProvider.overrideWithValue(0),
@@ -228,7 +230,7 @@ void main() {
 
     Future<ProviderContainer> pumpIndicator(WidgetTester tester,
         {int blocked = 0}) async {
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         syncStatusProvider
             .overrideWith((ref) => Stream.value(SyncStatus.online)),
         daysOfflineProvider.overrideWithValue(0),
@@ -331,8 +333,10 @@ void main() {
     // was still covering « ENCAISSER ».
     testWidgets('the notice closes as soon as no operation is blocked',
         (tester) async {
-      final blocked = StateProvider<int>((ref) => 1);
-      final container = ProviderContainer(overrides: [
+      final blocked = NotifierProvider<SettableNotifier<int>, int>(
+        () => SettableNotifier(1),
+      );
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         syncStatusProvider
             .overrideWith((ref) => Stream.value(SyncStatus.online)),
         daysOfflineProvider.overrideWithValue(0),
@@ -378,7 +382,7 @@ void main() {
     // the indicator) had been left — the notice stays on every screen.
     testWidgets('« Voir » opens the blocked list even after leaving the page',
         (tester) async {
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         syncStatusProvider
             .overrideWith((ref) => Stream.value(SyncStatus.online)),
         daysOfflineProvider.overrideWithValue(0),

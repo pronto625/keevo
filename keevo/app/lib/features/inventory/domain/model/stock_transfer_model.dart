@@ -9,7 +9,7 @@ part 'stock_transfer_model.g.dart';
 /// Mirrors StockTransfer backend domain model.
 /// Story 3.3. GoF: Command value object.
 @freezed
-class StockTransferModel with _$StockTransferModel {
+abstract class StockTransferModel with _$StockTransferModel {
   const factory StockTransferModel({
     required String id,
     required String sourceStoreId,

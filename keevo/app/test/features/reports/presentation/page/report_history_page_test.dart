@@ -8,6 +8,7 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:keevo/features/reports/domain/model/report_history_model.dart';
 import 'package:keevo/features/reports/presentation/page/report_history_page.dart';
 import 'package:keevo/features/reports/presentation/provider/report_history_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Widget tests for ReportHistoryPage.
 /// Story 7.2 — Task 21 TDD.
@@ -33,6 +34,7 @@ void main() {
 
   Widget _buildPage(Future<List<ReportHistoryModel>> future) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         reportHistoryProvider().overrideWith((_) => future),
       ],
@@ -51,6 +53,7 @@ void main() {
 
   Widget _buildErrorPage(Object error) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         reportHistoryProvider().overrideWith((_) async => throw error),
       ],
@@ -110,6 +113,7 @@ void main() {
       'the local employees table (by user id)', (tester) async {
     final report = _makeReport('r1').copyWith(actorId: 'user-jean');
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         reportHistoryProvider().overrideWith((_) async => [report]),
         employeeNamesByActorIdProvider
@@ -130,6 +134,7 @@ void main() {
   testWidgets('N2: back with nothing to pop goes to Rapports (/reports)',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         reportHistoryProvider().overrideWith((_) async => []),
       ],

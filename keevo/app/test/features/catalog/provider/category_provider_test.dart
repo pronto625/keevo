@@ -12,6 +12,7 @@ import 'package:keevo/features/catalog/presentation/provider/category_provider.d
 import 'package:keevo/features/identity/domain/model/tenant_preferences_model.dart';
 import 'package:keevo/features/identity/presentation/provider/tenant_preferences_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:keevo_core/sync/sync_trigger_dispatcher.dart';
@@ -149,6 +150,7 @@ void main() {
       when(() => mockSync.pull()).thenAnswer((_) async {});
 
       container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           categoryRepositoryProvider.overrideWithValue(mockRepository),
           syncServiceProvider.overrideWithValue(mockSync),
@@ -229,7 +231,7 @@ void main() {
                   ],
                 },
               ));
-      final apiContainer = ProviderContainer(overrides: [
+      final apiContainer = ProviderContainer(retry: noProviderRetry, overrides: [
         appDatabaseProvider.overrideWithValue(db),
         categoryRepositoryProvider.overrideWithValue(CategoryRepositoryImpl(
             db, mockSync, _MockSyncTriggerDispatcher())),

@@ -90,7 +90,7 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
   }
 
   bool get _isSelf =>
-      ref.read(currentUserIdProvider).valueOrNull == widget.employee.userId;
+      ref.read(currentUserIdProvider).value == widget.employee.userId;
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -204,7 +204,7 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
     final cs = theme.colorScheme;
     final storesAsync = ref.watch(storeListNotifierProvider);
     final isSelf =
-        ref.watch(currentUserIdProvider).valueOrNull == widget.employee.userId;
+        ref.watch(currentUserIdProvider).value == widget.employee.userId;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,

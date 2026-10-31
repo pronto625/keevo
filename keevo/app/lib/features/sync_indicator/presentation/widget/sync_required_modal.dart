@@ -95,7 +95,7 @@ class _SyncRequiredModalState extends ConsumerState<SyncRequiredModal> {
 
   bool _isOnline(WidgetRef ref) {
     final connectivity = ref.read(connectivityStreamProvider);
-    return connectivity.valueOrNull?.any((r) =>
+    return connectivity.value?.any((r) =>
             r == ConnectivityResult.mobile ||
             r == ConnectivityResult.wifi ||
             r == ConnectivityResult.ethernet) ??

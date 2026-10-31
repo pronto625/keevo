@@ -13,7 +13,7 @@ enum CrossStoreStockStatus { ok, low, outOfStock }
 /// Returned by [StockRepository.getCrossStoreAvailability].
 /// Story 3.4.
 @freezed
-class CrossStoreAvailabilityModel with _$CrossStoreAvailabilityModel {
+abstract class CrossStoreAvailabilityModel with _$CrossStoreAvailabilityModel {
   const CrossStoreAvailabilityModel._();
 
   const factory CrossStoreAvailabilityModel({
@@ -31,7 +31,7 @@ class CrossStoreAvailabilityModel with _$CrossStoreAvailabilityModel {
 ///
 /// Story 3.4.
 @freezed
-class CrossStoreAvailabilityEntry with _$CrossStoreAvailabilityEntry {
+abstract class CrossStoreAvailabilityEntry with _$CrossStoreAvailabilityEntry {
   const CrossStoreAvailabilityEntry._();
 
   const factory CrossStoreAvailabilityEntry({

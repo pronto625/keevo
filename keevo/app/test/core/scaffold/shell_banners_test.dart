@@ -8,6 +8,8 @@ import 'package:keevo/features/account/domain/model/deletion_pending_status.dart
 import 'package:keevo/features/account/presentation/provider/account_deletion_provider.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:keevo_core/sync/sync_gate_state.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,9 +88,13 @@ void main() {
       'clearing it reveals the deletion banner', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final status = StateProvider<AccountStatus>((_) => AccountStatus.suspended);
+    final status =
+        NotifierProvider<SettableNotifier<AccountStatus>, AccountStatus>(
+      () => SettableNotifier(AccountStatus.suspended),
+    );
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         accountStatusProvider.overrideWith((ref) => ref.watch(status)),
@@ -123,6 +129,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         accountStatusProvider.overrideWithValue(AccountStatus.trialExpired),
@@ -151,6 +158,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         accountStatusProvider.overrideWithValue(AccountStatus.active),
@@ -171,6 +179,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           accountStatusProvider.overrideWithValue(status),

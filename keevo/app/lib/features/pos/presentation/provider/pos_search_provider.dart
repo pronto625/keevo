@@ -95,6 +95,8 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
         ).get();
       }
 
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted) return;
       final results = rows.map((r) => PosProductResult(
             id: r.read<String>('id'),
             name: r.read<String>('name'),
@@ -106,7 +108,7 @@ class PosSearchNotifier extends Notifier<AsyncValue<List<PosProductResult>>> {
 
       state = AsyncData(results);
     } catch (e, st) {
-      state = AsyncError(e, st);
+      if (ref.mounted) state = AsyncError(e, st);
     }
   }
 

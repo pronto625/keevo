@@ -4,6 +4,7 @@ import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/domain/repository/day_closure_repository.dart';
 import 'package:keevo/features/pos/domain/usecase/close_day_usecase.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockCloseDayUseCase extends Mock implements CloseDayUseCase {}
@@ -35,6 +36,7 @@ void main() {
           )).thenAnswer((_) async => summary);
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           closeDayUseCaseProvider.overrideWithValue(mockUseCase),
         ],
@@ -57,6 +59,7 @@ void main() {
           )).thenAnswer((_) async => summary);
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           closeDayUseCaseProvider.overrideWithValue(mockUseCase),
         ],
@@ -77,6 +80,7 @@ void main() {
           )).thenThrow(StateError('Already closed'));
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           closeDayUseCaseProvider.overrideWithValue(mockUseCase),
         ],
@@ -101,6 +105,7 @@ void main() {
     when(() => repo.getLastClosure('store-1')).thenAnswer((_) async => null);
 
     final container = ProviderContainer(
+      retry: noProviderRetry,
       overrides: [
         closeDayUseCaseProvider.overrideWithValue(mockUseCase),
         dayClosureRepositoryProvider.overrideWithValue(repo),

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/features/pos/presentation/page/pos_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -17,6 +18,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         syncStatusProvider
             .overrideWith((ref) => Stream.value(SyncStatus.online)),

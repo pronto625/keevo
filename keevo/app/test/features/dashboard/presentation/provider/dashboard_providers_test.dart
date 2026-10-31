@@ -5,6 +5,7 @@ import 'package:keevo/features/dashboard/data/datasource/local_dashboard_datasou
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/domain/repository/dashboard_repository.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:keevo_core/di/core_providers.dart';
@@ -46,7 +47,7 @@ void main() {
       when(() => mockRepo.getDashboardSnapshot())
           .thenAnswer((_) async => snapshot);
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         dashboardRepositoryProvider.overrideWithValue(mockRepo),
         ..._ownerSession,
       ]);
@@ -89,7 +90,7 @@ void main() {
             todaySalesCount: 0,
           ));
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         dashboardRepositoryProvider.overrideWithValue(mockRepo),
         ..._ownerSession,
       ]);
@@ -106,7 +107,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kUserFirstNameKey: 'Amadou'});
       final prefs = await SharedPreferences.getInstance();
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
       ]);
       addTearDown(container.dispose);
@@ -119,7 +120,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
       ]);
       addTearDown(container.dispose);
@@ -134,7 +135,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
       ]);
       addTearDown(container.dispose);
@@ -181,7 +182,7 @@ void main() {
     ProviderContainer container(DashboardSnapshot snap) {
       final repo = _MockDashboardRepository();
       when(() => repo.getDashboardSnapshot()).thenAnswer((_) async => snap);
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         dashboardRepositoryProvider.overrideWithValue(repo),
         ..._ownerSession,
         dashboardClockProvider.overrideWithValue(() => now),

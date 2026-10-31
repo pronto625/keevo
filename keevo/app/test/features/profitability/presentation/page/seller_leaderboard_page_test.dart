@@ -8,6 +8,7 @@ import 'package:keevo/features/profitability/presentation/page/seller_leaderboar
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
 import 'package:keevo/features/profitability/presentation/widget/offline_data_banner.dart';
 import 'package:keevo/features/profitability/presentation/widget/period_filter_chips.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
@@ -52,6 +53,7 @@ void main() {
   Widget build(MockProfitabilityRepository repo,
           {String? storeId, Stream<SyncStatus>? status}) =>
       ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           profitabilityRepositoryProvider.overrideWithValue(repo),
           syncStatusProvider.overrideWith(

@@ -12,6 +12,7 @@ import 'package:keevo/features/contact/presentation/page/client_list_page.dart';
 import 'package:keevo/features/contact/presentation/page/supplier_form_page.dart';
 import 'package:keevo/features/contact/presentation/page/supplier_list_page.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/held_operations.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -29,6 +30,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenThrow(Exception('network'));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [clientRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: ClientListPage()),
     ));
@@ -64,6 +66,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [clientRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: ClientListPage()),
     ));
@@ -97,6 +100,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [clientRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: ClientListPage()),
     ));
@@ -124,6 +128,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: SupplierListPage()),
     ));
@@ -148,6 +153,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenThrow(Exception('network'));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: SupplierListPage()),
     ));
@@ -175,6 +181,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [clientRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: ClientFormPage()),
     ));
@@ -201,6 +208,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         supplierRepositoryProvider.overrideWithValue(repo),
         productListForPickerProvider
@@ -228,6 +236,7 @@ void main() {
         updatedAt: DateTime(2026));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         supplierRepositoryProvider.overrideWithValue(repo),
         productListForPickerProvider.overrideWith((ref) async => [
@@ -274,6 +283,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenThrow(Exception('offline'));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [clientRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: ClientListPage()),
     ));
@@ -313,6 +323,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenThrow(Exception('offline'));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: SupplierListPage()),
     ));
@@ -348,6 +359,7 @@ void main() {
     when(() => repo.unarchive(any())).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [clientRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: ClientListPage()),
     ));
@@ -382,6 +394,7 @@ void main() {
     when(() => repo.unarchive(any())).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [supplierRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: SupplierListPage()),
     ));
@@ -425,6 +438,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         clientRepositoryProvider.overrideWithValue(repo),
         heldEntityReasonsProvider
@@ -454,6 +468,7 @@ void main() {
     when(() => repo.syncFromRemote()).thenAnswer((_) async {});
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         supplierRepositoryProvider.overrideWithValue(repo),
         heldEntityReasonsProvider

@@ -5,6 +5,7 @@ import 'package:keevo/core/notification/fcm_service.dart';
 import 'package:keevo/features/notifications/data/datasource/local_notification_datasource.dart';
 import 'package:keevo/features/notifications/data/datasource/remote_device_token_datasource.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockGateway extends Mock implements FcmMessagingGateway {}
@@ -27,7 +28,7 @@ void main() {
           token: any(named: 'token'),
           platform: any(named: 'platform'),
         )).thenAnswer((_) async {});
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       fcmMessagingGatewayProvider.overrideWithValue(gateway),
       localNotificationDataSourceProvider.overrideWithValue(_MockLocal()),
       remoteDeviceTokenDataSourceProvider.overrideWithValue(remote),

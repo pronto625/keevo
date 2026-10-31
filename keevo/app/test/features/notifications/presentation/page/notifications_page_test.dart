@@ -6,6 +6,7 @@ import 'package:keevo/features/notifications/domain/model/notification_model.dar
 import 'package:keevo/features/notifications/domain/repository/notification_repository.dart';
 import 'package:keevo/features/notifications/presentation/page/notifications_page.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockNotificationRepository extends Mock
@@ -26,6 +27,7 @@ void main() {
 
   Widget buildPage({List<NotificationModel> items = const []}) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         notificationRepositoryProvider.overrideWithValue(mockRepo),
         unreadNotificationCountProvider.overrideWith((ref) => Stream.value(2)),

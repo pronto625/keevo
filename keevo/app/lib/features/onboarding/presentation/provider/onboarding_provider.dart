@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../data/datasource/remote_onboarding_datasource.dart';
@@ -47,12 +48,14 @@ class Onboarding extends _$Onboarding {
     required String storeName,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final guarded = await AsyncValue.guard(
       () => ref.read(completeOnboardingUseCaseProvider).execute(
             sectorType: sectorType,
             storeName: storeName,
           ),
     );
+    // Riverpod 3: a disposed notifier throws on `state`.
+    if (ref.mounted) state = guarded;
   }
 
   /// Reset state to initial (e.g. after navigation).

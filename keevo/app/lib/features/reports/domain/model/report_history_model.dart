@@ -8,7 +8,7 @@ part 'report_history_model.g.dart';
 /// ReportHistoryModel — domain model mirroring the backend EndOfDayReport entity.
 /// Story 7.2 — Rapport End-of-Day.
 @freezed
-class ReportHistoryModel with _$ReportHistoryModel {
+abstract class ReportHistoryModel with _$ReportHistoryModel {
   const ReportHistoryModel._();
 
   const factory ReportHistoryModel({

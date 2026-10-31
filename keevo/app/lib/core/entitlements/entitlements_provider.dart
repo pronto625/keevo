@@ -57,7 +57,7 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
         // Already asked by ensureServerState / refresh meanwhile: no 2nd call.
         if (generation == _generation &&
             _inFlight == null &&
-            state.valueOrNull?.status != EntitlementsStatus.server) {
+            state.value?.status != EntitlementsStatus.server) {
           _startFetch(generation).ignore();
         }
       });
@@ -71,8 +71,11 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
   /// current state, nothing asked.
   Future<Entitlements> ensureServerState() async {
     final current = await future;
+    // Riverpod 3: a disposed notifier throws on `ref` (container disposed).
+    if (!ref.mounted) return current;
     if (current.status == EntitlementsStatus.server) return current;
     if (!await hasSession()) return current;
+    if (!ref.mounted) return current;
     return _inFlight ?? _startFetch(_generation);
   }
 
@@ -82,7 +85,8 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
   Future<void> refresh() async {
     try {
       await future;
-      if (!await hasSession()) return;
+      if (!ref.mounted || !await hasSession()) return;
+      if (!ref.mounted) return;
       await (_inFlight ?? _startFetch(_generation));
     } catch (e) {
       debugPrint('[Entitlements] refresh failed: $e');

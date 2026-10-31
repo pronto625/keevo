@@ -46,21 +46,29 @@ class ReportPreferencesState {
 }
 
 /// Notifier for report preferences page.
-class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
-  final Ref _ref;
+class ReportPreferencesNotifier extends Notifier<ReportPreferencesState> {
+  @override
+  ReportPreferencesState build() => const ReportPreferencesState();
 
-  ReportPreferencesNotifier(this._ref) : super(const ReportPreferencesState());
+  /// Identity-based notification, as before the Riverpod 3 migration (not ==).
+  @override
+  bool updateShouldNotify(
+          ReportPreferencesState previous, ReportPreferencesState next) =>
+      !identical(previous, next);
 
   Future<void> load() async {
     state = state.copyWith(isLoading: true);
     try {
-      final repo = _ref.read(tenantPreferencesRepositoryProvider);
+      final repo = ref.read(tenantPreferencesRepositoryProvider);
       final prefs = await repo.getCurrentTenantPreferences();
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted) return;
       state = state.copyWith(
         isLoading: false,
         preferences: prefs,
       );
     } catch (e) {
+      if (!ref.mounted) return;
       state = state.copyWith(isLoading: false, error: appErrorMessage(e));
     }
   }
@@ -78,7 +86,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
     if (prefs == null) return;
     state = state.copyWith(isSaving: true);
     try {
-      final repo = _ref.read(tenantPreferencesRepositoryProvider);
+      final repo = ref.read(tenantPreferencesRepositoryProvider);
       final updated = await repo.updateReportPreferences({
         'eodReportEnabled': prefs.eodReportEnabled,
         'eodReportChannel': prefs.eodReportChannel,
@@ -93,14 +101,16 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
         'stockAlertChannel': prefs.stockAlertChannel,
         'trendNotificationEnabled': prefs.trendNotificationEnabled,
       });
+      if (!ref.mounted) return;
       state = state.copyWith(
         isSaving: false,
         preferences: updated,
         successMessage: 'Préférences enregistrées',
       );
       // Invalidate the main preferences cache
-      _ref.invalidate(tenantPreferencesProvider);
+      ref.invalidate(tenantPreferencesProvider);
     } catch (e) {
+      if (!ref.mounted) return;
       state = state.copyWith(isSaving: false, error: appErrorMessage(e));
     }
   }
@@ -109,8 +119,9 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
   Future<void> sendTestReport() async {
     state = state.copyWith(testSending: true);
     try {
-      final repo = _ref.read(tenantPreferencesRepositoryProvider);
+      final repo = ref.read(tenantPreferencesRepositoryProvider);
       final sent = await repo.sendTestReport();
+      if (!ref.mounted) return;
       state = state.copyWith(
         testSending: false,
         successMessage: sent
@@ -118,6 +129,7 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
             : 'Échec de l\'envoi WhatsApp. Vérifiez votre numéro.',
       );
     } catch (e) {
+      if (!ref.mounted) return;
       state = state.copyWith(testSending: false, error: appErrorMessage(e));
     }
   }
@@ -126,14 +138,16 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
   Future<String?> previewWeeklyReport() async {
     state = state.copyWith(weeklyPreviewing: true);
     try {
-      final repo = _ref.read(tenantPreferencesRepositoryProvider);
+      final repo = ref.read(tenantPreferencesRepositoryProvider);
       final reportId = await repo.triggerWeeklyPreview();
+      if (!ref.mounted) return reportId;
       state = state.copyWith(
         weeklyPreviewing: false,
         error: reportId == null ? 'Impossible de générer le rapport' : null,
       );
       return reportId;
     } catch (e) {
+      if (!ref.mounted) return null;
       state = state.copyWith(weeklyPreviewing: false, error: appErrorMessage(e));
       return null;
     }
@@ -145,5 +159,5 @@ class ReportPreferencesNotifier extends StateNotifier<ReportPreferencesState> {
 }
 
 final reportPreferencesProvider =
-    StateNotifierProvider<ReportPreferencesNotifier, ReportPreferencesState>(
-        (ref) => ReportPreferencesNotifier(ref));
+    NotifierProvider<ReportPreferencesNotifier, ReportPreferencesState>(
+        ReportPreferencesNotifier.new);

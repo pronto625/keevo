@@ -6,6 +6,7 @@ import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_event_logger.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
@@ -45,7 +46,7 @@ void main() {
     });
     when(() => sync.pull()).thenThrow(Exception('offline'));
 
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       syncServiceProvider.overrideWithValue(sync),
       syncEventLoggerProvider.overrideWithValue(logger),
@@ -92,7 +93,7 @@ void main() {
     });
     when(() => sync.pull()).thenThrow(Exception('offline'));
 
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       syncServiceProvider.overrideWithValue(sync),
       syncEventLoggerProvider.overrideWithValue(logger),

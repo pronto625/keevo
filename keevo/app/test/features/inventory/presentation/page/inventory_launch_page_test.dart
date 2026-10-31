@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
@@ -65,6 +66,7 @@ void main() {
       GoRoute(path: '/settings', builder: (_, __) => const Text('PLUS')),
     ]);
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         inventorySessionRepositoryProvider.overrideWithValue(repo),
         activeStoreIdProvider.overrideWith(_FixedActiveStore.new),

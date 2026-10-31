@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
@@ -14,6 +15,7 @@ import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/record_sale_notifier.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Records the sale at once (15.3: the success URI carries its id).
 class _SucceedingRecordSale extends RecordSaleNotifier {
@@ -110,6 +112,7 @@ Widget _buildApp({
   List<Override> overrides = const [],
 }) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: overrides,
     child: MaterialApp(
       home: Consumer(builder: (context, ref, _) {
@@ -327,6 +330,7 @@ void main() {
       ]);
       addTearDown(router.dispose);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           activeStoreIdProvider.overrideWith(_FixedStore.new),
           activeEmployeeIdProvider.overrideWith((ref) async => 'emp-1'),

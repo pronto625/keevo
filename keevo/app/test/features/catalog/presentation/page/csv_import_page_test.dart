@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/catalog/domain/model/csv_import_result.dart';
 import 'package:keevo/features/catalog/presentation/page/csv_import_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/csv_import_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Picks a fixed file and fails the import, without touching the platform.
 class _FailingImportNotifier extends CsvImportNotifier {
@@ -103,6 +104,7 @@ void main() {
       (tester) async {
     final notifier = _FailingImportNotifier();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [csvImportNotifierProvider.overrideWith(() => notifier)],
       child: const MaterialApp(home: CsvImportPage()),
     ));
@@ -150,6 +152,7 @@ void main() {
       ['nom', 'sku'],
     ]);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [csvImportNotifierProvider.overrideWith(() => notifier)],
       child: const MaterialApp(home: CsvImportPage()),
     ));
@@ -185,6 +188,7 @@ void main() {
   // the mapping step — the user could not tell and would import again.
   testWidgets('a successful import shows the result step', (tester) async {
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         csvImportNotifierProvider.overrideWith(_SucceedingImportNotifier.new),
       ],

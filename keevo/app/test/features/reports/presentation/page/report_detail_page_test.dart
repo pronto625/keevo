@@ -9,6 +9,7 @@ import 'package:keevo/features/reports/presentation/page/report_detail_page.dart
 import 'package:keevo/features/reports/presentation/provider/report_history_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 void main() {
   setUpAll(() async {
@@ -33,6 +34,7 @@ void main() {
       createdAt: DateTime(2026, 3, 17, 20),
     );
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         currentUserRoleProvider.overrideWithValue('OWNER'),
         reportDetailProvider('r1').overrideWith((ref) async => report),
@@ -49,6 +51,7 @@ void main() {
   testWidgets('weekly report refused: Premium title and upgrade action',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         currentUserRoleProvider.overrideWithValue('OWNER'),
         isOwnerSessionProvider.overrideWithValue(true),

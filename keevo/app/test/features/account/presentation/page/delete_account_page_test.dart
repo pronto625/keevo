@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/core/auth/session_refresher.dart';
@@ -38,6 +39,7 @@ const _employee = AccountProfile(
 /// somewhere to go.
 Widget _build(AccountDeletionRepository repo, AccountProfile profile) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       accountDeletionRepositoryProvider.overrideWithValue(repo),
       accountProfileProvider.overrideWith((_) async => profile),

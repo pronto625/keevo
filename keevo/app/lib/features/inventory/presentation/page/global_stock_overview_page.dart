@@ -42,7 +42,7 @@ class _GlobalStockOverviewPageState
     // Set low-stock filter when navigating from the dashboard badge.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(showLowStockOnlyProvider.notifier).state = widget.showLowOnly;
+        ref.read(showLowStockOnlyProvider.notifier).set(widget.showLowOnly);
       }
     });
   }
@@ -50,7 +50,7 @@ class _GlobalStockOverviewPageState
   void _onSearchChanged() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () {
-      ref.read(stockSearchQueryProvider.notifier).state = _searchCtrl.text;
+      ref.read(stockSearchQueryProvider.notifier).set(_searchCtrl.text);
     });
   }
 
@@ -82,8 +82,8 @@ class _GlobalStockOverviewPageState
 
     // AC4: invalidate overview when device comes back online.
     ref.listen<AsyncValue<SyncStatus>>(syncStatusProvider, (prev, next) {
-      if (next.valueOrNull == SyncStatus.online &&
-          prev?.valueOrNull != SyncStatus.online) {
+      if (next.value == SyncStatus.online &&
+          prev?.value != SyncStatus.online) {
         ref.invalidate(globalStockOverviewProvider);
       }
     });
@@ -232,7 +232,7 @@ class _GlobalStockOverviewPageState
                             _searchCtrl.clear();
                             ref
                                 .read(stockSearchQueryProvider.notifier)
-                                .state = '';
+                                .set('');
                           },
                         )
                       : null,
@@ -323,8 +323,8 @@ class _SearchResultsSliver extends ConsumerWidget {
                   onTap: () {
                     ref
                         .read(highlightedStoreIdProvider.notifier)
-                        .state = result.storeId;
-                    ref.read(stockSearchQueryProvider.notifier).state = '';
+                        .set(result.storeId);
+                    ref.read(stockSearchQueryProvider.notifier).set('');
                     clearSearch();
                   },
                 );

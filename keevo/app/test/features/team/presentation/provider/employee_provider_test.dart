@@ -5,6 +5,7 @@ import 'package:keevo/features/team/domain/model/create_employee_result.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/account_read_only_exception.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -30,6 +31,7 @@ void main() {
   });
 
   ProviderContainer makeContainer() => ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           employeeRepositoryProvider.overrideWithValue(mockRepo),
         ],
@@ -108,7 +110,7 @@ void main() {
 
     // A50: read-only account (suspension / deletion grace) → no team change.
     test('refused while the account is pending deletion', () async {
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         employeeRepositoryProvider.overrideWithValue(mockRepo),
         tenantStatusClaimProvider.overrideWith((_) async => 'DELETION_PENDING'),
       ]);

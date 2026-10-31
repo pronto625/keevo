@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,7 @@ void main() {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
       addTearDown(container.dispose);
@@ -23,6 +25,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kLastSyncAtKey: nowMs});
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
       addTearDown(container.dispose);
@@ -37,6 +40,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kLastSyncAtKey: yesterdayMs});
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
       addTearDown(container.dispose);
@@ -51,6 +55,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kLastSyncAtKey: fiveDaysMs});
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
       addTearDown(container.dispose);
@@ -65,6 +70,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kLastSyncAtKey: sevenDaysMs});
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
       addTearDown(container.dispose);
@@ -80,6 +86,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kLastSyncAtKey: future});
       final prefs = await SharedPreferences.getInstance();
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       );
       addTearDown(container.dispose);
@@ -99,7 +106,7 @@ void main() {
       SharedPreferences.setMockInitialValues(
           {kLastSyncAtKey: lastSync.millisecondsSinceEpoch});
       final prefs = await SharedPreferences.getInstance();
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         syncGateClockProvider.overrideWithValue(() => now),
       ]);
@@ -122,7 +129,7 @@ void main() {
       SharedPreferences.setMockInitialValues(
           {kLastSyncAtKey: lastSync.millisecondsSinceEpoch});
       final prefs = await SharedPreferences.getInstance();
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         syncGateClockProvider
             .overrideWithValue(() => DateTime(2026, 1, 6, 13)),

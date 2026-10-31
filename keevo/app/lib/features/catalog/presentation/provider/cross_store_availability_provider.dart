@@ -10,7 +10,7 @@ part 'cross_store_availability_provider.g.dart';
 /// Online-first: the repository handles the 3 s timeout + local fallback.
 @riverpod
 Future<CrossStoreAvailabilityModel> crossStoreAvailability(
-  CrossStoreAvailabilityRef ref,
+  Ref ref,
   String productId,
 ) {
   return ref.watch(stockRepositoryProvider).getCrossStoreAvailability(productId);

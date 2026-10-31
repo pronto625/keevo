@@ -7,7 +7,7 @@ part 'inventory_product_row_model.g.dart';
 /// Combines product info + theoretical stock + existing count data.
 /// Story 6.2.
 @freezed
-class InventoryProductRowModel with _$InventoryProductRowModel {
+abstract class InventoryProductRowModel with _$InventoryProductRowModel {
   const InventoryProductRowModel._();
 
   const factory InventoryProductRowModel({

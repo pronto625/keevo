@@ -6,7 +6,7 @@ part 'product_variant.g.dart';
 /// AC4: Product variant for sector-specific configurations
 /// Only applies to "Vêtements & Shopping" sector
 @freezed
-class ProductVariant with _$ProductVariant {
+abstract class ProductVariant with _$ProductVariant {
   const factory ProductVariant({
     required String id,
     required String productId,
@@ -20,7 +20,7 @@ class ProductVariant with _$ProductVariant {
 
 /// Variant axis for size, color, etc.
 @freezed  
-class VariantAxis with _$VariantAxis {
+abstract class VariantAxis with _$VariantAxis {
   const factory VariantAxis({
     required String type,  // "taille" or "couleur"
     required String value, // "M" or "#FF0000" 

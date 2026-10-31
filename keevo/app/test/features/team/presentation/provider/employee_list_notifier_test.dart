@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockEmployeeRepository extends Mock implements EmployeeRepository {}
@@ -26,6 +27,7 @@ void main() {
   });
 
   ProviderContainer makeContainer() => ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           employeeRepositoryProvider.overrideWithValue(mockRepo),
         ],

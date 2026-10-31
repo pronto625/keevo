@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
@@ -11,6 +12,7 @@ import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockRepo extends Mock implements StockTransferRepository {}
@@ -59,6 +61,7 @@ class _ActiveStore extends ActiveStoreNotifier {
 
 Widget _wrap(Widget child, {List<Override> overrides = const []}) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: overrides,
     child: MaterialApp(
       home: Scaffold(body: child),

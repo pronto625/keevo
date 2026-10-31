@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -17,6 +18,7 @@ import 'package:keevo/features/notifications/presentation/provider/notification_
 import 'package:keevo/features/settings/presentation/page/settings_page.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -98,6 +100,7 @@ Widget _buildPage({
   List<Override> overrides = const [],
 }) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       ...overrides,
       fcmServiceProvider.overrideWithValue(mockFcmService),
@@ -647,6 +650,7 @@ void main() {
           .thenAnswer((_) async => null);
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           fcmServiceProvider.overrideWithValue(mockFcm),
           remoteDeviceTokenDataSourceProvider.overrideWithValue(mockTokenDs),
@@ -709,6 +713,7 @@ void main() {
   group('SettingsPage — unsynced operations at sign-out', () {
     Widget page(_FakeSignOutService service, {int blocked = 0, int held = 0}) =>
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             fcmServiceProvider.overrideWithValue(mockFcm),
             remoteDeviceTokenDataSourceProvider.overrideWithValue(mockTokenDs),

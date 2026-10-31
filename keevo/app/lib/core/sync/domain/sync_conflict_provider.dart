@@ -8,7 +8,7 @@ part 'sync_conflict_provider.g.dart';
 /// Provider that fetches sync conflicts from GET /api/v1/sync/conflicts.
 /// OWNER-only endpoint — returns empty list if unauthorized.
 @riverpod
-Future<List<SyncConflict>> syncConflicts(SyncConflictsRef ref) async {
+Future<List<SyncConflict>> syncConflicts(Ref ref) async {
   final dio = ref.watch(dioProvider);
   final response = await dio.get(
     '/api/v1/sync/conflicts',

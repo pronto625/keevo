@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/core/di/providers.dart';
@@ -69,6 +70,7 @@ void main() {
           builder: (_, __) => const Scaffold(body: Text('liste équipe'))),
     ]);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),

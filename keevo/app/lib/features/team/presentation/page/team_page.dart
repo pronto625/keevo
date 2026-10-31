@@ -26,7 +26,7 @@ class _TeamPageState extends ConsumerState<TeamPage> {
     // v1s-14-6 (FR67): loaded beside the list, never blocks it — while
     // loading or on failure the cards simply show no stats.
     final activities =
-        ref.watch(employeeActivityMapProvider).valueOrNull ?? const {};
+        ref.watch(employeeActivityMapProvider).value ?? const {};
 
     return Scaffold(
       backgroundColor: theme.colorScheme.surface,

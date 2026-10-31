@@ -7,6 +7,7 @@ import 'package:keevo/core/router/app_router.dart';
 import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo/features/onboarding/presentation/page/terms_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// v1s-16-13: read-only CGU view opened from the register form.
@@ -20,6 +21,7 @@ void main() {
   });
 
   Widget app() => ProviderScope(
+        retry: noProviderRetry,
         overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
         child: MaterialApp.router(
           routerConfig: GoRouter(

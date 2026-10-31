@@ -10,6 +10,7 @@ import 'package:keevo/features/catalog/presentation/widget/cross_store_availabil
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -90,6 +91,7 @@ void main() {
     final modelToUse = modelOverride ?? tModel;
 
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         stockRepositoryProvider.overrideWithValue(mockRepo),

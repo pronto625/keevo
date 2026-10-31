@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/audit/domain/model/audit_filter.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_log_provider.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../page/audit_test_helpers.dart';
 
@@ -24,6 +25,7 @@ void main() {
           : AuditSlice(entries: [auditEntry('fresh')], nextCursor: 'c2'));
     };
     final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [auditRepositoryProvider.overrideWithValue(repo)]);
     addTearDown(container.dispose);
     container.listen(auditLogNotifierProvider, (_, __) {});
@@ -53,6 +55,7 @@ void main() {
         ? AuditSlice(entries: [auditEntry('a')], nextCursor: 'c1')
         : AuditSlice(entries: [auditEntry('a'), auditEntry('b')]);
     final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [auditRepositoryProvider.overrideWithValue(repo)]);
     addTearDown(container.dispose);
     container.listen(auditLogNotifierProvider, (_, __) {});

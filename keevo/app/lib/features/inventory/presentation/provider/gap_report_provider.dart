@@ -1,5 +1,6 @@
 import 'dart:developer' as dev;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -25,22 +26,23 @@ final localGapReportDataSourceProvider =
 /// Offline: fall back to local Drift generation.
 @riverpod
 Future<InventoryGapReportModel> gapReport(
-  GapReportRef ref,
+  Ref ref,
   String sessionId,
 ) async {
-  // Backend-First: try remote first (has all counts correctly)
+  // Read before the first await: Riverpod 3 throws on a ref used after this
+  // auto-dispose provider was disposed meanwhile.
   final connectivity = ref.read(connectivityServiceProvider);
+  final dio = ref.read(dioProvider);
+  final localDs = ref.read(localGapReportDataSourceProvider);
+  // Backend-First: try remote first (has all counts correctly)
   if (await connectivity.isOnline()) {
     try {
-      final dio = ref.read(dioProvider);
       final response = await dio.get<Map<String, dynamic>>(
         '/api/v1/inventory/sessions/$sessionId/gap-report',
       );
       final data = response.data!['data'] as Map<String, dynamic>;
       final report = InventoryGapReportModel.fromJson(data);
-      return ref
-          .read(localGapReportDataSourceProvider)
-          .withLocalCategoryNames(report);
+      return localDs.withLocalCategoryNames(report);
     } catch (e) {
       dev.log('Remote gap report failed, falling back to local: $e',
           name: 'GapReportProvider');
@@ -48,14 +50,13 @@ Future<InventoryGapReportModel> gapReport(
   }
 
   // Offline fallback: generate from local Drift tables
-  final localDs = ref.read(localGapReportDataSourceProvider);
   return localDs.generate(sessionId);
 }
 
 /// Generates emoji-rich WhatsApp text locally.
 @riverpod
 String gapReportWhatsAppText(
-  GapReportWhatsAppTextRef ref,
+  Ref ref,
   InventoryGapReportModel report,
   String actorName,
 ) {
@@ -65,7 +66,7 @@ String gapReportWhatsAppText(
 /// Generates detailed text for export/download.
 @riverpod
 String gapReportDetailedText(
-  GapReportDetailedTextRef ref,
+  Ref ref,
   InventoryGapReportModel report,
   String actorName,
 ) {

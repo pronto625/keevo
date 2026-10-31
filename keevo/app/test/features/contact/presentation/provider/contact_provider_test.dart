@@ -6,6 +6,7 @@ import 'package:keevo/features/contact/domain/model/client_model.dart';
 import 'package:keevo/features/contact/domain/repository/client_repository.dart';
 import 'package:keevo/features/contact/domain/repository/supplier_repository.dart';
 import 'package:keevo/features/contact/presentation/provider/contact_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockClientRepository extends Mock implements ClientRepository {}
@@ -23,6 +24,7 @@ void main() {
           .thenAnswer((_) async => []);
       when(() => repo.syncFromRemote()).thenAnswer((_) async {});
       container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [clientRepositoryProvider.overrideWithValue(repo)]);
       container.listen(clientListNotifierProvider, (_, __) {});
     });
@@ -104,6 +106,7 @@ void main() {
           .thenAnswer((_) async => []);
       when(() => repo.syncFromRemote()).thenThrow(Exception('network'));
       final container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [clientRepositoryProvider.overrideWithValue(repo)]);
       addTearDown(container.dispose);
       container.listen(clientListNotifierProvider, (_, __) {});
@@ -129,6 +132,7 @@ void main() {
           .thenAnswer((_) async => []);
       when(() => repo.syncFromRemote()).thenAnswer((_) async {});
       container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [supplierRepositoryProvider.overrideWithValue(repo)]);
       container.listen(supplierListNotifierProvider, (_, __) {});
     });
@@ -173,6 +177,7 @@ void main() {
       when(() => repo.syncFromRemote()).thenAnswer((_) async {});
       when(() => repo.archive(any())).thenAnswer((_) async {});
       container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [clientRepositoryProvider.overrideWithValue(repo)]);
       container.listen(clientListNotifierProvider, (_, __) {});
     });
@@ -240,6 +245,7 @@ void main() {
           .thenAnswer((_) async => []);
       when(() => repo.syncFromRemote()).thenAnswer((_) async {});
       final container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [supplierRepositoryProvider.overrideWithValue(repo)]);
       addTearDown(container.dispose);
       container.listen(supplierListNotifierProvider, (_, __) {});

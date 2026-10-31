@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:keevo/features/notifications/presentation/widget/notification_bell_widget.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 void main() {
   group('NotificationBellWidget', () {
     testWidgets('shows badge when unread > 0', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             unreadNotificationCountProvider
                 .overrideWith((ref) => Stream.value(3)),
@@ -27,6 +29,7 @@ void main() {
     testWidgets('hides badge when unread is 0', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             unreadNotificationCountProvider
                 .overrideWith((ref) => Stream.value(0)),

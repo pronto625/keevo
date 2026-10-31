@@ -44,7 +44,7 @@ class _StoreStockCardState extends ConsumerState<StoreStockCard> {
           curve: Curves.easeOut,
           alignment: 0.1,
         );
-        ref.read(highlightedStoreIdProvider.notifier).state = null;
+        ref.read(highlightedStoreIdProvider.notifier).set(null);
       });
     }
 

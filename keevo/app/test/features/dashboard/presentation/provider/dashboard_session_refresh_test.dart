@@ -10,6 +10,7 @@ import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/domain/repository/dashboard_repository.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -73,7 +74,7 @@ void main() {
     SharedPreferences.setMockInitialValues(prefs);
     final sp = await SharedPreferences.getInstance();
     var userId = 'u1';
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(sp),
       currentUserIdProvider.overrideWith((_) async => userId),
       dashboardRepositoryProvider.overrideWithValue(repo),

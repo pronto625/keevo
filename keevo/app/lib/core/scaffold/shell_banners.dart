@@ -49,7 +49,7 @@ ShellBanner? pickShellBanner({
 final shellBannerProvider = Provider<ShellBanner?>((ref) => pickShellBanner(
       accountStatus: ref.watch(accountStatusProvider),
       deletionPending:
-          ref.watch(deletionPendingStatusProvider).valueOrNull != null,
+          ref.watch(deletionPendingStatusProvider).value != null,
       gate: ref.watch(syncGateStateProvider),
       syncCriticalFailure:
           ref.watch(syncTriggerNotifierProvider) is SyncTriggerCriticalFailure,

@@ -13,6 +13,7 @@ import 'package:keevo/features/audit/presentation/provider/audit_log_provider.da
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../../../helpers/no_technical_text.dart';
 import 'audit_test_helpers.dart';
@@ -32,6 +33,7 @@ void main() {
   });
 
   Widget app() => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           auditRepositoryProvider.overrideWithValue(repo),
           currentUserRoleProvider.overrideWithValue(role),

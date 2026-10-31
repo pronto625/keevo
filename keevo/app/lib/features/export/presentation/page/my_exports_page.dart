@@ -175,17 +175,17 @@ class _MyExportsPageState extends ConsumerState<MyExportsPage> {
     final cs = Theme.of(context).colorScheme;
     final jobsAsync = ref.watch(exportJobsProvider);
     final labels = {
-      for (final d in ref.watch(exportDatasetsProvider).valueOrNull ??
+      for (final d in ref.watch(exportDatasetsProvider).value ??
           const <ExportDataset>[])
         d.key: d.label,
     };
     final stores = {
-      for (final s in ref.watch(exportStoreOptionsProvider).valueOrNull ??
+      for (final s in ref.watch(exportStoreOptionsProvider).value ??
           const <ExportStoreOption>[])
         s.id: s.label,
     };
 
-    final jobs = jobsAsync.valueOrNull;
+    final jobs = jobsAsync.value;
     _syncTimer(jobs != null && jobs.any((j) => j.isActive));
     if (jobs != null) _maybeAutoOpen(jobs);
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/inventory/domain/model/inventory_product_row_model.dart';
@@ -38,6 +39,7 @@ void main() {
         ]);
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [inventoryCountRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: InventoryCountingPage(sessionId: 'sess-1')),
     ));
@@ -70,6 +72,7 @@ void main() {
         ]);
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [inventoryCountRepositoryProvider.overrideWithValue(repo)],
       child: const MaterialApp(home: InventoryCountingPage(sessionId: 'sess-1')),
     ));

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -11,6 +12,7 @@ import 'package:keevo/features/catalog/presentation/provider/category_provider.d
 import 'package:keevo/features/inventory/data/datasource/remote_quick_add_datasource.dart';
 import 'package:keevo/features/inventory/presentation/provider/quick_add_product_provider.dart';
 import 'package:keevo/features/inventory/presentation/widget/quick_add_product_sheet.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Fake notifier that allows controlling quickAdd results in widget tests.
 class _FakeQuickAddNotifier extends QuickAddProductNotifier {
@@ -76,6 +78,7 @@ final _fakeResult = QuickAddResult(
 
 Widget _wrap(Widget child, {List<Override> overrides = const []}) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: overrides,
     child: MaterialApp(
       home: Scaffold(body: child),

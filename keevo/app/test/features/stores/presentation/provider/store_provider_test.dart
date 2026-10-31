@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/stores/domain/model/store_model.dart';
@@ -37,6 +38,7 @@ void main() {
   });
 
   ProviderContainer makeContainer() => ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           storeRepositoryProvider.overrideWithValue(mockRepo),
         ],

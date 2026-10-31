@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/feedback/domain/model/feedback_submission.dart';
@@ -15,6 +16,7 @@ class _FakeSubmission extends Fake implements FeedbackSubmission {}
 
 Widget _build(FeedbackRepository repo, {String? screenContext = '/settings'}) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       feedbackRepositoryProvider.overrideWithValue(repo),
       appVersionProvider.overrideWithValue('1.1.13'),

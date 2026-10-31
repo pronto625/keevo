@@ -58,7 +58,7 @@ class InventoryGapReportPage extends ConsumerWidget {
                 letterSpacing: -0.2,
               ),
             ),
-            if (reportAsync.valueOrNull != null)
+            if (reportAsync.value != null)
               Text(
                 '${reportAsync.value!.storeName} — ${inventoryScopeLabel(reportAsync.value!.scope)}',
                 style: Theme.of(context)
@@ -74,7 +74,7 @@ class InventoryGapReportPage extends ConsumerWidget {
             icon: Icons.share,
             iconSize: 20,
             tooltip: 'Partager sur WhatsApp',
-            onPressed: reportAsync.valueOrNull != null
+            onPressed: reportAsync.value != null
                 ? () => _shareWhatsApp(context, ref, reportAsync.value!)
                 : null,
           ),
@@ -85,7 +85,7 @@ class InventoryGapReportPage extends ConsumerWidget {
               icon: Icons.download,
               iconSize: 20,
               tooltip: 'Télécharger le rapport',
-              onPressed: reportAsync.valueOrNull != null
+              onPressed: reportAsync.value != null
                   ? () => _downloadReport(context, ref, reportAsync.value!)
                   : null,
             ),

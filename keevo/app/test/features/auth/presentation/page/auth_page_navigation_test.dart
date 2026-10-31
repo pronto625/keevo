@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/features/auth/presentation/page/auth_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +16,7 @@ Future<Widget> _buildApp({
   SharedPreferences.setMockInitialValues({kTermsAcceptedKey: termsAccepted});
   final prefs = await SharedPreferences.getInstance();
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
     child: MaterialApp.router(
       routerConfig: GoRouter(

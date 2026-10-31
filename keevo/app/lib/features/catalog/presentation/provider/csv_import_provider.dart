@@ -198,6 +198,8 @@ class CsvImportNotifier extends _$CsvImportNotifier {
         allowMultiple: false,
         withData: true,
       );
+      // Riverpod 3: a disposed notifier throws on `state`.
+      if (!ref.mounted) return;
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
@@ -220,6 +222,7 @@ class CsvImportNotifier extends _$CsvImportNotifier {
         detectedHeaders: headers,
       );
     } catch (e) {
+      if (!ref.mounted) return;
       state = const CsvImportError(
           'Impossible d\'ouvrir ce fichier. Vérifiez qu\'il s\'agit bien d\'un fichier CSV.');
     }
@@ -242,8 +245,10 @@ class CsvImportNotifier extends _$CsvImportNotifier {
         columnMapping: mapping,
         storeId: ref.read(activeStoreIdProvider),
       );
+      if (!ref.mounted) return;
       state = CsvImportSuccess(result);
     } catch (e) {
+      if (!ref.mounted) return;
       state = CsvImportError(_friendlyError(e), picked: current);
     }
   }

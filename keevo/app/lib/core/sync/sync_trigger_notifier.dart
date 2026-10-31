@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/account_read_only_exception.dart';
 import 'package:keevo_core/sync/held_operations.dart';
@@ -36,16 +37,20 @@ part 'sync_trigger_notifier.g.dart';
 
 /// Provider for pending stock conflict notifications (AC8).
 /// SyncTriggerNotifier populates this; SyncIndicator listens and shows SnackBars.
-final pendingConflictNotificationsProvider =
-    StateProvider<List<Map<String, dynamic>>>((ref) => []);
+final pendingConflictNotificationsProvider = NotifierProvider<
+    SettableNotifier<List<Map<String, dynamic>>>, List<Map<String, dynamic>>>(
+  () => SettableNotifier([]),
+);
 
 /// Provider for pending sync-rejection notifications.
 ///
 /// Populated with newly-REJECTED operations (business validation failures —
 /// duplicate name, plan limit, etc.) that haven't already been surfaced for
 /// their current reason. SyncIndicator listens and shows SnackBars.
-final pendingRejectionNotificationsProvider =
-    StateProvider<List<Map<String, dynamic>>>((ref) => []);
+final pendingRejectionNotificationsProvider = NotifierProvider<
+    SettableNotifier<List<Map<String, dynamic>>>, List<Map<String, dynamic>>>(
+  () => SettableNotifier([]),
+);
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -176,15 +181,19 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   Future<void> _tryPeriodicPush() async {
     if (state is! SyncTriggerIdle) return;
     if (await _isOffline()) return;
+    // Riverpod 3: the notifier throws on `state` / `ref` once disposed
+    // (container disposed): every step after an await checks it first.
+    if (!ref.mounted) return;
     // A50: a read-only account cannot push — the 5-minute full sync still
     // pulls and checks whether the account is writable again.
     if (AccountReadOnlyException.forTenantStatus(
-            ref.read(tenantStatusClaimProvider).valueOrNull) !=
+            ref.read(tenantStatusClaimProvider).value) !=
         null) {
       return;
     }
     final syncService = ref.read(syncServiceProvider);
     final hasPending = await syncService.hasPendingOperations();
+    if (!ref.mounted) return;
     if (hasPending) {
       // Check if queue is stale (ops pending > 1 hour) — trigger diagnostic
       final db = ref.read(appDatabaseProvider);
@@ -192,10 +201,12 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       // push: they do not make the queue stale.
       // Held operations (Stories 12.7, 13.5) wait for their module either.
       final oldestPending = await oldestPendingOperation(db);
+      if (!ref.mounted) return;
       if (oldestPending != null &&
           DateTime.now().difference(oldestPending.createdAt).inHours >= 1) {
         await ref.read(syncDiagnosticRunnerProvider).runIfNeeded();
       }
+      if (!ref.mounted) return;
       triggerSync();
     }
   }
@@ -215,6 +226,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     // attempt on every queued operation. Nothing is tried; the connectivity
     // listener starts a sync as soon as the network is back.
     if (await _isOffline()) return;
+    if (!ref.mounted) return;
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
@@ -270,6 +282,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
         // Non-423 push failure: proceed with pull (pull is NOT gated)
       }
 
+      if (!ref.mounted) return;
       _handlePushResults(conflicts);
 
       // Step 2: Pull server delta
@@ -284,12 +297,14 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
         }
       }
 
+      if (!ref.mounted) return;
       _consecutiveFailures = 0;
       _firstFailureAt = null;
       // Invalidate ALL entity providers so UI refreshes with pulled data
       _invalidateAllProviders();
       state = const SyncTriggerState.idle();
     } catch (_) {
+      if (!ref.mounted) return;
       _consecutiveFailures++;
       _firstFailureAt ??= DateTime.now();
       _scheduleRetry();
@@ -337,10 +352,12 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
 
   Future<void> _pushCycle() async {
     if (await _isOffline()) return; // A44 — see _syncCycle.
+    if (!ref.mounted) return;
     state = const SyncTriggerState.syncing();
     try {
       final syncService = ref.read(syncServiceProvider);
       final results = await syncService.push();
+      if (!ref.mounted) return;
       _handlePushResults(results);
       _consecutiveFailures = 0;
       _firstFailureAt = null;
@@ -350,8 +367,9 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
       // A50: not a failure to retry — the operations wait, queued, until the
       // account is writable again (periodic push, or the renewal after a
       // cancelled deletion).
-      state = const SyncTriggerState.idle();
+      if (ref.mounted) state = const SyncTriggerState.idle();
     } catch (_) {
+      if (!ref.mounted) return;
       _consecutiveFailures++;
       _firstFailureAt ??= DateTime.now();
       _scheduleRetry();
@@ -365,15 +383,19 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
     final stockConflicts =
         results.where((c) => c['status'] == 'CONFLICT').toList();
     if (stockConflicts.isNotEmpty) {
-      ref.read(pendingConflictNotificationsProvider.notifier).state =
-          stockConflicts;
+      // Appended, never overwritten: an indicator paused behind a route only
+      // gets the latest value on resume — earlier notices must still be in it.
+      ref
+          .read(pendingConflictNotificationsProvider.notifier)
+          .update((pending) => [...pending, ...stockConflicts]);
     }
 
     final rejections =
         results.where((c) => c['status'] == 'REJECTED').toList();
     if (rejections.isNotEmpty) {
-      ref.read(pendingRejectionNotificationsProvider.notifier).state =
-          rejections;
+      ref
+          .read(pendingRejectionNotificationsProvider.notifier)
+          .update((pending) => [...pending, ...rejections]);
     }
     // A rolled-back store creation may have cleared the active store pref:
     // refresh it now — _invalidateAllProviders() is skipped if the pull fails.

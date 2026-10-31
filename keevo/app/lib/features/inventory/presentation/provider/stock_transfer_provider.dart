@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -90,16 +91,18 @@ class TransferHistory extends _$TransferHistory {
   Future<void> loadMore() async {
     // A failed rebuild keeps the previous value: never page on from it.
     if (state.hasError) return;
-    final current = state.valueOrNull;
+    final current = state.value;
     if (current == null || !current.hasMore || _loadingMore) return;
     final generation = _generation;
     final pageIndex = _nextPage;
     _loadingMore = true;
     try {
       final page = await _fetch(pageIndex);
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted) return;
       // A refresh happened while loading: this page belongs to a list that
       // no longer exists.
-      if (generation != _generation || !identical(state.valueOrNull, current)) {
+      if (generation != _generation || !identical(state.value, current)) {
         return;
       }
       _nextPage = pageIndex + 1;
@@ -126,6 +129,9 @@ class TransferHistory extends _$TransferHistory {
           page: page,
           pageSize: kTransferHistoryPageSize,
         );
+    // Disposed meanwhile: nobody reads this page any more (Riverpod 3 throws
+    // on a disposed ref).
+    if (!ref.mounted) return transfers;
 
     // Enrich denormalized display fields from local providers (spec AC5).
     // Use ref.read (not ref.watch) to avoid AutoDispose race conditions: watching
@@ -133,6 +139,7 @@ class TransferHistory extends _$TransferHistory {
     // "Bad state: Future already completed" when the provider auto-disposes
     // mid-await (e.g. when the form bottom sheet closes its listeners).
     final stores = await ref.read(storeListNotifierProvider.future);
+    if (!ref.mounted) return transfers;
     final products = await ref.read(productListForPickerProvider.future);
     final storeMap = {for (final s in stores) s.id: s.name};
     final productMap = {for (final p in products) p.id: p.name};
@@ -178,7 +185,7 @@ class ExecuteTransferNotifier extends _$ExecuteTransferNotifier {
               quantity: quantity,
               notes: notes,
             ));
-    state = result;
+    if (ref.mounted) state = result;
     if (result.hasError) throw result.error!;
     return result.value!;
   }
@@ -195,7 +202,7 @@ class CompleteTransferNotifier extends _$CompleteTransferNotifier {
     state = const AsyncLoading();
     final result = await AsyncValue.guard(() =>
         ref.read(stockTransferRepositoryProvider).completeTransfer(transferId));
-    state = result;
+    if (ref.mounted) state = result;
     if (result.hasError) throw result.error!;
     return result.value!;
   }

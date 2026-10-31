@@ -70,7 +70,7 @@ class _InventoryCountingPageState
                   border: InputBorder.none,
                 ),
                 onChanged: (v) =>
-                    ref.read(inventoryCountSearchProvider.notifier).state = v,
+                    ref.read(inventoryCountSearchProvider.notifier).set(v),
               )
             : const Text(
                 'Comptage',
@@ -87,7 +87,7 @@ class _InventoryCountingPageState
                 _isSearching = !_isSearching;
                 if (!_isSearching) {
                   _searchController.clear();
-                  ref.read(inventoryCountSearchProvider.notifier).state = '';
+                  ref.read(inventoryCountSearchProvider.notifier).set('');
                 }
               });
             },
@@ -268,7 +268,7 @@ class _InventoryCountingPageState
               title: const Text('Tous'),
               subtitle: Text('${products.length} produits'),
               onChanged: (v) {
-                ref.read(inventoryCountFilterProvider.notifier).state = v!;
+                ref.read(inventoryCountFilterProvider.notifier).set(v!);
                 Navigator.pop(ctx);
               },
             ),
@@ -278,7 +278,7 @@ class _InventoryCountingPageState
               title: const Text('Non comptés'),
               subtitle: Text('$uncountedCount restants'),
               onChanged: (v) {
-                ref.read(inventoryCountFilterProvider.notifier).state = v!;
+                ref.read(inventoryCountFilterProvider.notifier).set(v!);
                 Navigator.pop(ctx);
               },
             ),
@@ -288,7 +288,7 @@ class _InventoryCountingPageState
               title: const Text('Écarts seulement'),
               subtitle: Text('$discrepancyCount produits avec écart'),
               onChanged: (v) {
-                ref.read(inventoryCountFilterProvider.notifier).state = v!;
+                ref.read(inventoryCountFilterProvider.notifier).set(v!);
                 Navigator.pop(ctx);
               },
             ),

@@ -1,10 +1,10 @@
 name: keevo
 description: Keevo — Gestion d'inventaire et de ventes pour commerçants au Cameroun.
 publish_to: 'none'
-version: 2.0.11+83
+version: 2.0.12+84
 
 environment:
-  sdk: '>=3.6.0 <4.0.0'
+  sdk: '>=3.8.0 <4.0.0'
 
 # Story 15.4a — Dart pub workspace (Melos 7): this app is the workspace root;
 # shared kernel in packages/keevo_core. `flutter pub get` here resolves all.
@@ -21,9 +21,11 @@ dependencies:
   keevo_core:
     path: packages/keevo_core
 
-  # State management
-  flutter_riverpod: ^2.5.1
-  riverpod_annotation: ^2.3.5
+  # State management — Riverpod 3 (Story 15.4b). Newer riverpod_generator /
+  # freezed / json_serializable need Dart 3.12+ or an analyzer that
+  # flutter_test's pinned `meta` rules out: bump them with the Flutter SDK.
+  flutter_riverpod: ^3.2.1
+  riverpod_annotation: ^4.0.2
 
   # Routing
   go_router: ^14.2.0
@@ -40,7 +42,7 @@ dependencies:
   http: ^1.1.0
 
   # Code generation (models)
-  freezed_annotation: ^2.4.4
+  freezed_annotation: ^3.1.0
   json_annotation: ^4.9.0
 
   # Fonts
@@ -97,9 +99,9 @@ dev_dependencies:
     sdk: flutter
 
   # Code generation
-  build_runner: ^2.4.11
-  freezed: ^2.5.2
-  riverpod_generator: ^2.4.0
+  build_runner: ^2.10.0
+  freezed: ^3.2.5
+  riverpod_generator: ^4.0.3
   json_serializable: ^6.8.0
   drift_dev: ^2.18.0
 

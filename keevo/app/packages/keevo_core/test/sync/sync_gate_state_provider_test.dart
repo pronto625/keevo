@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:keevo_core/sync/sync_gate_state.dart';
 
 void main() {
   ProviderContainer _makeContainer(int days) {
     return ProviderContainer(
+      retry: noProviderRetry,
       overrides: [
         daysSinceLastSyncProvider.overrideWithValue(days),
       ],

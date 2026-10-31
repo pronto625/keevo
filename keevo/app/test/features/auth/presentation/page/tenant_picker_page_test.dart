@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 
 import 'package:keevo/features/auth/domain/model/membership_dto.dart';
 import 'package:keevo/features/auth/presentation/page/tenant_picker_page.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// v1s-16-13: the tenant picker had no exit.
 void main() {
   Widget page() => ProviderScope(
+        retry: noProviderRetry,
         child: MaterialApp.router(
           routerConfig: GoRouter(routes: [
             GoRoute(

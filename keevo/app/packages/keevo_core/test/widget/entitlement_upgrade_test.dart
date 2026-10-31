@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/network/module_entitlement_exception.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:keevo_core/widget/entitlement_upgrade.dart';
 
@@ -24,6 +25,7 @@ Widget _app(Widget page, {bool owner = true}) {
     ),
   ]);
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [isOwnerSessionProvider.overrideWithValue(owner)],
     child: MaterialApp.router(routerConfig: router),
   );

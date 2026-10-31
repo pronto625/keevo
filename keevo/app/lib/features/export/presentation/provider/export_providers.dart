@@ -45,9 +45,12 @@ final exportOnlineProvider = FutureProvider.autoDispose<bool>((ref) {
 /// « Mes exports » — background jobs, newest first. No offline cache.
 final exportJobsProvider =
     FutureProvider.autoDispose<List<ExportJob>>((ref) async {
+  // Watched before the await: Riverpod 3 throws on a ref used after its
+  // provider was disposed / rebuilt meanwhile.
+  final dataSource = ref.watch(exportDataSourceProvider);
   final online = await ref.watch(exportOnlineProvider.future);
   if (!online) throw ExportException.offline;
-  return ref.watch(exportDataSourceProvider).listJobs();
+  return dataSource.listJobs();
 });
 
 /// Premium status for the format badges: `true` Premium, `false` FREE,

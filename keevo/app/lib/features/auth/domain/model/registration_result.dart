@@ -7,7 +7,7 @@ part 'registration_result.freezed.dart';
 /// Immutable Freezed value object — auto-generates equality, hashCode, copyWith and toString.
 /// Mirrors the backend RegistrationResult record.
 @freezed
-class RegistrationResult with _$RegistrationResult {
+abstract class RegistrationResult with _$RegistrationResult {
   const factory RegistrationResult({
     required String tenantCode,
     required String token,

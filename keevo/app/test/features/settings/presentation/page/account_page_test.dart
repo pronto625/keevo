@@ -10,6 +10,7 @@ import 'package:keevo/features/account/presentation/provider/account_deletion_pr
 import 'package:keevo/features/auth/domain/model/account_profile.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/settings/presentation/page/account_page.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Builds AccountPage wrapped with ProviderScope + GoRouter.
 ///
@@ -22,6 +23,7 @@ Widget _buildPage({
   DeletionPendingStatus? deletionStatus,
 }) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       accountProfileProvider.overrideWith((_) async {
         if (error != null) throw error;

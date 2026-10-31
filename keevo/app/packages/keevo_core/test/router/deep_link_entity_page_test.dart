@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:keevo_core/router/deep_link_entity_page.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// N3 — `/products/{id}/edit`, `/clients/:id`, `/suppliers/:id`,
 /// `/settings/team/:id/edit` opened without `extra` (notification) load the
 /// entity by id and open its form; absent → list + French snackbar.
 void main() {
   Widget app(Future<String?> Function() load) => ProviderScope(
+        retry: noProviderRetry,
         child: MaterialApp(
           home: DeepLinkEntityPage<String>(
             load: (_) => load(),

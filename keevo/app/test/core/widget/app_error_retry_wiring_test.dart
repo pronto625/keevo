@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -13,6 +14,7 @@ import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/page/subscription_page.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
 import 'package:keevo/features/sync_indicator/presentation/page/sync_conflict_log_page.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/domain/sync_conflict.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
@@ -32,6 +34,7 @@ void main() {
     Widget page,
   ) async {
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: overrides,
       child: MaterialApp(home: page),
     ));

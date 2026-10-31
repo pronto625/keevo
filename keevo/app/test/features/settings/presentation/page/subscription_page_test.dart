@@ -5,6 +5,7 @@ import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/page/subscription_page.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 
@@ -13,6 +14,7 @@ void main() {
     testWidgets('shows Free plan type, status and usage counts with limits',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           subscriptionInfoProvider.overrideWith(
             (ref) async => const SubscriptionInfo(
@@ -44,6 +46,7 @@ void main() {
         'shows Essai Premium plan with expiry date and unlimited label',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           subscriptionInfoProvider.overrideWith(
             (ref) async => const SubscriptionInfo(
@@ -73,7 +76,7 @@ void main() {
     testWidgets('loading the subscription re-reads the module states',
         (tester) async {
       final fake = FakeEntitlementsNotifier(() async => const {});
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         subscriptionInfoProvider.overrideWith(
           (ref) async => const SubscriptionInfo(
             planType: 'PREMIUM',

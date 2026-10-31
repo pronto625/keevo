@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:keevo_core/di/core_providers.dart';
@@ -249,10 +250,12 @@ class Registration extends _$Registration {
             password: password,
           ),
     );
+    // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+    if (!ref.mounted) return;
     // AC1 (HF-1): Persist role + phone after successful registration so
     // currentUserRoleProvider rebuilds immediately — no re-login required.
     // The success state is only published once the session is applied.
-    final result = registered.valueOrNull;
+    final result = registered.value;
     if (result == null) {
       state = registered;
       return;
@@ -276,6 +279,7 @@ class Registration extends _$Registration {
   Future<void> cancelPendingSignIn() async {
     _pending = null;
     await ref.read(sessionClaimsApplierProvider).abandonSignIn();
+    if (!ref.mounted) return;
     state = const AsyncData(null);
   }
 
@@ -288,12 +292,14 @@ class Registration extends _$Registration {
       await ref.read(sessionClaimsApplierProvider).apply(result.token,
           newSession: true,
           discardPreviousAccountData: discardPreviousAccountData);
+      if (!ref.mounted) return;
       final prefs = ref.read(sharedPreferencesProvider);
       // The server's role claim wins; registration creates an OWNER, so that
       // is only the fallback for a token without the claim.
       await prefs.setString(
           kUserRoleKey, JwtClaims.tryParse(result.token)?.role ?? 'OWNER');
       await prefs.setString(kUserPhoneKey, phoneNumber);
+      if (!ref.mounted) return;
       ref.read(activeStoreIdProvider.notifier).setActiveStore(null);
       ref.invalidate(currentUserRoleProvider);
       ref.invalidate(currentUserPhoneProvider);
@@ -301,6 +307,7 @@ class Registration extends _$Registration {
       _pending = null;
       state = AsyncData(result);
     } catch (e, st) {
+      if (!ref.mounted) return;
       if (e is PreviousAccountDataException) {
         _pending = result;
         _pendingPhone = phoneNumber;
@@ -336,9 +343,10 @@ class Login extends _$Login {
             password: password,
           ),
     );
+    if (!ref.mounted) return;
     // Persist phone + token claims (role, store, flags) through the same path
     // as every other token, so UI rebuilds immediately.
-    final loginResult = result.valueOrNull;
+    final loginResult = result.value;
     if (loginResult is AuthenticatedResult) {
       await _applySession(loginResult, phoneNumber);
       return;
@@ -362,6 +370,7 @@ class Login extends _$Login {
   Future<void> cancelPendingSignIn() async {
     _pending = null;
     await ref.read(sessionClaimsApplierProvider).abandonSignIn();
+    if (!ref.mounted) return;
     state = const AsyncData(null);
   }
 
@@ -375,7 +384,9 @@ class Login extends _$Login {
           result.tokens.accessToken,
           newSession: true,
           discardPreviousAccountData: discardPreviousAccountData);
+      if (!ref.mounted) return;
       await ref.read(sharedPreferencesProvider).setString(kUserPhoneKey, phoneNumber);
+      if (!ref.mounted) return;
       ref.invalidate(currentUserPhoneProvider);
 
       // Story 16.8 AC2: pull latest server state after fresh login.
@@ -383,6 +394,7 @@ class Login extends _$Login {
       _pending = null;
       state = AsyncData(result);
     } catch (e, st) {
+      if (!ref.mounted) return;
       // Never leave the button spinning: a storage or DB failure, or another
       // account's unsynced operations (the page asks the user), end in error.
       if (e is PreviousAccountDataException) {
@@ -422,7 +434,8 @@ class SelectTenant extends _$SelectTenant {
             tenantCode: tenantCode,
           ),
     );
-    final tokens = result.valueOrNull;
+    if (!ref.mounted) return;
+    final tokens = result.value;
     if (tokens != null) {
       await _applySession(tokens);
       return;
@@ -444,6 +457,7 @@ class SelectTenant extends _$SelectTenant {
   Future<void> cancelPendingSignIn() async {
     _pending = null;
     await ref.read(sessionClaimsApplierProvider).abandonSignIn();
+    if (!ref.mounted) return;
     state = const AsyncData(null);
   }
 
@@ -453,12 +467,14 @@ class SelectTenant extends _$SelectTenant {
       await ref.read(sessionClaimsApplierProvider).apply(tokens.accessToken,
           newSession: true,
           discardPreviousAccountData: discardPreviousAccountData);
+      if (!ref.mounted) return;
 
       // Story 16.8 AC2: pull latest server state after tenant selection.
       ref.read(syncTriggerNotifierProvider.notifier).onAppStartup();
       _pending = null;
       state = AsyncData(tokens);
     } catch (e, st) {
+      if (!ref.mounted) return;
       if (e is PreviousAccountDataException) _pending = tokens;
       state = AsyncError(e, st);
     }
@@ -503,17 +519,21 @@ class ChangePassword extends _$ChangePassword {
             newPassword: newPassword,
           ),
     );
+    if (!ref.mounted) return;
     // Clear the password change required flag on success
-    final tokens = result.valueOrNull;
+    final tokens = result.value;
     if (tokens != null) {
       try {
         await ref.read(sharedPreferencesProvider).setBool(kPasswordChangeRequiredKey, false);
+        if (!ref.mounted) return;
         await ref.read(sessionClaimsApplierProvider).apply(tokens.accessToken);
       } catch (e, st) {
         // Never leave the button spinning on a storage failure.
+        if (!ref.mounted) return;
         state = AsyncError(e, st);
         return;
       }
+      if (!ref.mounted) return;
     }
     state = result;
   }
@@ -535,11 +555,12 @@ class ForgotPassword extends _$ForgotPassword {
 
   Future<void> requestReset({required String phoneNumber}) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final result = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).forgotPassword(
             phoneNumber: phoneNumber,
           ),
     );
+    if (ref.mounted) state = result;
   }
 }
 
@@ -562,13 +583,14 @@ class ResetPassword extends _$ResetPassword {
     required String newPassword,
   }) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final result = await AsyncValue.guard(
       () => ref.read(authRepositoryProvider).resetPassword(
             phoneNumber: phoneNumber,
             code: code,
             newPassword: newPassword,
           ),
     );
+    if (ref.mounted) state = result;
   }
 }
 

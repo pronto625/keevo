@@ -26,8 +26,8 @@ class ProductProfitabilityListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // AC10: Auto-refresh when device comes back online.
     ref.listen<AsyncValue<SyncStatus>>(syncStatusProvider, (prev, next) {
-      if (next.valueOrNull == SyncStatus.online &&
-          prev?.valueOrNull != SyncStatus.online) {
+      if (next.value == SyncStatus.online &&
+          prev?.value != SyncStatus.online) {
         ref.invalidate(productProfitabilityProvider);
       }
     });
@@ -36,7 +36,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
     final period = selection.range();
     final sort = ref.watch(selectedSortProvider);
     final syncStatus = ref.watch(syncStatusProvider);
-    final isOffline = switch (syncStatus.valueOrNull) {
+    final isOffline = switch (syncStatus.value) {
       SyncStatus.offlineOk || SyncStatus.offlineCritical => true,
       _ => false,
     };
@@ -86,14 +86,13 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                       selected: selection,
                       onChanged: (s) => ref
                           .read(selectedProfitabilityPeriodProvider.notifier)
-                          .state = s,
+                          .set(s),
                     ),
                     const SizedBox(height: 4),
                     SortChips(
                       selected: sort,
                       onChanged: (option) =>
-                          ref.read(selectedSortProvider.notifier).state =
-                              option,
+                          ref.read(selectedSortProvider.notifier).set(option),
                     ),
                   ],
                 ),
@@ -144,8 +143,7 @@ class ProductProfitabilityListPage extends ConsumerWidget {
                   return ProductProfitabilityRow(
                     entry: entry,
                     onTap: () {
-                      ref.read(profitabilityStoreFilterProvider.notifier).state =
-                          storeId;
+                      ref.read(profitabilityStoreFilterProvider.notifier).set(storeId);
                       context.push('/reports/rentabilite/${entry.productId}',
                           extra: entry);
                     },

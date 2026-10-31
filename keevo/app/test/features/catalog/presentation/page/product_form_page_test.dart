@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
@@ -9,6 +10,7 @@ import 'package:keevo/core/photo/product_photo_providers.dart';
 import 'package:keevo/features/catalog/presentation/page/product_form_page.dart';
 import 'package:keevo/features/catalog/presentation/provider/category_provider.dart';
 import 'package:keevo_core/photo/product_photo_compressor.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockImagePicker extends Mock implements ImagePicker {}
@@ -32,6 +34,7 @@ Future<void> _openForm(WidgetTester tester,
     {List<Override> overrides = const []}) async {
   await tester.pumpWidget(
     ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         categoriesProvider.overrideWith((_) async => []),
         ...overrides,

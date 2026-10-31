@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/inventory/domain/model/inventory_gap_report_model.dart';
 import 'package:keevo/features/inventory/presentation/widget/apply_adjustments_button.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 void main() {
   final summary = const InventoryGapSummaryModel(
@@ -17,6 +18,7 @@ void main() {
 
   Widget buildButton() {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         currentUserRoleProvider.overrideWithValue('OWNER'),
       ],

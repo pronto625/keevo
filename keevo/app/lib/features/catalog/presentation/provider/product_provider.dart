@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -81,33 +82,42 @@ final unarchiveProductUseCaseProvider = Provider<UnarchiveProductUseCase>((ref) 
 // ── Feature state notifier ────────────────────────────────────────────────────
 
 /// Holds the current search query — updated by the search bar.
-final productSearchQueryProvider = StateProvider<String>((ref) => '');
+final productSearchQueryProvider =
+    NotifierProvider<SettableNotifier<String>, String>(
+  () => SettableNotifier(''),
+);
 
 /// When true, the active products tab shows only DRAFT products.
-final showDraftsOnlyProvider = StateProvider<bool>((ref) => false);
+final showDraftsOnlyProvider = NotifierProvider<SettableNotifier<bool>, bool>(
+  () => SettableNotifier(false),
+);
 
 /// When true, the active products tab shows only products with low stock.
-final showLowStockOnlyProvider = StateProvider<bool>((ref) => false);
+final showLowStockOnlyProvider = NotifierProvider<SettableNotifier<bool>, bool>(
+  () => SettableNotifier(false),
+);
 
 /// Product list state — reactive to the search query.
 ///
 /// AC7: re-executes on every [productSearchQueryProvider] change.
 /// Offline-first: reads from local Drift DB, no network required.
 @riverpod
-Future<List<ProductModel>> productList(ProductListRef ref) async {
+Future<List<ProductModel>> productList(Ref ref) async {
   final query = ref.watch(productSearchQueryProvider);
   final activeStoreId = ref.watch(activeStoreIdProvider);
   final useCase = ref.watch(getProductsUseCaseProvider);
   final local = ref.watch(localProductDataSourceProvider);
+  // Watched before the first await: Riverpod 3 throws on a ref used after
+  // this provider was disposed / rebuilt meanwhile.
+  final draftsOnly = ref.watch(showDraftsOnlyProvider);
+  final lowStockOnly = ref.watch(showLowStockOnlyProvider);
   var products = await useCase.execute(query: query.isEmpty ? null : query);
   // No per-store visibility filter: the catalog lists every active/draft
   // product tenant-wide, same as POS — a store with no stock_levels row for a
   // product still needs to see it here to perform its first stock movement.
-  final draftsOnly = ref.watch(showDraftsOnlyProvider);
   if (draftsOnly) {
     products = products.where((p) => p.status == ProductStatus.draft).toList();
   }
-  final lowStockOnly = ref.watch(showLowStockOnlyProvider);
   if (lowStockOnly) {
     final lowStockIds = await local.getLowStockProductIds(storeId: activeStoreId);
     products = products.where((p) => lowStockIds.contains(p.id)).toList();
@@ -148,14 +158,17 @@ Future<List<ProductModel>> productList(ProductListRef ref) async {
 /// `catalog_page.dart`'s background sync): offline or a flaky connection must
 /// never break the picker, which always has local Drift data to fall back to.
 @riverpod
-Future<List<ProductModel>> productListForPicker(ProductListForPickerRef ref) async {
+Future<List<ProductModel>> productListForPicker(Ref ref) async {
   final repo = ref.watch(productRepositoryProvider);
+  // Watched before the await: read without a listener (transfer history),
+  // this auto-dispose provider may be disposed during the sync, and Riverpod 3
+  // throws on a ref used after that.
+  final useCase = ref.watch(getProductsUseCaseProvider);
   try {
     await repo.syncFromRemote();
   } catch (_) {
     // Best-effort — local data below is still valid and usable offline.
   }
-  final useCase = ref.watch(getProductsUseCaseProvider);
   return useCase.execute();
 }
 
@@ -174,7 +187,7 @@ final pendingDraftsCountProvider = FutureProvider.autoDispose<int>((ref) async {
   return local.countDrafts();
 });
 @riverpod
-Future<List<ProductModel>> archivedProductList(ArchivedProductListRef ref) async {
+Future<List<ProductModel>> archivedProductList(Ref ref) async {
   final useCase = ref.watch(getProductsUseCaseProvider);
   return useCase.executeArchived();
 }
@@ -186,7 +199,7 @@ Future<List<ProductModel>> archivedProductList(ArchivedProductListRef ref) async
 /// same as POS's LEFT JOIN + COALESCE(quantity, 0) — so it counts as
 /// out-of-stock for that store, not hidden.
 @riverpod
-Future<List<ProductModel>> outOfStockProductList(OutOfStockProductListRef ref) async {
+Future<List<ProductModel>> outOfStockProductList(Ref ref) async {
   final useCase = ref.watch(getProductsUseCaseProvider);
   final local = ref.watch(localProductDataSourceProvider);
   final activeStoreId = ref.watch(activeStoreIdProvider);
@@ -214,7 +227,7 @@ Future<List<ProductModel>> outOfStockProductList(OutOfStockProductListRef ref) a
 /// [LocalProductDataSource.getLowStockProductIds]) so a product that's
 /// critically low elsewhere doesn't falsely flag as low here.
 @riverpod
-Future<List<ProductModel>> lowStockProductList(LowStockProductListRef ref) async {
+Future<List<ProductModel>> lowStockProductList(Ref ref) async {
   final local = ref.watch(localProductDataSourceProvider);
   final useCase = ref.watch(getProductsUseCaseProvider);
   final activeStoreId = ref.watch(activeStoreIdProvider);

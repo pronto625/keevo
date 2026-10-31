@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/team/domain/model/employee_model.dart';
@@ -34,6 +35,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [employeeRepositoryProvider.overrideWithValue(empRepo)],
       child: MaterialApp(
         home: Scaffold(

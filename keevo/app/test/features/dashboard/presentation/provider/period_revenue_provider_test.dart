@@ -6,6 +6,7 @@ import 'package:keevo/features/dashboard/data/datasource/remote_dashboard_dataso
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -51,7 +52,7 @@ void main() {
       LocalDashboardDatasource? local}) async {
     SharedPreferences.setMockInitialValues(prefs);
     final sp = await SharedPreferences.getInstance();
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(sp),
       dashboardSnapshotProvider.overrideWith((_) async => snapshot),
       if (local != null) localDashboardDatasourceProvider.overrideWithValue(local),

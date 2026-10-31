@@ -7,6 +7,7 @@ import 'package:keevo/features/notifications/data/repository/announcement_sync_s
 import 'package:keevo/features/notifications/domain/repository/notification_repository.dart';
 import 'package:keevo/features/notifications/presentation/provider/notification_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,6 +24,7 @@ void main() {
   });
 
   ProviderContainer makeContainer() => ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           notificationRepositoryProvider.overrideWithValue(mockRepo),
         ],
@@ -78,7 +80,7 @@ void main() {
       '(Story 9-5)', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       dioProvider.overrideWithValue(Dio()),
       localNotificationDataSourceProvider.overrideWithValue(_MockLocal()),

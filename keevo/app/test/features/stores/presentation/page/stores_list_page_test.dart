@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/stores/domain/exception/store_exception.dart';
@@ -26,6 +27,7 @@ void main() {
   });
 
   Widget buildPage() => ProviderScope(
+        retry: noProviderRetry,
         overrides: [storeRepositoryProvider.overrideWithValue(repo)],
         child: const MaterialApp(home: StoresListPage()),
       );
@@ -60,7 +62,7 @@ void main() {
     when(() => repo.getStores(includeInactive: true))
         .thenAnswer((_) async => [active, inactive]);
     final container =
-        ProviderContainer(overrides: [storeRepositoryProvider.overrideWithValue(repo)]);
+        ProviderContainer(retry: noProviderRetry, overrides: [storeRepositoryProvider.overrideWithValue(repo)]);
     addTearDown(container.dispose);
     // Another screen (e.g. the shell) keeps the shared list alive.
     container.listen(storeListNotifierProvider, (_, __) {});

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 import 'package:keevo_core/widget/soft_icon_badge.dart';
 
@@ -386,12 +387,12 @@ class SettingsPage extends ConsumerWidget {
     // One sign-out at a time: a second tap while the queue is being sent
     // would start a second push and a second sign-out.
     final inProgress = ref.read(_signOutInProgressProvider.notifier);
-    if (inProgress.state) return;
-    inProgress.state = true;
+    if (inProgress.value) return;
+    inProgress.set(true);
     try {
       await _runLogout(context, ref);
     } finally {
-      inProgress.state = false;
+      inProgress.set(false);
     }
   }
 
@@ -526,7 +527,10 @@ class SettingsPage extends ConsumerWidget {
 }
 
 /// True while a sign-out runs (re-entry guard for the logout tile).
-final _signOutInProgressProvider = StateProvider<bool>((_) => false);
+final _signOutInProgressProvider =
+    NotifierProvider<SettableNotifier<bool>, bool>(
+  () => SettableNotifier(false),
+);
 
 // ── Private widgets ─────────────────────────────────────────────────────────
 
@@ -739,7 +743,7 @@ class _ActiveStoreTile extends ConsumerWidget {
         context,
         ref,
         activeStoreId,
-        storesAsync.valueOrNull ?? [],
+        storesAsync.value ?? [],
       ),
     );
   }

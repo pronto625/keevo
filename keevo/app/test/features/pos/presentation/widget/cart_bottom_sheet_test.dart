@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
@@ -8,6 +9,7 @@ import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/cart_bottom_sheet.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -43,6 +45,7 @@ Future<void> pumpSheet(
 }) async {
   await tester.pumpWidget(
     ProviderScope(
+      retry: noProviderRetry,
       overrides: overrides,
       child: MaterialApp(
         theme: theme,
@@ -72,6 +75,7 @@ Future<_MockLocalSaleDs> _encaisserDraft(WidgetTester tester,
       .thenAnswer((_) async => hasStockRecord);
   await tester.pumpWidget(
     ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         localSaleDataSourceProvider.overrideWithValue(ds),
         activeStoreIdProvider.overrideWith(_FixedActiveStore.new),
@@ -141,6 +145,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -171,6 +176,7 @@ void main() {
     testWidgets('tapping price shows inline editor', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -199,6 +205,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -224,6 +231,7 @@ void main() {
     testWidgets('no modifié label when price is same', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {

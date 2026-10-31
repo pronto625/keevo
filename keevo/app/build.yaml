@@ -1,7 +1,11 @@
 targets:
   $default:
     builders:
-      # Riverpod generator
       riverpod_generator:
         options:
-          riverpod_version: 2
+          # Story 15.4b — on purpose: riverpod_generator 3+ strips a trailing
+          # "Notifier" from class names (FooNotifier -> fooProvider). The
+          # migration keeps every public provider name of Riverpod 2
+          # (fooNotifierProvider), so this pattern never matches anything.
+          # Removing it renames ~20 providers across lib/ and test/.
+          provider_name_strip_pattern: '(?!)'

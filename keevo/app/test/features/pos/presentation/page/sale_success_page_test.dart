@@ -8,6 +8,7 @@ import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/extension/extension_actions.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/features/pos/presentation/page/sale_success_page.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../../../helpers/fake_entitlements.dart';
 
@@ -30,6 +31,7 @@ void main() {
   Widget app(SaleSuccessPage page,
       {Future<List<ExtensionContribution>> Function()? slot}) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         entitlementsOverride({'invoicing': 'ENABLED'}),
         extensionContributionsFetcherProvider.overrideWithValue((_) {
@@ -193,6 +195,7 @@ void main() {
       var answer = <ExtensionContribution>[_facturer];
       final fake = FakeEntitlementsNotifier(() async => states);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           entitlementsProvider.overrideWith(() => fake),
           extensionContributionsFetcherProvider

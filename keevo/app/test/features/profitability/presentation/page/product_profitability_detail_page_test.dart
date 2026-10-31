@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/profitability/domain/model/product_profitability_model.dart';
@@ -47,6 +49,7 @@ void main() {
   Widget buildUnderTest(
       MockProfitabilityRepository mockRepo, String productId) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         profitabilityRepositoryProvider.overrideWithValue(mockRepo),
       ],
@@ -119,9 +122,10 @@ void main() {
           )).thenAnswer((_) async => makeDetail());
 
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           profitabilityRepositoryProvider.overrideWithValue(mockRepo),
-          profitabilityStoreFilterProvider.overrideWith((ref) => 's1'),
+          profitabilityStoreFilterProvider.overrideWith(() => SettableNotifier('s1')),
         ],
         child: const MaterialApp(
           home: ProductProfitabilityDetailPage(productId: 'p1'),

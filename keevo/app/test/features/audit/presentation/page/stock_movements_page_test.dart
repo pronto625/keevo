@@ -6,6 +6,7 @@ import 'package:keevo/features/audit/presentation/page/stock_movements_page.dart
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
 import 'package:keevo/features/audit/presentation/widget/stock_history_widget.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'audit_test_helpers.dart';
@@ -17,6 +18,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserIdProvider.overrideWith((_) async => 'owner-1'),

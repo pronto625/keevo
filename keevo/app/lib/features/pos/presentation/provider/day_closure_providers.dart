@@ -147,27 +147,40 @@ final salesHistoryProvider =
 // Notifiers
 
 /// CloseDayNotifier — handles the day closure action.
-class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
-  final CloseDayUseCase _closeDayUseCase;
-  final Ref _ref;
+class CloseDayNotifier extends Notifier<AsyncValue<DayClosureSummary?>> {
+  @override
+  AsyncValue<DayClosureSummary?> build() {
+    // Rebuilt (state reset) when the use case changes, as the former
+    // provider was recreated.
+    ref.watch(closeDayUseCaseProvider);
+    return const AsyncValue.data(null);
+  }
 
-  CloseDayNotifier(this._closeDayUseCase, this._ref) : super(const AsyncValue.data(null));
+  /// Identity-based notification, as before the Riverpod 3 migration (not ==).
+  @override
+  bool updateShouldNotify(AsyncValue<DayClosureSummary?> previous,
+          AsyncValue<DayClosureSummary?> next) =>
+      !identical(previous, next);
 
   Future<void> closeDay(String storeId, String actorId) async {
     state = const AsyncValue.loading();
     try {
       // A50: no closure while the account is read-only.
       SyncGateGuard.assertAccountWritable(
-          _ref.read(tenantStatusClaimProvider).valueOrNull);
-      final summary = await _closeDayUseCase.execute(storeId: storeId, actorId: actorId);
+          ref.read(tenantStatusClaimProvider).value);
+      final summary = await ref
+          .read(closeDayUseCaseProvider)
+          .execute(storeId: storeId, actorId: actorId);
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted) return;
       state = AsyncValue.data(summary);
       // Invalidate related providers to refresh UI
-      _ref.invalidate(dayClosureStateProvider);
-      _ref.invalidate(lastClosureProvider);
-      _ref.invalidate(todaySummaryProvider);
-      _ref.invalidate(reportHistoryProvider);
+      ref.invalidate(dayClosureStateProvider);
+      ref.invalidate(lastClosureProvider);
+      ref.invalidate(todaySummaryProvider);
+      ref.invalidate(reportHistoryProvider);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (ref.mounted) state = AsyncValue.error(e, st);
       rethrow;
     }
   }
@@ -177,7 +190,6 @@ class CloseDayNotifier extends StateNotifier<AsyncValue<DayClosureSummary?>> {
   }
 }
 
-final closeDayNotifierProvider = StateNotifierProvider<CloseDayNotifier, AsyncValue<DayClosureSummary?>>((ref) {
-  final useCase = ref.watch(closeDayUseCaseProvider);
-  return CloseDayNotifier(useCase, ref);
-});
+final closeDayNotifierProvider =
+    NotifierProvider<CloseDayNotifier, AsyncValue<DayClosureSummary?>>(
+        CloseDayNotifier.new);

@@ -10,7 +10,7 @@ part 'supplier_model.g.dart';
 /// Immutable Freezed value object — mirrors [Suppliers] Drift table and
 /// backend Supplier entity. Story 2.5 — Gestion Clients & Fournisseurs.
 @freezed
-class SupplierModel with _$SupplierModel {
+abstract class SupplierModel with _$SupplierModel {
   const factory SupplierModel({
     required String id,
     required String name,

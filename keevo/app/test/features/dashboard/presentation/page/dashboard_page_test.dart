@@ -14,6 +14,8 @@ import 'package:keevo/features/dashboard/presentation/provider/dashboard_provide
 import 'package:keevo/features/dashboard/presentation/widget/total_revenue_card.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -86,6 +88,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
 
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           dashboardSnapshotProvider.overrideWith((_) => Future.value(emptySnapshot)),
           storeOverviewsProvider.overrideWith((_) => Future.value(const <StoreOverview>[])),
@@ -105,6 +108,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
 
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           dashboardSnapshotProvider.overrideWith((_) => Future.value(snapshot)),
           storeOverviewsProvider.overrideWith((_) => Future.value(const <StoreOverview>[])),
@@ -152,6 +156,7 @@ void main() {
       SharedPreferences.setMockInitialValues({kUserFirstNameKey: 'Simon'});
       final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           dashboardSnapshotProvider.overrideWith((_) => load()),
           storeOverviewsProvider
@@ -249,6 +254,7 @@ void main() {
       );
       addTearDown(router.dispose);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           dashboardSnapshotProvider.overrideWith((_) async => withStores),
           storeOverviewsProvider
@@ -287,6 +293,7 @@ void main() {
             {kUserFirstNameKey: 'Simon', ...prefs});
         final sp = await SharedPreferences.getInstance();
         await tester.pumpWidget(ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             dashboardSnapshotProvider.overrideWith((_) async => data ?? snapshot),
             storeOverviewsProvider
@@ -384,7 +391,9 @@ void main() {
               periodRevenue: {for (final p in RevenuePeriod.values) p: r},
               computedOnDevice: onDevice,
             );
-        final session = StateProvider<String?>((_) => null);
+        final session = NotifierProvider<SettableNotifier<String?>, String?>(
+          () => SettableNotifier(null),
+        );
         final server = Completer<DashboardSnapshot>();
         final repo = _MockRepo();
         var calls = 0;
@@ -397,7 +406,7 @@ void main() {
           kDashboardRevenuePeriodKey: 'allTime',
         });
         final sp = await SharedPreferences.getInstance();
-        final container = ProviderContainer(overrides: [
+        final container = ProviderContainer(retry: noProviderRetry, overrides: [
           dashboardRepositoryProvider.overrideWithValue(repo),
           dashboardSessionKeyProvider
               .overrideWith((ref) => ref.watch(session)),
@@ -490,6 +499,7 @@ void main() {
         );
         addTearDown(router.dispose);
         await tester.pumpWidget(ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             dashboardSnapshotProvider.overrideWith((_) async => snapshot),
             storeOverviewsProvider

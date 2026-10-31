@@ -7,7 +7,7 @@ part 'store_product_stock_model.g.dart';
 /// Mirrors StoreProductStockEntry backend domain model.
 /// Story 3.2. GoF: Composite leaf.
 @freezed
-class StoreProductStockModel with _$StoreProductStockModel {
+abstract class StoreProductStockModel with _$StoreProductStockModel {
   const factory StoreProductStockModel({
     required String productId,
     required String productName,

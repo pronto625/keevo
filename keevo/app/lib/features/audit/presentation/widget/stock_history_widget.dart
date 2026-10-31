@@ -103,7 +103,7 @@ class _StockHistoryWidgetState extends ConsumerState<StockHistoryWidget> {
     );
     final currentUserIdAsync = ref.watch(currentUserIdProvider);
     final currentUserPhone   = ref.watch(currentUserPhoneProvider);
-    final currentUserId      = currentUserIdAsync.valueOrNull;
+    final currentUserId      = currentUserIdAsync.value;
 
     return historyAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),

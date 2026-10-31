@@ -10,7 +10,7 @@ part 'client_model.g.dart';
 /// Immutable Freezed value object — mirrors [Clients] Drift table and
 /// backend Client entity. Story 2.5 — Gestion Clients & Fournisseurs.
 @freezed
-class ClientModel with _$ClientModel {
+abstract class ClientModel with _$ClientModel {
   const factory ClientModel({
     required String id,
     required String name,

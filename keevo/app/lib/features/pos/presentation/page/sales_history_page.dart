@@ -479,7 +479,7 @@ class _SaleHistoryCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Consumer(
                         builder: (context, ref, _) => Text(
-                          'Client: ${ref.watch(saleClientNameProvider(sale.clientId!)).valueOrNull ?? 'enregistré'}',
+                          'Client: ${ref.watch(saleClientNameProvider(sale.clientId!)).value ?? 'enregistré'}',
                           style: TextStyle(
                             color: cs.onSurfaceVariant,
                             fontSize: 12,

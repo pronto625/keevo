@@ -9,6 +9,7 @@ import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/cart_bottom_sheet.dart';
 import 'package:keevo/features/pos/presentation/widget/pos_speed_dial.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 
 /// v1s-16-17 — POS feedback fills: every speed-dial option icon and the
@@ -37,6 +38,7 @@ Future<void> _pumpOpenSpeedDial(
 ) async {
   await tester.pumpWidget(
     ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         currentUserIdProvider.overrideWith((ref) => Future.value('u1')),
         dayClosureStateProvider('s1').overrideWith((ref) async => state),
@@ -62,6 +64,7 @@ Future<void> _pumpCartSheet(
 }) async {
   await tester.pumpWidget(
     ProviderScope(
+      retry: noProviderRetry,
       child: MaterialApp(
         theme: theme,
         home: Scaffold(
@@ -149,6 +152,7 @@ void main() {
     testWidgets('disabled checkout CTA, no payment mode (${entry.key})',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         child: MaterialApp(theme: theme, home: const CheckoutPage()),
       ));
       await tester.pumpAndSettle();

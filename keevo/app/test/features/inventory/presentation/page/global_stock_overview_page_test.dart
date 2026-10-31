@@ -11,6 +11,7 @@ import 'package:keevo/features/inventory/domain/repository/multi_store_stock_rep
 import 'package:keevo/features/inventory/presentation/page/global_stock_overview_page.dart';
 import 'package:keevo/features/inventory/presentation/provider/global_stock_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:mocktail/mocktail.dart';
@@ -28,7 +29,7 @@ void main() {
     repo = _MockRepo();
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       multiStoreStockRepositoryProvider.overrideWithValue(repo),
       sharedPreferencesProvider.overrideWithValue(prefs),
       currentUserRoleProvider.overrideWithValue('OWNER'),

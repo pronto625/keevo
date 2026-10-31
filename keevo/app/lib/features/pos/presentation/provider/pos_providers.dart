@@ -120,16 +120,19 @@ class FrequentProductsState {
 /// The local Drift DB only contains data synced for the authenticated tenant
 /// (the backend JWT already enforces per-tenant schema isolation at sync time),
 /// so no cross-tenant leakage is possible.
-class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
-    FrequentProductsState, ({String? storeId, String? categoryId})> {
+class FrequentProductsNotifier extends AsyncNotifier<FrequentProductsState> {
+  FrequentProductsNotifier(this.arg);
+
+  /// The family argument (store + optional category).
+  final ({String? storeId, String? categoryId}) arg;
+
   int _offset = 0;
   bool _hasMore = true;
   bool _isLoadingMore = false;
   List<String> _ids = [];
 
   @override
-  Future<FrequentProductsState> build(
-      ({String? storeId, String? categoryId}) arg) async {
+  Future<FrequentProductsState> build() async {
     _offset = 0;
     _hasMore = true;
     _isLoadingMore = false;
@@ -164,7 +167,7 @@ class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
   /// Appends the next page. No-op if already loading or no more pages.
   Future<void> loadMore() async {
     if (!_hasMore || _isLoadingMore) return;
-    final current = state.valueOrNull;
+    final current = state.value;
     if (current == null) return;
     final storeId = arg.storeId;
     if (storeId == null) return;
@@ -175,6 +178,9 @@ class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
     try {
       final page = await _fetchPage(
           storeId: storeId, categoryId: arg.categoryId, offset: _offset);
+      // Riverpod 3: a disposed notifier throws on `state` (the grid is
+      // auto-disposed and invalidated by every sync).
+      if (!ref.mounted) return;
       _offset += _kPosGridPageSize;
       state = AsyncData(FrequentProductsState(
         products: [...current.products, ...page],
@@ -182,7 +188,7 @@ class FrequentProductsNotifier extends AutoDisposeFamilyAsyncNotifier<
         isLoadingMore: false,
       ));
     } catch (_) {
-      state = AsyncData(current.copyWith(isLoadingMore: false));
+      if (ref.mounted) state = AsyncData(current.copyWith(isLoadingMore: false));
     } finally {
       _isLoadingMore = false;
     }

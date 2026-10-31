@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -66,7 +67,7 @@ final reportHistoryRepositoryProvider =
 /// [actorId]: optional — filter to a specific employee's reports.
 @riverpod
 Future<List<ReportHistoryModel>> reportHistory(
-  ReportHistoryRef ref, {
+  Ref ref, {
   int page = 0,
   int size = 20,
   String? type,
@@ -82,7 +83,7 @@ Future<List<ReportHistoryModel>> reportHistory(
 /// Single report detail by ID.
 @riverpod
 Future<ReportHistoryModel?> reportDetail(
-  ReportDetailRef ref,
+  Ref ref,
   String reportId,
 ) async {
   final repo = ref.watch(reportHistoryRepositoryProvider);
@@ -97,9 +98,11 @@ class ResendReportNotifier extends _$ResendReportNotifier {
 
   Future<void> resend(String reportId) async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(() async {
+    final guarded = await AsyncValue.guard(() async {
       final repo = ref.read(reportHistoryRepositoryProvider);
       await repo.resendReport(reportId);
     });
+    // Riverpod 3: a disposed notifier throws on `state`.
+    if (ref.mounted) state = guarded;
   }
 }

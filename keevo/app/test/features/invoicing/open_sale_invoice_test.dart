@@ -15,6 +15,7 @@ import 'package:keevo/features/invoicing/domain/model/invoice.dart';
 import 'package:keevo/features/invoicing/presentation/open_sale_invoice.dart';
 import 'package:keevo/features/invoicing/presentation/page/invoice_detail_page.dart';
 import 'package:keevo/features/invoicing/presentation/provider/invoicing_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 const _invoice = Invoice(
   id: 'inv-1',
@@ -211,6 +212,7 @@ void main() {
       ]);
       addTearDown(router.dispose);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [invoiceDataSourceProvider.overrideWithValue(ds)],
         child: MaterialApp.router(routerConfig: router),
       ));
@@ -272,6 +274,7 @@ void main() {
         Future<void> Function(Invoice)? opener}) async {
       final opened = <Invoice>[];
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           invoiceDataSourceProvider.overrideWithValue(_FakeDataSource(
               bySale: () async => null, byId: byId ?? () async => _invoice)),
@@ -320,6 +323,7 @@ void main() {
       (tester) async {
     final ds = _FakeDataSource(bySale: () async => null);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [invoiceDataSourceProvider.overrideWithValue(ds)],
       child: MaterialApp(
         home: Scaffold(
@@ -347,7 +351,7 @@ void main() {
     final stale = File('${temp.path}/invoices/1/old.pdf');
     await stale.create(recursive: true);
     final shared = <File>[];
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       invoiceDataSourceProvider
           .overrideWithValue(_FakeDataSource(bySale: () async => null)),
       exportTempDirProvider.overrideWith((ref) async => temp),

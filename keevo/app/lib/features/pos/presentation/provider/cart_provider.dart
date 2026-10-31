@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 
 import '../../domain/model/cart_item.dart';
 
@@ -108,4 +109,6 @@ final cartProvider =
 /// Set by CartBottomSheet after the user enters initial stocks via dialogs,
 /// then read and cleared by RecordSaleNotifier.submit().
 final draftInitialStocksProvider =
-    StateProvider<Map<String, int>>((ref) => {});
+    NotifierProvider<SettableNotifier<Map<String, int>>, Map<String, int>>(
+  () => SettableNotifier({}),
+);

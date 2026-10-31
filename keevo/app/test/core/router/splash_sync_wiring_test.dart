@@ -8,6 +8,7 @@ import 'package:keevo/features/auth/domain/usecase/login_usecase.dart';
 import 'package:keevo/features/auth/domain/usecase/select_tenant_usecase.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +34,7 @@ void main() {
       int triggerSyncCallCount = 0;
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           syncTriggerNotifierProvider.overrideWith(() {
             final fake = _FakeSyncTriggerNotifier();
@@ -57,6 +59,7 @@ void main() {
       int triggerSyncCallCount = 0;
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           syncTriggerNotifierProvider.overrideWith(() {
             final fake = _FakeSyncingTriggerNotifier();
@@ -77,6 +80,7 @@ void main() {
       int triggerSyncCallCount = 0;
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           syncTriggerNotifierProvider.overrideWith(() {
             final fake = _FakeCriticalFailureTriggerNotifier();
@@ -121,6 +125,7 @@ void main() {
           ));
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           loginUseCaseProvider.overrideWithValue(mockLoginUseCase),
@@ -158,6 +163,7 @@ void main() {
           ]));
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           loginUseCaseProvider.overrideWithValue(mockLoginUseCase),
@@ -206,6 +212,7 @@ void main() {
           ));
 
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           selectTenantUseCaseProvider.overrideWithValue(mockSelectTenantUseCase),

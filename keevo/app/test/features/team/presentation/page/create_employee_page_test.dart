@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl_phone_field/countries.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/stores/domain/model/store_model.dart';
@@ -45,6 +46,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),
@@ -86,6 +88,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),
@@ -128,6 +131,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),
@@ -166,6 +170,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),
@@ -240,6 +245,7 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),

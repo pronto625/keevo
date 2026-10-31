@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/export/presentation/widget/export_entry_button.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// v1s-18-4 — « Exporter » entry button (used as-is by Rapports, whose page
 /// is too heavy to pump here): OWNER only, pushes its prefill.
@@ -17,6 +18,7 @@ void main() {
   Future<ExportPrefill?> pump(WidgetTester tester, String role) async {
     ExportPrefill? pushed;
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [currentUserRoleProvider.overrideWithValue(role)],
       child: MaterialApp.router(
         routerConfig: GoRouter(routes: [

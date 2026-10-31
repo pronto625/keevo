@@ -8,6 +8,7 @@ import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/inventory/data/datasource/remote_quick_add_datasource.dart';
 import 'package:keevo/features/inventory/presentation/provider/quick_add_product_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -59,7 +60,7 @@ void main() {
       await db.close();
     });
 
-    ProviderContainer buildContainer() => ProviderContainer(overrides: [
+    ProviderContainer buildContainer() => ProviderContainer(retry: noProviderRetry, overrides: [
           remoteQuickAddDatasourceProvider
               .overrideWithValue(mockDatasource),
           appDatabaseProvider.overrideWithValue(db),

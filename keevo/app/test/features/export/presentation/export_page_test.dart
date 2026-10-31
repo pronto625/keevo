@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -10,6 +11,7 @@ import 'package:keevo/features/export/domain/exception/export_exception.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/export/presentation/page/export_page.dart';
 import 'package:keevo/features/export/presentation/provider/export_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../../helpers/fake_entitlements.dart';
 import '../export_test_helpers.dart';
@@ -32,6 +34,7 @@ void main() {
 
   Widget app({ExportPrefill? prefill, List<Override> extra = const []}) =>
       ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           ...extra,
           exportDataSourceProvider.overrideWithValue(ds),

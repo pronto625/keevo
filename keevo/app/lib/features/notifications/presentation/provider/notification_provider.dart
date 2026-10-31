@@ -80,6 +80,8 @@ final notificationsListProvider =
 final markAsReadProvider =
     FutureProvider.family<void, String>((ref, id) async {
   await ref.read(notificationRepositoryProvider).markAsRead(id);
+  // Riverpod 3 throws on a ref used after its provider was disposed.
+  if (!ref.mounted) return;
   ref.invalidate(unreadNotificationCountProvider);
   ref.invalidate(notificationsListProvider);
 });
@@ -87,6 +89,7 @@ final markAsReadProvider =
 /// Marks all notifications as read.
 final markAllAsReadProvider = FutureProvider<void>((ref) async {
   await ref.read(notificationRepositoryProvider).markAllAsRead();
+  if (!ref.mounted) return;
   ref.invalidate(unreadNotificationCountProvider);
   ref.invalidate(notificationsListProvider);
 });

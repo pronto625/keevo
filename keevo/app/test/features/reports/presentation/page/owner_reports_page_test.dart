@@ -8,6 +8,7 @@ import 'package:keevo/features/profitability/presentation/page/seller_leaderboar
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
 import 'package:keevo/features/reports/presentation/page/owner_reports_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -56,6 +57,7 @@ void main() {
             ));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         profitabilityRepositoryProvider.overrideWithValue(repo),
@@ -96,6 +98,7 @@ void main() {
     SharedPreferences.setMockInitialValues({kUserRoleKey: 'EMPLOYEE'});
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
       child: _routed(const EmployeeReportsPage()),
     ));
@@ -119,6 +122,7 @@ void main() {
             const SellerLeaderboardResult(fromLocal: false, entries: []));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         profitabilityRepositoryProvider.overrideWithValue(repo),

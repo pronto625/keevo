@@ -12,7 +12,7 @@ part 'product_model.g.dart';
 ///
 /// Mirrors the [Products] Drift table and the backend [Product] entity.
 @freezed
-class ProductModel with _$ProductModel {
+abstract class ProductModel with _$ProductModel {
   const factory ProductModel({
     required String id,
     required String name,

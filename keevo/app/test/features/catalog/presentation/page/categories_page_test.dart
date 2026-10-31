@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/catalog/domain/repository/category_repository.dart';
@@ -18,6 +19,7 @@ void main() {
         .thenThrow(Exception('Cette catégorie existe déjà'));
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         categoryRepositoryProvider.overrideWithValue(repo),
         categoriesProvider.overrideWith((_) async => const []),

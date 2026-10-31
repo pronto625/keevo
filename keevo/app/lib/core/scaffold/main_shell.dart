@@ -40,6 +40,13 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// Story 9-5 — fetches the Keevo announcements again when the app resumes.
   AppLifecycleListener? _lifecycle;
 
+  /// Starts the [SyncTriggerNotifier] (connectivity listener, periodic sync)
+  /// when the shell loads. Story 15.4b: a container subscription, not a
+  /// `ref.watch` — Riverpod 3 pauses a widget's watches while a full-screen
+  /// page covers the shell, and a provider only watched by paused widgets
+  /// stops hearing connectivity changes.
+  ProviderSubscription<SyncTriggerState>? _syncTriggerSub;
+
   /// OWNER tab routes — full navigation (5 tabs: Dashboard / Caisse / Catalogue / Rapports / Plus)
   static const _ownerRoutes = [
     '/dashboard',
@@ -62,6 +69,8 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void initState() {
     super.initState();
+    _syncTriggerSub = ProviderScope.containerOf(context, listen: false)
+        .listen(syncTriggerNotifierProvider, (_, __) {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAutoClosureNotifications();
       _checkMissedDayClosure();
@@ -73,6 +82,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   void dispose() {
+    _syncTriggerSub?.close();
     _lifecycle?.dispose();
     super.dispose();
   }
@@ -234,14 +244,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     final role = ref.read(currentUserRoleProvider);
     if (role == 'EMPLOYEE') return; // Employees don't trigger auto-closure.
 
-    final userId = ref.read(currentUserIdProvider).valueOrNull;
+    final userId = ref.read(currentUserIdProvider).value;
     if (userId == null) return;
 
     final db = ref.read(appDatabaseProvider);
     final localDS = LocalDayClosureDataSource(db);
 
     final storesAsync = ref.read(storeListNotifierProvider);
-    final stores = storesAsync.valueOrNull ?? [];
+    final stores = storesAsync.value ?? [];
 
     final startOfToday = DateTime(now.year, now.month, now.day);
 
@@ -285,18 +295,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     ];
     final index = _tabIndex(location, routes);
     final draftCountAsync = ref.watch(pendingDraftsCountProvider);
-    final draftCount = draftCountAsync.valueOrNull ?? 0;
-
-    // Eagerly initialize SyncTriggerNotifier so connectivity listeners
-    // and periodic sync timer are active from the moment the shell loads.
-    ref.watch(syncTriggerNotifierProvider);
+    final draftCount = draftCountAsync.value ?? 0;
 
     final storeId = ref.watch(activeStoreIdProvider);
 
     // OWNER auto-select: when no store is chosen, pick the first available.
     if (storeId == null && !isEmployee) {
       final storesAsync = ref.watch(storeListNotifierProvider);
-      final stores = storesAsync.valueOrNull;
+      final stores = storesAsync.value;
       if (stores != null && stores.isNotEmpty) {
         // Schedule after build to avoid modifying state during build.
         Future.microtask(() {
@@ -312,7 +318,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         ? 0
         : (ref
                 .watch(globalStockOverviewProvider)
-                .valueOrNull
+                .value
                 ?.fold<int>(0, (sum, s) => sum + s.lowStockCount) ??
             0);
 

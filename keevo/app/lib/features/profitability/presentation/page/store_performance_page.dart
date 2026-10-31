@@ -22,8 +22,8 @@ class StorePerformancePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // AC10: Auto-refresh when device comes back online.
     ref.listen<AsyncValue<SyncStatus>>(syncStatusProvider, (prev, next) {
-      if (next.valueOrNull == SyncStatus.online &&
-          prev?.valueOrNull != SyncStatus.online) {
+      if (next.value == SyncStatus.online &&
+          prev?.value != SyncStatus.online) {
         ref.invalidate(storePerformanceProvider);
       }
     });
@@ -32,7 +32,7 @@ class StorePerformancePage extends ConsumerWidget {
     final period = selection.range();
     final metric = ref.watch(selectedMetricProvider);
     final syncStatus = ref.watch(syncStatusProvider);
-    final isOffline = switch (syncStatus.valueOrNull) {
+    final isOffline = switch (syncStatus.value) {
       SyncStatus.offlineOk || SyncStatus.offlineCritical => true,
       _ => false,
     };
@@ -81,13 +81,13 @@ class StorePerformancePage extends ConsumerWidget {
                       selected: selection,
                       onChanged: (s) => ref
                           .read(selectedProfitabilityPeriodProvider.notifier)
-                          .state = s,
+                          .set(s),
                     ),
                     const SizedBox(height: 4),
                     RankingMetricToggle(
                       selected: metric,
                       onChanged: (m) =>
-                          ref.read(selectedMetricProvider.notifier).state = m,
+                          ref.read(selectedMetricProvider.notifier).set(m),
                     ),
                   ],
                 ),

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:sqlite3/open.dart';
 
@@ -32,6 +33,7 @@ void main() {
   setUp(() {
     db = AppDatabase.forTesting();
     container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [appDatabaseProvider.overrideWithValue(db)]);
   });
 

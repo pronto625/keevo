@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo/core/di/providers.dart';
@@ -17,6 +18,7 @@ import 'package:keevo/features/team/presentation/provider/employee_provider.dart
 import 'package:keevo/features/team/presentation/widget/employee_card.dart';
 import 'package:keevo/features/team/presentation/widget/set_password_bottom_sheet.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockEmployeeRepo extends Mock implements EmployeeRepository {}
@@ -75,6 +77,7 @@ void main() {
   Widget build(EmployeeModel e,
           {VoidCallback? onDone, String role = 'OWNER', String userId = 'u-owner'}) =>
       ProviderScope(
+        retry: noProviderRetry,
         overrides: overrides(role: role, userId: userId),
         child: MaterialApp(
           home: Scaffold(
@@ -278,6 +281,7 @@ void main() {
       ),
     ]);
     await pumpCard(tester, ProviderScope(
+      retry: noProviderRetry,
       overrides: overrides(),
       child: MaterialApp.router(routerConfig: router),
     ));
@@ -302,6 +306,7 @@ void main() {
   Widget buildWithActivity(EmployeeModel e, EmployeeActivity? a,
           {String role = 'OWNER'}) =>
       ProviderScope(
+        retry: noProviderRetry,
         overrides: overrides(role: role),
         child: MaterialApp(
           home: Scaffold(

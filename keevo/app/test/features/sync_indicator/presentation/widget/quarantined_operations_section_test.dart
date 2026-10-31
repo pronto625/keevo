@@ -8,6 +8,7 @@ import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/quarantined_operations_section.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/sync_quarantine_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -107,6 +108,7 @@ void main() {
   });
 
   Widget build(String role, {List<SyncQueueData>? ops}) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           quarantinedSyncQueueProvider
               .overrideWith((ref) => Future.value(ops ?? [sale, validation])),

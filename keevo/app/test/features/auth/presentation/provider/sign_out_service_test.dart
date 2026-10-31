@@ -19,6 +19,7 @@ import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -67,7 +68,7 @@ void main() {
     when(() => fcm.deleteToken()).thenAnswer((_) async {});
     when(() => auth.logout(any())).thenAnswer((_) async {});
 
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       syncServiceProvider.overrideWithValue(sync),
       authRepositoryProvider.overrideWithValue(auth),
@@ -216,7 +217,7 @@ void main() {
     // v1s-16-13: the next account must not see this tenant's plan.
     test('invalidates the subscription', () async {
       var fetches = 0;
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         syncServiceProvider.overrideWithValue(sync),
         authRepositoryProvider.overrideWithValue(auth),
@@ -247,7 +248,7 @@ void main() {
     test('a failing refresh-token read still clears the session', () async {
       final tokens = _MockTokenStorage();
       when(() => tokens.getRefreshToken()).thenThrow(Exception('keystore'));
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         syncServiceProvider.overrideWithValue(sync),
         authRepositoryProvider.overrideWithValue(auth),
@@ -267,7 +268,7 @@ void main() {
     // v1s-16-13 follow-up: nor this tenant's deletion banner.
     test('invalidates the account-deletion status', () async {
       var fetches = 0;
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         syncServiceProvider.overrideWithValue(sync),
         authRepositoryProvider.overrideWithValue(auth),
@@ -291,7 +292,7 @@ void main() {
     // 15.3: the extension slot cache belongs to the session.
     test('drops the extension slot cache', () async {
       var fetches = 0;
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         syncServiceProvider.overrideWithValue(sync),
         authRepositoryProvider.overrideWithValue(auth),

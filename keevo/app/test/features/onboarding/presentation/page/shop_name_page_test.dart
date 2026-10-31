@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,6 +12,7 @@ import 'package:keevo/features/onboarding/domain/model/sector_type.dart';
 import 'package:keevo/features/onboarding/domain/usecase/complete_onboarding_usecase.dart';
 import 'package:keevo/features/onboarding/presentation/page/shop_name_page.dart';
 import 'package:keevo/features/onboarding/presentation/provider/onboarding_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +49,7 @@ Widget _buildPage(
   List<Override> overrides,
 ) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       sessionRefresherProvider.overrideWithValue(_refresher),
       ...overrides,

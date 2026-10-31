@@ -81,7 +81,7 @@ class _InventoryConfigBottomSheetState
     // The active store may be deactivated: it is then absent from the
     // dropdown items, and keeping it selected would trip the dropdown's
     // value assertion (and start a session on a closed store).
-    final stores = storesAsync.valueOrNull;
+    final stores = storesAsync.value;
     if (_selectedStoreId != null &&
         stores != null &&
         !stores.any((s) => s.id == _selectedStoreId && s.isActive)) {

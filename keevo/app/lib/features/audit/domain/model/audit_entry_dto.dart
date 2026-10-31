@@ -12,7 +12,7 @@ part 'audit_entry_dto.g.dart';
 ///
 /// AC6: AuditRepository.getAuditHistory() returns List<AuditEntryDto>.
 @freezed
-class AuditEntryDto with _$AuditEntryDto {
+abstract class AuditEntryDto with _$AuditEntryDto {
   const factory AuditEntryDto({
     /// Unique identifier (UUID string).
     required String id,

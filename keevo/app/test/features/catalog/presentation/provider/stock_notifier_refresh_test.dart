@@ -5,6 +5,7 @@ import 'package:keevo/features/catalog/domain/model/stock_level_model.dart';
 import 'package:keevo/features/catalog/domain/repository/stock_repository.dart';
 import 'package:keevo/features/catalog/domain/usecase/get_stock_level_usecase.dart';
 import 'package:keevo/features/catalog/presentation/provider/stock_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 class _MutableStockRepository implements StockRepository {
   int quantity = 12;
@@ -28,7 +29,7 @@ class _MutableStockRepository implements StockRepository {
 void main() {
   test('family invalidation (post-sync) reloads stock levels', () async {
     final repo = _MutableStockRepository();
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       getStockLevelUseCaseProvider.overrideWithValue(GetStockLevelUseCase(repo)),
     ]);
     addTearDown(container.dispose);
@@ -47,7 +48,7 @@ void main() {
 
   test('invalidation while unwatched reloads on next watch', () async {
     final repo = _MutableStockRepository();
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       getStockLevelUseCaseProvider.overrideWithValue(GetStockLevelUseCase(repo)),
     ]);
     addTearDown(container.dispose);
@@ -69,7 +70,7 @@ void main() {
 
   test('a slow load started before the sync never overwrites the reload', () async {
     final repo = _SlowFirstRepository();
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       getStockLevelUseCaseProvider.overrideWithValue(GetStockLevelUseCase(repo)),
     ]);
     addTearDown(container.dispose);

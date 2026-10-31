@@ -76,7 +76,7 @@ class _TransferHistoryPageState extends ConsumerState<TransferHistoryPage> {
     final provider = _provider;
     final notifier = ref.read(provider.notifier);
     if (notifier.isLoadingMore) return;
-    final current = ref.read(provider).valueOrNull;
+    final current = ref.read(provider).value;
     if (current == null || !current.hasMore) return;
     setState(() => _loadMoreFailed = false);
     try {

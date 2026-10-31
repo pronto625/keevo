@@ -33,7 +33,7 @@ class ReportDetailPage extends ConsumerWidget {
     }
     final reportAsync = ref.watch(reportDetailProvider(reportId));
     // _DetailScaffold has its own Scaffold + AppBar: never nest it in another.
-    final loaded = reportAsync.valueOrNull;
+    final loaded = reportAsync.value;
     if (loaded != null) {
       return _DetailScaffold(reportId: reportId, report: loaded);
     }

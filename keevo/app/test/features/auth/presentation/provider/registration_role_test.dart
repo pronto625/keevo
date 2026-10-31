@@ -7,6 +7,7 @@ import 'package:keevo/features/auth/domain/usecase/register_user_usecase.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,7 +42,7 @@ void main() {
                 any(named: 'discardPreviousAccountData')))
         .thenAnswer((_) async {});
 
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       registerUserUseCaseProvider.overrideWithValue(useCase),
       sessionClaimsApplierProvider.overrideWithValue(applier),

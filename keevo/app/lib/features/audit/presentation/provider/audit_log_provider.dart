@@ -68,7 +68,7 @@ class AuditLogNotifier extends _$AuditLogNotifier {
   /// Appends the next slice. Errors propagate to the caller (SnackBar) and
   /// leave the loaded list untouched.
   Future<void> loadMore() async {
-    final current = state.valueOrNull;
+    final current = state.value;
     if (current == null || !current.hasMore || _loadingMore) return;
     final generation = _generation;
     _loadingMore = true;
@@ -79,10 +79,12 @@ class AuditLogNotifier extends _$AuditLogNotifier {
             cursor: current.nextCursor,
             size: kAuditLogPageSize,
           );
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted) return;
       // A refresh / filter change happened while loading: this slice
       // belongs to a list that no longer exists.
       if (generation != _generation ||
-          !identical(state.valueOrNull, current) ||
+          !identical(state.value, current) ||
           ref.read(auditLogFilterNotifierProvider) != filter) {
         return;
       }
@@ -104,7 +106,7 @@ class AuditLogNotifier extends _$AuditLogNotifier {
 
 /// Fresh detail of one entry (remote, local fallback).
 @riverpod
-Future<AuditEntryDto> auditEntryDetail(AuditEntryDetailRef ref, String id) =>
+Future<AuditEntryDto> auditEntryDetail(Ref ref, String id) =>
     ref.watch(auditRepositoryProvider).getAuditEntry(id);
 
 /// A choice in a filter sheet.
@@ -118,7 +120,7 @@ class AuditFilterOption {
 /// Stores known on this device (« Boutique » filter).
 @riverpod
 Future<List<AuditFilterOption>> auditStoreOptions(
-    AuditStoreOptionsRef ref) async {
+    Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   final stores = await (db.select(db.stores)
         ..orderBy([(t) => OrderingTerm.asc(t.name)]))
@@ -129,7 +131,7 @@ Future<List<AuditFilterOption>> auditStoreOptions(
 /// Employees known on this device, keyed by user id (« Employé » filter).
 @riverpod
 Future<List<AuditFilterOption>> auditEmployeeOptions(
-    AuditEmployeeOptionsRef ref) async {
+    Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   final employees = await (db.select(db.employees)
         ..orderBy([(t) => OrderingTerm.asc(t.firstName)]))

@@ -29,8 +29,8 @@ class SyncSettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncStatus = ref.watch(syncStatusProvider);
-    final isOnline = asyncStatus.valueOrNull == SyncStatus.online ||
-        asyncStatus.valueOrNull == SyncStatus.syncing;
+    final isOnline = asyncStatus.value == SyncStatus.online ||
+        asyncStatus.value == SyncStatus.syncing;
     final cs = Theme.of(context).colorScheme;
 
     return DefaultTabController(
@@ -110,7 +110,7 @@ class _ActiveDevicesSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final asyncDevices = ref.watch(activeDevicesProvider);
-    final selfDeviceId = ref.watch(currentDeviceIdProvider).valueOrNull;
+    final selfDeviceId = ref.watch(currentDeviceIdProvider).value;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),

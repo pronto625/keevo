@@ -163,11 +163,11 @@ class _StoreDetail extends ConsumerWidget {
                   period: chartPeriod,
                   daysRange: ref.watch(storeChartDaysProvider(storeId)),
                   onPeriodChanged: (p) =>
-                      ref.read(storeChartPeriodProvider(storeId).notifier).state = p,
+                      ref.read(storeChartPeriodProvider(storeId).notifier).set(p),
                   onDaysRangeChanged: chartPeriod == ChartPeriod.daily
                       ? (d) => ref
                           .read(storeChartDaysProvider(storeId).notifier)
-                          .state = d
+                          .set(d)
                       : null,
                 ),
           loading: () => const SizedBox(

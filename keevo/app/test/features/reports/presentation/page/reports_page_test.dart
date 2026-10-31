@@ -11,6 +11,7 @@ import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/reports/presentation/page/reports_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -29,6 +30,7 @@ void main() {
     final requested = <String?>[];
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
@@ -69,6 +71,7 @@ void main() {
     final requested = <String?>[];
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
@@ -111,6 +114,7 @@ void main() {
     ]);
     addTearDown(router.dispose);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue(role),

@@ -40,7 +40,7 @@ class ModuleUnavailablePage extends ConsumerWidget {
     final cs = theme.colorScheme;
     final isOwner = ref.watch(isOwnerSessionProvider);
     final entitlements =
-        ref.watch(entitlementsProvider).valueOrNull ?? Entitlements.unknown;
+        ref.watch(entitlementsProvider).value ?? Entitlements.unknown;
     final id = moduleId;
     final name = id == null ? null : entitlements.displayNameOf(id);
     final home = isOwner ? '/dashboard' : '/pos';

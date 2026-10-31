@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +17,7 @@ class _MockChangePasswordUseCase extends Mock implements ChangePasswordUseCase {
 
 Widget _buildPage(_MockChangePasswordUseCase useCase) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       changePasswordUseCaseProvider.overrideWithValue(useCase),
       sharedPreferencesProvider.overrideWithValue(_prefs),

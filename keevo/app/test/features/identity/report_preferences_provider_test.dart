@@ -6,6 +6,7 @@ import 'package:keevo/features/identity/presentation/provider/report_preferences
 import 'package:keevo/features/identity/presentation/provider/tenant_preferences_provider.dart';
 import 'package:keevo_core/network/module_entitlement_exception.dart';
 import 'package:keevo_core/services/api_service.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ void main() {
       when(() => mockRepo.getCurrentTenantPreferences())
           .thenAnswer((_) async => _testPrefs());
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -61,7 +62,7 @@ void main() {
       when(() => mockRepo.getCurrentTenantPreferences())
           .thenThrow(Exception('network error'));
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -77,7 +78,7 @@ void main() {
       when(() => mockRepo.getCurrentTenantPreferences())
           .thenAnswer((_) async => _testPrefs());
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -100,7 +101,7 @@ void main() {
       when(() => mockRepo.updateReportPreferences(any()))
           .thenAnswer((_) async => updated);
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -124,7 +125,7 @@ void main() {
           .thenAnswer((_) async => _testPrefs());
       when(() => mockRepo.sendTestReport()).thenAnswer((_) async => true);
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -142,7 +143,7 @@ void main() {
           .thenAnswer((_) async => _testPrefs());
       when(() => mockRepo.sendTestReport()).thenAnswer((_) async => false);
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -157,7 +158,7 @@ void main() {
       when(() => mockRepo.getCurrentTenantPreferences())
           .thenThrow(Exception('error'));
 
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -174,7 +175,7 @@ void main() {
     test('save() — module refusal → French message, no code', () async {
       when(() => mockRepo.updateReportPreferences(any())).thenThrow(
           ApiException('Ce module…', 403, domainCode: 'MODULE_NOT_ENTITLED'));
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);
@@ -192,7 +193,7 @@ void main() {
     test('previewWeeklyReport() — module refusal → French message', () async {
       when(() => mockRepo.triggerWeeklyPreview()).thenThrow(
           const ModuleEntitlementException(ModuleRefusalReason.readOnly));
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         tenantPreferencesRepositoryProvider.overrideWithValue(mockRepo),
       ]);
       addTearDown(container.dispose);

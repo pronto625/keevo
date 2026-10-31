@@ -15,6 +15,7 @@ import 'package:keevo/features/settings/presentation/provider/subscription_info_
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -68,7 +69,7 @@ void main() {
     });
     prefs = await SharedPreferences.getInstance();
     db = AppDatabase.forTesting();
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       appDatabaseProvider.overrideWithValue(db),
     ]);
@@ -262,7 +263,7 @@ void main() {
       () async {
     var states = {kMultiStoreModuleId: 'ENABLED'};
     final fake = FakeEntitlementsNotifier(() async => states);
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       appDatabaseProvider.overrideWithValue(db),
       entitlementsProvider.overrideWith(() => fake),
@@ -290,7 +291,7 @@ void main() {
   test('15.3: a new session drops the extension slot cache, a renewal keeps it',
       () async {
     var fetches = 0;
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       appDatabaseProvider.overrideWithValue(db),
       entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
@@ -324,7 +325,7 @@ void main() {
   test('a new session invalidates the subscription, a renewal does not',
       () async {
     var fetches = 0;
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       appDatabaseProvider.overrideWithValue(db),
       subscriptionInfoProvider.overrideWith((ref) async {

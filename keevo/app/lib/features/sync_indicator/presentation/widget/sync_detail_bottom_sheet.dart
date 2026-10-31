@@ -25,8 +25,8 @@ class SyncDetailBottomSheet extends ConsumerWidget {
     final quarantinedCount = ref.watch(quarantinedSyncCountProvider);
     final deviceCount = ref.watch(activeDevicesProvider);
     final conflictsAsync = ref.watch(syncConflictsProvider);
-    final isOnline = asyncStatus.valueOrNull == SyncStatus.online ||
-        asyncStatus.valueOrNull == SyncStatus.syncing;
+    final isOnline = asyncStatus.value == SyncStatus.online ||
+        asyncStatus.value == SyncStatus.syncing;
 
     return SafeArea(
       child: Padding(
@@ -58,7 +58,7 @@ class SyncDetailBottomSheet extends ConsumerWidget {
                   const _InfoRow(icon: Icons.error, label: 'Erreur'),
             ),
             // Quarantined ("bloquées") operations — v1s-16-15, all roles.
-            if ((quarantinedCount.valueOrNull ?? 0) > 0) ...[
+            if ((quarantinedCount.value ?? 0) > 0) ...[
               const SizedBox(height: 8),
               InkWell(
                 onTap: () {

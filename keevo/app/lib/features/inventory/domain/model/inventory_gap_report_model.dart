@@ -9,7 +9,7 @@ part 'inventory_gap_report_model.g.dart';
 /// Mirrors InventoryGapReport backend value object.
 /// Story 6.3 — Gap Analysis Report.
 @freezed
-class InventoryGapReportModel with _$InventoryGapReportModel {
+abstract class InventoryGapReportModel with _$InventoryGapReportModel {
   const InventoryGapReportModel._();
 
   const factory InventoryGapReportModel({
@@ -30,7 +30,7 @@ class InventoryGapReportModel with _$InventoryGapReportModel {
 }
 
 @freezed
-class InventoryGapSummaryModel with _$InventoryGapSummaryModel {
+abstract class InventoryGapSummaryModel with _$InventoryGapSummaryModel {
   const factory InventoryGapSummaryModel({
     required int totalCounted,
     required int totalConcordant,

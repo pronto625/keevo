@@ -15,6 +15,7 @@ import 'package:keevo/features/catalog/presentation/widget/product_card.dart';
 import 'package:keevo/features/pos/data/datasource/local_sale_datasource.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/held_operations.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 import 'package:mocktail/mocktail.dart';
@@ -147,6 +148,7 @@ Future<void> _pump(
   when(() => saleDs.cascadeValidatePendingSales(any(), any(), any()))
       .thenAnswer((_) async => 0);
   await tester.pumpWidget(ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       getStockLevelUseCaseProvider
@@ -271,6 +273,7 @@ void main() {
     SharedPreferences.setMockInitialValues({'active_store_id': 's1'});
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         getStockLevelUseCaseProvider

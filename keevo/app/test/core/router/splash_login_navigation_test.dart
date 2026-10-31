@@ -14,6 +14,7 @@ import 'package:keevo/features/auth/presentation/page/forgot_password_page.dart'
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/onboarding/presentation/page/terms_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
@@ -97,6 +98,7 @@ void main() {
     final cache = _SignedInCache();
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         flutterSecureStorageProvider.overrideWithValue(const _BrokenStorage()),
@@ -154,6 +156,7 @@ void main() {
     final db = AppDatabase.forTesting();
     addTearDown(db.close);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         appDatabaseProvider.overrideWithValue(db),
         flutterSecureStorageProvider.overrideWithValue(storage),

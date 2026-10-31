@@ -7,6 +7,7 @@ import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
 import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
 import 'package:keevo/features/auth/presentation/page/reset_password_page.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
@@ -24,6 +25,7 @@ Future<void> _submitForm(WidgetTester tester, AuthRepository repo) async {
     ),
   ]);
   await tester.pumpWidget(ProviderScope(
+    retry: noProviderRetry,
     overrides: [authRepositoryProvider.overrideWithValue(repo)],
     child: MaterialApp.router(routerConfig: router),
   ));
@@ -109,7 +111,7 @@ void main() {
       ),
     ]);
     await tester.pumpWidget(
-      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+      ProviderScope(retry: noProviderRetry, child: MaterialApp.router(routerConfig: router)),
     );
 
     router.push('/auth/reset-password', extra: {'phoneNumber': '+237600000001'});

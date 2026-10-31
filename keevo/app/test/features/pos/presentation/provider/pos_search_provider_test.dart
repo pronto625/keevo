@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_search_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/open.dart';
@@ -31,7 +32,7 @@ class _EmptySelectable extends Fake implements Selectable<QueryRow> {
 void main() {
   group('PosSearchNotifier', () {
     test('search with less than 2 chars returns empty', () async {
-      final container = ProviderContainer();
+      final container = ProviderContainer(retry: noProviderRetry);
       addTearDown(container.dispose);
 
       final notifier = container.read(posSearchProvider.notifier);
@@ -45,7 +46,7 @@ void main() {
       // This test validates the provider's contract: when search is called
       // with ≥ 2 chars, the state transitions to AsyncLoading then AsyncData.
       // Full integration requires a Drift in-memory DB — covered by smoke test.
-      final container = ProviderContainer();
+      final container = ProviderContainer(retry: noProviderRetry);
       addTearDown(container.dispose);
 
       final state = container.read(posSearchProvider);
@@ -54,7 +55,7 @@ void main() {
     });
 
     test('clear resets state to empty', () async {
-      final container = ProviderContainer();
+      final container = ProviderContainer(retry: noProviderRetry);
       addTearDown(container.dispose);
 
       final notifier = container.read(posSearchProvider.notifier);
@@ -78,6 +79,7 @@ void main() {
         return _EmptySelectable();
       });
       final container = ProviderContainer(
+        retry: noProviderRetry,
         overrides: [appDatabaseProvider.overrideWithValue(db)],
       );
       addTearDown(container.dispose);
@@ -123,6 +125,7 @@ void main() {
               ));
         }
         container = ProviderContainer(
+          retry: noProviderRetry,
           overrides: [appDatabaseProvider.overrideWithValue(db)],
         );
       });

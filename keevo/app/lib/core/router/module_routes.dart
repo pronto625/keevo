@@ -99,6 +99,6 @@ bool isRouteReadable(Entitlements entitlements, String location) {
 /// is shown. Rebuilds the caller when the module states change.
 bool isRouteAvailable(WidgetRef ref, String location) {
   final entitlements =
-      ref.watch(entitlementsProvider).valueOrNull ?? Entitlements.unknown;
+      ref.watch(entitlementsProvider).value ?? Entitlements.unknown;
   return isRouteReadable(entitlements, location);
 }

@@ -2,11 +2,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:keevo/features/inventory/presentation/provider/inventory_counting_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 void main() {
   test('filter and search reset once the counting page stops listening',
       () async {
-    final container = ProviderContainer();
+    final container = ProviderContainer(retry: noProviderRetry);
     addTearDown(container.dispose);
 
     final filterSub =

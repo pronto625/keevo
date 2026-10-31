@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
 import 'package:keevo/features/pos/presentation/widget/discount_sheet.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 CartItem _item({
   String id = 'p1',
@@ -24,6 +25,7 @@ void main() {
     testWidgets('shows percentage mode by default', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -50,6 +52,7 @@ void main() {
     testWidgets('percentage mode previews discounted total', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -81,6 +84,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -119,6 +123,7 @@ void main() {
       late ProviderContainer container;
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -188,6 +193,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {
@@ -222,6 +228,7 @@ void main() {
     testWidgets('Annuler closes without applying', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           child: MaterialApp(
             home: Scaffold(
               body: Consumer(builder: (context, ref, _) {

@@ -6,6 +6,7 @@ import 'package:keevo/core/sync/domain/sync_conflict_provider.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
 import 'package:keevo/features/sync_indicator/presentation/page/sync_settings_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/domain/sync_conflict.dart';
 import 'package:keevo_core/sync/sync_quarantine_service.dart';
@@ -27,6 +28,7 @@ void main() {
   }
 
   Widget _buildPage({List<Map<String, dynamic>>? devices}) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           activeDevicesProvider.overrideWith((ref) => Future.value(devices ??
               [
@@ -96,6 +98,7 @@ void main() {
                 'lastPushAt': '2024-01-01T00:00:00Z',
               });
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           activeDevicesProvider.overrideWith((ref) => Future.value(manyDevices)),
           syncHistoryProvider.overrideWith((ref) => Future.value([])),
@@ -144,6 +147,7 @@ void main() {
         resolvedAt: at,
       );
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           activeDevicesProvider.overrideWith((ref) => Future.value([
                 {'deviceId': uuid, 'userId': uuid, 'lastPushAt': ''},
@@ -268,6 +272,7 @@ void main() {
             quarantinedAt: blocked ? DateTime(2026, 10, 11, 10) : null,
           );
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           activeDevicesProvider.overrideWith((ref) => Future.value([])),
           syncHistoryProvider.overrideWith((ref) => Future.value([])),

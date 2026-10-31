@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/sync_event_logger.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
@@ -34,7 +35,7 @@ void main() {
     when(() => logger.logPullSuccess(any())).thenAnswer((_) async {});
     when(() => logger.logPullFailed(any())).thenAnswer((_) async {});
 
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       syncServiceProvider.overrideWithValue(sync),
       syncEventLoggerProvider.overrideWithValue(logger),

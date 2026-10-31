@@ -3,12 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo/features/settings/presentation/widget/suspension_banner.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 void main() {
   group('SuspensionBanner', () {
     testWidgets('shows suspension message when account manually suspended by admin',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           accountStatusProvider.overrideWith(
             (ref) => AccountStatus.suspended,
@@ -27,6 +29,7 @@ void main() {
         'shows trial expiry banner when trial expired (downgraded to Free)',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           accountStatusProvider.overrideWith(
             (ref) => AccountStatus.trialExpired,
@@ -43,6 +46,7 @@ void main() {
 
     testWidgets('hides banner when account is active', (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           accountStatusProvider.overrideWith(
             (ref) => AccountStatus.active,

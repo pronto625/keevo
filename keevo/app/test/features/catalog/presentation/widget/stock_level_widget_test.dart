@@ -9,6 +9,7 @@ import 'package:keevo/features/catalog/presentation/widget/stock_level_widget.da
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/provider/store_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeStockRepository implements StockRepository {
@@ -50,6 +51,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         getStockLevelUseCaseProvider
@@ -75,6 +77,7 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     final repo = _FlakyStockRepository();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         getStockLevelUseCaseProvider

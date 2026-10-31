@@ -10,6 +10,7 @@ import 'package:keevo/features/pos/presentation/provider/day_closure_providers.d
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo/core/di/providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/held_operations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -57,6 +58,7 @@ void main() {
     testWidgets('loads and displays sales for today', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -77,6 +79,7 @@ void main() {
     testWidgets('shows empty state when no sales', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -96,6 +99,7 @@ void main() {
     testWidgets('filter chips are displayed', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -117,6 +121,7 @@ void main() {
     testWidgets('tapping filter chip changes filter', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -153,6 +158,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -186,6 +192,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -208,6 +215,7 @@ void main() {
       final requested = <String>[];
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -239,6 +247,7 @@ void main() {
       );
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             sharedPreferencesProvider.overrideWithValue(prefs),
             currentUserIdProvider.overrideWith((ref) => Future.value('emp-1')),
@@ -265,6 +274,7 @@ void main() {
       testWidgets('a held sale shows « $label »', (tester) async {
         await tester.pumpWidget(
           ProviderScope(
+            retry: noProviderRetry,
             overrides: [
               sharedPreferencesProvider.overrideWithValue(prefs),
               currentUserIdProvider

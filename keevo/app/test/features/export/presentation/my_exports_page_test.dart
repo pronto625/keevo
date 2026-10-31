@@ -8,6 +8,7 @@ import 'package:keevo/features/export/domain/exception/export_exception.dart';
 import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/export/presentation/page/my_exports_page.dart';
 import 'package:keevo/features/export/presentation/provider/export_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
 
 import '../export_test_helpers.dart';
@@ -53,6 +54,7 @@ void main() {
         ..writeAsStringSync('a;b');
 
   Widget app({String location = '/exports'}) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           exportDataSourceProvider.overrideWithValue(ds),
           exportTempDirProvider.overrideWith((_) async => Directory.systemTemp),

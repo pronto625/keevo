@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/domain/sync_conflict.dart';
 
 /// Story 5.3 Task 13.1 — Tests for conflict handling in push flow.
@@ -138,7 +139,7 @@ void main() {
 
   group('pendingConflictNotificationsProvider', () {
     test('starts with empty list', () {
-      final container = ProviderContainer();
+      final container = ProviderContainer(retry: noProviderRetry);
       addTearDown(container.dispose);
 
       final conflicts = container.read(pendingConflictNotificationsProvider);
@@ -146,7 +147,7 @@ void main() {
     });
 
     test('can be populated with stock conflicts', () {
-      final container = ProviderContainer();
+      final container = ProviderContainer(retry: noProviderRetry);
       addTearDown(container.dispose);
 
       final stockConflicts = [
@@ -174,7 +175,7 @@ void main() {
     });
 
     test('can be cleared after UI consumption', () {
-      final container = ProviderContainer();
+      final container = ProviderContainer(retry: noProviderRetry);
       addTearDown(container.dispose);
 
       container

@@ -8,6 +8,7 @@ import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockTokenStorage extends Mock implements TokenStorage {}
@@ -35,7 +36,7 @@ void main() {
     }) async {
       when(() => mockTokenStorage.getToken()).thenAnswer((_) async => token);
 
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
         subscriptionInfoProvider.overrideWith((ref) async => subscription),
       ]);
@@ -143,7 +144,7 @@ void main() {
       when(() => mockTokenStorage.getToken())
           .thenAnswer((_) async => 'eyJhbGciOiJIUzI1NiJ9.!!!not-base64!!!.sig');
 
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
         subscriptionInfoProvider.overrideWith(
           (ref) async => const SubscriptionInfo(
@@ -169,7 +170,7 @@ void main() {
       final token = _jwtWith({'tenantStatus': 'ACTIVE'});
       when(() => mockTokenStorage.getToken()).thenAnswer((_) async => token);
 
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
         subscriptionInfoProvider.overrideWith(
           (ref) async => throw Exception('network error'),
@@ -201,7 +202,7 @@ void main() {
       var calls = 0;
       final second = Completer<SubscriptionInfo>();
 
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
         subscriptionInfoProvider.overrideWith((ref) {
           calls++;
@@ -244,7 +245,7 @@ void main() {
       when(() => mockTokenStorage.getToken()).thenAnswer((_) async => token);
       var calls = 0;
 
-      final c = ProviderContainer(overrides: [
+      final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
         subscriptionInfoProvider.overrideWith((ref) async {
           calls++;

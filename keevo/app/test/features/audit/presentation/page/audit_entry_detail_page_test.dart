@@ -11,6 +11,7 @@ import 'package:keevo/features/audit/domain/model/audit_entry_dto.dart';
 import 'package:keevo/features/audit/presentation/page/audit_entry_detail_page.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_log_provider.dart';
 import 'package:keevo/features/audit/presentation/provider/audit_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../../../helpers/no_technical_text.dart';
 import 'audit_test_helpers.dart';
@@ -23,6 +24,7 @@ void main() {
   setUp(() => repo = FakeAuditRepository());
 
   Widget app(String id, AuditEntryDto? initial) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           auditRepositoryProvider.overrideWithValue(repo),
           currentUserIdProvider.overrideWith((_) async => 'owner-1'),

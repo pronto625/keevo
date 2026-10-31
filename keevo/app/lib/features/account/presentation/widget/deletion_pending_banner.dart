@@ -45,7 +45,7 @@ class _DeletionPendingBannerState extends ConsumerState<DeletionPendingBanner> {
 
   @override
   Widget build(BuildContext context) {
-    final status = ref.watch(deletionPendingStatusProvider).valueOrNull;
+    final status = ref.watch(deletionPendingStatusProvider).value;
     if (status == null) return const SizedBox.shrink();
 
     final cs = Theme.of(context).colorScheme;

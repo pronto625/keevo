@@ -10,6 +10,7 @@ import 'package:keevo/features/catalog/domain/model/product_status.dart';
 import 'package:keevo/features/catalog/domain/repository/product_repository.dart';
 import 'package:keevo/features/catalog/presentation/provider/product_provider.dart';
 import 'package:keevo/features/stores/presentation/provider/active_store_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
@@ -59,7 +60,7 @@ void main() {
       mockRepo = _MockProductRepository();
     });
 
-    ProviderContainer buildContainer() => ProviderContainer(overrides: [
+    ProviderContainer buildContainer() => ProviderContainer(retry: noProviderRetry, overrides: [
           productRepositoryProvider.overrideWithValue(mockRepo),
         ]);
 
@@ -117,7 +118,7 @@ void main() {
     });
 
     ProviderContainer buildContainer(String? activeStoreId) =>
-        ProviderContainer(overrides: [
+        ProviderContainer(retry: noProviderRetry, overrides: [
           productRepositoryProvider.overrideWithValue(mockRepo),
           localProductDataSourceProvider.overrideWithValue(localDataSource),
           activeStoreIdProvider.overrideWith(() => _FixedActiveStoreNotifier(activeStoreId)),
@@ -201,7 +202,7 @@ void main() {
 
     tearDown(() async => db.close());
 
-    ProviderContainer buildContainer() => ProviderContainer(overrides: [
+    ProviderContainer buildContainer() => ProviderContainer(retry: noProviderRetry, overrides: [
           productRepositoryProvider.overrideWithValue(mockRepo),
           localProductDataSourceProvider.overrideWithValue(
               LocalProductDataSource(db, _MockSyncService())),

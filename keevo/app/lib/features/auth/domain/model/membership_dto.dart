@@ -7,7 +7,7 @@ part 'membership_dto.freezed.dart';
 /// Mirrors the backend LoginSessionResponse.MembershipDto record.
 /// Used in [TenantPickerPage] and auto-select logic in [LoginUseCase].
 @freezed
-class MembershipDto with _$MembershipDto {
+abstract class MembershipDto with _$MembershipDto {
   const factory MembershipDto({
     /// Tenant short code (e.g. "KV-ABC123")
     required String tenantCode,

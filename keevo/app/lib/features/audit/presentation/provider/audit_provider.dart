@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -85,7 +86,7 @@ class AuditHistoryNotifier extends _$AuditHistoryNotifier {
   /// No-op if already loading or no more pages available.
   Future<void> loadMore() async {
     if (!_hasMore || _isLoadingMore) return;
-    final current = state.valueOrNull;
+    final current = state.value;
     if (current == null) return;
 
     _isLoadingMore = true;
@@ -96,6 +97,8 @@ class AuditHistoryNotifier extends _$AuditHistoryNotifier {
             entityType: _entityType,
             entityId: _entityId,
           );
+      // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+      if (!ref.mounted) return;
       _hasMore = result.hasMore;
       _nextPage++;
       state = AsyncData([...current, ...result.entries]);

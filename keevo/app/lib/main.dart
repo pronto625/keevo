@@ -17,6 +17,7 @@ import 'package:sqlite3/open.dart';
 
 import 'core/router/app_router.dart';
 import 'features/feedback/presentation/provider/feedback_provider.dart';
+import 'root_scope.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,7 +68,7 @@ void main() async {
       .catchError((Object _) => null);
 
   runApp(
-    ProviderScope(
+    buildRootScope(
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         appVersionProvider.overrideWithValue(appVersion),

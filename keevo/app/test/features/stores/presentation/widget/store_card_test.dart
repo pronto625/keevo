@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/stores/domain/model/store_model.dart';
 import 'package:keevo/features/stores/presentation/widget/store_card.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/held_operations.dart';
 
 /// Story 13.8b — a store created/changed while its module is off stays listed
@@ -12,6 +13,7 @@ void main() {
       {String? address = 'Douala'}) async {
     final now = DateTime(2026, 10, 30);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [heldEntityReasonsProvider.overrideWith((_) async => held)],
       child: MaterialApp(
         home: Scaffold(

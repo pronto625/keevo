@@ -18,6 +18,7 @@ import 'package:keevo/features/pos/domain/model/sales_history_filter.dart';
 import 'package:keevo/features/pos/presentation/page/sales_history_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart' hide Sale, SaleItem;
 import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:keevo_core/sync/sync_service.dart';
@@ -133,6 +134,7 @@ void main() {
     when(() => connectivity.isOnline()).thenAnswer((_) async => true);
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         appDatabaseProvider.overrideWithValue(db),

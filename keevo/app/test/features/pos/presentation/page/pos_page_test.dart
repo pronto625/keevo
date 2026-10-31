@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,24 +9,24 @@ import 'package:keevo/features/pos/presentation/page/pos_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_search_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeFrequentProductsNotifier extends FrequentProductsNotifier {
   final List<PosProductResult> _products;
-  _FakeFrequentProductsNotifier([this._products = const []]);
+  _FakeFrequentProductsNotifier(super.arg, [this._products = const []]);
 
   @override
-  Future<FrequentProductsState> build(
-      ({String? storeId, String? categoryId}) arg) async {
+  Future<FrequentProductsState> build() async {
     return FrequentProductsState(products: _products, hasMore: false);
   }
 }
 
 class _CountingFrequentProductsNotifier extends _FakeFrequentProductsNotifier {
   static int loadMoreCalls = 0;
-  _CountingFrequentProductsNotifier(super.products);
+  _CountingFrequentProductsNotifier(super.arg, super.products);
 
   @override
   Future<void> loadMore() async => loadMoreCalls++;
@@ -67,8 +68,15 @@ void main() {
     prefs = await SharedPreferences.getInstance();
   });
 
-  Widget buildApp({List<Override> overrides = const []}) {
+  /// [grid] replaces the default (empty) product grid — Riverpod 3 refuses
+  /// a second override of the same provider.
+  Widget buildApp({
+    List<Override> overrides = const [],
+    FrequentProductsNotifier Function(({String? storeId, String? categoryId}))?
+        grid,
+  }) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         syncStatusProvider
             .overrideWith((ref) => Stream.value(SyncStatus.online)),
@@ -76,7 +84,7 @@ void main() {
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue('OWNER'),
         frequentProductsProvider
-            .overrideWith(() => _FakeFrequentProductsNotifier()),
+            .overrideWith2(grid ?? (arg) => _FakeFrequentProductsNotifier(arg)),
         ...overrides,
       ],
       child: MaterialApp.router(routerConfig: _testRouter(const PosPage())),
@@ -109,18 +117,14 @@ void main() {
 
     testWidgets('cartPill visible after adding product', (tester) async {
       await tester.pumpWidget(buildApp(
-        overrides: [
-          frequentProductsProvider.overrideWith(
-            () => _FakeFrequentProductsNotifier([
-              const PosProductResult(
-                id: 'p1',
-                name: 'Savon',
-                price: 500,
-                stock: 10,
-              ),
-            ]),
+        grid: (arg) => _FakeFrequentProductsNotifier(arg, [
+          const PosProductResult(
+            id: 'p1',
+            name: 'Savon',
+            price: 500,
+            stock: 10,
           ),
-        ],
+        ]),
       ));
       await tester.pumpAndSettle();
 
@@ -144,18 +148,14 @@ void main() {
       );
 
       await tester.pumpWidget(buildApp(
-        overrides: [
-          frequentProductsProvider.overrideWith(
-            () => _FakeFrequentProductsNotifier([
-              const PosProductResult(
-                id: 'p1',
-                name: 'Savon',
-                price: 500,
-                stock: 10,
-              ),
-            ]),
+        grid: (arg) => _FakeFrequentProductsNotifier(arg, [
+          const PosProductResult(
+            id: 'p1',
+            name: 'Savon',
+            price: 500,
+            stock: 10,
           ),
-        ],
+        ]),
       ));
       await tester.pumpAndSettle();
 
@@ -175,15 +175,11 @@ void main() {
         (tester) async {
       _CountingFrequentProductsNotifier.loadMoreCalls = 0;
       await tester.pumpWidget(buildApp(
-        overrides: [
-          frequentProductsProvider.overrideWith(
-            () => _CountingFrequentProductsNotifier([
-              for (var i = 0; i < 60; i++)
-                PosProductResult(
-                    id: 'p$i', name: 'Produit $i', price: 500, stock: 10),
-            ]),
-          ),
-        ],
+        grid: (arg) => _CountingFrequentProductsNotifier(arg, [
+          for (var i = 0; i < 60; i++)
+            PosProductResult(
+                id: 'p$i', name: 'Produit $i', price: 500, stock: 10),
+        ]),
       ));
       await tester.pumpAndSettle();
 

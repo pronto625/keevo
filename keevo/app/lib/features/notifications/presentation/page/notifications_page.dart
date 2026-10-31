@@ -33,7 +33,7 @@ class _NotificationsPageState extends ConsumerState<NotificationsPage> {
   Widget build(BuildContext context) {
     final notificationsAsync = ref.watch(notificationsListProvider);
     final unreadAsync = ref.watch(unreadNotificationCountProvider);
-    final unread = unreadAsync.valueOrNull ?? 0;
+    final unread = unreadAsync.value ?? 0;
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(

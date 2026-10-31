@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_indicator.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:keevo_core/sync/sync_gate_state.dart';
 import 'package:keevo_core/sync/sync_status.dart';
@@ -12,6 +13,7 @@ import 'package:keevo_core/sync/sync_status_provider.dart';
 
 Widget buildWithStatus(SyncStatus status, {int days = 0}) {
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       syncStatusProvider.overrideWith((ref) => Stream.value(status)),
       daysOfflineProvider.overrideWithValue(days),
@@ -105,6 +107,7 @@ void main() {
     final never = StreamController<SyncStatus>();
     addTearDown(never.close);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         syncStatusProvider.overrideWith((ref) => never.stream),
         daysOfflineProvider.overrideWithValue(0),
@@ -126,6 +129,7 @@ void main() {
   testWidgets('« Sync urgente » carries a screen-reader label', (tester) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
         daysOfflineProvider.overrideWithValue(0),
@@ -149,6 +153,7 @@ void main() {
       (tester) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         syncStatusProvider.overrideWith((ref) => Stream.value(SyncStatus.online)),
         daysOfflineProvider.overrideWithValue(0),

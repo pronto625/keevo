@@ -604,7 +604,7 @@ class ProductCard extends ConsumerWidget {
                       container.invalidate(dayClosureStateProvider(storeId));
                     }
                   }
-                  container.read(showDraftsOnlyProvider.notifier).state = false;
+                  container.read(showDraftsOnlyProvider.notifier).set(false);
                   messenger.showSnackBar(
                     SnackBar(
                       content: const Row(

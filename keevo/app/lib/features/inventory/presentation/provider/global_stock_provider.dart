@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -40,7 +41,7 @@ final multiStoreStockRepositoryProvider =
 
 @riverpod
 Future<List<StoreStockSummaryModel>> globalStockOverview(
-    GlobalStockOverviewRef ref) {
+    Ref ref) {
   return ref.watch(multiStoreStockRepositoryProvider).getOverview();
 }
 
@@ -48,7 +49,7 @@ Future<List<StoreStockSummaryModel>> globalStockOverview(
 
 @riverpod
 Future<List<StoreProductStockModel>> storeStockDetail(
-    StoreStockDetailRef ref, String storeId) {
+    Ref ref, String storeId) {
   return ref
       .watch(multiStoreStockRepositoryProvider)
       .getStoreStockDetail(storeId, sortLowFirst: true);
@@ -58,11 +59,14 @@ Future<List<StoreProductStockModel>> storeStockDetail(
 
 // autoDispose: leaving the stock overview resets the query, like its other
 // filters (the page's search field starts empty again).
-final stockSearchQueryProvider = StateProvider.autoDispose<String>((ref) => '');
+final stockSearchQueryProvider =
+    NotifierProvider.autoDispose<SettableNotifier<String>, String>(
+  () => SettableNotifier(''),
+);
 
 @riverpod
 Future<List<StoreProductStockModel>> stockSearchResults(
-    StockSearchResultsRef ref) {
+    Ref ref) {
   final query = ref.watch(stockSearchQueryProvider);
   if (query.trim().length < 2) return Future.value([]);
   return ref
@@ -75,11 +79,17 @@ Future<List<StoreProductStockModel>> stockSearchResults(
 /// Set to a storeId when a search result tile is tapped.
 /// The matching [StoreStockCard] will auto-expand and scroll into view, then
 /// this is cleared back to null.
-final highlightedStoreIdProvider = StateProvider<String?>((ref) => null);
+final highlightedStoreIdProvider =
+    NotifierProvider<SettableNotifier<String?>, String?>(
+  () => SettableNotifier(null),
+);
 
 /// Set to true when navigating from the dashboard low-stock badge.
 /// [GlobalStockOverviewPage] writes this in initState; [_ProductList] reads it
 /// when loading stock data; autoDispose resets it once the page is left.
-final showLowStockOnlyProvider = StateProvider.autoDispose<bool>((ref) => false);
+final showLowStockOnlyProvider =
+    NotifierProvider.autoDispose<SettableNotifier<bool>, bool>(
+  () => SettableNotifier(false),
+);
 
 

@@ -18,7 +18,7 @@ class HeldOperationBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final reason =
-        ref.watch(heldEntityReasonsProvider).valueOrNull?[entityId];
+        ref.watch(heldEntityReasonsProvider).value?[entityId];
     if (reason == null) return const SizedBox.shrink();
     const color = AppTheme.warningStrong;
     final badge = Container(

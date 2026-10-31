@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/keep_alive_while.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -54,7 +56,7 @@ final saveInventoryCountUseCaseProvider =
 /// Fetches products in scope for a counting session.
 @riverpod
 Future<List<InventoryProductRowModel>> countingProducts(
-  CountingProductsRef ref,
+  Ref ref,
   String sessionId,
 ) async {
   return ref
@@ -66,13 +68,16 @@ Future<List<InventoryProductRowModel>> countingProducts(
 enum InventoryCountFilter { all, uncounted, discrepancies }
 
 /// Filter state — defaults to uncounted (AC4).
-final inventoryCountFilterProvider =
-    StateProvider.autoDispose<InventoryCountFilter>(
-        (ref) => InventoryCountFilter.uncounted);
+final inventoryCountFilterProvider = NotifierProvider.autoDispose<
+    SettableNotifier<InventoryCountFilter>, InventoryCountFilter>(
+  () => SettableNotifier(InventoryCountFilter.uncounted),
+);
 
 /// Search query for product name filtering.
 final inventoryCountSearchProvider =
-    StateProvider.autoDispose<String>((ref) => '');
+    NotifierProvider.autoDispose<SettableNotifier<String>, String>(
+  () => SettableNotifier(''),
+);
 
 // ── Action notifier — saves individual count ─────────────────────────────
 
@@ -94,23 +99,29 @@ class SaveCountNotifier extends _$SaveCountNotifier {
     // Multiple rows fire save() concurrently (per-row debounce).
     // Setting AsyncLoading creates an internal Completer that races
     // with the next call → "Future already completed".
-    try {
-      final count = await ref.read(saveInventoryCountUseCaseProvider).execute(
-            sessionId: sessionId,
-            productId: productId,
-            variantId: variantId,
-            productName: productName,
-            variantLabel: variantLabel,
-            theoretical: theoretical,
-            physical: physical,
-          );
-      state = AsyncData(count);
-      // Invalidate product list to refresh écart + counted state
-      ref.invalidate(countingProductsProvider);
-      return count;
-    } catch (e, st) {
-      state = AsyncError(e, st);
-      rethrow;
-    }
+    // Riverpod 3: only read by the rows (no listener) — kept alive for the
+    // call, or the state writes below would throw once it is auto-disposed.
+    return ref.keepAliveWhile(() async {
+      try {
+        final count = await ref.read(saveInventoryCountUseCaseProvider).execute(
+              sessionId: sessionId,
+              productId: productId,
+              variantId: variantId,
+              productName: productName,
+              variantLabel: variantLabel,
+              theoretical: theoretical,
+              physical: physical,
+            );
+        // An invalidation mid-await drops the keep-alive: the ref may be gone.
+        if (!ref.mounted) return count;
+        state = AsyncData(count);
+        // Invalidate product list to refresh écart + counted state
+        ref.invalidate(countingProductsProvider);
+        return count;
+      } catch (e, st) {
+        if (ref.mounted) state = AsyncError(e, st);
+        rethrow;
+      }
+    });
   }
 }

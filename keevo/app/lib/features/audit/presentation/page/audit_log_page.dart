@@ -104,7 +104,7 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
   Future<void> _loadMore() async {
     final notifier = ref.read(auditLogNotifierProvider.notifier);
     if (notifier.isLoadingMore) return;
-    final current = ref.read(auditLogNotifierProvider).valueOrNull;
+    final current = ref.read(auditLogNotifierProvider).value;
     if (current == null || !current.hasMore) return;
     setState(() => _loadMoreFailed = false);
     try {
@@ -311,10 +311,10 @@ class _AuditLogPageState extends ConsumerState<AuditLogPage> {
       if (_loadMoreFailed) setState(() => _loadMoreFailed = false);
     });
     final logAsync = ref.watch(auditLogNotifierProvider);
-    final selfUserId = ref.watch(currentUserIdProvider).valueOrNull;
-    final stores = ref.watch(auditStoreOptionsProvider).valueOrNull ?? const [];
+    final selfUserId = ref.watch(currentUserIdProvider).value;
+    final stores = ref.watch(auditStoreOptionsProvider).value ?? const [];
     final employees =
-        ref.watch(auditEmployeeOptionsProvider).valueOrNull ?? const [];
+        ref.watch(auditEmployeeOptionsProvider).value ?? const [];
 
     String? labelOf(List<AuditFilterOption> opts, String? id) {
       if (id == null) return null;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo/core/sync/sync_monitoring_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:keevo/core/sync/domain/sync_conflict_provider.dart';
@@ -26,6 +27,7 @@ void main() {
     List<Map<String, dynamic>> devices = const [],
   }) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         syncStatusProvider.overrideWith(
             (ref) => Stream.value(status)),
@@ -177,6 +179,7 @@ void main() {
         ),
       ]);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           syncStatusProvider
               .overrideWith((ref) => Stream.value(SyncStatus.online)),

@@ -6,6 +6,7 @@ import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/router/app_router.dart';
 import 'package:keevo/core/router/deep_link_navigation.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 import '../../helpers/fake_entitlements.dart';
 
@@ -106,6 +107,7 @@ void main() {
       addTearDown(router.dispose);
       late ProviderContainer container;
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           entitlementsOverride({'multi-store': 'DISABLED'})
         ],

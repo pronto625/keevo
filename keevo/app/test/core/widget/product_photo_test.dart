@@ -8,6 +8,7 @@ import 'package:image/image.dart' as img;
 import 'package:keevo/core/photo/product_photo_providers.dart';
 import 'package:keevo/core/widget/product_photo.dart';
 import 'package:keevo_core/photo/product_photo_cache.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Resolves server URLs from a fixed map — no network, no path_provider.
 class _FakeCache extends ProductPhotoCache {
@@ -38,6 +39,7 @@ void main() {
   const initials = Text('SA');
 
   Widget host(Widget child, {ProductPhotoCache? cache}) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           if (cache != null) productPhotoCacheProvider.overrideWithValue(cache),
         ],

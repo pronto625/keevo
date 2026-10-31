@@ -69,7 +69,7 @@ final tenantStatusClaimProvider = FutureProvider<String?>(
 /// Falls back to [AccountStatus.active] while data is loading or on any error,
 /// matching the previous stub behaviour (no phantom banners).
 final accountStatusProvider = Provider<AccountStatus>((ref) {
-  final tenantStatus = ref.watch(tenantStatusClaimProvider).valueOrNull;
+  final tenantStatus = ref.watch(tenantStatusClaimProvider).value;
   if (tenantStatus == 'SUSPENDED') return AccountStatus.suspended;
 
   // v1s-16-13: while the subscription reloads (after an auth transition) or
@@ -77,7 +77,7 @@ final accountStatusProvider = Provider<AccountStatus>((ref) {
   final subscription = ref.watch(subscriptionInfoProvider);
   final planType = (subscription.isLoading || subscription.hasError)
       ? null
-      : subscription.valueOrNull?.planType;
+      : subscription.value?.planType;
   if (planType == 'FREE') return AccountStatus.trialExpired;
 
   return AccountStatus.active;

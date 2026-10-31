@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo/features/auth/domain/model/auth_tokens.dart';
@@ -8,6 +9,7 @@ import 'package:keevo/features/auth/presentation/page/password_change_page.dart'
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/auth/presentation/provider/sign_out_service.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,6 +42,7 @@ void main() {
 
   Widget buildPage({List<Override> overrides = const []}) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         changePasswordUseCaseProvider.overrideWithValue(mockUseCase),
         sharedPreferencesProvider.overrideWithValue(_prefs),

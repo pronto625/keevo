@@ -36,7 +36,7 @@ class ReportsPage extends ConsumerWidget {
     final userIdAsync = ref.watch(currentUserIdProvider);
     // OWNER: employeeId=null → all store sales. EMPLOYEE: scoped to own sales —
     // never query with a null id while it loads (that means the whole store).
-    final employeeId = userIdAsync.valueOrNull;
+    final employeeId = userIdAsync.value;
     final AsyncValue<DayClosureSummary> summaryAsync = !isEmployee
         ? ref.watch(todaySummaryProvider((storeId: storeId, employeeId: null)))
         : userIdAsync.isLoading
@@ -116,7 +116,7 @@ class ReportsPage extends ConsumerWidget {
                 storeId,
                 closureStateAsync,
                 userIdAsync,
-                lastClosureAsync.valueOrNull,
+                lastClosureAsync.value,
               ),
             ),
           ),
@@ -135,7 +135,7 @@ class ReportsPage extends ConsumerWidget {
     AsyncValue<String?> userIdAsync,
     DayClosure? lastClosure,
   ) {
-    final isClosed = closureStateAsync.valueOrNull == DayClosureState.closed;
+    final isClosed = closureStateAsync.value == DayClosureState.closed;
     // B3.4: mask financial totals for EMPLOYEE role (AC6 / HF-2).
     final isEmployee = ref.watch(currentUserRoleProvider) == 'EMPLOYEE';
 

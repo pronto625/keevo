@@ -12,6 +12,7 @@ import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.
 import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -118,7 +119,7 @@ void main() {
     adapter = _Adapter(server);
     final dio = Dio(BaseOptions(baseUrl: 'https://keevo.test'))
       ..httpClientAdapter = adapter;
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       dioProvider.overrideWithValue(dio),
     ]);
@@ -389,7 +390,7 @@ void main() {
     final first = Completer<Map<String, String>>();
     final second = Completer<Map<String, String>>();
     var calls = 0;
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
           () => ++calls == 1 ? first.future : second.future)),
     ]);
@@ -417,7 +418,7 @@ void main() {
   });
 
   test('persisting fails → the server answer still applies', () async {
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       entitlementsProvider
           .overrideWith(() => _FailingPersist(() async => {'pos': 'ENABLED'})),
     ]);

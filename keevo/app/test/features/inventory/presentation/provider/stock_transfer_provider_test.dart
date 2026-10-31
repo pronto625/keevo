@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/catalog/domain/model/product_model.dart';
@@ -45,7 +46,7 @@ void main() {
       mockRepo = _MockRepo();
     });
 
-    ProviderContainer buildContainer() => ProviderContainer(overrides: [
+    ProviderContainer buildContainer() => ProviderContainer(retry: noProviderRetry, overrides: [
           stockTransferRepositoryProvider.overrideWithValue(mockRepo),
           // Stub out providers that would hit the real DB/network.
           storeListNotifierProvider

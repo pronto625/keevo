@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -16,6 +17,7 @@ import 'package:keevo/features/pos/presentation/page/sale_detail_page.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_service.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -60,6 +62,7 @@ void main() {
     testWidgets('displays all sale items', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.value(mockSale),
@@ -82,6 +85,7 @@ void main() {
     testWidgets('displays discount when applied', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.value(mockSale),
@@ -102,6 +106,7 @@ void main() {
     testWidgets('displays client name when linked', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.value(mockSale),
@@ -123,6 +128,7 @@ void main() {
     testWidgets('displays payment mode', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.value(mockSale),
@@ -155,6 +161,7 @@ void main() {
         createdAt: DateTime(2026, 3, 19, 14, 30),
       );
       Widget page(Sale sale) => ProviderScope(
+            retry: noProviderRetry,
             overrides: [
               saleByIdProvider('sale-123')
                   .overrideWith((ref) => Future.value(sale)),
@@ -173,6 +180,7 @@ void main() {
     testWidgets('no Mobile Money reference line for a cash sale',
         (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           saleByIdProvider('sale-123')
               .overrideWith((ref) => Future.value(mockSale)),
@@ -188,6 +196,7 @@ void main() {
     testWidgets('displays total amount', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.value(mockSale),
@@ -208,6 +217,7 @@ void main() {
     testWidgets('shows loading state initially', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.delayed(
@@ -232,6 +242,7 @@ void main() {
     testWidgets('shows error state on failure', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith(
               (ref) => Future.error('Test error'),
@@ -253,6 +264,7 @@ void main() {
       var reads = 0;
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-123').overrideWith((ref) {
               reads++;
@@ -312,6 +324,7 @@ void main() {
         List<Override> extra = const []}) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             ...extra,
             lastClosureAtProvider
@@ -409,6 +422,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-999').overrideWith((ref) {
               reads++;
@@ -477,6 +491,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-999')
                 .overrideWith((ref) => Future.value(serverSale)),
@@ -525,6 +540,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-999').overrideWith((ref) {
               reads++;
@@ -560,6 +576,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             saleByIdProvider('sale-999').overrideWith((ref) {
               reads++;
@@ -819,6 +836,7 @@ void main() {
         createdAt: DateTime(2026, 3, 19, 14, 30),
       );
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
           saleClientNameProvider('3f2b9c1e-0000-4000-8000-000000000001')
@@ -851,6 +869,7 @@ void main() {
         WidgetTester tester, String status) async {
       final runs = <Map<String, Object?>>[];
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           currentUserRoleProvider.overrideWithValue('EMPLOYEE'),
           entitlementsOverride({'invoicing': 'ENABLED'}),

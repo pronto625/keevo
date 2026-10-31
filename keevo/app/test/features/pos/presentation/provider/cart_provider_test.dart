@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 CartItem _item({
   String id = 'p1',
@@ -24,7 +25,7 @@ void main() {
   late ProviderContainer container;
 
   setUp(() {
-    container = ProviderContainer();
+    container = ProviderContainer(retry: noProviderRetry);
   });
 
   tearDown(() => container.dispose());

@@ -5,6 +5,7 @@ import 'package:keevo/features/profitability/domain/repository/profitability_rep
 import 'package:keevo/features/profitability/presentation/page/store_performance_page.dart';
 import 'package:keevo/features/profitability/presentation/provider/profitability_providers.dart';
 import 'package:keevo/features/profitability/presentation/widget/offline_data_banner.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/sync/sync_status.dart';
 import 'package:keevo_core/sync/sync_status_provider.dart';
 import 'package:mocktail/mocktail.dart';
@@ -43,6 +44,7 @@ void main() {
 
   Widget buildUnderTest(MockProfitabilityRepository mockRepo) {
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         profitabilityRepositoryProvider.overrideWithValue(mockRepo),
       ],
@@ -196,6 +198,7 @@ void main() {
         .thenAnswer((_) async => makeStores());
 
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         profitabilityRepositoryProvider.overrideWithValue(mockRepo),
         syncStatusProvider

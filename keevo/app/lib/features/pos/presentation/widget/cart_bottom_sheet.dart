@@ -92,7 +92,7 @@ class _CartBottomSheetState extends ConsumerState<CartBottomSheet> {
     }
 
     if (!mounted) return;
-    ref.read(draftInitialStocksProvider.notifier).state = initialStocks;
+    ref.read(draftInitialStocksProvider.notifier).set(initialStocks);
     widget.onEncaisser();
   }
 

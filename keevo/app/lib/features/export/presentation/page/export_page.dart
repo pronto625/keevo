@@ -277,12 +277,12 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final datasetsAsync = ref.watch(exportDatasetsProvider);
-    final datasets = datasetsAsync.valueOrNull ?? const <ExportDataset>[];
+    final datasets = datasetsAsync.value ?? const <ExportDataset>[];
     if (datasetsAsync.hasValue) _pruneSelection(datasets);
-    final offline = ref.watch(exportOnlineProvider).valueOrNull == false;
-    final premium = ref.watch(exportIsPremiumProvider).valueOrNull;
+    final offline = ref.watch(exportOnlineProvider).value == false;
+    final premium = ref.watch(exportIsPremiumProvider).value;
     final stores =
-        ref.watch(exportStoreOptionsProvider).valueOrNull ?? const [];
+        ref.watch(exportStoreOptionsProvider).value ?? const [];
 
     final pdf = _format == ExportFormat.pdf;
     final canLaunch = !offline &&

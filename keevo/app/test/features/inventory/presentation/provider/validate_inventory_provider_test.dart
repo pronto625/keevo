@@ -9,6 +9,7 @@ import 'package:keevo/core/di/providers.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/inventory/presentation/provider/validate_inventory_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:keevo_core/sync/sync_service.dart';
@@ -121,7 +122,7 @@ void main() {
 
     /// Builds a ProviderContainer that overrides connectivity to offline,
     /// currentUserIdProvider to return a known userId, and uses the test DB.
-    ProviderContainer buildContainer() => ProviderContainer(overrides: [
+    ProviderContainer buildContainer() => ProviderContainer(retry: noProviderRetry, overrides: [
           appDatabaseProvider.overrideWithValue(db),
           syncServiceProvider.overrideWithValue(mockSyncService),
           dioProvider.overrideWithValue(_MockDio()),
@@ -571,7 +572,7 @@ void main() {
       );
 
       // Override currentUserIdProvider to return null (simulating no auth).
-      final container = ProviderContainer(overrides: [
+      final container = ProviderContainer(retry: noProviderRetry, overrides: [
         appDatabaseProvider.overrideWithValue(db),
         syncServiceProvider.overrideWithValue(mockSyncService),
         dioProvider.overrideWithValue(_MockDio()),
@@ -892,7 +893,7 @@ void main() {
         await onPush();
         return [];
       });
-      return ProviderContainer(overrides: [
+      return ProviderContainer(retry: noProviderRetry, overrides: [
           appDatabaseProvider.overrideWithValue(db),
           syncServiceProvider.overrideWithValue(mockSyncService),
           dioProvider.overrideWithValue(mockDio),

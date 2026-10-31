@@ -13,7 +13,7 @@ part 'sync_monitoring_providers.g.dart';
 /// (`MODULE_INACTIVE` / `MODULE_READ_ONLY`, Stories 12.7, 13.5 — still listed
 /// by [pendingSyncQueue]).
 @riverpod
-Future<int> pendingSyncCount(PendingSyncCountRef ref) async {
+Future<int> pendingSyncCount(Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   final count = await db.customSelect(
     'SELECT COUNT(*) AS c FROM sync_queue '
@@ -44,7 +44,7 @@ Future<SyncQueueData?> oldestPendingOperation(AppDatabase db) =>
 
 /// Pending sync operations list — for queue tab display.
 @riverpod
-Future<List<SyncQueueData>> pendingSyncQueue(PendingSyncQueueRef ref) async {
+Future<List<SyncQueueData>> pendingSyncQueue(Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.syncQueue)
         ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNull())
@@ -56,7 +56,7 @@ Future<List<SyncQueueData>> pendingSyncQueue(PendingSyncQueueRef ref) async {
 /// refused for good, oldest first.
 @riverpod
 Future<List<SyncQueueData>> quarantinedSyncQueue(
-    QuarantinedSyncQueueRef ref) async {
+    Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   return (db.select(db.syncQueue)
         ..where((t) => t.synced.equals(false) & t.quarantinedAt.isNotNull())
@@ -67,7 +67,7 @@ Future<List<SyncQueueData>> quarantinedSyncQueue(
 /// Number of quarantined chains (v1s-16-15): a sale's chained validation /
 /// cancellation counts with the sale, as in the "Bloquées" list.
 @riverpod
-Future<int> quarantinedSyncCount(QuarantinedSyncCountRef ref) async {
+Future<int> quarantinedSyncCount(Ref ref) async {
   final db = ref.watch(appDatabaseProvider);
   final count = await db.customSelect(
     'SELECT COUNT(*) AS c FROM sync_queue q '
@@ -82,7 +82,7 @@ Future<int> quarantinedSyncCount(QuarantinedSyncCountRef ref) async {
 
 /// Local sync event history — for history tab display.
 @riverpod
-Future<List<SyncEvent>> syncHistory(SyncHistoryRef ref) async {
+Future<List<SyncEvent>> syncHistory(Ref ref) async {
   final logger = ref.watch(syncEventLoggerProvider);
   return logger.getHistory(limit: 20);
 }
@@ -107,7 +107,7 @@ List<Map<String, dynamic>> devicesSeenRecently(
 
 /// Active devices — from backend GET /api/v1/sync/devices.
 @riverpod
-Future<List<Map<String, dynamic>>> activeDevices(ActiveDevicesRef ref) async {
+Future<List<Map<String, dynamic>>> activeDevices(Ref ref) async {
   try {
     final dio = ref.watch(dioProvider);
     final response = await dio.get('/api/v1/sync/devices');

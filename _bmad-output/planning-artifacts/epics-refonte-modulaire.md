@@ -1281,6 +1281,8 @@ As a **développeur frontend**, I want **extraire la facturation en package Dart
 **Given** le workspace **When** l'extraction est faite **Then** `packages/keevo_invoicing` compile/teste seul, dépend uniquement de `keevo_core`, enregistre ses routes/slots via le registre (15.2/15.3), et est chargé `deferred`.
 **Implementation Notes:** patron réutilisable pour extraire les autres features ensuite (incrémental, post-pilote).
 
+- [ ] [Deferred-from: review 15-4b, 2026-10-31] Riverpod 3 notifies on `==` (not `identical`) for every Notifier/AsyncNotifier: audit `state = <equal value>` patterns in the providers moved into packages (consider `riverpod_lint` in the workspace) [app state / riverpod]
+
 ### Story 15.5 : UI du module Facturation
 
 As a **commerçant**,

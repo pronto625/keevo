@@ -1,4 +1,5 @@
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../di/core_providers.dart';
@@ -60,7 +61,20 @@ final syncStatusProvider = StreamProvider<SyncStatus>((ref) async* {
   // replays future events — the initial state was missed and the indicator
   // stayed on « Vérification… » (device test). Each change rebuilds this
   // provider, which keeps showing the previous status meanwhile.
-  final results = await ref.watch(connectivityStreamProvider.future);
+  final List<ConnectivityResult> results;
+  try {
+    results = await ref.watch(connectivityStreamProvider.future);
+  } on StateError catch (e) {
+    // Riverpod 3 fails `.future` with a StateError when the connectivity
+    // provider is disposed before its first value (container disposed, e.g.
+    // sign-out / tests): this provider is going away too, nothing to report.
+    if (!ref.mounted) return;
+    debugPrint('[SyncStatus] connectivity unavailable: $e');
+    rethrow;
+  } catch (e) {
+    debugPrint('[SyncStatus] connectivity unavailable: $e');
+    rethrow;
+  }
   if (_isConnected(results)) {
     yield SyncStatus.online;
     return;

@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/sync/riverpod_sync_trigger_dispatcher.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/sync/connectivity_service.dart';
 import 'package:sqlite3/open.dart';
@@ -94,7 +95,7 @@ void main() {
     _ReadingPushNotifier.error = null;
     _ReadingPushNotifier.done = Completer<void>();
 
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       syncTriggerNotifierProvider.overrideWith(_ReadingPushNotifier.new),
     ]);
     addTearDown(container.dispose);
@@ -125,7 +126,7 @@ void main() {
     ProviderContainer newContainer() {
       _CountingPushNotifier.pushes = 0;
       online = _CountingOnline();
-      return ProviderContainer(overrides: [
+      return ProviderContainer(retry: noProviderRetry, overrides: [
         connectivityServiceProvider.overrideWithValue(online),
         syncTriggerNotifierProvider.overrideWith(_CountingPushNotifier.new),
       ]);

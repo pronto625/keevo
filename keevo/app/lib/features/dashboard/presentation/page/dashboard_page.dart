@@ -101,9 +101,9 @@ class _DashboardContent extends ConsumerWidget {
     final greeting = _buildGreeting(firstName);
     final tenantName = ref.watch(currentTenantNameProvider);
     // Online-first via snapshot; fallback to local when offline/empty.
-    final topProducts = ref.watch(topProductsProvider).valueOrNull
+    final topProducts = ref.watch(topProductsProvider).value
         ?? snapshot.weeklyTopProducts;
-    final worstProducts = ref.watch(worstProductsProvider).valueOrNull
+    final worstProducts = ref.watch(worstProductsProvider).value
         ?? snapshot.weeklyWorstProducts;
     final cs = Theme.of(context).colorScheme;
 
@@ -275,7 +275,7 @@ class _TotalRevenueSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final period = ref.watch(revenuePeriodProvider);
-    final view = ref.watch(periodRevenueProvider).valueOrNull;
+    final view = ref.watch(periodRevenueProvider).value;
     // While another period — or a newer snapshot (sign-in, refresh) — loads,
     // show the loading dash, never the previous figure (v1s-16-21).
     final current = view != null &&
@@ -372,9 +372,9 @@ class _ChartWithFilter extends ConsumerWidget {
           data: data,
           period: period,
           daysRange: days,
-          onPeriodChanged: (p) => ref.read(chartPeriodProvider.notifier).state = p,
+          onPeriodChanged: (p) => ref.read(chartPeriodProvider.notifier).set(p),
           onDaysRangeChanged: period == ChartPeriod.daily
-              ? (d) => ref.read(chartDaysProvider.notifier).state = d
+              ? (d) => ref.read(chartDaysProvider.notifier).set(d)
               : null,
         ),
         const SizedBox(height: 16),

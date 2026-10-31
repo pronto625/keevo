@@ -92,7 +92,7 @@ Entitlements? _entitlementsOf(GoRouter router) {
     if (context == null) return null;
     return ProviderScope.containerOf(context, listen: false)
         .read(entitlementsProvider)
-        .valueOrNull;
+        .value;
   } catch (_) {
     return null;
   }

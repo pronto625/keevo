@@ -4,12 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/export/presentation/provider/export_providers.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// v1s-18-4 — plan used by the format badges: Premium only when active,
 /// unknown (null) when the subscription cannot be read.
 void main() {
   Future<bool?> premiumFor(Future<SubscriptionInfo> Function() info) async {
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       subscriptionInfoProvider.overrideWith((_) => info()),
     ]);
     addTearDown(container.dispose);

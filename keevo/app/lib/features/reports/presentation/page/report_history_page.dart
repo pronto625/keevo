@@ -47,9 +47,9 @@ class _ReportHistoryPageState extends ConsumerState<ReportHistoryPage> {
       actorId: widget.adminMode ? _selectedEmployeeId : null,
       type: _typeFilter,
     ));
-    final currentUserId = ref.watch(currentUserIdProvider).valueOrNull;
+    final currentUserId = ref.watch(currentUserIdProvider).value;
     final localNames =
-        ref.watch(employeeNamesByActorIdProvider).valueOrNull ?? const {};
+        ref.watch(employeeNamesByActorIdProvider).value ?? const {};
 
     final cs = theme.colorScheme;
     return Scaffold(

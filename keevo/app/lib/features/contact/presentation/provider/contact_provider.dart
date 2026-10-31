@@ -1,4 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/keep_alive_while.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -82,37 +84,42 @@ class ClientListNotifier extends _$ClientListNotifier {
   // (a slower earlier search must not overwrite the current one).
   int _reloadSeq = 0;
 
-  Future<void> refresh({bool? includeArchived}) async {
-    if (includeArchived != null) _includeArchived = includeArchived;
-    final seq = ++_reloadSeq;
-    state = const AsyncLoading();
-    final repo = ref.read(clientRepositoryProvider);
-    final result = await AsyncValue.guard(() => _query.isEmpty
-        ? repo.getAll(includeArchived: _includeArchived)
-        : repo.search(_query, includeArchived: _includeArchived));
-    if (seq == _reloadSeq) state = result;
-  }
+  Future<void> refresh({bool? includeArchived}) =>
+      ref.keepAliveWhile(() async {
+        if (includeArchived != null) _includeArchived = includeArchived;
+        final seq = ++_reloadSeq;
+        state = const AsyncLoading();
+        final repo = ref.read(clientRepositoryProvider);
+        final result = await AsyncValue.guard(() => _query.isEmpty
+            ? repo.getAll(includeArchived: _includeArchived)
+            : repo.search(_query, includeArchived: _includeArchived));
+        // Riverpod 3: a disposed notifier throws on `state` (an invalidation
+        // mid-await drops the keep-alive of the old build).
+        if (ref.mounted && seq == _reloadSeq) state = result;
+      });
 
-  Future<void> search(String query) async {
-    _query = query.trim();
-    await refresh();
-  }
+  Future<void> search(String query) =>
+      ref.keepAliveWhile(() async {
+        _query = query.trim();
+        await refresh();
+      });
 
   Future<ClientModel> create({
     required String name,
     required String phone,
     String? email,
     String? notes,
-  }) async {
-    final result = await ref.read(clientRepositoryProvider).create(
-          name: name,
-          phone: phone,
-          email: email,
-          notes: notes,
-        );
-    await refresh();
-    return result;
-  }
+  }) =>
+      ref.keepAliveWhile(() async {
+        final result = await ref.read(clientRepositoryProvider).create(
+              name: name,
+              phone: phone,
+              email: email,
+              notes: notes,
+            );
+        if (ref.mounted) await refresh();
+        return result;
+      });
 
   Future<ClientModel> patchClient({
     required String id,
@@ -120,35 +127,39 @@ class ClientListNotifier extends _$ClientListNotifier {
     String? phone,
     String? email,
     String? notes,
-  }) async {
-    final result = await ref.read(clientRepositoryProvider).update(
-          id: id,
-          name: name,
-          phone: phone,
-          email: email,
-          notes: notes,
-        );
-    await refresh();
-    return result;
-  }
+  }) =>
+      ref.keepAliveWhile(() async {
+        final result = await ref.read(clientRepositoryProvider).update(
+              id: id,
+              name: name,
+              phone: phone,
+              email: email,
+              notes: notes,
+            );
+        if (ref.mounted) await refresh();
+        return result;
+      });
 
-  Future<void> archive(String id) async {
-    await ref.read(clientRepositoryProvider).archive(id);
-    await refresh();
-  }
+  Future<void> archive(String id) =>
+      ref.keepAliveWhile(() async {
+        await ref.read(clientRepositoryProvider).archive(id);
+        if (ref.mounted) await refresh();
+      });
 
-  Future<void> unarchive(String id) async {
-    await ref.read(clientRepositoryProvider).unarchive(id);
-    await refresh();
-  }
+  Future<void> unarchive(String id) =>
+      ref.keepAliveWhile(() async {
+        await ref.read(clientRepositoryProvider).unarchive(id);
+        if (ref.mounted) await refresh();
+      });
 
-  Future<void> syncFromRemote() async {
-    try {
-      await ref.read(clientRepositoryProvider).syncFromRemote();
-    } finally {
-      await refresh();
-    }
-  }
+  Future<void> syncFromRemote() =>
+      ref.keepAliveWhile(() async {
+        try {
+          await ref.read(clientRepositoryProvider).syncFromRemote();
+        } finally {
+          if (ref.mounted) await refresh();
+        }
+      });
 }
 
 // ── Supplier state notifier ──────────────────────────────────────────────────
@@ -176,37 +187,42 @@ class SupplierListNotifier extends _$SupplierListNotifier {
   // (a slower earlier search must not overwrite the current one).
   int _reloadSeq = 0;
 
-  Future<void> refresh({bool? includeArchived}) async {
-    if (includeArchived != null) _includeArchived = includeArchived;
-    final seq = ++_reloadSeq;
-    state = const AsyncLoading();
-    final repo = ref.read(supplierRepositoryProvider);
-    final result = await AsyncValue.guard(() => _query.isEmpty
-        ? repo.getAll(includeArchived: _includeArchived)
-        : repo.search(_query, includeArchived: _includeArchived));
-    if (seq == _reloadSeq) state = result;
-  }
+  Future<void> refresh({bool? includeArchived}) =>
+      ref.keepAliveWhile(() async {
+        if (includeArchived != null) _includeArchived = includeArchived;
+        final seq = ++_reloadSeq;
+        state = const AsyncLoading();
+        final repo = ref.read(supplierRepositoryProvider);
+        final result = await AsyncValue.guard(() => _query.isEmpty
+            ? repo.getAll(includeArchived: _includeArchived)
+            : repo.search(_query, includeArchived: _includeArchived));
+        // Riverpod 3: a disposed notifier throws on `state` (an invalidation
+        // mid-await drops the keep-alive of the old build).
+        if (ref.mounted && seq == _reloadSeq) state = result;
+      });
 
-  Future<void> search(String query) async {
-    _query = query.trim();
-    await refresh();
-  }
+  Future<void> search(String query) =>
+      ref.keepAliveWhile(() async {
+        _query = query.trim();
+        await refresh();
+      });
 
   Future<SupplierModel> create({
     required String name,
     required String phone,
     String? email,
     List<String> productIds = const [],
-  }) async {
-    final result = await ref.read(supplierRepositoryProvider).create(
-          name: name,
-          phone: phone,
-          email: email,
-          productIds: productIds,
-        );
-    await refresh();
-    return result;
-  }
+  }) =>
+      ref.keepAliveWhile(() async {
+        final result = await ref.read(supplierRepositoryProvider).create(
+              name: name,
+              phone: phone,
+              email: email,
+              productIds: productIds,
+            );
+        if (ref.mounted) await refresh();
+        return result;
+      });
 
   Future<SupplierModel> patchSupplier({
     required String id,
@@ -214,35 +230,39 @@ class SupplierListNotifier extends _$SupplierListNotifier {
     String? phone,
     String? email,
     List<String>? productIds,
-  }) async {
-    final result = await ref.read(supplierRepositoryProvider).update(
-          id: id,
-          name: name,
-          phone: phone,
-          email: email,
-          productIds: productIds,
-        );
-    await refresh();
-    return result;
-  }
+  }) =>
+      ref.keepAliveWhile(() async {
+        final result = await ref.read(supplierRepositoryProvider).update(
+              id: id,
+              name: name,
+              phone: phone,
+              email: email,
+              productIds: productIds,
+            );
+        if (ref.mounted) await refresh();
+        return result;
+      });
 
-  Future<void> archive(String id) async {
-    await ref.read(supplierRepositoryProvider).archive(id);
-    await refresh();
-  }
+  Future<void> archive(String id) =>
+      ref.keepAliveWhile(() async {
+        await ref.read(supplierRepositoryProvider).archive(id);
+        if (ref.mounted) await refresh();
+      });
 
-  Future<void> unarchive(String id) async {
-    await ref.read(supplierRepositoryProvider).unarchive(id);
-    await refresh();
-  }
+  Future<void> unarchive(String id) =>
+      ref.keepAliveWhile(() async {
+        await ref.read(supplierRepositoryProvider).unarchive(id);
+        if (ref.mounted) await refresh();
+      });
 
-  Future<void> syncFromRemote() async {
-    try {
-      await ref.read(supplierRepositoryProvider).syncFromRemote();
-    } finally {
-      await refresh();
-    }
-  }
+  Future<void> syncFromRemote() =>
+      ref.keepAliveWhile(() async {
+        try {
+          await ref.read(supplierRepositoryProvider).syncFromRemote();
+        } finally {
+          if (ref.mounted) await refresh();
+        }
+      });
 }
 
 // ── Product-supplier lookup ──────────────────────────────────────────────────
@@ -251,7 +271,7 @@ class SupplierListNotifier extends _$SupplierListNotifier {
 /// Tries remote first (and caches result locally), falls back to local on error.
 @riverpod
 Future<SupplierModel?> productSupplier(
-  ProductSupplierRef ref,
+  Ref ref,
   String productId,
 ) async {
   final remote = ref.watch(remoteSupplierDataSourceProvider);

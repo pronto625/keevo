@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:keevo_core/widget/soft_icon_button.dart';
@@ -38,7 +39,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
   late final TabController _tabController;
   final _searchController = TextEditingController();
   Timer? _debounce;
-  late final StateController<String> _queryController;
+  late final SettableNotifier<String> _queryController;
 
   @override
   void initState() {
@@ -48,7 +49,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
     // when the page is rebuilt (back from a product, tab switch), otherwise the list
     // stays filtered behind an empty-looking field that cannot be cleared.
     _queryController = ref.read(productSearchQueryProvider.notifier);
-    _searchController.text = _queryController.state;
+    _searchController.text = _queryController.value;
 
     // Trigger a background sync when the page first opens.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -65,7 +66,11 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
       final pending = _searchController.text;
       // Provider writes are not allowed during dispose: defer to the next microtask.
       final controller = _queryController;
-      Future.microtask(() => controller.state = pending);
+      // Riverpod 3 throws on a write to a disposed provider (sign-out
+      // disposing the scope with this page).
+      Future.microtask(() {
+        if (controller.mounted) controller.set(pending);
+      });
     }
     _tabController.dispose();
     _searchController.dispose();
@@ -76,13 +81,13 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
     _debounce?.cancel();
     // Clearing restores the full list immediately (no debounce).
     if (query.trim().isEmpty) {
-      ref.read(productSearchQueryProvider.notifier).state = '';
+      ref.read(productSearchQueryProvider.notifier).set('');
       setState(() {}); // hide the clear button
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      ref.read(productSearchQueryProvider.notifier).state = query;
+      ref.read(productSearchQueryProvider.notifier).set(query);
     });
     setState(() {}); // show the clear button as soon as there is text
   }
@@ -315,7 +320,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
               onTap: () {
                 // Toggle drafts-only filter and switch to the Actifs tab.
                 final current = ref.read(showDraftsOnlyProvider);
-                ref.read(showDraftsOnlyProvider.notifier).state = !current;
+                ref.read(showDraftsOnlyProvider.notifier).set(!current);
                 _tabController.animateTo(0);
               },
             ),
@@ -333,7 +338,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                       label: const Text('Brouillons uniquement'),
                       deleteIcon: const Icon(Icons.close, size: 18),
                       onDeleted: () {
-                        ref.read(showDraftsOnlyProvider.notifier).state = false;
+                        ref.read(showDraftsOnlyProvider.notifier).set(false);
                       },
                       backgroundColor: AppTheme.warning.withOpacity(0.12),
                       shape: RoundedRectangleBorder(
@@ -358,7 +363,7 @@ class _CatalogPageState extends ConsumerState<CatalogPage>
                       label: const Text('Stock bas uniquement'),
                       deleteIcon: const Icon(Icons.close, size: 18),
                       onDeleted: () {
-                        ref.read(showLowStockOnlyProvider.notifier).state = false;
+                        ref.read(showLowStockOnlyProvider.notifier).set(false);
                       },
                       backgroundColor: AppTheme.errorColor.withOpacity(0.12),
                       shape: RoundedRectangleBorder(

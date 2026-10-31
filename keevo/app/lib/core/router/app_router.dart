@@ -290,7 +290,7 @@ bool shouldPingModuleGate(Entitlements? prev, Entitlements? next) {
 /// call from the `build` of the widget hosting the router (`KeevoApp`).
 void listenModuleGate(WidgetRef ref, {ModuleGateRefresh? refresh}) {
   ref.listen<AsyncValue<Entitlements>>(entitlementsProvider, (prev, next) {
-    if (shouldPingModuleGate(prev?.valueOrNull, next.valueOrNull)) {
+    if (shouldPingModuleGate(prev?.value, next.value)) {
       (refresh ?? moduleGateRefresh).ping();
     }
   });
@@ -298,7 +298,7 @@ void listenModuleGate(WidgetRef ref, {ModuleGateRefresh? refresh}) {
 
 Entitlements _entitlementsOf(ProviderContainer container) {
   try {
-    return container.read(entitlementsProvider).valueOrNull ??
+    return container.read(entitlementsProvider).value ??
         Entitlements.unknown;
   } catch (_) {
     return Entitlements.unknown;

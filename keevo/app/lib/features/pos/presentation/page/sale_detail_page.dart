@@ -144,7 +144,7 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
             ListTile(
               leading: const SoftIconBadge(icon: Icons.person_outline_rounded),
               title: Text(
-                ref.watch(saleClientNameProvider(sale.clientId!)).valueOrNull ??
+                ref.watch(saleClientNameProvider(sale.clientId!)).value ??
                     'Client',
               ),
               subtitle: const Text('Client enregistré'),
@@ -191,7 +191,7 @@ class _SaleDetailContentState extends ConsumerState<_SaleDetailContent> {
           if (isOwner && sale.status == 'COMPLETED') ...[
             const SizedBox(height: 16),
             // v1s-13-11 (D3): allowed after closure, but the sent report stays as is.
-            if (_isInClosedDay(ref.watch(lastClosureAtProvider(sale.storeId)).valueOrNull))
+            if (_isInClosedDay(ref.watch(lastClosureAtProvider(sale.storeId)).value))
               Padding(
                 key: const Key('closed-day-warning'),
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),

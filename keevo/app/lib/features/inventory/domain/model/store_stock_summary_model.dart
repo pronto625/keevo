@@ -7,7 +7,7 @@ part 'store_stock_summary_model.g.dart';
 /// Mirrors StoreStockSummary backend domain model.
 /// Story 3.2. GoF: Composite root.
 @freezed
-class StoreStockSummaryModel with _$StoreStockSummaryModel {
+abstract class StoreStockSummaryModel with _$StoreStockSummaryModel {
   const factory StoreStockSummaryModel({
     required String storeId,
     required String storeName,

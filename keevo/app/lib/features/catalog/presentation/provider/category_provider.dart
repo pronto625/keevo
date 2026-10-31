@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/sync/riverpod_sync_trigger_dispatcher.dart';
 import '../../../auth/presentation/provider/auth_provider.dart';
@@ -35,6 +36,10 @@ final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref)
 
   // Try to get local categories first (persisted in Drift DB)
   final localCategories = await repository.getLocalCategories();
+  // Riverpod 3 throws on a ref used after this auto-dispose provider was
+  // disposed (the reads below are also inside try/catch: a disposal mid-way
+  // ends in an empty, discarded result).
+  if (!ref.mounted) return localCategories;
 
   // If no local categories (fresh install / first login), trigger a pull sync.
   if (localCategories.isEmpty) {
@@ -46,6 +51,7 @@ final categoriesProvider = FutureProvider.autoDispose<List<CategoryModel>>((ref)
 
     // Fallback: direct GET /api/v1/categories for resilience against empty delta.
     try {
+      if (!ref.mounted) return <CategoryModel>[];
       final dio = ref.read(dioProvider);
       final db = ref.read(appDatabaseProvider);
       final response = await dio.get<Map<String, dynamic>>('/api/v1/categories');
@@ -96,7 +102,9 @@ final subcategoriesProvider = FutureProvider.autoDispose
 });
 
 /// Trigger for manual category refresh (increment to force providers to re-run).
-final categoryRefreshProvider = StateProvider<int>((ref) => 0);
+final categoryRefreshProvider = NotifierProvider<SettableNotifier<int>, int>(
+  () => SettableNotifier(0),
+);
 
 /// Category actions — create, rename, delete.
 class CategoryActions {
@@ -107,19 +115,19 @@ class CategoryActions {
 
   Future<CategoryModel> create(String name, {String? parentId}) async {
     final result = await _repo.createCustomCategory(name, parentId: parentId);
-    _ref.read(categoryRefreshProvider.notifier).state++;
+    _ref.read(categoryRefreshProvider.notifier).update((n) => n + 1);
     return result;
   }
 
   Future<CategoryModel> rename(String categoryId, String newName) async {
     final result = await _repo.renameCategory(categoryId, newName);
-    _ref.read(categoryRefreshProvider.notifier).state++;
+    _ref.read(categoryRefreshProvider.notifier).update((n) => n + 1);
     return result;
   }
 
   Future<void> delete(String categoryId) async {
     await _repo.deleteCategory(categoryId);
-    _ref.read(categoryRefreshProvider.notifier).state++;
+    _ref.read(categoryRefreshProvider.notifier).update((n) => n + 1);
   }
 }
 
@@ -130,6 +138,6 @@ final categoryActionsProvider = Provider<CategoryActions>((ref) {
 /// Trigger a full pull sync then invalidate the category provider.
 Future<void> refreshCategories(WidgetRef ref) async {
   await ref.read(syncServiceProvider).pull();
-  ref.read(categoryRefreshProvider.notifier).state++;
+  ref.read(categoryRefreshProvider.notifier).update((n) => n + 1);
 }
 

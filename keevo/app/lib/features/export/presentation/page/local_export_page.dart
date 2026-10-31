@@ -188,9 +188,9 @@ class _LocalExportPageState extends ConsumerState<LocalExportPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final countsAsync = ref.watch(localExportCountsProvider);
-    final counts = countsAsync.valueOrNull ?? const <String, int>{};
+    final counts = countsAsync.value ?? const <String, int>{};
     final stores =
-        ref.watch(exportStoreOptionsProvider).valueOrNull ?? const [];
+        ref.watch(exportStoreOptionsProvider).value ?? const [];
     final effective = _effective(counts);
     final canGenerate = !_busy && countsAsync.hasValue && effective.isNotEmpty;
 

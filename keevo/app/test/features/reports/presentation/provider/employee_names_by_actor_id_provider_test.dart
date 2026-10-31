@@ -4,6 +4,7 @@ import 'package:keevo/features/reports/presentation/provider/report_history_prov
 import 'package:keevo/features/team/data/datasource/local_employee_datasource.dart';
 import 'package:keevo/features/team/domain/model/employee_model.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockLocalEmployees extends Mock implements LocalEmployeeDataSource {}
@@ -27,7 +28,7 @@ void main() {
         ),
       ],
     );
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       localEmployeeDataSourceProvider.overrideWithValue(local),
     ]);
     addTearDown(container.dispose);
@@ -44,7 +45,7 @@ void main() {
     final local = _MockLocalEmployees();
     when(() => local.getAll(status: any(named: 'status')))
         .thenThrow(StateError('db closed'));
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       localEmployeeDataSourceProvider.overrideWithValue(local),
     ]);
     addTearDown(container.dispose);

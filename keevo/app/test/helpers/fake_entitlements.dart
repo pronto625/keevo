@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
 

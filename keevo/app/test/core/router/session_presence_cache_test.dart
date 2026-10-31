@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/router/session_presence_cache.dart';
 import 'package:keevo/features/auth/data/repository/secure_token_storage.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/secure_storage_provider.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -120,7 +121,7 @@ void main() {
   });
 
   test('provider: one cache per container, built on the app storage', () {
-    final container = ProviderContainer(overrides: [
+    final container = ProviderContainer(retry: noProviderRetry, overrides: [
       flutterSecureStorageProvider.overrideWithValue(storage),
     ]);
     addTearDown(container.dispose);

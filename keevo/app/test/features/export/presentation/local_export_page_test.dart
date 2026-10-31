@@ -12,6 +12,7 @@ import 'package:keevo/features/export/domain/model/export_models.dart';
 import 'package:keevo/features/export/presentation/page/local_export_page.dart';
 import 'package:keevo/features/export/presentation/provider/export_providers.dart';
 import 'package:keevo/features/export/presentation/provider/local_export_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 /// Records the requested exports; scripted outcome.
 class _FakeService implements LocalExportService {
@@ -48,6 +49,7 @@ void main() {
   });
 
   Widget app({ExportPrefill? prefill}) => ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           localExportServiceProvider.overrideWithValue(service),
           localExportCountsProvider.overrideWith((_) async => counts),

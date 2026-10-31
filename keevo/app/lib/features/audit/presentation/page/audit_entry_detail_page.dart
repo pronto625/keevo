@@ -31,7 +31,7 @@ class AuditEntryDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     final detailAsync = ref.watch(auditEntryDetailProvider(entryId));
-    final entry = detailAsync.valueOrNull ?? initialEntry;
+    final entry = detailAsync.value ?? initialEntry;
 
     Widget body;
     if (entry != null) {
@@ -84,9 +84,9 @@ class _DetailBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final selfUserId = ref.watch(currentUserIdProvider).valueOrNull;
+    final selfUserId = ref.watch(currentUserIdProvider).value;
     final employees =
-        ref.watch(auditEmployeeOptionsProvider).valueOrNull ?? const [];
+        ref.watch(auditEmployeeOptionsProvider).value ?? const [];
     final info = AuditPresenter.actionInfo(entry.action);
     final sentence = AuditPresenter.sentence(entry, selfUserId: selfUserId);
     final changes = AuditPresenter.changes(entry);

@@ -9,7 +9,7 @@ part 'inventory_count_model.g.dart';
 /// Mirrors InventoryCount backend domain model.
 /// Story 6.2.
 @freezed
-class InventoryCountModel with _$InventoryCountModel {
+abstract class InventoryCountModel with _$InventoryCountModel {
   const InventoryCountModel._();
 
   const factory InventoryCountModel({

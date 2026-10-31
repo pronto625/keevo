@@ -8,7 +8,7 @@ part 'product_response_dto.g.dart';
 /// Returned by GET /api/v1/products and POST /api/v1/products.
 /// Maps directly from the backend [ProductResponseDto] JSON structure.
 @freezed
-class ProductResponseDto with _$ProductResponseDto {
+abstract class ProductResponseDto with _$ProductResponseDto {
   const factory ProductResponseDto({
     required String id,
     required String name,

@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -55,7 +56,7 @@ final cancelInventorySessionUseCaseProvider =
 
 @riverpod
 Future<InventorySessionModel?> activeSession(
-  ActiveSessionRef ref,
+  Ref ref,
   String storeId,
 ) async {
   return ref
@@ -65,7 +66,7 @@ Future<InventorySessionModel?> activeSession(
 
 @riverpod
 Future<List<InventorySessionModel>> sessionHistory(
-  SessionHistoryRef ref, {
+  Ref ref, {
   int page = 0,
   int size = 20,
 }) async {
@@ -94,9 +95,11 @@ class CreateSessionNotifier extends _$CreateSessionNotifier {
           .execute(storeId: storeId, scope: scope, categoryIds: categoryIds);
     } catch (e, st) {
       // Leaving AsyncLoading would keep the start button disabled.
-      state = AsyncError(e, st);
+      if (ref.mounted) state = AsyncError(e, st);
       rethrow;
     }
+    // Riverpod 3: a disposed notifier throws on `state` / `ref`.
+    if (!ref.mounted) return session;
     state = AsyncData(session);
     // Invalidate active session and history
     ref.invalidate(activeSessionProvider);
@@ -125,6 +128,7 @@ class CancelSessionNotifier extends _$CancelSessionNotifier {
     }
     state = const AsyncData(null);
     Future.microtask(() {
+      if (!ref.mounted) return;
       ref.invalidate(activeSessionProvider);
       ref.invalidate(sessionHistoryProvider);
     });

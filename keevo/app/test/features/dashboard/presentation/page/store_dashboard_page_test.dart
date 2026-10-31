@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/features/dashboard/domain/model/dashboard_snapshot.dart';
 import 'package:keevo/features/dashboard/presentation/page/store_dashboard_page.dart';
 import 'package:keevo/features/dashboard/presentation/provider/dashboard_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 
 void main() {
   setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
@@ -12,6 +13,7 @@ void main() {
   group('StoreDashboardPage', () {
     testWidgets('shows store detail when found', (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           storeOverviewsProvider.overrideWith((_) => Future.value([
                 const StoreOverview(
@@ -37,6 +39,7 @@ void main() {
 
     testWidgets('shows not found when store id does not match', (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           storeOverviewsProvider.overrideWith((_) => Future.value(const <StoreOverview>[])),
         ],
@@ -51,6 +54,7 @@ void main() {
 
     testWidgets('shows error state on failure', (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           storeOverviewsProvider.overrideWith(
             (_) => Future.error('DB error'),
@@ -71,6 +75,7 @@ void main() {
         (tester) async {
       var calls = 0;
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           dashboardSnapshotProvider.overrideWith((_) async {
             calls++;
@@ -119,6 +124,7 @@ void main() {
 
     testWidgets('shows EN BAISSE badge for declining store', (tester) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           storeOverviewsProvider.overrideWith((_) => Future.value([
                 const StoreOverview(
@@ -152,6 +158,7 @@ void main() {
         sharePercent: 100,
       );
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           storeOverviewsProvider.overrideWith((_) => Future.value([
                 const StoreOverview(

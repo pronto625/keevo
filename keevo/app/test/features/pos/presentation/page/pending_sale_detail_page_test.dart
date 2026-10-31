@@ -14,6 +14,7 @@ import 'package:keevo/features/pos/domain/repository/sale_repository.dart';
 import 'package:keevo/features/pos/presentation/page/pending_sale_detail_page.dart';
 import 'package:keevo/features/pos/presentation/provider/pos_providers.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -88,6 +89,7 @@ void main() {
       ),
     ]);
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         sharedPreferencesProvider.overrideWithValue(prefs),
         currentUserRoleProvider.overrideWithValue(role),

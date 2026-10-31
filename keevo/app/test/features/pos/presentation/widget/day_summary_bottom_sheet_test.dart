@@ -5,6 +5,7 @@ import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
 import 'package:keevo/features/pos/presentation/widget/day_summary_bottom_sheet.dart';
 import 'package:keevo/features/pos/domain/usecase/close_day_usecase.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/theme/app_theme.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -30,6 +31,7 @@ void main() {
     testWidgets('widget builds without error', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider((
               storeId: testStoreId,
@@ -58,6 +60,7 @@ void main() {
     testWidgets('displays summary data', (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider((
               storeId: testStoreId,
@@ -94,6 +97,7 @@ void main() {
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider((storeId: testStoreId, employeeId: null))
                 .overrideWith((ref) => Future.value(mockSummary)),
@@ -130,6 +134,7 @@ void main() {
       final requested = <({String storeId, String? employeeId})>[];
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider.overrideWith((ref, args) async {
               requested.add(args);
@@ -157,6 +162,7 @@ void main() {
         (tester) async {
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider((storeId: testStoreId, employeeId: null))
                 .overrideWith((ref) => Future.value(mockSummary)),
@@ -194,6 +200,7 @@ void main() {
       final requested = <({String storeId, String? employeeId})>[];
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider.overrideWith((ref, args) async {
               requested.add(args);
@@ -239,6 +246,7 @@ void main() {
     });
 
     Widget openerApp() => ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             todaySummaryProvider((storeId: testStoreId, employeeId: null))
                 .overrideWith((ref) => Future.value(mockSummary)),

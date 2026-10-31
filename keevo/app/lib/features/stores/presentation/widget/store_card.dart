@@ -38,7 +38,7 @@ class StoreCard extends ConsumerWidget {
     // Story 13.8b: held store → badge under the address; otherwise the
     // ListTile keeps its usual one/two-line layout.
     final held = ref.watch(heldEntityReasonsProvider
-        .select((m) => m.valueOrNull?.containsKey(store.id) ?? false));
+        .select((m) => m.value?.containsKey(store.id) ?? false));
     final subtitle = _subtitle(theme);
 
     return Opacity(

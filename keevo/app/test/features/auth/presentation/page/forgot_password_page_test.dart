@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
@@ -30,6 +31,7 @@ void main() {
   setUp(() => repo = _MockAuthRepository());
 
   Widget page() => ProviderScope(
+        retry: noProviderRetry,
         overrides: [authRepositoryProvider.overrideWithValue(repo)],
         child: MaterialApp.router(
           routerConfig: GoRouter(routes: [

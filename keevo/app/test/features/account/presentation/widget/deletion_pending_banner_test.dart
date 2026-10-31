@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/core/auth/session_refresher.dart';
@@ -18,6 +19,7 @@ class _MockRefresher extends Mock implements SessionRefresher {}
 late _MockRefresher _refresher;
 
 Widget _build(AccountDeletionRepository repo) => ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         accountDeletionRepositoryProvider.overrideWithValue(repo),
         sessionRefresherProvider.overrideWithValue(_refresher),

@@ -12,6 +12,7 @@ import 'package:keevo/core/extension/extension_slot.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart'
     show dioProvider;
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/widget/deferred_widget.dart';
 
 import '../../helpers/fake_entitlements.dart';
@@ -107,7 +108,7 @@ void main() {
     setUp(() {
       fetcher = _Fetcher(() async => [_facturer]);
       entitlements = _ControlledEntitlements(_server({'invoicing': 'ENABLED'}));
-      container = ProviderContainer(overrides: [
+      container = ProviderContainer(retry: noProviderRetry, overrides: [
         entitlementsProvider.overrideWith(() => entitlements),
         extensionContributionsFetcherProvider.overrideWithValue(fetcher.call),
       ]);
@@ -180,7 +181,7 @@ void main() {
       'module states still loading at start → one request, after them; '
       'a token renewal (same readable set) asks nothing', () async {
     var fetches = 0;
-    final c = ProviderContainer(overrides: [
+    final c = ProviderContainer(retry: noProviderRetry, overrides: [
       entitlementsProvider.overrideWith(() => FakeEntitlementsNotifier(
           () async => const {'invoicing': 'ENABLED'},
           seed: Entitlements(
@@ -216,6 +217,7 @@ void main() {
       Future<List<ExtensionContribution>> Function() answer,
     ) async {
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           entitlementsProvider.overrideWith(
               () => _ControlledEntitlements(_server({'invoicing': 'ENABLED'}))),
@@ -305,7 +307,7 @@ void main() {
           );
         });
       final c =
-          ProviderContainer(overrides: [dioProvider.overrideWithValue(dio)]);
+          ProviderContainer(retry: noProviderRetry, overrides: [dioProvider.overrideWithValue(dio)]);
       addTearDown(c.dispose);
       final list = await c.read(extensionContributionsFetcherProvider)(
           kPosCheckoutPostSaleActions);
@@ -318,6 +320,7 @@ void main() {
   group('ExtensionSlot taps', () {
     Future<void> pump(WidgetTester tester, ExtensionActionHandler handler) =>
         tester.pumpWidget(ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             entitlementsProvider.overrideWith(() =>
                 _ControlledEntitlements(_server({'invoicing': 'ENABLED'}))),

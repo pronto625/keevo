@@ -10,7 +10,7 @@ part 'stock_movement_model.g.dart';
 ///
 /// Story 2.3.
 @freezed
-class StockMovementModel with _$StockMovementModel {
+abstract class StockMovementModel with _$StockMovementModel {
   const factory StockMovementModel({
     required String id,
     required String productId,

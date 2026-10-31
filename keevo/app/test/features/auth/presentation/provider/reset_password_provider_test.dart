@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/auth/domain/exception/auth_exception.dart';
 import 'package:keevo/features/auth/domain/repository/auth_repository.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockAuthRepository extends Mock implements AuthRepository {}
@@ -21,7 +22,7 @@ void main() {
 
   setUp(() {
     repo = _MockAuthRepository();
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       authRepositoryProvider.overrideWithValue(repo),
     ]);
     addTearDown(container.dispose);

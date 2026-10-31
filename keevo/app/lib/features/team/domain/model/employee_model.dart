@@ -5,7 +5,7 @@ part 'employee_model.g.dart';
 
 /// EmployeeModel — Domain model for an employee (Story 3.5).
 @freezed
-class EmployeeModel with _$EmployeeModel {
+abstract class EmployeeModel with _$EmployeeModel {
   const factory EmployeeModel({
     required String id,
     required String userId,

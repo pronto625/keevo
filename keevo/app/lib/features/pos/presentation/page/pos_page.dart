@@ -452,7 +452,7 @@ class _PosGridLoadingFooter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final key = (storeId: storeId, categoryId: categoryId);
     final isLoading =
-        ref.watch(frequentProductsProvider(key)).valueOrNull?.isLoadingMore ??
+        ref.watch(frequentProductsProvider(key)).value?.isLoadingMore ??
             false;
     if (!isLoading) return const SliverToBoxAdapter(child: SizedBox.shrink());
     return const SliverToBoxAdapter(

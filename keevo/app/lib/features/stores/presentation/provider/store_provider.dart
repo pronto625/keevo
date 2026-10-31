@@ -1,4 +1,6 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/keep_alive_while.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/di/providers.dart';
@@ -78,64 +80,79 @@ class StoreListNotifier extends _$StoreListNotifier {
     }
   }
 
-  Future<void> refresh() async {
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(
-        () => ref.read(storeRepositoryProvider).getStores());
-    ref.invalidate(managedStoresProvider);
-  }
+  // Riverpod 3: the stores page only reads this auto-dispose notifier, which
+  // could be disposed during the awaits below — kept alive per call.
+  Future<void> refresh() => ref.keepAliveWhile(() async {
+        state = const AsyncLoading();
+        final guarded = await AsyncValue.guard(
+            () => ref.read(storeRepositoryProvider).getStores());
+        // Riverpod 3: a disposed notifier throws on `state` / `ref` (an
+        // invalidation mid-await drops the keep-alive of the old build).
+        if (!ref.mounted) return;
+        state = guarded;
+        ref.invalidate(managedStoresProvider);
+      });
 
   Future<StoreModel> createStore({
     required String name,
     required StoreType type,
     String? address,
     String? phone,
-  }) async {
-    await _settled();
-    final result = await ref.read(storeRepositoryProvider).createStore(
-          name: name,
-          type: type,
-          address: address,
-          phone: phone,
-        );
-    await refresh();
-    return result;
-  }
+  }) =>
+      ref.keepAliveWhile(() async {
+        // Read before the awaits: the ref may be gone after them.
+        final repo = ref.read(storeRepositoryProvider);
+        await _settled();
+        final result = await repo.createStore(
+              name: name,
+              type: type,
+              address: address,
+              phone: phone,
+            );
+        if (ref.mounted) await refresh();
+        return result;
+      });
 
   Future<StoreModel> updateStore({
     required String storeId,
     required String name,
     String? address,
     String? phone,
-  }) async {
-    await _settled();
-    final result = await ref.read(storeRepositoryProvider).updateStore(
-          storeId: storeId,
-          name: name,
-          address: address,
-          phone: phone,
-        );
-    await refresh();
-    return result;
-  }
+  }) =>
+      ref.keepAliveWhile(() async {
+        // Read before the awaits: the ref may be gone after them.
+        final repo = ref.read(storeRepositoryProvider);
+        await _settled();
+        final result = await repo.updateStore(
+              storeId: storeId,
+              name: name,
+              address: address,
+              phone: phone,
+            );
+        if (ref.mounted) await refresh();
+        return result;
+      });
 
-  Future<void> deactivateStore(String storeId) async {
-    await _settled();
-    await ref.read(storeRepositoryProvider).deactivateStore(storeId);
-    await refresh();
-  }
+  Future<void> deactivateStore(String storeId) => ref.keepAliveWhile(() async {
+        final repo = ref.read(storeRepositoryProvider);
+        await _settled();
+        await repo.deactivateStore(storeId);
+        if (ref.mounted) await refresh();
+      });
 
-  Future<void> reactivateStore(String storeId) async {
-    await _settled();
-    await ref.read(storeRepositoryProvider).reactivateStore(storeId);
-    await refresh();
-  }
+  Future<void> reactivateStore(String storeId) => ref.keepAliveWhile(() async {
+        final repo = ref.read(storeRepositoryProvider);
+        await _settled();
+        await repo.reactivateStore(storeId);
+        if (ref.mounted) await refresh();
+      });
 
-  Future<void> syncFromRemote() async {
-    try {
-      await ref.read(storeRepositoryProvider).syncFromRemote();
-    } finally {
-      await refresh();
-    }
-  }
+  Future<void> syncFromRemote() => ref.keepAliveWhile(() async {
+        try {
+          await ref.read(storeRepositoryProvider).syncFromRemote();
+        } finally {
+          if (ref.mounted) await refresh();
+        }
+      });
 }
+

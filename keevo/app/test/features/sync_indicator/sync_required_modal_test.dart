@@ -8,6 +8,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:keevo/core/sync/sync_trigger_notifier.dart';
 import 'package:keevo/features/sync_indicator/presentation/widget/sync_required_modal.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/storage/app_constants.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:keevo_core/sync/sync_gate_state.dart';
@@ -48,6 +50,7 @@ Widget _wrapButton({
 }) {
   final fake = notifier ?? _FakeSyncTriggerNotifier();
   return ProviderScope(
+    retry: noProviderRetry,
     overrides: [
       syncGateStateProvider.overrideWithValue(gateState),
       connectivityStreamProvider.overrideWith(
@@ -69,6 +72,7 @@ Widget _wrapButton({
 }
 
 Widget _wrapRealGate(SharedPreferences prefs) => ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         connectivityStreamProvider
             .overrideWith((ref) => Stream.value([ConnectivityResult.wifi])),
@@ -203,10 +207,13 @@ void main() {
 
       // Use a dynamic gate provider so we can trigger the open transition
       final gateController =
-          StateProvider<SyncGateState>((ref) => SyncGateState.blocked);
+          NotifierProvider<SettableNotifier<SyncGateState>, SyncGateState>(
+        () => SettableNotifier(SyncGateState.blocked),
+      );
 
       await tester.pumpWidget(
         ProviderScope(
+          retry: noProviderRetry,
           overrides: [
             syncGateStateProvider
                 .overrideWith((ref) => ref.watch(gateController)),
@@ -286,6 +293,7 @@ void main() {
             kLastSyncAtKey, DateTime.now().millisecondsSinceEpoch);
 
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           connectivityStreamProvider
               .overrideWith((ref) => Stream.value([ConnectivityResult.wifi])),

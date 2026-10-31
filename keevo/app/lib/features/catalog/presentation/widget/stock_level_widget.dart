@@ -38,7 +38,7 @@ class StockLevelWidget extends ConsumerWidget {
     final primaryStoreAsync = ref.watch(primaryStoreIdProvider);
     final activeStoreId = ref.watch(activeStoreIdProvider);
     final storesAsync = ref.watch(storeListNotifierProvider);
-    final stores = storesAsync.valueOrNull ?? [];
+    final stores = storesAsync.value ?? [];
 
     // Helper: resolve store name from id — never the id itself (v1s-16-20).
     String storeName(String id) {

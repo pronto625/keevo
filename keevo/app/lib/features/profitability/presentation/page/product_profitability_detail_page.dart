@@ -73,7 +73,7 @@ class ProductProfitabilityDetailPage extends ConsumerWidget {
                 selected: selection,
                 onChanged: (s) => ref
                     .read(selectedProfitabilityPeriodProvider.notifier)
-                    .state = s,
+                    .set(s),
               ),
             ),
           ),

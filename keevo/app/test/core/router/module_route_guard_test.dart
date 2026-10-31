@@ -24,6 +24,7 @@ import 'package:keevo/features/invoicing/presentation/provider/invoicing_provide
 import 'package:keevo/features/pos/presentation/page/sale_success_page.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:keevo_core/storage/app_database.dart';
 import 'package:keevo_core/widget/deferred_widget.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -228,6 +229,7 @@ void main() {
     final state = appRouter.configuration.buildTopLevelGoRouterState(match);
     final pending = Completer<Invoice>();
     await tester.pumpWidget(ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         invoiceByIdProvider('inv-7').overrideWith((ref) => pending.future),
       ],
@@ -282,7 +284,7 @@ void main() {
           hasSession: () async => true,
           readRole: () async => role,
           entitlements: () =>
-              container.read(entitlementsProvider).valueOrNull ??
+              container.read(entitlementsProvider).value ??
               Entitlements.unknown,
         ),
         routes: [
@@ -310,6 +312,7 @@ void main() {
       );
       addTearDown(router.dispose);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           entitlementsOverride(states,
@@ -446,6 +449,7 @@ void main() {
       final states = {'counting': 'DISABLED', 'crm': 'ENABLED'};
 
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
           appDatabaseProvider.overrideWithValue(db),

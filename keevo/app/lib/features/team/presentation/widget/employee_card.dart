@@ -79,7 +79,7 @@ class EmployeeCard extends ConsumerWidget {
         child: InkWell(
         borderRadius: BorderRadius.circular(AppTheme.radiusL),
         onTap: () => _showActions(context, ref, storeName,
-            resolvedStoreName: storesAsync.valueOrNull
+            resolvedStoreName: storesAsync.value
                     ?.where((s) => s.id == employee.storeId)
                     .firstOrNull
                     ?.name ??
@@ -173,7 +173,7 @@ class EmployeeCard extends ConsumerWidget {
     try {
       // A50: no team change while the account is read-only.
       SyncGateGuard.assertAccountWritable(
-          ref.read(tenantStatusClaimProvider).valueOrNull);
+          ref.read(tenantStatusClaimProvider).value);
       await action();
     } catch (e) {
       // v1s-14-13 : une réactivation refusée par la limite du forfait ouvre la
@@ -228,7 +228,7 @@ class EmployeeCard extends ConsumerWidget {
     final isOwner = ref.read(currentUserRoleProvider) == 'OWNER';
     // Already watched in build(), so the future has resolved by now.
     final isSelf =
-        ref.read(currentUserIdProvider).valueOrNull == employee.userId;
+        ref.read(currentUserIdProvider).value == employee.userId;
 
     showModalBottomSheet<void>(
       context: context,
@@ -421,7 +421,7 @@ class EmployeeCard extends ConsumerWidget {
 
   void _showReassignDialog(BuildContext context, WidgetRef ref) {
     final storesAsync = ref.read(storeListNotifierProvider);
-    final stores = storesAsync.valueOrNull ?? [];
+    final stores = storesAsync.value ?? [];
 
     String? selectedStoreId = employee.storeId;
 
@@ -565,7 +565,7 @@ class EmployeeCard extends ConsumerWidget {
                     .regeneratePassword(employee.id);
                 if (!context.mounted) return;
                 final storesAsync = ref.read(storeListNotifierProvider);
-                final resolved = storesAsync.valueOrNull
+                final resolved = storesAsync.value
                     ?.where((s) => s.id == result.employee.storeId)
                     .firstOrNull
                     ?.name;

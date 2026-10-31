@@ -15,7 +15,7 @@ class NotificationBellWidget extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final countAsync = ref.watch(unreadNotificationCountProvider);
-    final count = countAsync.valueOrNull ?? 0;
+    final count = countAsync.value ?? 0;
 
     final theme = Theme.of(context);
 

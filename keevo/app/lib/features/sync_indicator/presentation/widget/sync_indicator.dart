@@ -1,7 +1,10 @@
+import 'dart:collection';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/settable_notifier.dart';
 import 'package:keevo_core/sync/sync_gate_provider.dart';
 import 'package:keevo_core/sync/sync_gate_state.dart';
 import 'package:keevo_core/sync/sync_rejection_messages.dart';
@@ -49,12 +52,41 @@ class SyncIndicator extends ConsumerWidget {
     _blockedNotices.clear();
   }
 
+  /// Story 15.4b — notices of the pending lists already shown by an indicator
+  /// (by identity) and not yet removed from their list: another indicator
+  /// notified in the same frame skips them.
+  static final Set<Map<String, dynamic>> _shownNotices = HashSet.identity();
+
+  /// The notices of [pending] no indicator has shown yet.
+  static List<Map<String, dynamic>> _takeNew(
+          List<Map<String, dynamic>> pending) =>
+      [for (final n in pending) if (_shownNotices.add(n)) n];
+
+  /// Removes [shown] from [list] after the frame. Riverpod 3 replays a paused
+  /// listener during a build (when its route shows again), where providers
+  /// cannot be modified; and only what was shown is removed — notices added
+  /// meanwhile stay pending.
+  static void _dropShown(SettableNotifier<List<Map<String, dynamic>>> list,
+      List<Map<String, dynamic>> shown) {
+    if (shown.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      list.update((pending) => [
+            for (final n in pending)
+              if (!shown.any((s) => identical(s, n))) n,
+          ]);
+      _shownNotices.removeAll(shown);
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     // AC8: Listen for stock conflict notifications and show amber SnackBar
     ref.listen<List<Map<String, dynamic>>>(pendingConflictNotificationsProvider,
-        (prev, conflicts) {
+        (prev, pending) {
+      final conflicts = _takeNew(pending);
       if (conflicts.isEmpty) return;
+      final list = ref.read(pendingConflictNotificationsProvider.notifier);
       for (final c in conflicts) {
         final data = c['conflictData'] as Map<String, dynamic>?;
         if (data == null) continue;
@@ -93,20 +125,22 @@ class SyncIndicator extends ConsumerWidget {
           ),
         );
       }
-      ref.read(pendingConflictNotificationsProvider.notifier).state = [];
+      _dropShown(list, conflicts);
     });
 
     // J27: no blocked operation left (released, re-attached, abandoned) →
     // the « Bloqué … » notices still on screen go away at once.
     ref.listen<AsyncValue<int>>(quarantinedSyncCountProvider, (prev, next) {
-      if (next.valueOrNull == 0) closeBlockedNotices();
+      if (next.value == 0) closeBlockedNotices();
     });
 
     // Notify when a queued offline operation is rejected by the server
     // (duplicate name, plan limit, etc.) — previously silent, retried forever.
     ref.listen<List<Map<String, dynamic>>>(
-        pendingRejectionNotificationsProvider, (prev, rejections) {
+        pendingRejectionNotificationsProvider, (prev, pending) {
+      final rejections = _takeNew(pending);
       if (rejections.isEmpty) return;
+      final list = ref.read(pendingRejectionNotificationsProvider.notifier);
       // /settings/sync is OWNER-only: another role gets no « Voir » there.
       bool isOwner() => ref.read(currentUserRoleProvider) == 'OWNER';
       for (final r in rejections) {
@@ -166,7 +200,7 @@ class SyncIndicator extends ConsumerWidget {
         );
         if (quarantined) _blockedNotices.add(controller);
       }
-      ref.read(pendingRejectionNotificationsProvider.notifier).state = [];
+      _dropShown(list, rejections);
     });
 
     final asyncStatus = ref.watch(syncStatusProvider);
@@ -211,7 +245,7 @@ class SyncIndicator extends ConsumerWidget {
     }
 
     return GestureDetector(
-      onTap: () => _showSyncBottomSheet(context, ref, asyncStatus.valueOrNull),
+      onTap: () => _showSyncBottomSheet(context, ref, asyncStatus.value),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Builder(builder: (context) {
@@ -220,7 +254,7 @@ class SyncIndicator extends ConsumerWidget {
           // J25: a blocked (quarantined) operation needs the user — never a
           // plain green « En ligne » while one exists.
           final blocked =
-              ref.watch(quarantinedSyncCountProvider).valueOrNull ?? 0;
+              ref.watch(quarantinedSyncCountProvider).value ?? 0;
           if (!isSyncing && blocked > 0) return _buildActionRequired(blocked);
           if (isSyncing) {
             return _buildIndicator(SyncStatus.syncing,

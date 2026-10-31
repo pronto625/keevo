@@ -1,6 +1,6 @@
 import 'dart:developer' as dev;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart' show Ref;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/sync/account_read_only_exception.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -54,9 +54,11 @@ class EmployeeList extends _$EmployeeList {
 
   Future<void> refresh() async {
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final guarded = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).listEmployees(),
     );
+    // Riverpod 3: a disposed notifier throws on `state`.
+    if (ref.mounted) state = guarded;
   }
 }
 
@@ -88,7 +90,7 @@ final employeeActivityProvider = FutureProvider.autoDispose
 /// deletion pending) — the server would refuse them too.
 AccountReadOnlyException? _accountReadOnly(Ref ref) =>
     AccountReadOnlyException.forTenantStatus(
-        ref.read(tenantStatusClaimProvider).valueOrNull);
+        ref.read(tenantStatusClaimProvider).value);
 
 // ── Create employee ────────────────────────────────────────────────────────
 
@@ -109,7 +111,7 @@ class CreateEmployee extends _$CreateEmployee {
       return;
     }
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final guarded = await AsyncValue.guard(
       () => ref.read(createEmployeeUseCaseProvider).execute(
             firstName: firstName,
             lastName: lastName,
@@ -117,6 +119,8 @@ class CreateEmployee extends _$CreateEmployee {
             storeId: storeId,
           ),
     );
+    // Riverpod 3: a disposed notifier throws on `state`.
+    if (ref.mounted) state = guarded;
   }
 }
 
@@ -134,9 +138,11 @@ class RegeneratePassword extends _$RegeneratePassword {
       return;
     }
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final guarded = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).regeneratePassword(employeeId),
     );
+    // Riverpod 3: a disposed notifier throws on `state`.
+    if (ref.mounted) state = guarded;
   }
 }
 
@@ -164,7 +170,7 @@ class UpdateEmployee extends _$UpdateEmployee {
     final link = ref.keepAlive();
     try {
       state = const AsyncLoading();
-      state = await AsyncValue.guard(
+      final guarded = await AsyncValue.guard(
         () => ref.read(employeeRepositoryProvider).updateEmployee(
               employeeId,
               firstName: firstName,
@@ -173,6 +179,8 @@ class UpdateEmployee extends _$UpdateEmployee {
               storeId: storeId,
             ),
       );
+      // Riverpod 3: a disposed notifier throws on `state`.
+      if (ref.mounted) state = guarded;
     } finally {
       link.close();
     }
@@ -195,9 +203,11 @@ class ChangeEmployeeRole extends _$ChangeEmployeeRole {
     final link = ref.keepAlive(); // J31: see UpdateEmployee.updateProfile
     try {
       state = const AsyncLoading();
-      state = await AsyncValue.guard(
+      final guarded = await AsyncValue.guard(
         () => ref.read(employeeRepositoryProvider).changeRole(employeeId, role),
       );
+      // Riverpod 3: a disposed notifier throws on `state`.
+      if (ref.mounted) state = guarded;
     } finally {
       link.close();
     }
@@ -218,8 +228,10 @@ class SetEmployeePassword extends _$SetEmployeePassword {
       return;
     }
     state = const AsyncLoading();
-    state = await AsyncValue.guard(
+    final guarded = await AsyncValue.guard(
       () => ref.read(employeeRepositoryProvider).setPassword(employeeId, newPassword),
     );
+    // Riverpod 3: a disposed notifier throws on `state`.
+    if (ref.mounted) state = guarded;
   }
 }

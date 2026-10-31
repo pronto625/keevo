@@ -13,6 +13,7 @@ import 'package:keevo/features/team/domain/repository/employee_repository.dart';
 import 'package:keevo/features/team/presentation/page/team_page.dart';
 import 'package:keevo/features/team/presentation/provider/employee_provider.dart';
 import 'package:keevo_core/di/core_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockEmployeeRepo extends Mock implements EmployeeRepository {}
@@ -81,6 +82,7 @@ void main() {
         .thenAnswer((_) async => employees);
 
     return ProviderScope(
+      retry: noProviderRetry,
       overrides: [
         employeeRepositoryProvider.overrideWithValue(mockEmpRepo),
         storeRepositoryProvider.overrideWithValue(mockStoreRepo),
@@ -151,6 +153,7 @@ void main() {
         (tester) async {
       when(() => mockEmpRepo.listEmployees()).thenAnswer((_) async => []);
       await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
         overrides: [
           employeeRepositoryProvider.overrideWithValue(mockEmpRepo),
           storeRepositoryProvider.overrideWithValue(mockStoreRepo),

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/features/pos/domain/model/day_closure_model.dart';
 import 'package:keevo/features/pos/domain/repository/day_closure_repository.dart';
 import 'package:keevo/features/pos/presentation/provider/day_closure_providers.dart';
+import 'package:keevo_core/state/provider_retry.dart';
 import 'package:mocktail/mocktail.dart';
 
 class _MockDayClosureRepository extends Mock implements DayClosureRepository {}
@@ -29,7 +30,7 @@ void main() {
         .thenAnswer((_) async => _summary(2));
     when(() => repo.computeTodaySummary('store-1', null))
         .thenAnswer((_) async => _summary(9));
-    container = ProviderContainer(overrides: [
+    container = ProviderContainer(retry: noProviderRetry, overrides: [
       dayClosureRepositoryProvider.overrideWithValue(repo),
     ]);
     addTearDown(container.dispose);
