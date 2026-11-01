@@ -29,6 +29,21 @@ public interface ModuleLifecycle {
     ActivationResult activate(UUID tenantId, String moduleId, ActivationRequest request, Actor actor);
 
     /**
+     * Story 16.2 (bundles, MOD-FR12) — activates several modules for the tenant in <b>one</b> call: one activation
+     * plan over the union of their dependency closures (one topological order), the same validations, lock,
+     * provisioning, hooks and audit as {@link #activate} — which is the one-element case of this method. Paid modules
+     * get the request's status and end date (a {@code TRIAL} without one is the 14-day trial of each paid module that
+     * is not enabled); free modules follow the free rule. Unlike a single activation, a module of the set that
+     * is already ENABLED is never rewritten, whatever the request's terms: it is listed in
+     * {@link ModulesActivationResult#alreadyActive()}. All or nothing: a
+     * refused validation or a failed provisioning writes no row for any module.
+     *
+     * @param moduleIds the modules to activate (duplicates ignored); never empty
+     */
+    ModulesActivationResult activateModules(UUID tenantId, java.util.Collection<String> moduleIds,
+                                            ActivationRequest request, Actor actor);
+
+    /**
      * Deactivates {@code moduleId} for the tenant: its row becomes {@code DISABLED} with {@code disabled_at}; tables
      * and data are kept. Refused for the core and when active modules require it. Already disabled → idempotent.
      */
@@ -88,6 +103,20 @@ public interface ModuleLifecycle {
 
         public ActivationResult {
             activated = List.copyOf(activated);
+        }
+    }
+
+    /**
+     * Outcome of a multi-module activation (Story 16.2).
+     *
+     * @param activated     the modules written by this call, in activation order (dependencies first)
+     * @param alreadyActive the requested modules that needed no change, in request order
+     */
+    record ModulesActivationResult(List<ModuleRef> activated, List<ModuleRef> alreadyActive) {
+
+        public ModulesActivationResult {
+            activated = List.copyOf(activated);
+            alreadyActive = List.copyOf(alreadyActive);
         }
     }
 

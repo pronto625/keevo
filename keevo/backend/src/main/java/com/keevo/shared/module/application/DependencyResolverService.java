@@ -80,20 +80,33 @@ public class DependencyResolverService implements DependencyResolver {
     @Override
     public ActivationPlan planActivation(String tenantSchema, String moduleId) {
         ModuleManifest target = checkArguments(tenantSchema, moduleId);
+        return planActivation(tenantSchema, Set.of(target.id())); // a single activation is the one-element case
+    }
+
+    @Override
+    public ActivationPlan planActivation(String tenantSchema, Set<String> moduleIds) {
+        if (moduleIds == null || moduleIds.isEmpty()) {
+            throw new IllegalArgumentException("At least one module id is required");
+        }
+        Set<String> targets = new TreeSet<>();
+        for (String moduleId : moduleIds) {
+            targets.add(checkArguments(tenantSchema, moduleId).id());
+        }
         Map<String, ModuleState> states = registry.moduleStates(tenantSchema);
         // Story 16.1: a dependency counts as met only when ENABLED — a read-only (expired, in grace) or disabled
-        // dependency is (re)activated by the plan, so an activation never leaves its target on a read-only
-        // dependency. The target itself counts as active when readable: its renewal is the lifecycle's business.
+        // dependency is (re)activated by the plan, so an activation never leaves a target on a read-only
+        // dependency. A target itself counts as active when readable: its renewal is the lifecycle's business.
         Set<String> active = new TreeSet<>();
         states.forEach((id, state) -> {
-            if (state == ModuleState.ENABLED || (id.equals(target.id()) && state.readable())) {
+            if (state == ModuleState.ENABLED || (targets.contains(id) && state.readable())) {
                 active.add(id);
             }
         });
 
-        // closure of the target over 'requires' (target included, core excluded: always active)
+        // union of the targets' closures over 'requires' (targets included, core excluded: always active); a module
+        // shared by several targets is planned once (Story 16.2)
         Set<String> closure = new TreeSet<>();
-        Deque<String> todo = new ArrayDeque<>(List.of(target.id()));
+        Deque<String> todo = new ArrayDeque<>(targets);
         while (!todo.isEmpty()) {
             String id = todo.pop();
             if (ModuleManifest.CORE_ID.equals(id) || !closure.add(id)) {
@@ -116,7 +129,8 @@ public class DependencyResolverService implements DependencyResolver {
                 reasons.add(new BlockReason(outcome.reason(), id));
             }
         }
-        return new ActivationPlan(target.id(), steps, alreadyActive, reasons);
+        return new ActivationPlan(targets.stream().filter(id -> !ModuleManifest.CORE_ID.equals(id)).toList(), steps,
+                alreadyActive, reasons);
     }
 
     @Override

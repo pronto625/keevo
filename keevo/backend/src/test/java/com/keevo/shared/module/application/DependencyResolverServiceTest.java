@@ -185,6 +185,76 @@ class DependencyResolverServiceTest {
         assertThat(resolver.planActivation(TENANT, "top").moduleIds()).containsExactly("base", "zeta", "top");
     }
 
+    // ── Story 16.2: set of targets (bundles) ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("16.2 — shared dependency: {zeta, eta} both require base → base planned once, first: [base, eta, zeta]")
+    void setSharedDependencyPlannedOnce() {
+        ActivationPlan plan = resolver.planActivation(TENANT, Set.of("zeta", "eta"));
+        assertThat(plan.moduleIds()).containsExactly("base", "eta", "zeta");
+        assertThat(plan.targets()).containsExactly("eta", "zeta");
+        assertThat(eligibilityCalls).containsExactly(TENANT + ":base", TENANT + ":eta", TENANT + ":zeta");
+    }
+
+    @Test
+    @DisplayName("16.2 — union of closures in one topological order: {x, alpha} → [catalog, gamma, beta, inventory, …]")
+    void setUnionOneTopologicalOrder() {
+        ActivationPlan plan = resolver.planActivation(TENANT, Set.of("x", "alpha"));
+        List<String> order = plan.moduleIds();
+        assertThat(order).containsExactlyInAnyOrder("catalog", "inventory", "x", "gamma", "beta", "alpha");
+        assertThat(order.indexOf("catalog")).isLessThan(order.indexOf("inventory"));
+        assertThat(order.indexOf("inventory")).isLessThan(order.indexOf("x"));
+        assertThat(order.indexOf("gamma")).isLessThan(order.indexOf("beta"));
+        assertThat(order.indexOf("beta")).isLessThan(order.indexOf("alpha"));
+        // deterministic, ties by id
+        assertThat(order).containsExactly("catalog", "gamma", "beta", "alpha", "inventory", "x");
+    }
+
+    @Test
+    @DisplayName("16.2 — one target depending on another: {x, inventory} → inventory once, before x")
+    void setTargetRequiredByAnotherTarget() {
+        assertThat(resolver.planActivation(TENANT, Set.of("x", "inventory")).moduleIds())
+                .containsExactly("catalog", "inventory", "x");
+    }
+
+    @Test
+    @DisplayName("16.2 — already active members listed once; read-only target left to the lifecycle, read-only "
+            + "dependency renewed")
+    void setAlreadyActiveAndReadOnly() {
+        registry.activate("catalog", "base");
+        registry.readOnly("eta", "gamma");
+        ActivationPlan plan = resolver.planActivation(TENANT, Set.of("x", "eta", "beta"));
+        assertThat(plan.moduleIds()).containsExactly("gamma", "beta", "inventory", "x");
+        assertThat(plan.alreadyActive()).containsExactly("base", "catalog", "eta");
+        assertThat(plan.blocked()).isFalse();
+    }
+
+    @Test
+    @DisplayName("16.2 — the single form is the one-element case: same plan for every module of the catalogue")
+    void singleIsSetOfOne() {
+        registry.activate("catalog");
+        registry.readOnly("gamma");
+        for (String id : catalog.manifests().stream().map(ModuleManifest::id).toList()) {
+            assertThat(resolver.planActivation(TENANT, id)).isEqualTo(resolver.planActivation(TENANT, Set.of(id)));
+        }
+    }
+
+    @Test
+    @DisplayName("16.2 — paid member of the set blocked NOT_ENTITLED; core in the set ignored; empty / unknown refused")
+    void setBlockedCoreIgnoredAndRefusals() {
+        ActivationPlan plan = resolver.planActivation(TENANT, Set.of("buyer", "solo", "core"));
+        assertThat(plan.moduleIds()).containsExactly("paid", "buyer", "solo");
+        assertThat(plan.targets()).containsExactly("buyer", "solo"); // core filtered out
+        assertThat(resolver.planActivation(TENANT, Set.of("core")).targets()).isEmpty();
+        assertThat(plan.reasons()).containsExactly(new BlockReason(BlockReason.Code.NOT_ENTITLED, "paid"));
+        assertThatThrownBy(() -> resolver.planActivation(TENANT, Set.of()))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> resolver.planActivation(TENANT, (Set<String>) null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> resolver.planActivation(TENANT, Set.of("solo", "ghost")))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     // ── deactivation ────────────────────────────────────────────────────────────────────────────────
 
     @Test

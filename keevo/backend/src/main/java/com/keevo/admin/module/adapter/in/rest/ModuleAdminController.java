@@ -123,11 +123,11 @@ public class ModuleAdminController {
 
     // ── Parsing (adapter concern) ─────────────────────────────────────────────
 
-    private static ModuleLifecycle.Actor actor() {
+    static ModuleLifecycle.Actor actor() {
         return new ModuleLifecycle.Actor(CurrentActor.actorId(), CurrentActor.isSuperAdmin());
     }
 
-    private static TenantModuleStatus parseStatus(String value) {
+    static TenantModuleStatus parseStatus(String value) {
         if (value == null || value.isBlank()) {
             return TenantModuleStatus.ACTIVE;
         }
@@ -139,7 +139,7 @@ public class ModuleAdminController {
     }
 
     /** ISO instant / date-time with offset, or a plain date (end of that day, WAT); blank → no expiry. */
-    private static Instant parseExpiry(String value) {
+    static Instant parseExpiry(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }

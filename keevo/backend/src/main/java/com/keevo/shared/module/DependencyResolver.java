@@ -21,6 +21,14 @@ public interface DependencyResolver {
     ActivationPlan planActivation(String tenantSchema, String moduleId);
 
     /**
+     * Story 16.2 (bundles, MOD-FR12) — one activation plan for several targets: the union of their {@code requires}
+     * closures, each module once, in one topological order (dependencies first, ties broken by id), with the same
+     * rules as the single form (which is the one-element case). {@code core} targets are ignored. An empty set, a
+     * {@code null} or unknown id throw {@link IllegalArgumentException}.
+     */
+    ActivationPlan planActivation(String tenantSchema, java.util.Set<String> moduleIds);
+
+    /**
      * Whether {@code moduleId} can be deactivated for the tenant: blocked when an active module requires it
      * (directly or transitively, through {@code requires} only), or when it is {@code core}.
      */

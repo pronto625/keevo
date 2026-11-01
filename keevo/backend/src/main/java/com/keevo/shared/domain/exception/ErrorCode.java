@@ -122,6 +122,9 @@ public enum ErrorCode {
     MODULE_ACTIVATION_FAILED,      // Story 13.9 — HTTP 500: a module's activation hook failed; the call is rolled back
     MODULE_DEACTIVATION_FAILED,    // Story 13.9 — HTTP 500: a module's deactivation hook failed; the call is rolled back
     MODULE_BACKFILL_RUNNING,       // Story 16.5 — HTTP 409: a tenant_modules backfill already holds the lock
+    BUNDLE_NOT_FOUND,              // Story 16.2 — HTTP 404: unknown bundle id (« Pack introuvable »)
+    BUNDLE_INVALID,                // Story 16.2 — HTTP 422: invalid bundle definition (nothing saved)
+    BUNDLE_NOT_APPLICABLE,         // Story 16.2 — HTTP 422: the stored bundle holds a module no longer available; nothing written
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

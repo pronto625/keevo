@@ -516,10 +516,204 @@ class ModuleLifecycleServiceTest {
     @DisplayName("activating core: idempotent, never a row")
     void activateCore() {
         assertThat(lifecycle.activate(TENANT, "core", null, SUPER_ADMIN).activated()).isEmpty();
+        // core: the request is not validated (a past or invalid end date changes nothing), ACTIVE without end
+        assertThat(lifecycle.activate(TENANT, "core", new ActivationRequest(TenantModuleStatus.TRIAL,
+                NOW.minus(Duration.ofDays(1))), SUPER_ADMIN))
+                .isEqualTo(new ActivationResult(List.of(), TenantModuleStatus.ACTIVE, null, null));
         assertThat(rows.writes).isEmpty();
     }
 
     // ── deactivation ────────────────────────────────────────────────────────
+
+    // ── Story 16.2: several modules in one activation (bundles) ─────────────
+
+    /** The stored rows without their random ids. */
+    private Map<String, List<Object>> rowsWithoutIds() {
+        Map<String, List<Object>> out = new TreeMap<>();
+        rows.stored.forEach((id, r) -> out.put(id, java.util.Arrays.asList(r.status(), r.tier(), r.activatedAt(),
+                r.expiresAt(), r.graceUntil(), r.disabledAt(), r.provisionedVersion())));
+        return out;
+    }
+
+    @Test
+    @DisplayName("16.2 — a set of one is the single activation: identical rows, audit and activated modules")
+    void setOfOneIsSingle() {
+        rows.put("lcpaid", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+        ActivationRequest request = new ActivationRequest(TenantModuleStatus.TRIAL, null);
+
+        ActivationResult single = lifecycle.activate(TENANT, "lcpremium", request, SUPER_ADMIN);
+        Map<String, List<Object>> singleRows = rowsWithoutIds();
+        List<String> singleWrites = List.copyOf(rows.writes);
+        List<AuditPort.AuditEntry> singleAudit = auditEntries(2);
+
+        rows.stored.clear();
+        rows.writes.clear();
+        org.mockito.Mockito.clearInvocations(audit);
+        rows.put("lcpaid", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+        ModuleLifecycle.ModulesActivationResult set = lifecycle.activateModules(TENANT, List.of("lcpremium"), request,
+                SUPER_ADMIN);
+
+        assertThat(rowsWithoutIds()).isEqualTo(singleRows);
+        assertThat(rows.writes).isEqualTo(singleWrites).containsExactly("lcpaid", "lcpremium");
+        assertThat(set.activated()).isEqualTo(single.activated());
+        assertThat(set.alreadyActive()).isEmpty();
+        List<AuditPort.AuditEntry> setAudit = auditEntries(2);
+        assertThat(setAudit).extracting(AuditPort.AuditEntry::action, AuditPort.AuditEntry::entityLabel,
+                        AuditPort.AuditEntry::valueAfter)
+                .isEqualTo(singleAudit.stream().map(e -> org.assertj.core.groups.Tuple.tuple(e.action(),
+                        e.entityLabel(), e.valueAfter())).toList());
+    }
+
+    @Test
+    @DisplayName("16.2 — shared dependency written once, before both targets; one lock; each module audited once")
+    void setSharedDependencyOnce() {
+        rows.put("lcbase", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lctop", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lcbroken", TenantModuleStatus.DISABLED, null, null);
+
+        ModuleLifecycle.ModulesActivationResult result = lifecycle.activateModules(TENANT,
+                List.of("lctop", "lcbroken", "lctop"), ActivationRequest.active(), SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcbase", "lcbroken", "lctop");
+        assertThat(result.activated()).extracting(ModuleLifecycle.ModuleRef::displayName)
+                .containsExactly("Base de test", "Module cassé", "Module supérieur");
+        assertThat(result.alreadyActive()).isEmpty();
+        verify(locks, times(1)).lock("module-lifecycle:" + TENANT);
+        verify(provisioner, times(1)).provision(SCHEMA, "lcbase");
+        assertThat(auditEntries(3)).extracting(AuditPort.AuditEntry::entityLabel)
+                .containsExactly("Base de test", "Module cassé", "Module supérieur");
+    }
+
+    @Test
+    @DisplayName("16.2 — TRIAL without end: disabled paid modules get 14 days, an enabled paid one is kept (listed as "
+            + "already active), free ones ACTIVE without end")
+    void setTrialWithoutEnd() {
+        Instant later = NOW.plus(Duration.ofDays(200));
+        rows.put("lcpaid", TenantModuleStatus.ACTIVE, later, later.plus(Duration.ofDays(7)));
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lcplain", TenantModuleStatus.DISABLED, null, null);
+
+        ModuleLifecycle.ModulesActivationResult result = lifecycle.activateModules(TENANT,
+                List.of("lcplain", "lcpaid", "lcpremium"), new ActivationRequest(TenantModuleStatus.TRIAL, null),
+                SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcplain", "lcpremium");
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(later);
+        assertThat(rows.stored.get("lcpaid").status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(rows.stored.get("lcpremium").status()).isEqualTo(TenantModuleStatus.TRIAL);
+        assertThat(rows.stored.get("lcpremium").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+        assertThat(rows.stored.get("lcplain").status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(rows.stored.get("lcplain").expiresAt()).isNull();
+        assertThat(result.alreadyActive()).extracting(ModuleLifecycle.ModuleRef::displayName)
+                .containsExactly("Module payant");
+
+        // applied again: everything already active, nothing written, nothing audited
+        rows.writes.clear();
+        org.mockito.Mockito.clearInvocations(audit);
+        ModuleLifecycle.ModulesActivationResult again = lifecycle.activateModules(TENANT,
+                List.of("lcplain", "lcpaid", "lcpremium"), new ActivationRequest(TenantModuleStatus.TRIAL, null),
+                SUPER_ADMIN);
+        assertThat(again.activated()).isEmpty();
+        assertThat(again.alreadyActive()).extracting(ModuleLifecycle.ModuleRef::moduleId)
+                .containsExactly("lcplain", "lcpaid", "lcpremium");
+        assertThat(rows.writes).isEmpty();
+        verifyNoInteractions(audit);
+    }
+
+    @Test
+    @DisplayName("16.2 — a set never rewrites an ENABLED paid target (ACTIVE until later), the inactive one is written; "
+            + "a single activation with the same terms renews it")
+    void setNeverRewritesEnabledTargets() {
+        Instant later = NOW.plus(Duration.ofDays(800));
+        rows.put("lcpaid", TenantModuleStatus.ACTIVE, later, later.plus(Duration.ofDays(7)));
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+        Instant sooner = NOW.plus(Duration.ofDays(200));
+        ActivationRequest request = new ActivationRequest(TenantModuleStatus.ACTIVE, sooner);
+
+        ModuleLifecycle.ModulesActivationResult result = lifecycle.activateModules(TENANT,
+                List.of("lcpaid", "lcpremium"), request, SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcpremium");
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(later);
+        assertThat(rows.stored.get("lcpremium").expiresAt()).isEqualTo(sooner);
+        assertThat(result.alreadyActive()).extracting(ModuleLifecycle.ModuleRef::moduleId).containsExactly("lcpaid");
+        assertThat(result.activated()).extracting(ModuleLifecycle.ModuleRef::moduleId).containsExactly("lcpremium");
+
+        lifecycle.activate(TENANT, "lcpaid", request, SUPER_ADMIN); // single: deliberate renewal
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(sooner);
+    }
+
+    @Test
+    @DisplayName("16.1/16.2 — TRIAL without end, free target with a disabled paid dependency → the dependency gets "
+            + "the 14-day trial (formerly 422), the free target ACTIVE without end")
+    void trialWithoutEndFreeTargetPaidDependency() {
+        rows.put("lcbuyer", TenantModuleStatus.DISABLED, null, null);
+
+        lifecycle.activate(TENANT, "lcbuyer", new ActivationRequest(TenantModuleStatus.TRIAL, null), SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcpaid", "lcbuyer");
+        assertThat(rows.stored.get("lcpaid").status()).isEqualTo(TenantModuleStatus.TRIAL);
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+        assertThat(rows.stored.get("lcbuyer").status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(rows.stored.get("lcbuyer").expiresAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("16.1/16.2 — TRIAL without end on an ENABLED paid target with a read-only paid dependency → the "
+            + "dependency gets 14 days (not the target's stored terms), the target is kept")
+    void trialWithoutEndKeptTargetRepairDependency() {
+        Instant later = NOW.plus(Duration.ofDays(200));
+        rows.put("lcpremium", TenantModuleStatus.ACTIVE, later, later.plus(Duration.ofDays(7)));
+        rows.put("lcpaid", TenantModuleStatus.EXPIRED, NOW.minus(Duration.ofDays(2)), NOW.plus(Duration.ofDays(5)));
+
+        ActivationResult result = lifecycle.activate(TENANT, "lcpremium",
+                new ActivationRequest(TenantModuleStatus.TRIAL, null), SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcpaid");
+        assertThat(rows.stored.get("lcpaid").status()).isEqualTo(TenantModuleStatus.TRIAL);
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+        assertThat(rows.stored.get("lcpremium").expiresAt()).isEqualTo(later);
+        assertThat(result.status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(result.expiresAt()).isEqualTo(later);
+    }
+
+    @Test
+    @DisplayName("16.2 — validation failure (ACTIVE without end with a paid module) → 422, no row for any module")
+    void setValidationFailureWritesNothing() {
+        rows.put("lcplain", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lcbase", TenantModuleStatus.DISABLED, null, null);
+        Map<String, List<Object>> before = rowsWithoutIds();
+
+        DomainException e = (DomainException) org.assertj.core.api.Assertions.catchThrowable(() ->
+                lifecycle.activateModules(TENANT, List.of("lcplain", "lcbase", "lcpaid"), ActivationRequest.active(),
+                        SUPER_ADMIN));
+
+        assertThat(e.getDomainCode()).isEqualTo("VALIDATION_ERROR");
+        assertThat(String.valueOf(e.getDetails().get("expiresAt")))
+                .isEqualTo("Une date de fin est requise pour un module payant (« Module payant »)");
+        assertThat(rows.writes).isEmpty();
+        assertThat(rowsWithoutIds()).isEqualTo(before);
+        verifyNoInteractions(provisioner, audit);
+    }
+
+    @Test
+    @DisplayName("16.2 — refusals: free-only set with a trial, unknown module, empty set — nothing written")
+    void setRefusals() {
+        DomainException free = (DomainException) org.assertj.core.api.Assertions.catchThrowable(() ->
+                lifecycle.activateModules(TENANT, List.of("lcplain", "lcbase"),
+                        new ActivationRequest(TenantModuleStatus.TRIAL, NOW.plus(Duration.ofDays(5))), SUPER_ADMIN));
+        assertThat(free.getDomainCode()).isEqualTo("VALIDATION_ERROR");
+        assertThat(free.getMessage()).contains("« Module simple »", "« Base de test »", "gratuits");
+        assertThat(code(() -> lifecycle.activateModules(TENANT, List.of("lcplain", "ghost"),
+                ActivationRequest.active(), SUPER_ADMIN))).isEqualTo("MODULE_NOT_FOUND");
+        assertThat(code(() -> lifecycle.activateModules(TENANT, List.of(), ActivationRequest.active(),
+                SUPER_ADMIN))).isEqualTo("VALIDATION_ERROR");
+        assertThat(code(() -> lifecycle.activateModules(UUID.randomUUID(), List.of("lcplain"),
+                ActivationRequest.active(), SUPER_ADMIN))).isEqualTo("TENANT_NOT_FOUND");
+        assertThat(rows.writes).isEmpty();
+    }
 
     @Test
     @DisplayName("deactivate a free module without dependents: row DISABLED + disabled_at, audit, no provisioning")

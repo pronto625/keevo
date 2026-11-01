@@ -369,6 +369,59 @@ class ModuleLifecyclePostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("16.2 — several modules in one call: shared dependency once, rows + tables, one audit per module")
+    void activateModulesSharedDependency() {
+        insertRow("lcbase", "DISABLED");
+        insertRow("lctop", "DISABLED");
+        Instant expiry = Instant.now().plus(Duration.ofDays(30)).truncatedTo(ChronoUnit.MICROS);
+
+        ModuleLifecycle.ModulesActivationResult result = lifecycle.activateModules(TENANT,
+                List.of("lctop", "lcpaid", "lcbase"), new ActivationRequest(TenantModuleStatus.ACTIVE, expiry), ADMIN);
+
+        assertThat(result.activated()).extracting(ModuleLifecycle.ModuleRef::moduleId)
+                .containsExactly("lcbase", "lcpaid", "lctop");
+        assertThat(result.alreadyActive()).isEmpty();
+        assertThat(row("lcbase")).containsEntry("status", "ACTIVE").containsEntry("expires_at", null);
+        assertThat(row("lctop")).containsEntry("status", "ACTIVE").containsEntry("expires_at", null);
+        assertThat(instant(row("lcpaid").get("expires_at"))).isEqualTo(expiry);
+        assertThat(tables()).contains("lcbase_items", "lctop_items", "lcpaid_items");
+        assertThat(audits).extracting(AuditPort.AuditEntry::entityLabel)
+                .containsExactly("Base de test", "Module payant", "Module supérieur");
+        assertThat(auditSawCommittedRow).containsOnly(true);
+    }
+
+    @Test
+    @DisplayName("16.2 — several modules, one validation refused (paid without end) → 422, no row for any module")
+    void activateModulesValidationWritesNothing() {
+        insertRow("lcbase", "DISABLED");
+
+        String refused = code(() -> lifecycle.activateModules(TENANT, List.of("lcbase", "lcpaid"),
+                ActivationRequest.active(), ADMIN));
+
+        assertThat(refused).isEqualTo("VALIDATION_ERROR");
+        assertThat(row("lcbase")).containsEntry("status", "DISABLED");
+        assertThat(row("lcpaid")).isNull();
+        assertThat(audits).isEmpty();
+    }
+
+    @Test
+    @DisplayName("16.2 — several modules, one provisioning fails → MODULE_PROVISIONING_FAILED, every row rolled back")
+    void activateModulesProvisioningFailureRollsBackAll() {
+        insertRow("lcbase", "DISABLED");
+        insertRow("lctop", "DISABLED");
+        insertRow("lcbroken", "DISABLED");
+
+        String refused = code(() -> lifecycle.activateModules(TENANT, List.of("lctop", "lcbroken"),
+                ActivationRequest.active(), ADMIN));
+
+        assertThat(refused).isEqualTo("MODULE_PROVISIONING_FAILED");
+        for (String id : List.of("lcbase", "lctop", "lcbroken")) {
+            assertThat(row(id)).containsEntry("status", "DISABLED");
+        }
+        assertThat(audits).isEmpty();
+    }
+
+    @Test
     @DisplayName("deactivate a module with data: row DISABLED + disabled_at, tables and data kept, audit")
     void deactivateKeepsData() {
         lifecycle.activate(TENANT, "lctop", null, ADMIN);

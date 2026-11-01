@@ -60,6 +60,26 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("16.2: BUNDLE_NOT_FOUND → 404 « Pack introuvable »; BUNDLE_INVALID → 422 with the French reason")
+    void bundleCodes() {
+        ResponseEntity<ApiResponseWrapper<Void>> notFound = handler.handleDomainException(
+                new DomainException(ErrorCode.BUNDLE_NOT_FOUND, "x"));
+        assertThat(notFound.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(notFound.getBody().error()).isEqualTo("Pack introuvable");
+
+        ResponseEntity<ApiResponseWrapper<Void>> invalid = handler.handleDomainException(new DomainException(
+                ErrorCode.BUNDLE_INVALID, "x", java.util.Map.of("reason", "choisissez au moins un module")));
+        assertThat(invalid.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(invalid.getBody().error()).isEqualTo("Pack invalide : choisissez au moins un module");
+
+        ResponseEntity<ApiResponseWrapper<Void>> stale = handler.handleDomainException(new DomainException(
+                ErrorCode.BUNDLE_NOT_APPLICABLE, "x", java.util.Map.of("name", "Pack Pro")));
+        assertThat(stale.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(stale.getBody().error()).isEqualTo("Le pack « Pack Pro » contient un module qui n'est plus "
+                + "disponible. Modifiez-le avant de l'appliquer.");
+    }
+
+    @Test
     @DisplayName("ACCOUNT_SUSPENDED maps to 403 Forbidden")
     void accountSuspended_mapsto403() {
         ResponseEntity<ApiResponseWrapper<Void>> resp =

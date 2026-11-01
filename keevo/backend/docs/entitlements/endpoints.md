@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 202 — gated: 106, exempt: 96.
+Handlers: 206 — gated: 106, exempt: 100.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -25,6 +25,9 @@ Handlers: 202 — gated: 106, exempt: 96.
 | GET | `/api/v1/admin/analytics/overview` | — | — | — | super-admin | AdminAnalyticsController#getOverview |
 | GET | `/api/v1/admin/analytics/retention` | — | — | — | super-admin | AdminAnalyticsController#getRetention |
 | GET | `/api/v1/admin/analytics/top-stores` | — | — | — | super-admin | AdminAnalyticsController#getTopStores |
+| GET | `/api/v1/admin/bundles` | — | — | — | super-admin | BundleAdminController#list |
+| DELETE | `/api/v1/admin/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#delete |
+| PUT | `/api/v1/admin/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#save |
 | GET | `/api/v1/admin/catalog/products` | — | — | — | super-admin | AdminCatalogController#listProducts |
 | GET | `/api/v1/admin/catalog/products/export` | — | — | — | super-admin | AdminCatalogController#exportProducts |
 | GET | `/api/v1/admin/catalog/summary` | — | — | — | super-admin | AdminCatalogController#getCatalogSummary |
@@ -57,6 +60,7 @@ Handlers: 202 — gated: 106, exempt: 96.
 | GET | `/api/v1/admin/sync/tenants` | — | — | — | super-admin | AdminSyncMonitoringController#listTenantSyncHealth |
 | GET | `/api/v1/admin/sync/tenants/{tenantId}/detail` | — | — | — | super-admin | AdminSyncMonitoringController#getTenantDetail |
 | GET | `/api/v1/admin/tenants` | — | — | — | super-admin | AdminTenantController#listTenants |
+| POST | `/api/v1/admin/tenants/{tenantId}/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#apply |
 | POST | `/api/v1/admin/tenants/{tenantId}/cancel-deletion` | — | — | — | super-admin | AdminTenantController#cancelDeletion |
 | GET | `/api/v1/admin/tenants/{tenantId}/detail` | — | — | — | super-admin | AdminTenantController#getTenantDetail |
 | POST | `/api/v1/admin/tenants/{tenantId}/force-delete` | — | — | — | super-admin | AdminTenantController#forceDelete |

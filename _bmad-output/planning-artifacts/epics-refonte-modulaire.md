@@ -1484,7 +1484,7 @@ So that **le client peut choisir juste une partie ou un pack (MOD-FR12)**.
 - `bundle_definitions` (ou config) = `{ bundleId → [moduleId...] }` ; application = boucle d'activation (Epic 13.8).
 - Moteur **100 % à-la-carte** sous le capot (décision D1).
 
-- [ ] [Deferred-from: review 13-3, 2026-10-29] Bundles need one plan for a set of modules (`planActivation(schema, Set<String>)` over the union of closures, one topological order) instead of planning module by module [DependencyResolver]
+- [x] [Deferred-from: review 13-3, 2026-10-29] Bundles need one plan for a set of modules (`planActivation(schema, Set<String>)` over the union of closures, one topological order) instead of planning module by module [DependencyResolver] — fait en 16.2 (2026-11-01) : `planActivation(schema, Set<String>)`, `ModuleLifecycle.activateModules`, l'activation unitaire en est le cas à un élément
 
 ### Story 16.3 : Modules actifs côté app — rafraîchissement sans claim JWT + gating offline
 
@@ -1545,6 +1545,8 @@ So that **je gère la commercialisation après paiement Mobile Money (MOD-FR16, 
 - [ ] [Deferred-from: review 13-10a, 2026-10-30] Deactivating a free module (e.g. `inventory`, `messaging`) on a Premium/trial tenant is refused because rule-enabled paid modules count as dependents — the console must explain it and offer the cascade (deactivate dependents first) [console]
 
 - [ ] [Deferred-from: spec 16-8, 2026-11-01] Console section « Profils & plafonds »: list the plan profiles (`GET /api/v1/admin/plan-profiles` — French plan label, limits with « illimité » for null, granted paid modules by display name) and edit one (`PUT /api/v1/admin/plan-profiles/{planType}` with `maxStores`/`maxProducts`/`maxEmployees` positive or empty = unlimited, and the paid modules as checkboxes from `GET /api/v1/admin/modules` filtered on paid ones); the PUT body must carry the three limit keys (null sent explicitly = unlimited; unknown keys refused), flag a profile whose `fallback` is true (missing row: built-in defaults shown), show the 422 French reason as is, and the re-sync report of a composition change (tenants by code, counts, failures); warn that lowering a limit keeps existing records and only refuses new creations [console / AdminPlanProfileController]
+
+- [ ] [Deferred-from: spec 16-2, 2026-11-01] Console section « Packs »: list the bundles (`GET /api/v1/admin/bundles` — name, description, modules by display name), create / replace one (`PUT /api/v1/admin/bundles/{bundleId}` with `name`, `description` (may be empty) and `modules` — modules as checkboxes from `GET /api/v1/admin/modules`, core and platform ones excluded; 201 created / 200 replaced; show the 422 `BUNDLE_INVALID` French reason as is), delete one (`DELETE …/bundles/{bundleId}`, say that tenants keep their modules), and apply one to a tenant (`POST /api/v1/admin/tenants/{tenantId}/bundles/{bundleId}` with the same status / end date fields as a module activation — TRIAL without date = 14 days — then show « activés » and « déjà actifs » from the response and refresh the tenant's modules) [console / BundleAdminController]
 
 - [ ] [Deferred-from: review 16-5, 2026-11-01] The module backfill (`POST /api/v1/admin/modules/backfill`) runs synchronously in one HTTP request (all tenants + Flyway provisioning): behind a reverse proxy a long run can time out while it carries on, and the report is lost — the console must run it as an async job with progress and a retrievable report, like `provisionAll` [ModuleAdminController / ModuleBackfillService]
 

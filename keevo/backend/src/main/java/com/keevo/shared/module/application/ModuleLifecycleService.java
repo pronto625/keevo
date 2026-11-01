@@ -70,6 +70,17 @@ import java.util.stream.Collectors;
  * transaction back (rows as before — but tables created by migrations that already ran stay, Flyway commits on its
  * own connection) and answers {@code MODULE_PROVISIONING_FAILED} without technical detail.
  *
+ * <p><b>Several modules (Story 16.2, bundles).</b> {@link #activateModules} plans the union of the targets'
+ * closures once ({@link DependencyResolver#planActivation(String, java.util.Set)}) and runs the same steps; {@link
+ * #activate} is its one-element case, with one difference: a single activation with new terms on an ENABLED paid
+ * target rewrites it (deliberate renewal), while a set activation never rewrites an ENABLED target (listed as already
+ * active) — only the non-enabled targets and the dependencies they need are written.
+ *
+ * <p><b>TRIAL without an end date (Stories 16.1/16.2).</b> It always means 14 days for every paid module the call
+ * writes — the target and its paid dependencies alike, including the paid dependency of a free target (formerly a
+ * 422) and the paid repair dependencies of an ENABLED paid target (formerly given the target's stored terms). An
+ * enabled paid target keeps its stored status and end and is not written.
+ *
  * <p><b>Idempotence.</b> An enabled target with an empty plan and the same status/expiry writes no row and is not
  * audited, but is still provisioned (no-op when up to date): a free module without a row is active by the free rule
  * (Story 13.2) yet may never have had its tables created.
@@ -162,77 +173,133 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         lockTenant(tenantId); // first statement of the transaction
         TenantRef tenant = requireTenant(tenantId);
         ModuleManifest target = requireTenantModule(moduleId);
+        // Story 16.2: a single activation is the one-element case of the set activation
+        Outcome outcome = activateAll(tenant, List.of(target), request, actor, now, true);
+        if (target.isCore()) { // always enabled, never a row
+            return new ActivationResult(List.of(), TenantModuleStatus.ACTIVE, null, null);
+        }
+        return result(outcome.activated(), outcome.rows().get(target.id()));
+    }
+
+    @Override
+    @Transactional
+    public ModulesActivationResult activateModules(UUID tenantId, java.util.Collection<String> moduleIds,
+                                                   ActivationRequest request, Actor actor) {
+        Objects.requireNonNull(actor, "actor");
+        Instant now = clock.instant();
+        lockTenant(tenantId); // first statement of the transaction
+        TenantRef tenant = requireTenant(tenantId);
+        if (moduleIds == null || moduleIds.isEmpty()) {
+            throw invalid("modules", "Choisissez au moins un module à activer");
+        }
+        Map<String, ModuleManifest> requested = new LinkedHashMap<>();
+        for (String moduleId : moduleIds) {
+            ModuleManifest module = requireTenantModule(moduleId);
+            requested.putIfAbsent(module.id(), module);
+        }
+        Outcome outcome = activateAll(tenant, List.copyOf(requested.values()), request, actor, now, false);
+        return new ModulesActivationResult(outcome.activated(), outcome.alreadyActive());
+    }
+
+    /**
+     * The activation of {@code requested} (Story 13.8a, set form since Story 16.2), under the tenant lock already
+     * taken: validation, one plan over the union of the closures, rows + provisioning + hooks in plan order, audit
+     * after commit. Writes nothing when a validation or the plan refuses the call.
+     *
+     * @param renewEnabled whether an ENABLED paid target is rewritten when the request brings other terms (single
+     *                     activation: a deliberate renewal); {@code false} for a set (bundle): ENABLED targets are
+     *                     never rewritten and are listed as already active
+     */
+    private Outcome activateAll(TenantRef tenant, List<ModuleManifest> requested, ActivationRequest request,
+                                Actor actor, Instant now, boolean renewEnabled) {
+        List<ModuleManifest> targets = requested.stream().filter(m -> !m.isCore()).toList();
+        if (targets.isEmpty()) { // core: always enabled, never a row — nothing to validate
+            return new Outcome(List.of(), refs(requested), Map.of());
+        }
         TenantModuleStatus status = requestedStatus(request);
         Instant expiresAt = requestedExpiry(request, now);
         String schema = tenant.tenantSchema();
         registry.evict(schema); // never plan from rows read before the lock
         registerEviction(schema);
 
-        if (target.isCore()) { // always enabled, never a row
-            return new ActivationResult(List.of(), TenantModuleStatus.ACTIVE, null, null);
-        }
+        Map<String, StoredRow> rows = store.findStoredRows(schema);
         // Story 16.1 (MOD-FR13): a trial without an end date on a paid module that is not enabled is the 14-day
-        // reactivation trial; on an enabled one it changes nothing (never cuts a running subscription short, never
+        // reactivation trial; on an enabled target it changes nothing (never cuts a running subscription short, never
         // extends a running trial on each call): the stored status and end are kept
-        if (status == TenantModuleStatus.TRIAL && expiresAt == null && !target.free()) {
-            if (registry.moduleState(schema, target.id()) == ModuleState.ENABLED) {
-                StoredRow current = store.findStoredRows(schema).get(target.id());
-                status = current != null ? current.status() : TenantModuleStatus.ACTIVE;
-                expiresAt = current != null ? current.expiresAt() : null;
-            } else {
-                expiresAt = reactivationTrialEnd(now);
+        boolean defaultTrial = status == TenantModuleStatus.TRIAL && expiresAt == null;
+        Map<String, Terms> kept = new java.util.HashMap<>();
+        if (defaultTrial) {
+            for (ModuleManifest target : targets) {
+                if (!target.free() && registry.moduleState(schema, target.id()) == ModuleState.ENABLED) {
+                    StoredRow current = rows.get(target.id());
+                    kept.put(target.id(), current != null ? new Terms(current.status(), current.expiresAt())
+                            : new Terms(TenantModuleStatus.ACTIVE, null));
+                }
             }
         }
-        ActivationPlan plan = (actor.superAdmin() ? grantingResolver : resolver).planActivation(schema, target.id());
+        Terms requestedTerms = new Terms(status, defaultTrial ? reactivationTrialEnd(now) : expiresAt);
+        // a free module never gets a status other than ACTIVE nor an expiry; a paid one (target or dependency) gets
+        // the requested status and end date (or keeps its own, see above)
+        java.util.function.Function<ModuleManifest, Terms> termsOf = module -> module.free()
+                ? new Terms(TenantModuleStatus.ACTIVE, null)
+                : kept.getOrDefault(module.id(), requestedTerms);
+
+        java.util.Set<String> targetIds = new java.util.TreeSet<>();
+        targets.forEach(t -> targetIds.add(t.id()));
+        ActivationPlan plan = (actor.superAdmin() ? grantingResolver : resolver).planActivation(schema, targetIds);
         if (plan.blocked()) {
             throw blocked(plan);
         }
-        Map<String, StoredRow> rows = store.findStoredRows(schema);
-        List<String> toWrite = new ArrayList<>(plan.moduleIds());
-        if (!toWrite.contains(target.id())
-                && (registry.moduleState(schema, target.id()) != ModuleState.ENABLED
-                    || (!target.free() && changes(rows.get(target.id()), status, expiresAt)))) {
-            toWrite.add(target.id()); // renewal of a read-only module, or a new status/expiry of a paid one
+        List<String> planned = new ArrayList<>(plan.moduleIds());
+        for (ModuleManifest target : targets) {
+            if (!planned.contains(target.id())
+                    && (registry.moduleState(schema, target.id()) != ModuleState.ENABLED
+                        || (renewEnabled && !target.free()
+                            && changes(rows.get(target.id()), termsOf.apply(target))))) {
+                planned.add(target.id()); // renewal of a read-only module, or a new status/expiry of a paid one
+            }
         }
-        checkExpiryRules(target, toWrite, status, expiresAt);
+        List<String> toWrite = dependencyOrder(planned);
+        checkExpiryRules(targets, toWrite, termsOf, status, expiresAt);
         if (toWrite.isEmpty()) {
-            // already enabled: make sure its tables exist — and those of its dependencies active by the free rule
+            // already enabled: make sure their tables exist — and those of their dependencies active by the free rule
             // (no row): such modules are active but may never have been provisioned. No-op when up to date.
-            for (String id : dependencyOrder(plan.alreadyActive())) {
-                if (!id.equals(target.id()) && !rows.containsKey(id)) {
-                    provision(tenant, catalog.find(id).orElseThrow());
+            java.util.Set<String> toProvision = new java.util.LinkedHashSet<>();
+            for (String id : plan.alreadyActive()) {
+                if (targetIds.contains(id) || !rows.containsKey(id)) {
+                    toProvision.add(id);
                 }
             }
-            provision(tenant, target);
+            toProvision.addAll(targetIds);
+            for (String id : dependencyOrder(List.copyOf(toProvision))) {
+                provision(tenant, catalog.find(id).orElseThrow());
+            }
             registry.evict(schema);
-            return result(List.of(), store.findStoredRows(schema).get(target.id()));
+            return new Outcome(List.of(), refs(requested), store.findStoredRows(schema));
         }
 
         List<Written> written = new ArrayList<>();
         for (String id : toWrite) {
             ModuleManifest module = catalog.find(id).orElseThrow();
-            // a free module never gets a status other than ACTIVE nor an expiry; a paid one (target or dependency)
-            // gets the requested status and end date
-            TenantModuleStatus stepStatus = module.free() ? TenantModuleStatus.ACTIVE : status;
-            Instant stepExpiry = module.free() ? null : expiresAt;
-            Instant grace = stepExpiry != null ? stepExpiry.plus(GRACE) : null;
+            Terms terms = termsOf.apply(module);
+            Instant grace = terms.expiresAt() != null ? terms.expiresAt().plus(GRACE) : null;
             // activated_at is only set on an inactive → active transition
             boolean wasActive = registry.moduleState(schema, id) != ModuleState.DISABLED;
-            UUID rowId = store.upsertActivated(tenant.id(), id, stepStatus,
-                    module.free() ? TIER_FREE : TIER_PAID, now, wasActive, stepExpiry, grace);
+            UUID rowId = store.upsertActivated(tenant.id(), id, terms.status(),
+                    module.free() ? TIER_FREE : TIER_PAID, now, wasActive, terms.expiresAt(), grace);
             registry.evict(schema);
             provision(tenant, module);
             if (!wasActive) { // only an inactive → active transition (not a renewal / status change)
                 onActivate(tenant, actor, module);
             }
-            written.add(new Written(rowId, module, stepStatus, stepExpiry));
+            written.add(new Written(rowId, module, terms.status(), terms.expiresAt()));
         }
-        if (!toWrite.contains(target.id())) {
-            provision(tenant, target); // repair plan (dependencies only): the target's tables too
+        // repair plan (dependencies only): the tables of the targets not written too
+        for (String id : dependencyOrder(targetIds.stream().filter(t -> !toWrite.contains(t)).toList())) {
+            provision(tenant, catalog.find(id).orElseThrow());
         }
         registry.evict(schema);
 
-        StoredRow targetRow = store.findStoredRows(schema).get(target.id());
         List<ModuleRef> activated = written.stream()
                 .map(w -> new ModuleRef(w.module().id(), w.module().displayName())).toList();
         afterCommit(() -> {
@@ -240,7 +307,20 @@ public class ModuleLifecycleService implements ModuleLifecycle {
                     written.stream().map(w -> w.module().id()).toList());
             written.forEach(w -> recordActivated(tenant, actor, w));
         });
-        return result(activated, targetRow);
+        List<ModuleRef> alreadyActive = refs(requested.stream().filter(m -> !toWrite.contains(m.id())).toList());
+        return new Outcome(activated, alreadyActive, store.findStoredRows(schema));
+    }
+
+    /** What an activation call did: the modules written, the requested ones left as they were, the rows after. */
+    private record Outcome(List<ModuleRef> activated, List<ModuleRef> alreadyActive, Map<String, StoredRow> rows) {
+    }
+
+    /** The status and end date a module is written with. */
+    private record Terms(TenantModuleStatus status, Instant expiresAt) {
+    }
+
+    private static List<ModuleRef> refs(List<ModuleManifest> modules) {
+        return modules.stream().map(m -> new ModuleRef(m.id(), m.displayName())).toList();
     }
 
     /** The target's stored state; a target without a row (free rule) is ACTIVE without expiry nor version. */
@@ -251,20 +331,29 @@ public class ModuleLifecycleService implements ModuleLifecycle {
 
     /**
      * Expiry rules (orchestrator decision, 13.8a review): every paid module the call writes needs an explicit end
-     * date; a free module never gets one. {@code TRIAL} / {@code expiresAt} with a free target are refused unless the
-     * call writes a paid dependency, to which they then apply (the free target itself is written ACTIVE, no end).
+     * date; a free module never gets one. {@code TRIAL} / {@code expiresAt} with only free targets are refused unless
+     * the call writes a paid dependency, to which they then apply (the free targets are written ACTIVE, no end).
      */
-    private void checkExpiryRules(ModuleManifest target, List<String> toWrite, TenantModuleStatus status,
-                                  Instant expiresAt) {
-        List<String> paid = toWrite.stream()
-                .filter(id -> !catalog.find(id).orElseThrow().free()).toList();
-        if (!paid.isEmpty() && expiresAt == null) {
-            String names = paid.stream().map(id -> "« " + displayName(id) + " »").collect(Collectors.joining(", "));
+    private void checkExpiryRules(List<ModuleManifest> targets, List<String> toWrite,
+                                  java.util.function.Function<ModuleManifest, Terms> termsOf,
+                                  TenantModuleStatus status, Instant expiresAt) {
+        List<ModuleManifest> paid = toWrite.stream().map(id -> catalog.find(id).orElseThrow())
+                .filter(m -> !m.free()).toList();
+        List<ModuleManifest> withoutEnd = paid.stream().filter(m -> termsOf.apply(m).expiresAt() == null).toList();
+        if (!withoutEnd.isEmpty()) {
+            String names = withoutEnd.stream().map(m -> "« " + m.displayName() + " »")
+                    .collect(Collectors.joining(", "));
             throw invalid("expiresAt", "Une date de fin est requise pour un module payant (" + names + ")");
         }
-        if (target.free() && paid.isEmpty() && (expiresAt != null || status != TenantModuleStatus.ACTIVE)) {
-            throw invalid(expiresAt != null ? "expiresAt" : "status", "Le module « " + target.displayName()
-                    + " » est gratuit : il n'a ni date de fin ni période d'essai");
+        boolean allFree = targets.stream().allMatch(ModuleManifest::free);
+        if (allFree && paid.isEmpty() && (expiresAt != null || status != TenantModuleStatus.ACTIVE)) {
+            String message = targets.size() == 1
+                    ? "Le module « " + targets.get(0).displayName() + " » est gratuit : il n'a ni date de fin ni "
+                      + "période d'essai"
+                    : "Les modules " + targets.stream().map(m -> "« " + m.displayName() + " »")
+                      .collect(Collectors.joining(", ")) + " sont gratuits : ils n'ont ni date de fin ni période "
+                      + "d'essai";
+            throw invalid(expiresAt != null ? "expiresAt" : "status", message);
         }
     }
 
@@ -295,11 +384,11 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     }
 
     /** Whether the request changes the target's stored status or expiry (no row = ACTIVE without expiry). */
-    private static boolean changes(StoredRow row, TenantModuleStatus status, Instant expiresAt) {
+    private static boolean changes(StoredRow row, Terms terms) {
         if (row == null) {
-            return status != TenantModuleStatus.ACTIVE || expiresAt != null;
+            return terms.status() != TenantModuleStatus.ACTIVE || terms.expiresAt() != null;
         }
-        return row.status() != status || !Objects.equals(row.expiresAt(), expiresAt);
+        return row.status() != terms.status() || !Objects.equals(row.expiresAt(), terms.expiresAt());
     }
 
     /** Runs the module's migrations; any failure becomes {@code MODULE_PROVISIONING_FAILED} (rolls back). */
