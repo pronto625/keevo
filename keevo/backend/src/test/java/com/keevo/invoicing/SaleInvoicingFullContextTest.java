@@ -90,6 +90,9 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
     void setUp() {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
+        // Story 16.5: registration writes the paid modules' PLAN rows (trial); these tests drive the plan directly in
+        // the subscription (no plan writer), so they start from the transition rule
+        jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN'", tenantId);
         storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
         TenantContext.setCurrentTenant(schema);
         SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(

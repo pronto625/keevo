@@ -52,6 +52,7 @@ class ModuleAdminControllerTest {
     @Autowired MockMvc mockMvc;
 
     @MockitoBean ModuleLifecycle lifecycle;
+    @MockitoBean com.keevo.shared.module.ModuleBackfill backfill;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -219,8 +220,52 @@ class ModuleAdminControllerTest {
         mockMvc.perform(post(BASE + "/deactivate", TENANT, "crm")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/admin/modules")).andExpect(status().isForbidden());
         mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules", TENANT)).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/modules/backfill")).andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/v1/admin/modules/backfill").param("dryRun", "false"))
+                .andExpect(status().isForbidden());
 
         verifyNoInteractions(lifecycle);
+        verifyNoInteractions(backfill);
+    }
+
+    // ── Story 16.5 — backfill ────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("16.5: POST /admin/modules/backfill as SUPER_ADMIN → dry run by default, report by tenant code")
+    void backfill_dryRunByDefault() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(backfill.run(true)).thenReturn(new com.keevo.shared.module.ModuleBackfill.BackfillReport(true, 2, 1,
+                8, 0, 0, 0, 1,
+                List.of(new com.keevo.shared.module.ModuleBackfill.TenantChange("KV-AAA111", 8, 0,
+                        List.of("Facturation"))),
+                List.of(new com.keevo.shared.module.ModuleBackfill.Failure("KV-BBB222",
+                        "Abonnement illisible : modules laissés inchangés"))));
+
+        mockMvc.perform(post("/api/v1/admin/modules/backfill"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dryRun").value(true))
+                .andExpect(jsonPath("$.data.rowsInserted").value(8))
+                .andExpect(jsonPath("$.data.tenants[0].tenantCode").value("KV-AAA111"))
+                .andExpect(jsonPath("$.data.tenants[0].provisioned[0]").value("Facturation"))
+                .andExpect(jsonPath("$.data.failures[0].tenantCode").value("KV-BBB222"));
+        verify(backfill).run(true);
+    }
+
+    @Test
+    @DisplayName("16.5: dryRun=false runs for real; a concurrent run → 409 MODULE_BACKFILL_RUNNING in French")
+    void backfill_realRun_andConcurrent() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(backfill.run(false)).thenReturn(new com.keevo.shared.module.ModuleBackfill.BackfillReport(false, 0, 0,
+                0, 0, 0, 0, 0, List.of(), List.of()))
+                .thenThrow(new DomainException(ErrorCode.MODULE_BACKFILL_RUNNING, "A module backfill is already running"));
+
+        mockMvc.perform(post("/api/v1/admin/modules/backfill").param("dryRun", "false"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.dryRun").value(false));
+        mockMvc.perform(post("/api/v1/admin/modules/backfill").param("dryRun", "false"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("MODULE_BACKFILL_RUNNING"))
+                .andExpect(jsonPath("$.error").value("Une migration des modules est déjà en cours. Réessayez dans quelques minutes."));
     }
 
     private void as(String role) throws Exception {

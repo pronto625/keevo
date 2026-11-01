@@ -74,8 +74,9 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
             """;
 
     static final String INSERT_ACTIVE_FREE_SQL = """
-            INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, activated_at, provisioned_version)
-            SELECT t.id, ?, 'ACTIVE', 'FREE', now(), ?
+            INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, activated_at, provisioned_version,
+                                               origin)
+            SELECT t.id, ?, 'ACTIVE', 'FREE', now(), ?, 'SYSTEM'
             FROM public.tenants t
             WHERE t.schema_name = ? AND t.status <> 'DELETED'
             ON CONFLICT (tenant_id, module_id) DO UPDATE SET provisioned_version = EXCLUDED.provisioned_version
@@ -146,38 +147,57 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
      */
     Plan readPlan(String schema, UUID tenantId, String tenantCode) {
         try (Connection connection = dataSource.getConnection()) {
-            Plan plan;
-            try (PreparedStatement ps = connection.prepareStatement(FIND_PLAN_SQL.formatted(TenantSchema.validate(schema)))) {
-                ps.setQueryTimeout(PLAN_QUERY_TIMEOUT_SECONDS);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (!rs.next()) {
-                        return Plan.NONE;
-                    }
-                    plan = new Plan(rs.getString("plan_type"), rs.getString("status"),
-                            instant(rs.getObject("expires_at", OffsetDateTime.class)));
-                }
-            } catch (SQLException e) {
-                if (UNDEFINED_TABLE.equals(e.getSQLState())) {
-                    return Plan.NONE;
-                }
-                throw e;
-            }
-            Instant expiryDowngradeAt = null;
-            try (PreparedStatement ps = connection.prepareStatement(LAST_PLAN_EVENT_SQL)) {
-                ps.setQueryTimeout(PLAN_QUERY_TIMEOUT_SECONDS);
-                ps.setObject(1, tenantId);
-                try (ResultSet rs = ps.executeQuery()) {
-                    if (rs.next() && "EXPIRY".equals(rs.getString("cause"))) {
-                        expiryDowngradeAt = instant(rs.getObject("occurred_at", OffsetDateTime.class));
-                    }
-                }
-            }
-            return new Plan(plan.planType(), plan.status(), plan.expiresAt(), expiryDowngradeAt, false);
+            return readPlan(connection, schema, tenantId);
         } catch (SQLException | RuntimeException e) {
             log.error("Module registry: plan of tenant {} unreadable ({}) — paid modules granted for this request",
                     tenantCode, e.getClass().getSimpleName());
             return Plan.UNREADABLE;
         }
+    }
+
+    /**
+     * The plan read itself on the given connection (Story 16.5: shared with {@code JdbcPlanModuleRowStore}, which
+     * reads it on the caller's transaction so an uncommitted plan change is seen): oldest {@code subscriptions} row,
+     * then the latest {@code tenant_plan_events} cause. A missing {@code subscriptions} table → {@link Plan#NONE};
+     * any other fault is thrown.
+     */
+    static Plan readPlan(Connection connection, String schema, UUID tenantId) throws SQLException {
+        return readPlan(connection, schema, tenantId, false);
+    }
+
+    /**
+     * @param forUpdate lock the subscription row ({@code FOR UPDATE}, Story 16.5 review): the plan-module row sync
+     *                  serialises with the subscription writers, which hold that row lock until they commit
+     */
+    static Plan readPlan(Connection connection, String schema, UUID tenantId, boolean forUpdate) throws SQLException {
+        Plan plan;
+        String sql = FIND_PLAN_SQL.formatted(TenantSchema.validate(schema)) + (forUpdate ? " FOR UPDATE" : "");
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setQueryTimeout(PLAN_QUERY_TIMEOUT_SECONDS);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return Plan.NONE;
+                }
+                plan = new Plan(rs.getString("plan_type"), rs.getString("status"),
+                        instant(rs.getObject("expires_at", OffsetDateTime.class)));
+            }
+        } catch (SQLException e) {
+            if (UNDEFINED_TABLE.equals(e.getSQLState())) {
+                return Plan.NONE;
+            }
+            throw e;
+        }
+        Instant expiryDowngradeAt = null;
+        try (PreparedStatement ps = connection.prepareStatement(LAST_PLAN_EVENT_SQL)) {
+            ps.setQueryTimeout(PLAN_QUERY_TIMEOUT_SECONDS);
+            ps.setObject(1, tenantId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next() && "EXPIRY".equals(rs.getString("cause"))) {
+                    expiryDowngradeAt = instant(rs.getObject("occurred_at", OffsetDateTime.class));
+                }
+            }
+        }
+        return new Plan(plan.planType(), plan.status(), plan.expiresAt(), expiryDowngradeAt, false);
     }
 
     private static Instant instant(OffsetDateTime value) {

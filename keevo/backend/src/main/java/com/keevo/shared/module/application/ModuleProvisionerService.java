@@ -27,6 +27,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -147,9 +148,17 @@ public class ModuleProvisionerService implements ModuleProvisioner {
         }
         int written;
         try {
-            written = rowExists ? rows.updateProvisionedVersion(schema, id, version)
+            java.util.function.IntSupplier write = () -> rowExists ? rows.updateProvisionedVersion(schema, id, version)
                     : rows.insertActiveFree(schema, id, version);
-        } catch (DataAccessException e) {
+            // Story 16.5: lazy provisioning may run inside a read-only transaction (e.g. a sync pull) where the row
+            // write would fail — now that paid modules have rows. A read-only caller has written nothing, so a
+            // separate transaction cannot wait on its locks.
+            written = TransactionSynchronizationManager.isActualTransactionActive()
+                    && TransactionSynchronizationManager.isCurrentTransactionReadOnly()
+                    ? java.util.Objects.requireNonNullElse(moduleTransaction.execute(st -> write.getAsInt()), 0)
+                    : write.getAsInt();
+        } catch (DataAccessException | org.springframework.transaction.TransactionException e) {
+            // TransactionException: the separate transaction of the read-only branch could not be started
             throw new ModuleProvisioningException(id, schema, "ROW_WRITE/" + e.getClass().getSimpleName(), version);
         } finally {
             registry.evict(schema);
@@ -170,7 +179,8 @@ public class ModuleProvisionerService implements ModuleProvisioner {
             return;
         }
         // Legacy modules (existing-schema baseline, e.g. crm) keep their tables from the tenant provisioner until
-        // 16.5: no lazy adoption on first use, so an update writes no tenant_modules row nor history table for them.
+        // 16.12: no lazy adoption on first use, so an update writes no tenant_modules row nor history table for them;
+        // the on-demand backfill (16.5, ModuleBackfill) is their adoption path on existing tenants.
         if (modules.module(id).flatMap(KeevoModule::existingSchemaBaseline).isPresent()) {
             return;
         }

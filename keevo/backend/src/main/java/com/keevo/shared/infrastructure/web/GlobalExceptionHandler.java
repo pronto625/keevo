@@ -113,6 +113,7 @@ public class GlobalExceptionHandler {
             Map.entry("MODULE_PROVISIONING_FAILED", "Le module n'a pas été activé : la création de ses tables a échoué. Vous pouvez réessayer."),
             Map.entry("MODULE_ACTIVATION_FAILED", "Le module n'a pas été activé : sa mise en service a échoué. Vous pouvez réessayer."),
             Map.entry("MODULE_DEACTIVATION_FAILED", "Le module n'a pas été désactivé : sa mise hors service a échoué. Vous pouvez réessayer."),
+            Map.entry("MODULE_BACKFILL_RUNNING", "Une migration des modules est déjà en cours. Réessayez dans quelques minutes."),
             Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
             Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
             Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
@@ -255,6 +256,19 @@ public class GlobalExceptionHandler {
                 ));
     }
 
+    /** Story 16.5 — the plan was changed but the module rows could not follow: rolled back, retry. */
+    static final String PLAN_MODULE_ROWS_UNAVAILABLE =
+            "Les modules du compte n'ont pas pu être mis à jour. Réessayez dans quelques instants.";
+
+    @ExceptionHandler(com.keevo.shared.module.application.port.PlanModuleRowSync.PlanUnreadableException.class)
+    public ResponseEntity<ApiResponseWrapper<Void>> handlePlanModuleRowsUnavailable(RuntimeException ex) {
+        log.warn("PLAN_MODULE_ROWS_UNAVAILABLE: {}", ex.getMessage());
+        countDomainError("SERVICE_UNAVAILABLE");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponseWrapper.error(PLAN_MODULE_ROWS_UNAVAILABLE, HttpStatus.SERVICE_UNAVAILABLE.name(),
+                        "SERVICE_UNAVAILABLE", null));
+    }
+
     @ExceptionHandler(OptimisticLockingFailureException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleOptimisticLock(
             OptimisticLockingFailureException ex) {
@@ -380,6 +394,7 @@ public class GlobalExceptionHandler {
                  "MODULE_ACTIVATION_BLOCKED",
                  "MODULE_HAS_DEPENDENTS",
                  "CORE_MODULE_REQUIRED",
+                 "MODULE_BACKFILL_RUNNING",
                  "INVOICE_NOT_EDITABLE",
                  "INVOICE_INVALID_TRANSITION",
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5

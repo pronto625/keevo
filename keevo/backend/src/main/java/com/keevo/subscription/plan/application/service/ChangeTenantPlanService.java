@@ -4,6 +4,7 @@ import com.keevo.identity.api.PlanType;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanUseCase;
 import com.keevo.subscription.api.CurrentPlan;
@@ -25,6 +26,9 @@ import java.util.UUID;
  * {@code created_at}, limits from {@link PlanType}, status back to ACTIVE), but it joins the caller's
  * transaction and keeps {@code public.tenants.plan_type} + {@code tenant_plan_events} in step.
  *
+ * <p>Story 16.5: after the history row, the tenant's paid-module rows are realigned on the new plan in the same
+ * transaction ({@link PlanModuleRowSync}).
+ *
  * <p>Schema names are re-validated with {@link TenantSchema} before any interpolation.
  */
 @Service
@@ -44,10 +48,12 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
 
     private final JdbcTemplate jdbc;
     private final PlanChangeRecorder recorder;
+    private final PlanModuleRowSync planModuleRows;
 
-    public ChangeTenantPlanService(JdbcTemplate jdbc, PlanChangeRecorder recorder) {
+    public ChangeTenantPlanService(JdbcTemplate jdbc, PlanChangeRecorder recorder, PlanModuleRowSync planModuleRows) {
         this.jdbc = jdbc;
         this.recorder = recorder;
+        this.planModuleRows = planModuleRows;
     }
 
     @Override
@@ -71,6 +77,7 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
         recorder.syncPublicPlanType(cmd.tenantId(), plan);
         recorder.recordEvent(cmd.tenantId(), row.plan().planType(), plan, cmd.cause(),
                 cmd.actorId(), cmd.reason());
+        planModuleRows.sync(cmd.tenantId(), cmd.schemaName()); // Story 16.5 — same transaction
         log.info("Plan changed: tenant={} {} -> {} cause={} actor={}",
                 cmd.tenantId(), row.plan().planType(), plan, cmd.cause(), cmd.actorId());
         return row.plan();

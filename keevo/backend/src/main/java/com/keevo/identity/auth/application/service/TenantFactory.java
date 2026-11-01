@@ -8,6 +8,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import com.keevo.shared.module.ModuleProvisioner;
+import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,12 +40,14 @@ public class TenantFactory {
     private final TenantSchemaProvisioner schemaProvisioner;
     private final PlanChangeRecorder planChangeRecorder;
     private final ModuleProvisioner moduleProvisioner;
+    private final PlanModuleRowSync planModuleRows;
 
+    /** Without module provisioning nor plan-module rows — tests. */
     public TenantFactory(TenantCodeGenerator codeGenerator,
                          TenantRepository tenantRepository,
                          TenantSchemaProvisioner schemaProvisioner,
                          PlanChangeRecorder planChangeRecorder) {
-        this(codeGenerator, tenantRepository, schemaProvisioner, planChangeRecorder, null);
+        this(codeGenerator, tenantRepository, schemaProvisioner, planChangeRecorder, null, null);
     }
 
     @Autowired
@@ -52,12 +55,14 @@ public class TenantFactory {
                          TenantRepository tenantRepository,
                          TenantSchemaProvisioner schemaProvisioner,
                          PlanChangeRecorder planChangeRecorder,
-                         ModuleProvisioner moduleProvisioner) {
+                         ModuleProvisioner moduleProvisioner,
+                         PlanModuleRowSync planModuleRows) {
         this.codeGenerator    = codeGenerator;
         this.tenantRepository = tenantRepository;
         this.schemaProvisioner = schemaProvisioner;
         this.planChangeRecorder = planChangeRecorder;
         this.moduleProvisioner = moduleProvisioner;
+        this.planModuleRows = planModuleRows;
     }
 
     /**
@@ -99,6 +104,11 @@ public class TenantFactory {
             schemaProvisioner.provision(savedTenant.getId().toString(), schemaName);
             planChangeRecorder.recordEvent(savedTenant.getId(), null, PlanType.PREMIUM_TRIAL,
                     PlanChangeCause.REGISTRATION, null, null);
+            // Story 16.5 — the paid modules get their TRIAL rows (trial end = subscription end) in the
+            // registration transaction, before the module provisioning that runs after commit
+            if (planModuleRows != null) {
+                planModuleRows.sync(savedTenant.getId(), schemaName);
+            }
         } catch (RuntimeException e) {
             schemaProvisioner.dropSchemaIfExists(schemaName);
             throw e;

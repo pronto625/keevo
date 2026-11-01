@@ -3,6 +3,7 @@ package com.keevo.subscription.plan.application.service;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
+import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsUseCase;
@@ -32,7 +33,8 @@ import java.util.UUID;
  *   <li>Per tenant, in its own transaction: downgrade the expired subscription row
  *       ({@code UPDATE … RETURNING} the previous plan), sync {@code public.tenants.plan_type},
  *       append a {@code tenant_plan_events} row (cause EXPIRY) and publish a
- *       {@link PlanExpiredEvent} (owner WhatsApp sent after commit) — Story 9-2.</li>
+ *       {@link PlanExpiredEvent} (owner WhatsApp sent after commit) — Story 9-2 — and realign the tenant's
+ *       paid-module rows on the downgraded plan (Story 16.5).</li>
  * </ol>
  *
  * <p>GoF Pattern: <b>State</b> — PREMIUM_TRIAL → FREE, PREMIUM → FREE (expiry transition).
@@ -77,14 +79,17 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
+    private final PlanModuleRowSync planModuleRows;
 
     @Autowired
     public SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
                                      PlanChangeRecorder planChangeRecorder,
                                      ApplicationEventPublisher eventPublisher,
                                      PlatformTransactionManager transactionManager,
-                                     Clock clock) {
-        this(jdbcTemplate, planChangeRecorder, eventPublisher, new TransactionTemplate(transactionManager), clock);
+                                     Clock clock,
+                                     PlanModuleRowSync planModuleRows) {
+        this(jdbcTemplate, planChangeRecorder, eventPublisher, new TransactionTemplate(transactionManager), clock,
+                planModuleRows);
     }
 
     /** Test constructor — pre-built transaction template. */
@@ -92,8 +97,10 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
                               PlanChangeRecorder planChangeRecorder,
                               ApplicationEventPublisher eventPublisher,
                               TransactionTemplate transactionTemplate,
-                              Clock clock) {
+                              Clock clock,
+                              PlanModuleRowSync planModuleRows) {
         this.jdbcTemplate = jdbcTemplate;
+        this.planModuleRows = planModuleRows;
         this.planChangeRecorder = planChangeRecorder;
         this.eventPublisher = eventPublisher;
         this.transactionTemplate = transactionTemplate;
@@ -145,6 +152,8 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
         Instant now = clock.instant();
         planChangeRecorder.syncPublicPlanType(tenantId, PlanType.FREE);
         planChangeRecorder.recordEvent(tenantId, previous, PlanType.FREE, PlanChangeCause.EXPIRY, null, null);
+        // Story 16.5 — paid-module rows turn EXPIRED (grace anchored on this downgrade), same transaction
+        planModuleRows.sync(tenantId, schema);
         eventPublisher.publishEvent(new PlanExpiredEvent(tenantId, schema, previous, now));
         return previousPlans.size();
     }

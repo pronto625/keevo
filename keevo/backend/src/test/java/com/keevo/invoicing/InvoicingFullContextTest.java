@@ -66,6 +66,8 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
     private final UUID employeeId = UUID.randomUUID();
     private String schema;
     private UUID tenantId;
+    /** Story 16.5 — the invoicing row written by the registration (status/origin/provisioned version). */
+    private List<String> registrationInvoicingRow;
     private String ownerToken;
     private String employeeToken;
     private String year;
@@ -74,6 +76,11 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
     void setUp() {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
+        registrationInvoicingRow = jdbc.queryForList("SELECT status || '/' || origin || '/' || provisioned_version "
+                + "FROM public.tenant_modules WHERE tenant_id = ? AND module_id = 'invoicing'", String.class, tenantId);
+        // Story 16.5: registration writes the paid modules' PLAN rows (trial); these tests drive the plan directly in
+        // the subscription (no plan writer), so they start from the transition rule
+        jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN'", tenantId);
         UUID storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
         jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
                 + "password_change_required) VALUES (?, ?, 'Paul', 'Ekane', false)", employeeId, storeId);
@@ -212,11 +219,12 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
     // ── matrix ───────────────────────────────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("new trial tenant: invoicing tables provisioned at registration, no tenant_modules row for invoicing")
+    @DisplayName("new trial tenant: invoicing tables provisioned at registration; its row is the plan's TRIAL row "
+            + "(Story 16.5), with the provisioned version")
     void newTrialTenant() {
         assertThat(tables()).containsExactlyElementsOf(TABLES);
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", Integer.class, tenantId)).isZero();
+        assertThat(registrationInvoicingRow).hasSize(1);
+        assertThat(registrationInvoicingRow.get(0)).matches("TRIAL/PLAN/[0-9.]+");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' "
                 + "AND table_name = ANY (?)", Integer.class, (Object) TABLES.toArray(new String[0]))).isZero();
     }

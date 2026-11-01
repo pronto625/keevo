@@ -22,7 +22,8 @@ import java.util.UUID;
 /**
  * JDBC adapter of {@link TenantModuleLifecyclePort} on {@code public.tenants} / {@code public.tenant_modules}
  * (Story 13.8a). Schema-qualified, bind parameters only; runs on the caller's transaction (the lifecycle service is
- * {@code @Transactional}: the JDBC statements join its connection). Never deletes a row.
+ * {@code @Transactional}: the JDBC statements join its connection). Never deletes a row. Every row it writes is
+ * labelled {@code origin = 'ADMIN'} (Story 16.5): a super-admin decision is never rewritten from the plan.
  */
 @Component
 @DependsOnDatabaseInitialization
@@ -49,10 +50,10 @@ public class JdbcTenantModuleLifecycleStore implements TenantModuleLifecyclePort
 
     static final String UPSERT_ACTIVATED_SQL = """
             INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, activated_at, expires_at,
-                                               grace_until, disabled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                                               grace_until, disabled_at, origin)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'ADMIN')
             ON CONFLICT (tenant_id, module_id) DO UPDATE SET
-                status = EXCLUDED.status, tier = EXCLUDED.tier,
+                status = EXCLUDED.status, tier = EXCLUDED.tier, origin = 'ADMIN',
                 activated_at = CASE WHEN ? THEN COALESCE(public.tenant_modules.activated_at, EXCLUDED.activated_at)
                                     ELSE EXCLUDED.activated_at END,
                 expires_at = EXCLUDED.expires_at, grace_until = EXCLUDED.grace_until, disabled_at = NULL
@@ -60,10 +61,10 @@ public class JdbcTenantModuleLifecycleStore implements TenantModuleLifecyclePort
             """;
 
     static final String UPSERT_DISABLED_SQL = """
-            INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, disabled_at)
-            VALUES (?, ?, 'DISABLED', ?, ?)
+            INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, disabled_at, origin)
+            VALUES (?, ?, 'DISABLED', ?, ?, 'ADMIN')
             ON CONFLICT (tenant_id, module_id) DO UPDATE SET
-                status = 'DISABLED', disabled_at = EXCLUDED.disabled_at
+                status = 'DISABLED', disabled_at = EXCLUDED.disabled_at, origin = 'ADMIN'
             RETURNING id
             """;
 

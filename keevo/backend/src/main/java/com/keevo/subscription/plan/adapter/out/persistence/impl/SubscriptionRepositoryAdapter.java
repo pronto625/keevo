@@ -35,7 +35,8 @@ public class SubscriptionRepositoryAdapter implements SubscriptionRepository {
     @Override
     public Subscription save(Subscription subscription) {
         SubscriptionJpaEntity entity = toJpaEntity(subscription);
-        SubscriptionJpaEntity saved = springRepository.save(entity);
+        // Story 16.5 — flushed: the plan-module row sync reads the plan with JDBC in the same transaction
+        SubscriptionJpaEntity saved = springRepository.saveAndFlush(entity);
         return toDomain(saved);
     }
 

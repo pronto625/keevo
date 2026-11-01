@@ -102,12 +102,12 @@ class SubscriptionRepositoryAdapterTest {
 
         SubscriptionJpaEntity savedEntity = new SubscriptionJpaEntity(
                 id, "FREE", 1, 500, 3, "SUSPENDED", Instant.now(), null);
-        when(springRepository.save(any())).thenReturn(savedEntity);
+        when(springRepository.saveAndFlush(any())).thenReturn(savedEntity);
 
         Subscription saved = adapter.save(domain);
 
         assertThat(saved.getStatus()).isEqualTo(SubscriptionStatus.SUSPENDED);
         assertThat(saved.isSuspended()).isTrue();
-        verify(springRepository).save(any(SubscriptionJpaEntity.class));
+        verify(springRepository).saveAndFlush(any(SubscriptionJpaEntity.class));
     }
 }

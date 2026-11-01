@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 199 — gated: 106, exempt: 93.
+Handlers: 200 — gated: 106, exempt: 94.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -35,6 +35,7 @@ Handlers: 199 — gated: 106, exempt: 93.
 | GET | `/api/v1/admin/health` | — | — | — | super-admin | AdminHealthController#health |
 | GET | `/api/v1/admin/health/status` | — | — | — | super-admin | AdminHealthController#status |
 | GET | `/api/v1/admin/modules` | — | — | — | super-admin | ModuleAdminController#catalogue |
+| POST | `/api/v1/admin/modules/backfill` | — | — | — | super-admin | ModuleAdminController#backfill |
 | GET | `/api/v1/admin/notifications/global` | — | — | — | super-admin | AdminGlobalNotificationController#history |
 | POST | `/api/v1/admin/notifications/global` | — | — | — | super-admin | AdminGlobalNotificationController#schedule |
 | GET | `/api/v1/admin/notifications/global/estimate` | — | — | — | super-admin | AdminGlobalNotificationController#estimate |

@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -79,6 +80,49 @@ class TenantFactoryTest {
 
         verify(planChangeRecorder).recordEvent(id, null, PlanType.PREMIUM_TRIAL,
                 PlanChangeCause.REGISTRATION, null, null);
+    }
+
+    @Test
+    @DisplayName("Story 16.5: create() syncs the plan-module rows after the REGISTRATION event, before module provisioning")
+    void create_syncsPlanModuleRows() {
+        com.keevo.shared.module.ModuleProvisioner moduleProvisioner = mock(com.keevo.shared.module.ModuleProvisioner.class);
+        com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows =
+                mock(com.keevo.shared.module.application.port.PlanModuleRowSync.class);
+        TenantFactory factory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner,
+                planChangeRecorder, moduleProvisioner, planModuleRows);
+        String code = "KV-ROW165";
+        String schema = Tenant.schemaNameFromCode(code);
+        UUID id = UUID.randomUUID();
+        when(codeGenerator.generate()).thenReturn(code);
+        when(tenantRepository.save(any(Tenant.class))).thenReturn(new Tenant(id, code, schema,
+                TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now()));
+
+        factory.create(); // no transaction synchronization: the provisioning runs right away
+
+        InOrder order = inOrder(schemaProvisioner, planChangeRecorder, planModuleRows, moduleProvisioner);
+        order.verify(schemaProvisioner).provision(anyString(), eq(schema));
+        order.verify(planChangeRecorder).recordEvent(any(), any(), any(), any(), any(), any());
+        order.verify(planModuleRows).sync(id, schema);
+        order.verify(moduleProvisioner).provisionActiveModules(schema);
+    }
+
+    @Test
+    @DisplayName("Story 16.5: a failing plan-module row sync drops the provisioned schema and propagates")
+    void create_rowSyncFailure_dropsSchema() {
+        com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows =
+                mock(com.keevo.shared.module.application.port.PlanModuleRowSync.class);
+        TenantFactory factory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner,
+                planChangeRecorder, null, planModuleRows);
+        String code = "KV-ROW166";
+        UUID id = UUID.randomUUID();
+        when(codeGenerator.generate()).thenReturn(code);
+        when(tenantRepository.save(any(Tenant.class))).thenReturn(new Tenant(id, code,
+                Tenant.schemaNameFromCode(code), TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now()));
+        when(planModuleRows.sync(any(), anyString())).thenThrow(new IllegalStateException("rows"));
+
+        assertThatThrownBy(factory::create).hasMessage("rows");
+
+        verify(schemaProvisioner).dropSchemaIfExists(Tenant.schemaNameFromCode(code));
     }
 
     @Test

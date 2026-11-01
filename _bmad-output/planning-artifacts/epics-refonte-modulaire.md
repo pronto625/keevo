@@ -1399,13 +1399,13 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 | Bloc | État | Reste à faire |
 |---|---|---|
 | Epics 10–15 | **done** (sauf 10-8) | 10-8 : exécution serveur des runbooks (ops) |
-| Epic 16 | backlog | 16.1 → 16.9 + **16.10** (résidu sécurité V1) + **16.11** (sessions longues et sûres, décision du 2026-11-01) ; 16.3 révisée (plus de claim `modules` dans le jeton) ; 16.6 : cœur livré en V1, AC refonte à vérifier |
+| Epic 16 | backlog | 16.1 → 16.9 + **16.10** (résidu sécurité V1) + **16.11** (sessions longues et sûres, décision du 2026-11-01) + **16.12** (conversion du DDL tenant, issue de 16.5) ; 16.3 révisée (plus de claim `modules` dans le jeton) ; 16.6 : cœur livré en V1, AC refonte à vérifier |
 | Epic 17 | in-progress | 17.1, 17.3, 17.4, 17.5 livrés (V1 puis portés) ; 17.6 remplacée ; restent 17.2 (résidu), 17.7, 17.8, **17.9 (gate go-live)**, **17.10**, **17.11** (résidus V1), **17.12** (suivi de stock par produit, demande du 2026-11-01) |
 | Piste V1 (`v1s-*`) | close | V1 figée en 2.0.1 (`release/2.0.x`) ; ses derniers items ouverts sont réintégrés ici (16.10, 17.10, 17.11) ou sans objet (v1s-16-24 : app en portrait depuis 15-8) |
 
 **Chemin restant jusqu'à la mise en production de la refonte** (ordre conseillé) :
 
-1. **16.5** backfill `tenant_modules` + fin du DDL tenant sous Flyway (débloque 16.8 et la charge de la fusion) ; **16.1** cycle de vie (grâce, temps réel) ; **16.8** profils et plafonds configurables ; **16.2** bundles ; **16.3** modules actifs côté app (sans claim dans le jeton).
+1. **16.5** backfill `tenant_modules` puis **16.12** fin du DDL tenant sous Flyway (débloquent 16.8 et la charge de la fusion) ; **16.1** cycle de vie (grâce, temps réel) ; **16.8** profils et plafonds configurables ; **16.2** bundles ; **16.3** modules actifs côté app (sans claim dans le jeton).
 2. **16.4** console super-admin modules ; **16.10** scope employé de l'historique des transferts ; **16.11** sessions longues et sûres (jeton d'accès court, session glissante d'un an, appareils connectés) ; **17.10**, **17.11**, **17.12**, **17.8**, **17.7**, **17.2** (fonctionnel, peuvent s'intercaler ; 17.12 après 17.11, dont elle réutilise la saisie de stock initial).
 3. **16.6** vérification RGPD ; **10-8** exécution serveur des runbooks (secrets, TLS staging, S3, alertes, Prometheus).
 4. **17.9** régression E2E sur staging = **gate go-live** ; puis **16.7** canary (avec la version minimale d'app forcée, cf. items de 16.7).
@@ -1543,6 +1543,8 @@ So that **je gère la commercialisation après paiement Mobile Money (MOD-FR16, 
 
 - [ ] [Deferred-from: review 13-10a, 2026-10-30] Deactivating a free module (e.g. `inventory`, `messaging`) on a Premium/trial tenant is refused because rule-enabled paid modules count as dependents — the console must explain it and offer the cascade (deactivate dependents first) [console]
 
+- [ ] [Deferred-from: review 16-5, 2026-11-01] The module backfill (`POST /api/v1/admin/modules/backfill`) runs synchronously in one HTTP request (all tenants + Flyway provisioning): behind a reverse proxy a long run can time out while it carries on, and the report is lost — the console must run it as an async job with progress and a retrievable report, like `provisionAll` [ModuleAdminController / ModuleBackfillService]
+
 ### Story 16.5 : Migration des tenants existants (backfill `tenant_modules`)
 
 As a **plateforme**,
@@ -1569,17 +1571,13 @@ So that **la bascule au modèle modulaire ne casse aucun tenant (MOD-FR19, MOD-N
 - Provisioning des tables des modules activés (Epic 13.4) pour chaque tenant ; idempotent.
 - Dry-run obligatoire sur staging (Epic 10.5) ; rollback documenté.
 
-- [ ] [Deferred-from: spec 13-4, 2026-10-29] Remove `TenantSchemaSyncService` (runtime `public → tenant` copy) once every module is provisioned by `ModuleProvisioner` (after every module is converted — today only CRM/Reporting are planned in 13.9: this item also covers converting the remaining tenant DDL of catalog/inventory/commerce/sync/identity/store/… to `db/modules/<id>`, or recording a user decision to keep the sync as a permanent shim): drop the mirroring, keep only what `TenantSchemaMigrationRunner` still needs, update the security filter caller [tenant provisioning]
+- [x] [Deferred-from: review 13-4, 2026-10-29] — done in 16.5 (2026-11-01): `tenant_modules.origin` (V32) labels the provisioner's ACTIVE/FREE rows `SYSTEM`; the plan sync and the backfill never touch a `SYSTEM` (nor `ADMIN`) row; a later free→paid reclassification must relabel them (16.8) — `provisionAll` on a free module materialises explicit ACTIVE/FREE rows for every tenant — take them into account in the backfill and in any later free→paid reclassification (16.8) [tenant_modules]
 
-- [ ] [Deferred-from: review 13-4, 2026-10-29] `provisionAll` on a free module materialises explicit ACTIVE/FREE rows for every tenant — take them into account in the backfill and in any later free→paid reclassification (16.8) [tenant_modules]
+- [x] [Deferred-from: review 13-10a, 2026-10-30] — done in 16.5 (2026-11-01): `PlanModuleRows` reproduces `planState` row for row (parity property-tested at every boundary; `PREMIUM`/`PREMIUM_TRIAL` → TRIAL/ACTIVE then EXPIRED rows, FREE after an `EXPIRY` downgrade → EXPIRED anchored on it, anything else → DISABLED rows rather than none, unreadable plan → tenant skipped); rows kept in step by every subscription writer (`PlanModuleRowSync`); on-demand backfill `POST /api/v1/admin/modules/backfill?dryRun=`; the dry run on a prod copy → routed 16.7 — Backfill parity with the 13.10a transition rule: PREMIUM/PREMIUM_TRIAL → paid module rows with the subscription's `expires_at` and `grace_until` = +7 d; status ≠ ACTIVE and no-subscription tenants → no paid rows; after the backfill the rule must give the same states (test on a prod copy) [backfill]
 
-- [ ] [Deferred-from: spec 13-9, 2026-10-30] Remove the crm DDL (`clients`, `suppliers`, `product_suppliers`) from `TenantSchemaProvisioner` now that `db/modules/crm/V1` owns it — **FK ordering**: `sales.client_id REFERENCES clients(id)` is created by the core DDL, so either provision crm (module migrations) inside `TenantSchemaProvisioner.createTables` before `DDL_SALES`, or move that FK out of the core DDL into a commerce/crm migration (cf. the 14.3 `clientId` policy); same for `REQUIRED_TENANT_TABLES_DDL`/sync keyset indexes `idx_clients_sync_keyset`/`idx_suppliers_sync_keyset` [tenant provisioning / crm]
+- [x] [Deferred-from: spec 13-9 / review 13-9, 2026-10-30] — done in 16.5 (2026-11-01): crm adoption on existing tenants — the backfill provisions every enabled module that ships migrations (`crm` baselined at 1, `invoicing`) through `ModuleProvisioner.provision`, so prod tenants get their crm `SYSTEM` row and history table on demand; the lazy first-use skip of baseline modules (`ensureProvisioned`) is kept [crm / backfill]
 
-- [ ] [Deferred-from: spec 13-9, 2026-10-30] Drifted early tenants (created by the old `LIKE public INCLUDING ALL` copy — 157/331 dev schemas, likely the oldest prod ones) lack the crm indexes `idx_clients_name`/`idx_clients_archived`/`idx_suppliers_name`/`idx_product_suppliers_supplier`, the column defaults (`id`, `archived`, `created_at`, `updated_at`) and the `product_suppliers` FKs. crm is baselined at 1 without executing V1 (13.9 review), so nothing is repaired — decide with a dry-run on a prod copy whether a crm `V2` repairs them (`CREATE INDEX CONCURRENTLY` outside Flyway's transaction, `SET DEFAULT` metadata only, FKs `NOT VALID` + `VALIDATE` after an orphan report). Dev note: on keevo_dev V1 was applied once before the review (157 schemas already repaired, histories `0`+`1:SQL`) [crm migrations]
-
-- [ ] [Deferred-from: review 13-9, 2026-10-30] Stop `TenantSchemaSyncService` mirroring `clients`/`suppliers`/`product_suppliers` (and every other converted module's tables) once the module migrations are the single writer — together with the full conversion above [tenant provisioning]
-
-- [ ] [Deferred-from: review 13-10a, 2026-10-30] Backfill parity with the 13.10a transition rule: PREMIUM/PREMIUM_TRIAL → paid module rows with the subscription's `expires_at` and `grace_until` = +7 d; status ≠ ACTIVE and no-subscription tenants → no paid rows; after the backfill the rule must give the same states (test on a prod copy) [backfill]
+- [x] Routed → 16.12 (2026-11-01, decision recorded in spec 16.5: `TenantSchemaSyncService` stays a shim until then): conversion of the remaining tenant DDL to `db/modules/<id>`, crm DDL removal from `TenantSchemaProvisioner` (FK ordering), repair of drifted early crm schemas, end of the mirroring of converted modules' tables
 
 ### Story 16.6 : Conformité RGPD — suppression compte/données (FR91)
 
@@ -1624,6 +1622,7 @@ So that **le risque de mise en production est maîtrisé (MOD-NFR12, fiabilité)
 - [ ] [Deferred-from: spec 14-2, 2026-10-30] **Go-live config (invoices / company logo):** set `KEEVO_INVOICE_LINK_SECRET` (or `KEEVO_EXPORT_LINK_SECRET`, ≥ 32 chars, stable) — otherwise WhatsApp invoice links (30 days) die at each restart (WARN `INVOICE_LINK_SECRET_MISSING`); set `KEEVO_PUBLIC_BASE_URL=https://keevo.ad2s.cm` (else links are built from forwarded headers); `KEEVO_COMPANY_LOGO_DIR` on a persistent volume (logos lost on redeploy otherwise) [deploy config]
 - [ ] [Deferred-from: live test 14-2, 2026-10-30] Pre-existing: a request with an unsupported `Content-Type` (e.g. JSON body on a multipart endpoint) answers 500 `INTERNAL_ERROR` instead of 415 — map `HttpMediaTypeNotSupportedException` to 415 with a French message in `GlobalExceptionHandler` [shared web]
 - [ ] [Deferred-from: implementation 14-5, 2026-10-30] Pre-existing: `DomainException(ErrorCode.NOT_FOUND, msg)` has no French entry in `GlobalExceptionHandler`'s message map, so the client may receive the raw message (« NOT_FOUND: … », or English such as « Report not found » in `ReportController:165`) — callers: `AdminGlobalNotificationController:118`, `AdminPlanService:231`, `GlobalNotificationService:108`, `ReportController:165`; add a generic « Ressource introuvable » mapping and French messages [shared web / admin / reporting]
+- [ ] [Deferred-from: spec 16-5, 2026-11-01] **Backfill dry run on a prod copy before go-live**: on staging restored from a prod backup, `POST /api/v1/admin/modules/backfill?dryRun=true` then `dryRun=false` twice (super-admin); check the real run's counts equal the dry run's, the second run writes 0 rows, `GET /admin/tenants/{id}/modules` states unchanged on a sample of each plan, and client/supplier/sale/invoice counts unchanged; rollback = restore the backup (the V32 column alone is harmless: drop `tenant_modules` rows `origin = 'PLAN'` to return to the transition rule) [backfill / go-live]
 
 ### Story 16.8 : Profils de plan & plafonds configurables (super-admin)
 
@@ -1764,6 +1763,32 @@ As a **commerçant**, I want **ne presque jamais avoir à me reconnecter**, So t
 **Given** un nouveau service qui modifie un droit sans appeler la révocation
 **When** l'utilisateur concerné fait sa requête suivante
 **Then** le nouveau droit s'applique quand même (test de garde : aucun code d'autorisation ne lit le rôle dans le jeton)
+
+### Story 16.12 : Conversion du DDL tenant restant en migrations de modules
+
+> Clé tracker : `16-12-conversion-ddl-tenant-modules` — créée le 2026-11-01 par la spec 16.5, qui a livré le backfill de `tenant_modules` et laissé ici la partie DDL. Décision enregistrée (spec 16.5) : `TenantSchemaSyncService` reste un shim jusqu'à cette story.
+
+As a **plateforme**,
+I want **que chaque table d'un schéma tenant appartienne à la migration d'un module (`db/modules/<id>`)**,
+So that **le provisioning d'un tenant n'ait plus qu'un seul auteur (Flyway des modules) et que la copie `public → tenant` à l'exécution disparaisse**.
+
+**Acceptance Criteria:**
+
+**Given** un nouveau tenant
+**When** il est créé
+**Then** ses tables viennent des migrations des modules (plus du DDL de `TenantSchemaProvisioner` pour les modules convertis), y compris `sales.client_id → clients` dans le bon ordre
+
+**Given** un tenant existant (dev : 331 schémas, dont 157 « dérivés » de l'ancienne copie `LIKE public`)
+**When** les modules convertis sont provisionnés
+**Then** aucune donnée n'est modifiée, et les écarts de schéma (index, valeurs par défaut, FK crm) sont soit réparés par une migration revue, soit laissés selon une décision prise sur un dry-run d'une copie de prod
+
+- [ ] [Deferred-from: spec 13-4, 2026-10-29] Remove `TenantSchemaSyncService` (runtime `public → tenant` copy) once every module is provisioned by `ModuleProvisioner` (after every module is converted — today only CRM/Reporting are planned in 13.9: this item also covers converting the remaining tenant DDL of catalog/inventory/commerce/sync/identity/store/… to `db/modules/<id>`, or recording a user decision to keep the sync as a permanent shim): drop the mirroring, keep only what `TenantSchemaMigrationRunner` still needs, update the security filter caller [tenant provisioning]
+
+- [ ] [Deferred-from: spec 13-9, 2026-10-30] Remove the crm DDL (`clients`, `suppliers`, `product_suppliers`) from `TenantSchemaProvisioner` now that `db/modules/crm/V1` owns it — **FK ordering**: `sales.client_id REFERENCES clients(id)` is created by the core DDL, so either provision crm (module migrations) inside `TenantSchemaProvisioner.createTables` before `DDL_SALES`, or move that FK out of the core DDL into a commerce/crm migration (cf. the 14.3 `clientId` policy); same for `REQUIRED_TENANT_TABLES_DDL`/sync keyset indexes `idx_clients_sync_keyset`/`idx_suppliers_sync_keyset` [tenant provisioning / crm]
+
+- [ ] [Deferred-from: spec 13-9, 2026-10-30] Drifted early tenants (created by the old `LIKE public INCLUDING ALL` copy — 157/331 dev schemas, likely the oldest prod ones) lack the crm indexes `idx_clients_name`/`idx_clients_archived`/`idx_suppliers_name`/`idx_product_suppliers_supplier`, the column defaults (`id`, `archived`, `created_at`, `updated_at`) and the `product_suppliers` FKs. crm is baselined at 1 without executing V1 (13.9 review), so nothing is repaired — decide with a dry-run on a prod copy whether a crm `V2` repairs them (`CREATE INDEX CONCURRENTLY` outside Flyway's transaction, `SET DEFAULT` metadata only, FKs `NOT VALID` + `VALIDATE` after an orphan report). Dev note: on keevo_dev V1 was applied once before the review (157 schemas already repaired, histories `0`+`1:SQL`) [crm migrations]
+
+- [ ] [Deferred-from: review 13-9, 2026-10-30] Stop `TenantSchemaSyncService` mirroring `clients`/`suppliers`/`product_suppliers` (and every other converted module's tables) once the module migrations are the single writer — together with the full conversion above [tenant provisioning]
 
 ## Epic 17 : Complétion Fonctionnelle & Gating Produit (Phase 7)
 
@@ -1918,9 +1943,9 @@ As a **propriétaire**, I want **choisir pour chaque produit s'il suit un stock 
 | 13 — Moteur de Modularité (Socle) | 13.1 → 13.10 (10) | MOD-FR1-6, 9-11, 14 ; NFR7, 10 |
 | 14 — Module Pilote Facturation | 14.1 → 14.6 (6) | MOD-FR7-10, 17 ; UX-DR3, 5 |
 | 15 — Frontend Modulaire | 15.1-15.3, 15.4a-c, 15.5-15.8 (10) | MOD-FR14, 15, 18 ; UX-DR1, 3, 4 |
-| 16 — Licences, Migration & Go-Live | 16.1 → 16.11 (11) | MOD-FR12, 13, 13b, 15, 16, 19, 20 ; UX-DR2 ; FR78/79 ; DGI (16.9) ; résidu sécurité V1 (16.10) ; sessions longues et sûres (16.11) |
+| 16 — Licences, Migration & Go-Live | 16.1 → 16.12 (12) | MOD-FR12, 13, 13b, 15, 16, 19, 20 ; UX-DR2 ; FR78/79 ; DGI (16.9) ; résidu sécurité V1 (16.10) ; sessions longues et sûres (16.11) ; DDL tenant sous Flyway (16.12) |
 | 17 — Complétion Fonctionnelle & Gating | 17.1 → 17.12 (12) | FR44, 55, 60, 67, 81-83, 90, 92 + notif prix + régression E2E + résidus V1 (17.10, 17.11) + suivi de stock par produit (17.12) |
-| **Total** | **74 stories** | Toutes les exigences MOD-FR/MOD-NFR/UX-DR + FR produit résiduels |
+| **Total** | **75 stories** | Toutes les exigences MOD-FR/MOD-NFR/UX-DR + FR produit résiduels |
 
 > **Suite du produit** : fusion Keevo × Bref Point — epics 18 à 25 (85 stories) dans `epics-fusion-keevo-bref.md`.
 

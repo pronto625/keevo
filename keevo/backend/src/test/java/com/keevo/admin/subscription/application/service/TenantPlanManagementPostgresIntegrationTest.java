@@ -78,6 +78,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         tenantIds.forEach(id -> {
             jdbc.update("DELETE FROM public.tenant_payments WHERE tenant_id = ?", id);
             jdbc.update("DELETE FROM public.tenant_plan_events WHERE tenant_id = ?", id);
+            jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", id);
             jdbc.update("DELETE FROM public.user_tenant_memberships WHERE tenant_id = ?", id);
             jdbc.update("DELETE FROM public.tenants WHERE id = ?", id);
         });
@@ -182,9 +183,15 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         UUID t = tenant("kv_pm9204", "KV-PM9204", "PREMIUM");
         jdbc.update("UPDATE \"kv_pm9204\".subscriptions SET plan_type = 'PREMIUM', expires_at = now() - interval '1 hour'");
         SubscriptionExpiryService service = new SubscriptionExpiryService(jdbc, new JdbcPlanChangeRecorder(jdbc),
-                publisher, transactionManager, clock);
+                publisher, transactionManager, clock, planModuleRows());
 
         service.execute(new DowngradeExpiredTrialsCommand("test"));
+
+        // Story 16.5 — the paid-module rows turn EXPIRED in the downgrade transaction, grace anchored on it
+        assertThat(jdbc.queryForList("SELECT DISTINCT status || '/' || origin FROM public.tenant_modules "
+                + "WHERE tenant_id = ?", String.class, t)).containsExactly("EXPIRED/PLAN");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.tenant_modules WHERE tenant_id = ? "
+                + "AND grace_until > now() + interval '6 days'", Integer.class, t)).isEqualTo(8);
 
         assertThat(jdbc.queryForObject("SELECT plan_type FROM \"kv_pm9204\".subscriptions", String.class)).isEqualTo("FREE");
         assertThat(publicPlan(t)).isEqualTo("FREE");
@@ -411,8 +418,17 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
 
     private AdminPlanService planService() {
         JdbcPlanChangeRecorder recorder = new JdbcPlanChangeRecorder(jdbc);
-        return new AdminPlanService(new TargetTenantLookup(jdbc), SubscriptionApiTestSupport.administrationPort(null, new ChangeTenantPlanService(jdbc, recorder)),
+        return new AdminPlanService(new TargetTenantLookup(jdbc), SubscriptionApiTestSupport.administrationPort(null, new ChangeTenantPlanService(jdbc, recorder, planModuleRows())),
                 new JdbcTenantPaymentRepository(jdbc), publisher, jdbc, clock);
+    }
+
+    /** Story 16.5 — the real plan-module row sync on the shipped catalogue (registry eviction only mocked). */
+    private com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows() {
+        return new com.keevo.shared.module.application.PlanModuleRowSyncService(
+                new com.keevo.shared.module.application.ModuleCatalog(
+                        new org.springframework.core.io.support.PathMatchingResourcePatternResolver()),
+                new com.keevo.shared.module.adapter.out.persistence.JdbcPlanModuleRowStore(jdbc.getDataSource()),
+                mock(com.keevo.shared.module.ModuleRegistry.class), clock);
     }
 
     private UUID tenant(String schema, String code, String publicPlan) {

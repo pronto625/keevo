@@ -482,4 +482,32 @@ class ModuleProvisionerPostgresIntegrationTest {
             jdbc.execute("DROP SCHEMA IF EXISTS kv_prvd04 CASCADE"); // test database only
         }
     }
+
+    @Test
+    @DisplayName("16.5: lazy provisioning inside a read-only transaction (e.g. a sync pull) of a paid module with a "
+            + "row: no exception, provisioned_version recorded in a separate transaction")
+    void ensureProvisionedInsideReadOnlyTransaction() {
+        insertRow(A, "provpaid", "ACTIVE", "PREMIUM");
+        jdbc.update("UPDATE public.tenant_modules SET provisioned_version = '0' WHERE tenant_id = ? "
+                + "AND module_id = 'provpaid'", IDS.get(A));
+        org.springframework.jdbc.datasource.DataSourceTransactionManager tm =
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(dataSource);
+        org.springframework.transaction.support.TransactionTemplate requiresNew =
+                new org.springframework.transaction.support.TransactionTemplate(tm);
+        requiresNew.setPropagationBehavior(
+                org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        ModuleCatalog catalog = TestModuleCatalogs.provisioningCatalog();
+        JdbcTenantModuleStateStore store = new JdbcTenantModuleStateStore(dataSource);
+        ModuleProvisioner transactional = new ModuleProvisionerService(catalog, registry, store, store,
+                new FlywayModuleMigrations(dataSource, List.of(FlywayModuleMigrations.DEFAULT_ROOT)),
+                com.keevo.shared.module.application.KeevoModuleDirectory.empty(catalog), requiresNew);
+        org.springframework.transaction.support.TransactionTemplate readOnly =
+                new org.springframework.transaction.support.TransactionTemplate(tm);
+        readOnly.setReadOnly(true);
+
+        readOnly.executeWithoutResult(status -> transactional.ensureProvisioned(A, "provpaid"));
+
+        assertThat(row(A, "provpaid")).containsEntry("provisioned_version", "1").containsEntry("status", "ACTIVE");
+        assertThat(tables(A)).contains("provpaid_items");
+    }
 }

@@ -68,6 +68,9 @@ class CreditNoteFullContextTest extends FullContextIntegrationTest {
     void setUp() throws Exception {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
+        // Story 16.5: registration writes the paid modules' PLAN rows (trial); these tests drive the plan directly in
+        // the subscription (no plan writer), so they start from the transition rule
+        jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN'", tenantId);
         UUID storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
         jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
                 + "password_change_required) VALUES (?, ?, 'Paul', 'Ekane', false)", employeeId, storeId);

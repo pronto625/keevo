@@ -44,6 +44,7 @@ class SubscriptionExpiryServiceTest {
     @Mock PlanChangeRecorder recorder;
     @Mock ApplicationEventPublisher publisher;
     @Mock TransactionTemplate tx;
+    @Mock com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows;
 
     SubscriptionExpiryService service;
 
@@ -54,7 +55,7 @@ class SubscriptionExpiryServiceTest {
                 .thenAnswer(inv -> ((TransactionCallback<?>) inv.getArgument(0))
                         .doInTransaction(new SimpleTransactionStatus()));
         service = new SubscriptionExpiryService(jdbcTemplate, recorder, publisher, tx,
-                Clock.fixed(NOW, ZoneOffset.UTC));
+                Clock.fixed(NOW, ZoneOffset.UTC), planModuleRows);
     }
 
     private void tenants(Object... idSchemaPairs) {
@@ -96,6 +97,21 @@ class SubscriptionExpiryServiceTest {
         ArgumentCaptor<PlanExpiredEvent> event = ArgumentCaptor.forClass(PlanExpiredEvent.class);
         verify(publisher).publishEvent(event.capture());
         assertThat(event.getValue()).isEqualTo(new PlanExpiredEvent(T1, "kv_abc123", PlanType.PREMIUM_TRIAL, NOW));
+        // Story 16.5 — the downgraded tenant's paid-module rows are realigned after the EXPIRY event
+        org.mockito.InOrder order = inOrder(recorder, planModuleRows);
+        order.verify(recorder).recordEvent(any(), any(), any(), any(), any(), any());
+        order.verify(planModuleRows).sync(T1, "kv_abc123");
+    }
+
+    @Test
+    @DisplayName("16.5: a tenant with nothing to downgrade gets no row sync")
+    void execute_noDowngrade_noSync() {
+        tenants(T1, "kv_abc123");
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+
+        service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
+
+        verifyNoInteractions(planModuleRows);
     }
 
     @Test

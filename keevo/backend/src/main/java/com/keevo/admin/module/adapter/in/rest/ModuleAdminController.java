@@ -11,6 +11,7 @@ import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
+import com.keevo.shared.module.ModuleBackfill;
 import com.keevo.shared.module.ModuleLifecycle;
 import com.keevo.shared.module.TenantModuleStatus;
 import io.swagger.v3.oas.annotations.Operation;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
@@ -39,7 +41,7 @@ import java.util.UUID;
  * method (second barrier behind the SecurityConfig {@code /api/v1/admin/**} rule). Errors: {@code TENANT_NOT_FOUND}
  * / {@code MODULE_NOT_FOUND} 404, {@code MODULE_ACTIVATION_BLOCKED} / {@code MODULE_HAS_DEPENDENTS} /
  * {@code CORE_MODULE_REQUIRED} 409, {@code MODULE_PROVISIONING_FAILED} / {@code MODULE_ACTIVATION_FAILED} /
- * {@code MODULE_DEACTIVATION_FAILED} 500, {@code VALIDATION_ERROR} 422 — French
+ * {@code MODULE_DEACTIVATION_FAILED} 500, {@code VALIDATION_ERROR} 422, {@code MODULE_BACKFILL_RUNNING} 409 — French
  * messages naming modules by display name.
  */
 @Tag(name = "Admin — Modules", description = "Super Admin module catalogue and per-tenant activation")
@@ -49,9 +51,11 @@ import java.util.UUID;
 public class ModuleAdminController {
 
     private final ModuleLifecycle lifecycle;
+    private final ModuleBackfill backfill;
 
-    public ModuleAdminController(ModuleLifecycle lifecycle) {
+    public ModuleAdminController(ModuleLifecycle lifecycle, ModuleBackfill backfill) {
         this.lifecycle = lifecycle;
+        this.backfill = backfill;
     }
 
     @Operation(summary = "Activate a module for a tenant (missing dependencies first, tables provisioned)",
@@ -101,6 +105,20 @@ public class ModuleAdminController {
         CurrentActor.requireSuperAdmin();
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 lifecycle.tenantModules(tenantId).stream().map(TenantModuleDto::from).toList()));
+    }
+
+    @Operation(summary = "Backfill tenant_modules for every live tenant (Story 16.5)",
+            description = "Writes, for each tenant, the paid-module rows equivalent to its plan (remaining trial "
+                    + "kept, rows set by a super-admin untouched), then provisions the tables of every enabled "
+                    + "module that ships migrations. Idempotent: a second run writes nothing. dryRun=true (default) "
+                    + "only reports what would be written. Tenants are named by their code. 409 "
+                    + "MODULE_BACKFILL_RUNNING while another run is in progress.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/modules/backfill")
+    public ResponseEntity<ApiResponseWrapper<ModuleBackfill.BackfillReport>> backfill(
+            @RequestParam(name = "dryRun", defaultValue = "true") boolean dryRun) {
+        CurrentActor.requireSuperAdmin();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(backfill.run(dryRun)));
     }
 
     // ── Parsing (adapter concern) ─────────────────────────────────────────────

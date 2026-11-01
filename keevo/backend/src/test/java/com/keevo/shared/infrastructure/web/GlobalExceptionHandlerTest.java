@@ -233,4 +233,18 @@ class GlobalExceptionHandlerTest {
                 new org.springframework.web.HttpRequestMethodNotSupportedException("DELETE"));
         assertThat(notAllowed.getStatusCode()).isEqualTo(HttpStatus.METHOD_NOT_ALLOWED);
     }
+
+    @Test
+    @DisplayName("16.5: module rows not synced after a plan change → 503 SERVICE_UNAVAILABLE, French message, no detail")
+    void planModuleRowsUnavailable_mapsTo503() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp = handler.handlePlanModuleRowsUnavailable(
+                new com.keevo.shared.module.application.port.PlanModuleRowSync.PlanUnreadableException());
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().domainCode()).isEqualTo("SERVICE_UNAVAILABLE");
+        assertThat(resp.getBody().error())
+                .isEqualTo("Les modules du compte n'ont pas pu être mis à jour. Réessayez dans quelques instants.");
+        assertThat(resp.getBody().details()).isNull();
+    }
 }

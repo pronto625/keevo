@@ -121,6 +121,7 @@ public enum ErrorCode {
     MODULE_PROVISIONING_FAILED,    // Story 13.8a — HTTP 500: a module's tables could not be created; nothing changed
     MODULE_ACTIVATION_FAILED,      // Story 13.9 — HTTP 500: a module's activation hook failed; the call is rolled back
     MODULE_DEACTIVATION_FAILED,    // Story 13.9 — HTTP 500: a module's deactivation hook failed; the call is rolled back
+    MODULE_BACKFILL_RUNNING,       // Story 16.5 — HTTP 409: a tenant_modules backfill already holds the lock
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

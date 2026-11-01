@@ -48,6 +48,7 @@ class ActivatePlanServiceTest {
     @Mock TenantRepository tenantRepository;
     @Mock TransactionTemplate requiresNewTemplate;
     @Mock PlanChangeRecorder planChangeRecorder;
+    @Mock com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows;
 
     ActivatePlanService service;
 
@@ -78,7 +79,7 @@ class ActivatePlanServiceTest {
         // Use the package-private test constructor
         service = new ActivatePlanService(subscriptionRepository,
                 IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), requiresNewTemplate,
-                planChangeRecorder);
+                planChangeRecorder, planModuleRows);
     }
 
     @Test
@@ -224,5 +225,35 @@ class ActivatePlanServiceTest {
                 Instant.now().plus(60, ChronoUnit.DAYS)));
 
         verifyNoInteractions(planChangeRecorder);
+        // Story 16.5 — the module rows follow every plan write, an expiry-only update included
+        verify(planModuleRows).sync(TENANT_UUID, SCHEMA_NAME);
+    }
+
+    @Test
+    @DisplayName("16.5: the plan-module rows are synced after the subscription write, in the same transaction")
+    void execute_syncsPlanModuleRowsAfterSave() {
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub()));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        service.execute(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.PREMIUM,
+                Instant.now().plus(30, ChronoUnit.DAYS)));
+
+        org.mockito.InOrder order = inOrder(subscriptionRepository, planChangeRecorder, planModuleRows);
+        order.verify(subscriptionRepository).save(any());
+        order.verify(planChangeRecorder).recordEvent(any(), any(), any(), any(), any(), any());
+        order.verify(planModuleRows).sync(TENANT_UUID, SCHEMA_NAME);
+    }
+
+    @Test
+    @DisplayName("16.5: a failing row sync fails the activation (the transaction rolls back)")
+    void execute_syncFailure_propagates() {
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub()));
+        when(subscriptionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(planModuleRows.sync(TENANT_UUID, SCHEMA_NAME))
+                .thenThrow(new com.keevo.shared.module.application.port.PlanModuleRowSync.PlanUnreadableException());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.execute(new ActivatePlanCommand("admin",
+                SCHEMA_NAME, PlanType.PREMIUM, Instant.now().plus(30, ChronoUnit.DAYS))))
+                .isInstanceOf(com.keevo.shared.module.application.port.PlanModuleRowSync.PlanUnreadableException.class);
     }
 }

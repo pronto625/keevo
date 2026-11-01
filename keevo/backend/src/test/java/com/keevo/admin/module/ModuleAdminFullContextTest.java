@@ -52,6 +52,7 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
     @Autowired ModuleLifecycle lifecycle;
+    @Autowired com.keevo.subscription.plan.domain.port.in.ActivatePlanUseCase activatePlan;
 
     private final UUID ownerId = UUID.randomUUID();
     private final UUID adminId = UUID.randomUUID();
@@ -59,11 +60,17 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
     private UUID tenantId;
     private String adminToken;
     private String ownerToken;
+    /** Story 16.5 — the PLAN rows written by the registration, read before the setUp clears them. */
+    private List<String> registrationPlanRows;
 
     @BeforeEach
     void setUp() {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
+        registrationPlanRows = jdbc.queryForList("SELECT module_id || ':' || status || ':' || tier || ':' "
+                + "|| (expires_at = (SELECT expires_at FROM \"" + schema + "\".subscriptions LIMIT 1)) "
+                + "FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN' ORDER BY module_id",
+                String.class, tenantId);
         // Story 13.9: registration provisions the free modules with migrations (crm) and materialises their
         // ACTIVE/FREE row — these tests start from the free rule without any row
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId);
@@ -108,6 +115,32 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
     }
 
     // ── tests ────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("16.5: legacy plan activation (JPA, REQUIRES_NEW) rewrites the PLAN rows in its transaction — the "
+            + "subscription write is flushed before the rows are derived")
+    void legacyActivationSyncsPlanRows() {
+        Instant until = Instant.parse("2027-06-01T22:59:59Z");
+        activatePlan.execute(new com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand(
+                adminId.toString(), schema, com.keevo.identity.api.PlanType.PREMIUM, until));
+
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT status, tier, origin, expires_at "
+                + "FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN'", tenantId);
+        assertThat(rows).hasSize(8).allSatisfy(r -> {
+            assertThat(r).containsEntry("status", "ACTIVE").containsEntry("tier", "PREMIUM");
+            assertThat(((java.sql.Timestamp) r.get("expires_at")).toInstant()).isEqualTo(until);
+        });
+    }
+
+    @Test
+    @DisplayName("16.5: registration writes a TRIAL row per paid module, ending with the subscription (same "
+            + "transaction as the JPA tenant row, before it is flushed)")
+    void registrationWritesTrialRows() {
+        assertThat(registrationPlanRows).containsExactly(
+                "advanced-reports:TRIAL:PREMIUM:true", "alerts:TRIAL:PREMIUM:true", "counting:TRIAL:PREMIUM:true",
+                "exports:TRIAL:PREMIUM:true", "invoicing:TRIAL:PREMIUM:true", "multi-store:TRIAL:PREMIUM:true",
+                "profitability:TRIAL:PREMIUM:true", "report-config:TRIAL:PREMIUM:true");
+    }
 
     @Test
     @DisplayName("deactivate crm → push CREATE_CLIENT REJECTED MODULE_INACTIVE (held) → activate crm → same op APPLIED; audited")

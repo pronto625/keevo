@@ -5,6 +5,7 @@ import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
@@ -46,6 +47,10 @@ import java.util.UUID;
  * <p><b>Story 9-2:</b> inside the same REQUIRES_NEW transaction, {@code public.tenants.plan_type}
  * is synced and a {@code tenant_plan_events} row is written (cause ADMIN_DOWNGRADE for FREE,
  * ADMIN_ACTIVATION otherwise). The endpoint contract is unchanged.
+ *
+ * <p><b>Story 16.5:</b> on every call (an expiry-only update included), still inside the same transaction and after
+ * the subscription write, the paid-module rows of the tenant are realigned on the new plan
+ * ({@link PlanModuleRowSync}): a rollback rolls them back with the plan.
  */
 @Service
 public class ActivatePlanService implements ActivatePlanUseCase {
@@ -56,14 +61,17 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     private final TenantQueryPort tenantQuery;
     private final TransactionTemplate requiresNewTemplate;
     private final PlanChangeRecorder planChangeRecorder;
+    private final PlanModuleRowSync planModuleRows;
 
     /** Production constructor — Spring injects the {@link PlatformTransactionManager}. */
     @org.springframework.beans.factory.annotation.Autowired
     public ActivatePlanService(SubscriptionRepository subscriptionRepository,
                                TenantQueryPort tenantQuery,
                                PlatformTransactionManager transactionManager,
-                               PlanChangeRecorder planChangeRecorder) {
-        this(subscriptionRepository, tenantQuery, buildTemplate(transactionManager), planChangeRecorder);
+                               PlanChangeRecorder planChangeRecorder,
+                               PlanModuleRowSync planModuleRows) {
+        this(subscriptionRepository, tenantQuery, buildTemplate(transactionManager), planChangeRecorder,
+                planModuleRows);
     }
 
     /**
@@ -73,11 +81,13 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     ActivatePlanService(SubscriptionRepository subscriptionRepository,
                         TenantQueryPort tenantQuery,
                         TransactionTemplate requiresNewTemplate,
-                        PlanChangeRecorder planChangeRecorder) {
+                        PlanChangeRecorder planChangeRecorder,
+                        PlanModuleRowSync planModuleRows) {
         this.subscriptionRepository = subscriptionRepository;
         this.tenantQuery = tenantQuery;
         this.requiresNewTemplate = requiresNewTemplate;
         this.planChangeRecorder = planChangeRecorder;
+        this.planModuleRows = planModuleRows;
     }
 
     private static TransactionTemplate buildTemplate(PlatformTransactionManager tm) {
@@ -129,6 +139,9 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                                     ? PlanChangeCause.ADMIN_DOWNGRADE : PlanChangeCause.ADMIN_ACTIVATION,
                             parseActor(command.actorId()), null);
                 }
+
+                // Story 16.5 — paid-module rows follow the plan, in this transaction (every call)
+                planModuleRows.sync(tenant.id(), schemaName);
 
                 log.info("Plan activated: schema={} newPlan={} actor={}",
                         schemaName, command.newPlan(), command.actorId());

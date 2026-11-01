@@ -37,6 +37,7 @@ class ChangeTenantPlanServiceTest {
 
     @Mock JdbcTemplate jdbc;
     @Mock PlanChangeRecorder recorder;
+    @Mock com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows;
     @InjectMocks ChangeTenantPlanService service;
 
     @SuppressWarnings("unchecked")
@@ -68,6 +69,10 @@ class ChangeTenantPlanServiceTest {
         assertThat(sql.getValue()).contains("\"kv_abc123\".subscriptions").contains("status = 'ACTIVE'");
         verify(recorder).syncPublicPlanType(TENANT, PlanType.PREMIUM);
         verify(recorder).recordEvent(TENANT, PlanType.FREE, PlanType.PREMIUM, PlanChangeCause.ADMIN_ACTIVATION, ACTOR, "note");
+        // Story 16.5 — the paid-module rows follow, after the history row
+        org.mockito.InOrder order = inOrder(recorder, planModuleRows);
+        order.verify(recorder).recordEvent(any(), any(), any(), any(), any(), any());
+        order.verify(planModuleRows).sync(TENANT, SCHEMA);
     }
 
     @Test
