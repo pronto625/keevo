@@ -34,7 +34,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-03-06
-last_updated: 2026-10-28  # 11-1 portage en cours | 2026-10-28 V1 figée : tag v2.0.1 (c6373afb), branche release/2.0.x ; reprise après la refonte modulaire | 2026-10-13 rapprochement (demande utilisateur : V1 complète avant la refonte) : back office epic 9 complet (9-1..9-8), 10-7, 11-4, 11-5 ; epics V1 et v1s clos
+last_updated: 2026-11-01  # 2026-11-01 rapprochement refonte (epics 16–17 réalignés sur le code de refonte/modulaire, résidus V1 réintégrés) + fusion Keevo × Bref ajoutée (epics 18–25, planning-artifacts/epics-fusion-keevo-bref.md) | 11-1 portage en cours | 2026-10-28 V1 figée : tag v2.0.1 (c6373afb), branche release/2.0.x ; reprise après la refonte modulaire | 2026-10-13 rapprochement (demande utilisateur : V1 complète avant la refonte) : back office epic 9 complet (9-1..9-8), 10-7, 11-4, 11-5 ; epics V1 et v1s clos
 project: Keevo
 project_key: NOKEY
 tracking_system: file-system
@@ -191,6 +191,9 @@ development_status:
 
   # ═════════════════════════════════════════════════════════════════════
   # REFONTE MODULAIRE — Epics 10-16 (54 stories)
+  # NOTE 2026-11-01 : les statuts se lisent sur `refonte/modulaire` (= origin/develop). La note du 2026-10-11 sur `refractoring` est obsolète (branche d'essai, 1 commit).
+  # ÉTAT 2026-11-01 : epics 10–15 done (sauf 10-8, exécution serveur) ; reste à faire pour la mise en prod de la refonte = 10-8 + epic 16 + 17-9 (régression, gate go-live) ;
+  #   la prod (branche deploy, 34949fec) tourne encore la V1 2.0.1 → la mise en prod de la refonte est le PRÉALABLE de la fusion Keevo × Bref (epics 18–25, gate G0).
   # NOTE 2026-10-11 : les statuts des epics 10–17 se lisent sur la branche `refractoring` (code + story files) ; epics-refonte-modulaire.md copié sur deploy.
   # Source: planning-artifacts/epics-refonte-modulaire.md
   # Ordre conseillé (frontières de risque) : 10 → 11 → 12 → 13 → {14,15} → 16
@@ -209,7 +212,7 @@ development_status:
   10-5-environnement-staging: done  # 2026-10-11 : AC1–AC7 validés ; décision TLS staging via Traefik prod + 5 items staging déplacés vers 10-7-ops-hardening-backups-staging | 2026-06-19 — implementation complete | code review: AC1-AC7 PASS, 3 patches (chmod 600 clé JWT, doc restore via docker exec, ADMIN_PASSWORD dans .env), 5+1 deferred | TLS: décision Toor = router via Traefik prod (réseau partagé keevo_edge) → implémentation deploy-time (touche prod), prérequis HTTPS valide | reste review jusqu'au routage TLS appliqué
   10-6-archunit-modulith-verify-baseline: done     # 2026-06-19 — code review PASSED (story la plus propre) | AC1-AC6 tous PASS, 0 Critical/High | baseline warning-mode correcte (non-bloquant assumé AC2/AC6) | 6 deferred → phase enforcement Epic 12.2e/12.6 (ratchet, fix allowedDependencies, try/catch doc-gen, règles ArchUnit, if-no-files-found, scope deps) | 3/3 tests GREEN | 11 modules détectés
   10-7-ops-hardening-backups-staging: done  # 2026-10-13 done (bmad-build-auto, spec-10-7-ops-hardening.md) : côté dépôt (workflows, unités, alertes, checklist unique) ; exécution serveur → 10-8 | # 2026-10-13 +1 item routé depuis la revue de suivi v1s-15-9 (vérif prod : tenants DELETED avec schéma encore présent, hérités de l'ancien forceDelete) | 2026-10-11 deferred-work redistribution — 11 items ops (TLS staging via Traefik prod, secrets staging, alerting backup, S3, chemins) issus des reviews 10-4/10-5
-  10-8-ops-runbook-execution-serveur: backlog  # 2026-10-28 review 11-1/11-2 — +1 item (KEEVO_PROMETHEUS_TOKEN + scrape job) | 2026-10-13 review 10-7 + 11-4 — 6 items (exécution serveur des runbooks §11–§16, DASHBOARD_ORIGIN prod) — owner : agent ops
+  10-8-ops-runbook-execution-serveur: backlog  # 2026-11-01 prérequis go-live refonte (avant 16-7) | 2026-10-28 review 11-1/11-2 — +1 item (KEEVO_PROMETHEUS_TOKEN + scrape job) | 2026-10-13 review 10-7 + 11-4 — 6 items (exécution serveur des runbooks §11–§16, DASHBOARD_ORIGIN prod) — owner : agent ops
   epic-10-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
@@ -289,17 +292,21 @@ development_status:
   epic-15-retrospective: optional
 
   # ─────────────────────────────────────────────────────────
-  # Epic 16: Licences, Migration & Go-Live (Phase 6) — monétisation
+  # Epic 16: Licences, Migration & Go-Live (Phase 6) — monétisation — PRÉALABLE de la fusion (gate G0)
   # ─────────────────────────────────────────────────────────
   epic-16: backlog
-  16-1-cycle-vie-licences-grace-temps-reel: backlog
-  16-2-a-la-carte-bundles: backlog
-  16-3-claim-jwt-modules-gating-offline: backlog
-  16-4-console-super-admin-modules: backlog
+  # ORDRE D'EXÉCUTION (2026-11-01, lignes rangées dans cet ordre) : 16-5 → 16-1 → 16-8 → 16-2 → 16-3 → 16-4 → 16-10 → 16-11
+  #   → [epic 17 : 17-10 → 17-11 → 17-12 → 17-8 → 17-7 → 17-2] → 16-6 → 10-8 (ops) → 17-9 (gate go-live) → 16-7 (canary) ; 16-9 en attente des specs DGI
   16-5-migration-backfill-tenant-modules: backlog
-  16-6-rgpd-suppression-compte-donnees: backlog
-  16-7-go-live-canary-runbook: backlog
+  16-1-cycle-vie-licences-grace-temps-reel: backlog
   16-8-profils-plan-plafonds-configurables: backlog  # 2026-10-29 journal I14 — +1 item (FREE employés : 3 dans le code vs 2 dans le plan) | 2026-10-29 review 12-2c/12-2d — 1 item (ProductCountPort fail-open)
+  16-2-a-la-carte-bundles: backlog
+  16-3-modules-actifs-app-sans-claim-jwt: backlog  # 2026-11-01 révisée (décision utilisateur : jeton minimal) — ex-16-3-claim-jwt-modules-gating-offline : PAS de claim `modules` dans le JWT ; l'app recharge GET /tenants/me/modules au renouvellement / retour réseau et garde l'état sur l'appareil (15.1)
+  16-4-console-super-admin-modules: backlog
+  16-10-scope-employe-historique-transferts: backlog  # 2026-11-01 rapprochement — résidu de v1s-12-9 (GET /api/v1/stock/transfers sans scope boutique pour EMPLOYEE, StockTransferController.getHistory) : sécurité, à corriger avant le go-live
+  16-11-sessions-longues-et-sures: backlog  # 2026-11-01 décision utilisateur — jusqu'à 1 an sans ressaisir le mot de passe, en sécurité : jeton d'accès 30 min (aujourd'hui 60 j), session glissante 365 j via le jeton de renouvellement (rotation + rejeu déjà en place), jeton = identité seule (sub, tenantId, sid) : rôle, boutique, état du compte lus côté serveur à chaque requête avec cache invalidé sur toutes les instances → retrait d'accès immédiat ; firstName retiré, sessions par appareil + écran « Appareils connectés », révocation à la perte de droits ; avant le go-live, avec 16-10
+  16-6-rgpd-suppression-compte-donnees: backlog  # 2026-11-01 rapprochement : cœur FR91 livré en V1 (v1s-14-5 : demande, délai de grâce, purge ; AccountDeletionPolicy présent sur refonte) — reste à vérifier les AC refonte (DROP SCHEMA, données des modules DISABLED jamais purgées) puis clore
+  16-7-go-live-canary-runbook: backlog
   16-9-facturation-electronique-dgi: backlog  # 2026-10-30 spec 14-1 (recherche légale) — 1 item
   epic-16-retrospective: optional
 
@@ -308,17 +315,140 @@ development_status:
   # Referme les FR produit résiduels + features Premium. Dépend d'Epic 13.
   # 17.1-17.4 remplacent les backlog d'origine 4-5, 4-6, 8-2, 8-4.
   # ─────────────────────────────────────────────────────────
-  epic-17: backlog
-  17-1-annulation-correction-vente: backlog                  # FR90 — remplace 4-5
-  17-2-leaderboard-vendeurs: backlog                         # FR44 — remplace 4-6
-  17-3-suivi-activite-employes: backlog                      # FR67 — remplace 8-2
-  17-4-feedback-signalement-in-app: backlog                  # FR92 — remplace 8-4
-  17-5-sante-systeme-alertes-proactives-push-global: backlog # FR81/82/83 — remplace 9-5
-  17-6-exports-pdf-excel: backlog  # 2026-10-11 : ⤳ superseded par v1s-epic-18 (tag C, la refonte réabsorbe reporting/export) — sprint-change-proposal-2026-10-11 | FR55 (Premium)
-  17-7-notif-changement-prix-employe: backlog                # Premium (décision)
-  17-8-gating-config-rapports: backlog                       # FR60 (Free fixe / Premium)
-  17-9-regression-e2e-multi-surface: backlog
+  epic-17: in-progress  # 2026-11-01 rapprochement : 17-1, 17-3, 17-4, 17-5 livrés en V1 et présents sur refonte/modulaire ; 17-6 remplacée par v1s-epic-18 ; restent 17-2 (résidu), 17-7, 17-8, 17-9 (gate go-live) + 17-10/17-11 (résidus V1 réintégrés) + 17-12 (suivi de stock par produit)
+  # ORDRE D'EXÉCUTION : livrées d'abord, puis 17-10 → 17-11 → 17-12 → 17-8 → 17-7 → 17-2 (après 16-11), 17-9 = gate go-live (après 16-6 et 10-8)
+  17-1-annulation-correction-vente: done  # 2026-11-01 rapprochement : FR90 livré par v1s-13-5, présent sur refonte (CorrectSaleService, JustificationPolicy, avoir auto via pont pos→invoicing 14-7)
+  17-3-suivi-activite-employes: done  # 2026-11-01 rapprochement : FR67 livré par v1s-14-6, présent sur refonte (GetEmployeeActivityUseCase), gaté par 13.10
+  17-4-feedback-signalement-in-app: done  # 2026-11-01 rapprochement : FR92 livré par v1s-14-5 + boîte « Retours utilisateurs » du dashboard (8-4), module feedback présent sur refonte
+  17-5-sante-systeme-alertes-proactives-push-global: done  # 2026-11-01 rapprochement : FR81/82/83 livrés par 9-5 (santé, alertes, push global), présents sur refonte (PlatformHealthService, AdminGlobalNotificationController)
+  17-6-exports-pdf-excel: done  # 2026-11-01 clos : ⤳ superseded par v1s-epic-18 (done 2026-10-12), exports présents sur refonte (module exports, 15.x) | FR55 (Premium)
+  17-10-compteur-produits-ecran-abonnement: backlog  # 2026-11-01 rapprochement — reprend v1s-16-25 (compteur « Produits » à 0 sur l'écran Abonnement alors que /subscription/me renvoie N)
+  17-11-stock-initial-creation-produit: backlog  # 2026-11-01 rapprochement — reprend v1s-16-26 (demande utilisateur : stock initial FACULTATIF dans le formulaire « Nouveau produit », même pour un produit suivi ; vide = 0 sans mouvement ; sinon mouvement STOCK_ENTRY local + sync)
+  17-12-suivi-stock-par-produit: backlog  # 2026-11-01 demande utilisateur — suivi de stock activable par produit (products.track_stock, défaut true), et non par type/catégorie de boutique ; après 17-11 ; tranche §7.3 de la fusion (20-1 réutilise le champ)
+  17-8-gating-config-rapports: backlog  # FR60 (Free fixe / Premium) — 2026-11-01 : endpoint gaté report-config (13.10) ; reste l'item de l'en-tête Epic 17 (rapport EOD par défaut quand report-config est DISABLED, préférences du trial ignorées)
+  17-7-notif-changement-prix-employe: backlog  # Premium (décision) — 2026-11-01 vérifié : SalePriceOverriddenEvent seulement audité (AuditEventListener), aucune notification owner
+  17-2-leaderboard-vendeurs: backlog  # 2026-11-01 rapprochement : cœur FR44 livré (v1s-14-2, LeaderboardController OWNER-only, gaté advanced-reports en 15.8) ; reste l'item « Afficher le leaderboard aux employés » (UX16, anonymisé, OFF par défaut) — epics-refonte-modulaire.md §17.2
+  17-9-regression-e2e-multi-surface: backlog  # 2026-11-01 GATE GO-LIVE : à passer sur staging avant 16-7 (canary)
   epic-17-retrospective: optional
+  # ═══════════════════════════════════════════════════════════════════════
+  # FUSION KEEVO × BREF POINT — Epics 18-25 (85 stories) — ajouté 2026-11-01
+  # Source  : planning-artifacts/epics-fusion-keevo-bref.md (analyse : fusion-keevo-bref-analyse-2026-10-31.md)
+  # Dépôts  : AI/Keevo (refonte/modulaire), AI/bref et AI/api-bref (develop)
+  # Préalable : refonte en prod (10-8, epic 16, 17-9). Seules 18-1 et 18-2 peuvent démarrer avant (aucun code).
+  # Ordre   : 18 → 19 → {20, 21} → 24-1..24-10 ; 22 démarre à 19 + 4 sem ; 23 après 22 ; 24-11..24-16 après 23-12 ; 25 en dernier
+  # Jalons  : G0 après 18-2 | G1 après 20-12 | G2 bêta 22-15 | G3 après 24-12 + 23-12 | G4 après 24-14 | G5 avant 25-1
+  # Statut du plan : draft jusqu'à 18-2 (décisions Q10/Q11/Q12 et ⚠️) — ne pas créer de story 19+ avant G0
+  # Note : `epic-18` (fusion) ≠ `v1s-epic-18-export-audit` (piste V1, close)
+  # ═══════════════════════════════════════════════════════════════════════
+  epic-18: backlog  # P0 Cadrage
+  18-1-mesures-bases-bref-keevo: backlog
+  18-2-decisions-produit-gate-p0: backlog
+  18-3-gel-perimetre-bref: backlog
+  18-4-identites-app-comptes-stores: backlog
+  18-5-brief-prd-architecture-fusion: backlog
+  epic-18-retrospective: optional
+
+  epic-19: backlog  # P1a Socle d'accueil
+  19-1-users-identifiants-multiples: backlog
+  19-2-authenticator-otp: backlog
+  19-3-authenticators-google-apple: backlog
+  19-4-login-username-membres: backlog
+  19-5-roles-manager-viewer-permissions: backlog
+  19-6-multi-roles-multi-entreprises: backlog
+  19-7-profils-pro-team-business: backlog
+  19-8-compteurs-usage-quotas: backlog
+  19-9-sms-email-notifications-persistantes: backlog
+  19-10-versions-minimales-app: backlog
+  19-11-charge-nombre-tenants: backlog
+  19-12-boutiques-etendues-parcours-vente: backlog
+  epic-19-retrospective: optional
+
+  epic-20: backlog  # P1b Modules métier Bref
+  20-1-catalogue-sans-stock-cle-fusion: backlog
+  20-2-crm-etendu-consentement: backlog
+  20-3-devis: backlog
+  20-4-encaissements-echeancier-retard: backlog
+  20-5-remise-livraison-tva-echeance: backlog
+  20-6-derivation-catalogue-crm: backlog
+  20-7-modeles-signatures-liens-publics: backlog
+  20-8-envoi-sms-email: backlog
+  20-9-reporting-multi-source: backlog
+  20-10-module-expenses: backlog
+  20-11-module-finance: backlog
+  20-12-acceptation-parcours-bref: backlog
+  epic-20-retrospective: optional
+
+  epic-21: backlog  # P1b Monétisation & engagement
+  21-1-payments-mobile-money: backlog
+  21-2-storekit-revenuecat: backlog
+  21-3-credit-packs-sms: backlog
+  21-4-ai-assistant: backlog
+  21-5-whatsapp-cloud: backlog
+  21-6-campagnes: backlog
+  21-7-client-portal: backlog
+  epic-21-retrospective: optional
+
+  epic-22: backlog  # P2 App RN parité Keevo
+  22-1-monorepo-shell-deux-identites: backlog
+  22-2-stockage-chiffre-schema: backlog
+  22-3-auth-sessions-tenant-picker: backlog
+  22-4-file-operations-push: backlog
+  22-5-pull-delta-fusion: backlog
+  22-6-rejet-quarantaine-journal: backlog
+  22-7-gate-7-jours: backlog
+  22-8-entitlements-modules-routes: backlog
+  22-9-ecrans-coeur: backlog
+  22-10-catalogue-stock-inventaire: backlog
+  22-11-caisse-pos: backlog
+  22-12-crm-facturation-rapports-exports: backlog
+  22-13-tests-parite-maestro: backlog
+  22-14-derniere-release-flutter: backlog
+  22-15-beta-deploiement-ios: backlog
+  22-16-retrait-flutter: backlog
+  epic-22-retrospective: optional
+
+  epic-23: backlog  # P3 App RN parité Bref
+  23-1-onboarding-otp-social: backlog
+  23-2-parcours-document-5-etapes: backlog
+  23-3-devis-encaissements-impayes: backlog
+  23-4-modeles-impression-partage: backlog
+  23-5-depenses-finance: backlog
+  23-6-ia-whatsapp-campagnes: backlog
+  23-7-mon-plan-paiement: backlog
+  23-8-portail-client: backlog
+  23-9-securite-langues-notifications: backlog
+  23-10-bascule-caisse-document: backlog
+  23-11-double-backend-mode-legacy: backlog
+  23-12-publication-identite-bref: backlog
+  epic-23-retrospective: optional
+
+  epic-24: backlog  # P1c outil + P4 vagues
+  24-1-api-bref-statut-gel-export: backlog
+  24-2-migration-identite-boutiques-membres: backlog
+  24-3-import-produits-clients: backlog
+  24-4-import-documents-paiements-depenses: backlog
+  24-5-import-monetisation: backlog
+  24-6-import-annexes-index-portail: backlog
+  24-7-bridge-identite-collisions: backlog
+  24-8-reconciliation-bloquante: backlog
+  24-9-pilotage-vagues-rollback: backlog
+  24-10-liens-publics-webhooks: backlog
+  24-11-pre-migrateur-ota: backlog
+  24-12-dry-run-copie-prod: backlog
+  24-13-runbook-communication: backlog
+  24-14-vagues-pilotes: backlog
+  24-15-vagues-de-masse: backlog
+  24-16-retardataires-gel-global: backlog
+  epic-24-retrospective: optional
+
+  epic-25: backlog  # P5 Convergence
+  25-1-api-bref-lecture-seule-arret: backlog
+  25-2-webhooks-keevo-seul: backlog
+  25-3-retrait-code-transitoire: backlog
+  25-4-marque-fiche-store: backlog
+  25-5-retrospective-architecture: backlog
+  epic-25-retrospective: optional
+
 
   # ═══════════════════════════════════════════════════════════════════════
   # V1 STABILIZATION TRACK (pre-refonte, parallel) — post-audit 2026-07-20
@@ -339,11 +469,11 @@ development_status:
   v1s-12-6-rbac-owner-only-scope-store: done # S6/S7/B-HIGH-9/10, FR36 — + Flutter UI gating EMPLOYEE. Story créée 2026-07-21 : DayClosure/Store/Stock/InventorySession/StockTransfer OWNER-only ou scope storeId (non ambigu) ; PendingSaleController.cancelSale → OWNER-only (ferme defer P2 HF-2, non ambigu) ; Product inchangé (décision HF-2 B4 déjà résolue). Décision D1 (préserver HF-2 sur getPendingSales/validateSale) confirmée en code review. + 2 fichiers Flutter (app_router _ownerOnlyPrefixes + transfer FAB gate). | 2026-07-21 → in-progress (dev-story) → review (implémentation terminée : 6 controllers backend modifiés + 7 tests + 2 Flutter ; 97/97 tests GREEN ; 0 NEW régression) → done (code review bmad-code-review — 1 decision résolue : retrait de /pos/pending des routes owner-only Flutter, cohérent avec D1 ; 2 patches appliqués : router fix + extractAssignedStoreId() fail-closed sur claim storeId absente dans StockController/InventorySessionController ; 3 defers dont 1 CRITIQUE — /api/v1/sync/push contourne tout le RBAC de cette story via CancelSaleSyncHandler/ValidateSaleSyncHandler/StockAdjustSyncHandler/TransferSyncHandler, recommandation de story de suivi immédiate ; 10 dismiss ; tests impactés GREEN, 0 NEW régression).
   v1s-12-7-flutter-hardening-storage-logs-https: done  # S8/S9/S12, ARCH21 — SecureStorageProvider + redact Bearer + HTTPS default. Story créée 2026-07-21 | implémentée 2026-07-21 : buildSecureStorage() centralisé (7 sites) + LogInterceptor gated kDebugMode + redaction Authorization + HTTPS default + IOHttpClientAdapter badCertificateCallback + AuthInterceptor.onAccountSuspended (SESSION_REVOKED/ACCOUNT_INACTIVE, ties 12.2) + AC5 ajoutée (garde deep-link globale, S12). 100% Flutter, aucun changement backend. | code review bmad-code-review 2026-07-21 : 1 decision résolue (migration one-shot encryptedSharedPreferences — migrateToEncryptedStorage() ajouté dans secure_storage_provider.dart, appelé main.dart avant DbEncryptionKeyService) ; 4 patches appliqués : P1 /auth/change-password bypass garde auth (publicPaths exact set), P2 _tryProactiveRefresh IOHttpClientAdapter (debug localhost HTTPS), P3 try/catch _expireSession SESSION_REVOKED path, P4 import ordering ; 4 defers (race SESSION_REVOKED/refresh concurrent, SnackBar flood, storage read perf AC5, DRY badCertificateCallback) ; ~25 dismiss ; tous AC1-AC5 PASS.
   v1s-12-8-rbac-sync-push-scope: done  # 2026-10-11 : AC4 (transfert OWNER-only) inversé par 4302eba sans story ; décision PO : un employé ne transfère que depuis sa boutique → v1s-12-11 ; trous résiduels → v1s-12-10 — sprint-change-proposal-2026-10-11 / audit-coherence-2026-10-11 | 2026-07-23 story créée (bmad-create-story) → in-progress (bmad-dev-story) → review (bmad-dev-story: AC1-AC6 tous satisfaits, 10 nouveaux tests, 85/85 sync handlers GREEN, 0 régression sync) → done (code review 2026-07-24 : 3 layers Blind Hunter/Edge Case Hunter/Acceptance Auditor, 0 decision-needed, 2 patchs appliqués (P1 message neutre StockAdjust, P2 ArgumentCaptor dans tests Validate/Cancel), 4 defers dont 1 HIGH (D1 SaleSyncHandler CREATE_SALE sans scope check — story de suivi recommandée), 9 dismiss ; 19/19 tests handlers GREEN, 0 NEW régression).
-  v1s-12-9-transfer-complete-store-scope: in-progress  # 2026-10-28 hors v2.0.1 — reprise après la refonte | 2026-10-20 reopened — 1 item routed from v1s-16-23 review (GET transfer history employee store scope) | 2026-07-23 story créée (bmad-create-story) — audit-coherence-2026-07-23.md Finding #2 : StockTransferController.complete() sans scope destination-boutique, aggravation confirmée (atteignable via usage normal de l'app, filtre "boutique active" Flutter mutable). Fix backend (CompleteTransferCommand + CompleteTransferService) + fix Flutter défensif (condition d'affichage bouton Réceptionner). [2026-07-24] Story implémentée : 19/19 tests backend GREEN, Flutter AC2 défensif, deferred-work.md résolu. [2026-07-24] Code review bmad-code-review : 3 layers (Blind Hunter + Edge Case Hunter + Acceptance Auditor), AC1/AC2/AC3 PASS, 2 patchs appliqués (P1 ArgumentCaptor remplace test dupliqué, P2 tests chemins sécurité extractAssignedStoreId null/non-AuthDetails), 2 defers (duplication extractAssignedStoreId cross-controllers, widget test _shouldShowReceiveButton), 12 dismiss ; 21/21 tests story GREEN, 0 NEW régression.
+  v1s-12-9-transfer-complete-store-scope: done  # 2026-11-01 clos au rapprochement : complete() scopé (CompleteTransferCommand avec assignedStoreId, présent sur refonte) ; résidu GET historique ⤳ 16-10 | 2026-07-24 implémentée + code review (21/21 tests)
   v1s-12-10-sync-rbac-residual: done  # 2026-10-11 done (bmad-build-auto, spec-v1s-12-10-sync-rbac-residual.md) : PROMOTE_PRODUCT + TOGGLE_CATEGORY OWNER-only (sync + REST), session/comptages d'inventaire limités à la boutique de l'employé (sync + REST), rôle réel passé à UpdateProduct, null auth fail-closed (D2) ; app : vente EMPLOYEE ne promeut plus les brouillons ; 2 passes de revue (1 boucle bad_spec) ; InventorySessionSyncHandler hors use case → v1s-13-8 | 2026-10-11 audit I1 — PROMOTE_PRODUCT, TOGGLE_CATEGORY, session d'inventaire non limitées à la boutique de l'employé
   v1s-12-11-transfer-employee-own-store: done  # 2026-10-11 done (bmad-build-auto, spec-v1s-12-11-transfer-employee-own-store.md) : scope source EMPLOYEE restauré REST + sync, OWNER cross-store, form Flutter verrouillé ; items CR 12-9/12-8 D4 résolus | 2026-10-11 décision PO : un employé ne transfère que depuis sa boutique ; annuler l'ouverture de 4302eba (REST + sync) ; FR36 et v1s-12-8 AC4 maintenus
   v1s-12-12-auth-session-hardening: done  # 2026-10-11 (commit 151b331) : 24 items clos (21 corrigés, D3 déjà clos par 12-5 + test, 2 rejetés motivés) — cache révocation Caffeine, skew JWT, JSON 403/500, reset OTP après commit + claim atomique + CAS, purge tokens + V10, to_regclass, upsert device gardé + logs SECURITY, téléphones +<digits>, cap mot de passe 72 octets, SUSPENDED ne peut pas demander la suppression ; review 44 findings (19 patchés, 2 routés v1s-15-11) ; spec spec-v1s-12-12-auth-session-hardening.md | 2026-10-11 deferred-work redistribution — 24 items (+2 routés depuis v1s-14-5 / v1s-14-11)
-  v1s-12-13-prod-secrets-config-hardening: in-progress  # 2026-10-29 correctif CI : étape « Generate JWT test keys » (openssl, PKCS#8) dans backend-ci.yml — simulé en checkout propre (architecture+shared+identity 1 108 tests verts), run GitHub 40873364196 VERT (pronto625/keevo) | 2026-10-29 cause racine CI : clés JWT de test (src/test/resources/keys/*.pem) ignorées par .gitignore (*.pem) et jamais générées par backend-ci.yml → « test keys unavailable » + contextes Spring en échec ; correctif = étape openssl dans le workflow | 2026-10-28 reopened — Backend CI rouge depuis 9a37b165 (18/10) : ProdSecretsFailFastContextTest échoue ; à corriger après la refonte (V1 figée en v2.0.1) | 2026-10-11 (commit 2001e5cd77bbce1c05403efc7fca3bb48f6627ff) done (bmad-build-auto, spec-v1s-12-13-prod-secrets-config-hardening.md) : 3 items clos — ProdSecretsValidator étendu (POSTGRES_PASSWORD ≥12 + denylist, politique ADMIN_PASSWORD 12/3-classes/72 octets, jetons du provider WhatsApp sélectionné), DataSource dependsOn validateur, test de démarrage prod (ProdSecretsFailFastContextTest) ; review 33 findings (6 patchés, 0 différé) | 2026-10-11 deferred-work redistribution — 3 items
+  v1s-12-13-prod-secrets-config-hardening: done  # 2026-11-01 clos au rapprochement : correctif CI (clés JWT de test générées par openssl dans backend-ci.yml, présent sur refonte) — run GitHub 40873364196 vert (29/10) | 2026-10-11 done (commit 2001e5cd) ProdSecretsValidator + ProdSecretsFailFastContextTest
   v1s-epic-12-retrospective: optional
 
   v1s-epic-13-concurrency-integrity: done  # 2026-10-13 rapprochement (demande utilisateur : V1 complète avant la refonte) : toutes les stories done
@@ -416,9 +546,9 @@ development_status:
   v1s-16-21-prod-1-1-70-fixes: done  # 2026-10-18 done — app 2.0.0+70, régression complète verte | 2026-10-18 recette prod 1.1.70 — 4 constats (super-admin dans l'app mobile, CA total à 0 au 1er affichage, avalanche d'avis de clôture, « Dernière activité » identique dans l'admin) — spec-v1s-16-21-prod-1-1-70-fixes.md
   v1s-16-22-auto-closure-tenant-context: done  # 2026-10-19 rapport A17 (Boutique 6e) ≠ tableau de bord : la clôture automatique écrivait dans public à partir de la 2e boutique d'une entreprise — backend seul — spec-v1s-16-22-auto-closure-tenant-context.md
   v1s-16-23-transfer-history-and-audit-route: done  # 2026-10-20 demande utilisateur — liste des transferts mobile limitée aux 20 derniers (filtres boutique/statut appliqués après la limite) + audit d'un transfert sans boutique d'origine/destination — done 2026-10-20 (bmad-build), app 2.0.1+71, 1 passe de revue (19 constats, 9 patchés, 1 routé → v1s-12-9) — spec-v1s-16-23-transfer-history-and-audit-route.md
-  v1s-16-24-onboarding-landscape-overflow: backlog  # 2026-10-29 live device run refonte 12-1/12-5 — 1 item (débordement paysage + clavier, V1)
-  v1s-16-25-subscription-products-counter: backlog  # 2026-10-29 live device run refonte 12-2e — 1 item (compteur produits à 0, V1)
-  v1s-16-26-initial-stock-on-product-create: backlog  # 2026-10-29 demande utilisateur (test live) — 1 item (champ stock initial au formulaire de création)
+  v1s-16-24-onboarding-landscape-overflow: done  # 2026-11-01 sans objet : l'app est verrouillée en portrait (15-8, AndroidManifest screenOrientation=portrait, Info.plist portrait)
+  v1s-16-25-subscription-products-counter: done  # 2026-11-01 ⤳ reportée dans la refonte : 17-10 (la V1 est figée en 2.0.1)
+  v1s-16-26-initial-stock-on-product-create: done  # 2026-11-01 ⤳ reportée dans la refonte : 17-11 (la V1 est figée en 2.0.1)
   v1s-epic-16-retrospective: optional
 
   # ─────────────────────────────────────────────────────────

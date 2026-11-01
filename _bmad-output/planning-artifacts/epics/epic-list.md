@@ -36,4 +36,10 @@ Simon peut recevoir des alertes de stock critique et de tendances de ventes via 
 Toor peut piloter toute la plateforme : liste tenants, activation manuelle des payants, dashboard revenus, analytics plateforme, santé système, alertes proactives, et notifications push globales.
 **FRs couverts :** FR77–FR83
 
+## Epics 10 à 17 : Refonte modulaire
+Plateforme de modules activables par tenant (socle, facturation pilote, frontend modulaire, licences et go-live, complétion fonctionnelle). Détail : `../epics-refonte-modulaire.md`.
+
+## Epics 18 à 25 : Fusion Keevo × Bref Point
+Un backend (Keevo), une app React Native, migration progressive des utilisateurs et des données de Bref Point. Détail : `../epics-fusion-keevo-bref.md`.
+
 ---

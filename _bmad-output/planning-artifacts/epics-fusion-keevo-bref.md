@@ -1,0 +1,1809 @@
+---
+stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories]
+status: draft  # passe à "ready" quand le gate P0 (Epic 18, story 18.2) a tranché les décisions ouvertes
+date: 2026-11-01
+author: Dalois-30 (avec Claude)
+inputDocuments:
+  - _bmad-output/planning-artifacts/fusion-keevo-bref-analyse-2026-10-31.md   # analyse source (D1–D7, §5–§13)
+  - _bmad-output/planning-artifacts/epics-refonte-modulaire.md                # epics 10–16 (socle modulaire)
+  - _bmad-output/planning-artifacts/prd.md
+  - _bmad-output/planning-artifacts/architecture.md
+  - _bmad-output/implementation-artifacts/sprint-status.yaml                  # epics 16 et 17 en backlog
+  - plan-refonte-modulaire.md
+  - spec-socle-modulaire.md
+reposAnalysed:
+  keevo: "AI/Keevo @ refonte/modulaire c4e69b0a (31/10/2026)"
+  api-bref: "AI/api-bref @ develop 376ad70 (31/10/2026)"
+  bref: "AI/bref @ develop a435e9b (31/10/2026)"
+scope: "Fusion Keevo × Bref Point : un backend (Keevo Spring Boot), une app React Native (Expo), migration progressive des utilisateurs et des données des deux produits, puis décommissionnement d'api-bref et de l'app Flutter. Epics 18 à 25. Préserve les epics 1–17."
+decisionsLocked:
+  - "D1 Backend unique = Keevo Spring Boot (Java 21, Spring Modulith) ; api-bref absorbé en modules puis arrêté"
+  - "D2 App unique = Expo / React Native, shell Bref + couche données portée du protocole de sync Keevo (sync_queue, push/pull keyset, quarantaine, gate 7 j) ; app Flutter retirée"
+  - "D3 Un owner Bref = un tenant Keevo ; shops → stores ; membres → employees + memberships"
+  - "D4 Identité étendue (email, username, OTP, Google, Apple) ; réconciliation téléphone E.164 puis email ; hash bcrypt Bref réutilisés tels quels"
+  - "D5 Plans Bref → profils/bundles Keevo ; quotas d'usage ; module payments (MyCoolPay, StoreKit/RevenueCat) = auto-service"
+  - "D6 Strangler à double piste : Keevo sans migration de données ; Bref owner par owner (gel → export → import idempotent → réconciliation bloquante → activation), api-bref maintenu pour les non-migrés"
+  - "D7 Deux identités d'app store (Keevo, com.brefpoint.app) construites depuis le même code"
+  - "Deux parcours de vente : Caisse (pos → sales + stock) et Document (invoicing, sans stock) ; reporting = union sans double comptage"
+  - "Factures émises non modifiables (conformité DGI) ; devis éditables ; correction = avoir + nouvelle facture"
+decisionsPending:  # gate P0 — à trancher dans la story 18.2 ; les stories impactées portent le tag ⚠️Qn
+  - "Q10 plan FREE unifié (employés, documents/mois, trial 6 mois conservé ?) et grille tarifaire unique"
+  - "Q11 marque finale (une fiche store, laquelle ; ou deux marques durables)"
+  - "Q12 périmètre pays (CM-XAF seul ou CM/GA/TD/CD/SN) : TVA, devise, fuseau des journées"
+  - "§7.10 owners Bref à abonnement expiré depuis peu : grâce 30 j (recommandé) ou FREE immédiat"
+  - "§7.5 clients au niveau tenant avec store_id optionnel (recommandé)"
+  - "§7.3 TRANCHÉ le 2026-11-01 : suivi de stock réglé par produit (track_stock), livré dans la refonte par la story 17.12 ; les produits importés de Bref arrivent track_stock=false ; le secteur ne fixe pas le réglage"
+  - "§9.5 publication précoce de l'app unifiée sous com.brefpoint.app avec mode legacy (recommandé) ou après la dernière vague"
+---
+
+# Keevo × Bref Point — Plan de fusion : epics et stories
+
+## Overview
+
+Ce document est le **plan d'exécution BMAD** de la fusion décidée dans `fusion-keevo-bref-analyse-2026-10-31.md` (désigné ci-après « l'analyse », sections citées en `§n`). Il transforme les décisions D1–D7 en **exigences numérotées**, en **8 epics (18 à 25)** et en **stories implémentables** avec critères d'acceptation, dans l'ordre où elles doivent être livrées.
+
+Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des **préalables** :
+
+- **Epic 16 (Licences, Migration & Go-Live)** : la production Keevo tourne encore sur la V1 (`deploy` = `34949fec`, 47 commits derrière `refonte/modulaire`). Rien de la fusion ne part en production tant que la refonte modulaire n'y est pas (16-2 bundles, 16-3 modules actifs côté app (sans claim dans le jeton), 16-11 sessions longues et sûres, 16-4 console, 16-5 backfill, 16-7 canary, 16-8 profils configurables).
+- **Epic 17 (Complétion fonctionnelle)** : rapprochement du 2026-11-01 — 17.1, 17.3, 17.4, 17.5 livrés (V1 puis portés), 17.6 remplacée ; **17.9 (régression E2E) est le gate du go-live** de la refonte ; 17.2, 17.7, 17.8, 17.10, 17.11, 17.12 sont fonctionnelles et indépendantes de la fusion. **17.12 (suivi de stock par produit) livre `products.track_stock`, dont la fusion dépend (FUS-FR13, story 20.1).**
+- **10-8** (exécution serveur des runbooks) et **16.10** (scope employé des transferts) font aussi partie du go-live de la refonte. Le chemin complet est dans `epics-refonte-modulaire.md`, section « État de la refonte au 1er novembre 2026 ».
+
+**Hypothèses de charge** : un développeur plein temps, mode de travail identique à la refonte (spec BMAD par story puis `bmad-build-auto`, revue `bmad-code-review`). Estimation totale : **32 à 40 semaines** calendaires (§13 de l'analyse), avec recouvrement P1/P2.
+
+**Règle d'or de la fusion** : *aucun utilisateur ne réinstalle, ne perd de données, ne change de mot de passe, ni ne paie deux fois.* Chaque story qui touche une donnée de production le démontre dans ses critères d'acceptation.
+
+### Correspondance phases ↔ epics
+
+| Phase (§9.2) | Epic(s) | Durée | Sortie (jalon) |
+|---|---|---|---|
+| Préalable | **16** (refonte en prod) | selon backlog 16 | prod Keevo = socle modulaire |
+| **P0** Cadrage | **18** | 2 sem | chiffres connus, décisions écrites, périmètre Bref gelé |
+| **P1a** Socle d'accueil | **19** | 6 sem | login OTP/social/username sur Keevo, rôles, quotas, plans ; app Flutter intacte |
+| **P1b** Modules Bref | **20**, **21** | 8 sem | API complète pour l'app unifiée ; parcours Bref vert sur Keevo |
+| **P1c** Outil de migration | **24** (24.1 → 24.10) | 3 sem (recouvrement P1b) | 100 % d'une copie de prod Bref importée sans écart |
+| **P2** App RN parité Keevo | **22** | 10–12 sem (démarre à P1a + 4 sem) | tous les utilisateurs Keevo sur RN, Flutter retiré |
+| **P3** App RN parité Bref | **23** | 8–10 sem | app publiée sous les deux identités |
+| **P4** Vagues Bref | **24** (24.11 → 24.16) | 4–8 sem | plus aucun owner actif sur api-bref |
+| **P5** Convergence | **25** | 2–4 sem | une app, un backend |
+
+---
+
+## Requirements Inventory
+
+### Exigences fonctionnelles de fusion (`FUS-FR`)
+
+**Identité et accès**
+
+- **FUS-FR1 :** Un utilisateur peut se connecter par téléphone + mot de passe (Keevo), par code OTP reçu par SMS, WhatsApp ou email, par Google, par Apple, ou par identifiant (username) + mot de passe (membres Bref).
+- **FUS-FR2 :** Un compte possède au moins un identifiant parmi téléphone E.164, email, username ; le téléphone n'est plus obligatoire.
+- **FUS-FR3 :** Une même personne peut être owner d'un tenant et membre d'un autre ; après login elle choisit son entreprise (tenant-picker existant).
+- **FUS-FR4 :** Les rôles de membership sont OWNER, MANAGER, EMPLOYEE, VIEWER ; chaque module déclare les permissions de chaque rôle ; VIEWER n'écrit jamais.
+- **FUS-FR5 :** Un owner crée un membre avec téléphone ou username ; le mot de passe initial n'est jamais renvoyé en clair une seconde fois.
+- **FUS-FR6 :** Un compte social se lie automatiquement à un compte existant par email seulement si l'email est vérifié et si le compte n'est pas un membre (règle Bref `develop`).
+
+**Plans, quotas, paiement**
+
+- **FUS-FR7 :** Les plans FREE, PRO, TEAM, BUSINESS existent comme profils configurables (bundles de modules + plafonds) ; PREMIUM Keevo est servi par TEAM ⚠️Q10.
+- **FUS-FR8 :** Les quotas mensuels (documents, SMS, emails, requêtes IA) sont décomptés de façon atomique par tenant et période ; un dépassement renvoie une erreur explicite sans bloquer le cœur.
+- **FUS-FR9 :** Un owner peut souscrire ou renouveler un plan en libre-service par Mobile Money (MyCoolPay) sur Android et par achat intégré (StoreKit via RevenueCat) sur iOS ; le paiement confirmé active le bundle sans intervention du super-admin.
+- **FUS-FR10 :** Le crédit de compte et les packs SMS achetés sont conservés, affichés et consommables.
+- **FUS-FR11 :** Le super-admin peut toujours accorder un plan manuellement (`admin_grant`), avec trace dans `tenant_plan_events`.
+
+**Boutiques, catalogue, clients**
+
+- **FUS-FR12 :** Une boutique porte catégorie, description, logo, NIU, RCCM, pays.
+- **FUS-FR13 :** Un produit peut ne pas suivre de stock (`track_stock=false`) : pas de contrôle, pas de mouvement, pas d'alerte, hors inventaire ; l'owner peut activer le suivi plus tard, avec un stock initial facultatif (0 par défaut). Le réglage est **par produit**, jamais déduit du secteur ou du type de boutique (décision du 2026-11-01). **Livré dans la refonte par la story 17.12** ; la fusion n'ajoute que le défaut `false` à l'import Bref et la dérivation depuis les documents.
+- **FUS-FR14 :** Un produit porte une clé de déduplication (`product_key`), un code-barres, un prix manuel ; deux produits peuvent être fusionnés (le fusionné est archivé et redirige).
+- **FUS-FR15 :** Un client porte type (particulier/entreprise), NIU, RCCM, adresse, contact, site web, date de naissance, consentement marketing (date d'accord, de retrait, auteur), boutique d'origine optionnelle ; le service avertit en cas de doublon de téléphone.
+- **FUS-FR16 :** Créer un document peut créer ou mettre à jour le client et les produits correspondants (dérivation optionnelle, désactivable par tenant).
+
+**Ventes et documents**
+
+- **FUS-FR17 :** Un tenant dispose de deux parcours de vente : Caisse (vente + stock + facture automatique) et Document (facture ou devis sans stock) ; il choisit son parcours par défaut.
+- **FUS-FR18 :** Un devis est éditable, convertible en facture (la date d'émission est celle de la conversion) et annulable.
+- **FUS-FR19 :** Une facture accepte remise, frais de livraison (hors assiette TVA), taux de TVA propre ou exonération, date d'échéance, NIU/RCCM/email du client, lignes liées ou non à un produit, quantités à 3 décimales.
+- **FUS-FR20 :** Une facture accepte un acompte, des paiements partiels et un échéancier ; son état d'encaissement (impayée, partielle, payée, en retard) est calculé par le serveur ; un job quotidien passe en retard les échéances dépassées.
+- **FUS-FR21 :** Une facture se rend selon 8 modèles (dont ticket 58/80 mm) avec signatures client/vendeur facultatives ; le rendu fonctionne hors ligne dans l'app et côté serveur pour le lien public.
+- **FUS-FR22 :** Une facture s'envoie par WhatsApp, SMS ou email (quotas FUS-FR8) avec un lien public dont la durée est paramétrable ; les liens Bref historiques restent valides.
+- **FUS-FR23 :** Les factures historiques Bref conservent leur référence (`BRF-…`) ; les nouvelles suivent la numérotation sans trou `FAC-`.
+- **FUS-FR24 :** Le chiffre d'affaires, les rapports, la rentabilité et le classement des vendeurs comptent les ventes caisse et les factures sans vente source, sans double comptage.
+
+**Nouveaux modules**
+
+- **FUS-FR25 :** Module `expenses` : dépenses par boutique et catégorie (10 catégories Bref), hors ligne.
+- **FUS-FR26 :** Module `finance` : résultat (CA HT − dépenses), marge, variations, séries par période.
+- **FUS-FR27 :** Module `ai-assistant` : questions guidées gratuites, chat libre décompté par quota, fournisseur configurable.
+- **FUS-FR28 :** Module `whatsapp-cloud` : compte WhatsApp Business par tenant, boîte de réception, modèles de messages, campagnes clients respectant le consentement marketing.
+- **FUS-FR29 :** Module `client-portal` : un client final retrouve, par OTP sur son téléphone, toutes ses factures quel que soit le commerçant.
+- **FUS-FR30 :** Notifications in-app persistantes (liste, lu/non lu) en plus des push FCM.
+- **FUS-FR31 :** Le super-admin gère les versions minimales d'app par plateforme et identité ; l'app force la mise à jour en dessous.
+- **FUS-FR32 :** Le super-admin envoie des campagnes multi-canal (push, WhatsApp, SMS, email) à des segments de tenants.
+
+**Application mobile unifiée**
+
+- **FUS-FR33 :** Une seule base de code React Native produit deux applications (identité Keevo, identité Bref Point) différenciées par la marque, le bundle et le thème.
+- **FUS-FR34 :** L'app fonctionne hors ligne pour toutes les écritures métier (ventes, documents, paiements, stock, catalogue, clients, dépenses) via la file d'opérations du protocole Keevo.
+- **FUS-FR35 :** L'app n'affiche que les modules actifs du tenant et les permissions du rôle ; une route d'un module inactif n'est jamais atteignable.
+- **FUS-FR36 :** L'app propose verrouillage par PIN et biométrie, 7 langues (fr et en exposées d'abord), thème clair/sombre.
+- **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy) ⚠️§9.5.
+
+### Exigences de migration (`FUS-MIG`)
+
+- **FUS-MIG1 :** Un owner Bref est migré seul, de façon idempotente : rejouer son import est sans effet ou complète ce qui manque.
+- **FUS-MIG2 :** Tous les identifiants Bref (UUID) sont conservés ; chaque ligne importée est tracée dans `migration_records` (table, id source, checksum, note).
+- **FUS-MIG3 :** L'activation d'un owner migré est bloquée tant que la réconciliation (§10.3) présente un écart hors tolérance.
+- **FUS-MIG4 :** Pendant la migration d'un owner, ses écritures (et celles de ses membres) sont refusées par api-bref avec 423 `ACCOUNT_MIGRATING`, ses lectures restent possibles.
+- **FUS-MIG5 :** Le retour arrière d'un owner est possible jusqu'à son activation (suppression du tenant importé, dégel api-bref).
+- **FUS-MIG6 :** Aucune mutation locale Bref n'est perdue : le gel est refusé tant que l'appareil a des mutations en attente ; les lignes locales sans équivalent serveur sont montrées à l'owner.
+- **FUS-MIG7 :** Aucune opération Keevo locale n'est perdue : l'app Flutter ne propose la mise à jour que file vide et sans quarantaine.
+- **FUS-MIG8 :** Abonnements en vigueur, crédits, packs SMS et compteurs du mois sont reportés à l'identique ; la règle `SUBSCRIPTION_IN_FORCE` à la date de migration fait foi, jamais `user.plan` ⚠️§7.10.
+- **FUS-MIG9 :** Les liens publics Bref, les webhooks RevenueCat/MyCoolPay/Meta et les comptes WhatsApp Business restent fonctionnels avant, pendant et après la migration de chaque owner.
+- **FUS-MIG10 :** Chaque vague produit un rapport archivé (owners, compteurs, sommes, anomalies, durée) consultable dans le dashboard.
+
+### Exigences non fonctionnelles (`FUS-NFR`)
+
+- **FUS-NFR1 :** Compatibilité ascendante de `/api/v1` : toute évolution du backend pendant P1–P3 est additive (colonnes nullables, nouveaux endpoints, nouveaux champs de delta) ; la suite de tests Flutter et les `curl-tests-story-*.sh` restent verts jusqu'au retrait de Flutter.
+- **FUS-NFR2 :** Les règles d'architecture existantes (ArchUnit, Modulith `verify`, `EndpointEntitlementCoverageTest`, table feature→module) s'appliquent aux nouveaux modules sans exception.
+- **FUS-NFR3 :** Le backend supporte le nombre de tenants mesuré en P0 × 2 (boot, provisioning, migrations par module, sauvegardes) avec un temps de démarrage < 2 min et un import d'owner moyen < 60 s.
+- **FUS-NFR4 :** Données locales de l'app chiffrées (SQLCipher), clés en stockage sécurisé ; secrets serveur externalisés et fail-fast (10-3) ; tokens WABA chiffrés au repos.
+- **FUS-NFR5 :** L'app RN a une couverture de tests au moins équivalente à la spécification Flutter sur la couche données (mergers, politique de rejet, gate, calculs de montants) et des parcours Maestro hors ligne.
+- **FUS-NFR6 :** Contrats JSON partagés (`keevo/contracts/`) vérifiés à la fois par le backend et l'app (routes de modules, payloads de sync, datasets d'export).
+- **FUS-NFR7 :** Gel d'un owner < 15 min de bout en bout (gel → activation) pour un owner moyen ; aucune indisponibilité globale planifiée.
+- **FUS-NFR8 :** Montants en entiers XAF ; calcul des totaux identique dans l'app et le serveur (même jeu de cas de test partagé).
+- **FUS-NFR9 :** Journées métier en Africa/Douala (WAT) ; dates civiles importées telles quelles.
+- **FUS-NFR10 :** Observabilité de la migration : métriques par vague (durée, échecs, écarts), logs corrélés `tenantId`/`migrationBatchId`.
+
+### Exigences UX (`FUS-UX`)
+
+- **FUS-UX1 :** Le shell visuel de Bref (HeroUI Native, uniwind, thème, typographie) est le design system de l'app unifiée ; les écrans Keevo sont redessinés dedans.
+- **FUS-UX2 :** Un owner ex-Keevo retrouve son parcours Caisse comme écran d'accueil ; un owner ex-Bref retrouve son parcours Document (création de facture en 5 étapes).
+- **FUS-UX3 :** États de synchronisation visibles et compréhensibles : indicateur de connexion, bannières J5/J6/J7, écran « opérations bloquées », journal de synchronisation.
+- **FUS-UX4 :** Écrans de migration : bannière d'annonce, refus motivé (mutations en attente), « migration en cours », « compte migré, mettez à jour ».
+- **FUS-UX5 :** Écran « Mon plan » unique : plan, échéance, quotas consommés, crédit, souscription en libre-service.
+
+### Exigences additionnelles (architecture)
+
+- Nouveaux modules backend (manifeste, `db/modules/<id>/`, permissions, `DeltaEntityProvider`, routes d'app) : `expenses`, `finance`, `ai-assistant`, `whatsapp-cloud`, `client-portal`, `payments`, `migration` (temporaire) ; extensions de `identity`, `messaging`, `invoicing`, `catalog`, `crm`, `store`, `admin`, `entitlement` (Annexe B de l'analyse).
+- Tables `public` nouvelles : `user_authenticators` (ou colonnes `users`), `otp_challenges`, `usage_counters`, `external_subscriptions`, `tenant_credits`, `app_versions`, `invoice_phone_index`, `portal_clients`, `migration_batches`, `migration_records`.
+- App : monorepo pnpm `packages/{core,data,ui,pos,invoicing,catalog,inventory,crm,expenses,finance,...}` ; registre de modules client ; table feature→module testée contre `contracts/module-routes.json`.
+- Infrastructure : routeur de webhooks (reverse proxy à double livraison), redirection des liens publics, réplica en lecture ou endpoint d'export api-bref, stockage fichiers (logos, signatures, PDF).
+
+---
+
+## Couverture des exigences
+
+| Exigence | Epic | Note |
+|---|---|---|
+| FUS-FR1, FR2, FR3, FR5, FR6 | **19** | identité étendue (backend) ; écrans en **22** (Keevo) et **23** (OTP/social) |
+| FUS-FR4 | **19** | rôles + permissions par module |
+| FUS-FR7, FR8, FR11 | **19** | profils/bundles (s'appuie sur 16-2/16-8) + compteurs |
+| FUS-FR9, FR10 | **21** (backend) / **23** (écrans) | paiement libre-service |
+| FUS-FR12 | **19** | extension store |
+| FUS-FR13–FR16 | **20** | catalog/crm étendus, dérivation |
+| FUS-FR17 | **19** (préférence) / **22** + **23** (navigation) | deux parcours |
+| FUS-FR18–FR23 | **20** (backend) / **23** (écrans) | invoicing étendu |
+| FUS-FR24 | **20** | reporting multi-source |
+| FUS-FR25, FR26 | **20** / **23** | expenses, finance |
+| FUS-FR27–FR32 | **21** / **23** | IA, WhatsApp Cloud, portail, notifications, versions, campagnes |
+| FUS-FR33–FR36 | **22** | app RN, identités, offline, modules |
+| FUS-FR37 | **23** | mode legacy |
+| FUS-MIG1–MIG5, MIG8–MIG10 | **24** | outil de migration et vagues |
+| FUS-MIG6 | **24** (pré-migrateur OTA) | |
+| FUS-MIG7 | **22** (dernière release Flutter) | |
+| FUS-NFR1 | **transverse**, contrôlé à chaque story 19–21 | |
+| FUS-NFR3 | **19** (story 19.11) | |
+| FUS-NFR5, NFR6, NFR8 | **22** | |
+| FUS-NFR7, NFR10 | **24** | |
+| FUS-UX1–UX3 | **22** | |
+| FUS-UX4 | **23** / **24** | |
+| FUS-UX5 | **23** | |
+
+---
+
+## Epic List
+
+### Epic 18 : Cadrage de la fusion (P0)
+**Valeur :** décider sur des chiffres, pas sur des suppositions. Mesurer les bases, trancher les décisions ouvertes, geler le périmètre de Bref, sécuriser les identités d'app.
+**Exigences :** prépare toutes les autres ; aucune FR livrée.
+**Dépend de :** rien. **Bloque :** 19 (décisions Q10/Q12), 24 (mesures Q1–Q8).
+
+### Epic 19 : Socle d'accueil — identité, rôles, plans, quotas (P1a)
+**Valeur :** le backend Keevo sait accueillir un utilisateur Bref tel qu'il est : sans téléphone, connecté par OTP ou Google/Apple, avec ses rôles et son plan.
+**Exigences :** FUS-FR1–FR8, FR11, FR12, FR17 (préférence), FUS-NFR1, FUS-NFR3.
+**Dépend de :** Epic 16 (16-2, 16-3, 16-5, 16-8), story 18.2.
+
+### Epic 20 : Modules métier Bref dans Keevo — documents, catalogue, clients, dépenses, finance (P1b)
+**Valeur :** tout ce qu'un commerçant Bref fait au quotidien existe dans Keevo, sans casser ce qu'un commerçant Keevo fait déjà.
+**Exigences :** FUS-FR13–FR26.
+**Dépend de :** 19.1, 19.5, 19.7, 19.8.
+
+### Epic 21 : Monétisation en libre-service et engagement (P1b)
+**Valeur :** l'owner paie seul, Keevo encaisse et active ; les fonctions d'engagement de Bref (IA, WhatsApp Business, portail client, notifications, campagnes) sont reprises.
+**Exigences :** FUS-FR9, FR10, FR27–FR32.
+**Dépend de :** 19.7, 19.8, 19.9.
+
+### Epic 22 : App React Native — fondations et parité Keevo (P2)
+**Valeur :** les utilisateurs Keevo passent sur la nouvelle app par une simple mise à jour, sans perte, avec un hors-ligne au moins aussi fiable qu'en Flutter.
+**Exigences :** FUS-FR33–FR36, FUS-MIG7, FUS-NFR5, NFR6, NFR8, FUS-UX1–UX3.
+**Dépend de :** 18.4 (identité Keevo), 19.2 (login), contrats `keevo/contracts/`.
+
+### Epic 23 : App React Native — parité Bref (P3)
+**Valeur :** un owner Bref retrouve dans l'app unifiée tous ses parcours, et l'app peut être publiée sous `com.brefpoint.app`.
+**Exigences :** FUS-FR9 (écrans), FR17–FR22 (écrans), FR25–FR29 (écrans), FR36, FR37, FUS-UX2, UX4, UX5.
+**Dépend de :** 22 (fondations), 20, 21.
+
+### Epic 24 : Migration Bref par vagues (P1c + P4)
+**Valeur :** chaque owner Bref et ses données arrivent dans Keevo, vérifiés au franc près, avec retour arrière possible jusqu'à l'activation.
+**Exigences :** FUS-MIG1–MIG6, MIG8–MIG10, FUS-NFR7, NFR10.
+**Dépend de :** 19, 20, 21 (cibles d'import) ; 23 (app à proposer aux migrés) avant la première vague.
+
+### Epic 25 : Convergence et décommissionnement (P5)
+**Valeur :** une app, un backend, une facture d'hébergement ; plus de code transitoire.
+**Dépend de :** 24 terminé (aucun owner actif sur api-bref), 22.19 (Flutter retiré).
+
+### Ordonnancement
+
+```
+Epic 16 (prod refonte) ───────┐
+Epic 18 (P0) ─────────────────┼──► Epic 19 (P1a) ──► Epic 20 + 21 (P1b) ──► Epic 24.1–24.10 (outil, dry-run)
+                              │          │                                          │
+                              │          └─(+4 sem)──► Epic 22 (P2, app RN Keevo) ──┤
+                              │                              │                      │
+                              │                              └──► Epic 23 (P3) ─────┴──► Epic 24.11–24.16 (vagues, P4)
+                              │                                                                   │
+                              └───────────────────────────────────────────────────────────────────┴──► Epic 25 (P5)
+```
+
+**Point de non-retour** : story 24.15 (première vague pilote activée). Avant, toute la fusion peut être suspendue sans impact utilisateur.
+
+---
+
+## Epic 18 : Cadrage de la fusion (P0)
+
+> Aucune ligne de code produit. Sortie : un dossier de mesures, des décisions écrites, un périmètre Bref gelé. Durée : 2 semaines.
+
+### Story 18.1 : Mesurer les bases Bref et Keevo (Q1–Q9, Q13)
+
+As a **responsable de la fusion**,
+I want **des chiffres exacts sur les owners, données, identités et abonnements des deux bases**,
+So that **le dimensionnement, l'ordre des vagues et les décisions produit reposent sur des faits**.
+
+**Acceptance Criteria:**
+
+**Given** un réplica (ou dump restauré en local) de la base api-bref de production et de la base Keevo de production
+**When** le script de mesures en lecture seule est exécuté
+**Then** il produit un rapport daté contenant : owners total/actifs < 90 j/payants par plan et par moyen de paiement (Q1), volumes par table (Q2), owners et membres sans téléphone (Q3), intersection des téléphones normalisés E.164 Bref ∩ Keevo (Q4), boutiques hors CM et TVA ≠ 19,25 %, montants non entiers (Q5), crédits et packs SMS restants (Q6), factures dont `total` ≠ recalcul (Q7), owners `plan ≠ free` sans abonnement en vigueur (Q8)
+
+**Given** les historiques de déploiement (GHCR, consoles stores)
+**When** on les consulte
+**Then** le rapport indique la date de mise en production de `develop` sur api-bref (Q13) et l'identité réelle de l'app Keevo publiée : `applicationId`, signature, comptes développeur Google/Apple disponibles (Q9, R11)
+
+**Implementation Notes:**
+- Scripts SQL versionnés dans `_bmad-output/planning-artifacts/research/fusion-mesures/` (aucun accès en écriture, aucune donnée personnelle dans le rapport : agrégats seulement).
+- Normalisation téléphone : réutiliser la logique de `PhoneNumbers.normalize` (Keevo) appliquée aux deux côtés pour Q4.
+
+### Story 18.2 : Trancher les décisions produit ouvertes (gate P0)
+
+As a **owner produit**,
+I want **une décision écrite pour chaque question ouverte**,
+So that **aucune story ne démarre sur une hypothèse non validée**.
+
+**Acceptance Criteria:**
+
+**Given** le rapport 18.1
+**When** la session de décision est tenue
+**Then** un ADR par décision est ajouté en annexe de ce document : Q10 (plan FREE unifié, trial, grille), Q11 (marque), Q12 (pays), §7.10 (grâce 30 j ou FREE), §7.5 (clients tenant), §9.5 (publication précoce sous `com.brefpoint.app`), et le champ `status` du frontmatter passe à `ready`
+
+**Given** une décision qui contredit une recommandation de l'analyse
+**When** l'ADR est rédigé
+**Then** les stories impactées (tag ⚠️) sont listées et mises à jour dans ce document avant leur passage en `ready-for-dev`
+
+### Story 18.3 : Geler le périmètre fonctionnel de Bref
+
+As a **responsable de la fusion**,
+I want **qu'aucune nouvelle fonctionnalité ne soit ajoutée à Bref pendant la fusion**,
+So that **la cible ne bouge pas pendant qu'on la reproduit**.
+
+**Acceptance Criteria:**
+
+**Given** les dépôts `AI/bref` et `AI/api-bref`
+**When** le gel est prononcé
+**Then** les branches `develop` sont étiquetées `pre-fusion-freeze` (tag git), une règle écrite autorise uniquement correctifs de sécurité, correctifs bloquants et évolutions demandées par l'Epic 24 (statut de migration, gel, export, pré-migrateur), et toute exception est consignée dans ce document
+
+**Given** un correctif livré sur Bref pendant la fusion
+**When** il change une règle métier (calcul, statut, quota)
+**Then** une story miroir est ajoutée à l'Epic 20 ou 21
+
+### Story 18.4 : Sécuriser les identités d'app et les comptes stores
+
+As a **responsable de la fusion**,
+I want **savoir sous quelles identités chaque base d'utilisateurs recevra la nouvelle app**,
+So that **la mise à jour remplace l'app installée au lieu d'en créer une seconde**.
+
+**Acceptance Criteria:**
+
+**Given** la fiche Play Store Keevo en production
+**When** on vérifie l'`applicationId` et la clé de signature (Play App Signing)
+**Then** l'identité est documentée et la clé d'upload est disponible pour EAS ; si l'app publiée est `com.example.keevo`, la décision (conserver cet identifiant ou republier) est actée avec son impact (une nouvelle fiche = réinstallation)
+
+**Given** le compte Apple de Bref (Team `N9534K29PS`) et le projet EAS `bb0b6dbe-…`
+**When** on prépare la publication iOS de l'identité Keevo
+**Then** l'App ID, le bundle et les certificats Keevo sont créés (ou la décision de ne pas publier Keevo sur iOS en P2 est actée)
+
+### Story 18.5 : Product brief et PRD de fusion
+
+As a **owner produit**,
+I want **un brief et un PRD de fusion issus de l'analyse et des décisions 18.2**,
+So that **les FR ci-dessus ont une source produit tracée et que la validation d'implémentation (`bmad-sprint-planning`) puisse s'appuyer dessus**.
+
+**Acceptance Criteria:**
+
+**Given** l'analyse et les ADR 18.2
+**When** `bmad-product-brief` puis `bmad-prd` sont exécutés
+**Then** `prd-fusion-keevo-bref.md` reprend les FUS-FR/MIG/NFR/UX de ce document, sans contradiction, et `architecture.md` reçoit une section « Fusion Bref » (identité étendue, invoicing étendu, reporting multi-source, app RN, migration) via `bmad-architecture`
+
+---
+
+## Epic 19 : Socle d'accueil — identité, rôles, plans, quotas (P1a)
+
+> Tout est **additif** (FUS-NFR1) : l'app Flutter en production doit continuer de fonctionner sans mise à jour. Chaque story vérifie la non-régression avec la suite Flutter et les `curl-tests-story-*.sh` concernés.
+
+### Story 19.1 : Étendre `public.users` (identifiants multiples, profil)
+
+As a **plateforme**,
+I want **un compte utilisateur qui accepte téléphone, email ou username comme identifiant**,
+So that **les comptes Bref email-only et les membres sans téléphone puissent exister dans Keevo**.
+
+**Acceptance Criteria:**
+
+**Given** la migration Flyway `public`
+**When** elle s'applique sur une copie de prod Keevo
+**Then** `phone_number` et `password_hash` deviennent nullables, `email` (UNIQUE, nullable, insensible à la casse), `username` (UNIQUE, nullable, insensible à la casse), `first_name`, `last_name`, `email_verified_at`, `phone_verified_at` sont ajoutés, une contrainte CHECK impose au moins un identifiant, et aucune ligne existante n'est modifiée
+
+**Given** un utilisateur Keevo existant
+**When** il se connecte avec l'app Flutter actuelle
+**Then** le comportement est identique (téléphone + mot de passe, `select-tenant`)
+
+**Given** les DTO exposés à l'app Flutter
+**When** un champ est nullable côté base
+**Then** les réponses existantes ne renvoient jamais `null` là où Flutter attend une valeur (champ omis ou chaîne vide documentés)
+
+### Story 19.2 : Authenticator OTP (SMS, WhatsApp, email)
+
+As a **commerçant**,
+I want **me connecter avec un code reçu par SMS, WhatsApp ou email**,
+So that **je n'ai pas besoin de mot de passe (parcours Bref)**.
+
+**Acceptance Criteria:**
+
+**Given** un identifiant (téléphone E.164 ou email)
+**When** `POST /api/v1/auth/otp/request` est appelé
+**Then** un code à 6 chiffres est envoyé par le canal demandé, stocké haché avec expiration (5 min), compteur d'essais en base (5 max), limitation par identifiant et par IP, et la réponse ne révèle pas si le compte existe
+
+**Given** un code valide
+**When** `POST /api/v1/auth/otp/verify` est appelé
+**Then** la réponse suit le login 2 étapes Keevo (`loginToken` puis `select-tenant`, ou tokens directs si un seul tenant) ; si le compte n'existe pas, un compte est créé sans tenant et l'app enchaîne sur la création d'entreprise ; `phone_verified_at`/`email_verified_at` est renseigné
+
+**Given** un téléphone hors des préfixes autorisés par la décision Q12
+**When** un code est demandé
+**Then** la demande est refusée avec `PHONE_COUNTRY_NOT_SUPPORTED`
+
+**Implementation Notes:** porter la normalisation et le décompte d'échecs de `api-bref/src/otp/*` ; réutiliser `WhatsAppMessageService` existant pour le canal WhatsApp ; SMS/email via 19.9.
+
+### Story 19.3 : Authenticators Google et Apple
+
+As a **commerçant**,
+I want **me connecter avec Google ou Apple**,
+So that **mon compte Bref social fonctionne dans l'app unifiée**.
+
+**Acceptance Criteria:**
+
+**Given** un `idToken` Google (audiences Android/iOS/web configurées) ou Apple (JWKS, `aud` = bundle(s) autorisés)
+**When** `POST /api/v1/auth/social/{google|apple}` est appelé
+**Then** le token est vérifié côté serveur, le compte est trouvé par `(provider, social_id)`, sinon lié par email **uniquement** si l'email est vérifié et que le compte trouvé n'est pas uniquement membre (FUS-FR6), sinon créé ; la suite suit le login 2 étapes
+
+**Given** Apple qui ne renvoie l'email qu'au premier consentement
+**When** le compte existe déjà avec ce `social_id`
+**Then** l'absence d'email n'empêche pas la connexion
+
+**Given** les deux bundles (Keevo, `com.brefpoint.app`)
+**When** l'un ou l'autre envoie un token
+**Then** les deux audiences sont acceptées
+
+### Story 19.4 : Connexion par username pour les membres
+
+As a **membre d'équipe ex-Bref**,
+I want **me connecter avec l'identifiant et le mot de passe que mon patron m'a donnés**,
+So that **je n'ai rien à changer après la migration**.
+
+**Acceptance Criteria:**
+
+**Given** un compte avec `username` et `password_hash` bcrypt (`$2a$`/`$2b$`, coût 12)
+**When** `POST /api/v1/auth/login` reçoit `{username, password}`
+**Then** `BCryptPasswordEncoder` valide le hash sans réécriture forcée, et la suite suit le login 2 étapes
+
+**Given** un owner
+**When** il crée un membre (`POST /employees`) avec un username sans téléphone
+**Then** le membre est créé ; l'unicité du username est globale ; le mot de passe temporaire n'est renvoyé qu'une fois (FUS-FR5)
+
+### Story 19.5 : Rôles MANAGER et VIEWER, permissions par rôle
+
+As a **owner**,
+I want **donner à mes membres un rôle gérant, vendeur ou lecteur**,
+So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/seller/viewer Bref)**.
+
+**Acceptance Criteria:**
+
+**Given** l'enum de rôle de membership
+**When** la migration s'applique
+**Then** MANAGER et VIEWER s'ajoutent à OWNER/EMPLOYEE, sans modifier les memberships existantes
+
+**Given** `KeevoModule.employeePermissions()`
+**When** il est généralisé en `permissionsFor(Role)`
+**Then** chaque manifeste déclare les permissions par rôle ; VIEWER n'a aucune permission d'écriture ; MANAGER = EMPLOYEE + gestion de l'équipe de sa boutique + lecture CRM/produits ; `ModulePermissions` valide au boot que chaque rôle a une déclaration explicite par module
+
+**Given** un VIEWER
+**When** il appelle n'importe quel endpoint d'écriture ou pousse une opération de sync
+**Then** il reçoit 403 `FORBIDDEN` (HTTP) ou `REJECTED/FORBIDDEN` (sync), vérifié par un test paramétré sur tous les endpoints de `EndpointEntitlementCoverageTest`
+
+**Given** le profil `/auth/profile` (le rôle n'est plus dans le jeton, refonte 16.11)
+**When** l'app Flutter actuelle reçoit un rôle MANAGER ou VIEWER
+**Then** elle ne plante pas (rôle inconnu traité comme EMPLOYEE en lecture) — test sur le parseur Flutter
+
+### Story 19.6 : Une personne, plusieurs rôles dans plusieurs entreprises
+
+As a **commerçant qui utilise Keevo et Bref**,
+I want **un seul compte pour mes deux entreprises, ou pour être patron ici et employé là**,
+So that **la réconciliation d'identité ne me force pas à choisir**.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur existant (par téléphone, email ou username)
+**When** un owner l'ajoute comme membre
+**Then** une membership est ajoutée au compte existant au lieu de lever `USER_ALREADY_EXISTS` ; l'utilisateur est notifié ; son mot de passe n'est pas modifié
+
+**Given** un utilisateur avec deux memberships
+**When** il se connecte
+**Then** le tenant-picker liste les deux entreprises avec leur rôle
+
+### Story 19.7 : Profils PRO, TEAM, BUSINESS et bundles associés ⚠️Q10
+
+As a **super-admin**,
+I want **les plans Bref comme profils Keevo configurables**,
+So that **chaque owner migré retrouve exactement ses droits et que la grille soit unique**.
+
+**Acceptance Criteria:**
+
+**Given** `plan_profiles`/`profile_modules` (16-8) et les bundles (16-2)
+**When** le seed de fusion s'applique
+**Then** les profils FREE, PRO, TEAM, BUSINESS existent avec modules et plafonds issus de l'ADR Q10 (base : free = 1 boutique / 1 membre / 300 documents par mois / 5 SMS / 100 emails ; PRO + dépenses, finance ; BUSINESS + campagnes, modèles, boîte WhatsApp) et les tenants PREMIUM existants sont rattachés à TEAM sans perte de module
+
+**Given** les limites membres de Bref (par boutique)
+**When** un owner ajoute un membre au-delà de la limite de son profil
+**Then** il reçoit `PLAN_LIMIT_EXCEEDED` avec la limite et l'usage
+
+**Given** l'app Flutter actuelle
+**When** elle lit `/tenants/me` (plan)
+**Then** un tenant PRO/TEAM/BUSINESS est présenté comme Premium (compatibilité)
+
+### Story 19.8 : Compteurs d'usage et quotas atomiques
+
+As a **plateforme**,
+I want **décompter documents, SMS, emails et requêtes IA par tenant et par mois**,
+So that **les quotas Bref sont appliqués sans course entre appareils**.
+
+**Acceptance Criteria:**
+
+**Given** `public.usage_counters(tenant_id, metric, period, used)` et les limites du profil
+**When** `UsageQuotaService.assertAndIncrement(tenant, metric, n)` est appelé en concurrence (10 threads)
+**Then** une seule requête `UPDATE … SET used = used + n WHERE used + n <= limit RETURNING used` garantit qu'aucun dépassement n'a lieu (test d'intégration Testcontainers)
+
+**Given** un dépassement
+**When** l'opération est une écriture du cœur (vente caisse, paiement)
+**Then** elle n'est jamais bloquée par un quota ; seuls documents (au-delà du plafond FREE), SMS, emails et IA le sont, avec `QUOTA_EXCEEDED {metric, limit, resetAt}`
+
+**Given** une opération de sync rejouée (`DUPLICATE`)
+**When** elle était déjà décomptée
+**Then** le compteur n'est pas incrémenté une seconde fois
+
+**Given** les packs SMS achetés (crédit hors période)
+**When** le quota mensuel est épuisé
+**Then** le pack est consommé ensuite
+
+### Story 19.9 : Fournisseurs SMS et email, notifications persistantes
+
+As a **plateforme**,
+I want **envoyer des SMS (MboaSMS, Infobip) et des emails (Resend), et conserver les notifications in-app**,
+So that **OTP, envoi de documents et notifications Bref fonctionnent dans Keevo**.
+
+**Acceptance Criteria:**
+
+**Given** les ports `SmsSender` et `EmailSender` du module `messaging`
+**When** un fournisseur échoue
+**Then** le suivant est essayé (ordre configurable), l'échec est journalisé sans secret, et le quota n'est décompté qu'en cas de succès
+
+**Given** les secrets des fournisseurs
+**When** l'application démarre en profil prod sans eux
+**Then** elle échoue au démarrage (fail-fast 10-3) seulement si le canal est activé
+
+**Given** `notifications` (par tenant : user, type, titre, corps, données, lu_at)
+**When** un événement métier notifiable survient
+**Then** une notification est persistée, exposée par `GET /notifications` (paginé, compteur non lus) et `PATCH /notifications/{id}/read`, et un push FCM est envoyé si un token existe
+
+### Story 19.10 : Versions minimales d'app
+
+As a **super-admin**,
+I want **imposer une version minimale par plateforme et par identité d'app**,
+So that **je peux retirer Flutter et l'ancienne app Bref en temps voulu (FUS-FR31)**.
+
+**Acceptance Criteria:**
+
+**Given** `public.app_versions(app_identity, platform, min_version, latest_version, store_url, message)`
+**When** `GET /api/v1/app-version/check?identity=&platform=&version=` est appelé sans authentification
+**Then** la réponse indique `{updateRequired, updateAvailable, storeUrl, message}`, et la page dashboard permet de modifier ces valeurs avec audit
+
+### Story 19.11 : Tenir la charge d'un grand nombre de tenants (R1)
+
+As a **exploitant**,
+I want **un backend qui démarre et migre vite avec le nombre de tenants mesuré en P0 × 2**,
+So that **l'arrivée des owners Bref ne dégrade pas le service (FUS-NFR3)**.
+
+**Acceptance Criteria:**
+
+**Given** le DDL tenant encore produit par `TenantSchemaProvisioner` + `TenantSchemaSyncService` au boot
+**When** la story est livrée
+**Then** le DDL des tables du cœur est sous Flyway par module (item deferred 16-5), `TenantSchemaSyncService` n'est plus appelé au boot, et un test de charge sur staging avec N schémas (N = mesure Q1 × 2) mesure : démarrage < 2 min, provisioning d'un tenant < 5 s, application d'une migration de module à tous les schémas < 10 min, durée de sauvegarde/restauration
+
+**Given** un résultat de charge hors objectif
+**When** le rapport est rédigé
+**Then** une décision d'architecture (pool de connexions, migrations paresseuses par tenant, schéma partagé pour les tenants FREE inactifs) est actée avant l'Epic 24
+
+### Story 19.12 : Boutiques étendues et préférence de parcours de vente
+
+As a **owner**,
+I want **décrire mes boutiques comme dans Bref et choisir mon parcours de vente par défaut**,
+So that **un ex-Bref arrive sur ses documents et un ex-Keevo sur sa caisse (FUS-FR12, FR17)**.
+
+**Acceptance Criteria:**
+
+**Given** la table `stores`
+**When** la migration s'applique
+**Then** `category` (19 valeurs Bref), `description`, `logo_path`, `niu`, `rccm`, `country` (défaut CM) sont ajoutés, exposés en lecture/écriture (OWNER) et dans le delta de sync (champs additionnels ignorés par Flutter)
+
+**Given** `tenant_preferences.default_sale_flow ∈ {POS, DOCUMENT}`
+**When** un tenant existant est lu
+**Then** la valeur est POS ; un tenant importé de Bref reçoit DOCUMENT ; l'owner peut la modifier
+
+**Given** un logo envoyé
+**When** il est stocké
+**Then** il passe par le port de stockage de fichiers (disque aujourd'hui, S3 optionnel), taille et type contrôlés
+
+---
+
+## Epic 20 : Modules métier Bref dans Keevo — documents, catalogue, clients, dépenses, finance (P1b)
+
+> Référence fonctionnelle : api-bref `develop` (`src/invoice/*`, `src/expense/*`, `src/finance/*`, `product-key.ts`, `customer.repository.ts`). Référence technique : socle modulaire Keevo (manifeste, `db/modules/<id>/`, `DeltaEntityProvider`, opérations de sync idempotentes, capacités). Chaque nouvelle opération de sync est ajoutée à `contracts/invoice-sync-payloads.json` (ou à un contrat dédié) pour être vérifiée par l'app RN.
+
+### Story 20.1 : Catalogue étendu — produits sans stock, clé, code-barres, fusion
+
+> **2026-11-01** : §7.3 tranché — le suivi de stock par produit (`track_stock`, défaut `true`, case dans le formulaire produit, activation/désactivation) est livré par la story **17.12** de la refonte. Ici, il ne reste qu'à vérifier que le comportement couvre les produits Bref (défaut `false` à l'import et à la dérivation depuis une facture, 20.x) ; les deux premiers critères ci-dessous sont des critères de non-régression.
+
+As a **commerçant de services ou de documents**,
+I want **des produits qui ne suivent pas de stock et qui se dédupliquent**,
+So that **mes articles Bref fonctionnent dans Keevo sans fausses ruptures (FUS-FR13, FR14)**.
+
+**Acceptance Criteria:**
+
+**Given** un produit `track_stock=false`
+**When** il est vendu à la caisse
+**Then** aucun contrôle `INSUFFICIENT_STOCK`, aucun mouvement `SALE`, aucune ligne `stock_levels`, aucune alerte de seuil ; il est exclu des exports de stock et de l'inventaire
+
+**Given** un produit `track_stock=false`
+**When** l'owner active le suivi, avec ou sans stock initial (facultatif, 0 par défaut)
+**Then** un mouvement `INITIAL` est créé et le produit se comporte ensuite comme un produit Keevo
+
+**Given** `product_key` (`bc:<code-barres>` ou `nm:<nom normalisé>`, logique de `product-key.ts`)
+**When** deux produits sont fusionnés (`POST /products/{id}/merge`)
+**Then** le fusionné est archivé avec `merged_into_id`, les lookups le redirigent, les lignes historiques restent intactes, et le pull de sync transmet la redirection (déjà géré par l'app Flutter)
+
+**Given** un code-barres scanné
+**When** `GET /products/lookup?barcode=` est appelé
+**Then** le produit (ou sa cible de fusion) est renvoyé
+
+### Story 20.2 : CRM étendu ⚠️§7.5
+
+As a **commerçant**,
+I want **des fiches clients complètes et un consentement marketing tracé**,
+So that **mes clients Bref et mes campagnes sont conformes (FUS-FR15)**.
+
+**Acceptance Criteria:**
+
+**Given** la table `clients`
+**When** la migration Flyway du module `crm` s'applique
+**Then** `client_type`, `niu`, `rccm`, `address`, `contact_name`, `website`, `birth_date`, `store_id` (nullable), `phone_normalized`, `marketing_consent_at`, `marketing_opt_out_at`, `marketing_consent_by` sont ajoutés et synchronisés
+
+**Given** la création d'un client dont le téléphone normalisé existe déjà dans le tenant
+**When** l'owner valide
+**Then** le serveur renvoie un avertissement `DUPLICATE_PHONE` avec la fiche existante, sans contrainte d'unicité en base
+
+**Given** un retrait de consentement
+**When** il est enregistré
+**Then** le client est exclu de toute campagne (21.6) dès l'enregistrement
+
+### Story 20.3 : Devis (`kind = QUOTE`)
+
+As a **commerçant**,
+I want **faire un devis, le modifier, puis le convertir en facture**,
+So that **je retrouve le parcours devis de Bref (FUS-FR18)**.
+
+**Acceptance Criteria:**
+
+**Given** le module `invoicing`
+**When** un devis est créé, modifié (contrôle `expected_updated_at` → 409 en cas de conflit) ou annulé
+**Then** il n'a pas de numéro `FAC-`, ne consomme pas le compteur de facturation légale, et apparaît dans les listes avec le filtre Devis
+
+**Given** un devis
+**When** il est converti (`POST /invoices/{id}/convert` ou opération de sync `CONVERT_QUOTE` idempotente)
+**Then** une facture ISSUED est créée avec un numéro sans trou, `issue_date` = date de conversion, le devis passe CONVERTED avec lien vers la facture
+
+**Given** une facture émise
+**When** on tente de la modifier
+**Then** le refus actuel est conservé (conformité DGI)
+
+### Story 20.4 : Encaissements — acompte, paiements partiels, échéancier, retard
+
+As a **commerçant**,
+I want **enregistrer un acompte, des paiements partiels et un échéancier**,
+So that **je sais qui me doit quoi (FUS-FR20)**.
+
+**Acceptance Criteria:**
+
+**Given** `invoice_payments(id, invoice_id, amount, due_date, paid_at, method, note)`
+**When** des paiements sont ajoutés (HTTP ou opérations de sync `ADD_INVOICE_PAYMENT`/`SETTLE_INVOICE_PAYMENT` idempotentes)
+**Then** `payment_state ∈ {UNPAID, PARTIAL, PAID, OVERDUE}` est recalculé par le serveur sous verrou de ligne, la somme payée ne dépasse jamais le total (`OVERPAYMENT`), et `paid_at` historique est renseigné quand l'état devient PAID
+
+**Given** le job quotidien (WAT, `@SchedulerLock`)
+**When** une échéance non payée est dépassée
+**Then** la facture passe OVERDUE et une notification est émise à l'owner
+
+**Given** une facture Keevo existante (un seul `paid_at`)
+**When** elle est lue
+**Then** elle est présentée comme un paiement unique : aucune migration destructive, compatibilité Flutter conservée
+
+**Given** les cas de calcul (acompte = total, échéances multiples, annulation)
+**When** les tests s'exécutent
+**Then** le jeu de cas est publié dans `contracts/` et réutilisé par les tests de l'app RN (FUS-NFR8)
+
+### Story 20.5 : Remise, livraison, TVA par facture, échéance, données client
+
+As a **commerçant**,
+I want **une facture qui porte remise, frais de livraison, TVA propre ou exonération et date d'échéance**,
+So that **mes factures Bref sont reproduites à l'identique (FUS-FR19)**.
+
+**Acceptance Criteria:**
+
+**Given** `discount_amount`, `delivery_fee`, `vat_rate` (nullable, défaut vendeur), `vat_exempt`, `due_date`, `client_rccm`, `client_email`, `invoice_items.product_id` (nullable), `invoice_items.reference`
+**When** une facture est calculée
+**Then** remise appliquée avant TVA, livraison hors assiette TVA, arrondi HALF_UP par ligne puis total, et le résultat est identique au calcul Bref sur 50 factures de référence extraites de la copie de prod (montants entiers XAF)
+
+**Given** le pays de la boutique (ADR Q12)
+**When** aucun taux n'est donné
+**Then** le taux par défaut du pays s'applique (CM 19,25 %)
+
+### Story 20.6 : Dérivation catalogue et CRM depuis un document
+
+As a **commerçant pressé**,
+I want **que mes clients et articles se créent tout seuls quand je fais une facture**,
+So that **je retrouve le comportement Bref sans saisie préalable (FUS-FR16)**.
+
+**Acceptance Criteria:**
+
+**Given** les modules `crm` et `catalog` actifs et la préférence `derive_from_documents=true` (défaut DOCUMENT)
+**When** une facture est émise avec un client non lié
+**Then** le client est trouvé par téléphone normalisé ou créé, via `ClientLookupPort`, dans la même transaction que la facture (contrairement à Bref, où ces effets n'étaient pas transactionnels)
+
+**Given** une ligne sans `product_id`
+**When** la facture est émise
+**Then** le produit est trouvé par `product_key` ou créé `track_stock=false` avec le prix de la ligne, via `ProductLookupPort`, et la ligne est liée
+
+**Given** `crm` ou `catalog` inactif
+**When** la facture est émise
+**Then** aucune dérivation n'a lieu et la facture reste valide (autonomie du module)
+
+### Story 20.7 : Modèles de rendu, signatures, liens publics
+
+As a **commerçant**,
+I want **choisir parmi les 8 modèles Bref, signer et partager un lien qui dure**,
+So that **mes documents ont la même allure qu'avant (FUS-FR21, FR22, FR23)**.
+
+**Acceptance Criteria:**
+
+**Given** `invoice_template` (8 valeurs), `ticket_width ∈ {58, 80, A4}`, `signature_client_path`, `signature_seller_path`
+**When** le PDF serveur est généré
+**Then** les 8 modèles Thymeleaf reproduisent les modèles de `features/invoice/components/invoice-templates/*` (comparaison visuelle sur 3 factures types par modèle)
+
+**Given** le lien public
+**When** sa durée est configurée par tenant (défaut 30 j Keevo, 90 j pour les tenants importés)
+**Then** le lien signé HMAC respecte cette durée et peut être régénéré (rotation)
+
+**Given** `legacy_public_token` et `legacy_reference` (`BRF-xxxxxxxx`)
+**When** une facture importée est ouverte par un ancien lien Bref redirigé
+**Then** elle s'affiche ; la référence `BRF-` apparaît sur le PDF à côté du numéro légal s'il existe
+
+### Story 20.8 : Envoi des documents par SMS et email
+
+As a **commerçant**,
+I want **envoyer une facture par SMS ou email en plus de WhatsApp**,
+So that **je joins aussi les clients sans WhatsApp (FUS-FR22)**.
+
+**Acceptance Criteria:**
+
+**Given** une facture émise et un quota disponible
+**When** `POST /invoices/{id}/send {channel: SMS|EMAIL|WHATSAPP}` est appelé
+**Then** le message contient le lien public, l'envoi est journalisé, le quota (19.8) est décompté après succès, et un échec n'altère pas la facture
+
+**Given** un envoi hors ligne depuis l'app
+**When** l'opération `SEND_INVOICE` est poussée
+**Then** elle est idempotente (un seul envoi par `operationId`)
+
+### Story 20.9 : Reporting multi-source sans double comptage (R4)
+
+As a **owner**,
+I want **un chiffre d'affaires qui compte mes ventes caisse et mes factures, une seule fois chacune**,
+So that **mes tableaux de bord restent justes quel que soit mon parcours (FUS-FR24)**.
+
+**Acceptance Criteria:**
+
+**Given** la définition « CA = ventes COMPLETED ∪ factures ISSUED/PAID dont `source_sale_id IS NULL` (hors devis, hors annulées, avoirs déduits) »
+**When** le dashboard owner, les rapports quotidien/hebdomadaire, la rentabilité, le classement vendeurs et les exports sont calculés
+**Then** tous lisent une même source (`RevenueQueryPort` ou vue SQL) et un test d'acceptation couvre : caisse seule, documents seuls, mixte avec pont POS→facture (pas de double comptage), avoir, devis non compté
+
+**Given** un tenant ex-Bref importé (copie de prod, 10 owners)
+**When** on compare ses KPI mensuels Keevo aux KPI Bref (`owner-dashboard.service.ts`)
+**Then** l'écart est nul, à la règle de date près (date civile de la facture, FUS-NFR9)
+
+**Given** les factures sans produit lié
+**When** la rentabilité est calculée
+**Then** elles comptent au CA mais pas dans la marge par produit (marge inconnue affichée comme telle)
+
+### Story 20.10 : Module `expenses`
+
+As a **commerçant**,
+I want **enregistrer mes dépenses par boutique et par catégorie, même hors ligne**,
+So that **je retrouve les dépenses Bref (FUS-FR25)**.
+
+**Acceptance Criteria:**
+
+**Given** le manifeste `expenses` (premium, profil PRO+) et `db/modules/expenses/V1__*.sql`
+**When** le module est activé pour un tenant
+**Then** la table `expenses(id, store_id, category, amount, date, label, note, created_by, timestamps, archived_at)` est provisionnée et les routes sont gatées par entitlement et permission
+
+**Given** les opérations `CREATE_EXPENSE`, `UPDATE_EXPENSE`, `DELETE_EXPENSE`
+**When** elles sont poussées deux fois
+**Then** la seconde est `DUPLICATE` ; le pull transmet les suppressions (tombstones) ; LWW sur `clientTimestamp`
+
+**Given** un EMPLOYEE confiné à une boutique
+**When** il liste les dépenses
+**Then** il ne voit que celles de sa boutique
+
+### Story 20.11 : Module `finance`
+
+As a **owner**,
+I want **voir mon résultat (CA HT − dépenses), ma marge et leur évolution**,
+So that **je pilote mon commerce comme dans Bref (FUS-FR26)**.
+
+**Acceptance Criteria:**
+
+**Given** `requires: [expenses, reporting]`
+**When** `GET /finance/summary?period=&storeId=` est appelé
+**Then** les valeurs (CA HT via 20.9, dépenses, résultat, marge, variation vs période précédente, séries) sont égales à celles de `finance-math.ts` sur le jeu de cas porté de `finance-math.spec.ts`
+
+### Story 20.12 : Test d'acceptation « parcours Bref sur Keevo »
+
+As a **responsable de la fusion**,
+I want **un test de bout en bout qui rejoue la journée type d'un owner Bref sur l'API Keevo**,
+So that **P1b est déclaré terminé sur une preuve, pas sur une liste de tickets**.
+
+**Acceptance Criteria:**
+
+**Given** un tenant DOCUMENT avec profil PRO
+**When** le scénario s'exécute (login OTP → boutique → devis → conversion → acompte → échéance → retard → paiement → envoi SMS → dépense → résumé finance → lien public)
+**Then** chaque étape réussit, les quotas sont décomptés, le CA et le résultat sont exacts ; le scénario symétrique Keevo (caisse → facture auto → clôture) reste vert
+
+---
+
+## Epic 21 : Monétisation en libre-service et engagement (P1b)
+
+### Story 21.1 : Module `payments` — Mobile Money (MyCoolPay)
+
+As a **owner sur Android**,
+I want **payer mon plan par Mobile Money depuis l'app**,
+So that **mon abonnement s'active sans attendre le support (FUS-FR9)**.
+
+**Acceptance Criteria:**
+
+**Given** `POST /payments/checkout {plan, period, method}`
+**When** une demande est initiée
+**Then** une seule demande en cours par tenant (verrou `INITIATING`), le flux USSD/OTP MyCoolPay est porté de `src/payment-gateway/*`, et la réponse donne l'étape suivante
+
+**Given** le webhook MyCoolPay signé
+**When** un paiement est confirmé (livraison multiple possible)
+**Then** le traitement est idempotent, `tenant_payments` est écrit, le profil est appliqué par `ModuleLifecycleService` (bundle activé, `expires_at` prolongé), `tenant_plan_events` est tracé, et l'owner est notifié
+
+**Given** un webhook pour un owner encore sur api-bref (pendant P4)
+**When** Keevo le reçoit via le routeur (24.10)
+**Then** il est ignoré sans erreur (owner inconnu)
+
+### Story 21.2 : Achats intégrés iOS (StoreKit / RevenueCat) et abonnements externes
+
+As a **owner sur iPhone**,
+I want **payer mon plan par l'App Store**,
+So that **mon abonnement Apple actuel continue après la migration (FUS-FR9, FUS-MIG8)**.
+
+**Acceptance Criteria:**
+
+**Given** `external_subscriptions(tenant_id, provider, original_transaction_id, product_id, status, expires_at, environment)`
+**When** un événement RevenueCat (INITIAL_PURCHASE, RENEWAL, CANCELLATION, EXPIRATION, BILLING_ISSUE, TRANSFER) arrive
+**Then** il est dédoublonné (`revenuecat_webhook_event`), la sandbox est filtrée en prod, la période de grâce Apple est respectée, et le profil du tenant suit l'état de l'abonnement
+
+**Given** l'`app_user_id` RevenueCat d'un owner migré
+**When** il était l'id utilisateur Bref
+**Then** il reste valide car les UUID utilisateur sont conservés (FUS-MIG2) — vérifié en sandbox avant la vague Apple
+
+### Story 21.3 : Crédit de compte et packs SMS
+
+As a **owner**,
+I want **retrouver et utiliser mon crédit et mes SMS achetés**,
+So that **je ne perds pas d'argent dans la fusion (FUS-FR10, R9)**.
+
+**Acceptance Criteria:**
+
+**Given** `tenant_credits` (solde, mouvements) et les packs SMS (19.8)
+**When** un paiement de plan est effectué
+**Then** le crédit est imputé en premier si l'owner le choisit, chaque mouvement est journalisé (append-only) et le solde ne devient jamais négatif
+
+**Given** une recharge SMS (`sms_recharge_request` Bref)
+**When** elle est confirmée
+**Then** le pack est crédité et visible dans « Mon plan »
+
+### Story 21.4 : Module `ai-assistant`
+
+As a **owner**,
+I want **poser des questions sur mon activité**,
+So that **je retrouve l'assistant de Bref (FUS-FR27)**.
+
+**Acceptance Criteria:**
+
+**Given** les questions guidées (chips) gratuites et le chat libre décompté (quota IA, 19.8)
+**When** une question est posée
+**Then** le contexte est construit à partir des ports publics (reporting, finance, crm) du tenant seulement, le fournisseur est configurable (porté de `src/ai/*`), les conversations sont stockées par tenant, et aucune donnée d'un autre tenant ne peut apparaître (test d'isolation)
+
+**Given** le fournisseur indisponible
+**When** l'appel échoue
+**Then** le quota n'est pas consommé et un message d'erreur clair est renvoyé
+
+### Story 21.5 : Module `whatsapp-cloud` — compte, boîte de réception, modèles
+
+As a **owner BUSINESS**,
+I want **connecter mon WhatsApp Business et répondre à mes clients depuis l'app**,
+So that **je garde ma boîte WhatsApp Bref (FUS-FR28)**.
+
+**Acceptance Criteria:**
+
+**Given** un compte WABA par tenant (token chiffré au repos, FUS-NFR4)
+**When** le webhook Meta (unique par app Meta) livre un message
+**Then** il est routé vers le bon tenant par `phone_number_id`, stocké, notifié, et la signature `X-Hub-Signature-256` est vérifiée
+
+**Given** les modèles de messages
+**When** l'owner en crée ou en envoie
+**Then** le cycle de validation Meta est suivi et l'envoi respecte la fenêtre de 24 h
+
+### Story 21.6 : Campagnes clients et campagnes plateforme
+
+As a **owner BUSINESS / super-admin**,
+I want **envoyer des campagnes à mes clients consentants / à des segments de tenants**,
+So that **les campagnes Bref sont reprises (FUS-FR28, FR32)**.
+
+**Acceptance Criteria:**
+
+**Given** une campagne client
+**When** elle est envoyée
+**Then** seuls les clients avec consentement actif sont ciblés (20.2), l'envoi est asynchrone avec suivi (envoyé, délivré, échec), et les quotas sont décomptés
+
+**Given** une campagne plateforme (dashboard super-admin)
+**When** elle cible un segment (plan, pays, activité)
+**Then** elle part par les canaux choisis (push, WhatsApp, SMS, email) avec audit
+
+### Story 21.7 : Module `client-portal`
+
+As a **client final**,
+I want **retrouver toutes mes factures avec mon numéro de téléphone**,
+So that **le portail Bref « retrouver mes factures » continue (FUS-FR29)**.
+
+**Acceptance Criteria:**
+
+**Given** `public.invoice_phone_index(phone_normalized, tenant_id, invoice_id)` alimenté à l'émission (et à l'import)
+**When** un client s'authentifie par OTP (19.2, compte `portal_clients` distinct des comptes commerçants)
+**Then** il voit la liste de ses factures tous commerçants confondus, chaque document étant lu dans le schéma de son tenant avec le minimum de champs, et rien d'autre (test d'isolation)
+
+**Given** un commerçant qui désactive le portail pour son tenant
+**When** le client consulte
+**Then** les factures de ce commerçant n'apparaissent plus
+
+---
+
+## Epic 22 : App React Native — fondations et parité Keevo (P2)
+
+> Base : fork du shell Bref (`app/`, `components/ds`, `lib/i18n`, `lib/theme`, `lib/app-lock`, `eas.json`, EAS Update). **À ne pas reprendre** : `lib/database/sync.ts`, `local-mutations.ts`, `mutation-defaults.ts`, schéma WatermelonDB. **Spécification de la couche données** : le code Flutter et ses 388 fichiers de test (`rest_sync_service.dart`, `sync_rejection_policy.dart`, `sync_quarantine_service.dart`, `sync_gate_state.dart`, `entitlements_provider.dart`, `feature_modules.dart`). Emplacement proposé : `keevo/mobile/` dans le monorepo Keevo (à côté de `app/` Flutter jusqu'à son retrait).
+
+### Story 22.1 : Monorepo, shell et deux identités d'app
+
+As a **développeur**,
+I want **un monorepo RN avec le shell Bref et deux profils de build**,
+So that **un même code produise l'app Keevo et l'app Bref Point (FUS-FR33)**.
+
+**Acceptance Criteria:**
+
+**Given** `keevo/mobile` (pnpm workspaces : `apps/merchant`, `packages/{core,data,ui,i18n,…}`)
+**When** `eas build --profile production-keevo` puis `--profile production-bref` sont lancés
+**Then** deux binaires sont produits avec bundle, nom, icônes, thème et `EXPO_PUBLIC_BRAND` distincts (identité Keevo de 18.4 ; `com.brefpoint.app`), et les canaux EAS Update sont séparés par identité
+
+**Given** la CI
+**When** une PR est ouverte
+**Then** typecheck, lint, tests unitaires et vérification des contrats (`keevo/contracts/`) s'exécutent et bloquent
+
+### Story 22.2 : Stockage local chiffré et schéma
+
+As a **commerçant**,
+I want **que mes données locales soient chiffrées et structurées comme sur Keevo**,
+So that **le hors-ligne est sûr et compatible avec le protocole serveur (FUS-NFR4)**.
+
+**Acceptance Criteria:**
+
+**Given** SQLite chiffré (op-sqlite + SQLCipher ; clé 32 octets générée au premier lancement et stockée dans le Keystore/Keychain)
+**When** l'app démarre
+**Then** les 22 tables Drift, `module_records` et `sync_queue` sont créées par migrations versionnées, et un test vérifie que le fichier n'est pas lisible sans la clé
+
+**Given** l'ancienne base Drift ou WatermelonDB présente après la mise à jour
+**When** l'app RN démarre pour la première fois
+**Then** elle les supprime sans les lire (le serveur fait foi, FUS-MIG7 garantit la file vide)
+
+### Story 22.3 : Authentification, sessions et choix d'entreprise
+
+As a **utilisateur**,
+I want **me connecter avec mes identifiants Keevo et choisir mon entreprise**,
+So that **j'accède à mes données dès le premier lancement**.
+
+**Acceptance Criteria:**
+
+**Given** le login 2 étapes (téléphone + mot de passe ; username + mot de passe) et le tenant-picker
+**When** l'utilisateur se connecte
+**Then** les tokens sont dans `expo-secure-store`, le refresh est rotatif et sérialisé (une seule requête de refresh à la fois, rejeu détecté → déconnexion), et un full pull est déclenché pour un nouvel appareil
+
+**Given** un 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY` ou un 423 `SYNC_REQUIRED`
+**When** l'API le renvoie
+**Then** l'intercepteur produit l'état d'interface correspondant (comme `auth_interceptor.dart`)
+
+### Story 22.4 : File d'opérations et push
+
+As a **commerçant hors ligne**,
+I want **que chaque action soit enregistrée localement puis envoyée de façon sûre**,
+So that **rien ne se perd ni ne se double (FUS-FR34)**.
+
+**Acceptance Criteria:**
+
+**Given** une écriture métier
+**When** elle est faite
+**Then** la modification locale et l'opération (`operationId` UUID, `operation`, `entityId`, `payload`, `clientTimestamp`) sont écrites dans **la même transaction** SQLite
+
+**Given** le service de push (lots de 50, toutes les 30 s et à la reconnexion, single-flight)
+**When** le serveur répond `APPLIED`/`DUPLICATE`/`REJECTED`/`CONFLICT` par opération
+**Then** chaque opération est traitée selon sa réponse, le dédoublonnage one-shot / append-only de Flutter est reproduit, et les tests portés de `rest_sync_service_test` passent
+
+### Story 22.5 : Pull delta et fusion locale
+
+As a **commerçant sur plusieurs appareils**,
+I want **recevoir les changements des autres appareils**,
+So that **mes données sont cohérentes partout**.
+
+**Acceptance Criteria:**
+
+**Given** `GET /sync/pull?since&cursor` (keyset, pages de 1 000, marge 30 s, curseur en stockage sécurisé)
+**When** le pull s'exécute
+**Then** chaque entité a son merger porté de Flutter (dont `replaceUnlessPending` pour `module_records`, redirection des produits fusionnés, tombstones), et une donnée locale encore en file n'est jamais écrasée
+
+**Given** un appareil réinstallé
+**When** le curseur est absent
+**Then** un full pull complet est fait avec indicateur de progression
+
+### Story 22.6 : Politique de rejet, quarantaine, journal
+
+As a **commerçant**,
+I want **savoir quand une opération ne passe pas et que faire**,
+So that **une erreur ne fait pas disparaître une vente (FUS-UX3)**.
+
+**Acceptance Criteria:**
+
+**Given** la politique de `sync_rejection_policy.dart` (transitoire → retry + backoff ; held → conservée 6 h si module inactif ; terminal → quarantaine pour argent/stock, rollback pour catalogue/contact)
+**When** chaque cas est simulé
+**Then** le comportement est identique à Flutter (tests portés un à un)
+
+**Given** l'écran « Opérations bloquées »
+**When** une opération est en quarantaine
+**Then** l'owner peut Renvoyer, Rattacher (au produit/client cible) ou Abandonner après export, et le journal des conflits est consultable
+
+### Story 22.7 : Limite de 7 jours hors ligne
+
+As a **plateforme**,
+I want **empêcher un appareil de diverger trop longtemps**,
+So that **les conflits restent gérables**.
+
+**Acceptance Criteria:**
+
+**Given** la date du dernier push réussi
+**When** elle atteint J5 / J6 / J7
+**Then** bannière d'information / bannière rouge / écritures bloquées (lecture autorisée) ; un 423 `SYNC_REQUIRED` serveur produit le même blocage ; une synchronisation réussie lève le blocage
+
+### Story 22.8 : Entitlements, modules UI et garde de routes
+
+As a **commerçant**,
+I want **voir uniquement les modules de mon plan et de mon rôle**,
+So that **l'app reste simple et cohérente avec le serveur (FUS-FR35)**.
+
+**Acceptance Criteria:**
+
+**Given** le snapshot `GET /tenants/me/modules` gardé sur l'appareil (aucune liste de modules dans le jeton, décision du 2026-11-01, refonte 16.3)
+**When** l'app construit sa navigation
+**Then** chaque écran appartient à un module (table feature→module), une route d'un module inactif redirige vers « Mes modules », READ_ONLY désactive les actions d'écriture, et un test compare la table à `contracts/module-routes.json`
+
+**Given** un package de module (`packages/invoicing`, …)
+**When** le module est inactif
+**Then** son code n'est pas chargé (import différé) et ses opérations de sync locales sont mises en attente (held)
+
+**Given** `GET /tenants/me/extensions/{pointId}`
+**When** un slot d'extension est affiché (ex. « Facturer » au checkout)
+**Then** seules les actions contribuées par des modules actifs apparaissent
+
+### Story 22.9 : Écrans cœur — accueil, boutiques, équipe, paramètres, « Mes modules »
+
+As a **owner Keevo**,
+I want **retrouver mon tableau de bord, mes boutiques, mon équipe et mes réglages**,
+So that **le changement d'app est transparent (FUS-UX1, UX2)**.
+
+**Acceptance Criteria:**
+
+**Given** l'inventaire des écrans Flutter (§5.2 de l'analyse, colonne Keevo)
+**When** les écrans du module `core` sont livrés dans le design system Bref
+**Then** chaque écran Keevo du périmètre a son équivalent, avec les mêmes règles (employé confiné à sa boutique, changement de mot de passe, déconnexion, multi-entreprise), et l'accueil d'un tenant POS est la caisse
+
+### Story 22.10 : Catalogue, stock, transferts, inventaire
+
+As a **commerçant Keevo**,
+I want **gérer produits, catégories, prix, stock, transferts et inventaires dans la nouvelle app**,
+So that **je ne perds aucune fonction de gestion de stock**.
+
+**Acceptance Criteria:**
+
+**Given** les opérations de sync existantes (création/édition produit, ajustement, transfert, session d'inventaire)
+**When** elles sont exécutées hors ligne puis synchronisées
+**Then** le résultat serveur est identique à celui produit par l'app Flutter (mêmes payloads, vérifiés par contrat), y compris `STOCK_NEGATIVE` → conflit et bannière
+
+**Given** le formulaire « Nouveau produit »
+**When** l'owner saisit une quantité initiale, ou laisse le champ vide (il est facultatif)
+**Then** le comportement de la story refonte 17.11 est reproduit (mouvement STOCK_ENTRY dans la même transaction locale si une quantité est saisie ; sinon stock à 0, sans mouvement ni blocage)
+
+**Given** le scanner de code-barres (repris de Bref)
+**When** un code est scanné
+**Then** le produit est trouvé localement, ou par `GET /products/lookup` en ligne
+
+### Story 22.11 : Caisse (POS)
+
+As a **vendeur**,
+I want **encaisser vite, même hors ligne**,
+So that **la caisse Keevo fonctionne au moins aussi bien qu'avant**.
+
+**Acceptance Criteria:**
+
+**Given** le panier (quantités décimales via `lib/quantity.ts`, prix modifiable, remise, CASH/MOMO, client facultatif)
+**When** la vente est validée hors ligne
+**Then** la vente, ses lignes et la décrémentation locale du stock sont écrites en une transaction avec l'opération `CREATE_SALE`, le reçu s'affiche immédiatement, et le stock disponible limite la quantité pour les produits `track_stock=true` uniquement
+
+**Given** une vente
+**When** l'owner l'annule ou la corrige, ou clôture la journée (WAT)
+**Then** le comportement est celui de Keevo (avoir automatique via le pont, clôture), y compris l'action « Facturer » si `invoicing` est actif
+
+### Story 22.12 : CRM, facturation Keevo, rapports, exports, alertes
+
+As a **owner Keevo**,
+I want **mes clients, factures, rapports, exports et alertes**,
+So that **la parité Keevo est complète**.
+
+**Acceptance Criteria:**
+
+**Given** les 5 opérations de facturation hors ligne de 15-5b, les rapports serveur d'abord, les exports, les alertes de stock et les push FCM (token natif `getDevicePushTokenAsync` → `POST /devices/token`)
+**When** chaque parcours est exécuté
+**Then** il est équivalent au parcours Flutter correspondant, vérifié par un scénario Maestro par parcours
+
+### Story 22.13 : Tests de la couche données et parcours hors ligne
+
+As a **responsable qualité**,
+I want **une preuve que l'app RN est au moins aussi fiable que Flutter**,
+So that **R5 est maîtrisé avant toute mise en production (FUS-NFR5)**.
+
+**Acceptance Criteria:**
+
+**Given** les tests Flutter de la couche données (mergers, politique de rejet, gate, calcul des montants, file)
+**When** la story est terminée
+**Then** chacun a un équivalent Jest (liste de correspondance dans `keevo/mobile/docs/test-parity.md`), et 6 scénarios Maestro passent sur émulateur Android : vente hors ligne puis sync, deux appareils en conflit de stock, quarantaine puis renvoi, gate J7, réinstallation et full pull, module désactivé pendant une vente en file
+
+### Story 22.14 : Dernière release Flutter — mise à jour seulement file vide
+
+As a **commerçant Keevo**,
+I want **ne passer à la nouvelle app qu'une fois toutes mes opérations envoyées**,
+So that **rien ne se perd au changement d'app (FUS-MIG7)**.
+
+**Acceptance Criteria:**
+
+**Given** la release Flutter N+1 (dernière)
+**When** la nouvelle version minimale approche
+**Then** l'app force une synchronisation, affiche « Mise à jour disponible » uniquement si `sync_queue` est vide et sans quarantaine, sinon liste les opérations à traiter, et propose l'export CSV local comme filet
+
+**Given** la page `/monitoring/sync` du dashboard
+**When** on la consulte
+**Then** elle liste les appareils Flutter avec des opérations non poussées depuis plus de 24 h
+
+### Story 22.15 : Bêta, déploiement progressif et publication iOS (identité Keevo)
+
+As a **responsable de la fusion**,
+I want **déployer l'app RN aux utilisateurs Keevo par paliers**,
+So that **un défaut touche peu de monde et peut être corrigé avant la généralisation**.
+
+**Acceptance Criteria:**
+
+**Given** la piste de test fermée Play
+**When** 2 semaines de bêta passent sans anomalie bloquante (aucune perte de donnée, crash-free ≥ 99,5 %)
+**Then** le déploiement passe à 10 %, 50 %, 100 % avec une semaine d'observation par palier ; l'app Flutter reste téléchargeable 4 semaines
+
+**Given** l'App ID Keevo (18.4)
+**When** la build iOS est prête
+**Then** elle est soumise à l'App Store (première publication iOS de Keevo)
+
+### Story 22.16 : Retrait de l'app Flutter
+
+As a **exploitant**,
+I want **ne plus maintenir deux apps Keevo**,
+So that **l'effort se concentre sur l'app unifiée**.
+
+**Acceptance Criteria:**
+
+**Given** 100 % du parc sur RN depuis 4 semaines et moins de 2 % d'appareils Flutter actifs
+**When** la version minimale de l'identité Keevo est relevée (19.10)
+**Then** les appareils Flutter restants voient l'écran de mise à jour obligatoire, `keevo/app` passe en lecture seule (tag `flutter-final`), et la CI Flutter est retirée
+
+---
+
+## Epic 23 : App React Native — parité Bref (P3)
+
+> Référence : écrans et parcours de `AI/bref` `develop` (§3.5 et §5.2 de l'analyse). Les écrans Bref sont réutilisés au maximum (composants, styles, i18n) ; seule leur source de données change (repositories de la couche 22.x au lieu de WatermelonDB/TanStack).
+
+### Story 23.1 : Onboarding et connexion Bref (OTP, Google, Apple)
+
+As a **owner ex-Bref**,
+I want **me connecter comme avant**,
+So that **la migration ne change pas mes habitudes (FUS-FR1)**.
+
+**Acceptance Criteria:**
+
+**Given** l'écran d'onboarding Bref
+**When** l'utilisateur choisit OTP (SMS/WhatsApp/email), Google ou Apple
+**Then** les authenticators 19.2/19.3 sont utilisés, et un nouveau compte sans entreprise est conduit à la création d'entreprise (secteur, boutique, parcours DOCUMENT par défaut)
+
+### Story 23.2 : Parcours Document en 5 étapes
+
+As a **commerçant Bref**,
+I want **créer une facture ou un devis en 5 étapes**,
+So that **je retrouve mon parcours principal (FUS-FR17–FR19, FUS-UX2)**.
+
+**Acceptance Criteria:**
+
+**Given** les étapes Infos (type de client obligatoire, NIU/RCCM), Articles (recherche, scanner, quantités décimales), Paiement (remise, livraison, TVA/exonération, acompte, échéancier), Signature, Récapitulatif/envoi
+**When** le document est validé hors ligne
+**Then** il est écrit localement avec ses opérations de sync (création, paiements), les montants sont calculés avec le même code que le serveur (jeu de cas de 20.4/20.5), et l'écran de succès propose PDF local, partage et envoi
+
+**Given** un tenant POS
+**When** il ouvre le menu « Nouveau document »
+**Then** le parcours est disponible si `invoicing` est actif
+
+### Story 23.3 : Devis, encaissements et suivi des impayés
+
+As a **commerçant**,
+I want **convertir mes devis, enregistrer mes paiements et suivre mes impayés**,
+So that **la gestion d'encaissement Bref est complète (FUS-FR18, FR20)**.
+
+**Acceptance Criteria:**
+
+**Given** la liste des documents (filtres type, état d'encaissement, client, période)
+**When** l'utilisateur convertit un devis, ajoute un paiement ou marque une échéance payée
+**Then** les opérations correspondantes sont mises en file, l'état affiché localement est provisoire jusqu'au retour serveur, puis remplacé par l'état calculé par le serveur
+
+### Story 23.4 : Modèles de reçu, impression et partage
+
+As a **commerçant**,
+I want **imprimer ou partager mes documents avec mon modèle habituel, hors ligne**,
+So that **mes clients reçoivent le même document qu'avant (FUS-FR21)**.
+
+**Acceptance Criteria:**
+
+**Given** les 8 modèles React de Bref et la signature (désormais persistée, 20.7)
+**When** un PDF est généré hors ligne
+**Then** il est identique au rendu Bref actuel ; en ligne, le lien public renvoie le rendu serveur équivalent
+
+### Story 23.5 : Dépenses et finance
+
+As a **owner PRO**,
+I want **mes dépenses et mon résultat dans l'app**,
+So that **je pilote comme dans Bref (FUS-FR25, FR26)**.
+
+**Acceptance Criteria:**
+
+**Given** les modules `expenses` et `finance` actifs
+**When** l'owner saisit une dépense hors ligne puis consulte le résumé
+**Then** la dépense est synchronisée (20.10) et le résumé (serveur d'abord, repli local) correspond au calcul serveur
+
+### Story 23.6 : Assistant IA, boîte WhatsApp, modèles et campagnes
+
+As a **owner PRO/BUSINESS**,
+I want **l'assistant et la boîte WhatsApp dans l'app**,
+So that **mes outils d'engagement Bref sont conservés (FUS-FR27, FR28)**.
+
+**Acceptance Criteria:**
+
+**Given** les modules `ai-assistant` et `whatsapp-cloud`
+**When** l'utilisateur les ouvre
+**Then** les écrans Bref sont branchés sur les API 21.4/21.5/21.6 (lectures en ligne via TanStack Query, jamais d'écriture métier hors file), et le quota restant est affiché
+
+### Story 23.7 : Mon plan, paiement en libre-service, crédit
+
+As a **owner**,
+I want **voir mon plan, mes quotas et payer seul**,
+So that **je gère mon abonnement sans le support (FUS-FR9, FR10, FUS-UX5)**.
+
+**Acceptance Criteria:**
+
+**Given** l'écran « Mon plan »
+**When** il s'affiche
+**Then** il montre profil, échéance, quotas consommés/limites, crédit et packs SMS ; sur Android le paiement Mobile Money (21.1), sur iOS RevenueCat (21.2) ; à la confirmation, les modules s'activent sans redémarrage (rafraîchissement du snapshot d'entitlements)
+
+### Story 23.8 : Portail client « retrouver mes factures »
+
+As a **client final**,
+I want **retrouver mes factures depuis l'app ou le web**,
+So that **le portail Bref continue (FUS-FR29)**.
+
+**Acceptance Criteria:**
+
+**Given** l'entrée « Je suis client » de l'onboarding Bref et la page web publique
+**When** le client s'authentifie par OTP
+**Then** il voit ses factures (21.7) et peut ouvrir chaque lien public
+
+### Story 23.9 : Sécurité locale, langues, notifications in-app
+
+As a **utilisateur**,
+I want **verrouiller l'app, choisir ma langue et voir mes notifications**,
+So that **je retrouve le confort de Bref (FUS-FR30, FR36)**.
+
+**Acceptance Criteria:**
+
+**Given** PIN et biométrie (`lib/app-lock` Bref), i18n (fr, en ; 5 autres langues prêtes), notifications in-app (19.9)
+**When** chaque fonction est utilisée
+**Then** elle fonctionne dans les deux identités d'app ; tous les écrans Keevo portés en 22.x ont leurs clés fr et en
+
+### Story 23.10 : Bascule Caisse / Document
+
+As a **owner**,
+I want **choisir mon parcours principal et passer de l'un à l'autre**,
+So that **chaque type de commerce a l'accueil qui lui convient (FUS-FR17)**.
+
+**Acceptance Criteria:**
+
+**Given** `default_sale_flow` (19.12)
+**When** l'owner le change dans les paramètres
+**Then** l'accueil, le bouton d'action principal et l'ordre des onglets changent ; les deux parcours restent accessibles selon les modules actifs
+
+### Story 23.11 : Routage double backend et mode legacy ⚠️§9.5
+
+As a **owner Bref pas encore migré qui a reçu la mise à jour**,
+I want **comprendre ce qui se passe et consulter mes factures**,
+So that **la mise à jour ne me bloque pas (FUS-FR37, FUS-UX4)**.
+
+**Acceptance Criteria:**
+
+**Given** l'identité Bref et un compte inconnu de Keevo au login (OTP/social)
+**When** Keevo répond « compte inconnu »
+**Then** l'app interroge `api-bref /v1/auth/me/migration` (24.1) et affiche « Migration prévue le … » ou, si aucune n'est planifiée, un mode legacy en lecture seule (liste et PDF de ses factures via api-bref), sans aucune écriture
+
+**Given** l'owner migré entre-temps
+**When** il relance l'app
+**Then** le login Keevo réussit et un full pull charge ses données
+
+### Story 23.12 : Publication sous l'identité Bref Point
+
+As a **responsable de la fusion**,
+I want **publier l'app unifiée sur la fiche `com.brefpoint.app`**,
+So that **les owners migrés la reçoivent comme une mise à jour**.
+
+**Acceptance Criteria:**
+
+**Given** l'ADR §9.5 (publication précoce ou après les vagues)
+**When** la build `production-bref` est publiée (Play et App Store)
+**Then** elle passe la revue Apple (achats intégrés RevenueCat inchangés, connexion Apple présente), la version minimale de l'ancienne app n'est pas encore relevée, et le canal EAS Update de l'ancienne app reste dédié au pré-migrateur (24.11)
+
+---
+
+## Epic 24 : Migration Bref par vagues (P1c + P4)
+
+> Stories 24.1 à 24.10 = **outil** (P1c, en recouvrement de P1b, validé par dry-run). Stories 24.11 à 24.16 = **exécution** (P4). Ordre d'import et contrôles : §10 de l'analyse. Seules évolutions autorisées dans api-bref : 24.1 et 24.11 (règle 18.3).
+
+### Story 24.1 : api-bref — statut de migration, gel et export d'un owner
+
+As a **outil de migration**,
+I want **geler un owner, exporter toutes ses données et publier son statut**,
+So that **l'import part d'un instantané figé et l'app sait où en est l'owner (FUS-MIG4)**.
+
+**Acceptance Criteria:**
+
+**Given** la colonne `user.migration_status ∈ {none, scheduled, frozen, migrated}` (+ `scheduled_at`, `migrated_at`)
+**When** l'owner est `frozen`
+**Then** toute écriture de l'owner et de ses membres (HTTP, mutations rejouées) renvoie 423 `ACCOUNT_MIGRATING` via un guard global, les lectures restent autorisées, et `unfreeze` rétablit l'état précédent
+
+**Given** `GET /v1/admin/migration/owners/:id/export` (superadmin, streaming JSON, checksum)
+**When** il est appelé sur un owner gelé
+**Then** il sérialise user, shops, membres, customers, products, invoices (+items, +payments), expenses, subscriptions, plan payment requests, usage counters, account credit, Apple transactions, WhatsApp (compte, modèles, campagnes, messages), conversations IA, notifications ; il refuse un owner non gelé
+
+**Given** `GET /v1/auth/me` et `GET /v1/auth/me/migration`
+**When** l'app les appelle
+**Then** ils exposent `{status, scheduledAt, redirectBundle, minVersion}`
+
+**Given** un owner `migrated`
+**When** il tente de se connecter sur api-bref
+**Then** la connexion est refusée avec `ACCOUNT_MIGRATED` et le lien store
+
+### Story 24.2 : Module `migration` — lots, correspondances, identité, boutiques, membres
+
+As a **super-admin**,
+I want **importer l'identité, les boutiques et l'équipe d'un owner**,
+So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
+
+**Acceptance Criteria:**
+
+**Given** `migration_batches` et `migration_records(target_table, target_id, source_table, source_id, checksum, note)` et le module `migration` (plateforme, SUPER_ADMIN)
+**When** l'export d'un owner est importé (étapes 1 à 3 du §10.2)
+**Then** le compte owner est créé avec l'UUID Bref ou lié par téléphone puis email (bridge 24.7), le tenant est créé sans boutique par défaut (`seedDefaultStore=false`), `default_sale_flow=DOCUMENT`, les boutiques avec leurs logos rapatriés, les membres avec hash bcrypt copiés et rôles mappés (admin→MANAGER, seller→EMPLOYEE, viewer→VIEWER), et chaque ligne est tracée
+
+**Given** le même import relancé
+**When** il s'exécute
+**Then** il est sans effet (`ON CONFLICT (id) DO NOTHING`) ou complète les lignes manquantes
+
+### Story 24.3 : Import des produits et des clients (avec fusions)
+
+As a **outil de migration**,
+I want **importer catalogue et clients en fusionnant les doublons inter-boutiques**,
+So that **le tenant respecte les règles d'unicité Keevo sans perdre d'historique**.
+
+**Acceptance Criteria:**
+
+**Given** des produits de même `productKey` dans plusieurs boutiques
+**When** ils sont importés
+**Then** un seul produit tenant (`track_stock=false`) est créé, les autres ids source pointent vers lui dans `migration_records`, et les produits `mergedIntoId` sont importés archivés et redirigés
+
+**Given** des clients de même téléphone normalisé dans plusieurs boutiques
+**When** ils sont importés
+**Then** une seule fiche est créée (boutique d'origine = la plus ancienne), les autres champs non vides sont conservés dans `note` de `migration_records`, et le consentement le plus restrictif s'applique
+
+### Story 24.4 : Import des documents, paiements et dépenses
+
+As a **outil de migration**,
+I want **importer factures, devis, lignes, paiements et dépenses**,
+So that **l'historique commercial et les impayés sont intacts**.
+
+**Acceptance Criteria:**
+
+**Given** les documents Bref
+**When** ils sont importés via le port d'import du module `invoicing` (sans `InvoiceLifecycleUseCase.issue`, sans événement de pont, sans consommation de quota)
+**Then** devis puis factures sont insérés avec `legacy_reference = BRF-<8 premiers caractères de l'UUID>`, `legacy_public_token`, `issue_date` = `invoice.date` civile, `created_at`/`updated_at` d'origine, lignes liées par `product_key`, paiements dans `invoice_payments`, `payment_state` recalculé, et compteurs client/produit recalculés
+
+**Given** un document dont le total stocké diffère du recalcul de plus de 1 XAF ou un montant non entier
+**When** il est importé
+**Then** la valeur Bref est conservée telle quelle, l'anomalie est inscrite dans `migration_records.note` et dans le rapport, sans correction silencieuse (R3)
+
+### Story 24.5 : Import de la monétisation ⚠️§7.10
+
+As a **outil de migration**,
+I want **reporter plans, abonnements, crédits et compteurs**,
+So that **personne ne perd ce qu'il a payé (FUS-MIG8)**.
+
+**Acceptance Criteria:**
+
+**Given** les abonnements, demandes de paiement, transactions Apple, crédit, packs SMS et compteurs du mois
+**When** ils sont importés
+**Then** le profil du tenant est celui que donne `SUBSCRIPTION_IN_FORCE` à la date de migration (grâce Apple incluse, règle de l'ADR §7.10 pour les expirés récents), `expires_at` = fin de la période payée, `external_subscriptions` et `tenant_payments` sont alimentés, crédit et packs reportés au franc près, et `tenant_plan_events` reçoit `MIGRATION_BREF`
+
+### Story 24.6 : Import des données annexes et index du portail
+
+As a **outil de migration**,
+I want **importer WhatsApp Business, IA, notifications et indexer les factures pour le portail**,
+So that **l'owner et ses clients retrouvent tout**.
+
+**Acceptance Criteria:**
+
+**Given** le compte WABA, modèles, campagnes, messages, conversations IA, notifications
+**When** ils sont importés
+**Then** le token WABA est rechiffré avec la clé Keevo, les modules correspondants sont activés selon le profil, `invoice_phone_index` est alimenté, `ModuleProvisioner.provisionActiveModules` est appelé et l'audit reçoit `TENANT_IMPORTED {source: bref, counts}`
+
+### Story 24.7 : Bridge d'identité et cas de collision
+
+As a **commerçant présent dans Keevo et Bref**,
+I want **retrouver mes deux entreprises sous un seul compte**,
+So that **je n'ai pas deux identités (R2)**.
+
+**Acceptance Criteria:**
+
+**Given** un owner Bref dont le téléphone normalisé (puis l'email vérifié) existe dans Keevo
+**When** il est importé
+**Then** le compte Keevo existant est conservé (hash Keevo conservé), une membership OWNER est ajoutée sur le tenant importé, et il voit deux entreprises au login (19.6)
+
+**Given** un username Bref déjà pris ou égal à un téléphone existant
+**When** il est détecté
+**Then** l'import de l'owner est bloqué avant écriture avec un cas listé dans le rapport à résoudre manuellement
+
+### Story 24.8 : Réconciliation automatique et bloquante
+
+As a **responsable de la fusion**,
+I want **comparer chaque owner importé à sa source, au franc près**,
+So that **aucun owner n'est activé avec des données fausses (FUS-MIG3)**.
+
+**Acceptance Criteria:**
+
+**Given** les contrôles du §10.3 (compteurs par table après fusions expliquées, Σ ventes non annulées par boutique et par mois, Σ encaissé, Σ dépenses, impayés, échantillon de 20 documents champ à champ, abonnement/crédit, 5 liens publics)
+**When** la réconciliation s'exécute
+**Then** elle produit un rapport JSON + page dashboard ; tout écart hors tolérance met l'owner en état `RECONCILIATION_FAILED` et empêche l'activation
+
+### Story 24.9 : Pilotage des vagues dans le dashboard et rollback
+
+As a **super-admin**,
+I want **planifier, exécuter, suivre et annuler une vague**,
+So that **la migration est maîtrisée et observable (FUS-MIG5, MIG10, FUS-NFR10)**.
+
+**Acceptance Criteria:**
+
+**Given** une vague (liste d'owners signée)
+**When** elle est lancée
+**Then** chaque owner passe par planifié → gelé → exporté → importé → réconcilié → activé, avec durée par étape, métriques et logs corrélés `migrationBatchId`
+
+**Given** un owner non encore activé
+**When** le super-admin demande un rollback
+**Then** `TenantDeletionService.deleteNow` supprime le tenant importé (schéma, memberships, comptes créés pour l'occasion uniquement, pas les comptes liés), `migration_records` est purgé pour cet owner, et api-bref est dégelé
+
+**Given** l'activation
+**When** elle est confirmée
+**Then** api-bref passe l'owner `migrated`, le tenant passe ACTIVE, et un WhatsApp/SMS de confirmation avec le lien store est envoyé
+
+### Story 24.10 : Continuité externe — liens publics et webhooks
+
+As a **client final / owner**,
+I want **que mes liens, paiements et messages WhatsApp continuent de fonctionner pendant la migration**,
+So that **rien ne casse côté extérieur (FUS-MIG9)**.
+
+**Acceptance Criteria:**
+
+**Given** un lien public Bref d'un owner migré
+**When** il est ouvert
+**Then** api-bref (ou le reverse proxy) répond 302 vers la page publique Keevo qui résout `legacy_public_token` ; les liens des non-migrés sont inchangés
+
+**Given** le routeur de webhooks (RevenueCat, MyCoolPay, Meta) devant les deux backends
+**When** un événement arrive
+**Then** il est livré aux deux, chacun ignore les owners qu'il ne connaît pas, et aucun événement n'est perdu si l'un des deux est indisponible (file de relivraison)
+
+### Story 24.11 : Pré-migrateur OTA dans l'app Bref actuelle
+
+As a **owner Bref**,
+I want **être prévenu et que mon appareil soit prêt avant ma migration**,
+So that **mes ventes en attente ne se perdent pas (FUS-MIG6, R8)**.
+
+**Acceptance Criteria:**
+
+**Given** une mise à jour EAS Update sur le canal `production` de l'app Bref actuelle
+**When** elle est appliquée
+**Then** l'app affiche la bannière de migration (date si planifiée), force `syncAll()` puis `resumePausedMutations()`, signale au serveur le nombre de mutations en attente, et liste les lignes locales sans équivalent serveur
+
+**Given** un owner planifié avec des mutations en attente sur un appareil
+**When** le gel est demandé (24.9)
+**Then** le gel est refusé pour cet owner et le motif est visible dans le dashboard et dans l'app
+
+**Given** un owner `migrated`
+**When** il ouvre l'ancienne app
+**Then** il voit « Votre compte a été migré, mettez à jour l'application » avec le lien store
+
+### Story 24.12 : Dry-run complet sur copie de production
+
+As a **responsable de la fusion**,
+I want **importer 100 % des owners d'une copie de prod Bref sur staging**,
+So that **les vagues réelles ne découvrent aucun cas nouveau**.
+
+**Acceptance Criteria:**
+
+**Given** une copie anonymisée ou protégée de la base api-bref et le staging Keevo
+**When** tous les owners sont importés et réconciliés
+**Then** 100 % sont réconciliés sans écart ou ont un cas documenté (et une décision), la durée moyenne par owner est < 60 s, le temps total d'une vague de 100 owners est mesuré, et le rapport est archivé dans `research/fusion-mesures/`
+
+**Given** un deuxième dry-run une semaine plus tard
+**When** il est relancé sur une copie fraîche
+**Then** les résultats sont identiques (idempotence et stabilité)
+
+### Story 24.13 : Runbook et communication
+
+As a **exploitant / support**,
+I want **un runbook de vague et des messages prêts**,
+So that **chaque vague se déroule pareil et les owners savent quoi faire**.
+
+**Acceptance Criteria:**
+
+**Given** le runbook (J-3 notification, J0 gel/import/réconciliation/activation, J+1 vérification, critères d'arrêt, rollback, contacts)
+**When** il est relu sur le dry-run
+**Then** chaque étape est exécutable telle qu'écrite ; les messages WhatsApp/SMS/email (annonce, rappel, confirmation, incident) existent en fr et en
+
+### Story 24.14 : Vagues pilotes
+
+As a **responsable de la fusion**,
+I want **migrer 3 à 5 owners volontaires et les accompagner**,
+So that **le procédé est validé sur de vrais commerçants avant d'élargir**.
+
+**Acceptance Criteria:**
+
+**Given** 3 à 5 owners volontaires (mix free/payant, Android/iOS si possible)
+**When** ils sont migrés
+**Then** chacun est contacté après sa première connexion, ses retours sont consignés, aucun écart de données n'est constaté à J+7, et la décision « go » pour les vagues suivantes est écrite
+
+### Story 24.15 : Vagues de masse (2 à 6)
+
+As a **responsable de la fusion**,
+I want **migrer les owners par groupes de risque croissant**,
+So that **les incidents arrivent quand ils coûtent le moins**.
+
+**Acceptance Criteria:**
+
+**Given** l'ordre (2) free inactifs > 60 j, (3) free actifs, (4) payants Mobile Money, (5) payants Apple — après validation sandbox de 21.2 —, (6) collisions (24.7)
+**When** chaque vague est exécutée
+**Then** son rapport est archivé, le taux d'échec de réconciliation est < 1 % (les échecs repassent individuellement), et aucune vague ne démarre tant que la précédente a un incident ouvert de sévérité haute
+
+### Story 24.16 : Retardataires et gel global
+
+As a **responsable de la fusion**,
+I want **traiter les owners qui ne se sont jamais reconnectés**,
+So that **api-bref peut être arrêté (R7)**.
+
+**Acceptance Criteria:**
+
+**Given** les owners restants après la vague 6
+**When** la date de gel global annoncée arrive
+**Then** ils sont migrés sans interaction (mêmes contrôles), reçoivent un message avec le lien store, et l'ancienne app affiche l'écran « compte migré » ; à la fin, api-bref ne compte plus aucun owner `none`/`scheduled`
+
+---
+
+## Epic 25 : Convergence et décommissionnement (P5)
+
+### Story 25.1 : api-bref en lecture seule puis arrêt
+
+As a **exploitant**,
+I want **arrêter api-bref proprement**,
+So that **on ne maintient plus deux backends**.
+
+**Acceptance Criteria:**
+
+**Given** aucun owner actif sur api-bref et 4 semaines sans écriture
+**When** le service passe en lecture seule puis est arrêté
+**Then** une sauvegarde finale chiffrée est archivée (durée de conservation légale décidée), `api.brefpoint.app` renvoie une page de migration (410/301), et les redirections de liens publics sont servies par le reverse proxy de façon permanente
+
+### Story 25.2 : Webhooks et intégrations sur Keevo seul
+
+As a **exploitant**,
+I want **pointer RevenueCat, MyCoolPay et Meta directement sur Keevo**,
+So that **le routeur transitoire disparaît**.
+
+**Acceptance Criteria:**
+
+**Given** les consoles des fournisseurs
+**When** les URLs sont repointées
+**Then** un événement de test de chaque fournisseur est traité par Keevo, et le routeur est retiré
+
+### Story 25.3 : Retrait du code transitoire
+
+As a **développeur**,
+I want **supprimer ce qui ne servait qu'à la migration**,
+So that **le code reste simple**.
+
+**Acceptance Criteria:**
+
+**Given** le module `migration`, le mode legacy de l'app (23.11), le pré-migrateur et les canaux EAS de l'ancienne app
+**When** ils sont retirés
+**Then** `migration_records` est archivé hors base chaude (export daté), le module est désinscrit, les tests restent verts, et les ArchUnit/contrats sont mis à jour
+
+### Story 25.4 : Décision de marque et fiche store finale ⚠️Q11
+
+As a **owner produit**,
+I want **appliquer la décision de marque**,
+So that **les utilisateurs voient un produit cohérent**.
+
+**Acceptance Criteria:**
+
+**Given** l'ADR Q11
+**When** la décision est « une seule marque »
+**Then** la fiche conservée reçoit la marque finale par mise à jour, l'autre fiche publie une dernière version qui invite à installer l'app conservée (avec reconnexion simple : mêmes identifiants), puis est dépubliée ; **sinon** les deux identités restent construites depuis le même code
+
+### Story 25.5 : Rétrospective et mise à jour de l'architecture
+
+As a **équipe**,
+I want **capitaliser sur la fusion**,
+So that **la documentation reflète le système réel**.
+
+**Acceptance Criteria:**
+
+**Given** les rapports de vagues et les incidents
+**When** `bmad-retrospective` est exécuté sur les epics 18–25
+**Then** `architecture.md`, le PRD et les contrats sont à jour, et les écarts restants sont versés au backlog
+
+---
+
+## Jalons de décision (go / no-go)
+
+| Jalon | Quand | Critères pour continuer | Si non |
+|---|---|---|---|
+| **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus, Epic 16 en prod ou daté | on ne démarre pas P1 |
+| **G1** fin P1b | après 20.12 | parcours Bref vert sur Keevo, suite Flutter verte, charge 19.11 tenue | corriger avant P3 / avant l'outil |
+| **G2** fin bêta P2 | 22.15 palier 10 % | zéro perte de donnée, crash-free ≥ 99,5 %, quarantaine < 0,5 % des opérations | rester à 10 %, corriger |
+| **G3** avant vagues | après 24.12 et 23.12 | dry-run 100 % réconcilié, app Bref unifiée publiée, runbook relu | pas de vague |
+| **G4** après pilotes | 24.14 | aucun écart à J+7, retours pilotes traités | pas de vague de masse |
+| **G5** avant arrêt api-bref | 25.1 | zéro owner actif, 4 semaines sans écriture | prolonger la lecture seule |
+
+## Risques suivis (renvoi vers les stories)
+
+| Risque (§11) | Stories qui le traitent |
+|---|---|
+| R1 volume de tenants | 18.1, 19.11 |
+| R2 collisions d'identité | 18.1, 19.6, 24.7, vague 6 de 24.15 |
+| R3 factures incohérentes | 18.1 (Q7, Q13), 24.4, 24.8 |
+| R4 reporting multi-source | 20.9, 20.12 |
+| R5 qualité de l'app RN | 22.4–22.7, 22.13, G2 |
+| R6 abonnements Apple | 21.2, 24.10, vague 5 |
+| R7 retardataires | 19.10, 24.11, 24.16 |
+| R8 mutations locales Bref | 24.11 |
+| R9 crédits et packs | 21.3, 24.5, 24.8 |
+| R10 secrets | 19.9, 21.5, 24.6 |
+| R11 identité de l'app Keevo | 18.4 |
+| R12 charge solo | 18.3 (gel Bref), ordonnancement, jalons G0–G5 |
+
+## Annexe A — Bloc de suivi dans `sprint-status.yaml`
+
+> **Ajouté au `sprint-status.yaml` le 2026-11-01** (entre l'epic 17 et la piste V1). Ce bloc reste ici comme référence ; la source de vérité des statuts est `sprint-status.yaml`. Ne pas créer de fichier de story 19+ avant le gate G0.
+
+```yaml
+  # ─────────────────────────────────────────────────────────
+  # FUSION KEEVO × BREF POINT — epics-fusion-keevo-bref.md
+  # Préalable : epic-16 en production
+  # ─────────────────────────────────────────────────────────
+  epic-18: backlog  # P0 Cadrage
+  18-1-mesures-bases-bref-keevo: backlog
+  18-2-decisions-produit-gate-p0: backlog
+  18-3-gel-perimetre-bref: backlog
+  18-4-identites-app-comptes-stores: backlog
+  18-5-brief-prd-architecture-fusion: backlog
+  epic-18-retrospective: optional
+
+  epic-19: backlog  # P1a Socle d'accueil
+  19-1-users-identifiants-multiples: backlog
+  19-2-authenticator-otp: backlog
+  19-3-authenticators-google-apple: backlog
+  19-4-login-username-membres: backlog
+  19-5-roles-manager-viewer-permissions: backlog
+  19-6-multi-roles-multi-entreprises: backlog
+  19-7-profils-pro-team-business: backlog
+  19-8-compteurs-usage-quotas: backlog
+  19-9-sms-email-notifications-persistantes: backlog
+  19-10-versions-minimales-app: backlog
+  19-11-charge-nombre-tenants: backlog
+  19-12-boutiques-etendues-parcours-vente: backlog
+  epic-19-retrospective: optional
+
+  epic-20: backlog  # P1b Modules métier Bref
+  20-1-catalogue-sans-stock-cle-fusion: backlog
+  20-2-crm-etendu-consentement: backlog
+  20-3-devis: backlog
+  20-4-encaissements-echeancier-retard: backlog
+  20-5-remise-livraison-tva-echeance: backlog
+  20-6-derivation-catalogue-crm: backlog
+  20-7-modeles-signatures-liens-publics: backlog
+  20-8-envoi-sms-email: backlog
+  20-9-reporting-multi-source: backlog
+  20-10-module-expenses: backlog
+  20-11-module-finance: backlog
+  20-12-acceptation-parcours-bref: backlog
+  epic-20-retrospective: optional
+
+  epic-21: backlog  # P1b Monétisation & engagement
+  21-1-payments-mobile-money: backlog
+  21-2-storekit-revenuecat: backlog
+  21-3-credit-packs-sms: backlog
+  21-4-ai-assistant: backlog
+  21-5-whatsapp-cloud: backlog
+  21-6-campagnes: backlog
+  21-7-client-portal: backlog
+  epic-21-retrospective: optional
+
+  epic-22: backlog  # P2 App RN parité Keevo
+  22-1-monorepo-shell-deux-identites: backlog
+  22-2-stockage-chiffre-schema: backlog
+  22-3-auth-sessions-tenant-picker: backlog
+  22-4-file-operations-push: backlog
+  22-5-pull-delta-fusion: backlog
+  22-6-rejet-quarantaine-journal: backlog
+  22-7-gate-7-jours: backlog
+  22-8-entitlements-modules-routes: backlog
+  22-9-ecrans-coeur: backlog
+  22-10-catalogue-stock-inventaire: backlog
+  22-11-caisse-pos: backlog
+  22-12-crm-facturation-rapports-exports: backlog
+  22-13-tests-parite-maestro: backlog
+  22-14-derniere-release-flutter: backlog
+  22-15-beta-deploiement-ios: backlog
+  22-16-retrait-flutter: backlog
+  epic-22-retrospective: optional
+
+  epic-23: backlog  # P3 App RN parité Bref
+  23-1-onboarding-otp-social: backlog
+  23-2-parcours-document-5-etapes: backlog
+  23-3-devis-encaissements-impayes: backlog
+  23-4-modeles-impression-partage: backlog
+  23-5-depenses-finance: backlog
+  23-6-ia-whatsapp-campagnes: backlog
+  23-7-mon-plan-paiement: backlog
+  23-8-portail-client: backlog
+  23-9-securite-langues-notifications: backlog
+  23-10-bascule-caisse-document: backlog
+  23-11-double-backend-mode-legacy: backlog
+  23-12-publication-identite-bref: backlog
+  epic-23-retrospective: optional
+
+  epic-24: backlog  # P1c outil + P4 vagues
+  24-1-api-bref-statut-gel-export: backlog
+  24-2-migration-identite-boutiques-membres: backlog
+  24-3-import-produits-clients: backlog
+  24-4-import-documents-paiements-depenses: backlog
+  24-5-import-monetisation: backlog
+  24-6-import-annexes-index-portail: backlog
+  24-7-bridge-identite-collisions: backlog
+  24-8-reconciliation-bloquante: backlog
+  24-9-pilotage-vagues-rollback: backlog
+  24-10-liens-publics-webhooks: backlog
+  24-11-pre-migrateur-ota: backlog
+  24-12-dry-run-copie-prod: backlog
+  24-13-runbook-communication: backlog
+  24-14-vagues-pilotes: backlog
+  24-15-vagues-de-masse: backlog
+  24-16-retardataires-gel-global: backlog
+  epic-24-retrospective: optional
+
+  epic-25: backlog  # P5 Convergence
+  25-1-api-bref-lecture-seule-arret: backlog
+  25-2-webhooks-keevo-seul: backlog
+  25-3-retrait-code-transitoire: backlog
+  25-4-marque-fiche-store: backlog
+  25-5-retrospective-architecture: backlog
+  epic-25-retrospective: optional
+```
+
+## Annexe B — Prochaines étapes BMAD
+
+1. Exécuter **18.1** (mesures) et **18.2** (décisions) : ce sont les seules stories démarrables aujourd'hui.
+2. `bmad-product-brief` → `bmad-prd` → `bmad-architecture` (story 18.5) pour aligner PRD et architecture sur ce plan.
+3. `bmad-sprint-planning` : vérifier la complétude (readiness) après G0 ; le bloc de l'Annexe A est déjà dans `sprint-status.yaml`.
+4. En parallèle, terminer **Epic 16** et mettre la refonte modulaire en production : c'est le préalable de tout le reste.

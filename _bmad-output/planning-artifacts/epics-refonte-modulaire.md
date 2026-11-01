@@ -9,7 +9,7 @@ inputDocuments:
   - _bmad-output/planning-artifacts/prd.md
   - _bmad-output/planning-artifacts/architecture.md
   - _bmad-output/gap-analysis-client-importateur.md
-scope: "Refonte modulaire — 7 phases complètes (Epics 10-16). Préserve les Epics 1-9 existants."
+scope: "Refonte modulaire — 7 phases complètes (Epics 10-17). Préserve les Epics 1-9 existants. Rapprochement 2026-11-01 : epics 10-15 done (sauf 10-8), reste 10-8 + 16 + 17 ; suite = fusion Keevo × Bref (epics 18-25, epics-fusion-keevo-bref.md)."
 decisionsLocked:
   - "Schema-per-tenant conservé (< 100 tenants) ; provisioning module = Flyway par module dans le schéma tenant"
   - "Entitlements à-la-carte hybride ; bundle = liste d'IDs ; trial HYBRIDE (6 mois global à l'inscription + 14j par module réactivé)"
@@ -1392,6 +1392,29 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 - [x] [Deferred-from: device test 15-5b, 2026-10-31] The app is not locked to portrait: in landscape the terms screen overflows (« BOTTOM OVERFLOWED BY 17 PIXELS ») — lock portrait on phones or make onboarding/terms screens scroll [app shell / onboarding] — ✅ 15.8 (2026-10-31): portrait lock
 ---
 
+## État de la refonte au 1er novembre 2026 (rapprochement)
+
+> Rapprochement fait sur `refonte/modulaire` (`c4e69b0a` = `origin/develop`) contre `sprint-status.yaml`. **La production (branche `deploy`, `34949fec`) tourne encore la V1 2.0.1** : rien de la refonte n'est en production.
+
+| Bloc | État | Reste à faire |
+|---|---|---|
+| Epics 10–15 | **done** (sauf 10-8) | 10-8 : exécution serveur des runbooks (ops) |
+| Epic 16 | backlog | 16.1 → 16.9 + **16.10** (résidu sécurité V1) + **16.11** (sessions longues et sûres, décision du 2026-11-01) ; 16.3 révisée (plus de claim `modules` dans le jeton) ; 16.6 : cœur livré en V1, AC refonte à vérifier |
+| Epic 17 | in-progress | 17.1, 17.3, 17.4, 17.5 livrés (V1 puis portés) ; 17.6 remplacée ; restent 17.2 (résidu), 17.7, 17.8, **17.9 (gate go-live)**, **17.10**, **17.11** (résidus V1), **17.12** (suivi de stock par produit, demande du 2026-11-01) |
+| Piste V1 (`v1s-*`) | close | V1 figée en 2.0.1 (`release/2.0.x`) ; ses derniers items ouverts sont réintégrés ici (16.10, 17.10, 17.11) ou sans objet (v1s-16-24 : app en portrait depuis 15-8) |
+
+**Chemin restant jusqu'à la mise en production de la refonte** (ordre conseillé) :
+
+1. **16.5** backfill `tenant_modules` + fin du DDL tenant sous Flyway (débloque 16.8 et la charge de la fusion) ; **16.1** cycle de vie (grâce, temps réel) ; **16.8** profils et plafonds configurables ; **16.2** bundles ; **16.3** modules actifs côté app (sans claim dans le jeton).
+2. **16.4** console super-admin modules ; **16.10** scope employé de l'historique des transferts ; **16.11** sessions longues et sûres (jeton d'accès court, session glissante d'un an, appareils connectés) ; **17.10**, **17.11**, **17.12**, **17.8**, **17.7**, **17.2** (fonctionnel, peuvent s'intercaler ; 17.12 après 17.11, dont elle réutilise la saisie de stock initial).
+3. **16.6** vérification RGPD ; **10-8** exécution serveur des runbooks (secrets, TLS staging, S3, alertes, Prometheus).
+4. **17.9** régression E2E sur staging = **gate go-live** ; puis **16.7** canary (avec la version minimale d'app forcée, cf. items de 16.7).
+5. **16.9** (facturation électronique DGI) reste en attente des spécifications DGI ; elle ne bloque pas le go-live.
+
+**Suite** : une fois la refonte en production (gate G0 de la fusion), la **fusion Keevo × Bref Point** prend le relais — epics **18 à 25**, décrits dans `epics-fusion-keevo-bref.md` et suivis dans `sprint-status.yaml`. Les stories 18.1 (mesures) et 18.2 (décisions) peuvent être menées dès maintenant, en parallèle, car elles ne touchent pas au code.
+
+---
+
 ## Epic 16 : Licences, Migration & Go-Live (Phase 6)
 
 > Rendre la **commercialisation modulaire effective** : à-la-carte + bundles, console super-admin, conformité RGPD, migration des tenants existants, déploiement progressif.
@@ -1462,28 +1485,39 @@ So that **le client peut choisir juste une partie ou un pack (MOD-FR12)**.
 
 - [ ] [Deferred-from: review 13-3, 2026-10-29] Bundles need one plan for a set of modules (`planActivation(schema, Set<String>)` over the union of closures, one topological order) instead of planning module by module [DependencyResolver]
 
-### Story 16.3 : Claim JWT `modules` + gating offline
+### Story 16.3 : Modules actifs côté app — rafraîchissement sans claim JWT + gating offline
+
+> **Révisée le 2026-11-01 (décision utilisateur, minimisation du jeton)** : le claim `modules` n'est **plus** ajouté au JWT. Un jeton est signé mais lisible par quiconque le détient, ses claims restent figés jusqu'à l'expiration, et il voyage avec chaque requête. L'app n'en a pas besoin : depuis 15.1, elle lit `GET /api/v1/tenants/me/modules` et garde la dernière réponse sur l'appareil (`entitlements_provider.dart`), ce qui suffit hors ligne. Le serveur reste seule source de vérité (`@RequiresEntitlement`, revalidation en base).
 
 As a **plateforme**,
-I want **embarquer les modules actifs dans le JWT à la sélection de tenant et au refresh**,
-So that **le frontend gâte hors-ligne, le backend restant source de vérité (MOD-FR15)**.
+I want **que l'app connaisse les modules actifs sans les lire dans le jeton**,
+So that **le gating fonctionne hors ligne, suit vite les changements faits côté serveur, et le jeton reste minimal (MOD-FR15)**.
 
 **Acceptance Criteria:**
 
-**Given** un `select-tenant`/refresh
-**When** le token est émis
-**Then** il contient `modules: [...]` (modules TRIAL/ACTIVE)
+**Given** un renouvellement de jeton, une sélection de tenant ou un retour du réseau
+**When** l'app reprend la main
+**Then** elle redemande `GET /tenants/me/modules` et remplace l'état gardé sur l'appareil ; en cas d'échec, l'état connu est conservé
 
-**Given** un changement d'entitlement
-**When** le token est rafraîchi
-**Then** le claim reflète le nouvel état ; le backend revalide toujours en DB
+**Given** un module désactivé par le super-admin
+**When** l'app de l'owner renouvelle sa session ou retrouve le réseau
+**Then** le module disparaît de l'app sans reconnexion, et le serveur le refuse déjà avant cela
+
+**Given** un appareil hors ligne depuis plusieurs jours
+**When** l'owner ouvre l'app
+**Then** les modules affichés sont ceux de la dernière réponse du serveur
+
+**Given** un jeton émis par le serveur
+**When** on décode son contenu
+**Then** il ne contient aucune liste de modules
 
 **Implementation Notes:**
-- Étendre la génération JWT (au `select-tenant`, Story 1.7 existante) ; backend continue d'appliquer `@RequiresEntitlement` (défense).
+- Pas de modification de `JwtTokenProvider` pour les modules ; la réponse de `/tenants/me/modules` porte l'état de chaque module (`ENABLED`, `READ_ONLY`, `TRIAL`…) au lieu d'une liste mélangée.
+- Le backend continue d'appliquer `@RequiresEntitlement` (défense).
 
-- [ ] [Deferred-from: review 13-5, 2026-10-29] Claim shape must carry read-only modules (`{id: state}` or a separate list) built from `ModuleRegistry.moduleStates` — `enabledModules` mixes ENABLED and READ_ONLY [JWT]
+- [ ] [Deferred-from: review 13-5, 2026-10-29 ; reformulé le 2026-11-01] The modules answer must carry read-only modules (`{id: state}`) built from `ModuleRegistry.moduleStates` — `enabledModules` mixes ENABLED and READ_ONLY [`GET /tenants/me/modules` — plus de claim JWT]
 
-- [ ] [Deferred-from: review 15-2, 2026-10-31] The app's route guard (15.2) treats a module absent from known states as not readable: when the `modules` claim seeds `entitlementsProvider`, it must list every usable module (free ones included, e.g. `crm`), or the app must treat absent free modules as readable [JWT claim / app entitlements]
+- [ ] [Deferred-from: review 15-2, 2026-10-31 ; reformulé le 2026-11-01] The app's route guard (15.2) treats a module absent from known states as not readable: the modules answer that seeds `entitlementsProvider` must list every usable module (free ones included, e.g. `crm`), or the app must treat absent free modules as readable [modules answer / app entitlements]
 
 ### Story 16.4 : Console super-admin « Modules »
 
@@ -1633,10 +1667,124 @@ As a **commerçant assujetti**, I want **que mes factures Keevo soient transmise
 
 **Interim AC:** Given the published DGI specifications, when an invoice is issued by a concerned tenant, then it is transmitted and carries the DGI identifier; otherwise no « normalisée » mention appears.
 
+### Story 16.10 : Scope boutique de l'employé sur l'historique des transferts
+
+> Clé tracker : `16-10-scope-employe-historique-transferts` — créée le 2026-11-01 au rapprochement : résidu de `v1s-12-9` (V1 figée), à corriger avant le go-live (sécurité).
+
+As a **propriétaire**,
+I want **qu'un employé ne voie que les transferts de sa boutique**,
+So that **les mouvements des autres boutiques restent confidentiels, comme pour la création et la réception d'un transfert**.
+
+- [ ] [Deferred-from: spec-v1s-16-23-transfer-history-and-audit-route.md review, 2026-10-20 ; routé depuis v1s-12-9 le 2026-11-01] `GET /api/v1/stock/transfers` has no EMPLOYEE store scope [`keevo/backend/src/main/java/com/keevo/inventory/transfer/adapter/in/web/StockTransferController.java` `getHistory`] — POST and `/complete` already use `CurrentActor.assignedStoreId()`
+
+**Acceptance Criteria:**
+
+**Given** un EMPLOYEE rattaché à la boutique A
+**When** il appelle `GET /api/v1/stock/transfers` (avec ou sans filtres `source`/`destination`/`store`)
+**Then** seuls les transferts dont la source **ou** la destination est A sont renvoyés ; un filtre sur une autre boutique renvoie une liste vide (ou 403, au choix de la spec) ; l'OWNER voit tout
+
+**Given** le pull de sync des transferts
+**When** un EMPLOYEE synchronise
+**Then** la même règle s'applique (vérifier le `DeltaEntityProvider` des transferts)
+
+### Story 16.11 : Sessions longues et sûres (jeton d'accès court, session d'un an sans mot de passe, droits lus côté serveur)
+
+> Clé tracker : `16-11-sessions-longues-et-sures` — décision utilisateur du 2026-11-01 : un utilisateur doit pouvoir rester **jusqu'à un an sans jamais ressaisir son mot de passe**, tout en restant sécurisé, et le jeton doit contenir le moins d'informations possible. À livrer **avant le go-live** (avec 16.10).
+
+As a **commerçant**, I want **ne presque jamais avoir à me reconnecter**, So that **je travaille sans friction, tandis qu'un jeton volé ne sert que très peu de temps, qu'un appareil perdu peut être coupé à distance et qu'un accès retiré cesse immédiatement**.
+
+**Constat (code `refonte/modulaire`, 2026-11-01)** :
+- Jeton d'accès valable **60 jours** (`access-token-expiry-hours: 1440`) : un jeton volé reste utilisable deux mois, et ses claims (rôle, boutique) restent figés aussi longtemps.
+- Déjà en place (12.12) : jeton de renouvellement de **360 jours**, stocké haché en base (`refresh_tokens`), **rotation** à chaque usage avec une nouvelle échéance (fenêtre glissante, `SessionTokenIssuer`), **détection de rejeu**, révocation globale au changement / à la réinitialisation du mot de passe et à la désactivation ; côté app, stockage dans le coffre sécurisé du téléphone (`secure_token_storage.dart`) et renouvellement automatique sur `401 TOKEN_EXPIRED` (`auth_interceptor.dart`, présent aussi dans la V1 en production).
+- Le jeton contient le prénom (`firstName`), donnée personnelle inutile à l'autorisation.
+- **Droits lus dans le jeton** (`JwtAuthFilter`) : le **rôle** (`role`) et l'**état du compte** (`tenantStatus`) viennent du jeton. Ce qui est déjà vérifié en base à chaque requête : la coupure de session (`tokens_valid_after`, posée au changement de rôle, à la désactivation, au changement de mot de passe et à la suspension du compte, avec un cache de 5 min par instance) et, pour un employé seulement, son statut, sa boutique et l'obligation de changer de mot de passe. Il reste donc des cas où un droit retiré survit jusqu'à l'expiration du jeton (60 jours aujourd'hui) : tout changement d'état du compte qui ne passe pas par la suspension (ex. `DELETION_PENDING`, réactivation), un oubli futur d'appel à la révocation dans un nouveau service, et le délai de 5 min entre instances.
+
+**Principes** :
+1. La durée de session « sans mot de passe » repose sur le **jeton de renouvellement** (long, révocable, contrôlé en base à chaque usage), jamais sur le jeton d'accès.
+2. **Le jeton prouve seulement l'identité, jamais les droits** (décision utilisateur du 2026-11-01) : il ne contient que l'utilisateur (`sub`), le compte (`tenantId`), l'identifiant de session (`sid`, l'appareil) et les dates. Le **rôle, la boutique, l'état du compte et l'obligation de changer de mot de passe sont lus côté serveur à chaque requête**. Un retrait d'accès prend donc effet **à la requête suivante**, sans attendre l'expiration du jeton ni compter sur un appel de révocation.
+
+**Périmètre :**
+- **Jeton d'accès court** : 30 min (réglable). L'app le renouvelle seule, sans rien montrer ; le mode hors ligne n'en dépend pas (vente, clôture, file de synchro) : seule la synchronisation le renouvelle au retour du réseau.
+- **Session glissante d'un an** : le jeton de renouvellement est valable **365 jours depuis sa dernière utilisation** (rotation déjà en place, passer de 360 à 365). Un utilisateur qui ouvre l'app au moins une fois par an ne ressaisit jamais son mot de passe ; au-delà d'un an d'inactivité, reconnexion.
+- **Jeton minimal** : `sub`, `tenantId`, `sid`, `iat`, `exp` seulement. Retirer `firstName`, `role`, `tenantStatus`, `storeId` et `passwordChangeRequired`. Aucune liste de modules (16.3).
+- **Droits lus côté serveur** : `JwtAuthFilter` charge en une seule lecture l'« état d'accès » de l'utilisateur dans ce compte (rôle, statut de l'adhésion ou de l'employé, boutique, mot de passe à changer, état du compte, coupure de session, session `sid` encore ouverte) et en tire les autorisations Spring (`ROLE_…`), `CurrentActor` et les blocages actuels (`ACCOUNT_SUSPENDED`, `ACCOUNT_DELETION_PENDING`, `ACCOUNT_INACTIVE`, `PASSWORD_CHANGE_REQUIRED`). Le rôle n'est plus jamais lu dans le jeton.
+- **Coût maîtrisé** : cet état est mis en cache par utilisateur et par compte, et **invalidé à chaque changement** (rôle, boutique, statut, suspension, suppression, fermeture de session) sur **toutes** les instances du serveur, par un message diffusé (PostgreSQL `LISTEN/NOTIFY` ou Redis s'il est en place). Durée de vie du cache comme filet de sécurité : 30 s au plus. Le cache actuel de 5 min (`CachedTokenRevocationAdapter`) est remplacé.
+- **Plus de `STORE_REASSIGNED`** : la boutique vient de la base, l'employé réaffecté travaille tout de suite dans sa nouvelle boutique ; l'app rafraîchit son profil à la réponse suivante.
+- **App mobile et dashboard** : le rôle, la boutique, le prénom et « mot de passe à changer » sont lus dans `GET /api/v1/auth/profile` (étendu si besoin) au lieu du jeton, et gardés sur l'appareil pour l'affichage hors ligne. Ce n'est que de l'affichage : le serveur décide. `session_claims_applier.dart` et le décodage du jeton côté app sont adaptés ; bump de `pubspec.yaml`.
+- **Compatibilité** : pendant la transition, le serveur ignore les anciens claims des jetons déjà émis (il ne les lit plus) ; les apps V1 encore installées qui lisent le rôle dans le jeton reçoivent, jusqu'à la version minimale forcée (16.7), des jetons qui gardent un claim `role` **purement indicatif**, que le serveur n'utilise pas ; ce claim est supprimé une fois la version minimale imposée.
+- **Une session par appareil** : `refresh_tokens` reçoit l'identifiant de l'appareil (celui de la synchro), un libellé lisible (modèle, système) et la date de dernière utilisation. Écran « Appareils connectés » : chaque utilisateur voit ses sessions et peut en fermer une ; l'owner peut fermer celles de ses employés (téléphone perdu, employé parti).
+- **Retrait immédiat des droits** : changement de rôle, réaffectation de boutique, désactivation d'un employé, suspension ou suppression du compte, fermeture d'une session → effet **à la requête suivante** sur toutes les instances (lecture côté serveur + invalidation diffusée). La révocation des jetons de renouvellement reste en place pour forcer la reconnexion quand c'est voulu (désactivation, appareil perdu).
+- **Protection du renouvellement** : limite de débit sur `/auth/refresh` ; rejeu d'un jeton déjà échangé = révocation de toute la chaîne de cet appareil (déjà en place, à couvrir par un test) ; jeton de renouvellement jamais écrit dans les logs.
+- **Compatibilité** : les apps déjà installées (V1 2.0.1 comprise) renouvellent déjà sur `TOKEN_EXPIRED` ; vérifier sur appareil réel qu'aucune reconnexion n'est demandée après le passage à 30 min. Les jetons d'accès de 60 jours déjà émis expirent naturellement ; les sessions en cours ne sont pas cassées.
+- **Dashboard web** (owner / super-admin) : même règle (accès court, renouvellement), avec une session plus courte pour le **super-admin** (par exemple 12 h glissantes).
+- Libellés français dans l'app et l'audit (« Appareil déconnecté », « Toutes les sessions fermées »), sans identifiants techniques à l'écran.
+
+**Acceptance Criteria:**
+
+**Given** un utilisateur connecté qui ouvre l'app au moins une fois tous les 11 mois
+**When** il l'ouvre au bout d'un an
+**Then** il n'a jamais eu à ressaisir son mot de passe
+
+**Given** un utilisateur qui n'a pas ouvert l'app depuis plus de 365 jours
+**When** il l'ouvre
+**Then** il doit se reconnecter
+
+**Given** un jeton d'accès émis
+**When** 30 minutes sont passées
+**Then** le serveur le refuse (`TOKEN_EXPIRED`) et l'app le renouvelle et rejoue la requête sans rien montrer à l'utilisateur
+
+**Given** un appareil hors ligne pendant 5 jours
+**When** il retrouve le réseau
+**Then** l'app renouvelle sa session et synchronise sans demander de mot de passe
+
+**Given** un téléphone d'employé perdu
+**When** l'owner ferme cette session dans « Appareils connectés »
+**Then** dès la requête suivante, ce téléphone ne peut plus rien envoyer au serveur et doit se reconnecter
+
+**Given** un jeton de renouvellement déjà échangé, présenté une seconde fois
+**When** le serveur le reçoit
+**Then** toute la chaîne de cet appareil est révoquée et l'événement est audité
+
+**Given** un jeton émis
+**When** on décode son contenu
+**Then** il ne contient ni rôle, ni boutique, ni état du compte, ni prénom, ni liste de modules (une fois la version minimale de l'app imposée)
+
+**Given** un gérant rétrogradé en employé, sur un serveur à plusieurs instances
+**When** il envoie une action réservée aux gérants juste après, avec un jeton d'accès encore valide
+**Then** l'action est refusée (403) dès cette requête, quelle que soit l'instance qui la reçoit
+
+**Given** un compte passé en suppression programmée ou suspendu
+**When** un de ses utilisateurs tente une écriture avec un jeton encore valide
+**Then** elle est refusée dès la requête suivante
+
+**Given** un employé réaffecté à une autre boutique
+**When** il fait sa requête suivante
+**Then** elle s'applique à sa nouvelle boutique, sans reconnexion
+
+**Given** un nouveau service qui modifie un droit sans appeler la révocation
+**When** l'utilisateur concerné fait sa requête suivante
+**Then** le nouveau droit s'applique quand même (test de garde : aucun code d'autorisation ne lit le rôle dans le jeton)
+
 ## Epic 17 : Complétion Fonctionnelle & Gating Produit (Phase 7)
 
 > **Objectif :** refermer les FR produit non planifiés + livrer les features Premium décidées, **gâtées** par le moteur d'entitlements. Dépend d'Epic 13 (gating) et du classement §6.1. Rend l'app **fonctionnellement complète** sur les 3 surfaces. (Comble les gaps G5-G13.)
 > **Note :** 17.1-17.4 reprennent et **remplacent** les stories backlog d'origine (4-5, 4-6, 8-2, 8-4) — désormais planifiées dans la refonte.
+
+> **Rapprochement 2026-11-01** — la piste V1 (`v1s-*`) a livré une partie de cet epic avant la refonte, et le code est présent sur `refonte/modulaire` :
+>
+> | Story | Statut | Preuve / reste |
+> |---|---|---|
+> | 17.1 Annulation/correction | **done** | v1s-13-5 ; `CorrectSaleService`, `JustificationPolicy`, avoir automatique via le pont pos→invoicing (14.7) |
+> | 17.2 Leaderboard | backlog (résidu) | cœur livré par v1s-14-2 (OWNER-only, gaté `advanced-reports` en 15.8) ; reste le réglage « Afficher aux employés » |
+> | 17.3 Activité employés | **done** | v1s-14-6 ; `GetEmployeeActivityUseCase` |
+> | 17.4 Feedback | **done** | v1s-14-5 + boîte « Retours utilisateurs » (8-4) ; module `feedback` |
+> | 17.5 Santé, alertes, push global | **done** | 9-5 ; `PlatformHealthService`, `AdminGlobalNotificationController` |
+> | 17.6 Exports PDF/Excel | **done (remplacée)** | v1s-epic-18 (2026-10-12) |
+> | 17.7 Notification changement de prix | backlog | `SalePriceOverriddenEvent` seulement audité (`AuditEventListener`), aucune notification owner |
+> | 17.8 Gating config rapports | backlog (résidu) | endpoint gaté `report-config` (13.10) ; reste l'item ci-dessous (EOD par défaut quand `report-config` est DISABLED) |
+> | 17.9 Régression E2E | backlog | **gate go-live** : à passer sur staging avant 16.7 |
+> | 17.10, 17.11 | backlog | résidus V1 réintégrés (v1s-16-25, v1s-16-26) |
+> | 17.12 | backlog | demande du 2026-11-01 : suivi de stock réglé par produit |
 
 - [ ] [Deferred-from: review 13-10a, 2026-10-30] With `report-config` DISABLED the end-of-day report must use the fixed default (hour/channel) — stored `report_preferences` set during a trial must be ignored; retire/replace the 13.10a transition rule (plan → paid modules without row) by `profile_modules` [plan profiles]
 
@@ -1680,6 +1828,86 @@ As a **équipe**, I want **une suite de régression de bout en bout couvrant les
 
 ---
 
+
+### Story 17.10 : Compteur « Produits » juste sur l'écran Abonnement
+
+> Clé tracker : `17-10-compteur-produits-ecran-abonnement` — reprend `v1s-16-25` le 2026-11-01 (V1 figée).
+
+As a **propriétaire**, I want **voir le bon nombre de produits dans « Utilisation » de mon abonnement**, So that **je sais où j'en suis par rapport à mon plafond**.
+
+- [ ] [Deferred-from: live device run 12-2e, 2026-10-29 ; routé depuis v1s-16-25 le 2026-11-01] Subscription usage « Produits » counter shows 0 [`keevo/app/lib/features/settings/presentation/page/subscription_page.dart`] — compare with `GET /api/v1/subscription/me` (`currentProducts`) ; decide local vs server source
+
+**Acceptance Criteria:** **Given** un tenant avec N produits actifs **When** l'owner ouvre l'écran Abonnement **Then** « Produits » affiche N (en ligne : valeur serveur ; hors ligne : comptage local cohérent).
+
+### Story 17.11 : Stock initial dès la création d'un produit
+
+> Clé tracker : `17-11-stock-initial-creation-produit` — reprend `v1s-16-26` le 2026-11-01 (demande utilisateur du 2026-10-29). À reporter aussi dans l'app RN (fusion, story 22.10).
+
+As a **propriétaire**, I want **pouvoir saisir, si je le souhaite, la quantité initiale dans le formulaire « Nouveau produit »**, So that **je n'ai pas à rouvrir le produit pour lui donner du stock**.
+
+> **Précision du 2026-11-01 (utilisateur)** : le champ est **facultatif**, y compris pour un produit dont le stock est suivi. Laissé vide, le produit est créé avec un stock de 0 et aucun mouvement n'est créé ; la création n'est jamais bloquée par ce champ.
+
+- [ ] [Deferred-from: user request during live device run, 2026-10-29 ; routé depuis v1s-16-26 le 2026-11-01] Initial stock field in the product creation form [`keevo/app/lib/features/catalog/presentation/page/product_form_page.dart`] — STOCK_ENTRY movement for the active store, applied in the same local transaction as the product creation, synced like other stock entries
+
+**Acceptance Criteria:**
+
+**Given** l'owner crée un produit suivi avec une quantité initiale Q > 0 **When** il enregistre (en ligne ou hors ligne) **Then** le catalogue affiche Q pour la boutique active, un mouvement STOCK_ENTRY existe, et après synchronisation le stock serveur vaut Q.
+
+**Given** l'owner crée un produit suivi sans remplir la quantité initiale **When** il enregistre **Then** la création réussit sans message d'erreur, le stock affiché est 0 et aucun mouvement n'est créé.
+
+**Given** l'owner crée un produit non suivi (17.12) **When** le formulaire s'affiche **Then** le champ quantité initiale est masqué.
+
+### Story 17.12 : Suivi de stock activable par produit
+
+> Clé tracker : `17-12-suivi-stock-par-produit` — demande utilisateur du 2026-11-01 : le suivi de stock se règle **produit par produit**, et non selon le type ou la catégorie de la boutique (secteur d'onboarding, `StoreType`). Chaque boutique vend librement des produits suivis et non suivis. Tranche aussi le point §7.3 de la fusion (`track_stock`) : la story 20.1 de la fusion réutilise ce champ au lieu de le créer.
+
+As a **propriétaire**, I want **choisir pour chaque produit s'il suit un stock ou non**, So that **je vends des services ou des articles sans inventaire à côté de produits suivis, sans être bloqué par « Stock insuffisant »**.
+
+**Constat (code `refonte/modulaire`, 2026-11-01)** : aucun réglage de suivi n'existe ; `RecordSaleService` contrôle toujours le stock (`INSUFFICIENT_STOCK`) et le POS Flutter limite la quantité au stock disponible, pour tous les produits.
+
+**Périmètre :**
+- Catalogue : colonne `products.track_stock BOOLEAN NOT NULL DEFAULT true` (migration Flyway tenant ; produits existants = `true`, aucun changement de comportement) ; champ exposé dans l'API produit, l'import CSV (colonne optionnelle `suivi_stock`, défaut `oui`) et le delta de sync.
+- Le réglage appartient au **produit** (toutes ses variantes, toutes les boutiques). Ni le secteur choisi à l'onboarding ni le type de boutique ne le fixent : un nouveau produit est suivi par défaut, l'owner décoche s'il le souhaite.
+- Produit non suivi : pas de contrôle de disponibilité ni de mouvement SALE à la vente (en ligne, hors ligne, validation d'une vente en attente, correction/annulation 17.1) ; pas de ligne `stock_levels` créée ; pas d'alerte de seuil ; exclu des transferts, des sessions d'inventaire, des exports et de la valeur de stock ; affiché « Sans suivi de stock » au lieu d'une quantité (catalogue, POS, fiche).
+- Activer le suivi sur un produit existant : saisie **facultative** d'une quantité de départ pour la boutique active (mouvement STOCK_ENTRY si renseignée, même mécanique que 17.11) ; sans saisie, et pour les autres boutiques, le stock démarre à 0.
+- Créer un produit suivi : la quantité initiale reste facultative (17.11).
+- Désactiver le suivi : confirmation explicite ; les niveaux de stock sont conservés mais gelés (plus de mouvements), l'historique reste consultable ; réactiver repart des quantités gelées après confirmation.
+- Gating : le champ est disponible dès que le module `inventory` est actif ; sans `inventory`, tous les produits se comportent comme non suivis (cohérent avec le gating 15.8).
+- Réservé à l'owner (le manager selon les permissions existantes) ; changement audité avec un libellé français (« Suivi du stock activé / désactivé »).
+- App mobile : case « Suivre le stock » dans le formulaire produit (création et modification) ; colonne Drift + migration locale ; opérations de sync existantes enrichies ; bump de `pubspec.yaml`.
+
+**Acceptance Criteria:**
+
+**Given** un produit `track_stock=false` sans aucun stock
+**When** un vendeur le vend en ligne ou hors ligne, puis synchronise
+**Then** la vente est acceptée, aucun mouvement de stock n'est créé, et le serveur ne renvoie ni `INSUFFICIENT_STOCK` ni `STOCK_NEGATIVE`
+
+**Given** une boutique qui vend un produit suivi et un produit non suivi dans la même vente
+**When** la vente est enregistrée
+**Then** seul le produit suivi est contrôlé et décrémenté
+
+**Given** un produit non suivi
+**When** l'owner ouvre les alertes de seuil, un transfert, une session d'inventaire ou l'export du stock
+**Then** le produit n'y apparaît pas
+
+**Given** un produit non suivi
+**When** l'owner active le suivi en saisissant 12 pour la boutique active
+**Then** un mouvement STOCK_ENTRY de 12 est créé, le produit est contrôlé à la vente suivante, et les autres boutiques affichent 0
+
+**Given** un produit non suivi
+**When** l'owner active le suivi sans saisir de quantité
+**Then** l'activation réussit, le stock vaut 0 dans toutes les boutiques et aucun mouvement n'est créé
+
+**Given** un produit suivi avec du stock
+**When** l'owner désactive le suivi et confirme
+**Then** les ventes suivantes ne créent plus de mouvement, l'historique reste consultable, et le changement apparaît dans l'audit en français
+
+**Given** les tenants existants après migration
+**When** ils vendent
+**Then** le comportement est inchangé (tous les produits sont suivis)
+
+---
+
 ## Récapitulatif
 
 | Épic | Stories | Couvre |
@@ -1690,7 +1918,9 @@ As a **équipe**, I want **une suite de régression de bout en bout couvrant les
 | 13 — Moteur de Modularité (Socle) | 13.1 → 13.10 (10) | MOD-FR1-6, 9-11, 14 ; NFR7, 10 |
 | 14 — Module Pilote Facturation | 14.1 → 14.6 (6) | MOD-FR7-10, 17 ; UX-DR3, 5 |
 | 15 — Frontend Modulaire | 15.1-15.3, 15.4a-c, 15.5-15.8 (10) | MOD-FR14, 15, 18 ; UX-DR1, 3, 4 |
-| 16 — Licences, Migration & Go-Live | 16.1 → 16.8 (8) | MOD-FR12, 13, 13b, 15, 16, 19, 20 ; UX-DR2 ; FR78/79 |
-| 17 — Complétion Fonctionnelle & Gating | 17.1 → 17.9 (9) | FR44, 55, 60, 67, 81-83, 90, 92 + notif prix + régression E2E |
-| **Total** | **67 stories** | Toutes les exigences MOD-FR/MOD-NFR/UX-DR + FR produit résiduels |
+| 16 — Licences, Migration & Go-Live | 16.1 → 16.11 (11) | MOD-FR12, 13, 13b, 15, 16, 19, 20 ; UX-DR2 ; FR78/79 ; DGI (16.9) ; résidu sécurité V1 (16.10) ; sessions longues et sûres (16.11) |
+| 17 — Complétion Fonctionnelle & Gating | 17.1 → 17.12 (12) | FR44, 55, 60, 67, 81-83, 90, 92 + notif prix + régression E2E + résidus V1 (17.10, 17.11) + suivi de stock par produit (17.12) |
+| **Total** | **74 stories** | Toutes les exigences MOD-FR/MOD-NFR/UX-DR + FR produit résiduels |
+
+> **Suite du produit** : fusion Keevo × Bref Point — epics 18 à 25 (85 stories) dans `epics-fusion-keevo-bref.md`.
 

@@ -1307,7 +1307,7 @@ Le propriétaire peut récupérer toutes ses données dans le format de son choi
 
 Scope: in landscape with the soft keyboard open, the onboarding "Comment s'appelle votre boutique ?" step overflows (Flutter "BOTTOM OVERFLOWED BY 240 PIXELS"). Found during the 2026-10-29 live device run (Redmi 23106RN0DA, debug build) of the modular refactor; V1 behaviour, not caused by the refactor. Either lock the app to portrait (as the iOS release identity story did for iOS) or make the onboarding steps scrollable.
 
-- [ ] [Deferred-from: live device run 12-1/12-5, 2026-10-29] Onboarding shop-name step overflows in landscape with keyboard [keevo/app/lib/features/onboarding] — reproduce in landscape, keyboard open
+- [x] [Deferred-from: live device run 12-1/12-5, 2026-10-29] Onboarding shop-name step overflows in landscape with keyboard [keevo/app/lib/features/onboarding] — reproduce in landscape, keyboard open — ✅ 2026-11-01 sans objet : app verrouillée en portrait (15-8)
 
 **AC (interim):** Given the app in landscape with the keyboard open, when the owner reaches any onboarding step, then no overflow stripe appears and the primary button stays reachable.
 
@@ -1315,7 +1315,7 @@ Scope: in landscape with the soft keyboard open, the onboarding "Comment s'appel
 
 Scope: on the owner's subscription screen (« Utilisation »), « Produits » shows 0 while the tenant has 2 active products; the backend `GET /api/v1/subscription/me` returns `currentProducts: 2`, and the screen issues no call to it (counter computed locally). Seen during the 2026-10-29 live run of the refactor (app untouched by the refactor, so pre-existing V1).
 
-- [ ] [Deferred-from: live device run 12-2e, 2026-10-29] Subscription usage « Produits » counter shows 0 [keevo/app/lib/features/subscription] — compare with `/subscription/me`; decide local vs server source
+- [x] [Deferred-from: live device run 12-2e, 2026-10-29] Subscription usage « Produits » counter shows 0 [keevo/app/lib/features/subscription] — compare with `/subscription/me`; decide local vs server source — ⤳ 2026-11-01 routé vers la refonte : story 17-10 (epics-refonte-modulaire.md)
 
 **AC (interim):** Given a tenant with N active products, when the owner opens the subscription screen, then « Produits » shows N.
 
@@ -1323,7 +1323,7 @@ Scope: on the owner's subscription screen (« Utilisation »), « Produits » sh
 
 Scope (user request 2026-10-29, live run): the owner must be able to enter the initial stock (quantity, store = active store) directly in the « Nouveau produit » form. Today the form has no stock field — the « Gestion du stock » section only appears when editing an existing product — while CSV import (« Quantité initiale ») and draft products at checkout already support an initial stock, and the REST create already accepts `stockQuantity`. Offline-first: the initial stock must go through the same local movement + sync path as other stock entries (no direct REST).
 
-- [ ] [Deferred-from: user request during live device run, 2026-10-29] Initial stock field in the product creation form [keevo/app/lib/features/catalog/presentation/page/product_form_page.dart:640] — STOCK_ENTRY movement for the active store, applied in the same local transaction as the product creation, synced like other stock entries
+- [x] [Deferred-from: user request during live device run, 2026-10-29] Initial stock field in the product creation form [keevo/app/lib/features/catalog/presentation/page/product_form_page.dart:640] — STOCK_ENTRY movement for the active store, applied in the same local transaction as the product creation, synced like other stock entries — ⤳ 2026-11-01 routé vers la refonte : story 17-11 (epics-refonte-modulaire.md)
 
 **AC (interim):** Given the owner creates a product with an initial quantity Q, when the product is saved (online or offline), then the catalogue shows stock Q for the active store, a STOCK_ENTRY movement exists, and after sync the server stock level is Q.
 
