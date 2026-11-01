@@ -131,7 +131,7 @@ Implementation decisions (2026-11-01): `PullScope` lives in `shared.application.
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Lire d'abord la section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` (conventions d'API, profil) puis celle de `spec-16-10-scope-employe-historique-transferts.md` (**protocole de synchro**) : cette section les complète.
 
-**Statut** : API livrée (16-13) — mobile à faire.
+**Statut** : API livrée (commit `2339512d`) — mobile à faire.
 
 **Clé de suivi mobile** : `m16-13-scope-employe-donnees-synchro`
 
