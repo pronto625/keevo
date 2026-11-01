@@ -291,3 +291,75 @@ curl -s $BASE/api/v1/auth/sessions -H "Authorization: Bearer $AT" | jq .data
 - `VALIDATION_ERROR` (422) renvoie « Validation failed » et des messages de champ en anglais.
 - `TOKEN_EXPIRED` est aussi renvoyé par `/auth/select-tenant` (jeton de connexion de 5 min expiré) : ce n'est pas un cas de renouvellement.
 - Le jeton porte encore des claims hérités (`role`, `storeId`…) tant que 16.7 n'a pas coupé le drapeau : les ignorer, ils disparaîtront.
+
+## Dashboard super-admin (autre dépôt)
+
+> Destinataire : agent IA qui construit le dashboard super-admin dans un **autre dépôt** (ce dépôt ne livre que l'API). `keevo/dashboard` (Next.js) n'est ici qu'un client de test de l'API, mais c'est la **référence de comportement**. Cette section est la référence de **session super-admin** pour les sections « Dashboard super-admin » des specs 16-2, 16-4, 16-5 et 16-8.
+
+**Statut** : API livrée (commit `7b8f04d9`) — dashboard à faire.
+
+**Clé de suivi dashboard** : `d16-11-sessions-longues-et-sures`
+
+### Ce qui est fait côté API
+
+- Jeton d'accès de **30 min** qui ne prouve que l'identité (`sub`, `tenantId`, `sid`, `iat`, `exp`) : le rôle n'est **jamais** à lire dans le jeton (les claims hérités `role`… présents tant que `keevo.jwt.legacy-claims=true` sont indicatifs et disparaîtront en 16.7).
+- Jeton de renouvellement du super-admin glissant sur **12 h** (`keevo.jwt.super-admin-refresh-expiry-hours: 12`, `application.yml`) au lieu de 365 jours : chaque renouvellement repart pour 12 h ; au-delà de 12 h sans renouvellement → reconnexion. Rotation à chaque renouvellement, rejeu détecté (toute la session de l'appareil fermée).
+- Rôle, statut et ouverture de session relus côté serveur à chaque requête (cache ≤ 30 s) : `/api/v1/admin/**` exige le rôle `SUPER_ADMIN` (`SecurityConfig` + `CurrentActor.requireSuperAdmin()` dans chaque contrôleur admin).
+- Une session par navigateur (libellé envoyé par le client), visible dans `GET /api/v1/auth/sessions`.
+
+### À utiliser
+
+Conventions (enveloppes, `domainCode`, codes d'authentification, renouvellement, rejeu, limite de 10 renouvellements/min) : section « Mobile » de cette spec, sous-section « À utiliser » — ne pas les redupliquer. Spécificités super-admin :
+
+| Étape | Requête | Réponse 200 (JSON brut, sans `data`) |
+|---|---|---|
+| 1 | `POST /api/v1/auth/login` `{"phoneNumber": "+237…", "password": "…"}` | `{"loginToken", "memberships": [{"tenantCode": "KV-ADMIN", "tenantName", "role": "SUPER_ADMIN", "schemaName"}, …]}` |
+| 2 | `POST /api/v1/auth/select-tenant` `{"loginToken", "tenantCode": "KV-ADMIN", "deviceLabel": "Chrome · Linux"}` (`deviceId` facultatif) | `{"accessToken", "refreshToken", "userId", "tenantId", "role", "expiresIn", "storeId": null, "passwordChangeRequired"}` |
+| 3 | `GET /api/v1/auth/profile` (Bearer) | `{"role": "SUPER_ADMIN", "phoneNumber", "tenantStatus", …}` — **seule** source du rôle |
+| Renouvellement | `POST /api/v1/auth/refresh` `{"refreshToken", "deviceLabel"}` | même corps que l'étape 2 ; stocker les **deux** nouveaux jetons |
+| Déconnexion | `POST /api/v1/auth/logout` `{"refreshToken"}` | 204, même avec un jeton d'accès expiré |
+
+- Le tenant système du super-admin est `KV-ADMIN` (schéma `public`) ; un compte sans appartenance `SUPER_ADMIN` à `KV-ADMIN` n'a rien à faire dans le dashboard.
+- Codes propres au dashboard : 401 `TOKEN_EXPIRED` → renouveler puis rejouer une fois ; 401 `REFRESH_TOKEN_INVALID` sur `/auth/refresh` (12 h dépassées, rejeu, session fermée) → écran de connexion ; 401 `SESSION_REVOKED` / `ACCOUNT_INACTIVE` → écran de connexion ; 403 `FORBIDDEN` (« Vous n'avez pas les droits nécessaires ») sur `/api/v1/admin/**` → la session n'est pas super-admin : déconnexion ; 401 `INVALID_CREDENTIALS` / `ACCOUNT_LOCKED` à l'étape 1 → message sous le formulaire.
+- Sources : `keevo/backend/src/main/java/com/keevo/identity/auth/adapter/in/rest/AuthController.java`, `.../identity/auth/application/service/SessionTokenIssuer.java` (durée 12 h), `.../shared/infrastructure/security/JwtProperties.java`, `.../shared/infrastructure/security/SecurityConfig.java` (règle `/api/v1/admin/**`).
+
+### À implémenter côté dashboard
+
+1. **Connexion** : étape 1 ; si aucune appartenance `role = SUPER_ADMIN` et `tenantCode = KV-ADMIN` → refus « Accès refusé — compte super admin requis. » **sans** appeler l'étape 2 ; sinon étape 2 sur `KV-ADMIN` avec un `deviceLabel` lisible (« Chrome · Linux »).
+2. **Rôle lu dans le profil** : après l'étape 2, `GET /auth/profile` ; si `role ≠ SUPER_ADMIN` → appeler `POST /auth/logout` avec le `refreshToken` reçu (la session tout juste ouverte est fermée) puis afficher le même refus. Ne jamais décoder le jeton pour un droit — seul `exp` peut être lu, pour planifier le renouvellement.
+3. **Renouvellement silencieux** : avant chaque requête, si `exp` est à moins d'1 min, renouveler d'abord ; sur 401 `TOKEN_EXPIRED`, renouveler puis rejouer **une seule fois**. Un seul renouvellement à la fois (promesse partagée) : deux renouvellements parallèles ressemblent à un rejeu et ferment la session.
+4. **Issue du renouvellement** : 400/401/403 → effacer les jetons et aller sur la connexion ; erreur réseau / 5xx / 429 → garder la session et laisser la requête échouer avec un message « réessayez ».
+5. **Fin de session** : tout autre 401 (`SESSION_REVOKED`, `ACCOUNT_INACTIVE`, `TOKEN_INVALID`, `REFRESH_TOKEN_INVALID`) → effacer jetons + indicateur de session (cookie de garde de routes s'il existe) puis connexion ; sinon la page suivante restaurerait la même session morte.
+6. **Stockage** : jetons limités à l'onglet/au navigateur (la référence utilise `sessionStorage` + un cookie `ks_admin_auth` de 12 h lu par la garde de routes) ; jamais dans une URL ni dans les journaux.
+7. **Déconnexion volontaire** : `POST /auth/logout` puis effacement local.
+8. Messages : tous en français (« Numéro ou mot de passe incorrect », « Serveur injoignable. Vérifiez votre connexion. », « Connexion impossible pour le moment. Réessayez. ») ; jamais le texte anglais d'Axios/fetch, jamais un `domainCode`.
+
+### Implémentation de référence
+
+- `keevo/dashboard/src/lib/api/auth.ts` (connexion 2 étapes, refus, fermeture de session sur rôle refusé, messages)
+- `keevo/dashboard/src/lib/auth/session.ts` (`RENEWAL_MARGIN_MS`, `renewSession` single-flight, `freshToken`, `deviceLabel`), `keevo/dashboard/src/lib/auth/auth-context.tsx` (stockage, cookie 12 h, `clearSession`)
+- `keevo/dashboard/src/lib/api/client.ts` (intercepteurs : renouvellement avant expiration et sur `TOKEN_EXPIRED`, fin de session sur les autres 401), `keevo/dashboard/src/proxy.ts` (garde de routes), `keevo/dashboard/src/app/login/page.tsx`
+- Tests : `keevo/dashboard/src/lib/auth/__tests__/session-renewal.test.ts`, `auth-context.test.tsx`, `keevo/dashboard/src/lib/api/__tests__/auth.test.ts`
+
+### Critères d'acceptation / scénarios de test
+
+Préparation (backend local démarré **uniquement** avec `--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false`, ajouter `--keevo.jwt.access-token-expiry-minutes=2` pour les scénarios de renouvellement ; arrêt `fuser -k 4500/tcp` ; ne jamais fabriquer de jeton avec la clé de dev) :
+
+```bash
+BASE=http://localhost:4500
+PW='Admin@1234!'   # défaut dev de keevo.admin.password (application.yml), sauf si ADMIN_PASSWORD est défini
+LOGIN=$(curl -s -X POST $BASE/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg p "$PW" '{phoneNumber:"+237600000000",password:$p}')")
+echo "$LOGIN" | jq '.memberships'          # contient KV-ADMIN / SUPER_ADMIN
+TOKENS=$(curl -s -X POST $BASE/api/v1/auth/select-tenant -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg t "$(echo "$LOGIN" | jq -r .loginToken)" '{loginToken:$t,tenantCode:"KV-ADMIN",deviceLabel:"curl · test"}')")
+AT=$(echo "$TOKENS" | jq -r .accessToken); RT=$(echo "$TOKENS" | jq -r .refreshToken)
+curl -s $BASE/api/v1/auth/profile -H "Authorization: Bearer $AT" | jq .role     # "SUPER_ADMIN"
+```
+
+1. **Connexion super-admin** — Given le super-admin de dev, When il se connecte, Then le dashboard ouvre l'accueil ; `GET /auth/sessions` (Bearer `$AT`) liste la session du navigateur avec son libellé lisible.
+2. **Compte non super-admin refusé** — Given un owner (connexion valide), When il se connecte au dashboard, Then « Accès refusé — compte super admin requis. » et aucune session n'est ouverte (aucune appartenance `KV-ADMIN` → étape 2 non appelée) ; et `curl $BASE/api/v1/admin/modules -H "Authorization: Bearer <jeton owner>"` → 403 `FORBIDDEN`.
+3. **Renouvellements silencieux** — Given un backend à jeton de 2 min, When le super-admin navigue ~6 min, Then aucune reconnexion, aucune erreur visible, et chaque renouvellement remplace les deux jetons stockés.
+4. **Fin des 12 h** — Given un jeton de renouvellement non utilisé depuis plus de 12 h (ou démarrer le backend avec `--keevo.jwt.super-admin-refresh-expiry-hours=1` et attendre), When le dashboard renouvelle, Then 401 `REFRESH_TOKEN_INVALID` → écran de connexion, sans boucle de renouvellement.
+5. **Session fermée ailleurs** — Given le dashboard ouvert et une session curl du même super-admin, When `curl -X DELETE $BASE/api/v1/auth/sessions -H "Authorization: Bearer $AT"` (ferme toutes les autres), Then à sa requête suivante le dashboard revient à la connexion.
+6. **Déconnexion** — When le super-admin se déconnecte, Then `POST /auth/logout` part, et `POST /auth/refresh` avec l'ancien jeton répond 401 `REFRESH_TOKEN_INVALID`.

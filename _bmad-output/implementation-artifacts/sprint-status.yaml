@@ -295,7 +295,9 @@ development_status:
   # Epic 16: Licences, Migration & Go-Live (Phase 6) — monétisation — PRÉALABLE de la fusion (gate G0)
   # ─────────────────────────────────────────────────────────
   epic-16: in-progress
-  # ORGANISATION (décision utilisateur 2026-11-01) : nous ne livrons que l'API (keevo/backend + dashboard super-admin).
+  # ORGANISATION (décision utilisateur 2026-11-01) : nous ne livrons que l'API (keevo/backend).
+  #   - Dashboard super-admin livré depuis un AUTRE dépôt ; keevo/dashboard ici = tests très basiques de l'API seulement.
+  #     Parties dashboard des stories : section « ## Dashboard super-admin (autre dépôt) » + clé `d<story>-<slug>` (bloc DASHBOARD).
   #   - Mobile = app React Native (Expo) construite par un autre développeur sur une branche dédiée du dépôt AI/bref.
   #   - Stories séparées : clé backend (livrée ici) + clé mobile `m<story>-<slug>` (bloc « MOBILE » ci-dessous), suivie ici.
   #     Chaque spec livrée se termine par « ## Mobile (React Native — dépôt AI/bref) » : ce que fait l'API, ce qu'il faut
@@ -318,7 +320,7 @@ development_status:
   16-10-scope-employe-historique-transferts: done  # 2026-11-01 build-auto done (spec-16-10-scope-employe-historique-transferts.md) — historique et pull des transferts limités à la boutique de l’'employé, employé sans boutique = page vide ; 22 constats (7 corrigés) ; routé → 16-13 (mouvements de stock, purge des appareils)
   16-11-sessions-longues-et-sures: done
   16-13-scope-employe-donnees-synchro: backlog  # 2026-11-01 review 16-10 — 3 items : mouvements de stock des autres boutiques envoyés aux employés par le pull, purge sur l'appareil des données déjà téléchargées (et au changement de boutique), portée passée par la commande de pull ; sécurité, avant le go-live (après 16-11)
-  16-14-api-prete-client-mobile: backlog  # 2026-11-01 sections mobiles des specs 16-x — incohérences additives (compatibles V1) : messages français des erreurs du filtre d'auth, codes sans message (ACCOUNT_SUSPENDED, MEMBERSHIP_NOT_FOUND…), VALIDATION_ERROR en anglais, date de grâce non envoyée aux employés, rejet synchro PLAN_LIMIT_EXCEEDED sans la limite ; après 16-13
+  16-14-api-prete-client-mobile: backlog  # 2026-11-01 sections mobiles et dashboard des specs 16-x — incohérences additives (compatibles V1) : API admin (référence module {id} vs {moduleId}, VALIDATION_ERROR sans message utile, nom du module perdu dans CORE_MODULE_REQUIRED, recherche de compte par code, MODULE_BACKFILL_RUNNING mort, plan inconnu 422 vs 404, historique sans pagination) ; messages français des erreurs du filtre d'auth, codes sans message (ACCOUNT_SUSPENDED, MEMBERSHIP_NOT_FOUND…), VALIDATION_ERROR en anglais, date de grâce non envoyée aux employés, rejet synchro PLAN_LIMIT_EXCEEDED sans la limite ; après 16-13
   16-6-rgpd-suppression-compte-donnees: backlog  # 2026-11-01 rapprochement : cœur FR91 livré en V1 (v1s-14-5 : demande, délai de grâce, purge ; AccountDeletionPolicy présent sur refonte) — reste à vérifier les AC refonte (DROP SCHEMA, données des modules DISABLED jamais purgées) puis clore
   16-7-go-live-canary-runbook: backlog  # 2026-11-01 spec 16-5 — +1 item (dry-run du backfill tenant_modules sur copie de prod avant le go-live)
   16-12-conversion-ddl-tenant-modules: backlog  # 2026-11-01 créée par la spec 16-5 — 4 items DDL routés depuis 16.5 : conversion du DDL tenant restant en db/modules/<id> (ou décision shim), retrait du DDL crm de TenantSchemaProvisioner (ordre de la FK sales.client_id), réparation des schémas crm dérivés (dry-run copie prod), fin du mirroring TenantSchemaSyncService des modules convertis
@@ -336,6 +338,17 @@ development_status:
   m16-3-modules-actifs-app-sans-claim-jwt: backlog  # API 8325d05c — modules actifs lus par l'API, rafraîchissement, instantané hors ligne
   m16-1-cycle-vie-licences-grace-temps-reel: backlog  # API 6ea22538 — bandeau lecture seule, dates WAT, notifications
   m16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — plafonds envoyés par le serveur, PRODUCT_QUOTA_UNAVAILABLE
+
+  # ─────────────────────────────────────────────────────────
+  # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
+  # Directives : section « ## Dashboard super-admin (autre dépôt) » à la fin de chaque spec.
+  # Statuts : backlog → in-progress → review (livré, à tester ici) → done (testé ici). d16-11 (session) et d16-4 (conventions admin, tâches de fond) à lire en premier.
+  # ─────────────────────────────────────────────────────────
+  d16-11-sessions-longues-et-sures: backlog  # API 7b8f04d9 — session super-admin : connexion KV-ADMIN, rôle lu au profil, renouvellement 30 min, 12 h glissantes
+  d16-4-console-super-admin-modules: backlog  # API fc1e431f — section Modules de la fiche compte, catalogue, provisionnement, tâches de fond (202/409/suivi)
+  d16-5-migration-backfill-tenant-modules: backlog  # API 13eca21e — carte « Migration des modules » : simulation puis exécution confirmée
+  d16-2-a-la-carte-bundles: backlog  # API 165a3501 — page Packs (liste, création, modification, suppression) et application d'un pack
+  d16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — page « Profils & plafonds » (plafonds, modules inclus, suivi de la resynchro)
 
   # ─────────────────────────────────────────────────────────
   # Epic 17: Complétion Fonctionnelle & Gating Produit (Phase 7)

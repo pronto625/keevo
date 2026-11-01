@@ -140,3 +140,117 @@ Status: done
 **Verification:** backend packages one at a time, all green — shared.module 449, shared.job 9, admin 558, shared.infrastructure 608, architecture 32, messaging 176, subscription 83, sync (0 failures), invoicing 170, identity.auth 261. Dashboard: lint clean, 67 files / 373 tests, `next build` green. keevo_dev (backend WhatsApp noop, FCM off, real super-admin login): backfill dry run answered 202 in 0.03 s, concurrent start 409, job SUCCEEDED 333/333 with its report; Pack Pro applied to KV-I3NPYM; history in French (« Modules activés : Facturation · Actif jusqu'au 30/06/2027 »). Test row restored, backend stopped. The drawer was not clicked through in a browser (no automation available).
 
 **Note:** during the first round the implementer signed a super-admin token with the dev key for its manual check; not repeated — the orchestrator's check above used the normal login.
+
+## Dashboard super-admin (autre dépôt)
+
+> Destinataire : agent IA qui construit le dashboard super-admin dans un **autre dépôt** (ce dépôt ne livre que l'API). `keevo/dashboard` (Next.js) n'est ici qu'un client de test de l'API, mais c'est la **référence de comportement** (les écrans décrits dans « Boundaries » ci-dessus y existent). Session et authentification : section « Dashboard super-admin » de `spec-16-11-sessions-longues-et-sures.md` (elle-même renvoyant aux « Conventions » de la section « Mobile » de la même spec). Cette section est la référence des **conventions admin** et des **tâches de fond** pour les sections « Dashboard super-admin » de 16-2, 16-5 et 16-8.
+
+**Statut** : API livrée (commit `fc1e431f`) — dashboard à faire.
+
+**Clé de suivi dashboard** : `d16-4-console-super-admin-modules`
+
+### Ce qui est fait côté API
+
+- Modules d'un compte : état effectif de chaque module (avec dates de fin et de grâce, origine de la ligne), activation (dépendances manquantes d'abord, tables créées ; un Essai sans date dure 14 jours — règle 16.1), désactivation avec `cascade` (dépendants actifs d'abord) et `force` (désactivation malgré l'échec de la mise hors service, auditée « Désactivation forcée »), historique des actions sur les modules.
+- Catalogue des modules installés (gratuit/payant, version, tables à créer ou non).
+- Tâches de fond persistées (`public.admin_jobs`, Flyway V35) : « Migration des modules » (16.5), « Provisionnement d'un module » (tous les comptes, comptes déjà à jour ignorés sauf `force`), « Mise à jour des comptes d'une offre » (16.8). Démarrage en **202** immédiat, suivi par sondage, rapport conservé ; une seule tâche par type à la fois (409) ; une tâche coupée par un redémarrage finit `FAILED` « Interrompu par un redémarrage » (aucune reprise automatique).
+- Packs (16.2) et profils d'offre (16.8) : voir leurs sections « Dashboard super-admin ».
+
+### À utiliser
+
+**Conventions admin** (valables pour toutes les routes `/api/v1/admin/**`) :
+- Bearer d'une session super-admin (`KV-ADMIN`, cf. 16-11) ; toute autre session → 403 `FORBIDDEN`.
+- Succès enveloppé `{"data": …, "timestamp"}` ; `DELETE` → 204 sans corps. Erreur : `{"error": "<message français>", "code", "domainCode", "details", "timestamp"}`.
+- Afficher `error` tel quel, **sauf** `VALIDATION_ERROR` (422) dont `error` vaut « Données invalides » : le vrai message français est la valeur de `details.<champ>` (afficher la première). Décider sur `domainCode`, ne jamais l'afficher.
+- `tenantId` = `id` (UUID) d'un élément de `GET /api/v1/admin/tenants` (`data.items[]`, contrôleur `keevo/backend/src/main/java/com/keevo/admin/tenant/adapter/in/rest/AdminTenantController.java`) — à utiliser dans les URL, jamais à l'écran (afficher `name` et `code`).
+- Dates : ISO-8601 UTC → afficher en JJ/MM/AAAA, heure de Douala (UTC+1).
+
+**Modules d'un compte et catalogue** (`keevo/backend/src/main/java/com/keevo/admin/module/adapter/in/rest/ModuleAdminController.java`, DTO dans `.../rest/dto/`) :
+
+| Méthode | Route | Corps / paramètres | Réponse `data` |
+|---|---|---|---|
+| GET | `/api/v1/admin/modules` | — | `[{moduleId, displayName, category ("core"\|"business"\|"premium"), free, version, requires: [moduleId], migrations}]` |
+| GET | `/api/v1/admin/tenants/{tenantId}/modules` | — | `[{moduleId, displayName, state ("ENABLED"\|"READ_ONLY"\|"DISABLED"), status ("TRIAL"\|"ACTIVE"\|"EXPIRED"\|"DISABLED"\|"AVAILABLE"\|null), expiresAt, graceUntil, provisionedVersion, origin ("PLAN"\|"ADMIN"\|"SYSTEM"\|null)}]` |
+| POST | `/api/v1/admin/tenants/{tenantId}/modules/{moduleId}/activate` | corps facultatif `{"status": "ACTIVE"\|"TRIAL", "expiresAt": "AAAA-MM-JJ" (fin de ce jour, Douala) ou instant ISO}` ; module gratuit : aucun corps | `{activated: [{moduleId, displayName}], status, expiresAt, provisionedVersion}` — `activated` vide = rien à changer (déjà actif) |
+| POST | `/api/v1/admin/tenants/{tenantId}/modules/{moduleId}/deactivate?cascade=false&force=false` | aucun corps | `{moduleId, displayName, status, deactivated: [{moduleId, displayName}], forced: [{moduleId, displayName}]}` ; déjà désactivé → 200 |
+| GET | `/api/v1/admin/tenants/{tenantId}/modules/history` | — | 100 dernières entrées, la plus récente d'abord : `[{occurredAt, action, subject, detail, actorName, actorPhone}]` (`action` déjà en français : « Module activé », « Module désactivé », « Désactivation forcée », « Pack appliqué » ; `detail` peut être null) |
+| POST | `/api/v1/admin/modules/{moduleId}/provision-all?force=false` | — | **202** `{jobId}` |
+| POST | `/api/v1/admin/modules/backfill?dryRun=true` | voir 16-5 | **202** `{jobId}` |
+
+Règles d'activation (serveur) : payant `ACTIVE` sans date → refusé ; `TRIAL` sans date → 14 jours (seulement si le module n'est pas déjà actif) ; date passée ou à plus de 10 ans → refusée ; un module gratuit n'accepte ni statut ni date.
+
+**Tâches de fond** (`keevo/backend/src/main/java/com/keevo/admin/job/adapter/in/rest/AdminJobController.java`, DTO `.../dto/AdminJobDto.java`, rapports `keevo/backend/src/main/java/com/keevo/shared/module/ModuleBackfill.java` et `ProvisioningReport.java`) :
+
+| Méthode | Route | Réponse `data` |
+|---|---|---|
+| GET | `/api/v1/admin/jobs/{jobId}` | une tâche (ci-dessous) ; inconnue → 404 `ADMIN_JOB_NOT_FOUND` |
+| GET | `/api/v1/admin/jobs?kind=MODULE_BACKFILL\|MODULE_PROVISION_ALL\|PROFILE_RESYNC` | les 20 dernières, la plus récente d'abord (`kind` facultatif) |
+
+Tâche : `{id, kind, label (français : « Migration des modules », « Provisionnement d'un module », « Mise à jour des comptes d'une offre »), params, status ("QUEUED"\|"RUNNING"\|"SUCCEEDED"\|"FAILED"), processed, total (null tant qu'inconnu), report (null avant la fin), createdAt, startedAt, finishedAt, error (message français si FAILED)}`.
+- `params` : backfill `{dryRun}` ; provisionnement `{moduleId, module (nom affichable), force}` ; mise à jour d'offre `{planType, plan (nom affichable)}` → afficher `module` / `plan`, jamais `moduleId` / `planType`.
+- `report` de `MODULE_PROVISION_ALL` : `{moduleId, provisioned: [code compte], skipped: [code compte], failures: [{tenantCode, reason}], upToDate}` ; de `MODULE_BACKFILL` et `PROFILE_RESYNC` : forme 16.5 (voir section « Dashboard super-admin » de 16-5).
+- Flux : `POST` → 202 `{jobId}` → `GET /jobs/{jobId}` toutes les ~1 s tant que `QUEUED`/`RUNNING` → `SUCCEEDED` (rapport) ou `FAILED` (`error`).
+
+**Codes à gérer** (messages : `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/GlobalExceptionHandler.java`, `FR_MESSAGES` + `domainCodeToHttpStatus`) :
+
+| `domainCode` | HTTP | Message (`error`) | Réaction attendue |
+|---|---|---|---|
+| `VALIDATION_ERROR` | 422 | « Données invalides » ; vrai message dans `details.status` / `details.expiresAt` / `details.modules` / `details.moduleId` / `details.kind` (« Statut invalide : choisissez Actif ou Essai », « Date de fin invalide », « La date de fin doit être dans le futur », « La date de fin ne peut pas dépasser 10 ans », « Une date de fin est requise pour un module payant (« Facturation ») », « Le module « X » est gratuit : il n'a ni date de fin ni période d'essai », « Le module « X » n'a pas de tables à créer », « Type de tâche inconnu ») | message sous le champ / dans la boîte de dialogue |
+| `TENANT_NOT_FOUND` | 404 | Espace de travail introuvable | fermer la fiche, recharger la liste |
+| `MODULE_NOT_FOUND` | 404 | Module introuvable | recharger le catalogue |
+| `MODULE_ACTIVATION_BLOCKED` | 409 | « Activation impossible : … » (`details.reasons`, `details.modules` = noms) | message |
+| `MODULE_HAS_DEPENDENTS` | 409 | « Désactivation impossible : ce module est utilisé par « A », « B » » ; `details.modules` = noms des dépendants | boîte « Désactiver aussi : A, B ? » → renvoyer avec `cascade=true` |
+| `CORE_MODULE_REQUIRED` | 409 | Ce module fait partie du socle et ne peut pas être désactivé | ne pas proposer « Désactiver » sur `category = "core"` |
+| `MODULE_PROVISIONING_FAILED` | 500 | Le module n'a pas été activé : la création de ses tables a échoué. Vous pouvez réessayer. | message + réessayer |
+| `MODULE_ACTIVATION_FAILED` | 500 | Le module n'a pas été activé : sa mise en service a échoué. Vous pouvez réessayer. | message + réessayer |
+| `MODULE_DEACTIVATION_FAILED` | 500 | Le module n'a pas été désactivé : sa mise hors service a échoué. Vous pouvez réessayer. | message + bouton « Forcer la désactivation » (confirmation) → renvoyer avec `force=true` (en gardant `cascade` s'il était demandé) |
+| `ADMIN_JOB_RUNNING` | 409 | « « <label> » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une. » (`details.label`) | afficher le message et suivre la tâche en cours (première `QUEUED`/`RUNNING` de `GET /jobs?kind=`) |
+| `ADMIN_JOB_NOT_FOUND` | 404 | Tâche introuvable | arrêter le sondage, message |
+| `FORBIDDEN` | 403 | Vous n'avez pas les droits nécessaires | session non super-admin → connexion |
+
+### À implémenter côté dashboard
+
+1. **Fiche compte › section « Modules »** : une ligne par module de `GET …/modules` : nom, état (« Actif » = `ENABLED` hors essai, « Essai » = `ENABLED` + `status TRIAL`, « Lecture seule » = `READ_ONLY`, « Désactivé » = `DISABLED`), « Fin » (`expiresAt`), « Lecture seule jusqu'au » (`graceUntil`), origine (« Offre » = `PLAN`, « Super-admin » = `ADMIN`, « Inclus » = `SYSTEM` ou null). Jamais `moduleId`, `status` brut ni `provisionedVersion`. Actions désactivées tant que le catalogue charge.
+2. **Activer** : boîte de dialogue ; module payant → Statut « Actif » / « Essai » + date de fin (obligatoire pour Actif ; pour Essai, champ vide avec l'aide « 14 jours si vide ») ; module gratuit → aucune option, aucun corps envoyé. Résultat : « Modules activés : A, B » (`activated`, dépendances incluses) ou « Déjà actif » si la liste est vide ; recharger la section et l'historique.
+3. **Désactiver** : confirmation ; sur 409 `MODULE_HAS_DEPENDENTS`, seconde boîte « Désactiver aussi : A, B » (avertir que les modules payants inclus dans l'offre ainsi coupés restent coupés) → `cascade=true`. « Forcer la désactivation » n'apparaît **qu'après** un `MODULE_DEACTIVATION_FAILED`, avec confirmation (action auditée). Résultat : modules désactivés (`deactivated`) et forcés (`forced`) par leur nom.
+4. **Historique** de la fiche : date + heure, `action`, `subject`, `detail`, acteur « nom (téléphone) » ; « — » si inconnu.
+5. **Page « Modules »** : catalogue (nom, « Gratuit » / « Payant », version) ; carte « Migration des modules » (voir 16-5) ; bouton « Provisionner » pour chaque module avec `migrations = true`, confirmation, option « Vérification complète » (`force=true`), puis suivi de tâche.
+6. **Suivi de tâche** (composant commun aux pages Modules et Profils & plafonds) : après le 202, sonder `GET /jobs/{jobId}` chaque seconde tant que `QUEUED`/`RUNNING` ; barre « x / y comptes » (`total` null → barre indéterminée « Démarrage de la tâche… ») ; fin : rapport lisible (`SUCCEEDED`) ou `error` (`FAILED`). Arrêter le sondage après 3 lectures en échec consécutives avec « Impossible de suivre la tâche pour le moment. Rechargez la page pour réessayer. » À la fin, recharger catalogue, modules des comptes, profils et listes de tâches.
+7. **Reprise au rechargement** : à l'ouverture d'une page, `GET /jobs?kind=…` : suivre la tâche encore en cours, sinon afficher le dernier rapport. Sur 409 `ADMIN_JOB_RUNNING`, basculer sur la tâche en cours.
+8. **Rapport de provisionnement** : nom du module (`params.module`), comptes provisionnés / ignorés / déjà à jour (`upToDate`) / en échec, échecs « KV-XXXXXX : raison ». Les comptes sont nommés par leur code public — c'est le seul identifiant admis à l'écran.
+9. **Barre latérale** : « Modules », « Packs », « Profils & plafonds ».
+10. **Erreurs** : toujours le message français du serveur (règle `VALIDATION_ERROR` ci-dessus) ; jamais un `domainCode`, un UUID, un `moduleId` ni un statut brut.
+
+### Implémentation de référence
+
+- API : `keevo/dashboard/src/lib/api/admin-modules.ts`, `admin-jobs.ts`, `console-errors.ts` (`consoleErrorMessage`, `dependentsOf`, `isDeactivationFailure`), types `keevo/dashboard/src/types/modules.ts`, hooks `keevo/dashboard/src/hooks/useModules.ts` (`useJob`, `JOB_MAX_ERRORS`)
+- Fiche compte : `keevo/dashboard/src/components/modules/TenantModulesSection.tsx`, `components/modules/activation.ts`, hôte `keevo/dashboard/src/components/tenants/TenantDetailDrawer.tsx`
+- Tâches : `keevo/dashboard/src/components/modules/JobProgress.tsx`, `JobReport.tsx` ; page `keevo/dashboard/src/app/modules/ModulesPageClient.tsx`
+- Libellés : `keevo/dashboard/src/lib/labels.ts` (états, origines) ; barre latérale `keevo/dashboard/src/components/layout/Sidebar.tsx`
+- Tests : `keevo/dashboard/src/components/modules/__tests__/`, `keevo/dashboard/src/app/modules/__tests__/`, `keevo/dashboard/src/lib/api/__tests__/admin-modules.test.ts`
+
+### Critères d'acceptation / scénarios de test
+
+Préparation (backend local démarré **uniquement** avec `--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false`, arrêt `fuser -k 4500/tcp` ; connexion par l'API, jamais de jeton fabriqué ; compte de test Free `KV-I3NPYM` à remettre dans son état d'origine après coup) :
+
+```bash
+BASE=http://localhost:4500
+PW='Admin@1234!'   # défaut dev de keevo.admin.password (application.yml), sauf si ADMIN_PASSWORD est défini
+LT=$(curl -s -X POST $BASE/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg p "$PW" '{phoneNumber:"+237600000000",password:$p}')" | jq -r .loginToken)
+AT=$(curl -s -X POST $BASE/api/v1/auth/select-tenant -H 'Content-Type: application/json' \
+  -d "$(jq -n --arg t "$LT" '{loginToken:$t,tenantCode:"KV-ADMIN",deviceLabel:"curl · test"}')" | jq -r .accessToken)
+H="Authorization: Bearer $AT"
+TID=$(psql "$KEEVO_DB_URL" -tAc "SELECT id FROM public.tenants WHERE code='KV-I3NPYM'")
+curl -s $BASE/api/v1/admin/tenants/$TID/modules -H "$H" | jq '.data[] | {displayName,state,status,expiresAt,origin}'   # état d'origine à noter
+```
+
+1. **Section Modules** — Given `KV-I3NPYM`, When le super-admin ouvre sa fiche, Then chaque module apparaît avec un état français, ses dates en JJ/MM/AAAA et son origine, sans identifiant technique.
+2. **Essai sans date** — When il active « Facturation » en Essai sans date (`curl -X POST $BASE/api/v1/admin/tenants/$TID/modules/invoicing/activate -H "$H" -H 'Content-Type: application/json' -d '{"status":"TRIAL"}'`), Then la fiche montre « Essai » jusqu'à aujourd'hui + 14 jours et la première entrée de l'historique est « Module activé » / « Facturation ».
+3. **Actif sans date refusé** — When `-d '{"status":"ACTIVE"}'` sur un module payant non actif, Then 422 et le dashboard affiche « Une date de fin est requise pour un module payant (« … ») » (pris dans `details.expiresAt`), pas « Données invalides ».
+4. **Dépendants** — Given un compte de test (Premium ou essai) où « Alertes et notifications » est actif, When on désactive « Messagerie et notifications » (`POST …/modules/messaging/deactivate`), Then 409 et la boîte « Désactiver aussi : Alertes et notifications » ; confirmée (`?cascade=true`), Then les deux modules sont « Désactivé » (`deactivated` les nomme). Restaurer ensuite les lignes. (Éviter « Stock et inventaire » en test : « Point de vente » en dépend et serait coupé par la cascade.)
+5. **Forcer** — Given une désactivation qui échoue (500 `MODULE_DEACTIVATION_FAILED`, simulable par une réponse moquée dans les tests du dashboard), Then le message français s'affiche avec « Forcer la désactivation », et seulement alors ; confirmé, l'appel part avec `force=true`.
+6. **Provisionnement** — When « Provisionner » sur « Clients et fournisseurs » (`curl -s -X POST $BASE/api/v1/admin/modules/crm/provision-all -H "$H" -w '%{http_code}'` → 202 `{jobId}`), Then la barre « x / y comptes » avance puis le rapport montre les comptes déjà à jour (`upToDate`) ; un second démarrage pendant la tâche → 409 avec « « Provisionnement d'un module » est déjà en cours… » et le dashboard suit la tâche en cours.
+7. **Rechargement** — Given une tâche en cours, When la page est rechargée, Then la progression reprend (`GET $BASE/api/v1/admin/jobs?kind=MODULE_PROVISION_ALL -H "$H" | jq '.data[0].status'`).
+8. **Tâche inconnue** — `curl $BASE/api/v1/admin/jobs/00000000-0000-0000-0000-000000000000 -H "$H"` → 404 « Tâche introuvable ».
+9. **Non super-admin** — Given un jeton d'owner (connexion owner normale), When il appelle `GET /api/v1/admin/modules`, Then 403.

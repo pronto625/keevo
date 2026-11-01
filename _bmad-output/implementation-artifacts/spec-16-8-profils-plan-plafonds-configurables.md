@@ -220,3 +220,69 @@ curl -s -X POST $BASE/api/v1/employees -H "Authorization: Bearer $AT" -H 'Conten
 3. **Premium** — Given un compte Premium, Then aucune feuille de plafond, et l'écran Abonnement affiche « Illimité ».
 4. **Quota illisible** — Given le serveur renvoie 503 `PRODUCT_QUOTA_UNAVAILABLE`, Then message de réessai, pas de feuille « plafond atteint ».
 5. **Hors ligne** — Given une boutique créée hors ligne au-delà du plafond, When la synchro la refuse (`REJECTED`/`PLAN_LIMIT_EXCEEDED`), Then la boutique fantôme disparaît localement, l'owner est prévenu une fois avec la limite issue de l'abonnement.
+
+## Dashboard super-admin (autre dépôt)
+
+> Destinataire : agent IA qui construit le dashboard super-admin dans un **autre dépôt** (ce dépôt ne livre que l'API). `keevo/dashboard` (Next.js) n'est ici qu'un client de test de l'API, mais c'est la **référence de comportement** (page « Profils & plafonds » livrée par 16-4). Session : section « Dashboard super-admin » de `spec-16-11-sessions-longues-et-sures.md`. Conventions admin et **suivi des tâches de fond** : section « Dashboard super-admin » de `spec-16-4-console-super-admin-modules.md` ; forme du rapport de mise à jour : section « Dashboard super-admin » de `spec-16-5-migration-backfill-tenant-modules.md`.
+
+**Statut** : API livrée (commit `f6492009` ; mise à jour des comptes passée en tâche de fond par 16-4, commit `fc1e431f`) — dashboard à faire.
+
+**Clé de suivi dashboard** : `d16-8-profils-plan-plafonds-configurables`
+
+### Ce qui est fait côté API
+
+- Pour chaque offre (Gratuit, Essai Premium, Premium) : plafonds de boutiques, produits, employés (entier positif ou illimité) et modules payants inclus, enregistrés en base et appliqués dès le contrôle suivant, sans redémarrage. Valeurs livrées : Gratuit 1 / 500 / 2 sans module payant ; Essai Premium et Premium illimités avec tous les modules payants.
+- Un plafond abaissé ne supprime rien : seules les nouvelles créations sont refusées.
+- Changer les modules inclus d'une offre lance la tâche de fond « Mise à jour des comptes d'une offre » (`PROFILE_RESYNC`) qui réaligne les modules de tous les comptes de cette offre (lignes posées par un super-admin intactes) et prévient les propriétaires depuis la tâche. Une sauvegarde sans changement de modules ne lance rien.
+
+### À utiliser
+
+Source : `keevo/backend/src/main/java/com/keevo/admin/plan/adapter/in/rest/AdminPlanProfileController.java`, vues `keevo/backend/src/main/java/com/keevo/shared/module/PlanProfileAdmin.java` (`ProfileView`, `UpdateResult`), règles `.../shared/module/application/PlanProfileAdminService.java`.
+
+| Méthode | Route | Corps | Réponse `data` |
+|---|---|---|---|
+| GET | `/api/v1/admin/plan-profiles` | — | `[{planType ("FREE"\|"PREMIUM_TRIAL"\|"PREMIUM"), label ("Gratuit"\|"Essai Premium"\|"Premium"), maxStores, maxProducts, maxEmployees (null = illimité), modules: [{id, displayName}], fallback}]` |
+| PUT | `/api/v1/admin/plan-profiles/{planType}` | `{"maxStores": n\|null, "maxProducts": n\|null, "maxEmployees": n\|null, "modules": [moduleId…]}` — **les quatre clés obligatoires**, `null` envoyé explicitement pour illimité, toute autre clé refusée ; `modules` = modules **payants** inclus (liste vide si aucun ; tout autre module payant est enregistré comme non inclus) | 200 `{profile: <même forme que GET>, compositionChanged, jobId (null si les modules n'ont pas changé)}` |
+| GET | `/api/v1/admin/jobs/{jobId}` | — | tâche `PROFILE_RESYNC`, `params = {planType, plan}`, rapport de forme 16.5 (`modulesProvisioned` = 0) — voir 16-4 / 16-5 |
+
+- Attention : dans les profils, un module est `{id, displayName}` (et non `{moduleId, displayName}` comme ailleurs).
+- `fallback = true` : le profil enregistré est absent ou illisible, ce sont les valeurs intégrées qui s'appliquent.
+- Modules proposables = `GET /api/v1/admin/modules` avec `free = false` (et hors `category = "core"`).
+
+| `domainCode` | HTTP | Message (`error`) | Réaction attendue |
+|---|---|---|---|
+| `PLAN_PROFILE_INVALID` | 422 | « Profil non enregistré : <raison> » (ex. « indiquez le plafond de boutiques (vide pour illimité) », « le plafond de produits doit être un nombre entier (vide pour illimité) », « le nombre d'employés maximal doit être supérieur à zéro (laissez vide pour illimité) », « indiquez les modules inclus dans l'offre (liste vide si aucun) », « « X » est un module gratuit, inclus dans toutes les offres », « « X » fait partie du socle, inclus dans toutes les offres », « un des modules demandés n'existe pas », « la demande contient un champ non reconnu », « offre inconnue ») ; rien n'est enregistré | message dans la carte de l'offre |
+| `ADMIN_JOB_RUNNING` | 409 | « « Mise à jour des comptes d'une offre » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une. » — **rien n'est enregistré** | message ; suivre la tâche en cours ; l'utilisateur ré-enregistre après |
+| `FORBIDDEN` | 403 | Vous n'avez pas les droits nécessaires | session non super-admin |
+
+### À implémenter côté dashboard
+
+1. **Page « Profils & plafonds »** (barre latérale) : une carte par offre, titrée par `label` (jamais `planType`).
+2. **Plafonds** : trois champs « Boutiques », « Produits », « Employés » ; vide = « illimité » (afficher « illimité » en lecture) ; entier strictement positif sinon (validation côté client en français). À l'envoi, toujours les trois clés, `null` pour illimité.
+3. **Modules payants inclus** : cases à cocher par nom de module (catalogue `free = false`). Un module encore listé dans le profil mais qui n'est plus un module payant proposé est signalé (« Ne sont plus des modules payants proposés et seront retirés à l'enregistrement : … ») puis retiré de l'envoi.
+4. **Avertissement `fallback`** : « Profil enregistré introuvable ou illisible : les valeurs par défaut s'appliquent. Enregistrez-le pour le rétablir. »
+5. **Confirmation** quand les modules cochés changent : « Tous les comptes de l'offre « X » seront mis à jour et leurs propriétaires seront prévenus des modules désactivés. Continuer ? » ; pas de confirmation pour un simple changement de plafond.
+6. **Après sauvegarde** : message « Profil enregistré » ; si `jobId` non nul, afficher le suivi de tâche de 16-4 sous la carte (« x / y comptes », puis rapport : comptes mis à jour, lignes créées / mises à jour, échecs « KV-XXXXXX : raison »). À l'ouverture de la page, reprendre la dernière tâche `PROFILE_RESYNC` (`GET /jobs?kind=PROFILE_RESYNC`). Sur 409, afficher le message et suivre la tâche en cours.
+7. Jamais de `planType`, d'identifiant de module ni de code d'erreur à l'écran.
+
+### Implémentation de référence
+
+- `keevo/dashboard/src/lib/api/admin-plans.ts` (`getPlanProfiles`, `updatePlanProfile` — trois clés toujours envoyées)
+- Page `keevo/dashboard/src/app/plans/PlansPageClient.tsx` (reprise de la dernière tâche, 409), carte `keevo/dashboard/src/components/modules/PlanProfileCard.tsx` (plafonds, modules, `fallback`, confirmation)
+- Suivi : `keevo/dashboard/src/components/modules/JobProgress.tsx`, `JobReport.tsx` (rapport `PROFILE_RESYNC`)
+- Tests : `keevo/dashboard/src/components/modules/__tests__/PlanProfileCard.test.tsx`, `keevo/dashboard/src/app/plans/__tests__/`
+
+### Critères d'acceptation / scénarios de test
+
+Préparation : backend local démarré **uniquement** avec `--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false` (la mise à jour des comptes envoie des notifications ; arrêt `fuser -k 4500/tcp`) ; connexion super-admin par l'API comme dans la section « Dashboard super-admin » de 16-4 (variables `BASE`, `H`) ; sauvegarder les profils d'origine et les remettre après chaque scénario :
+
+```bash
+curl -s $BASE/api/v1/admin/plan-profiles -H "$H" | jq '.data' > profils-origine.json   # hors du dépôt
+```
+
+1. **Lecture** — When on ouvre « Profils & plafonds », Then trois cartes « Gratuit », « Essai Premium », « Premium » ; Gratuit 1 / 500 / 2 sans module payant ; Premium « illimité » partout.
+2. **Plafond seul** — When on passe « Boutiques » de Gratuit à 2 (`curl -s -X PUT $BASE/api/v1/admin/plan-profiles/FREE -H "$H" -H 'Content-Type: application/json' -d '{"maxStores":2,"maxProducts":500,"maxEmployees":2,"modules":[]}' | jq '.data | {compositionChanged, jobId}'`), Then « Profil enregistré », `compositionChanged = false`, `jobId = null`, aucune confirmation ni tâche. Remettre 1.
+3. **Clé manquante** — When `-d '{"maxStores":1,"maxProducts":500,"modules":[]}'`, Then 422 « Profil non enregistré : indiquez le plafond d'employés (vide pour illimité) », rien n'est enregistré.
+4. **Module gratuit refusé** — When `"modules":["crm"]`, Then 422 « Profil non enregistré : « Clients et fournisseurs » est un module gratuit, inclus dans toutes les offres ».
+5. **Changement de modules** — When on coche « Exports PDF et Excel » pour Gratuit et confirme (`"modules":["exports"]`), Then 200 avec un `jobId`, la carte suit « Mise à jour des comptes d'une offre » jusqu'au rapport, et `GET /jobs/{jobId}` finit `SUCCEEDED`. Une seconde modification de modules pendant la tâche → 409, rien n'est enregistré. Remettre `"modules":[]` (nouvelle tâche) une fois la première terminée.
+6. **Rechargement** — Given une tâche `PROFILE_RESYNC` en cours, When la page est rechargée, Then le suivi reprend sous la bonne carte.

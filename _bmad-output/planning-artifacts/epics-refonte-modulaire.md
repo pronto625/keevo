@@ -1821,12 +1821,12 @@ As a **propriétaire**, I want **qu'un téléphone d'employé ne contienne que l
 
 **Acceptance Criteria (provisoires):** **Given** un employé de la boutique A dont l'appareil contient des données de B **When** il met à jour l'app et synchronise **Then** plus aucune donnée propre à B (transferts, mouvements, ventes…) n'est présente sur l'appareil ni envoyée par le serveur ; **Given** l'employé réaffecté de A vers B **When** il synchronise **Then** les données de A disparaissent et l'historique de B est téléchargé.
 
-### Story 16.14 : API prête pour le client mobile React Native (incohérences additives)
+### Story 16.14 : API prête pour les clients mobile React Native et dashboard (incohérences additives)
 
 > Clé tracker : `16-14-api-prete-client-mobile` — créée le 2026-11-01 lors de la rédaction des sections « Mobile » des specs 16-x. Backend seul, **compatible V1 2.0.1** (ajouts uniquement : aucune forme de réponse existante ne change). Après 16.13.
 
 As a développeur de l'app React Native,
-I want que l'API donne partout des erreurs exploitables en français et les informations dont l'app a besoin,
+I want que l'API donne partout des erreurs exploitables en français et les informations dont l'app et le dashboard ont besoin,
 So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du serveur.
 
 **Items :**
@@ -1835,7 +1835,8 @@ So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du
 - `VALIDATION_ERROR` (422) : message général et messages par champ en français.
 - `GET /api/v1/tenants/me/modules` : envoyer aussi aux employés la date de fin de grâce d'un module en lecture seule (bandeau daté), sans les autres champs réservés au propriétaire.
 - Rejet de synchro `PLAN_LIMIT_EXCEEDED` : joindre la limite et l'usage (comme le 403 REST) dans le détail du rejet.
-- Mettre à jour les sections « Mobile » des specs concernées (16-1, 16-8, 16-10, 16-11).
+- API super-admin (relevé par les sections « Dashboard » des specs 16-x) : référence de module `{id, displayName}` des profils de plan alignée sur `{moduleId, displayName}` (ajout du champ, l'ancien gardé) ; `VALIDATION_ERROR` des routes admin avec le vrai message français dans `error` ; `CORE_MODULE_REQUIRED` garde le nom du module ; `GET /admin/tenants?search=` cherche aussi par code de compte ; retirer `MODULE_BACKFILL_RUNNING` devenu mort ; plan inconnu → 404 comme pack/tâche inconnus ; historique des modules paginé.
+- Mettre à jour les sections « Mobile » et « Dashboard » des specs concernées (16-1, 16-2, 16-4, 16-5, 16-8, 16-10, 16-11).
 
 **Hors périmètre (documenté, non modifiable avant le retrait des apps V1) :** deux formes de succès (`/auth/*` brut vs `{data}`), deux formes de pagination (`meta` vs `data.content`).
 

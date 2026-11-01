@@ -172,3 +172,67 @@ Status: done
 **Verification:** packages run one at a time, all green — shared.module 396, subscription 73, admin 521, identity.auth 261, architecture 32, invoicing 170, shared.infrastructure 604, sync 491, crm 158, messaging 168. Dev run on keevo_dev (331 tenants): first pass by the implementer — dry run 2 648 rows to insert, real run identical, states of all 331 tenants identical before/after, clients/suppliers/sales/invoices counts unchanged; after the review patches, dry run and real run again: 0 inserted, 0 updated, 2 648 unchanged, 0 failures. No app change (no device test needed).
 
 **Residual risks:** the backfill is synchronous in one HTTP request (async job routed to 16-4); a dry run on a prod copy before go-live is routed to 16.7; `PlanTypeRealignJob` can write a REALIGNMENT event after an EXPIRY one (the stored EXPIRED row keeps the full grace, the old rule ended it early — rare, acceptable).
+
+## Dashboard super-admin (autre dépôt)
+
+> Destinataire : agent IA qui construit le dashboard super-admin dans un **autre dépôt** (ce dépôt ne livre que l'API). `keevo/dashboard` (Next.js) n'est ici qu'un client de test de l'API, mais c'est la **référence de comportement**. Session : section « Dashboard super-admin » de `spec-16-11-sessions-longues-et-sures.md`. Conventions admin et **suivi des tâches de fond** : section « Dashboard super-admin » de `spec-16-4-console-super-admin-modules.md` (à lire d'abord).
+
+**Statut** : API livrée (commit `13eca21e` ; passée en tâche de fond par 16-4, commit `fc1e431f`) — dashboard à faire.
+
+**Clé de suivi dashboard** : `d16-5-migration-backfill-tenant-modules`
+
+### Ce qui est fait côté API
+
+- « Migration des modules » : pour chaque compte vivant, écrit les lignes de modules payants équivalentes à son offre (essai restant conservé, lignes posées par un super-admin et lignes gratuites jamais touchées), puis crée les tables des modules actifs qui en livrent (Clients et fournisseurs, Facturation). Idempotent : une seconde exécution n'écrit rien.
+- Mode simulation (`dryRun=true`, **par défaut**) : rapport de ce qui serait écrit, rien n'est modifié.
+- Depuis 16-4 : exécution en tâche de fond (202 immédiat, progression, rapport conservé), une seule à la fois.
+
+### À utiliser
+
+| Méthode | Route | Réponse |
+|---|---|---|
+| POST | `/api/v1/admin/modules/backfill?dryRun=true\|false` (sans paramètre = simulation) | **202** `{"data": {"jobId"}}` — tâche `MODULE_BACKFILL`, `params = {dryRun}` |
+| GET | `/api/v1/admin/jobs/{jobId}` / `/api/v1/admin/jobs?kind=MODULE_BACKFILL` | voir 16-4 |
+
+Source : `keevo/backend/src/main/java/com/keevo/admin/module/adapter/in/rest/ModuleAdminController.java` (`backfill`), `.../shared/module/application/ModuleJobsService.java`, rapport `keevo/backend/src/main/java/com/keevo/shared/module/ModuleBackfill.java` (`BackfillReport`).
+
+`report` d'une tâche `SUCCEEDED` (même forme pour `PROFILE_RESYNC`, 16-8, avec `modulesProvisioned` toujours 0) :
+
+| Champ | Sens (libellé à afficher) |
+|---|---|
+| `dryRun` | « Simulation » / « Exécution réelle » |
+| `tenantsProcessed` | comptes traités |
+| `tenantsSkipped` | comptes ignorés (pas encore d'espace, compte plateforme) |
+| `rowsInserted`, `rowsUpdated` | lignes créées / mises à jour (ou qui le seraient) |
+| `rowsUnchanged` | lignes déjà conformes à l'offre |
+| `rowsPreserved` | lignes laissées telles quelles (posées par un super-admin ou la plateforme) |
+| `modulesProvisioned` | tables de modules créées (tous comptes confondus) |
+| `tenants[]` | `{tenantCode, inserted, updated, provisioned: [noms de modules]}` — seulement les comptes modifiés |
+| `failures[]` | `{tenantCode, reason}` (raison en français, sans SQL) — la tâche continue après un échec |
+
+Codes : 409 `ADMIN_JOB_RUNNING` (« « Migration des modules » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une. ») → suivre la tâche en cours ; tâche `FAILED` avec `error` « Une migration des modules est déjà en cours. Réessayez dans quelques minutes. » quand une autre instance du backend détient le verrou ; `FAILED` « Interrompu par un redémarrage » après un redémarrage → proposer de relancer. Le code `MODULE_BACKFILL_RUNNING` n'est plus renvoyé par la route depuis 16-4.
+
+### À implémenter côté dashboard
+
+1. **Carte « Migration des modules »** sur la page « Modules » : texte d'explication court (« Aligne les modules de chaque compte sur son offre et crée les tables manquantes. Les modules posés par un super-admin ne sont jamais modifiés. »).
+2. Bouton « Simuler » (`dryRun=true`) toujours disponible ; bouton « Lancer la migration » (`dryRun=false`) avec confirmation (« Les modules de tous les comptes vont être alignés sur leur offre. ») (bouton de confirmation en deux temps dans la référence). Recommandé : simuler d'abord.
+3. Suivi par le composant de tâche de 16-4 (progression « x / y comptes », reprise au rechargement depuis `GET /jobs?kind=MODULE_BACKFILL`, bascule sur la tâche en cours en cas de 409).
+4. **Rapport** : en-tête « Simulation » / « Exécution réelle », compteurs avec les libellés ci-dessus, liste des comptes modifiés « KV-XXXXXX : n créées, n mises à jour, tables : Facturation », liste des échecs « KV-XXXXXX : raison ». Une simulation porte la mention « Simulation : rien n'a été modifié. » ; un rapport sans aucune ligne créée ni mise à jour affiche « Aucun changement ».
+5. Pendant une tâche en cours, désactiver les deux boutons ; jamais d'identifiant de schéma ni d'UUID à l'écran (les comptes sont nommés par leur code public).
+
+### Implémentation de référence
+
+- `keevo/dashboard/src/app/modules/ModulesPageClient.tsx` (carte, simulation puis exécution, reprise de la dernière tâche)
+- `keevo/dashboard/src/components/modules/JobProgress.tsx`, `keevo/dashboard/src/components/modules/JobReport.tsx` (rendu du rapport de migration)
+- `keevo/dashboard/src/lib/api/admin-modules.ts` (`startBackfill`), `keevo/dashboard/src/lib/api/admin-jobs.ts`, `keevo/dashboard/src/hooks/useModules.ts`
+- Tests : `keevo/dashboard/src/app/modules/__tests__/`, `keevo/dashboard/src/components/modules/__tests__/JobProgress.test.tsx`
+
+### Critères d'acceptation / scénarios de test
+
+Préparation : backend local démarré **uniquement** avec `--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false` (arrêt `fuser -k 4500/tcp`) ; connexion super-admin par l'API comme dans la section « Dashboard super-admin » de 16-4 (variables `BASE`, `H` ; `+237600000000`, tenant `KV-ADMIN` ; jamais de jeton fabriqué).
+
+1. **Simulation** — When « Simuler » (`curl -s -X POST "$BASE/api/v1/admin/modules/backfill?dryRun=true" -H "$H" -w '\n%{http_code}\n'` → 202 + `jobId` en moins d'une seconde), Then la progression avance puis le rapport « Simulation » s'affiche (`curl -s $BASE/api/v1/admin/jobs/$JOB -H "$H" | jq '.data | {status, processed, total, report: (.report | {dryRun, tenantsProcessed, rowsInserted, rowsUpdated, rowsUnchanged})}'`), sans délai d'attente HTTP.
+2. **Une seule à la fois** — Given une migration en cours, When on en relance une, Then 409 `ADMIN_JOB_RUNNING` et le dashboard affiche le message puis suit la tâche en cours.
+3. **Idempotence** — Given une exécution réelle terminée, When on relance une simulation, Then `rowsInserted = 0` et `rowsUpdated = 0` et le rapport dit « Aucun changement ».
+4. **Rechargement** — Given une simulation en cours, When la page est rechargée, Then la progression reprend ; une fois finie, le dernier rapport reste affiché à la réouverture de la page.
+5. **Redémarrage** — Given le backend arrêté pendant une tâche puis redémarré, Then `GET /jobs?kind=MODULE_BACKFILL` montre la tâche `FAILED` et le dashboard affiche « Interrompu par un redémarrage » avec la possibilité de relancer.

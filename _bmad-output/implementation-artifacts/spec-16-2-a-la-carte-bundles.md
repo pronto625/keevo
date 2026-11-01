@@ -128,3 +128,64 @@ Status: done
 **Review:** 26 findings — 7 patched entries (4 medium, 3 low), 19 rejected with reasons. Follow-up review recommended: true — several medium entries patched on a first pass; named risk: the `renewEnabled` split between single activation and bundle application in `activateAll`.
 
 **Verification:** backend packages one at a time, all green — shared.module 429, admin 547, architecture 32, shared.infrastructure 607, subscription 83. keevo_dev (backend with WhatsApp noop, FCM off), super-admin API: `GET /admin/bundles` → `pro`; apply `pro` to Free test tenant KV-I3NPYM with ACTIVE until 2027-06-30 → Facturation activated (ENABLED, expires 2027-06-30), pos/inventory/crm already active; re-apply → everything already active. Test row restored afterwards. No app change.
+
+## Dashboard super-admin (autre dépôt)
+
+> Destinataire : agent IA qui construit le dashboard super-admin dans un **autre dépôt** (ce dépôt ne livre que l'API). `keevo/dashboard` (Next.js) n'est ici qu'un client de test de l'API, mais c'est la **référence de comportement** (écrans livrés par 16-4). Session : section « Dashboard super-admin » de `spec-16-11-sessions-longues-et-sures.md`. Conventions admin, codes d'activation communs et fiche compte : section « Dashboard super-admin » de `spec-16-4-console-super-admin-modules.md`.
+
+**Statut** : API livrée (commit `165a3501`) — dashboard à faire.
+
+**Clé de suivi dashboard** : `d16-2-a-la-carte-bundles`
+
+### Ce qui est fait côté API
+
+- Packs = listes nommées de modules (`public.bundle_definitions` + `bundle_modules`, V34), exemple livré : « Pack Pro » (`pro`) = Point de vente, Stock et inventaire, Facturation, Clients et fournisseurs.
+- Créer / remplacer / supprimer un pack ; supprimer ne touche à aucun compte (les comptes gardent leurs modules).
+- Appliquer un pack à un compte = **une seule** activation de tous ses modules (dépendances d'abord), mêmes règles qu'une activation simple : modules payants avec le statut/la date demandés (Essai sans date = 14 jours pour chaque module payant pas encore actif), modules gratuits sans fin, modules déjà actifs jamais réécrits. Tout ou rien : une validation refusée n'écrit rien. Un pack n'est jamais un état stocké sur le compte.
+- Un pack devenu inapplicable (module plus disponible) est signalé `applicable: false` et refusé à l'application.
+
+### À utiliser
+
+Source : `keevo/backend/src/main/java/com/keevo/admin/module/adapter/in/rest/BundleAdminController.java`, DTO `.../rest/dto/BundleDto.java`, `BundleActivationDto.java`, règles `keevo/backend/src/main/java/com/keevo/shared/module/application/BundleAdminService.java`.
+
+| Méthode | Route | Corps | Réponse |
+|---|---|---|---|
+| GET | `/api/v1/admin/bundles` | — | 200 `data: [{id, name, description, modules: [{moduleId, displayName}], applicable}]` |
+| PUT | `/api/v1/admin/bundles/{bundleId}` | `{"name", "description", "modules": [moduleId…]}` — **les trois clés obligatoires** (`description` peut être `null` ou vide), toute autre clé refusée | **201** créé / **200** remplacé, `data` = le pack |
+| DELETE | `/api/v1/admin/bundles/{bundleId}` | — | **204** sans corps |
+| POST | `/api/v1/admin/tenants/{tenantId}/bundles/{bundleId}` | facultatif `{"status": "ACTIVE"\|"TRIAL", "expiresAt": "AAAA-MM-JJ" ou instant ISO}` | 200 `data: {name, activated: [{moduleId, displayName}], alreadyActive: [{moduleId, displayName}]}` |
+
+Règles de définition : `bundleId` en minuscules, chiffres et tirets (`pack-pro`) ; nom obligatoire ≤ 100 caractères ; description ≤ 500 ; au moins un module ; modules installés, ni socle (`category = "core"`), ni plateforme, sans doublon. Modules proposables = `GET /api/v1/admin/modules` sans `category = "core"`.
+
+| `domainCode` | HTTP | Message (`error`) | Réaction attendue |
+|---|---|---|---|
+| `BUNDLE_INVALID` | 422 | « Pack invalide : <raison> » (ex. « l'identifiant du pack doit contenir uniquement des minuscules, des chiffres et des tirets… », « indiquez le nom du pack », « choisissez au moins un module », « « Socle » fait partie du socle, toujours actif… », « « X » figure plusieurs fois dans le pack », « un des modules demandés n'existe pas », « la demande contient un champ non reconnu ») ; rien n'est enregistré | message dans le formulaire (valider aussi côté client) |
+| `BUNDLE_NOT_FOUND` | 404 | Pack introuvable | recharger la liste |
+| `BUNDLE_NOT_APPLICABLE` | 422 | Le pack « X » contient un module qui n'est plus disponible. Modifiez-le avant de l'appliquer. | message ; proposer de modifier le pack |
+| `VALIDATION_ERROR`, `MODULE_ACTIVATION_BLOCKED`, `MODULE_PROVISIONING_FAILED`, `MODULE_ACTIVATION_FAILED`, `TENANT_NOT_FOUND` | 422 / 409 / 500 / 404 | voir le tableau de 16-4 (ex. `details.expiresAt` « Une date de fin est requise pour un module payant (« Facturation ») ») | idem 16-4 ; aucune ligne écrite |
+
+### À implémenter côté dashboard
+
+1. **Page « Packs »** (barre latérale) : liste des packs — nom, description, modules par leur nom, badge « Inapplicable » quand `applicable = false` ; état vide « Aucun pack ».
+2. **Créer / modifier** : formulaire Nom, Description, cases à cocher des modules proposables (sans le socle). Identifiant demandé **à la création seulement** (suggéré à partir du nom, ex. « Pack Pro » → `pack-pro`), jamais affiché dans la liste ; non modifiable ensuite. Un module du pack qui n'est plus proposé apparaît décoché, grisé, « Module indisponible » pour qu'on puisse l'enlever. Envoyer toujours les trois clés.
+3. **Supprimer** : confirmation « Supprimer le pack « X » ? Les comptes gardent leurs modules. » ; 204 → retirer de la liste.
+4. **Appliquer un pack** depuis la fiche compte (section « Modules » de 16-4) : liste des packs applicables, Statut « Actif » / « Essai », date de fin (obligatoire pour Actif s'il contient un module payant ; Essai vide = 14 jours) ; résultat « Pack Pro appliqué — activés : Facturation ; déjà actifs : Point de vente, Stock et inventaire, Clients et fournisseurs » ; recharger les modules et l'historique (entrée « Pack appliqué »).
+5. Erreurs affichées avec le message français du serveur ; jamais `moduleId`, `bundleId` dans la liste ni code d'erreur.
+
+### Implémentation de référence
+
+- `keevo/dashboard/src/lib/api/admin-bundles.ts` (`getBundles`, `saveBundle`, `deleteBundle`, `applyBundle`)
+- Page `keevo/dashboard/src/app/packs/PacksPageClient.tsx`, formulaire `keevo/dashboard/src/components/modules/BundleForm.tsx`
+- Application depuis la fiche : `keevo/dashboard/src/components/modules/TenantModulesSection.tsx`
+- Tests : `keevo/dashboard/src/app/packs/__tests__/`, `keevo/dashboard/src/components/modules/__tests__/TenantModulesSection.test.tsx`
+
+### Critères d'acceptation / scénarios de test
+
+Préparation : backend local démarré **uniquement** avec `--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false` (arrêt `fuser -k 4500/tcp`) ; connexion super-admin par l'API et `TID` du compte de test Free `KV-I3NPYM` comme dans la section « Dashboard super-admin » de 16-4 (variables `BASE`, `H`, `TID`) ; noter l'état des modules du compte avant, le restaurer après.
+
+1. **Liste** — When on ouvre « Packs » (`curl -s $BASE/api/v1/admin/bundles -H "$H" | jq '.data[] | {name, modules: [.modules[].displayName], applicable}'`), Then « Pack Pro » apparaît avec ses quatre modules par leur nom.
+2. **Création** — When on crée « Pack Test » avec Facturation (`curl -s -X PUT $BASE/api/v1/admin/bundles/pack-test -H "$H" -H 'Content-Type: application/json' -d '{"name":"Pack Test","description":null,"modules":["invoicing"]}' -w '%{http_code}'`), Then 201 et le pack apparaît ; la même requête → 200 (remplacement).
+3. **Définition refusée** — When `"modules":["core"]` ou `"modules":[]`, Then 422 `BUNDLE_INVALID` et le formulaire montre « Pack invalide : … » ; rien n'est enregistré.
+4. **Application** — When on applique « Pack Pro » à `KV-I3NPYM` en Actif jusqu'à une date future (`curl -s -X POST $BASE/api/v1/admin/tenants/$TID/bundles/pro -H "$H" -H 'Content-Type: application/json' -d '{"status":"ACTIVE","expiresAt":"2027-06-30"}' | jq .data`), Then la fiche montre Facturation « Actif » jusqu'au 30/06/2027, les autres modules « déjà actifs », et l'historique « Pack appliqué ». Réappliqué : tout est « déjà actif ».
+5. **Tout ou rien** — When on applique « Pack Pro » en Actif **sans** date à un compte dont Facturation n'est pas active, Then 422, message « Une date de fin est requise pour un module payant (« Facturation ») », aucun module modifié.
+6. **Suppression** — When on supprime « Pack Test » (`curl -X DELETE $BASE/api/v1/admin/bundles/pack-test -H "$H" -w '%{http_code}'` → 204), Then il disparaît ; un compte qui l'avait appliqué garde ses modules ; `POST …/bundles/pack-test` → 404 « Pack introuvable ».
