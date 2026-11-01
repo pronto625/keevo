@@ -6,6 +6,8 @@ import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.job.AdminJobs;
+import com.keevo.shared.job.ProgressListener;
 import com.keevo.shared.module.ModuleBackfill.BackfillReport;
 import com.keevo.shared.module.ModuleBackfill.Failure;
 import com.keevo.shared.module.ModuleBackfill.TenantChange;
@@ -36,7 +38,7 @@ import java.util.UUID;
  * {@link PlanProfileAdmin} of the core (Story 16.8). The profile is validated, then saved in its own transaction
  * (row locked, so two edits serialise) with an explicit decision for every installed paid module; when the
  * effective composition changed, the live tenants whose public plan type is that type (re-checked on their own
- * subscription) get their {@code PLAN} rows re-synced ({@link PlanModuleRowSync#syncIfPlanType}, one transaction per tenant, a
+ * subscription) get their {@code PLAN} rows re-synced by a {@code PROFILE_RESYNC} background job (Story 16.4) ({@link PlanModuleRowSync#syncIfPlanType}, one transaction per tenant, a
  * failure reported by tenant code and the loop going on). Every change is logged {@code [ADMIN AUDIT]} with the
  * actor, the plan type and the profile before/after.
  */
@@ -51,10 +53,12 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
     private final PlanModuleRowSync rowSync;
     private final PlanModuleRowStore rows;
     private final TransactionTemplate tx;
+    private final AdminJobs jobs;
 
     public PlanProfileAdminService(ModuleCatalog catalog, PlanProfiles profiles, PlanProfileStore store,
                                    PlanModuleRowSync rowSync, PlanModuleRowStore rows,
-                                   PlatformTransactionManager transactionManager) {
+                                   PlatformTransactionManager transactionManager, AdminJobs jobs) {
+        this.jobs = jobs;
         this.catalog = catalog;
         this.profiles = profiles;
         this.store = store;
@@ -90,22 +94,49 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         withheld.removeAll(granted);
         PlanProfile after = PlanProfile.of(planType, maxStores, maxProducts, maxEmployees, granted, withheld);
 
-        PlanProfile before = tx.execute(status -> {
-            Optional<PlanProfile> current = store.findForUpdate(planType); // row lock: edits serialise
-            store.save(after, actorId);
-            return current.orElse(null);
-        });
-        boolean compositionChanged = !effective(before != null ? before : PlanProfile.fromEnum(planType))
-                .equals(effective(after));
+        // Story 16.4: a composition change re-syncs the plan's tenants in a background job. The change is decided
+        // from the row read under its lock, and the job slot is reserved before the write: a refusal (409, a re-sync
+        // still running) saves nothing. Nothing is thrown once the profile is committed.
+        Map<String, Object> params = Map.of("planType", planType.name(), "plan", label(planType));
+        AdminJobs.Reservation[] reserved = new AdminJobs.Reservation[1];
+        PlanProfile[] before = new PlanProfile[1];
+        try {
+            tx.executeWithoutResult(status -> {
+                PlanProfile stored = store.findForUpdate(planType).orElse(null); // row lock: edits serialise
+                before[0] = stored;
+                if (!effective(stored != null ? stored : PlanProfile.fromEnum(planType)).equals(effective(after))) {
+                    reserved[0] = jobs.reserve(AdminJobs.Kind.PROFILE_RESYNC, params, actorId);
+                }
+                store.save(after, actorId);
+            });
+        } catch (RuntimeException e) {
+            if (reserved[0] != null) {
+                reserved[0].cancel();
+            }
+            throw e;
+        }
+        boolean compositionChanged = reserved[0] != null;
         log.info("[ADMIN AUDIT] Plan profile changed: actor={} plan={} before={} after={}", actorId, planType,
-                describe(before), describe(after));
+                describe(before[0]), describe(after));
 
-        BackfillReport resync = compositionChanged ? resync(planType) : null;
-        return new UpdateResult(view(after), compositionChanged, resync);
+        UUID jobId = null;
+        if (compositionChanged) {
+            jobId = reserved[0].id();
+            try {
+                reserved[0].submit(progress -> resync(planType, progress));
+            } catch (RuntimeException e) {
+                // the profile is committed: the job is already marked failed (French reason), the call succeeds
+                log.error("Plan profile {}: re-sync job could not start ({}) — run it again by saving the profile",
+                        planType, e.getClass().getSimpleName());
+            }
+        }
+        return new UpdateResult(view(after), compositionChanged, jobId);
     }
 
     /** Re-syncs the {@code PLAN} rows of every live tenant whose plan has this type. */
-    private BackfillReport resync(PlanType planType) {
+    @Override
+    public BackfillReport resync(PlanType planType, ProgressListener progress) {
+        ProgressListener listener = progress != null ? progress : ProgressListener.NONE;
         int processed = 0;
         int skipped = 0;
         int inserted = 0;
@@ -114,7 +145,15 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         int preserved = 0;
         List<TenantChange> changes = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
-        for (LiveTenant tenant : rows.liveTenants(planType.name())) {
+        List<LiveTenant> tenants = rows.liveTenants(planType.name());
+        int total = tenants.size();
+        int done = 0;
+        listener.progress(0, total);
+        for (LiveTenant tenant : tenants) {
+            if (done > 0) {
+                listener.progress(done, total);
+            }
+            done++;
             if (!TenantSchema.isValid(tenant.tenantSchema()) || !tenant.schemaPresent()) {
                 skipped++;
                 continue;
@@ -145,6 +184,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                 changes.add(new TenantChange(tenant.code(), r.inserted(), r.updated(), List.of()));
             }
         }
+        listener.progress(total, total);
         log.info("Plan profile re-sync ({}): {} tenant(s) processed, {} failed — rows {} inserted, {} updated, "
                         + "{} unchanged, {} preserved", planType, processed, failures.size(), inserted, updated,
                 unchanged, preserved);

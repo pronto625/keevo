@@ -29,7 +29,8 @@ import java.util.Set;
  *
  * <p>ZERO business logic: parsing, then {@link PlanProfileAdmin}. {@link CurrentActor#requireSuperAdmin()} in every
  * method (second barrier behind the SecurityConfig {@code /api/v1/admin/**} rule). Errors: {@code PLAN_PROFILE_INVALID}
- * 422 with a French reason (modules named by display name), nothing saved.
+ * 422 with a French reason (modules named by display name), nothing saved; Story 16.4: {@code ADMIN_JOB_RUNNING} 409
+ * when the modules change while a re-sync job runs, nothing saved.
  */
 @Tag(name = "Admin — Plan profiles", description = "Super Admin plan limits and the paid modules each plan grants")
 @EntitlementExempt("super-admin")
@@ -55,9 +56,13 @@ public class AdminPlanProfileController {
             description = "Body keys maxStores / maxProducts / maxEmployees are required: positive, or null "
                     + "(unlimited) sent explicitly; unknown keys are refused. modules: ids of installed paid modules "
                     + "only (every other installed paid module is recorded as not granted). Tenants above a lowered limit keep their records; only new "
-                    + "creations are refused. When the modules change, the plan-derived module rows of every live "
-                    + "tenant on this plan type are re-synced and the per-tenant counts returned (tenants by code); "
-                    + "rows set by a super-admin are untouched. 422 PLAN_PROFILE_INVALID, nothing saved.",
+                    + "creations are refused. Answer {profile, compositionChanged, jobId}: when the modules change, "
+                    + "the plan-derived module rows of every live tenant on this plan type are re-synced by a "
+                    + "PROFILE_RESYNC background job (follow it with GET /api/v1/admin/jobs/{jobId}: progress, then "
+                    + "the per-tenant report, tenants by code; owner notifications sent by the job); rows set by a "
+                    + "super-admin are untouched; jobId is null when the modules did not change. 422 "
+                    + "PLAN_PROFILE_INVALID, nothing saved; 409 ADMIN_JOB_RUNNING when the modules change while a "
+                    + "re-sync is still running, nothing saved.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @PutMapping("/{planType}")
     public ResponseEntity<ApiResponseWrapper<PlanProfileAdmin.UpdateResult>> update(

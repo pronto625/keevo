@@ -41,7 +41,7 @@ public class JdbcTenantModuleLifecycleStore implements TenantModuleLifecyclePort
 
     static final String FIND_ROWS_SQL = """
             SELECT tm.id, tm.module_id, tm.status, tm.tier, tm.activated_at, tm.expires_at, tm.grace_until,
-                   tm.disabled_at, tm.provisioned_version
+                   tm.disabled_at, tm.provisioned_version, tm.origin
             FROM public.tenants t
             JOIN public.tenant_modules tm ON tm.tenant_id = t.id
             WHERE t.schema_name = ? AND t.status <> 'DELETED'
@@ -103,7 +103,7 @@ public class JdbcTenantModuleLifecycleStore implements TenantModuleLifecyclePort
                     instant(rs.getObject("expires_at", OffsetDateTime.class)),
                     instant(rs.getObject("grace_until", OffsetDateTime.class)),
                     instant(rs.getObject("disabled_at", OffsetDateTime.class)),
-                    rs.getString("provisioned_version")));
+                    rs.getString("provisioned_version"), rs.getString("origin")));
         }, schema);
         return Map.copyOf(rows);
     }

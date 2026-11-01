@@ -10,8 +10,9 @@ import java.util.UUID;
  * Story 16.8 — super-admin editor of the plan profiles (MOD-FR13b): the limits of each plan type and the paid modules
  * it grants ({@code public.plan_profiles} + {@code public.profile_modules}). A change applies to the next check
  * without a restart. When the granted modules change, the plan-derived {@code tenant_modules} rows of every live
- * tenant on that plan type are re-synced in the same call (rows set by a super-admin are never touched); tenants
- * above a lowered limit keep their records.
+ * tenant on that plan type are re-synced by a background job (Story 16.4, {@code PROFILE_RESYNC}: its owner
+ * notifications are sent from the job thread, never in the HTTP request; rows set by a super-admin are never
+ * touched); tenants above a lowered limit keep their records.
  */
 public interface PlanProfileAdmin {
 
@@ -24,10 +25,21 @@ public interface PlanProfileAdmin {
      * @param modules ids of installed <b>paid</b> modules only — the full list granted: every other installed paid
      *                module is recorded as not granted
      * @throws com.keevo.shared.domain.exception.DomainException {@code PLAN_PROFILE_INVALID} (422, French reason
-     *         naming modules by display name) — nothing saved
+     *         naming modules by display name) — nothing saved; {@code ADMIN_JOB_RUNNING} (409) when the
+     *         composition changes while a re-sync job is still running — nothing saved
      */
     UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
                         Set<String> modules, UUID actorId);
+
+    /**
+     * Re-syncs the {@code PLAN} rows of every live tenant whose plan has this type (the work of the
+     * {@code PROFILE_RESYNC} job; synchronous here). Owner notifications of rows switched off are sent after each
+     * tenant's commit, on the calling thread.
+     *
+     * @param progress told {@code (tenants done, tenants of the plan type)}
+     * @return same shape as the 16.5 backfill report ({@code modulesProvisioned} always 0)
+     */
+    ModuleBackfill.BackfillReport resync(PlanType planType, com.keevo.shared.job.ProgressListener progress);
 
     /**
      * @param planType     {@code FREE} | {@code PREMIUM_TRIAL} | {@code PREMIUM}
@@ -53,9 +65,9 @@ public interface PlanProfileAdmin {
     /**
      * @param profile            the profile as saved
      * @param compositionChanged whether the granted modules changed
-     * @param resync             re-sync of the tenants on this plan type (same shape as the 16.5 backfill report,
-     *                           {@code modulesProvisioned} always 0); {@code null} when the composition did not change
+     * @param jobId              the {@code PROFILE_RESYNC} job re-syncing the tenants on this plan type (its report has
+     *                           the 16.5 backfill shape); {@code null} when the composition did not change
      */
-    record UpdateResult(ProfileView profile, boolean compositionChanged, ModuleBackfill.BackfillReport resync) {
+    record UpdateResult(ProfileView profile, boolean compositionChanged, UUID jobId) {
     }
 }

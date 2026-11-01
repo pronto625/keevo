@@ -3,6 +3,7 @@ package com.keevo.shared.module.application;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.job.ProgressListener;
 import com.keevo.shared.module.ModuleBackfill;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
@@ -76,14 +77,14 @@ public class ModuleBackfillService implements ModuleBackfill {
     }
 
     @Override
-    public BackfillReport run(boolean dryRun) {
+    public BackfillReport run(boolean dryRun, ProgressListener progress) {
         Optional<SimpleLock> lock = lockProvider.lock(
                 new LockConfiguration(clock.instant(), LOCK_NAME, LOCK_AT_MOST_FOR, Duration.ZERO));
         if (lock.isEmpty()) {
             throw new DomainException(ErrorCode.MODULE_BACKFILL_RUNNING, "A module backfill is already running");
         }
         try {
-            return backfill(dryRun);
+            return backfill(dryRun, progress != null ? progress : ProgressListener.NONE);
         } finally {
             try {
                 lock.get().unlock();
@@ -94,7 +95,7 @@ public class ModuleBackfillService implements ModuleBackfill {
         }
     }
 
-    private BackfillReport backfill(boolean dryRun) {
+    private BackfillReport backfill(boolean dryRun, ProgressListener progress) {
         List<ModuleManifest> migrating = migratingModules();
         int processed = 0;
         int skipped = 0;
@@ -106,7 +107,15 @@ public class ModuleBackfillService implements ModuleBackfill {
         List<TenantChange> changes = new ArrayList<>();
         List<Failure> failures = new ArrayList<>();
 
-        for (LiveTenant tenant : rows.liveTenants()) {
+        List<LiveTenant> tenants = rows.liveTenants();
+        int total = tenants.size();
+        int done = 0;
+        progress.progress(0, total);
+        for (LiveTenant tenant : tenants) {
+            if (done > 0) {
+                progress.progress(done, total);
+            }
+            done++;
             if (!TenantSchema.isValid(tenant.tenantSchema()) || !tenant.schemaPresent()) {
                 skipped++; // the platform tenant ("public"), or a schema not created yet
                 continue;
@@ -137,6 +146,7 @@ public class ModuleBackfillService implements ModuleBackfill {
                 changes.add(new TenantChange(tenant.code(), result.inserted(), result.updated(), provisioned));
             }
         }
+        progress.progress(total, total);
         log.info("Module backfill{}: {} tenant(s) processed, {} skipped, {} failed — rows {} inserted, {} updated, "
                         + "{} unchanged, {} preserved; {} module provisioning(s)", dryRun ? " (dry run)" : "",
                 processed, skipped, failures.size(), inserted, updated, unchanged, preserved, provisionedCount);

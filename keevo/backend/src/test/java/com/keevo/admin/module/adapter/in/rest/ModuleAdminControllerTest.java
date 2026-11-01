@@ -52,7 +52,7 @@ class ModuleAdminControllerTest {
     @Autowired MockMvc mockMvc;
 
     @MockitoBean ModuleLifecycle lifecycle;
-    @MockitoBean com.keevo.shared.module.ModuleBackfill backfill;
+    @MockitoBean com.keevo.shared.module.ModuleJobs jobs;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -136,9 +136,11 @@ class ModuleAdminControllerTest {
         as("ROLE_SUPER_ADMIN");
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("dependents", "« Point de vente »");
-        when(lifecycle.deactivate(TENANT, "inventory", new ModuleLifecycle.Actor(ADMIN_ID, true)))
+        when(lifecycle.deactivate(TENANT, "inventory", ModuleLifecycle.DeactivationOptions.NONE,
+                new ModuleLifecycle.Actor(ADMIN_ID, true)))
                 .thenThrow(new DomainException(ErrorCode.MODULE_HAS_DEPENDENTS, "x", details));
-        when(lifecycle.deactivate(TENANT, "core", new ModuleLifecycle.Actor(ADMIN_ID, true)))
+        when(lifecycle.deactivate(TENANT, "core", ModuleLifecycle.DeactivationOptions.NONE,
+                new ModuleLifecycle.Actor(ADMIN_ID, true)))
                 .thenThrow(new DomainException(ErrorCode.CORE_MODULE_REQUIRED, "x"));
         when(lifecycle.activate(eq(TENANT), eq("ghost"), any(), any()))
                 .thenThrow(new DomainException(ErrorCode.MODULE_NOT_FOUND, "x"));
@@ -179,13 +181,53 @@ class ModuleAdminControllerTest {
     @DisplayName("POST …/deactivate → 200 {moduleId, displayName, status}")
     void deactivate_ok() throws Exception {
         as("ROLE_SUPER_ADMIN");
-        when(lifecycle.deactivate(TENANT, "crm", new ModuleLifecycle.Actor(ADMIN_ID, true))).thenReturn(
+        when(lifecycle.deactivate(TENANT, "crm", ModuleLifecycle.DeactivationOptions.NONE,
+                new ModuleLifecycle.Actor(ADMIN_ID, true))).thenReturn(
                 new ModuleLifecycle.DeactivationResult("crm", "Clients et fournisseurs", TenantModuleStatus.DISABLED));
 
         mockMvc.perform(post(BASE + "/deactivate", TENANT, "crm"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.displayName").value("Clients et fournisseurs"))
-                .andExpect(jsonPath("$.data.status").value("DISABLED"));
+                .andExpect(jsonPath("$.data.status").value("DISABLED"))
+                .andExpect(jsonPath("$.data.deactivated").isEmpty());
+    }
+
+    @Test
+    @DisplayName("16.4: POST …/deactivate?cascade=true&force=true → options passed; dependents and forced listed")
+    void deactivate_cascadeForce() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(lifecycle.deactivate(TENANT, "inventory", new ModuleLifecycle.DeactivationOptions(true, true),
+                new ModuleLifecycle.Actor(ADMIN_ID, true))).thenReturn(new ModuleLifecycle.DeactivationResult(
+                "inventory", "Stock et inventaire", TenantModuleStatus.DISABLED,
+                List.of(new ModuleLifecycle.ModuleRef("counting", "Inventaire assisté"),
+                        new ModuleLifecycle.ModuleRef("inventory", "Stock et inventaire")),
+                List.of(new ModuleLifecycle.ModuleRef("inventory", "Stock et inventaire"))));
+
+        mockMvc.perform(post(BASE + "/deactivate", TENANT, "inventory").param("cascade", "true")
+                        .param("force", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.deactivated[0].displayName").value("Inventaire assisté"))
+                .andExpect(jsonPath("$.data.deactivated[1].moduleId").value("inventory"))
+                .andExpect(jsonPath("$.data.forced[0].displayName").value("Stock et inventaire"));
+    }
+
+    @Test
+    @DisplayName("16.4: GET …/modules/history → newest first, French labels, actor name and phone, no id")
+    void history() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(lifecycle.history(TENANT)).thenReturn(List.of(
+                new ModuleLifecycle.HistoryEntry(Instant.parse("2026-11-01T10:00:00Z"), "Pack appliqué", "Pack Pro",
+                        "Modules activés : Facturation · Actif jusqu'au 30/06/2027", "Administrateur Keevo",
+                        "+237690000000"),
+                new ModuleLifecycle.HistoryEntry(Instant.parse("2026-10-01T10:00:00Z"), "Module désactivé",
+                        "Facturation", "Données conservées", "Administrateur Keevo", null)));
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].action").value("Pack appliqué"))
+                .andExpect(jsonPath("$.data[0].subject").value("Pack Pro"))
+                .andExpect(jsonPath("$.data[0].actorPhone").value("+237690000000"))
+                .andExpect(jsonPath("$.data[1].detail").value("Données conservées"));
     }
 
     @Test
@@ -193,6 +235,7 @@ class ModuleAdminControllerTest {
     void reads() throws Exception {
         as("ROLE_SUPER_ADMIN");
         when(lifecycle.catalogue()).thenReturn(List.copyOf(TestModuleCatalogs.lifecycleCatalog().manifests()));
+        when(jobs.hasMigrations("lcpaid")).thenReturn(true);
         when(lifecycle.tenantModules(TENANT)).thenReturn(List.of(new ModuleLifecycle.TenantModuleView("lcpaid",
                 "Module payant", ModuleState.READ_ONLY, TenantModuleStatus.ACTIVE,
                 Instant.parse("2026-10-29T10:00:00Z"), Instant.parse("2026-11-05T10:00:00Z"), "1")));
@@ -202,7 +245,9 @@ class ModuleAdminControllerTest {
                 .andExpect(jsonPath("$.data[?(@.moduleId == 'lctop')].requires[1]").value("lcbase"))
                 .andExpect(jsonPath("$.data[?(@.moduleId == 'lcpaid')].free").value(false))
                 .andExpect(jsonPath("$.data[?(@.moduleId == 'lcpaid')].category").value("premium"))
-                .andExpect(jsonPath("$.data[?(@.moduleId == 'lcpaid')].version").value("1.0.0"));
+                .andExpect(jsonPath("$.data[?(@.moduleId == 'lcpaid')].version").value("1.0.0"))
+                .andExpect(jsonPath("$.data[?(@.moduleId == 'lcpaid')].migrations").value(true))
+                .andExpect(jsonPath("$.data[?(@.moduleId == 'lctop')].migrations").value(false));
         mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules", TENANT))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].state").value("READ_ONLY"))
@@ -224,48 +269,71 @@ class ModuleAdminControllerTest {
         mockMvc.perform(post("/api/v1/admin/modules/backfill").param("dryRun", "false"))
                 .andExpect(status().isForbidden());
 
+        mockMvc.perform(post("/api/v1/admin/modules/invoicing/provision-all")).andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT))
+                .andExpect(status().isForbidden());
+
         verifyNoInteractions(lifecycle);
-        verifyNoInteractions(backfill);
+        verifyNoInteractions(jobs);
     }
 
-    // ── Story 16.5 — backfill ────────────────────────────────────────────────
+    // ── Story 16.5 / 16.4 — backfill and provisioning as background jobs ───────
 
     @Test
-    @DisplayName("16.5: POST /admin/modules/backfill as SUPER_ADMIN → dry run by default, report by tenant code")
-    void backfill_dryRunByDefault() throws Exception {
+    @DisplayName("16.4: POST /admin/modules/backfill → 202 {jobId} at once, dry run by default, actor passed")
+    void backfill_startsJob() throws Exception {
         as("ROLE_SUPER_ADMIN");
-        when(backfill.run(true)).thenReturn(new com.keevo.shared.module.ModuleBackfill.BackfillReport(true, 2, 1,
-                8, 0, 0, 0, 1,
-                List.of(new com.keevo.shared.module.ModuleBackfill.TenantChange("KV-AAA111", 8, 0,
-                        List.of("Facturation"))),
-                List.of(new com.keevo.shared.module.ModuleBackfill.Failure("KV-BBB222",
-                        "Abonnement illisible : modules laissés inchangés"))));
+        UUID job = UUID.randomUUID();
+        when(jobs.startBackfill(true, ADMIN_ID)).thenReturn(job);
 
         mockMvc.perform(post("/api/v1/admin/modules/backfill"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.dryRun").value(true))
-                .andExpect(jsonPath("$.data.rowsInserted").value(8))
-                .andExpect(jsonPath("$.data.tenants[0].tenantCode").value("KV-AAA111"))
-                .andExpect(jsonPath("$.data.tenants[0].provisioned[0]").value("Facturation"))
-                .andExpect(jsonPath("$.data.failures[0].tenantCode").value("KV-BBB222"));
-        verify(backfill).run(true);
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.jobId").value(job.toString()));
+        verify(jobs).startBackfill(true, ADMIN_ID);
     }
 
     @Test
-    @DisplayName("16.5: dryRun=false runs for real; a concurrent run → 409 MODULE_BACKFILL_RUNNING in French")
+    @DisplayName("16.4: dryRun=false starts a real run; a job already running → 409 ADMIN_JOB_RUNNING in French")
     void backfill_realRun_andConcurrent() throws Exception {
         as("ROLE_SUPER_ADMIN");
-        when(backfill.run(false)).thenReturn(new com.keevo.shared.module.ModuleBackfill.BackfillReport(false, 0, 0,
-                0, 0, 0, 0, 0, List.of(), List.of()))
-                .thenThrow(new DomainException(ErrorCode.MODULE_BACKFILL_RUNNING, "A module backfill is already running"));
+        when(jobs.startBackfill(false, ADMIN_ID)).thenReturn(UUID.randomUUID())
+                .thenThrow(new DomainException(ErrorCode.ADMIN_JOB_RUNNING, "x",
+                        Map.of("label", "Migration des modules")));
 
         mockMvc.perform(post("/api/v1/admin/modules/backfill").param("dryRun", "false"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.dryRun").value(false));
+                .andExpect(status().isAccepted());
         mockMvc.perform(post("/api/v1/admin/modules/backfill").param("dryRun", "false"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.domainCode").value("MODULE_BACKFILL_RUNNING"))
-                .andExpect(jsonPath("$.error").value("Une migration des modules est déjà en cours. Réessayez dans quelques minutes."));
+                .andExpect(jsonPath("$.domainCode").value("ADMIN_JOB_RUNNING"))
+                .andExpect(jsonPath("$.error").value("« Migration des modules » est déjà en cours. Attendez la fin "
+                        + "de la tâche avant d'en relancer une."));
+    }
+
+    @Test
+    @DisplayName("16.4: POST /admin/modules/{id}/provision-all → 202 {jobId}; unknown module 404, no tables 422")
+    void provisionAll() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        UUID job = UUID.randomUUID();
+        when(jobs.startProvisionAll("invoicing", false, ADMIN_ID)).thenReturn(job);
+        when(jobs.startProvisionAll("ghost", false, ADMIN_ID))
+                .thenThrow(new DomainException(ErrorCode.MODULE_NOT_FOUND, "Module introuvable"));
+        when(jobs.startProvisionAll("catalog", false, ADMIN_ID)).thenThrow(new DomainException(ErrorCode.VALIDATION_ERROR,
+                "Le module « Catalogue » n'a pas de tables à créer",
+                Map.of("moduleId", "Le module « Catalogue » n'a pas de tables à créer")));
+
+        mockMvc.perform(post("/api/v1/admin/modules/invoicing/provision-all"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.jobId").value(job.toString()));
+        UUID forced = UUID.randomUUID();
+        when(jobs.startProvisionAll("invoicing", true, ADMIN_ID)).thenReturn(forced);
+        mockMvc.perform(post("/api/v1/admin/modules/invoicing/provision-all").param("force", "true"))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.data.jobId").value(forced.toString()));
+        mockMvc.perform(post("/api/v1/admin/modules/ghost/provision-all"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.error").value("Module introuvable"));
+        mockMvc.perform(post("/api/v1/admin/modules/catalog/provision-all"))
+                .andExpect(status().isUnprocessableEntity());
     }
 
     private void as(String role) throws Exception {

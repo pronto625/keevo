@@ -10,14 +10,21 @@ import java.util.List;
  * @param provisioned tenants whose schema is up to date after the run (whether or not migrations were applied)
  * @param skipped     tenants without a schema yet, or for which the module is not active (nothing done)
  * @param failures    tenants whose provisioning failed
+ * @param upToDate    Story 16.4 — tenants already at the module's latest version, left without any Flyway run
+ *                    (not counted in {@code skipped}; always 0 for a forced run)
  */
 public record ProvisioningReport(String moduleId, List<String> provisioned, List<String> skipped,
-                                 List<Failure> failures) {
+                                 List<Failure> failures, int upToDate) {
 
     public ProvisioningReport {
         provisioned = List.copyOf(provisioned);
         skipped = List.copyOf(skipped);
         failures = List.copyOf(failures);
+    }
+
+    public ProvisioningReport(String moduleId, List<String> provisioned, List<String> skipped,
+                              List<Failure> failures) {
+        this(moduleId, provisioned, skipped, failures, 0);
     }
 
     /** Whether every live tenant was provisioned or skipped. */

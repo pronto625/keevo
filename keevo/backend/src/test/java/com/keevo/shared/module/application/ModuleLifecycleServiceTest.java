@@ -721,7 +721,8 @@ class ModuleLifecycleServiceTest {
         ModuleLifecycle.DeactivationResult result = lifecycle.deactivate(TENANT, "lcplain", SUPER_ADMIN);
 
         assertThat(result).isEqualTo(new ModuleLifecycle.DeactivationResult("lcplain", "Module simple",
-                TenantModuleStatus.DISABLED));
+                TenantModuleStatus.DISABLED, List.of(new ModuleLifecycle.ModuleRef("lcplain", "Module simple")),
+                List.of()));
         TenantModuleLifecyclePort.StoredRow row = rows.stored.get("lcplain");
         assertThat(row.status()).isEqualTo(TenantModuleStatus.DISABLED);
         assertThat(row.disabledAt()).isEqualTo(NOW);
@@ -950,5 +951,148 @@ class ModuleLifecycleServiceTest {
                 NOW.plus(Duration.ofDays(60))), SUPER_ADMIN);
         assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(60)));
         assertThat(paid.calls).containsExactly("activate");
+    }
+
+    // ── Story 16.4 — console: cascade, force, history, pack audit ───────────
+
+    @Test
+    @DisplayName("16.4 cascade: active dependents deactivated first (reverse dependency order), then the module; "
+            + "one audit entry each; without cascade the 409 lists them by display name")
+    void cascadeDeactivation() {
+        assertThat(code(() -> lifecycle.deactivate(TENANT, "lcbase", SUPER_ADMIN))).isEqualTo("MODULE_HAS_DEPENDENTS");
+
+        ModuleLifecycle.DeactivationResult result = lifecycle.deactivate(TENANT, "lcbase",
+                new ModuleLifecycle.DeactivationOptions(true, false), SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lctop", "lcbroken", "lcbase");
+        assertThat(result.deactivated()).extracting(ModuleLifecycle.ModuleRef::displayName)
+                .containsExactly("Module supérieur", "Module cassé", "Base de test");
+        assertThat(result.forced()).isEmpty();
+        assertThat(rows.stored.values()).extracting(TenantModuleLifecyclePort.StoredRow::status)
+                .containsOnly(TenantModuleStatus.DISABLED);
+        assertThat(auditEntries(3)).extracting(AuditPort.AuditEntry::action).containsOnly("MODULE_DEACTIVATED");
+    }
+
+    @Test
+    @DisplayName("16.4 cascade through a paid chain: the paid dependent first, then the paid module")
+    void cascadePaidChain() {
+        Instant end = NOW.plus(Duration.ofDays(30));
+        rows.put("lcpaid", TenantModuleStatus.ACTIVE, end, end.plus(Duration.ofDays(7)));
+        rows.put("lcpremium", TenantModuleStatus.TRIAL, end, end.plus(Duration.ofDays(7)));
+        rows.put("lcbuyer", TenantModuleStatus.DISABLED, null, null);
+
+        DomainException refused = (DomainException) org.assertj.core.api.Assertions.catchThrowable(() ->
+                lifecycle.deactivate(TENANT, "lcpaid", SUPER_ADMIN));
+        assertThat(refused.getDetails().get("modules")).isEqualTo(List.of("Module premium"));
+        rows.writes.clear();
+
+        lifecycle.deactivate(TENANT, "lcpaid", new ModuleLifecycle.DeactivationOptions(true, false), SUPER_ADMIN);
+        assertThat(rows.writes).containsExactly("lcpremium", "lcpaid");
+    }
+
+    @Test
+    @DisplayName("16.4 force: a failing deactivation hook no longer cancels — DISABLED, reported forced, audited "
+            + "« Désactivation forcée » (metadata), no technical detail")
+    void forcedDeactivation() {
+        HookModule plain = new HookModule("lcplain");
+        plain.failure = new IllegalStateException("SQL kv_lcu001 boom");
+        ModuleLifecycle service = withModules(plain);
+
+        assertThat(code(() -> service.deactivate(TENANT, "lcplain", SUPER_ADMIN)))
+                .isEqualTo("MODULE_DEACTIVATION_FAILED");
+        rows.stored.remove("lcplain"); // no transaction here: undo the row the refused call wrote
+
+        ModuleLifecycle.DeactivationResult result = service.deactivate(TENANT, "lcplain",
+                new ModuleLifecycle.DeactivationOptions(false, true), SUPER_ADMIN);
+
+        assertThat(result.status()).isEqualTo(TenantModuleStatus.DISABLED);
+        assertThat(result.forced()).extracting(ModuleLifecycle.ModuleRef::displayName).containsExactly("Module simple");
+        assertThat(rows.stored.get("lcplain").status()).isEqualTo(TenantModuleStatus.DISABLED);
+        AuditPort.AuditEntry entry = auditEntries(1).get(0);
+        assertThat(entry.action()).isEqualTo("MODULE_DEACTIVATED");
+        assertThat(entry.metadataJson()).contains("\"kind\":\"FORCED\"");
+        assertThat(entry.valueAfter()).contains("Désactivation forcée").doesNotContain("kv_", "boom", "lcplain");
+    }
+
+    @Test
+    @DisplayName("16.4 applyBundle: one « Pack appliqué » entry naming the pack and the modules activated, besides "
+            + "the per-module entries; nothing activated → no pack entry")
+    void bundleAudit() {
+        rows.put("lcbase", TenantModuleStatus.DISABLED, null, null);
+        rows.put("lctop", TenantModuleStatus.DISABLED, null, null);
+
+        lifecycle.applyBundle(TENANT, "Pack Test", List.of("lctop"), ActivationRequest.active(), SUPER_ADMIN);
+
+        List<AuditPort.AuditEntry> entries = auditEntries(3);
+        AuditPort.AuditEntry pack = entries.get(2);
+        assertThat(pack.action()).isEqualTo("MODULE_ACTIVATED");
+        assertThat(pack.entityLabel()).isEqualTo("Pack Test");
+        assertThat(pack.metadataJson()).contains("\"kind\":\"BUNDLE\"");
+        assertThat(pack.valueAfter()).contains("Base de test, Module supérieur").doesNotContain("lctop");
+
+        lifecycle.applyBundle(TENANT, "Pack Test", List.of("lctop"), ActivationRequest.active(), SUPER_ADMIN);
+        auditEntries(3); // already active: nothing more
+    }
+
+    @Test
+    @DisplayName("16.4 history: the tenant's module entries newest first with French labels (pack, forced), other "
+            + "entries ignored, read in the tenant's schema; unknown tenant → TENANT_NOT_FOUND")
+    void history() {
+        Instant t = Instant.parse("2026-11-01T09:00:00Z");
+        List<String> contexts = new ArrayList<>();
+        List<AuditPort.AuditEntryRecord> stored = new ArrayList<>();
+        when(audit.search(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenAnswer(inv -> {
+            contexts.add(TenantContext.getCurrentTenant());
+            AuditPort.AuditQuery query = inv.getArgument(0);
+            assertThat(query.entityType()).isEqualTo("Module");
+            assertThat(query.action()).isIn("MODULE_ACTIVATED", "MODULE_DEACTIVATED");
+            return new AuditPort.AuditSlice(stored.stream().filter(r -> r.action().equals(query.action())).toList(),
+                    false, null);
+        });
+        stored.addAll(List.of(
+                    record("MODULE_ACTIVATED", "Pack Pro", t.plusSeconds(30),
+                            "{\"pack\":\"Pack Pro\",\"modulesActives\":\"Facturation\",\"statut\":\"Actif\","
+                                    + "\"finAbonnement\":\"30/06/2027\"}",
+                            "{\"actorLabel\":\"Administrateur Keevo\",\"kind\":\"BUNDLE\"}"),
+                    record("MODULE_ACTIVATED", "Facturation", t.plusSeconds(20),
+                            "{\"module\":\"Facturation\",\"statut\":\"Essai\",\"finAbonnement\":\"15/11/2026\"}",
+                            "{\"actorLabel\":\"Administrateur Keevo\"}"),
+                    record("MODULE_DEACTIVATED", "Inventaire assisté", t.plusSeconds(10),
+                            "{\"module\":\"Inventaire assisté\",\"motif\":\"Désactivation forcée : la mise "
+                                    + "hors service du module a échoué\"}",
+                            "{\"kind\":\"FORCED\"}"),
+                    record("PRODUCT_CREATED", "Riz", t, null, null)));
+
+        List<ModuleLifecycle.HistoryEntry> history = lifecycle.history(TENANT);
+
+        assertThat(history).extracting(ModuleLifecycle.HistoryEntry::action)
+                .containsExactly("Pack appliqué", "Module activé", "Désactivation forcée");
+        assertThat(history.get(0).detail()).isEqualTo("Modules activés : Facturation · Actif jusqu'au 30/06/2027");
+        assertThat(history.get(1).detail()).isEqualTo("Essai jusqu'au 15/11/2026");
+        assertThat(history.get(2).detail()).startsWith("Désactivation forcée").endsWith("Données conservées");
+        assertThat(history.get(0).actorName()).isEqualTo("Administrateur Keevo");
+        assertThat(history.get(0).actorPhone()).isEqualTo("+237690000000");
+        assertThat(contexts).containsOnly(SCHEMA).hasSize(2);
+        assertThat(TenantContext.getCurrentTenant()).isNull();
+        assertThat(code(() -> lifecycle.history(UUID.randomUUID()))).isEqualTo("TENANT_NOT_FOUND");
+    }
+
+    private static AuditPort.AuditEntryRecord record(String action, String label, Instant at, String after,
+                                                     String metadata) {
+        return new AuditPort.AuditEntryRecord(UUID.randomUUID(), "Module", UUID.randomUUID(), action, null, after,
+                ADMIN, "+237690000000", at, null, null, label, null, "ONLINE", metadata, "Administrateur Keevo");
+    }
+
+    @Test
+    @DisplayName("16.4 tenantModules: the stored row's origin is exposed (no row → null)")
+    void tenantModulesOrigin() {
+        rows.stored.put("lcpaid", new TenantModuleLifecyclePort.StoredRow(UUID.randomUUID(), TenantModuleStatus.ACTIVE,
+                "STANDARD", NOW, NOW.plus(Duration.ofDays(3)), NOW.plus(Duration.ofDays(10)), null, null, "PLAN"));
+
+        List<ModuleLifecycle.TenantModuleView> views = lifecycle.tenantModules(TENANT);
+        assertThat(views.stream().filter(v -> v.moduleId().equals("lcpaid")).findFirst().orElseThrow().origin())
+                .isEqualTo("PLAN");
+        assertThat(views.stream().filter(v -> v.moduleId().equals("lcplain")).findFirst().orElseThrow().origin())
+                .isNull();
     }
 }

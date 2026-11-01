@@ -4,6 +4,8 @@ import com.keevo.admin.module.adapter.in.rest.dto.ModuleActivationDto;
 import com.keevo.admin.module.adapter.in.rest.dto.ModuleActivationRequest;
 import com.keevo.admin.module.adapter.in.rest.dto.ModuleCatalogueEntryDto;
 import com.keevo.admin.module.adapter.in.rest.dto.ModuleDeactivationDto;
+import com.keevo.admin.module.adapter.in.rest.dto.ModuleHistoryEntryDto;
+import com.keevo.admin.module.adapter.in.rest.dto.JobStartedDto;
 import com.keevo.admin.module.adapter.in.rest.dto.TenantModuleDto;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -11,12 +13,13 @@ import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
-import com.keevo.shared.module.ModuleBackfill;
+import com.keevo.shared.module.ModuleJobs;
 import com.keevo.shared.module.ModuleLifecycle;
 import com.keevo.shared.module.TenantModuleStatus;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,7 +44,7 @@ import java.util.UUID;
  * method (second barrier behind the SecurityConfig {@code /api/v1/admin/**} rule). Errors: {@code TENANT_NOT_FOUND}
  * / {@code MODULE_NOT_FOUND} 404, {@code MODULE_ACTIVATION_BLOCKED} / {@code MODULE_HAS_DEPENDENTS} /
  * {@code CORE_MODULE_REQUIRED} 409, {@code MODULE_PROVISIONING_FAILED} / {@code MODULE_ACTIVATION_FAILED} /
- * {@code MODULE_DEACTIVATION_FAILED} 500, {@code VALIDATION_ERROR} 422, {@code MODULE_BACKFILL_RUNNING} 409 — French
+ * {@code MODULE_DEACTIVATION_FAILED} 500, {@code VALIDATION_ERROR} 422, {@code ADMIN_JOB_RUNNING} 409 — French
  * messages naming modules by display name.
  */
 @Tag(name = "Admin — Modules", description = "Super Admin module catalogue and per-tenant activation")
@@ -51,11 +54,11 @@ import java.util.UUID;
 public class ModuleAdminController {
 
     private final ModuleLifecycle lifecycle;
-    private final ModuleBackfill backfill;
+    private final ModuleJobs jobs;
 
-    public ModuleAdminController(ModuleLifecycle lifecycle, ModuleBackfill backfill) {
+    public ModuleAdminController(ModuleLifecycle lifecycle, ModuleJobs jobs) {
         this.lifecycle = lifecycle;
-        this.backfill = backfill;
+        this.jobs = jobs;
     }
 
     @Operation(summary = "Activate a module for a tenant (missing dependencies first, tables provisioned)",
@@ -77,16 +80,31 @@ public class ModuleAdminController {
     }
 
     @Operation(summary = "Deactivate a module for a tenant (row DISABLED, tables and data kept)",
-            description = "409 MODULE_HAS_DEPENDENTS when active modules require it, 409 CORE_MODULE_REQUIRED for "
+            description = "409 MODULE_HAS_DEPENDENTS when active modules require it (details.modules: their display "
+                    + "names), unless cascade=true: the active dependents are deactivated first, in reverse "
+                    + "dependency order, in the same transaction. force=true writes DISABLED even when the module's "
+                    + "deactivation hook fails (audited « Désactivation forcée »). 409 CORE_MODULE_REQUIRED for "
                     + "the core. Already disabled → 200.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/tenants/{tenantId}/modules/{moduleId}/deactivate")
     public ResponseEntity<ApiResponseWrapper<ModuleDeactivationDto>> deactivate(
             @PathVariable UUID tenantId,
-            @PathVariable String moduleId) {
+            @PathVariable String moduleId,
+            @RequestParam(name = "cascade", defaultValue = "false") boolean cascade,
+            @RequestParam(name = "force", defaultValue = "false") boolean force) {
         CurrentActor.requireSuperAdmin();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(ModuleDeactivationDto.from(
-                lifecycle.deactivate(tenantId, moduleId, actor()))));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ModuleDeactivationDto.from(lifecycle.deactivate(tenantId,
+                moduleId, new ModuleLifecycle.DeactivationOptions(cascade, force), actor()))));
+    }
+
+    @Operation(summary = "Module history of a tenant: activations, deactivations, forced deactivations, packs applied",
+            description = "Newest first (last 100), French labels, actor by name and phone, no identifier.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/tenants/{tenantId}/modules/history")
+    public ResponseEntity<ApiResponseWrapper<List<ModuleHistoryEntryDto>>> history(@PathVariable UUID tenantId) {
+        CurrentActor.requireSuperAdmin();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                lifecycle.history(tenantId).stream().map(ModuleHistoryEntryDto::from).toList()));
     }
 
     @Operation(summary = "Module catalogue (installed tenant modules)",
@@ -95,7 +113,8 @@ public class ModuleAdminController {
     public ResponseEntity<ApiResponseWrapper<List<ModuleCatalogueEntryDto>>> catalogue() {
         CurrentActor.requireSuperAdmin();
         return ResponseEntity.ok(ApiResponseWrapper.ok(
-                lifecycle.catalogue().stream().map(ModuleCatalogueEntryDto::from).toList()));
+                lifecycle.catalogue().stream()
+                        .map(m -> ModuleCatalogueEntryDto.from(m, jobs.hasMigrations(m.id()))).toList()));
     }
 
     @Operation(summary = "Modules of a tenant: effective state, stored status, dates, provisioned version",
@@ -107,18 +126,35 @@ public class ModuleAdminController {
                 lifecycle.tenantModules(tenantId).stream().map(TenantModuleDto::from).toList()));
     }
 
-    @Operation(summary = "Backfill tenant_modules for every live tenant (Story 16.5)",
-            description = "Writes, for each tenant, the paid-module rows equivalent to its plan (remaining trial "
-                    + "kept, rows set by a super-admin untouched), then provisions the tables of every enabled "
-                    + "module that ships migrations. Idempotent: a second run writes nothing. dryRun=true (default) "
-                    + "only reports what would be written. Tenants are named by their code. 409 "
-                    + "MODULE_BACKFILL_RUNNING while another run is in progress.",
+    @Operation(summary = "Backfill tenant_modules for every live tenant (Story 16.5) — background job (Story 16.4)",
+            description = "Starts a MODULE_BACKFILL job and answers 202 {jobId} at once; follow it with GET "
+                    + "/api/v1/admin/jobs/{jobId} (progress, then the report). The job writes, for each tenant, the "
+                    + "paid-module rows equivalent to its plan (remaining trial kept, rows set by a super-admin "
+                    + "untouched), then provisions the tables of every enabled module that ships migrations. "
+                    + "Idempotent. dryRun=true (default) only reports what would be written. Tenants are named by "
+                    + "their code. 409 ADMIN_JOB_RUNNING while another backfill job is queued or running.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/modules/backfill")
-    public ResponseEntity<ApiResponseWrapper<ModuleBackfill.BackfillReport>> backfill(
+    public ResponseEntity<ApiResponseWrapper<JobStartedDto>> backfill(
             @RequestParam(name = "dryRun", defaultValue = "true") boolean dryRun) {
         CurrentActor.requireSuperAdmin();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(backfill.run(dryRun)));
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseWrapper.ok(
+                new JobStartedDto(jobs.startBackfill(dryRun, CurrentActor.actorId()))));
+    }
+
+    @Operation(summary = "Provision a module's tables for every live tenant — background job (Story 16.4)",
+            description = "Starts a MODULE_PROVISION_ALL job and answers 202 {jobId}. Tenants for which the module "
+                    + "is not active are skipped; tenants already at the module's latest version are counted in "
+                    + "upToDate without any migration run, unless force=true (full validate). 404 MODULE_NOT_FOUND, 422 VALIDATION_ERROR for a module without tables, 409 "
+                    + "ADMIN_JOB_RUNNING while another provisioning job is queued or running.",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/modules/{moduleId}/provision-all")
+    public ResponseEntity<ApiResponseWrapper<JobStartedDto>> provisionAll(
+            @PathVariable String moduleId,
+            @RequestParam(name = "force", defaultValue = "false") boolean force) {
+        CurrentActor.requireSuperAdmin();
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(ApiResponseWrapper.ok(
+                new JobStartedDto(jobs.startProvisionAll(moduleId, force, CurrentActor.actorId()))));
     }
 
     // ── Parsing (adapter concern) ─────────────────────────────────────────────

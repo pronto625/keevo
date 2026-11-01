@@ -29,6 +29,14 @@ public interface TenantModuleProvisioningPort {
      */
     int insertActiveFree(String tenantSchema, String moduleId, String version);
 
+    /**
+     * Story 16.4 — the stored {@code provisioned_version} of the module for every live tenant that has a row with one
+     * (tenant schema → version); tenants without a row or without a version are absent.
+     */
+    default java.util.Map<String, String> provisionedVersions(String moduleId) {
+        return java.util.Map.of();
+    }
+
     /** Every live tenant ({@code status <> 'DELETED'}), ordered by code. */
     List<LiveTenant> liveTenants();
 

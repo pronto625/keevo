@@ -30,7 +30,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -111,6 +115,16 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     static final int MAX_EXPIRY_YEARS = 10;
     static final String ACTION_ACTIVATED = "MODULE_ACTIVATED";
     static final String ACTION_DEACTIVATED = "MODULE_DEACTIVATED";
+    /**
+     * Story 16.4 — kinds told apart in the audit metadata ({@code kind}), on the existing action codes (the owner's
+     * history and exports keep their labels): a deactivation written although the module's deactivation hook failed
+     * ({@code MODULE_DEACTIVATED}), a pack applied by the super-admin ({@code MODULE_ACTIVATED}, one entry per
+     * application that wrote something).
+     */
+    static final String KIND_FORCED = "FORCED";
+    static final String KIND_BUNDLE = "BUNDLE";
+    /** Story 16.4 — how many history entries the console shows. */
+    static final int HISTORY_SIZE = 100;
     static final String ENTITY_TYPE = "Module";
     static final String ACTOR_LABEL = "Administrateur Keevo";
     static final String TIER_FREE = "FREE";
@@ -128,6 +142,13 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     private final AuditPort audit;
     private final Clock clock;
     private final KeevoModuleDirectory modules;
+    private final TransactionOperations hookTransaction;
+
+    private static TransactionOperations requiresNew(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        return template;
+    }
 
     /** Without module beans (no hook called) — tests and catalogues without converted modules. */
     public ModuleLifecycleService(ModuleCatalog catalog, ModuleRegistry registry, DependencyResolver resolver,
@@ -137,11 +158,34 @@ public class ModuleLifecycleService implements ModuleLifecycle {
                 KeevoModuleDirectory.empty(catalog));
     }
 
-    @Autowired
+    /** Forced-deactivation hooks run without their own transaction — tests without a transaction manager. */
     public ModuleLifecycleService(ModuleCatalog catalog, ModuleRegistry registry, DependencyResolver resolver,
                                   ModuleProvisioner provisioner, TenantModuleLifecyclePort store,
                                   TransactionLockPort locks, AuditPort audit, Clock clock,
                                   KeevoModuleDirectory modules) {
+        this(catalog, registry, resolver, provisioner, store, locks, audit, clock, modules,
+                TransactionOperations.withoutTransaction());
+    }
+
+    @Autowired
+    public ModuleLifecycleService(ModuleCatalog catalog, ModuleRegistry registry, DependencyResolver resolver,
+                                  ModuleProvisioner provisioner, TenantModuleLifecyclePort store,
+                                  TransactionLockPort locks, AuditPort audit, Clock clock,
+                                  KeevoModuleDirectory modules, PlatformTransactionManager transactionManager) {
+        this(catalog, registry, resolver, provisioner, store, locks, audit, clock, modules,
+                requiresNew(transactionManager));
+    }
+
+    /**
+     * @param hookTransaction how a forced deactivation isolates the module's {@link KeevoModule#onDeactivate} hook
+     *                        (production: its own {@code REQUIRES_NEW} transaction, so a failing hook — even one
+     *                        marking its transaction rollback-only — never touches the deactivation's transaction)
+     */
+    public ModuleLifecycleService(ModuleCatalog catalog, ModuleRegistry registry, DependencyResolver resolver,
+                                  ModuleProvisioner provisioner, TenantModuleLifecyclePort store,
+                                  TransactionLockPort locks, AuditPort audit, Clock clock,
+                                  KeevoModuleDirectory modules, TransactionOperations hookTransaction) {
+        this.hookTransaction = hookTransaction;
         this.modules = modules;
         this.catalog = catalog;
         this.registry = registry;
@@ -185,6 +229,21 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     @Transactional
     public ModulesActivationResult activateModules(UUID tenantId, java.util.Collection<String> moduleIds,
                                                    ActivationRequest request, Actor actor) {
+        return activateSet(tenantId, null, moduleIds, request, actor);
+    }
+
+    @Override
+    @Transactional
+    public ModulesActivationResult applyBundle(UUID tenantId, String bundleName,
+                                               java.util.Collection<String> moduleIds, ActivationRequest request,
+                                               Actor actor) {
+        return activateSet(tenantId, Objects.requireNonNull(bundleName, "bundleName"), moduleIds, request, actor);
+    }
+
+    /** The set activation; with a pack name, one « Pack appliqué » audit entry after commit when something changed. */
+    private ModulesActivationResult activateSet(UUID tenantId, String bundleName,
+                                                java.util.Collection<String> moduleIds, ActivationRequest request,
+                                                Actor actor) {
         Objects.requireNonNull(actor, "actor");
         Instant now = clock.instant();
         lockTenant(tenantId); // first statement of the transaction
@@ -198,6 +257,10 @@ public class ModuleLifecycleService implements ModuleLifecycle {
             requested.putIfAbsent(module.id(), module);
         }
         Outcome outcome = activateAll(tenant, List.copyOf(requested.values()), request, actor, now, false);
+        if (bundleName != null && !outcome.activated().isEmpty()) {
+            List<String> names = outcome.activated().stream().map(ModuleRef::displayName).toList();
+            afterCommit(() -> recordBundleApplied(tenant, actor, bundleName, names, request));
+        }
         return new ModulesActivationResult(outcome.activated(), outcome.alreadyActive());
     }
 
@@ -444,6 +507,28 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         }
     }
 
+    /**
+     * Story 16.4 — the hook of a forced deactivation, in its own transaction ({@link #hookTransaction}): whatever it
+     * does (a SQL error, a rollback-only mark) stays there. A failure is logged {@code [ADMIN AUDIT]}, never thrown.
+     *
+     * @return whether the hook succeeded (or the module has none)
+     */
+    private boolean forcedHook(TenantRef tenant, Actor actor, ModuleManifest module) {
+        KeevoModule bean = modules.module(module.id()).orElse(null);
+        if (bean == null) {
+            return true;
+        }
+        try {
+            hookTransaction.executeWithoutResult(status -> bean.onDeactivate(context(tenant, actor)));
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("[ADMIN AUDIT] Forced deactivation: actor={} tenant={} module={} — deactivation hook failed "
+                    + "({}), module disabled anyway", actor.userId(), tenant.code(), module.id(),
+                    e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
     private static ModuleTenantContext context(TenantRef tenant, Actor actor) {
         return new ModuleTenantContext(tenant.tenantSchema(), tenant.code(),
                 new ActorRef(actor.userId(), actor.superAdmin()));
@@ -466,10 +551,18 @@ public class ModuleLifecycleService implements ModuleLifecycle {
 
     // ── deactivation ────────────────────────────────────────────────────────
 
+    /** Overridden so the call is transactional through the proxy (an interface default method is not). */
     @Override
     @Transactional
     public DeactivationResult deactivate(UUID tenantId, String moduleId, Actor actor) {
+        return deactivate(tenantId, moduleId, DeactivationOptions.NONE, actor);
+    }
+
+    @Override
+    @Transactional
+    public DeactivationResult deactivate(UUID tenantId, String moduleId, DeactivationOptions options, Actor actor) {
         Objects.requireNonNull(actor, "actor");
+        DeactivationOptions opts = options != null ? options : DeactivationOptions.NONE;
         Instant now = clock.instant();
         lockTenant(tenantId); // first statement of the transaction
         TenantRef tenant = requireTenant(tenantId);
@@ -485,25 +578,58 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         if (registry.moduleState(schema, target.id()) == ModuleState.DISABLED) {
             return new DeactivationResult(target.id(), target.displayName(), TenantModuleStatus.DISABLED);
         }
+        List<ModuleManifest> toDisable = new ArrayList<>();
         DeactivationCheck check = resolver.checkDeactivation(schema, target.id());
         if (check.blocked()) {
             List<String> names = check.dependents().stream().map(this::displayName).toList();
-            String joined = names.stream().map(n -> "« " + n + " »").collect(Collectors.joining(", "));
-            Map<String, Object> details = new LinkedHashMap<>();
-            details.put("dependents", joined);
-            details.put("modules", names);
-            throw new DomainException(ErrorCode.MODULE_HAS_DEPENDENTS,
-                    "Désactivation impossible : ce module est utilisé par " + joined, details);
+            if (!opts.cascade()) {
+                String joined = names.stream().map(n -> "« " + n + " »").collect(Collectors.joining(", "));
+                Map<String, Object> details = new LinkedHashMap<>();
+                details.put("dependents", joined);
+                details.put("modules", names);
+                throw new DomainException(ErrorCode.MODULE_HAS_DEPENDENTS,
+                        "Désactivation impossible : ce module est utilisé par " + joined, details);
+            }
+            // Story 16.4 — cascade: every active dependent first, a module before the modules it requires
+            List<String> order = new ArrayList<>(dependencyOrder(check.dependents()));
+            java.util.Collections.reverse(order);
+            for (String id : order) {
+                ModuleManifest dependent = catalog.find(id).orElseThrow();
+                if (dependent.isCore() || dependent.category() == ModuleCategory.CORE) {
+                    throw new DomainException(ErrorCode.CORE_MODULE_REQUIRED, "Le module « "
+                            + dependent.displayName() + " » fait partie du socle et ne peut pas être désactivé");
+                }
+                toDisable.add(dependent);
+            }
         }
-        UUID rowId = store.upsertDisabled(tenant.id(), target.id(), target.free() ? TIER_FREE : TIER_PAID, now);
-        registry.evict(schema);
-        onDeactivate(tenant, actor, target);
+        toDisable.add(target);
+
+        List<Disabled> written = new ArrayList<>();
+        for (ModuleManifest module : toDisable) {
+            // force: the hook runs first in its own transaction and its failure is swallowed; then the row is written
+            boolean forced = opts.force() && !forcedHook(tenant, actor, module);
+            UUID rowId = store.upsertDisabled(tenant.id(), module.id(), module.free() ? TIER_FREE : TIER_PAID, now);
+            registry.evict(schema);
+            if (!opts.force()) {
+                onDeactivate(tenant, actor, module);
+            }
+            written.add(new Disabled(rowId, module, forced));
+        }
         afterCommit(() -> {
-            log.info("[ADMIN AUDIT] Module deactivated: actor={} tenant={} module={}", actor.userId(), tenant.code(),
-                    target.id());
-            recordDeactivated(tenant, actor, rowId, target);
+            log.info("[ADMIN AUDIT] Module deactivated: actor={} tenant={} module={} cascade={}", actor.userId(),
+                    tenant.code(), target.id(), written.stream().map(w -> w.module().id()).toList());
+            written.forEach(w -> recordDeactivated(tenant, actor, w.rowId(), w.module(), w.forced()));
         });
-        return new DeactivationResult(target.id(), target.displayName(), TenantModuleStatus.DISABLED);
+        List<ModuleRef> deactivated = written.stream()
+                .map(w -> new ModuleRef(w.module().id(), w.module().displayName())).toList();
+        List<ModuleRef> forced = written.stream().filter(Disabled::forced)
+                .map(w -> new ModuleRef(w.module().id(), w.module().displayName())).toList();
+        return new DeactivationResult(target.id(), target.displayName(), TenantModuleStatus.DISABLED, deactivated,
+                forced);
+    }
+
+    /** A module written {@code DISABLED} by a deactivation; {@code forced}: its hook failed (force). */
+    private record Disabled(UUID rowId, ModuleManifest module, boolean forced) {
     }
 
     // ── reads ───────────────────────────────────────────────────────────────
@@ -533,7 +659,8 @@ public class ModuleLifecycleService implements ModuleLifecycle {
             views.add(new TenantModuleView(module.id(), module.displayName(),
                     states.getOrDefault(module.id(), ModuleState.DISABLED),
                     row != null ? row.status() : null, row != null ? row.expiresAt() : null,
-                    row != null ? row.graceUntil() : null, row != null ? row.provisionedVersion() : null));
+                    row != null ? row.graceUntil() : null, row != null ? row.provisionedVersion() : null,
+                    row != null ? row.origin() : null));
         }
         return List.copyOf(views);
     }
@@ -641,30 +768,146 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         if (w.expiresAt() != null) {
             after.put("finAbonnement", FR_DATE.format(w.expiresAt().atZone(KeevoZones.WAT)));
         }
-        record(tenant, actor, ACTION_ACTIVATED, w.rowId(), w.module(), after);
+        record(tenant, actor, ACTION_ACTIVATED, w.rowId(), w.module().displayName(), w.module().id(), after, null);
     }
 
-    private void recordDeactivated(TenantRef tenant, Actor actor, UUID rowId, ModuleManifest module) {
+    private void recordDeactivated(TenantRef tenant, Actor actor, UUID rowId, ModuleManifest module,
+                                   boolean forced) {
         Map<String, Object> after = new LinkedHashMap<>();
         after.put("module", module.displayName());
         after.put("statut", "Désactivé");
         after.put("donnees", "Conservées");
-        record(tenant, actor, ACTION_DEACTIVATED, rowId, module, after);
+        if (forced) {
+            after.put("motif", "Désactivation forcée : la mise hors service du module a échoué");
+        }
+        record(tenant, actor, ACTION_DEACTIVATED, rowId, module.displayName(), module.id(), after,
+                forced ? KIND_FORCED : null);
+    }
+
+    /** Story 16.4 — « Pack appliqué »: the pack's name, the modules the call activated, the requested terms. */
+    private void recordBundleApplied(TenantRef tenant, Actor actor, String bundleName, List<String> activated,
+                                     ActivationRequest request) {
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("pack", bundleName);
+        after.put("modulesActives", String.join(", ", activated));
+        after.put("statut", request != null && request.status() == TenantModuleStatus.TRIAL ? "Essai" : "Actif");
+        if (request != null && request.expiresAt() != null) {
+            after.put("finAbonnement", FR_DATE.format(request.expiresAt().atZone(KeevoZones.WAT)));
+        }
+        UUID entityId = UUID.nameUUIDFromBytes(("bundle:" + bundleName).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        log.info("[ADMIN AUDIT] Bundle applied: actor={} tenant={} bundle={} activated={}", actor.userId(),
+                tenant.code(), bundleName, activated);
+        record(tenant, actor, ACTION_ACTIVATED, entityId, bundleName, "bundle", after, KIND_BUNDLE);
+    }
+
+    // ── history (Story 16.4) ────────────────────────────────────────────────
+
+    @Override
+    public List<HistoryEntry> history(UUID tenantId) {
+        TenantRef tenant = requireTenant(tenantId);
+        String previous = TenantContext.getCurrentTenant();
+        TenantContext.setCurrentTenant(tenant.tenantSchema());
+        try {
+            // the module actions only, filtered in the queries, then merged newest first and limited
+            List<AuditPort.AuditEntryRecord> records = new ArrayList<>();
+            for (String action : List.of(ACTION_ACTIVATED, ACTION_DEACTIVATED)) {
+                records.addAll(audit.search(new AuditPort.AuditQuery(null, null, null, null, action, ENTITY_TYPE,
+                        null), null, 0, HISTORY_SIZE).entries());
+            }
+            records.sort(java.util.Comparator.comparing(AuditPort.AuditEntryRecord::occurredAt,
+                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+            List<HistoryEntry> entries = new ArrayList<>();
+            for (AuditPort.AuditEntryRecord entry : records.subList(0, Math.min(records.size(), HISTORY_SIZE))) {
+                String kind = kindOf(entry.metadata());
+                String label = historyLabel(entry.action(), kind);
+                if (label == null) {
+                    continue;
+                }
+                entries.add(new HistoryEntry(entry.occurredAt(), label, entry.entityLabel(),
+                        historyDetail(entry.action(), kind, entry.valueAfter()), entry.actorName(),
+                        entry.actorPhone()));
+            }
+            return List.copyOf(entries);
+        } finally {
+            if (previous != null) {
+                TenantContext.setCurrentTenant(previous);
+            } else {
+                TenantContext.clear();
+            }
+        }
+    }
+
+    /** French label of a module audit entry in the console history; {@code null}: not a module lifecycle entry. */
+    static String historyLabel(String action, String kind) {
+        if (ACTION_ACTIVATED.equals(action)) {
+            return KIND_BUNDLE.equals(kind) ? "Pack appliqué" : "Module activé";
+        }
+        if (ACTION_DEACTIVATED.equals(action)) {
+            return KIND_FORCED.equals(kind) ? "Désactivation forcée" : "Module désactivé";
+        }
+        return null;
+    }
+
+    /** The {@code kind} of the audit metadata ({@code null}: none). */
+    private static String kindOf(String metadata) {
+        if (metadata == null || metadata.isBlank()) {
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode kind = JSON.readTree(metadata).get("kind");
+            return kind != null && kind.isTextual() ? kind.asText() : null;
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    /** A French summary of an entry's stored details (never ids); {@code null} when there is nothing to say. */
+    static String historyDetail(String action, String kind, String valueAfter) {
+        Map<String, Object> after;
+        try {
+            after = valueAfter == null ? Map.of()
+                    : JSON.readValue(valueAfter, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        boolean bundle = ACTION_ACTIVATED.equals(action) && KIND_BUNDLE.equals(kind);
+        if (bundle && after.get("modulesActives") != null) {
+            parts.add("Modules activés : " + after.get("modulesActives"));
+        }
+        if (ACTION_ACTIVATED.equals(action)) {
+            Object statut = after.get("statut");
+            Object end = after.get("finAbonnement");
+            if (statut != null) {
+                parts.add(end != null ? statut + " jusqu'au " + end : String.valueOf(statut));
+            }
+        } else {
+            if (after.get("motif") != null) {
+                parts.add(String.valueOf(after.get("motif")));
+            }
+            parts.add("Données conservées");
+        }
+        return parts.isEmpty() ? null : String.join(" · ", parts);
     }
 
     /** Writes the entry into the tenant's own audit log (the audit adapter routes by {@link TenantContext}). */
-    private void record(TenantRef tenant, Actor actor, String action, UUID rowId, ModuleManifest module,
-                        Map<String, Object> after) {
+    private void record(TenantRef tenant, Actor actor, String action, UUID rowId, String label, String logId,
+                        Map<String, Object> after, String kind) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("actorLabel", ACTOR_LABEL);
+        if (kind != null) {
+            metadata.put("kind", kind);
+        }
         String previous = TenantContext.getCurrentTenant();
         TenantContext.setCurrentTenant(tenant.tenantSchema());
         try {
             audit.record(new AuditPort.AuditEntry(actor.userId(), tenant.tenantSchema(), action, ENTITY_TYPE, rowId,
-                    null, json(after), null, module.displayName(), null, "ONLINE",
-                    json(Map.of("actorLabel", ACTOR_LABEL))));
+                    null, json(after), null, label, null, "ONLINE",
+                    json(metadata)));
         } catch (RuntimeException e) {
             // the change is committed: the call succeeds, but a lost audit entry must be visible
-            log.error("Module lifecycle: audit entry {} for module '{}' of tenant {} NOT written ({})", action,
-                    module.id(), tenant.code(), e.getClass().getSimpleName());
+            log.error("Module lifecycle: audit entry {} for '{}' of tenant {} NOT written ({})", action,
+                    logId, tenant.code(), e.getClass().getSimpleName());
         } finally {
             if (previous != null) {
                 TenantContext.setCurrentTenant(previous);

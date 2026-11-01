@@ -31,6 +31,10 @@ export function Sidebar() {
 
   const navItems = [
     { href: "/tenants", label: "Entreprises", badge: 0 },
+    // Story 16.4 — « Modules » console.
+    { href: "/modules", label: "Modules", badge: 0 },
+    { href: "/packs", label: "Packs", badge: 0 },
+    { href: "/plans", label: "Profils & plafonds", badge: 0 },
     { href: "/revenus", label: "Revenus", badge: 0 },
     { href: "/analytics", label: "Statistiques", badge: 0 },
     // Spec 9-1 completion — badge = HIGH-priority feedback not handled yet.

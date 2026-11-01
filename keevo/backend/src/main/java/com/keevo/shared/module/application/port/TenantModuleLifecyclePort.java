@@ -62,12 +62,21 @@ public interface TenantModuleLifecyclePort {
         }
     }
 
-    /** A full {@code tenant_modules} row. */
+    /**
+     * A full {@code tenant_modules} row.
+     *
+     * @param origin {@code PLAN} | {@code ADMIN} | {@code SYSTEM} (Story 16.5); {@code null} when unknown
+     */
     record StoredRow(UUID id, TenantModuleStatus status, String tier, Instant activatedAt, Instant expiresAt,
-                     Instant graceUntil, Instant disabledAt, String provisionedVersion) {
+                     Instant graceUntil, Instant disabledAt, String provisionedVersion, String origin) {
 
         public StoredRow {
             Objects.requireNonNull(status, "status");
+        }
+
+        public StoredRow(UUID id, TenantModuleStatus status, String tier, Instant activatedAt, Instant expiresAt,
+                         Instant graceUntil, Instant disabledAt, String provisionedVersion) {
+            this(id, status, tier, activatedAt, expiresAt, graceUntil, disabledAt, provisionedVersion, null);
         }
     }
 }

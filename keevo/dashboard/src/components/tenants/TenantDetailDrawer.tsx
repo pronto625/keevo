@@ -20,6 +20,7 @@ import {
 } from "@/lib/labels";
 import type { AuditEvent, TenantDetail } from "@/types/tenant";
 import { PlanSection } from "./PlanSection";
+import { TenantModulesSection } from "@/components/modules/TenantModulesSection";
 
 interface TenantDetailDrawerProps {
   tenantId: string;
@@ -155,6 +156,9 @@ export function TenantDetailDrawer({ tenantId, onClose }: TenantDetailDrawerProp
                 suspension={data.suspension ?? null}
                 onRetryPlan={() => void refetch()}
               />
+
+              {/* Story 16.4 — Modules */}
+              {data.tenant.status !== "DELETED" && <TenantModulesSection tenantId={tenantId} />}
 
               {/* DELETION_PENDING actions */}
               {data.tenant.status === "DELETION_PENDING" && (

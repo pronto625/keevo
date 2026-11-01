@@ -216,6 +216,22 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
         return jdbc.update(INSERT_ACTIVE_FREE_SQL, moduleId, version, schema);
     }
 
+    static final String PROVISIONED_VERSIONS_SQL = """
+            SELECT t.schema_name, tm.provisioned_version
+            FROM public.tenants t
+            JOIN public.tenant_modules tm ON tm.tenant_id = t.id
+            WHERE t.status <> 'DELETED' AND tm.module_id = ? AND tm.provisioned_version IS NOT NULL
+            """;
+
+    @Override
+    public Map<String, String> provisionedVersions(String moduleId) {
+        Map<String, String> versions = new LinkedHashMap<>();
+        jdbc.query(PROVISIONED_VERSIONS_SQL, rs -> {
+            versions.put(rs.getString("schema_name"), rs.getString("provisioned_version"));
+        }, moduleId);
+        return versions;
+    }
+
     @Override
     public List<LiveTenant> liveTenants() {
         return jdbc.query(LIVE_TENANTS_SQL,

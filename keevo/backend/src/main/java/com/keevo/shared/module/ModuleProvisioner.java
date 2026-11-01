@@ -61,9 +61,29 @@ public interface ModuleProvisioner {
      * on one tenant is recorded and the loop
      * continues.
      *
+     * <p>Story 16.4: a tenant whose {@code provisioned_version} already equals the module's latest shipped version is
+     * skipped without any Flyway run (~0.2 s saved per tenant).
+     *
      * @throws IllegalArgumentException unknown module
      */
-    ProvisioningReport provisionAll(String moduleId);
+    default ProvisioningReport provisionAll(String moduleId) {
+        return provisionAll(moduleId, com.keevo.shared.job.ProgressListener.NONE);
+    }
+
+    /**
+     * Story 16.4 — {@link #provisionAll(String)} reporting its progress tenant by tenant (console background job).
+     *
+     * @param progress told {@code (tenants done, live tenants)} after each tenant
+     */
+    default ProvisioningReport provisionAll(String moduleId, com.keevo.shared.job.ProgressListener progress) {
+        return provisionAll(moduleId, false, progress);
+    }
+
+    /**
+     * @param force {@code true}: every tenant goes through Flyway, even those already at the latest version (full
+     *              validate on demand)
+     */
+    ProvisioningReport provisionAll(String moduleId, boolean force, com.keevo.shared.job.ProgressListener progress);
 
     /**
      * Story 13.9 — provisions, for one tenant, every installed module (category {@code platform} excluded) that ships

@@ -147,10 +147,13 @@ class ModuleLifecyclePostgresIntegrationTest {
                 throw new UnsupportedOperationException();
             }
         };
+        transactionManager = new DataSourceTransactionManager(dataSource);
+        org.springframework.transaction.support.TransactionTemplate hookTx =
+                new org.springframework.transaction.support.TransactionTemplate(transactionManager);
+        hookTx.setPropagationBehavior(org.springframework.transaction.TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         ModuleLifecycleService target = new ModuleLifecycleService(catalog, registry, resolver, provisioner,
                 new JdbcTenantModuleLifecycleStore(dataSource), locks, audit, Clock.systemUTC(),
-                com.keevo.shared.module.application.KeevoModuleDirectory.of(catalog, List.of(modules)));
-        transactionManager = new DataSourceTransactionManager(dataSource);
+                com.keevo.shared.module.application.KeevoModuleDirectory.of(catalog, List.of(modules)), hookTx);
         ProxyFactory proxy = new ProxyFactory(target);
         proxy.addInterface(ModuleLifecycle.class);
         proxy.addAdvice(new TransactionInterceptor(transactionManager, new AnnotationTransactionAttributeSource()));
@@ -587,6 +590,78 @@ class ModuleLifecyclePostgresIntegrationTest {
         assertThat(top.calls).hasValue(2); // onActivate (ok), then onDeactivate (throws)
         assertThat(row("lctop")).containsEntry("status", "ACTIVE").containsEntry("disabled_at", null);
         assertThat(audits).isEmpty();
+    }
+
+    /** A {@code @Transactional} (REQUIRED) service a hook goes through; it throws, marking the transaction. */
+    public interface Cleanup {
+        void run();
+    }
+
+    public static class FailingCleanup implements Cleanup {
+        @Override
+        @org.springframework.transaction.annotation.Transactional
+        public void run() {
+            jdbc.update("UPDATE public.tenant_modules SET tier = 'FREE' WHERE tenant_id = ?", TENANT);
+            throw new IllegalStateException("cleanup failed");
+        }
+    }
+
+    @Test
+    @DisplayName("16.4 — force: onDeactivate goes through a @Transactional bean that throws (rollback-only) → the "
+            + "hook runs in its own transaction, the row is DISABLED and committed, audited as forced; without force "
+            + "MODULE_DEACTIVATION_FAILED and the row stays ACTIVE")
+    void forcedDeactivationSurvivesRollbackOnlyHook() {
+        ProxyFactory factory = new ProxyFactory(new FailingCleanup());
+        factory.addInterface(Cleanup.class);
+        factory.addAdvice(new TransactionInterceptor(new DataSourceTransactionManager(dataSource),
+                new AnnotationTransactionAttributeSource()));
+        Cleanup cleanup = (Cleanup) factory.getProxy();
+        KeevoModule broken = new KeevoModule() {
+            @Override
+            public String id() {
+                return "lctop";
+            }
+
+            @Override
+            public void onDeactivate(ModuleTenantContext ctx) {
+                cleanup.run();
+            }
+        };
+        lifecycle = build(new RequestScopedActiveModulesCache(), broken);
+        insertRow("lctop", "ACTIVE");
+
+        assertThat(code(() -> lifecycle.deactivate(TENANT, "lctop", ADMIN))).isEqualTo("MODULE_DEACTIVATION_FAILED");
+        assertThat(row("lctop")).containsEntry("status", "ACTIVE");
+
+        ModuleLifecycle.DeactivationResult result = lifecycle.deactivate(TENANT, "lctop",
+                new ModuleLifecycle.DeactivationOptions(false, true), ADMIN);
+
+        assertThat(result.forced()).extracting(ModuleLifecycle.ModuleRef::moduleId).containsExactly("lctop");
+        assertThat(row("lctop")).containsEntry("status", "DISABLED");
+        assertThat(audits).hasSize(1);
+        assertThat(audits.get(0).metadataJson()).contains("FORCED");
+        assertThat(auditSawCommittedRow).containsOnly(true);
+    }
+
+    @Test
+    @DisplayName("16.4 — cascade in one transaction: dependents then the module DISABLED; a failing dependent hook "
+            + "rolls everything back")
+    void cascadeInOneTransaction() {
+        ThrowingHooks broken = new ThrowingHooks("lcbroken", false, true);
+        lifecycle = build(new RequestScopedActiveModulesCache(), broken);
+        insertRow("lcbase", "ACTIVE");
+        insertRow("lctop", "ACTIVE");
+        insertRow("lcbroken", "ACTIVE");
+
+        assertThat(code(() -> lifecycle.deactivate(TENANT, "lcbase",
+                new ModuleLifecycle.DeactivationOptions(true, false), ADMIN))).isEqualTo("MODULE_DEACTIVATION_FAILED");
+        assertThat(row("lctop")).containsEntry("status", "ACTIVE");
+        assertThat(row("lcbase")).containsEntry("status", "ACTIVE");
+
+        lifecycle.deactivate(TENANT, "lcbase", new ModuleLifecycle.DeactivationOptions(true, true), ADMIN);
+        assertThat(row("lctop")).containsEntry("status", "DISABLED");
+        assertThat(row("lcbroken")).containsEntry("status", "DISABLED");
+        assertThat(row("lcbase")).containsEntry("status", "DISABLED");
     }
 
     @Test

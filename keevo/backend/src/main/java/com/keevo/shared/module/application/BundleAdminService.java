@@ -103,7 +103,8 @@ public class BundleAdminService implements BundleAdmin {
                     Map.of("name", bundle.name()));
         }
         List<String> modules = bundle.modules();
-        ModuleLifecycle.ModulesActivationResult result = lifecycle.activateModules(tenantId, modules, request, actor);
+        ModuleLifecycle.ModulesActivationResult result = lifecycle.applyBundle(tenantId, bundle.name(), modules,
+                request, actor);
         log.info("[ADMIN AUDIT] Bundle applied: actor={} tenant={} bundle={} activated={}", actor.userId(), tenantId,
                 bundleId, result.activated().stream().map(ModuleLifecycle.ModuleRef::moduleId).toList());
         return new ApplyResult(bundle.name(), result.activated(), result.alreadyActive());

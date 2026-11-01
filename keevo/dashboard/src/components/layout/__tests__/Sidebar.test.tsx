@@ -36,6 +36,10 @@ describe("Sidebar (spec 9-1 completion)", () => {
     renderSidebar();
 
     expect(screen.getByRole("link", { name: "Entreprises" })).toHaveAttribute("href", "/tenants");
+    // Story 16.4 — « Modules » console
+    expect(screen.getByRole("link", { name: "Modules" })).toHaveAttribute("href", "/modules");
+    expect(screen.getByRole("link", { name: "Packs" })).toHaveAttribute("href", "/packs");
+    expect(screen.getByRole("link", { name: "Profils & plafonds" })).toHaveAttribute("href", "/plans");
     expect(screen.getByRole("link", { name: "Notifications" })).toHaveAttribute("href", "/notifications");
     expect(screen.getByRole("link", { name: "Activité" })).toHaveAttribute("href", "/monitoring/activity");
     expect(await screen.findByLabelText("3 retours prioritaires non traités")).toHaveTextContent("3");

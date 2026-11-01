@@ -16,7 +16,16 @@ public interface ModuleBackfill {
      * @throws com.keevo.shared.domain.exception.DomainException {@code MODULE_BACKFILL_RUNNING} (409) when another
      *         run holds the lock
      */
-    BackfillReport run(boolean dryRun);
+    default BackfillReport run(boolean dryRun) {
+        return run(dryRun, com.keevo.shared.job.ProgressListener.NONE);
+    }
+
+    /**
+     * Story 16.4 — same, reporting the progress tenant by tenant (the console runs it as a background job).
+     *
+     * @param progress told {@code (tenants done, live tenants)} after each tenant
+     */
+    BackfillReport run(boolean dryRun, com.keevo.shared.job.ProgressListener progress);
 
     /**
      * Outcome of a run. Tenants are named by their public code ({@code KV-XXXXXX}) only.

@@ -709,3 +709,37 @@ export function globalFailureReasonLabel(code: string | null | undefined): strin
 export function deviceCountLabel(n: number): string {
   return `${n} ${n > 1 ? "appareils" : "appareil"}`;
 }
+
+// ── Story 16.4 — « Modules » console ─────────────────────────────────────────
+
+/** State of a tenant's module: Actif / Essai / Lecture seule / Désactivé. */
+export function moduleStateLabel(state: string | null | undefined, status?: string | null): string {
+  if (state === "READ_ONLY") return "Lecture seule";
+  if (state === "DISABLED") return "Désactivé";
+  if (state === "ENABLED") return status === "TRIAL" ? "Essai" : "Actif";
+  return "—";
+}
+
+/** Who set a tenant's module: « Offre » (the plan), « Super-admin », « Inclus » (platform / free rule). */
+export function moduleOriginLabel(origin: string | null | undefined): string {
+  if (origin === "PLAN") return "Offre";
+  if (origin === "ADMIN") return "Super-admin";
+  return "Inclus";
+}
+
+const JOB_STATUS_LABELS: Record<string, string> = {
+  QUEUED: "En attente",
+  RUNNING: "En cours",
+  SUCCEEDED: "Terminée",
+  FAILED: "Échouée",
+};
+
+/** Status of a background job. */
+export function jobStatusLabel(code: string | null | undefined): string {
+  return lookup(JOB_STATUS_LABELS, code, "—");
+}
+
+/** A plan limit: the number, or « illimité » when there is none. */
+export function limitLabel(value: number | null | undefined): string {
+  return value === null || value === undefined ? "illimité" : String(value);
+}

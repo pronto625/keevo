@@ -64,6 +64,13 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
     @Autowired PlanProfiles planProfiles;
     @Autowired PlanModuleRowSync rowSync;
     @Autowired ModuleRegistry registry;
+    /** Story 16.4 — owner notifications of the re-sync: recorded with the thread that sent them. */
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.keevo.shared.capability.notification.PushNotifier pushNotifier;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.keevo.shared.capability.notification.WhatsAppSender whatsAppSender;
+    private final List<String> pushes = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private final List<String> whatsAppThreads = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private final UUID ownerId = UUID.randomUUID();
     private final UUID adminId = UUID.randomUUID();
@@ -76,6 +83,16 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.doAnswer(inv -> {
+            com.keevo.shared.capability.notification.NotificationPayload payload = inv.getArgument(1);
+            pushes.add(inv.getArgument(0) + "|" + payload.type() + "|" + Thread.currentThread().getName());
+            return null;
+        }).when(pushNotifier).notifyOwners(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.doAnswer(inv -> {
+            whatsAppThreads.add(Thread.currentThread().getName());
+            return null;
+        }).when(whatsAppSender).sendReport(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
         tenantCode = jdbc.queryForObject("SELECT code FROM public.tenants WHERE id = ?", String.class, tenantId);
@@ -85,9 +102,13 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
     @AfterEach
     void restoreSeed() {
+        awaitJobs();
         profileAdmin.update(PlanType.FREE, 1, 500, 2, Set.of(), adminId);
+        awaitJobs();
         profileAdmin.update(PlanType.PREMIUM_TRIAL, null, null, null, Set.copyOf(PAID), adminId);
+        awaitJobs();
         profileAdmin.update(PlanType.PREMIUM, null, null, null, Set.copyOf(PAID), adminId);
+        awaitJobs();
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId); // test tenant only
         for (UUID extra : extraTenants) {
             jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", extra);
@@ -105,10 +126,39 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
         rowSync.sync(id, schemaName);
     }
 
+    /** Story 16.4 — the PUT re-syncs in a background job: waits for it (the next PUT would answer 409 meanwhile). */
     private MvcResult putProfile(String planType, Map<String, Object> body, String token) throws Exception {
-        return mockMvc.perform(put("/api/v1/admin/plan-profiles/{planType}", planType)
+        MvcResult result = mockMvc.perform(put("/api/v1/admin/plan-profiles/{planType}", planType)
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(body))).andReturn();
+        awaitJobs();
+        return result;
+    }
+
+    /** Waits until no admin job is queued or running (at most 60 s). */
+    private void awaitJobs() {
+        long deadline = System.currentTimeMillis() + 60_000;
+        while (jdbc.queryForObject("SELECT count(*) FROM public.admin_jobs WHERE status IN ('QUEUED', 'RUNNING')",
+                Integer.class) > 0) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("admin job still running after 60 s");
+            }
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError(e);
+            }
+        }
+    }
+
+    /** The re-sync job of a PUT answer: its stored JSON (status + report). */
+    private String resyncJob(MvcResult put) throws Exception {
+        String jobId = objectMapper.readTree(body(put)).at("/data/jobId").asText();
+        MvcResult job = mockMvc.perform(get("/api/v1/admin/jobs/{id}", jobId)
+                .header("Authorization", "Bearer " + adminToken)).andReturn();
+        assertThat(job.getResponse().getStatus()).as(body(job)).isEqualTo(200);
+        return body(job);
     }
 
     private static Map<String, Object> profile(Integer stores, Integer products, Integer employees,
@@ -224,7 +274,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
         MvcResult raised = putProfile("free", profile(2, 500, 2, List.of()), adminToken); // case-folded
         assertThat(raised.getResponse().getStatus()).as(body(raised)).isEqualTo(200);
-        assertThat(body(raised)).contains("\"compositionChanged\":false").contains("\"resync\":null");
+        assertThat(body(raised)).contains("\"compositionChanged\":false").contains("\"jobId\":null");
         MvcResult second = createStore("Boutique Akwa");
         assertThat(second.getResponse().getStatus()).as(body(second)).isEqualTo(201);
 
@@ -268,8 +318,11 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
         MvcResult granted = putProfile("FREE", profile(1, 500, 2, List.of("exports")), adminToken);
         assertThat(granted.getResponse().getStatus()).as(body(granted)).isEqualTo(200);
-        assertThat(body(granted)).contains("\"compositionChanged\":true").contains(tenantCode)
-                .contains("\"displayName\":\"Exports PDF et Excel\"");
+        assertThat(body(granted)).contains("\"compositionChanged\":true").contains("\"jobId\":\"")
+                .contains("\"displayName\":\"Exports PDF et Excel\"").doesNotContain(tenantCode);
+        // Story 16.4: the re-sync ran as a PROFILE_RESYNC job; its report names the tenants by code
+        assertThat(resyncJob(granted)).contains("\"status\":\"SUCCEEDED\"").contains("\"kind\":\"PROFILE_RESYNC\"")
+                .contains(tenantCode);
         assertThat(row(tenantId, "exports")).isEqualTo("ACTIVE/FREE/PLAN/-");
         assertThat(row(tenantId, "invoicing")).startsWith("DISABLED/");
         registry.evict(schema);
@@ -300,9 +353,17 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
         plan(freeSchema, freeTenant, "FREE", "NULL");
 
         List<String> withoutInvoicing = PAID.stream().filter(m -> !m.equals("invoicing")).toList();
+        pushes.clear(); // the plan setups above notify on the test thread
+        whatsAppThreads.clear();
         MvcResult r = putProfile("PREMIUM", profile(null, null, null, withoutInvoicing), adminToken);
         assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(200);
-        assertThat(body(r)).contains(tenantCode).doesNotContain(freeCode);
+        assertThat(resyncJob(r)).contains(tenantCode).doesNotContain(freeCode);
+        // Story 16.4: one « Modules désactivés » notification for the tenant, sent by the job thread, none by the
+        // request thread
+        assertThat(pushes.stream().filter(p -> p.startsWith(schema + "|")).toList())
+                .singleElement().satisfies(p -> assertThat(p).contains("|MODULE_DISABLED|").contains("|admin-job-"));
+        assertThat(pushes).allSatisfy(p -> assertThat(p).contains("|admin-job-"));
+        assertThat(whatsAppThreads).allSatisfy(t -> assertThat(t).startsWith("admin-job-"));
 
         assertThat(row(tenantId, "invoicing")).startsWith("DISABLED/FREE/PLAN");
         assertThat(row(tenantId, "exports")).startsWith("ACTIVE/PREMIUM/PLAN");

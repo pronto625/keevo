@@ -290,12 +290,49 @@ class ModuleProvisionerPostgresIntegrationTest {
         assertThat(report.provisioned()).containsExactly("KV-PRVA01", "KV-PRVC03");
         assertThat(report.skipped()).containsExactly("KV-PRVE05"); // live tenant without a schema yet
         assertThat(report.failures()).extracting(ProvisioningReport.Failure::tenantCode).containsExactly("KV-PRVB02");
-        assertThat(report.failures().get(0).reason()).doesNotContain(B).contains("provbatch");
+        assertThat(report.failures().get(0).reason()).doesNotContain(B).doesNotContain("provbatch")
+                .isEqualTo("Création des tables échouée : réessayez plus tard");
         assertThat(report.successful()).isFalse();
         assertThat(tables(A)).contains("provbatch_items");
         assertThat(tables(C)).contains("provbatch_items");
         assertThat(row(B, "provbatch")).isNull();
         assertThat(tables("kv_prvd04")).isEmpty(); // DELETED tenant: never touched (no schema either)
+    }
+
+    @Test
+    @DisplayName("16.4: batch again → tenants already at the latest version skipped without any Flyway run, "
+            + "progress reported tenant by tenant")
+    void batchSkipsUpToDate() {
+        assertThat(provisioner.provisionAll("provtest").provisioned()).containsExactly("KV-PRVA01", "KV-PRVB02",
+                "KV-PRVC03");
+        // a Flyway run would fail on A: its history table is gone, the module table is still there
+        jdbc.execute("DROP TABLE \"" + A + "\".flyway_history_provtest");
+        List<String> progress = new java.util.ArrayList<>();
+
+        ProvisioningReport again = provisioner.provisionAll("provtest",
+                (done, total) -> progress.add(done + "/" + total));
+
+        assertThat(again.provisioned()).isEmpty();
+        assertThat(again.failures()).isEmpty();
+        assertThat(again.skipped()).containsExactly("KV-PRVE05"); // no schema yet
+        assertThat(again.upToDate()).isEqualTo(3);
+        assertThat(tables(A)).doesNotContain("flyway_history_provtest"); // never migrated again
+        assertThat(progress).startsWith("0/4").endsWith("4/4");
+    }
+
+    @Test
+    @DisplayName("16.4: force=true → every tenant goes through Flyway again (full validate), none counted up to date")
+    void batchForced() {
+        provisioner.provisionAll("provtest");
+        jdbc.execute("DROP TABLE \"" + B + "\".flyway_history_provtest"); // gone history: only a Flyway run sees it
+
+        ProvisioningReport forced = provisioner.provisionAll("provtest", true,
+                com.keevo.shared.job.ProgressListener.NONE);
+
+        assertThat(forced.upToDate()).isZero();
+        assertThat(forced.provisioned()).contains("KV-PRVA01", "KV-PRVC03");
+        assertThat(forced.provisioned().size() + forced.failures().size()).isEqualTo(3); // B went through Flyway
+        assertThat(forced.skipped()).containsExactly("KV-PRVE05");
     }
 
     @Test

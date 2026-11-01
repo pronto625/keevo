@@ -44,10 +44,37 @@ public interface ModuleLifecycle {
                                             ActivationRequest request, Actor actor);
 
     /**
+     * Story 16.2/16.4 — {@link #activateModules} for a commercial pack: same activation, plus one audit entry
+     * « Pack appliqué » naming the pack (after commit, when the call wrote something).
+     */
+    ModulesActivationResult applyBundle(UUID tenantId, String bundleName, java.util.Collection<String> moduleIds,
+                                        ActivationRequest request, Actor actor);
+
+    /**
      * Deactivates {@code moduleId} for the tenant: its row becomes {@code DISABLED} with {@code disabled_at}; tables
      * and data are kept. Refused for the core and when active modules require it. Already disabled → idempotent.
      */
-    DeactivationResult deactivate(UUID tenantId, String moduleId, Actor actor);
+    default DeactivationResult deactivate(UUID tenantId, String moduleId, Actor actor) {
+        return deactivate(tenantId, moduleId, DeactivationOptions.NONE, actor);
+    }
+
+    /**
+     * Story 16.4 — deactivation with the console's options.
+     * <ul>
+     *   <li>{@code cascade}: the active modules that require it (directly or transitively) are deactivated first, in
+     *       reverse dependency order, in the same transaction; without it, {@code MODULE_HAS_DEPENDENTS} (409) lists
+     *       them by display name ({@code details.modules});</li>
+     *   <li>{@code force}: a failing {@link KeevoModule#onDeactivate} hook no longer cancels the call — the row is
+     *       written {@code DISABLED} anyway, logged {@code [ADMIN AUDIT]} and audited « Désactivation forcée ».</li>
+     * </ul>
+     */
+    DeactivationResult deactivate(UUID tenantId, String moduleId, DeactivationOptions options, Actor actor);
+
+    /**
+     * Story 16.4 — the module history of the tenant targeted by id ({@code TENANT_NOT_FOUND} otherwise): activations,
+     * deactivations, forced deactivations and packs applied, newest first, French labels, no identifier.
+     */
+    List<HistoryEntry> history(UUID tenantId);
 
     /** The installed modules a tenant can be given (every category but {@code platform}), sorted by id. */
     List<ModuleManifest> catalogue();
@@ -120,8 +147,49 @@ public interface ModuleLifecycle {
         }
     }
 
-    /** Outcome of a deactivation: the module and its stored status ({@code DISABLED}). */
-    record DeactivationResult(String moduleId, String displayName, TenantModuleStatus status) {
+    /**
+     * Story 16.4 — options of a deactivation.
+     *
+     * @param cascade deactivate the active dependents first
+     * @param force   write {@code DISABLED} even when the module's deactivation hook fails (audited)
+     */
+    record DeactivationOptions(boolean cascade, boolean force) {
+
+        public static final DeactivationOptions NONE = new DeactivationOptions(false, false);
+    }
+
+    /**
+     * Outcome of a deactivation: the module and its stored status ({@code DISABLED}).
+     *
+     * @param deactivated every module written {@code DISABLED} by the call (dependents first, then the module);
+     *                    empty when it was already disabled
+     * @param forced      the modules whose deactivation hook failed and that were deactivated anyway
+     */
+    record DeactivationResult(String moduleId, String displayName, TenantModuleStatus status,
+                              List<ModuleRef> deactivated, List<ModuleRef> forced) {
+
+        public DeactivationResult {
+            deactivated = deactivated != null ? List.copyOf(deactivated) : List.of();
+            forced = forced != null ? List.copyOf(forced) : List.of();
+        }
+
+        public DeactivationResult(String moduleId, String displayName, TenantModuleStatus status) {
+            this(moduleId, displayName, status, List.of(), List.of());
+        }
+    }
+
+    /**
+     * Story 16.4 — one entry of a tenant's module history.
+     *
+     * @param action     French label (« Module activé », « Module désactivé », « Désactivation forcée »,
+     *                   « Pack appliqué »)
+     * @param subject    the module or pack, by name
+     * @param detail     French summary (status, end date, modules of a pack); may be {@code null}
+     * @param actorName  who acted, by name ({@code null}: unknown)
+     * @param actorPhone the actor's phone number ({@code null}: unknown)
+     */
+    record HistoryEntry(Instant occurredAt, String action, String subject, String detail, String actorName,
+                        String actorPhone) {
     }
 
     /**
@@ -130,8 +198,15 @@ public interface ModuleLifecycle {
      * @param state              effective state now ({@link ModuleRegistry#moduleState})
      * @param status             stored status ({@code null}: no row)
      * @param provisionedVersion stored provisioned version ({@code null}: none)
+     * @param origin             who set the stored row: {@code PLAN} (the offer), {@code ADMIN} (a super-admin),
+     *                           {@code SYSTEM} (the platform); {@code null}: no row (included by the free rule)
      */
     record TenantModuleView(String moduleId, String displayName, ModuleState state, TenantModuleStatus status,
-                            Instant expiresAt, Instant graceUntil, String provisionedVersion) {
+                            Instant expiresAt, Instant graceUntil, String provisionedVersion, String origin) {
+
+        public TenantModuleView(String moduleId, String displayName, ModuleState state, TenantModuleStatus status,
+                                Instant expiresAt, Instant graceUntil, String provisionedVersion) {
+            this(moduleId, displayName, state, status, expiresAt, graceUntil, provisionedVersion, null);
+        }
     }
 }

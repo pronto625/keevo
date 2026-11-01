@@ -15,6 +15,10 @@ vi.mock("@/lib/api/admin-tenants", () => ({
 vi.mock("@/components/tenants/PlanSection", () => ({
   PlanSection: () => <div data-testid="plan-section" />,
 }));
+// Modules has its own tests (16.4).
+vi.mock("@/components/modules/TenantModulesSection", () => ({
+  TenantModulesSection: () => <div data-testid="modules-section" />,
+}));
 
 const mockedDetail = vi.mocked(getTenantDetail);
 

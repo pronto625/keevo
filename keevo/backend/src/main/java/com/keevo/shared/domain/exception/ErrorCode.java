@@ -125,6 +125,8 @@ public enum ErrorCode {
     BUNDLE_NOT_FOUND,              // Story 16.2 — HTTP 404: unknown bundle id (« Pack introuvable »)
     BUNDLE_INVALID,                // Story 16.2 — HTTP 422: invalid bundle definition (nothing saved)
     BUNDLE_NOT_APPLICABLE,         // Story 16.2 — HTTP 422: the stored bundle holds a module no longer available; nothing written
+    ADMIN_JOB_RUNNING,             // Story 16.4 — HTTP 409: a super-admin job of the same kind is already queued or running
+    ADMIN_JOB_NOT_FOUND,           // Story 16.4 — HTTP 404: unknown super-admin job id (« Tâche introuvable »)
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

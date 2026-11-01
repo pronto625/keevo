@@ -3,6 +3,7 @@ package com.keevo.shared.module.application;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.shared.job.ProgressListener;
 import org.flywaydb.core.api.MigrationVersion;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
@@ -219,12 +220,25 @@ public class ModuleProvisionerService implements ModuleProvisioner {
     }
 
     @Override
-    public ProvisioningReport provisionAll(String moduleId) {
+    public ProvisioningReport provisionAll(String moduleId, boolean force, ProgressListener progress) {
+        ProgressListener listener = progress != null ? progress : ProgressListener.NONE;
         String id = requireModule(moduleId).id();
         List<String> provisioned = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
         List<ProvisioningReport.Failure> failures = new ArrayList<>();
-        for (LiveTenant tenant : rows.liveTenants()) {
+        // Story 16.4: tenants already at the latest shipped version are skipped without any Flyway run
+        String latest = migrations.hasMigrations(id) ? migrations.latestVersion(id) : null;
+        Map<String, String> versions = latest != null && !force ? rows.provisionedVersions(id) : Map.of();
+        List<LiveTenant> tenants = rows.liveTenants();
+        int total = tenants.size();
+        int done = 0;
+        int upToDate = 0;
+        listener.progress(0, total);
+        for (LiveTenant tenant : tenants) {
+            if (done > 0) {
+                listener.progress(done, total);
+            }
+            done++;
             if (!TenantSchema.isValid(tenant.tenantSchema())) {
                 // Story 13.9: the platform tenant (schema "public") is not a tenant schema — never provisioned
                 skipped.add(tenant.code());
@@ -236,6 +250,10 @@ public class ModuleProvisionerService implements ModuleProvisioner {
                 log.debug("Module '{}' batch: tenant {} skipped (schema not created yet)", id, tenant.code());
                 continue;
             }
+            if (sameVersion(latest, versions.get(tenant.tenantSchema()))) {
+                upToDate++;
+                continue;
+            }
             try {
                 provision(tenant.tenantSchema(), id);
                 provisioned.add(tenant.code());
@@ -244,18 +262,33 @@ public class ModuleProvisionerService implements ModuleProvisioner {
                 log.debug("Module '{}' batch: tenant {} skipped ({})", id, tenant.code(), e.getMessage());
             } catch (ModuleProvisioningException | IllegalArgumentException e) {
                 // our messages carry no schema value nor SQL text
-                failures.add(new ProvisioningReport.Failure(tenant.code(), e.getMessage()));
+                failures.add(new ProvisioningReport.Failure(tenant.code(),
+                        "Création des tables échouée : réessayez plus tard"));
                 log.warn("Module '{}' provisioning failed for tenant {} ({})", id, tenant.code(),
                         e.getClass().getSimpleName());
             } catch (RuntimeException e) {
-                failures.add(new ProvisioningReport.Failure(tenant.code(), e.getClass().getSimpleName()));
+                failures.add(new ProvisioningReport.Failure(tenant.code(),
+                        "Création des tables échouée : réessayez plus tard"));
                 log.warn("Module '{}' provisioning failed for tenant {} ({})", id, tenant.code(),
                         e.getClass().getSimpleName());
             }
         }
-        log.info("Module '{}' batch provisioning: {} provisioned, {} skipped, {} failed", id, provisioned.size(),
-                skipped.size(), failures.size());
-        return new ProvisioningReport(id, provisioned, skipped, failures);
+        listener.progress(total, total);
+        log.info("Module '{}' batch provisioning{}: {} provisioned, {} skipped, {} already up to date, {} failed", id,
+                force ? " (forced)" : "", provisioned.size(), skipped.size(), upToDate, failures.size());
+        return new ProvisioningReport(id, provisioned, skipped, failures, upToDate);
+    }
+
+    /** Whether a stored version equals the latest shipped one (Flyway comparison: {@code 1.0 == 1}). */
+    private static boolean sameVersion(String latest, String stored) {
+        if (latest == null || stored == null) {
+            return false;
+        }
+        try {
+            return MigrationVersion.fromVersion(latest).equals(MigrationVersion.fromVersion(stored));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**
