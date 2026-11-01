@@ -120,7 +120,7 @@ The mobile rules below avoid all three.
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; plafonds de plan : section « Mobile » de `spec-16-8-profils-plan-plafonds-configurables.md` ; messages d'erreur : `spec-16-14-api-prete-client-mobile.md`. Aucun changement de forme de réponse (compatible V1 2.0.1).
 
-**Statut** : API livrée — mobile à faire.
+**Statut** : API livrée (commit `513008e1`) — mobile à faire.
 
 **Clé de suivi mobile** : `m17-10-compteur-produits-ecran-abonnement`
 
