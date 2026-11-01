@@ -34,6 +34,7 @@ import static org.mockito.Mockito.*;
 class StockAdjustSyncHandlerTest {
 
     @Mock private StockCommandPort stockCommand;
+    @Mock private com.keevo.inventory.api.StockQueryPort stockQuery;
 
     private StockAdjustSyncHandler handler;
 
@@ -43,7 +44,7 @@ class StockAdjustSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new StockAdjustSyncHandler(stockCommand);
+        handler = new StockAdjustSyncHandler(stockCommand, stockQuery);
     }
 
     @AfterEach
@@ -221,5 +222,57 @@ class StockAdjustSyncHandlerTest {
         var result = handler.handle(adjustWithQuantity(5.0), ACTOR_ID, TENANT_ID);
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         verify(stockCommand).adjustTo(eq(TENANT_ID), any(), any(), eq(STORE_ID), eq(5), eq(ACTOR_ID), any(), any());
+    }
+
+    // ── 17.11: same movement id re-queued under a new operation id ──────────────────────────────────────
+
+    private SyncOperation entry(String movementId, UUID productId, int quantity) {
+        return new SyncOperation("op-17-11", "RECORD_STOCK_ENTRY", movementId,
+                Map.of("productId", productId.toString(), "storeId", STORE_ID.toString(), "quantity", quantity),
+                Instant.now());
+    }
+
+    @Test
+    void handle_stockEntry_movementIdAlreadyRecordedWithSameContent_duplicate_noSecondEntry() {
+        authenticateAsOwner();
+        UUID product = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        when(stockQuery.findMovement(TENANT_ID, movementId)).thenReturn(java.util.Optional.of(
+                new com.keevo.inventory.api.RecordedMovement(movementId, product, null, STORE_ID, "STOCK_ENTRY", 5)));
+
+        var result = handler.handle(entry(movementId.toString(), product, 5), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.DUPLICATE);
+        assertThat(result.reason()).isNull();
+        verify(stockCommand, never()).recordEntry(any(), any(), any(), any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void handle_stockEntry_movementIdUsedByDifferentMovement_rejectedStableReason() {
+        authenticateAsOwner();
+        UUID product = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        when(stockQuery.findMovement(TENANT_ID, movementId)).thenReturn(java.util.Optional.of(
+                new com.keevo.inventory.api.RecordedMovement(movementId, product, null, STORE_ID, "STOCK_ENTRY", 3)));
+
+        var result = handler.handle(entry(movementId.toString(), product, 5), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo(StockAdjustSyncHandler.MOVEMENT_ID_ALREADY_USED);
+        verify(stockCommand, never()).recordEntry(any(), any(), any(), any(), anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void handle_stockEntry_movementIdOfAnotherType_rejected() {
+        authenticateAsOwner();
+        UUID product = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+        when(stockQuery.findMovement(TENANT_ID, movementId)).thenReturn(java.util.Optional.of(
+                new com.keevo.inventory.api.RecordedMovement(movementId, product, null, STORE_ID, "ADJUSTMENT", 5)));
+
+        var result = handler.handle(entry(movementId.toString(), product, 5), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo(StockAdjustSyncHandler.MOVEMENT_ID_ALREADY_USED);
     }
 }

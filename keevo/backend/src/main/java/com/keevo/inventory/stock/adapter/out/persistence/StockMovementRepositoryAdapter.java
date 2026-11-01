@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -41,6 +42,11 @@ public class StockMovementRepositoryAdapter implements StockMovementRepository {
         var entity = toJpaEntity(movement);
         var saved = springRepository.save(entity);
         return toDomain(saved);
+    }
+
+    @Override
+    public Optional<StockMovement> findById(UUID id) {
+        return springRepository.findById(id).map(this::toDomain);
     }
 
     @Override

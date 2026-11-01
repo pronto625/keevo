@@ -1,5 +1,6 @@
 package com.keevo.inventory.api;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /** Read access to stock levels for other modules (Story 12.2b); joins the caller's transaction. */
@@ -11,4 +12,7 @@ public interface StockQueryPort {
      * @param variantId null → the simple-product (no variant) level
      */
     int availableQuantity(String tenantSchema, UUID productId, UUID variantId, UUID storeId);
+
+    /** Story 17.11: the movement with this id, empty when none was recorded. */
+    Optional<RecordedMovement> findMovement(String tenantSchema, UUID movementId);
 }

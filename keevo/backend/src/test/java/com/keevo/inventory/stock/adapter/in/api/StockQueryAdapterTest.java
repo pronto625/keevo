@@ -33,6 +33,7 @@ class StockQueryAdapterTest {
     }
 
     @Mock private StockLevelRepository stockLevelRepository;
+    @Mock private com.keevo.inventory.stock.domain.port.out.StockMovementRepository stockMovementRepository;
 
     private StockQueryAdapter adapter;
 
@@ -42,7 +43,7 @@ class StockQueryAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new StockQueryAdapter(stockLevelRepository);
+        adapter = new StockQueryAdapter(stockLevelRepository, stockMovementRepository);
     }
 
     private static StockLevel level(UUID variantId, int qty) {
@@ -81,5 +82,20 @@ class StockQueryAdapterTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.availableQuantity(null, java.util.UUID.randomUUID(), null, java.util.UUID.randomUUID()))
                 .isInstanceOf(IllegalStateException.class);
         org.mockito.Mockito.verifyNoInteractions(stockLevelRepository);
+    }
+
+    @Test
+    void findMovement_mapsTheStoredMovement_emptyWhenUnknown() {
+        UUID id = UUID.randomUUID();
+        when(stockMovementRepository.findById(id)).thenReturn(Optional.of(new com.keevo.inventory.stock.domain.entity.StockMovement(
+                id, PRODUCT, null, STORE, com.keevo.inventory.stock.domain.entity.MovementType.STOCK_ENTRY,
+                0, 5, 5, UUID.randomUUID(), "Stock initial", Instant.now())));
+
+        var found = adapter.findMovement(TenantContext.getCurrentTenant(), id);
+
+        assertThat(found).hasValue(new com.keevo.inventory.api.RecordedMovement(id, PRODUCT, null, STORE, "STOCK_ENTRY", 5));
+        UUID unknown = UUID.randomUUID();
+        when(stockMovementRepository.findById(unknown)).thenReturn(Optional.empty());
+        assertThat(adapter.findMovement(TenantContext.getCurrentTenant(), unknown)).isEmpty();
     }
 }

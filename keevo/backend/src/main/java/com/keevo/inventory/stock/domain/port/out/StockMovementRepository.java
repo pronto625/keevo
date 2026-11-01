@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -15,6 +16,9 @@ public interface StockMovementRepository {
 
     /** Persist a new stock movement record (immutable — no update). */
     StockMovement save(StockMovement movement);
+
+    /** Story 17.11: a movement by id (client-generated ids are checked before a replayed entry). */
+    Optional<StockMovement> findById(UUID id);
 
     /**
      * Paginated history for a product with optional filters.

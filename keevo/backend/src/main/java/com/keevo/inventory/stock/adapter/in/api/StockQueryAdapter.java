@@ -1,11 +1,14 @@
 package com.keevo.inventory.stock.adapter.in.api;
 
+import com.keevo.inventory.api.RecordedMovement;
 import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -16,9 +19,12 @@ import java.util.UUID;
 class StockQueryAdapter implements StockQueryPort {
 
     private final StockLevelRepository stockLevelRepository;
+    private final StockMovementRepository stockMovementRepository;
 
-    StockQueryAdapter(StockLevelRepository stockLevelRepository) {
+    StockQueryAdapter(StockLevelRepository stockLevelRepository,
+                      StockMovementRepository stockMovementRepository) {
         this.stockLevelRepository = stockLevelRepository;
+        this.stockMovementRepository = stockMovementRepository;
     }
 
     @Override
@@ -28,5 +34,14 @@ class StockQueryAdapter implements StockQueryPort {
                 ? stockLevelRepository.findByProductVariantAndStore(productId, variantId, storeId)
                 : stockLevelRepository.findByProductAndStore(productId, storeId);
         return level.map(StockLevel::getQuantity).orElse(0);
+    }
+
+    @Override
+    public Optional<RecordedMovement> findMovement(String tenantSchema,
+                                                                                    UUID movementId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return stockMovementRepository.findById(movementId).map(m -> new RecordedMovement(
+                m.getId(), m.getProductId(), m.getVariantId(), m.getStoreId(), m.getMovementType().name(),
+                m.getQuantityChange()));
     }
 }

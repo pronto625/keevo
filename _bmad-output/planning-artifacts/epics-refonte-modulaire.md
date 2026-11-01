@@ -1922,7 +1922,8 @@ As a **propriétaire**, I want **pouvoir saisir, si je le souhaite, la quantité
 
 > **Précision du 2026-11-01 (utilisateur)** : le champ est **facultatif**, y compris pour un produit dont le stock est suivi. Laissé vide, le produit est créé avec un stock de 0 et aucun mouvement n'est créé ; la création n'est jamais bloquée par ce champ.
 
-- [ ] [Deferred-from: user request during live device run, 2026-10-29 ; routé depuis v1s-16-26 le 2026-11-01] Initial stock field in the product creation form [`keevo/app/lib/features/catalog/presentation/page/product_form_page.dart`] — STOCK_ENTRY movement for the active store, applied in the same local transaction as the product creation, synced like other stock entries
+- [x] [Deferred-from: user request during live device run, 2026-10-29 ; routé depuis v1s-16-26 le 2026-11-01] Initial stock field in the product creation form [`keevo/app/lib/features/catalog/presentation/page/product_form_page.dart`] — STOCK_ENTRY movement for the active store, applied in the same local transaction as the product creation, synced like other stock entries
+  - 2026-11-01 (17-11) : contrat de synchro vérifié côté API (`CREATE_PRODUCT` + `RECORD_STOCK_ENTRY` ; entrée remise en file avec le même id de mouvement → `DUPLICATE` au lieu d'une erreur interne, test `InitialStockAtCreationFullContextTest`) ; le formulaire relève de l'app React Native → section « Mobile » de `spec-17-11-stock-initial-creation-produit.md`, clé `m17-11-stock-initial-creation-produit`.
 
 **Acceptance Criteria:**
 
@@ -1931,6 +1932,18 @@ As a **propriétaire**, I want **pouvoir saisir, si je le souhaite, la quantité
 **Given** l'owner crée un produit suivi sans remplir la quantité initiale **When** il enregistre **Then** la création réussit sans message d'erreur, le stock affiché est 0 et aucun mouvement n'est créé.
 
 **Given** l'owner crée un produit non suivi (17.12) **When** le formulaire s'affiche **Then** le champ quantité initiale est masqué.
+
+### Story 17.13 : Créer un produit au nom d'un produit archivé
+
+> Clé tracker : `17-13-creation-produit-nom-archive` — créée le 2026-11-01 par la revue de 17.11. Backend + section mobile.
+
+As a **propriétaire**, I want **être prévenu quand je crée un produit dont le nom est celui d'un produit archivé**, So that **mon nouveau produit et son stock initial ne disparaissent pas dans un produit caché**.
+
+**Constat (revue 17.11, test `InitialStockAtCreationFullContextTest.mergedByName_ontoArchivedProduct_pinsTodaysBehaviour`) :** `CREATE_PRODUCT` dont le nom existe déjà fusionne dans ce produit (`ProductSyncHandler.mergeIntoExistingByName`, recherche sans filtre `archived`) ; si ce produit est archivé, l'opération répond `MERGED_INTO:<E>`, le stock initial va sur E qui reste archivé, donc invisible. L'index unique `uq_products_name` (`lower(name)`, archivés compris) empêche de simplement créer un second produit du même nom.
+
+- [ ] [Deferred-from: review 17-11, 2026-11-01] Decide and implement: restore E automatically (subject to the 17.10 product limit) or reject with an explicit code the app turns into « Un produit archivé porte déjà ce nom — le restaurer ? » [`keevo/backend/src/main/java/com/keevo/sync/sync/application/handler/ProductSyncHandler.java:160-170`]; same rule for REST `POST /api/v1/products` and CSV import; Mobile section updated (17-11 rule 5 / scenario 5b).
+
+**Acceptance Criteria (provisoires):** **Given** un produit archivé « Riz » **When** l'owner crée « riz » (en ligne ou hors ligne) **Then** il n'obtient jamais un produit invisible : soit « Riz » est restauré (plafond respecté) avec le stock saisi, soit la création est refusée avec un message français proposant la restauration.
 
 ### Story 17.12 : Suivi de stock activable par produit
 

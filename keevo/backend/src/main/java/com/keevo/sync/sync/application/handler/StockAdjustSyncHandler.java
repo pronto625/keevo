@@ -2,6 +2,7 @@ package com.keevo.sync.sync.application.handler;
 
 import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.inventory.api.StockCommandPort;
+import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.application.port.sync.SyncOperation;
@@ -16,10 +17,18 @@ import java.util.UUID;
 @Component
 public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
 
-    private final StockCommandPort stockCommand; // 12.2b: inventory public API
+    /**
+     * Story 17.11 — a {@code RECORD_STOCK_ENTRY} whose movement id is already used by a DIFFERENT movement
+     * (other product / store / variant / type / quantity). Stable reason the client can act on.
+     */
+    public static final String MOVEMENT_ID_ALREADY_USED = "MOVEMENT_ID_ALREADY_USED";
 
-    public StockAdjustSyncHandler(StockCommandPort stockCommand) {
+    private final StockCommandPort stockCommand; // 12.2b: inventory public API
+    private final StockQueryPort stockQuery;
+
+    public StockAdjustSyncHandler(StockCommandPort stockCommand, StockQueryPort stockQuery) {
         this.stockCommand = stockCommand;
+        this.stockQuery = stockQuery;
     }
 
     @Override
@@ -64,6 +73,21 @@ public class StockAdjustSyncHandler extends AbstractSyncOperationHandler {
         if (productId.equals(movementId)) movementId = null;
 
         if ("RECORD_STOCK_ENTRY".equals(operation.operationType())) {
+            // 17.11: the same entry re-queued under a NEW operation id but the same movement id would hit the
+            // stock_movements primary key (INTERNAL_ERROR). Same content → DUPLICATE (no second entry);
+            // different content → a stable rejection.
+            if (movementId != null) {
+                var existing = stockQuery.findMovement(tenantId, movementId);
+                if (existing.isPresent()) {
+                    var m = existing.get();
+                    boolean same = productId.equals(m.productId()) && storeId.equals(m.storeId())
+                            && java.util.Objects.equals(variantId, m.variantId())
+                            && "STOCK_ENTRY".equals(m.movementType()) && m.quantityChange() == quantity;
+                    return new SyncOperationResult(operation.operationId(),
+                            same ? SyncOperationStatus.DUPLICATE : SyncOperationStatus.REJECTED,
+                            null, same ? null : MOVEMENT_ID_ALREADY_USED);
+                }
+            }
             stockCommand.recordEntry(tenantId, productId, variantId, storeId, quantity, actorId, notes, movementId);
         } else {
             stockCommand.adjustTo(tenantId, productId, variantId, storeId, quantity, actorId, notes, movementId);
