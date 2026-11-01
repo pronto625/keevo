@@ -339,7 +339,7 @@ development_status:
   m16-1-cycle-vie-licences-grace-temps-reel: backlog  # API 6ea22538 — bandeau lecture seule, dates WAT, notifications
   m16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — plafonds envoyés par le serveur, PRODUCT_QUOTA_UNAVAILABLE
   m16-13-scope-employe-donnees-synchro: backlog  # API 2339512d — champs de pull `scope`/`reseed`, purge locale des données d'autres boutiques au changement de portée, pull complet
-  m16-14-api-prete-client-mobile: backlog  # API (16-14) — `error` français sur les erreurs du filtre d'auth, VALIDATION_ERROR français, graceUntil employé, limite dans le rejet synchro PLAN_LIMIT_EXCEEDED (`conflictData`)
+  m16-14-api-prete-client-mobile: backlog  # API 525cbdaa — `error` français sur les erreurs du filtre d'auth, VALIDATION_ERROR français, graceUntil employé, limite dans le rejet synchro PLAN_LIMIT_EXCEEDED (`conflictData`)
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -351,7 +351,7 @@ development_status:
   d16-5-migration-backfill-tenant-modules: backlog  # API 13eca21e — carte « Migration des modules » : simulation puis exécution confirmée
   d16-2-a-la-carte-bundles: backlog  # API 165a3501 — page Packs (liste, création, modification, suppression) et application d'un pack
   d16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — page « Profils & plafonds » (plafonds, modules inclus, suivi de la resynchro)
-  d16-14-api-prete-client-mobile: backlog  # API (16-14) — VALIDATION_ERROR avec le vrai message, CORE_MODULE_REQUIRED nommé, moduleId des profils, recherche par code, plan inconnu 404, historique paginé (limit/before)
+  d16-14-api-prete-client-mobile: backlog  # API 525cbdaa — VALIDATION_ERROR avec le vrai message, CORE_MODULE_REQUIRED nommé, moduleId des profils, recherche par code, plan inconnu 404, historique paginé (limit/before)
 
   # ─────────────────────────────────────────────────────────
   # Epic 17: Complétion Fonctionnelle & Gating Produit (Phase 7)

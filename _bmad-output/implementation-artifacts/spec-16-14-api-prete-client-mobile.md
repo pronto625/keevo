@@ -155,7 +155,7 @@ deferred: []
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; protocole de synchro : section « Mobile » de `spec-16-10-scope-employe-historique-transferts.md`. Cette story ne fait qu'**ajouter** des champs et des textes (compatible V1 2.0.1).
 
-**Statut** : API livrée (16-14, non commitée à la rédaction) — mobile à faire.
+**Statut** : API livrée (commit `525cbdaa`) — mobile à faire.
 
 **Clé de suivi mobile** : `m16-14-api-prete-client-mobile`
 
@@ -207,7 +207,7 @@ curl -s $BASE/api/v1/tenants/me/modules -H "Authorization: Bearer $AT_EMPLOYE" |
 
 > Destinataire : agent IA qui construit le dashboard super-admin dans un **autre dépôt**. Session : section « Dashboard super-admin » de `spec-16-11-sessions-longues-et-sures.md` ; conventions admin : section « Dashboard super-admin » de `spec-16-4-console-super-admin-modules.md` (mise à jour par cette story).
 
-**Statut** : API livrée (16-14, non commitée à la rédaction) — dashboard à faire.
+**Statut** : API livrée (commit `525cbdaa`) — dashboard à faire.
 
 **Clé de suivi dashboard** : `d16-14-api-prete-client-mobile`
 
