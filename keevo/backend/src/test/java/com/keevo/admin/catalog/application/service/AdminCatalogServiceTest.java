@@ -138,10 +138,14 @@ class AdminCatalogServiceTest {
         lenient().when(jdbc.queryForObject(anyString(), eq(Long.class))).thenReturn(0L);
         when(jdbc.queryForObject(matches("SELECT COUNT\\(\\*\\) FROM kv_aaaaaa\\.products$"), eq(Long.class))).thenReturn(10L);
         when(jdbc.queryForObject(matches("SELECT COUNT\\(\\*\\) FROM kv_bbbbbb\\.products$"), eq(Long.class))).thenReturn(5L);
+        // 17.10: active = ACTIVE and not archived (same count as /subscription/me and the plan limit)
+        when(jdbc.queryForObject(eq("SELECT COUNT(*) FROM kv_aaaaaa.products WHERE status = 'ACTIVE' AND archived = false"),
+                eq(Long.class))).thenReturn(7L);
 
         AdminCatalogSummary summary = service.execute();
 
         assertThat(summary.totalProducts()).isEqualTo(15L);
+        assertThat(summary.activeProducts()).isEqualTo(7L);
     }
 
     @Test

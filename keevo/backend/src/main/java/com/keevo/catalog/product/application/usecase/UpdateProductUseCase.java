@@ -9,8 +9,13 @@ import com.keevo.shared.event.catalog.product.DraftProductValidatedEvent;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.application.port.TransactionLockPort;
+import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.TenantPlanQuery;
+import com.keevo.subscription.api.ProductCountPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -31,13 +36,25 @@ public class UpdateProductUseCase {
     private final ProductRepository           productRepository;
     private final ApplicationEventPublisher   eventPublisher;
     private final ObjectMapper                objectMapper;
+    private final ProductCountPort            productCountPort;
+    private final TenantPlanQuery             tenantPlanQuery;
+    private final PlanLimitCheck              planLimit;
+    private final TransactionLockPort         transactionLock;
 
     public UpdateProductUseCase(ProductRepository productRepository,
                                 ApplicationEventPublisher eventPublisher,
-                                ObjectMapper objectMapper) {
+                                ObjectMapper objectMapper,
+                                ProductCountPort productCountPort,
+                                TenantPlanQuery tenantPlanQuery,
+                                PlanLimitCheck planLimit,
+                                TransactionLockPort transactionLock) {
         this.productRepository = productRepository;
         this.eventPublisher    = eventPublisher;
         this.objectMapper      = objectMapper;
+        this.productCountPort  = productCountPort;
+        this.tenantPlanQuery   = tenantPlanQuery;
+        this.planLimit         = planLimit;
+        this.transactionLock   = transactionLock;
     }
 
     /**
@@ -64,6 +81,7 @@ public class UpdateProductUseCase {
         // (fail open — any caller skipped the draft guard). Callers pass the real role.
     }
 
+    @Transactional
     public Product execute(UpdateProductDto dto) {
         // Find existing product
         var existing = productRepository.findById(dto.id())
@@ -82,6 +100,11 @@ public class UpdateProductUseCase {
         if (isPromotion && !"OWNER".equals(dto.actorRole())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "Seul le propriétaire peut valider un produit en brouillon");
+        }
+        // 17.10: a promoted draft becomes an active product — same limit check as a creation (same per-tenant
+        // lock, fail closed). An archived draft stays out of the count once promoted: no check then.
+        if (isPromotion && !Boolean.TRUE.equals(existing.getArchived())) {
+            checkProductLimit();
         }
 
         // Resolve SKU: keep existing if not provided
@@ -168,5 +191,13 @@ public class UpdateProductUseCase {
         } catch (JsonProcessingException e) {
             return "{}";
         }
+    }
+
+    private void checkProductLimit() {
+        String tenant = TenantContext.getCurrentTenant();
+        transactionLock.lock("product-limit:" + tenant);
+        var plan = tenantPlanQuery.findCurrentPlan(tenant)
+                .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND, "Aucun abonnement actif"));
+        planLimit.checkProductLimit(plan, () -> productCountPort.countActiveProducts(tenant));
     }
 }

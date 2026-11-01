@@ -340,6 +340,7 @@ development_status:
   m16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — plafonds envoyés par le serveur, PRODUCT_QUOTA_UNAVAILABLE
   m16-13-scope-employe-donnees-synchro: backlog  # API 2339512d — champs de pull `scope`/`reseed`, purge locale des données d'autres boutiques au changement de portée, pull complet
   m16-14-api-prete-client-mobile: backlog  # API 525cbdaa — `error` français sur les erreurs du filtre d'auth, VALIDATION_ERROR français, graceUntil employé, limite dans le rejet synchro PLAN_LIMIT_EXCEEDED (`conflictData`)
+  m17-10-compteur-produits-ecran-abonnement: backlog  # API (commit à venir) — « Produits » = currentProducts relu à chaque ouverture (jamais en cache de session), hors ligne comptage local actifs non archivés, null → « — »
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -365,7 +366,7 @@ development_status:
   17-4-feedback-signalement-in-app: done  # 2026-11-01 rapprochement : FR92 livré par v1s-14-5 + boîte « Retours utilisateurs » du dashboard (8-4), module feedback présent sur refonte
   17-5-sante-systeme-alertes-proactives-push-global: done  # 2026-11-01 rapprochement : FR81/82/83 livrés par 9-5 (santé, alertes, push global), présents sur refonte (PlatformHealthService, AdminGlobalNotificationController)
   17-6-exports-pdf-excel: done  # 2026-11-01 clos : ⤳ superseded par v1s-epic-18 (done 2026-10-12), exports présents sur refonte (module exports, 15.x) | FR55 (Premium)
-  17-10-compteur-produits-ecran-abonnement: backlog  # 2026-11-01 rapprochement — reprend v1s-16-25 (compteur « Produits » à 0 sur l'écran Abonnement alors que /subscription/me renvoie N)
+  17-10-compteur-produits-ecran-abonnement: done  # 2026-11-01 build-auto done (spec-17-10-compteur-produits-ecran-abonnement.md) — currentProducts = actifs non archivés (8 → 7), restauration et promotion d'un brouillon vérifiées contre le plafond, compteur admin aligné ; cause Flutter (fournisseur mis en cache pour la session) → section mobile ; 24 constats (5 corrigés)
   17-11-stock-initial-creation-produit: backlog  # 2026-11-01 rapprochement — reprend v1s-16-26 (demande utilisateur : stock initial FACULTATIF dans le formulaire « Nouveau produit », même pour un produit suivi ; vide = 0 sans mouvement ; sinon mouvement STOCK_ENTRY local + sync)
   17-12-suivi-stock-par-produit: backlog  # 2026-11-01 demande utilisateur — suivi de stock activable par produit (products.track_stock, défaut true), et non par type/catégorie de boutique ; après 17-11 ; tranche §7.3 de la fusion (20-1 réutilise le champ)
   17-8-gating-config-rapports: backlog  # FR60 (Free fixe / Premium) — 2026-11-01 : endpoint gaté report-config (13.10) ; reste l'item de l'en-tête Epic 17 (rapport EOD par défaut quand report-config est DISABLED, préférences du trial ignorées)

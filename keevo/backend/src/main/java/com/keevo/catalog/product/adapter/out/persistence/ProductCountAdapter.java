@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * ProductCountAdapter — JDBC implementation of {@link ProductCountPort}.
  *
- * <p>Counts active products in the given tenant schema. Story 16.8: <b>fails closed</b> — an invalid schema or a
+ * <p>Counts active products in the given tenant schema: status {@code ACTIVE} and not archived (archiving keeps the
+ * status, it only sets {@code archived}) — story 17.10: the « Produits » usage of {@code /subscription/me} and the
+ * product-limit guard share this one count. Story 16.8: <b>fails closed</b> — an invalid schema or a
  * failing query throws instead of answering 0, so the plan-limit guard refuses the creation
  * ({@code PRODUCT_QUOTA_UNAVAILABLE}) rather than letting a Free tenant past its quota. The guard only counts when the
  * plan's product limit is finite.
@@ -41,7 +43,7 @@ public class ProductCountAdapter implements ProductCountPort {
             throw new IllegalStateException("Product count: invalid tenant schema");
         }
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM \"" + tenantSchema + "\".products WHERE status = 'ACTIVE'",
+                "SELECT COUNT(*) FROM \"" + tenantSchema + "\".products WHERE status = 'ACTIVE' AND archived = false",
                 Integer.class);
         return count != null ? count : 0;
     }

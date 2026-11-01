@@ -39,11 +39,63 @@ class UpdateProductUseCaseTest {
     @Mock
     private ObjectMapper objectMapper;
 
+    @Mock private com.keevo.subscription.api.ProductCountPort productCountPort;
+    @Mock private com.keevo.shared.capability.entitlement.TenantPlanQuery tenantPlanQuery;
+    @Mock private com.keevo.shared.capability.entitlement.PlanLimitCheck planLimit;
+    @Mock private com.keevo.shared.application.port.TransactionLockPort transactionLock;
+
+    private final com.keevo.shared.capability.entitlement.PlanView free =
+            new com.keevo.shared.capability.entitlement.PlanView(com.keevo.identity.api.PlanType.FREE, true, null, 1, 500, 2);
+
     private UpdateProductUseCase useCase;
 
     @BeforeEach
     void setUp() {
-        useCase = new UpdateProductUseCase(productRepository, eventPublisher, objectMapper);
+        useCase = new UpdateProductUseCase(productRepository, eventPublisher, objectMapper, productCountPort,
+                tenantPlanQuery, planLimit, transactionLock);
+        lenient().when(tenantPlanQuery.findCurrentPlan(any())).thenReturn(Optional.of(free));
+    }
+
+    // ── Story 17.10: promotion passes the product limit ─────────────────────────
+
+    private Product draft(UUID id, boolean archived) {
+        return new Product(id, "Savon", null, "KEV-SAVON1", null,
+                500, 0, 0, 0, archived, ProductStatus.DRAFT, 0, Instant.now(), Instant.now());
+    }
+
+    @Test
+    void promotion_at_the_limit_is_refused_and_nothing_is_saved() {
+        var id = UUID.randomUUID();
+        when(productRepository.findById(id)).thenReturn(Optional.of(draft(id, false)));
+        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "products limit reached"))
+                .when(planLimit).checkProductLimit(eq(free), any());
+
+        var ex = assertThrows(DomainException.class, () -> useCase.execute(new UpdateProductUseCase.UpdateProductDto(
+                id, null, null, null, null, null, null, null, null, UUID.randomUUID(), "OWNER")));
+
+        assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED, ex.getErrorCode());
+        var order = inOrder(transactionLock, planLimit);
+        order.verify(transactionLock).lock(startsWith("product-limit:"));
+        order.verify(planLimit).checkProductLimit(eq(free), any());
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    void active_update_or_archived_draft_promotion_does_not_check_the_limit() {
+        var id = UUID.randomUUID();
+        when(productRepository.findById(id)).thenReturn(Optional.of(draft(id, true)));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TenantContext.setCurrentTenant("kv_test01");
+        try {
+            useCase.execute(new UpdateProductUseCase.UpdateProductDto(
+                    id, null, null, null, null, 700, null, null, null, UUID.randomUUID(), "OWNER"));
+        } finally {
+            TenantContext.clear();
+        }
+
+        verifyNoInteractions(planLimit, transactionLock);
     }
 
     // Device test: a price-only PATCH answered 404 « Produit introuvable ».

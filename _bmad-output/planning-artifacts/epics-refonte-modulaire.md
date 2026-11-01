@@ -1910,7 +1910,7 @@ As a **équipe**, I want **une suite de régression de bout en bout couvrant les
 
 As a **propriétaire**, I want **voir le bon nombre de produits dans « Utilisation » de mon abonnement**, So that **je sais où j'en suis par rapport à mon plafond**.
 
-- [ ] [Deferred-from: live device run 12-2e, 2026-10-29 ; routé depuis v1s-16-25 le 2026-11-01] Subscription usage « Produits » counter shows 0 [`keevo/app/lib/features/settings/presentation/page/subscription_page.dart`] — compare with `GET /api/v1/subscription/me` (`currentProducts`) ; decide local vs server source
+- [x] [Deferred-from: live device run 12-2e, 2026-10-29 ; routé depuis v1s-16-25 le 2026-11-01] Subscription usage « Produits » counter shows 0 [`keevo/app/lib/features/settings/presentation/page/subscription_page.dart`] — compare with `GET /api/v1/subscription/me` (`currentProducts`) ; decide local vs server source
 
 **Acceptance Criteria:** **Given** un tenant avec N produits actifs **When** l'owner ouvre l'écran Abonnement **Then** « Produits » affiche N (en ligne : valeur serveur ; hors ligne : comptage local cohérent).
 
