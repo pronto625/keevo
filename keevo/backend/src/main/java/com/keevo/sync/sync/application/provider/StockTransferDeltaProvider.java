@@ -3,7 +3,10 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import jakarta.persistence.EntityManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -14,6 +17,11 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
 
     /** Keyset cursor of the delta pull; the {@code stock_transfers} sync keyset index leads with it (Story 11.5). */
     static final String CURSOR = "GREATEST(occurred_at, COALESCE(updated_at, occurred_at))";
+
+    private static final Logger log = LoggerFactory.getLogger(StockTransferDeltaProvider.class);
+
+    /** Story 16.10 — an EMPLOYEE only pulls the transfers its assigned store sent or received. */
+    static final String STORE_SCOPE = "source_store_id = :scopeStoreId OR destination_store_id = :scopeStoreId";
 
     private final EntityManager em;
 
@@ -33,9 +41,18 @@ public class StockTransferDeltaProvider implements DeltaEntityProvider {
 
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
+        // Story 16.10 — fail closed without failing the pull: no actor, or an EMPLOYEE without a store, gets
+        // no transfers (an exception would mark the whole pull failed and its cursor would never advance).
+        UUID scopeStoreId = CurrentActor.assignedStoreIdOrNull();
+        if (CurrentActor.authentication() == null || (scopeStoreId == null && CurrentActor.isEmployee())) {
+            log.warn("[Sync] Transfers pull without an assigned store for the actor — no transfers sent");
+            return new Page(List.of(), null);
+        }
         var page = DeltaPageQuery.fetch(em,
                 "id, source_store_id, destination_store_id, product_id, variant_id, quantity, actor_id, occurred_at, status, notes",
-                "stock_transfers", CURSOR, since, after, limit);
+                "stock_transfers", CURSOR, since, after, limit,
+                scopeStoreId != null ? STORE_SCOPE : null,
+                scopeStoreId != null ? Map.of("scopeStoreId", scopeStoreId) : Map.of());
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

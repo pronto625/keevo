@@ -16,7 +16,9 @@ import java.util.UUID;
  * @param size               page size (default 25)
  * @param storeId            optional — transfers where this store is source OR destination
  * @param status             optional — only transfers in this status
- * Story 3.3; v1s-16-23 (storeId, status).
+ * @param scopeStoreId       actor scope — the EMPLOYEE's assigned store ({@code null} for OWNER):
+ *                           only transfers where it is source OR destination, ANDed with the filters
+ * Story 3.3; v1s-16-23 (storeId, status); 16.10 (scopeStoreId).
  */
 public record GetTransferHistoryQuery(
     UUID sourceStoreId,
@@ -26,12 +28,7 @@ public record GetTransferHistoryQuery(
     int page,
     int size,
     UUID storeId,
-    TransferStatus status
+    TransferStatus status,
+    UUID scopeStoreId
 ) {
-
-    /** Pre-v1s-16-23 arity — no store/status filter. */
-    public GetTransferHistoryQuery(UUID sourceStoreId, UUID destinationStoreId,
-                                   Instant from, Instant to, int page, int size) {
-        this(sourceStoreId, destinationStoreId, from, to, page, size, null, null);
-    }
 }

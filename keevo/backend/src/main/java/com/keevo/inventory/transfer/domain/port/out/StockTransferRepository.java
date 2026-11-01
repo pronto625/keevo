@@ -22,8 +22,10 @@ public interface StockTransferRepository {
     java.util.Optional<StockTransfer> findById(UUID id);
 
     /**
-     * @param storeId optional — matches transfers where the store is source OR destination
-     * @param status  optional — exact status match
+     * @param storeId      optional — matches transfers where the store is source OR destination
+     * @param status       optional — exact status match
+     * @param scopeStoreId optional actor scope (Story 16.10, EMPLOYEE's assigned store): only transfers
+     *                     whose source OR destination is this store, ANDed with every other filter
      */
     Page<StockTransfer> findByFilters(
         UUID sourceStoreId,
@@ -32,6 +34,7 @@ public interface StockTransferRepository {
         Instant to,
         UUID storeId,
         TransferStatus status,
+        UUID scopeStoreId,
         Pageable pageable
     );
 

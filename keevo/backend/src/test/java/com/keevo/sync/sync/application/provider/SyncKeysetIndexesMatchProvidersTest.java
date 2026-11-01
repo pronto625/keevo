@@ -10,6 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.core.type.filter.AssignableTypeFilter;
 
 import java.lang.reflect.Constructor;
@@ -86,7 +89,14 @@ class SyncKeysetIndexesMatchProvidersTest {
         when(query.getResultList()).thenReturn(List.of());
         Constructor<?> ctor = type.getDeclaredConstructor(EntityManager.class);
         ctor.setAccessible(true);
-        ((DeltaEntityProvider) ctor.newInstance(em)).queryDeltaPage(Instant.parse("2026-10-01T00:00:00Z"), null, 50);
+        // Story 16.10 — scoped providers read the actor (fail closed when none): pull as an unscoped OWNER.
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                "owner", null, List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
+        try {
+            ((DeltaEntityProvider) ctor.newInstance(em)).queryDeltaPage(Instant.parse("2026-10-01T00:00:00Z"), null, 50);
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(em, atLeastOnce()).createNativeQuery(sql.capture());
         return sql.getAllValues().get(0);

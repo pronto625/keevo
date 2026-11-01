@@ -41,6 +41,7 @@ public class GetTransferHistoryService implements GetTransferHistoryUseCase {
             query.to(),
             query.storeId(),
             query.status(),
+            query.scopeStoreId(),
             pageable
         );
     }

@@ -1688,7 +1688,7 @@ As a **propriétaire**,
 I want **qu'un employé ne voie que les transferts de sa boutique**,
 So that **les mouvements des autres boutiques restent confidentiels, comme pour la création et la réception d'un transfert**.
 
-- [ ] [Deferred-from: spec-v1s-16-23-transfer-history-and-audit-route.md review, 2026-10-20 ; routé depuis v1s-12-9 le 2026-11-01] `GET /api/v1/stock/transfers` has no EMPLOYEE store scope [`keevo/backend/src/main/java/com/keevo/inventory/transfer/adapter/in/web/StockTransferController.java` `getHistory`] — POST and `/complete` already use `CurrentActor.assignedStoreId()`
+- [x] [Deferred-from: spec-v1s-16-23-transfer-history-and-audit-route.md review, 2026-10-20 ; routé depuis v1s-12-9 le 2026-11-01] `GET /api/v1/stock/transfers` has no EMPLOYEE store scope [`keevo/backend/src/main/java/com/keevo/inventory/transfer/adapter/in/web/StockTransferController.java` `getHistory`] — POST and `/complete` already use `CurrentActor.assignedStoreId()`
 
 **Acceptance Criteria:**
 
@@ -1803,6 +1803,20 @@ So that **le provisioning d'un tenant n'ait plus qu'un seul auteur (Flyway des m
 - [ ] [Deferred-from: spec 13-9, 2026-10-30] Drifted early tenants (created by the old `LIKE public INCLUDING ALL` copy — 157/331 dev schemas, likely the oldest prod ones) lack the crm indexes `idx_clients_name`/`idx_clients_archived`/`idx_suppliers_name`/`idx_product_suppliers_supplier`, the column defaults (`id`, `archived`, `created_at`, `updated_at`) and the `product_suppliers` FKs. crm is baselined at 1 without executing V1 (13.9 review), so nothing is repaired — decide with a dry-run on a prod copy whether a crm `V2` repairs them (`CREATE INDEX CONCURRENTLY` outside Flyway's transaction, `SET DEFAULT` metadata only, FKs `NOT VALID` + `VALIDATE` after an orphan report). Dev note: on keevo_dev V1 was applied once before the review (157 schemas already repaired, histories `0`+`1:SQL`) [crm migrations]
 
 - [ ] [Deferred-from: review 13-9, 2026-10-30] Stop `TenantSchemaSyncService` mirroring `clients`/`suppliers`/`product_suppliers` (and every other converted module's tables) once the module migrations are the single writer — together with the full conversion above [tenant provisioning]
+
+### Story 16.13 : Confidentialité des données d'autres boutiques chez l'employé (synchro + purge des appareils)
+
+> Clé tracker : `16-13-scope-employe-donnees-synchro` — créée le 2026-11-01 par la revue de 16.10. À faire **avant le go-live** (sécurité), après 16.11.
+
+As a **propriétaire**, I want **qu'un téléphone d'employé ne contienne que les données de sa boutique**, So that **les mouvements, transferts et ventes des autres boutiques restent confidentiels même hors ligne**.
+
+**Périmètre :** auditer chaque fournisseur du pull de synchro (`DeltaEntityProvider`) et limiter à la boutique de l'employé ce qui est propre à une boutique (au minimum les mouvements de stock, dont TRANSFER_OUT/IN d'autres boutiques ; examiner niveaux de stock, ventes, clôtures, inventaires, rapports — garder ce dont l'app a besoin, ex. disponibilité inter-boutiques si la fonction existe pour l'employé) ; purger sur l'appareil, à la mise à jour de l'app et à chaque changement de boutique de l'employé, les lignes locales hors de sa boutique (et repartir d'un pull complet pour la nouvelle boutique) ; passer la portée par la commande de pull plutôt que par le contexte de sécurité.
+
+- [ ] [Deferred-from: review 16-10, 2026-11-01] `StockMovementDeltaProvider` sends every store's movements (incl. TRANSFER_OUT/IN of B→C, quantities, notes) to an employee of A [sync providers]
+- [ ] [Deferred-from: review 16-10, 2026-11-01] Transfers (and other rows) pulled before 16.10 stay in the employee device's local DB (Drift `stock_transfers`, local export reader) — the incremental cursor never re-sends nor deletes them; same on store reassignment (old-store rows kept, new-store history never pulled) [app sync / purge]
+- [ ] [Deferred-from: review 16-10, 2026-11-01] Store scope read from the static security context inside providers; pass it through the pull command like `ownerOnly` [SyncPushService / DeltaEntityProvider]
+
+**Acceptance Criteria (provisoires):** **Given** un employé de la boutique A dont l'appareil contient des données de B **When** il met à jour l'app et synchronise **Then** plus aucune donnée propre à B (transferts, mouvements, ventes…) n'est présente sur l'appareil ni envoyée par le serveur ; **Given** l'employé réaffecté de A vers B **When** il synchronise **Then** les données de A disparaissent et l'historique de B est téléchargé.
 
 ## Epic 17 : Complétion Fonctionnelle & Gating Produit (Phase 7)
 

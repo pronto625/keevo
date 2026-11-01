@@ -92,4 +92,54 @@ class DeltaPageQueryTest {
         verify(query).setParameter("afterCursor", Timestamp.from(after.cursor()));
         verify(query).setParameter("afterId", "b");
     }
+
+    // ── Story 16.10 — optional extra predicate ──────────────────────────
+
+    @Test
+    void filter_isAndedAndItsParametersBound() {
+        when(em.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+
+        DeltaPageQuery.fetch(em, "id, name", "products", "updated_at", SINCE, null, 10,
+                "store_id = :scopeStoreId", java.util.Map.of("scopeStoreId", "s1"));
+
+        assertThat(capturedSql()).contains("WHERE updated_at >= :since AND (store_id = :scopeStoreId) ORDER BY");
+        verify(query).setParameter("scopeStoreId", "s1");
+    }
+
+    @Test
+    void filterWithoutParameters_isRejected() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> DeltaPageQuery.fetch(em, "id", "products",
+                "updated_at", SINCE, null, 10, "store_id = :s", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(em);
+    }
+
+    @Test
+    void parametersWithoutFilter_areRejected() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> DeltaPageQuery.fetch(em, "id", "products",
+                "updated_at", SINCE, null, 10, null, java.util.Map.of("s", "x")))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(em);
+    }
+
+    @Test
+    void reservedParameterNames_areRejected() {
+        for (String reserved : List.of("since", "afterCursor", "afterId")) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> DeltaPageQuery.fetch(em, "id", "products",
+                    "updated_at", SINCE, null, 10, "x = :" + reserved, java.util.Map.of(reserved, "v")))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        verifyNoInteractions(em);
+    }
+
+    @Test
+    void noFilter_noParameters_isTheUnfilteredQuery() {
+        when(em.createNativeQuery(anyString())).thenReturn(query);
+        when(query.getResultList()).thenReturn(List.of());
+
+        DeltaPageQuery.fetch(em, "id", "products", "updated_at", SINCE, null, 10, null, null);
+
+        assertThat(capturedSql()).doesNotContain(" AND (");
+    }
 }

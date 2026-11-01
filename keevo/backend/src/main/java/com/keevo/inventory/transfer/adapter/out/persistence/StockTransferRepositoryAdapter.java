@@ -53,9 +53,9 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
     public Page<StockTransfer> findByFilters(UUID sourceStoreId, UUID destinationStoreId,
                                              Instant from, Instant to,
                                              UUID storeId, TransferStatus status,
-                                             Pageable pageable) {
+                                             UUID scopeStoreId, Pageable pageable) {
         Specification<StockTransferJpaEntity> spec =
-                buildSpec(sourceStoreId, destinationStoreId, from, to, storeId, status);
+                buildSpec(sourceStoreId, destinationStoreId, from, to, storeId, status, scopeStoreId);
         return springRepository.findAll(spec, pageable).map(this::toDomain);
     }
 
@@ -69,7 +69,7 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
 
     private Specification<StockTransferJpaEntity> buildSpec(
             UUID sourceStoreId, UUID destinationStoreId, Instant from, Instant to,
-            UUID storeId, TransferStatus status) {
+            UUID storeId, TransferStatus status, UUID scopeStoreId) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -84,6 +84,13 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
                 predicates.add(cb.or(
                         cb.equal(root.get("sourceStoreId"), storeId),
                         cb.equal(root.get("destinationStoreId"), storeId)));
+            }
+            if (scopeStoreId != null) {
+                // Story 16.10: an EMPLOYEE only sees transfers involving its assigned store; a filter
+                // on another store is ANDed with it, so it narrows to nothing rather than leaking.
+                predicates.add(cb.or(
+                        cb.equal(root.get("sourceStoreId"), scopeStoreId),
+                        cb.equal(root.get("destinationStoreId"), scopeStoreId)));
             }
             if (status != null) {
                 predicates.add(cb.equal(root.get("status"), status));

@@ -302,13 +302,53 @@ class StockTransferControllerTest {
 
     @Test
     void GET_history_employeeCanView_returns200() throws Exception {
-        authenticateAs("EMPLOYEE");
+        authenticateAsEmployeeWithStore(srcId);
         when(getTransferHistoryService.execute(any()))
             .thenReturn(new PageImpl<>(List.of(completedTransfer())));
 
         mockMvc.perform(get("/api/v1/stock/transfers")
                 .param("page", "0").param("size", "25"))
             .andExpect(status().isOk());
+    }
+
+    // ── Story 16.10 — EMPLOYEE store scope on history ──────────────────────
+
+    @Test
+    void GET_history_employee_forwardsAssignedStoreAsScope_alongsideFilters() throws Exception {
+        authenticateAsEmployeeWithStore(srcId);
+        when(getTransferHistoryService.execute(any())).thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/v1/stock/transfers").param("store", destId.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.content").isEmpty())
+            .andExpect(jsonPath("$.data.totalElements").value(0));
+
+        ArgumentCaptor<GetTransferHistoryQuery> captor = ArgumentCaptor.forClass(GetTransferHistoryQuery.class);
+        verify(getTransferHistoryService).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().scopeStoreId()).isEqualTo(srcId);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().storeId()).isEqualTo(destId);
+    }
+
+    @Test
+    void GET_history_owner_isNeverScoped() throws Exception {
+        authenticateAs("OWNER");
+        when(getTransferHistoryService.execute(any())).thenReturn(new PageImpl<>(List.of()));
+
+        mockMvc.perform(get("/api/v1/stock/transfers")).andExpect(status().isOk());
+
+        ArgumentCaptor<GetTransferHistoryQuery> captor = ArgumentCaptor.forClass(GetTransferHistoryQuery.class);
+        verify(getTransferHistoryService).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().scopeStoreId()).isNull();
+    }
+
+    @Test
+    void GET_history_employeeWithoutStoreClaim_failsClosed403() throws Exception {
+        authenticateAs("EMPLOYEE"); // no AuthDetails
+
+        mockMvc.perform(get("/api/v1/stock/transfers"))
+            .andExpect(status().isForbidden());
+
+        verify(getTransferHistoryService, never()).execute(any());
     }
 
     // ── Story v1s-12-9 — EMPLOYEE store scope on complete ──────────────────

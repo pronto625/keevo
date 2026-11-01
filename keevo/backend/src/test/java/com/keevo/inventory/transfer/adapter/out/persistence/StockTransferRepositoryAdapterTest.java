@@ -69,7 +69,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(SRC_ID, null, null, null, null, null, pageable);
+        adapter.findByFilters(SRC_ID, null, null, null, null, null, null, pageable);
 
         verify(springRepo).findAll(any(Specification.class), eq(pageable));
     }
@@ -81,7 +81,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, DEST_ID, null, null, null, null, pageable);
+        adapter.findByFilters(null, DEST_ID, null, null, null, null, null, pageable);
 
         verify(springRepo).findAll(any(Specification.class), eq(pageable));
     }
@@ -95,7 +95,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, null, from, to, null, null, pageable);
+        adapter.findByFilters(null, null, from, to, null, null, null, pageable);
 
         verify(springRepo).findAll(any(Specification.class), eq(pageable));
     }
@@ -107,7 +107,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), any(Pageable.class)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, null, null, null, null, null, pageable);
+        adapter.findByFilters(null, null, null, null, null, null, null, pageable);
 
         ArgumentCaptor<Pageable> pageCaptor = ArgumentCaptor.forClass(Pageable.class);
         verify(springRepo).findAll(any(Specification.class), pageCaptor.capture());
@@ -124,7 +124,7 @@ class StockTransferRepositoryAdapterTest {
         when(springRepo.findAll(any(Specification.class), eq(pageable)))
             .thenReturn(new PageImpl<>(List.of()));
 
-        adapter.findByFilters(null, null, null, null, SRC_ID, TransferStatus.COMPLETED, pageable);
+        adapter.findByFilters(null, null, null, null, SRC_ID, TransferStatus.COMPLETED, null, pageable);
 
         ArgumentCaptor<Specification> specCaptor = ArgumentCaptor.forClass(Specification.class);
         verify(springRepo).findAll(specCaptor.capture(), eq(pageable));

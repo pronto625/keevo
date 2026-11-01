@@ -124,6 +124,8 @@ public class StockTransferController {
 
     /**
      * Paginated transfer history with optional filters.
+     * Story 16.10 — an EMPLOYEE only sees transfers its assigned store sent or received; a filter on
+     * another store yields an empty page (no 403, nothing revealed about other stores).
      */
     @RequiresEntitlement(value = "multi-store", access = RequiresEntitlement.Access.READ)
     @GetMapping
@@ -138,7 +140,8 @@ public class StockTransferController {
             @RequestParam(required = false) TransferStatus status) {
 
         // v1s-16-23: store (source OR destination) and status are optional — old apps unchanged.
-        var query = new GetTransferHistoryQuery(source, destination, from, to, page, size, store, status);
+        var query = new GetTransferHistoryQuery(source, destination, from, to, page, size, store, status,
+                CurrentActor.assignedStoreId());
         Page<StockTransferResponseDto> result =
                 getTransferHistoryService.execute(query)
                                         .map(StockTransferResponseDto::from);
