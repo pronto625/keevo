@@ -20,6 +20,7 @@ import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
 import com.keevo.shared.event.catalog.sale.SaleManuallyValidatedEvent;
 import com.keevo.shared.event.catalog.sale.SalePendingValidationEvent;
 import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
+import com.keevo.shared.event.catalog.module.ModuleLicencesChangedEvent;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -109,6 +110,13 @@ class RegistryEventSerializationTest {
         f.put(StockAdjustedEvent.class, new StockAdjustedEvent(A, null, B, MovementKind.ADJUSTMENT, 10, -2, 8, C,
                 "casse", TENANT, "EMPLOYEE", "Awa", "Akwa", "Riz 5kg", T0, "Bonamoussadi"));
         f.put(CsvImportCompletedEvent.class, new CsvImportCompletedEvent(7, TENANT, A, "Awa", "EMPLOYEE", T0));
+        // 16.1: nightly module licence transitions → owner notifications
+        f.put(ModuleLicencesChangedEvent.class, new ModuleLicencesChangedEvent(TENANT, List.of(
+                new ModuleLicencesChangedEvent.Transition("invoicing", "Facturation",
+                        ModuleLicencesChangedEvent.Origin.ADMIN, ModuleLicencesChangedEvent.NewStatus.EXPIRED, T1),
+                new ModuleLicencesChangedEvent.Transition("alerts", "Alertes",
+                        ModuleLicencesChangedEvent.Origin.PLAN, ModuleLicencesChangedEvent.NewStatus.DISABLED, null)),
+                null, T0));
         return f;
     }
 

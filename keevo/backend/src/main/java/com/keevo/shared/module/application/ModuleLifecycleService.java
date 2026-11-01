@@ -60,7 +60,10 @@ import java.util.stream.Collectors;
  * resolver is not a bean: every other caller keeps the free-only rule.
  *
  * <p><b>Rows.</b> A free module (target or dependency) is written {@code ACTIVE} without end date; a paid one gets
- * the requested status and end date, which is then mandatory ({@code TRIAL} always needs one; at most 10 years);
+ * the requested status and end date, which is then mandatory for {@code ACTIVE} (a {@code TRIAL} without one is the
+ * 14-day reactivation trial of a paid target that is not enabled, and no change on an enabled one, Story 16.1; at
+ * most 10 years). Story 16.1: dependencies that are not ENABLED (read-only
+ * or disabled) are part of the plan, so they are renewed with the target's status and end date;
  * {@code grace_until = expires_at + 7 days}; {@code activated_at = now} only on an inactive → active transition
  * (kept otherwise), {@code disabled_at = null}. Deactivation upserts {@code DISABLED} + {@code disabled_at}
  * and never deletes a row (a free module without a row is active). A provisioning failure rolls the whole
@@ -91,6 +94,8 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     static final String LOCK_PREFIX = "module-lifecycle:";
     /** Read-only grace after the end of a subscription (spec-socle §2.2). */
     static final Duration GRACE = Duration.ofDays(7);
+    /** Story 16.1 (MOD-FR13) — length of a trial granted without an end date (reactivation trial). */
+    static final Duration REACTIVATION_TRIAL = Duration.ofDays(14);
     /** Farthest end date accepted (a typo must not grant decades, nor overflow the column). */
     static final int MAX_EXPIRY_YEARS = 10;
     static final String ACTION_ACTIVATED = "MODULE_ACTIVATED";
@@ -159,15 +164,24 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         ModuleManifest target = requireTenantModule(moduleId);
         TenantModuleStatus status = requestedStatus(request);
         Instant expiresAt = requestedExpiry(request, now);
-        if (status == TenantModuleStatus.TRIAL && expiresAt == null) {
-            throw invalid("expiresAt", "Une date de fin est requise pour un essai");
-        }
         String schema = tenant.tenantSchema();
         registry.evict(schema); // never plan from rows read before the lock
         registerEviction(schema);
 
         if (target.isCore()) { // always enabled, never a row
             return new ActivationResult(List.of(), TenantModuleStatus.ACTIVE, null, null);
+        }
+        // Story 16.1 (MOD-FR13): a trial without an end date on a paid module that is not enabled is the 14-day
+        // reactivation trial; on an enabled one it changes nothing (never cuts a running subscription short, never
+        // extends a running trial on each call): the stored status and end are kept
+        if (status == TenantModuleStatus.TRIAL && expiresAt == null && !target.free()) {
+            if (registry.moduleState(schema, target.id()) == ModuleState.ENABLED) {
+                StoredRow current = store.findStoredRows(schema).get(target.id());
+                status = current != null ? current.status() : TenantModuleStatus.ACTIVE;
+                expiresAt = current != null ? current.expiresAt() : null;
+            } else {
+                expiresAt = reactivationTrialEnd(now);
+            }
         }
         ActivationPlan plan = (actor.superAdmin() ? grantingResolver : resolver).planActivation(schema, target.id());
         if (plan.blocked()) {
@@ -458,6 +472,11 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         return catalog.find(moduleId)
                 .filter(m -> m.category() != ModuleCategory.PLATFORM)
                 .orElseThrow(() -> new DomainException(ErrorCode.MODULE_NOT_FOUND, "Module introuvable"));
+    }
+
+    /** End of a trial requested without a date: now + {@link #REACTIVATION_TRIAL} (column precision). */
+    private static Instant reactivationTrialEnd(Instant now) {
+        return now.plus(REACTIVATION_TRIAL).truncatedTo(ChronoUnit.MICROS);
     }
 
     private static TenantModuleStatus requestedStatus(ActivationRequest request) {

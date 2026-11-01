@@ -7,6 +7,11 @@ import com.keevo.shared.module.application.port.PlanModuleRowStore.Origin;
 import com.keevo.shared.module.application.port.PlanModuleRowStore.StoredRow;
 import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.shared.module.application.port.TenantModuleStatePort.Plan;
+import com.keevo.shared.event.catalog.module.ModuleLicencesChangedEvent;
+import com.keevo.shared.event.catalog.module.ModuleLicencesChangedEvent.Transition;
+import com.keevo.shared.module.TenantModuleStatus;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -14,6 +19,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -31,13 +38,22 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
     private final PlanModuleRowStore store;
     private final ModuleRegistry registry;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
+    /** Without an event publisher (tests that do not observe the licence notifications). */
     public PlanModuleRowSyncService(ModuleCatalog catalog, PlanModuleRowStore store, ModuleRegistry registry,
                                     Clock clock) {
+        this(catalog, store, registry, clock, event -> { });
+    }
+
+    @Autowired
+    public PlanModuleRowSyncService(ModuleCatalog catalog, PlanModuleRowStore store, ModuleRegistry registry,
+                                    Clock clock, ApplicationEventPublisher events) {
         this.catalog = catalog;
         this.store = store;
         this.registry = registry;
         this.clock = clock;
+        this.events = events;
     }
 
     @Override
@@ -68,6 +84,7 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
         int updated = 0;
         int unchanged = 0;
         int preserved = 0;
+        List<Transition> disabled = new ArrayList<>();
         for (Map.Entry<String, PlanModuleRows.Desired> entry : desired.entrySet()) {
             String moduleId = entry.getKey();
             PlanModuleRows.Desired row = entry.getValue();
@@ -89,7 +106,18 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
                 inserted++;
             } else {
                 updated++;
+                if (write && row.status() == TenantModuleStatus.DISABLED
+                        && current.status() != TenantModuleStatus.DISABLED) {
+                    disabled.add(new Transition(moduleId, catalog.find(moduleId).map(m -> m.displayName())
+                            .orElse(moduleId), ModuleLicencesChangedEvent.Origin.PLAN,
+                            ModuleLicencesChangedEvent.NewStatus.DISABLED, row.graceUntil()));
+                }
             }
+        }
+        if (!disabled.isEmpty()) {
+            // Story 16.1: an existing row switched off by a plan write (grace over, downgrade) is told to the owner
+            // like the nightly job's transitions — the job will find nothing left to change
+            events.publishEvent(new ModuleLicencesChangedEvent(schema, disabled, null, now));
         }
         return new SyncResult(inserted, updated, unchanged, preserved);
     }

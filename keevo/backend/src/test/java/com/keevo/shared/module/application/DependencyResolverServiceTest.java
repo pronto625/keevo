@@ -66,6 +66,29 @@ class DependencyResolverServiceTest {
     }
 
     @Test
+    @DisplayName("16.1 — read-only dependency: catalog READ_ONLY → renewed in the plan [catalog, inventory, x]")
+    void readOnlyDependencyRenewed() {
+        registry.readOnly("catalog");
+        ActivationPlan plan = resolver.planActivation(TENANT, "x");
+        assertThat(plan.moduleIds()).containsExactly("catalog", "inventory", "x");
+        assertThat(plan.alreadyActive()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("16.1 — read-only target, enabled dependencies: empty plan, target listed as already active")
+    void readOnlyTargetLeftToLifecycle() {
+        registry.activate("catalog", "inventory");
+        registry.readOnly("x");
+        ActivationPlan plan = resolver.planActivation(TENANT, "x");
+        assertThat(plan.moduleIds()).isEmpty();
+        assertThat(plan.alreadyActive()).containsExactly("catalog", "inventory", "x");
+        // a read-only target with a read-only dependency: the dependency alone is planned (repair plan)
+        registry.readOnly("inventory");
+        registry.active.remove("inventory");
+        assertThat(resolver.planActivation(TENANT, "x").moduleIds()).containsExactly("inventory");
+    }
+
+    @Test
     @DisplayName("multi-level: alpha → beta → gamma, none active → [gamma, beta, alpha]")
     void multiLevel() {
         assertThat(resolver.planActivation(TENANT, "alpha").moduleIds()).containsExactly("gamma", "beta", "alpha");
@@ -352,6 +375,7 @@ class DependencyResolverServiceTest {
 
         private final ModuleCatalog catalog;
         private final Set<String> active = new TreeSet<>(Set.of(ModuleManifest.CORE_ID));
+        private final Set<String> readOnly = new TreeSet<>();
         private int reads;
 
         FakeRegistry(ModuleCatalog catalog) {
@@ -360,6 +384,11 @@ class DependencyResolverServiceTest {
 
         void activate(String... ids) {
             active.addAll(List.of(ids));
+        }
+
+        /** Story 16.1 — modules in their read-only grace (readable, not writable). */
+        void readOnly(String... ids) {
+            readOnly.addAll(List.of(ids));
         }
 
         @Override
@@ -375,7 +404,9 @@ class DependencyResolverServiceTest {
         @Override
         public Set<String> activeModules(String tenantSchema) {
             reads++;
-            return Set.copyOf(active);
+            Set<String> readable = new TreeSet<>(active);
+            readable.addAll(readOnly);
+            return Set.copyOf(readable);
         }
 
         @Override
@@ -385,16 +416,18 @@ class DependencyResolverServiceTest {
 
         @Override
         public boolean isActive(String tenantSchema, String moduleId) {
-            return active.contains(moduleId);
+            return active.contains(moduleId) || readOnly.contains(moduleId);
         }
 
         @Override
         public ModuleState moduleState(String tenantSchema, String moduleId) {
-            return active.contains(moduleId) ? ModuleState.ENABLED : ModuleState.DISABLED;
+            return active.contains(moduleId) ? ModuleState.ENABLED
+                    : readOnly.contains(moduleId) ? ModuleState.READ_ONLY : ModuleState.DISABLED;
         }
 
         @Override
         public Map<String, ModuleState> moduleStates(String tenantSchema) {
+            reads++;
             Map<String, ModuleState> states = new TreeMap<>();
             catalog.manifests().forEach(m -> states.put(m.id(), moduleState(tenantSchema, m.id())));
             return states;

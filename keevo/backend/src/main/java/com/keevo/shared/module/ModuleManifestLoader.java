@@ -472,6 +472,14 @@ public final class ModuleManifestLoader {
             for (String required : manifest.requires()) {
                 if (byId.containsKey(required)) {
                     known.add(required);
+                    ModuleManifest dependency = byId.get(required).manifest();
+                    if (manifest.free() && !dependency.free()) {
+                        // Story 16.1: a free module never enters the licence lifecycle, so it cannot rest on a
+                        // paid one that expires (it would stay enabled on a disabled dependency)
+                        problems.add(m.location() + ": field 'requires' — free module '" + manifest.id()
+                                + "' requires paid module '" + required + "' (a free module may only require free "
+                                + "modules)");
+                    }
                 } else if (invalidDirectories.contains(required)) {
                     problems.add(m.location() + ": field 'requires' — module '" + manifest.id()
                             + "' requires '" + required + "', whose manifest is invalid (see above)");

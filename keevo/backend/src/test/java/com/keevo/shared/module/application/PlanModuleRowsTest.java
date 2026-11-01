@@ -74,6 +74,21 @@ class PlanModuleRowsTest {
     }
 
     @Test
+    @DisplayName("16.1 — grace over (exclusive: at grace_until) → DISABLED / PREMIUM, dates kept (the job's row)")
+    void graceOver() {
+        Instant end = NOW.minus(Duration.ofDays(8));
+        Desired over = new Desired(TenantModuleStatus.DISABLED, "PREMIUM", end, end.plus(GRACE));
+        assertThat(PlanModuleRows.rowFor(new Plan("PREMIUM_TRIAL", "ACTIVE", end), NOW)).isEqualTo(over);
+        assertThat(PlanModuleRows.rowFor(new Plan("PREMIUM", "EXPIRED", end), NOW)).isEqualTo(over);
+        assertThat(PlanModuleRows.rowFor(new Plan("FREE", "ACTIVE", null, end, false), NOW)).isEqualTo(over);
+        Instant exactly = NOW.minus(GRACE);
+        assertThat(PlanModuleRows.rowFor(new Plan("PREMIUM", "ACTIVE", exactly), NOW).status())
+                .isEqualTo(TenantModuleStatus.DISABLED);
+        assertThat(PlanModuleRows.rowFor(new Plan("PREMIUM", "ACTIVE", exactly.plusNanos(1000)), NOW).status())
+                .isEqualTo(TenantModuleStatus.EXPIRED);
+    }
+
+    @Test
     @DisplayName("plain FREE, no subscription, SUSPENDED, EXPIRED without end, unknown plan → DISABLED / FREE")
     void disabled() {
         Desired disabled = new Desired(TenantModuleStatus.DISABLED, "FREE", null, null);

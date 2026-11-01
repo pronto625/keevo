@@ -21,6 +21,7 @@ import com.keevo.subscription.plan.adapter.in.scheduling.PlanExpiryReminderSched
 import com.keevo.admin.platform.adapter.in.scheduling.PlatformHealthSampleScheduler;
 import com.keevo.admin.alerts.adapter.in.scheduling.SyncSilenceAlertScheduler;
 import com.keevo.subscription.plan.adapter.in.scheduling.SubscriptionExpiryScheduler;
+import com.keevo.shared.module.adapter.in.scheduling.ModuleExpiryScheduler;
 import com.keevo.sync.sync.application.service.SyncErrorLogCleanupJob;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.provider.jdbctemplate.JdbcTemplateLockProvider;
@@ -76,7 +77,8 @@ class SchedulerLockCoverageTest {
             Map.entry(GlobalNotificationScheduler.class, Duration.ofMinutes(15)),
             Map.entry(GlobalNotificationPurgeJob.class, Duration.ofDays(1)), // 9-5 (2/2)
             Map.entry(EventPublicationPurgeJob.class, Duration.ofDays(1)), // 12.4
-            Map.entry(EventPublicationResubmissionJob.class, Duration.ofMinutes(10))); // 12.4
+            Map.entry(EventPublicationResubmissionJob.class, Duration.ofMinutes(10)), // 12.4
+            Map.entry(ModuleExpiryScheduler.class, Duration.ofDays(1))); // 16.1
 
     /**
      * Per-instance sweeps: must run on every instance → never locked. Includes the 11.2 sync-lag

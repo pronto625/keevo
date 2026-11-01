@@ -140,7 +140,9 @@ public final class TestModuleCatalogs {
      * <ul>
      *   <li>{@code lcbase} « Base de test » (free, V1) ← {@code lctop} « Module supérieur » (free, V1) and
      *       {@code lcbroken} « Module cassé » (free, V1 invalid SQL) require it;</li>
-     *   <li>{@code lcpaid} « Module payant » (premium, paid, V1) ← {@code lcbuyer} « Acheteur » (free) requires it;</li>
+     *   <li>{@code lcpaid} « Module payant » (premium, paid, V1) ← {@code lcbuyer} « Acheteur » (free, built here
+ *       directly: the manifest loader refuses a free module requiring a paid one since 16.1) and {@code lcpremium}
+ *       « Module premium » (premium, paid, no migrations, Story 16.1) require it;</li>
      *   <li>{@code lcplain} « Module simple » (free, no migrations), {@code lcsync} « Synchronisation » (category
      *       core, free), {@code lcadmin} « Plateforme » (platform).</li>
      * </ul>
@@ -154,6 +156,7 @@ public final class TestModuleCatalogs {
                 named("lcbroken", "Module cassé", b, true, List.of("lcbase")),
                 named("lcpaid", "Module payant", ModuleCategory.PREMIUM, false, List.of()),
                 named("lcbuyer", "Acheteur", b, true, List.of("lcpaid")),
+                named("lcpremium", "Module premium", ModuleCategory.PREMIUM, false, List.of("lcpaid")),
                 named("lcplain", "Module simple", b, true, List.of()),
                 named("lcsync", "Synchronisation", ModuleCategory.CORE, true, List.of()),
                 named("lcadmin", "Plateforme", ModuleCategory.PLATFORM, true, List.of())));

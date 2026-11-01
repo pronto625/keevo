@@ -9,6 +9,7 @@ import com.keevo.shared.module.ModuleActivationEligibility;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -79,7 +80,16 @@ public class DependencyResolverService implements DependencyResolver {
     @Override
     public ActivationPlan planActivation(String tenantSchema, String moduleId) {
         ModuleManifest target = checkArguments(tenantSchema, moduleId);
-        Set<String> active = registry.activeModules(tenantSchema);
+        Map<String, ModuleState> states = registry.moduleStates(tenantSchema);
+        // Story 16.1: a dependency counts as met only when ENABLED — a read-only (expired, in grace) or disabled
+        // dependency is (re)activated by the plan, so an activation never leaves its target on a read-only
+        // dependency. The target itself counts as active when readable: its renewal is the lifecycle's business.
+        Set<String> active = new TreeSet<>();
+        states.forEach((id, state) -> {
+            if (state == ModuleState.ENABLED || (id.equals(target.id()) && state.readable())) {
+                active.add(id);
+            }
+        });
 
         // closure of the target over 'requires' (target included, core excluded: always active)
         Set<String> closure = new TreeSet<>();

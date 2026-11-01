@@ -286,13 +286,81 @@ class ModuleLifecycleServiceTest {
         assertThat(String.valueOf(freeEnd.getDetails().get("expiresAt"))).contains("« Module supérieur »", "gratuit");
         assertThat(code(() -> lifecycle.activate(TENANT, "lcplain", new ActivationRequest(TenantModuleStatus.TRIAL,
                 NOW.plus(Duration.ofDays(5))), SUPER_ADMIN))).isEqualTo("VALIDATION_ERROR");
-        assertThat(code(() -> lifecycle.activate(TENANT, "lcpaid", new ActivationRequest(TenantModuleStatus.TRIAL,
-                null), SUPER_ADMIN))).isEqualTo("VALIDATION_ERROR"); // TRIAL needs an end
         assertThat(code(() -> lifecycle.activate(TENANT, "lcpaid", new ActivationRequest(TenantModuleStatus.ACTIVE,
                 NOW.plus(Duration.ofDays(3653 + 2))), SUPER_ADMIN))).isEqualTo("VALIDATION_ERROR"); // > 10 years
         assertThat(lifecycle.activate(TENANT, "lcpaid", new ActivationRequest(TenantModuleStatus.ACTIVE,
                 NOW.plus(Duration.ofDays(3650))), SUPER_ADMIN).activated()).hasSize(1); // 10 years: accepted
         assertThat(rows.writes).containsExactly("lcpaid");
+    }
+
+    @Test
+    @DisplayName("16.1 — TRIAL without end on a disabled paid module → the 14-day reactivation trial (grace + 7 d); "
+            + "ACTIVE without end still 422")
+    void reactivationTrialDefault() {
+        rows.put("lcpaid", TenantModuleStatus.DISABLED, NOW.minus(Duration.ofDays(40)), NOW.minus(Duration.ofDays(33)));
+
+        ActivationResult result = lifecycle.activate(TENANT, "lcpaid",
+                new ActivationRequest(TenantModuleStatus.TRIAL, null), SUPER_ADMIN);
+
+        assertThat(result.status()).isEqualTo(TenantModuleStatus.TRIAL);
+        assertThat(result.expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+        assertThat(rows.stored.get("lcpaid").graceUntil()).isEqualTo(NOW.plus(Duration.ofDays(21)));
+        rows.put("lcpaid", TenantModuleStatus.DISABLED, null, null);
+        assertThat(code(() -> lifecycle.activate(TENANT, "lcpaid", ActivationRequest.active(), SUPER_ADMIN)))
+                .isEqualTo("VALIDATION_ERROR");
+
+        // paid target with a disabled paid dependency: both get the 14-day trial
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+        rows.writes.clear();
+        lifecycle.activate(TENANT, "lcpremium", new ActivationRequest(TenantModuleStatus.TRIAL, null), SUPER_ADMIN);
+        assertThat(rows.writes).containsExactly("lcpaid", "lcpremium");
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+        assertThat(rows.stored.get("lcpremium").status()).isEqualTo(TenantModuleStatus.TRIAL);
+        assertThat(rows.stored.get("lcpremium").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+
+        // free target alone: a trial is still refused (free modules have no trial)
+        assertThat(code(() -> lifecycle.activate(TENANT, "lcplain", new ActivationRequest(TenantModuleStatus.TRIAL,
+                null), SUPER_ADMIN))).isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @DisplayName("16.1 — TRIAL without end on an ENABLED paid module (ACTIVE until later, or a running trial) → no "
+            + "change: the stored status and end are kept, nothing written")
+    void trialWithoutEndOnEnabledModuleKeepsIt() {
+        Instant later = NOW.plus(Duration.ofDays(200));
+        rows.put("lcpaid", TenantModuleStatus.ACTIVE, later, later.plus(Duration.ofDays(7)));
+        ActivationResult active = lifecycle.activate(TENANT, "lcpaid",
+                new ActivationRequest(TenantModuleStatus.TRIAL, null), SUPER_ADMIN);
+        assertThat(active.status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(active.expiresAt()).isEqualTo(later);
+
+        Instant trialEnd = NOW.plus(Duration.ofDays(5));
+        rows.put("lcpaid", TenantModuleStatus.TRIAL, trialEnd, trialEnd.plus(Duration.ofDays(7)));
+        ActivationResult trial = lifecycle.activate(TENANT, "lcpaid",
+                new ActivationRequest(TenantModuleStatus.TRIAL, null), SUPER_ADMIN);
+        assertThat(trial.status()).isEqualTo(TenantModuleStatus.TRIAL);
+        assertThat(trial.expiresAt()).isEqualTo(trialEnd);
+        assertThat(rows.writes).isEmpty();
+    }
+
+    @Test
+    @DisplayName("16.1 — read-only paid dependency is renewed with the target's status and end by activate")
+    void readOnlyDependencyRenewed() {
+        // lcpremium requires lcpaid; lcpaid expired 2 days ago, grace running → READ_ONLY; lcpremium disabled
+        rows.put("lcpaid", TenantModuleStatus.EXPIRED, NOW.minus(Duration.ofDays(2)), NOW.plus(Duration.ofDays(5)));
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+        Instant expiry = NOW.plus(Duration.ofDays(60));
+
+        lifecycle.activate(TENANT, "lcpremium", new ActivationRequest(TenantModuleStatus.ACTIVE, expiry),
+                SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcpaid", "lcpremium");
+        for (String id : List.of("lcpaid", "lcpremium")) {
+            assertThat(rows.stored.get(id).status()).isEqualTo(TenantModuleStatus.ACTIVE);
+            assertThat(rows.stored.get(id).expiresAt()).isEqualTo(expiry);
+            assertThat(rows.stored.get(id).graceUntil()).isEqualTo(expiry.plus(Duration.ofDays(7)));
+        }
+        verify(audit, times(2)).record(any(AuditPort.AuditEntry.class));
     }
 
     @Test
@@ -527,13 +595,15 @@ class ModuleLifecycleServiceTest {
     @DisplayName("catalogue hides platform modules; tenant view: state + stored status, core never with a row")
     void reads() {
         assertThat(lifecycle.catalogue()).extracting(m -> m.id())
-                .containsExactly("core", "lcbase", "lcbroken", "lcbuyer", "lcpaid", "lcplain", "lcsync", "lctop");
+                .containsExactly("core", "lcbase", "lcbroken", "lcbuyer", "lcpaid", "lcplain", "lcpremium", "lcsync",
+                        "lctop");
         rows.put("lcpaid", TenantModuleStatus.ACTIVE, NOW.minusSeconds(60), NOW.plus(Duration.ofDays(7)));
 
         List<ModuleLifecycle.TenantModuleView> views = lifecycle.tenantModules(TENANT);
 
         assertThat(views).extracting(ModuleLifecycle.TenantModuleView::moduleId)
-                .containsExactly("core", "lcbase", "lcbroken", "lcbuyer", "lcpaid", "lcplain", "lcsync", "lctop");
+                .containsExactly("core", "lcbase", "lcbroken", "lcbuyer", "lcpaid", "lcplain", "lcpremium", "lcsync",
+                        "lctop");
         ModuleLifecycle.TenantModuleView paid = views.get(4);
         assertThat(paid.state()).isEqualTo(ModuleState.READ_ONLY);
         assertThat(paid.status()).isEqualTo(TenantModuleStatus.ACTIVE);

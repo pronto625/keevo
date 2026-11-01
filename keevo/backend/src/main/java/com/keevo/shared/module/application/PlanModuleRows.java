@@ -24,6 +24,8 @@ import java.util.Objects;
  *       {@code EXPIRED}, tier {@code PREMIUM}, {@code expires_at} = end, {@code grace_until} = end + 7 days;</li>
  *   <li>{@code FREE} whose latest plan change is the nightly {@code EXPIRY} downgrade → {@code EXPIRED}, tier
  *       {@code PREMIUM}, {@code expires_at} = the downgrade instant, {@code grace_until} = + 7 days;</li>
+ *   <li>Story 16.1: either {@code EXPIRED} case whose grace is over ({@code grace_until <= now}) → {@code DISABLED},
+ *       same tier and dates (what the nightly materialisation writes);</li>
  *   <li>anything else ({@code FREE}, no subscription, {@code SUSPENDED}, unknown plan) → {@code DISABLED}, tier
  *       {@code FREE};</li>
  *   <li>plan unreadable → no rows can be derived ({@link IllegalArgumentException}): the caller skips the tenant.</li>
@@ -87,14 +89,23 @@ public final class PlanModuleRows {
             return new Desired(status, TIER_PREMIUM, end, end != null ? end.plus(ModuleStateRules.PLAN_GRACE) : null);
         }
         if (premiumType && ("ACTIVE".equals(plan.status()) || "EXPIRED".equals(plan.status())) && end != null) {
-            return new Desired(TenantModuleStatus.EXPIRED, TIER_PREMIUM, end, end.plus(ModuleStateRules.PLAN_GRACE));
+            return expired(end, now);
         }
         if ("FREE".equals(plan.planType()) && plan.expiryDowngradeAt() != null) {
-            Instant downgrade = plan.expiryDowngradeAt();
-            return new Desired(TenantModuleStatus.EXPIRED, TIER_PREMIUM, downgrade,
-                    downgrade.plus(ModuleStateRules.PLAN_GRACE));
+            return expired(plan.expiryDowngradeAt(), now);
         }
         return disabled();
+    }
+
+    /**
+     * An ended paid row: {@code EXPIRED} while its grace runs, {@code DISABLED} with the same dates once it is over
+     * (Story 16.1 — the nightly {@code ModuleExpiryMaterializer} writes exactly this row, so the plan sync and the
+     * job never flip it back and forth). Exclusive bound, like {@link ModuleStateRules}.
+     */
+    private static Desired expired(Instant end, Instant now) {
+        Instant grace = end.plus(ModuleStateRules.PLAN_GRACE);
+        TenantModuleStatus status = grace.isAfter(now) ? TenantModuleStatus.EXPIRED : TenantModuleStatus.DISABLED;
+        return new Desired(status, TIER_PREMIUM, end, grace);
     }
 
     /**

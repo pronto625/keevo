@@ -85,10 +85,12 @@ class ModuleManifestLoaderTest {
                         {"id":"pos","version":"1.2.3","displayName":"Point de vente","category":"business",
                          "requires":["core","catalog"],"enhances":["crm"],"entitlement":"module.pos","free":true,
                          "extensionPoints":{"declares":["pos.checkout"],"fills":[],"slots":[]},"tables":["sales"]}"""),
-                src("catalog", module("catalog", "[\"core\"]")),
+                // 16.1: a free module only requires free modules
+                src("catalog", module("catalog", "[\"core\"]", ",\"free\":true")),
                 src("crm", module("crm", "[\"core\"]"))));
 
         assertThat(loaded).extracting(m -> m.manifest().id()).containsExactly("catalog", "core", "crm", "pos");
+        assertThat(loaded.get(2).manifest().free()).isFalse(); // default
         ModuleManifest pos = loaded.get(3).manifest();
         assertThat(pos.version()).isEqualTo("1.2.3");
         assertThat(pos.category()).isEqualTo(ModuleCategory.BUSINESS);
@@ -102,13 +104,13 @@ class ModuleManifestLoaderTest {
 
         ModuleManifest catalog = loaded.get(0).manifest();
         assertThat(catalog.entitlement()).isEqualTo("module.catalog");
-        assertThat(catalog.free()).isFalse();
+        assertThat(catalog.free()).isTrue();
         assertThat(catalog.enhances()).isEmpty();
         assertThat(catalog.extensionPoints()).isEqualTo(ModuleManifest.ExtensionPoints.NONE);
         assertThat(loaded.get(0).json()).isEqualTo("{\"id\":\"catalog\",\"version\":\"1.0.0\",\"displayName\":"
                 + "\"Module catalog\",\"category\":\"business\",\"requires\":[\"core\"],\"enhances\":[],\"publishes\":[],"
                 + "\"consumes\":[],\"provides\":[],\"needs\":[],\"extensionPoints\":{\"declares\":[],\"fills\":[]},"
-                + "\"permissions\":[],\"routes\":[],\"entitlement\":\"module.catalog\",\"free\":false}");
+                + "\"permissions\":[],\"routes\":[],\"entitlement\":\"module.catalog\",\"free\":true}");
     }
 
     @Test
@@ -244,6 +246,18 @@ class ModuleManifestLoaderTest {
         assertThat(problemsOf(withCore(src("crm", module("crm", "[\"core\"]")),
                 src("pos", module("pos", "[\"core\",\"crm\"]", ",\"enhances\":[\"crm\"]")))))
                 .singleElement().asString().contains(loc("pos"), "'requires' and 'enhances' both list 'crm'");
+    }
+
+    @Test
+    @DisplayName("16.1 — a free module requiring a paid one fails the load, naming both; free→free and paid→free load")
+    void freeRequiresPaidRejected() {
+        assertThat(problemsOf(withCore(src("invoicing", module("invoicing", "[\"core\"]")),
+                src("crm", module("crm", "[\"core\",\"invoicing\"]", ",\"free\":true")))))
+                .singleElement().asString()
+                .contains(loc("crm"), "free module 'crm'", "requires paid module 'invoicing'");
+        assertThat(ModuleManifestLoader.load(withCore(src("crm", module("crm", "[\"core\"]", ",\"free\":true")),
+                src("invoicing", module("invoicing", "[\"core\",\"crm\"]")),
+                src("pos", module("pos", "[\"core\",\"crm\"]", ",\"free\":true"))))).hasSize(4);
     }
 
     @Test

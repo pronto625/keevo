@@ -65,6 +65,18 @@ class EntitlementAspectFullContextTest extends FullContextIntegrationTest {
             return TransactionSynchronizationManager.isActualTransactionActive();
         }
 
+        @RequiresEntitlement("invoicing")
+        @Transactional
+        public boolean writeInvoicing() {
+            return TransactionSynchronizationManager.isActualTransactionActive();
+        }
+
+        @RequiresEntitlement(value = "invoicing", access = RequiresEntitlement.Access.READ)
+        @Transactional(readOnly = true)
+        public boolean readInvoicing() {
+            return TransactionSynchronizationManager.isActualTransactionActive();
+        }
+
         @RequiresEntitlement("crm")
         @PreAuthorize("hasRole('OWNER')")
         @Transactional
@@ -163,6 +175,20 @@ class EntitlementAspectFullContextTest extends FullContextIntegrationTest {
         assertThat(code(service::write)).isEqualTo("MODULE_READ_ONLY");
         assertThat(transactionsBegun).hasValue(0);
         assertThat(service.read()).isTrue();
+    }
+
+    @Test
+    @DisplayName("16.1 real time: ADMIN invoicing ACTIVE ended 1 min ago, nightly job never run → write "
+            + "MODULE_READ_ONLY, read passes; the stored row is still ACTIVE")
+    void realTimeExpiryWithoutJob() {
+        tenantRow("ACTIVE");
+        jdbc().update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier, expires_at, grace_until, "
+                + "origin) VALUES (?, 'invoicing', 'ACTIVE', 'STANDARD', now() - interval '1 minute', "
+                + "now() - interval '1 minute' + interval '7 days', 'ADMIN')", tenantId);
+        assertThat(code(service::writeInvoicing)).isEqualTo("MODULE_READ_ONLY");
+        assertThat(service.readInvoicing()).isTrue();
+        assertThat(jdbc().queryForObject("SELECT status FROM public.tenant_modules WHERE tenant_id = ? "
+                + "AND module_id = 'invoicing'", String.class, tenantId)).isEqualTo("ACTIVE");
     }
 
     @Test

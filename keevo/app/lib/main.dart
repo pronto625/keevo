@@ -15,6 +15,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
+import 'core/entitlements/module_read_only_banner.dart';
 import 'core/extension/extension_actions.dart';
 import 'core/router/app_router.dart';
 import 'features/feedback/presentation/provider/feedback_provider.dart';
@@ -115,6 +116,9 @@ class KeevoApp extends ConsumerWidget {
       ],
       locale: const Locale('fr', 'FR'),
       routerConfig: appRouter,
+      // Story 16.1 — read-only banner above every screen of a module in grace.
+      builder: (context, child) => ModuleReadOnlyLayout(
+          router: appRouter, child: child ?? const SizedBox.shrink()),
     );
   }
 }
