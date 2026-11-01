@@ -59,6 +59,8 @@ public class GlobalExceptionHandler {
             Map.entry("FORBIDDEN",                 "Vous n'avez pas les droits nécessaires"),
             Map.entry("TENANT_NOT_FOUND",          "Espace de travail introuvable"),
             Map.entry("PLAN_LIMIT_EXCEEDED",       "Limite de votre plan atteinte"),
+            Map.entry("PRODUCT_QUOTA_UNAVAILABLE", "Impossible de vérifier votre quota de produits pour le moment. Réessayez dans quelques instants."),
+            Map.entry("PLAN_PROFILE_INVALID",      "Profil non enregistré : {reason}"),
             Map.entry("RATE_LIMIT_EXCEEDED",       "Trop de requêtes, veuillez patienter"),
             Map.entry("AUDIT_IMMUTABLE",           "Les entrées du journal d'audit ne peuvent pas être modifiées"),
             Map.entry("AUDIT_ENTRY_NOT_FOUND",     "Entrée du journal d'audit introuvable"),
@@ -416,8 +418,10 @@ public class GlobalExceptionHandler {
                  "COMPANY_LOGO_INVALID",
                  "COMPANY_LOGO_TOO_LARGE",
                  "COMPANY_LOGO_TOO_HEAVY",
+                 "PLAN_PROFILE_INVALID",
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE",
+                 "PRODUCT_QUOTA_UNAVAILABLE",
                  "WHATSAPP_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;

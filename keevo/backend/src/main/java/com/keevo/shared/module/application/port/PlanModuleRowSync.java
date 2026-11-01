@@ -1,5 +1,6 @@
 package com.keevo.shared.module.application.port;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -20,6 +21,14 @@ public interface PlanModuleRowSync {
      * @throws PlanUnreadableException the plan could not be read: nothing written
      */
     SyncResult sync(UUID tenantId, String tenantSchema);
+
+    /**
+     * Story 16.8 — {@link #sync} only when the tenant's plan has the given type (read on the same locked plan read);
+     * empty, nothing written, otherwise. Used to re-sync the tenants of a plan type whose profile changed.
+     *
+     * @throws PlanUnreadableException the plan could not be read: nothing written
+     */
+    Optional<SyncResult> syncIfPlanType(UUID tenantId, String tenantSchema, String planType);
 
     /** What {@link #sync} would write, without writing anything (backfill dry run). */
     SyncResult preview(UUID tenantId, String tenantSchema);

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:keevo/features/stores/data/datasource/remote_store_datasource.dart';
+import 'package:keevo/features/stores/domain/exception/store_exception.dart';
 import 'package:keevo/features/stores/domain/model/store_type.dart';
 
 class _MockDio extends Mock implements Dio {}
@@ -66,6 +67,29 @@ void main() {
             '/api/v1/stores',
             data: any(named: 'data'),
           )).called(1);
+    });
+
+    test('16.8: create() refused PLAN_LIMIT_EXCEEDED carries the server limit',
+        () async {
+      final options = RequestOptions(path: '/api/v1/stores');
+      when(() => dio.post<Map<String, dynamic>>(
+            '/api/v1/stores',
+            data: any(named: 'data'),
+          )).thenThrow(DioException(
+        requestOptions: options,
+        type: DioExceptionType.badResponse,
+        response: Response(requestOptions: options, statusCode: 403, data: {
+          'domainCode': 'PLAN_LIMIT_EXCEEDED',
+          'details': {'entity': 'stores', 'limit': 2, 'current': 2},
+        }),
+      ));
+
+      await expectLater(
+        datasource.create(name: 'Boutique 3', type: StoreType.store),
+        throwsA(isA<StoreException>()
+            .having((e) => e.domainCode, 'domainCode', 'PLAN_LIMIT_EXCEEDED')
+            .having((e) => e.limit, 'limit', 2)),
+      );
     });
 
     test('update() calls PATCH /api/v1/stores/{id}', () async {

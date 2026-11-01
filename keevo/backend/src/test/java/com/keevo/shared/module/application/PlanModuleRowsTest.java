@@ -1,5 +1,7 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.TenantModuleStatus;
@@ -16,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static com.keevo.shared.module.TestModuleCatalogs.testCatalog;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -123,6 +126,49 @@ class PlanModuleRowsTest {
     }
 
     @Test
+    @DisplayName("16.8: a paid module granted to FREE → ACTIVE/FREE without expiry; not granted to a premium plan → "
+            + "DISABLED; not granted to FREE → the FREE mapping (grace after an expiry downgrade)")
+    void composition() {
+        Plan free = new Plan("FREE", "ACTIVE", null);
+        assertThat(PlanModuleRows.rowFor(free, NOW, true))
+                .isEqualTo(new Desired(TenantModuleStatus.ACTIVE, PlanModuleRows.TIER_FREE, null, null));
+        Plan freeInGrace = new Plan("FREE", "ACTIVE", null, NOW.minus(Duration.ofDays(2)), false);
+        assertThat(PlanModuleRows.rowFor(freeInGrace, NOW, true).status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(PlanModuleRows.rowFor(freeInGrace, NOW, false).status()).isEqualTo(TenantModuleStatus.EXPIRED);
+        assertThat(PlanModuleRows.rowFor(free, NOW, false).status()).isEqualTo(TenantModuleStatus.DISABLED);
+        Plan premium = new Plan("PREMIUM", "ACTIVE", NOW.plus(Duration.ofDays(30)));
+        assertThat(PlanModuleRows.rowFor(premium, NOW, false))
+                .isEqualTo(new Desired(TenantModuleStatus.DISABLED, PlanModuleRows.TIER_FREE, null, null));
+        assertThat(PlanModuleRows.rowFor(premium, NOW, true).status()).isEqualTo(TenantModuleStatus.ACTIVE);
+
+        ModuleCatalog shipped = new ModuleCatalog(new PathMatchingResourcePatternResolver());
+        Map<String, Desired> freeRows = PlanModuleRows.compute(free, NOW, shipped.manifests(),
+                PlanProfile.of(PlanType.FREE, 1, 500, 2, Set.of("exports")));
+        assertThat(freeRows.get("exports").status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(freeRows).hasSize(8);
+        assertThat(freeRows.entrySet()).filteredOn(e -> !e.getKey().equals("exports"))
+                .allMatch(e -> e.getValue().status() == TenantModuleStatus.DISABLED);
+        Map<String, Desired> premiumRows = PlanModuleRows.compute(premium, NOW, shipped.manifests(),
+                PlanProfile.of(PlanType.PREMIUM, null, null, null,
+                        Set.of("counting", "exports", "profitability", "alerts", "report-config", "multi-store"),
+                        Set.of("invoicing"))); // advanced-reports: no decision → premium default
+        assertThat(premiumRows.get("advanced-reports").status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        assertThat(premiumRows.get("invoicing").status()).isEqualTo(TenantModuleStatus.DISABLED);
+        assertThat(premiumRows.get("exports").status()).isEqualTo(TenantModuleStatus.ACTIVE);
+        // a paid module absent from profile_modules: granted to premium, not to Free
+        assertThat(PlanModuleRows.granted(premium, PlanProfile.of(PlanType.PREMIUM, null, null, null, Set.of()),
+                "shipped-later")).isTrue();
+        assertThat(PlanModuleRows.granted(free, PlanProfile.of(PlanType.FREE, 1, 500, 2, Set.of()),
+                "shipped-later")).isFalse();
+        // a profile of another plan type grants nothing (defensive), no profile → built-in defaults
+        assertThat(PlanModuleRows.granted(premium, PlanProfile.of(PlanType.FREE, 1, 1, 1, Set.of("exports")),
+                "exports")).isFalse();
+        assertThat(PlanModuleRows.granted(premium, null, "exports")).isTrue();
+        assertThat(PlanModuleRows.granted(free, null, "exports")).isFalse();
+        assertThat(PlanModuleRows.granted(Plan.NONE, null, "exports")).isFalse();
+    }
+
+    @Test
     @DisplayName("parity: for every plan and every instant around its boundaries, stateOf(row) == planState(plan)")
     void parity() {
         ModuleManifest paid = testCatalog().find("invoicing").orElseThrow();
@@ -148,24 +194,44 @@ class PlanModuleRowsTest {
         }
         int checked = 0;
         for (Plan plan : plans) {
-            for (Instant writtenAt : List.of(NOW, NOW.minus(Duration.ofDays(5)), NOW.plus(Duration.ofDays(5)))) {
-                Desired desired = PlanModuleRows.rowFor(plan, writtenAt);
-                Row row = new Row(desired.status(), desired.expiresAt(), desired.graceUntil(), desired.tier());
-                // the row is only written when it is computed; parity holds from that instant on (AC 2: the trial
-                // end passing later turns it read-only then disabled exactly as the rule would)
-                for (Instant at : instants) {
-                    if (at.isBefore(writtenAt)) {
-                        continue;
+            for (boolean granted : new boolean[]{true, false}) {
+                // Story 16.8 — the same parity whatever the profile grants; the no-row state through stateOf with a
+                // profile that grants (or not) the module must equal planState(plan, granted)
+                PlanProfile profile = profileOf(plan, granted, paid.id());
+                for (Instant writtenAt : List.of(NOW, NOW.minus(Duration.ofDays(5)), NOW.plus(Duration.ofDays(5)))) {
+                    Desired desired = PlanModuleRows.rowFor(plan, writtenAt, granted);
+                    Row row = new Row(desired.status(), desired.expiresAt(), desired.graceUntil(), desired.tier());
+                    // the row is only written when it is computed; parity holds from that instant on (AC 2: the
+                    // trial end passing later turns it read-only then disabled exactly as the rule would)
+                    for (Instant at : instants) {
+                        if (at.isBefore(writtenAt)) {
+                            continue;
+                        }
+                        ModuleState fromRow = ModuleStateRules.stateOf(paid, Optional.of(Map.of(paid.id(), row)),
+                                Plan.NONE, at);
+                        ModuleState fromPlan = ModuleStateRules.planState(plan, granted, at);
+                        assertThat(fromRow).as("plan %s granted %s written at %s, read at %s", plan, granted,
+                                writtenAt, at).isEqualTo(fromPlan);
+                        if (profile != null) {
+                            assertThat(ModuleStateRules.stateOf(paid, Optional.of(Map.of()), plan, profile, at))
+                                    .as("no-row state, plan %s granted %s at %s", plan, granted, at)
+                                    .isEqualTo(fromPlan);
+                        }
+                        checked++;
                     }
-                    ModuleState fromRow = ModuleStateRules.stateOf(paid, Optional.of(Map.of(paid.id(), row)),
-                            Plan.NONE, at);
-                    ModuleState fromPlan = ModuleStateRules.planState(plan, at);
-                    assertThat(fromRow).as("plan %s written at %s, read at %s", plan, writtenAt, at)
-                            .isEqualTo(fromPlan);
-                    checked++;
                 }
             }
         }
         assertThat(checked).isGreaterThan(1000);
+    }
+
+    /** A stored profile of the plan's type granting (or not) the module; {@code null} without a known type. */
+    private static PlanProfile profileOf(Plan plan, boolean granted, String moduleId) {
+        if (plan.planType() == null) {
+            return null;
+        }
+        PlanType type = PlanType.valueOf(plan.planType());
+        return PlanProfile.of(type, null, null, null, granted ? Set.of(moduleId) : Set.of(),
+                granted ? Set.of() : Set.of(moduleId));
     }
 }

@@ -8,7 +8,6 @@ import com.keevo.identity.api.TenantStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -33,8 +32,13 @@ class TenantRepositoryAdapterTest {
     @Mock
     private TenantSpringRepository springRepository;
 
-    @InjectMocks
     private TenantRepositoryAdapter adapter;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        adapter = new TenantRepositoryAdapter(springRepository,
+                com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
+    }
 
     // ── deletionScheduledAt round-trip ─────────────────────────────────────
 

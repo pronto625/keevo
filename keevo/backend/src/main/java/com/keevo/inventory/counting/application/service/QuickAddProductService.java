@@ -109,11 +109,12 @@ public class QuickAddProductService implements QuickAddProductUseCase {
 
         // 2b. Plan limit check (v1s-14-13) — after the name check, as in CreateProductUseCase,
         // so the « produit existant » dedup still wins at the cap; before any write.
-        int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
         var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif"));
-        planLimit.checkProductLimit(plan, currentCount);
+        // 16.8: counted only for a finite limit; an unreadable count refuses the creation (fail closed)
+        planLimit.checkProductLimit(plan,
+                () -> productCountPort.countActiveProducts(TenantContext.getCurrentTenant()));
 
         // 3. Create Product
         String sku = generateSku();

@@ -258,7 +258,9 @@ class _UsageCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String label;
-  final int current;
+
+  /// 16.8: `null` = the server could not count (shown « — »).
+  final int? current;
   final int? max;
 
   const _UsageCard({
@@ -273,7 +275,8 @@ class _UsageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final isUnlimited = max == null;
-    final ratio = isUnlimited ? 0.0 : current / max!;
+    final known = current;
+    final ratio = isUnlimited || known == null ? 0.0 : known / max!;
     final barColor = isUnlimited
         ? cs.primary
         : ratio >= 1.0
@@ -309,7 +312,7 @@ class _UsageCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      isUnlimited ? '$current / ∞' : '$current / $max',
+                      '${known ?? '—'} / ${isUnlimited ? '∞' : '$max'}',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -378,7 +381,7 @@ class _PremiumCta extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Boutiques, produits et employés illimités',
+                  "Plus de boutiques, de produits et d'employés",
                   style: TextStyle(
                     color: cs.onSurfaceVariant,
                     fontSize: 12,

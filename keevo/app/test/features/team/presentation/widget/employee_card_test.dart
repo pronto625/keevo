@@ -158,7 +158,7 @@ void main() {
           'error': 'Forbidden',
           'code': 403,
           'domainCode': 'PLAN_LIMIT_EXCEEDED',
-          'details': {'entity': 'employees', 'limit': '3', 'current': '3'},
+          'details': {'entity': 'employees', 'limit': 2, 'current': 2},
         },
       ),
     ));
@@ -176,7 +176,7 @@ void main() {
     expect(done, 0);
     expect(
         find.text(
-            'Vous avez atteint la limite de 3 employés sur votre plan gratuit'),
+            'Vous avez atteint la limite de 2 employés de votre forfait'),
         findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     expect(find.textContaining('PLAN_LIMIT_EXCEEDED'), findsNothing);

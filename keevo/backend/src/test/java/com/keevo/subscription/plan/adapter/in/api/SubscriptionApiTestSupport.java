@@ -2,6 +2,8 @@ package com.keevo.subscription.plan.adapter.in.api;
 
 import com.keevo.subscription.api.PlanAdministrationPort;
 import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.shared.capability.entitlement.PlanView;
 import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
@@ -20,7 +22,7 @@ public final class SubscriptionApiTestSupport {
 
     /** The real query adapter over the given repository. */
     public static TenantPlanQuery queryPort(SubscriptionRepository subscriptionRepository) {
-        return new SubscriptionPlanAdapter(subscriptionRepository, null);
+        return new SubscriptionPlanAdapter(subscriptionRepository, new PlanLimitGuard(PlanProfiles.ENUM_DEFAULTS));
     }
 
     /** The real limit adapter over the given guard (real or mock). */
@@ -33,8 +35,13 @@ public final class SubscriptionApiTestSupport {
         return new PlanAdministrationAdapter(activate, change);
     }
 
+    /** Matcher of a {@link PlanView} of the given plan type (16.8: the guard receives the plan view). */
+    public static PlanView plan(com.keevo.identity.api.PlanType type) {
+        return org.mockito.ArgumentMatchers.argThat(p -> p != null && p.planType() == type);
+    }
+
     /** The published view of a subscription, mapped exactly as the adapter does. */
     public static PlanView view(Subscription subscription) {
-        return SubscriptionPlanAdapter.view(subscription);
+        return SubscriptionPlanAdapter.view(subscription, PlanProfile.fromEnum(subscription.getPlanType()));
     }
 }

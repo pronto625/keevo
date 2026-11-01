@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -53,7 +54,8 @@ class CreateProductUseCaseTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private ProductCountPort         productCountPort;
     @Mock private SubscriptionRepository   subscriptionRepository;
-    @Mock private PlanLimitGuard           planLimitGuard;
+    @Spy private PlanLimitGuard           planLimitGuard =
+            new PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
     @Mock private TransactionLockPort transactionLock;
 
     private CreateProductUseCase useCase;
@@ -84,7 +86,6 @@ class CreateProductUseCaseTest {
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
         when(productCountPort.countActiveProducts(any())).thenReturn(0);
-        lenient().doNothing().when(planLimitGuard).checkProductLimit(any(), anyInt());
     }
 
     // ── AC4 Tests ─────────────────────────────────────────────────────────────
@@ -97,8 +98,6 @@ class CreateProductUseCaseTest {
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
         when(productCountPort.countActiveProducts(any())).thenReturn(500);
-        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
-                .when(planLimitGuard).checkProductLimit(any(), anyInt());
 
         var ex = assertThrows(DomainException.class, () -> useCase.execute(dto("Produit Bloqué")));
         assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED.name(), ex.getDomainCode());
@@ -122,7 +121,7 @@ class CreateProductUseCaseTest {
             assertEquals("Produit OK", result.getName());
             assertEquals(ProductStatus.ACTIVE, result.getStatus());
             verify(productRepository).save(any());
-            verify(planLimitGuard).checkProductLimit(eq(PlanType.FREE), eq(0));
+            verify(planLimitGuard).checkProductLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), any(java.util.function.IntSupplier.class));
         }
     }
 
@@ -195,9 +194,7 @@ class CreateProductUseCaseTest {
             when(sub.getPlanType()).thenReturn(PlanType.FREE);
             when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
             // The winner's product is committed before the lock is released: the loser counts it.
-            when(productCountPort.countActiveProducts(any())).thenReturn(20);
-            doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
-                    .when(planLimitGuard).checkProductLimit(PlanType.FREE, 20);
+            when(productCountPort.countActiveProducts(any())).thenReturn(500); // the winner's product reached the Free cap
 
             var ex = assertThrows(DomainException.class, () -> useCase.execute(dto("Produit Perdant")));
 
@@ -219,8 +216,6 @@ class CreateProductUseCaseTest {
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
         when(productCountPort.countActiveProducts(any())).thenReturn(500);
-        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
-                .when(planLimitGuard).checkProductLimit(any(), anyInt());
         // An already-taken SKU would raise IllegalArgumentException if it were checked first.
         lenient().when(productRepository.findBySku("KEV-TAKEN1")).thenReturn(Optional.of(mock(Product.class)));
 

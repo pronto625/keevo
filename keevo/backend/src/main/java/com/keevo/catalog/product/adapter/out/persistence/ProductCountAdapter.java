@@ -2,8 +2,6 @@ package com.keevo.catalog.product.adapter.out.persistence;
 
 import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -12,19 +10,16 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * ProductCountAdapter — JDBC implementation of {@link ProductCountPort}.
  *
- * <p>Counts active products in the given tenant schema. Returns 0 if the
- * {@code products} table does not exist yet (pre-Epic 2 state).
+ * <p>Counts active products in the given tenant schema. Story 16.8: <b>fails closed</b> — an invalid schema or a
+ * failing query throws instead of answering 0, so the plan-limit guard refuses the creation
+ * ({@code PRODUCT_QUOTA_UNAVAILABLE}) rather than letting a Free tenant past its quota. The guard only counts when the
+ * plan's product limit is finite.
  *
  * <p>Story 12.2d: moved from subscription to catalog, the owner of the {@code products} table;
- * the port is declared by subscription ({@code subscription :: api}), which no longer reads it.
- *
- * <p>NOTE: Temporary count-only adapter. Epic 2 will introduce a full ProductRepository
- * — this adapter will be superseded at that point.
+ * the port is declared by subscription ({@code subscription :: api}).
  */
 @Component
 public class ProductCountAdapter implements ProductCountPort {
-
-    private static final Logger log = LoggerFactory.getLogger(ProductCountAdapter.class);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -33,31 +28,21 @@ public class ProductCountAdapter implements ProductCountPort {
     }
 
     /**
-     * Runs with {@code NOT_SUPPORTED} propagation to prevent an outer
-     * {@code @Transactional} context (GetSubscriptionService) from being poisoned
-     * when the {@code products} table does not yet exist (pre-Epic 2 state).
-     * A caught SQL error inside a shared PostgreSQL transaction leaves it in
-     * "aborted" state — subsequent queries fail with «transaction is aborted».
-     * NOT_SUPPORTED suspends the outer transaction, isolates the failure, and
-     * allows the catch to return 0 cleanly without tainting anything.
+     * Runs with {@code NOT_SUPPORTED} propagation: the count runs outside the caller's transaction, so a failing
+     * query never leaves that PostgreSQL transaction aborted — the failure is thrown to the caller, which decides.
+     *
+     * @throws IllegalStateException the schema is invalid
+     * @throws org.springframework.dao.DataAccessException the count could not be read
      */
     @Override
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public int countActiveProducts(String tenantSchema) {
-        String schema = tenantSchema;
-        if (!TenantSchema.isValid(schema)) { // same 0 fallback as a missing table, but no SQL is built
-            log.warn("Product count: invalid tenant schema in context — 0 returned");
-            return 0;
+        if (!TenantSchema.isValid(tenantSchema)) {
+            throw new IllegalStateException("Product count: invalid tenant schema");
         }
-        try {
-            Integer count = jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM \"" + schema + "\".products WHERE status = 'ACTIVE'",
-                    Integer.class);
-            return count != null ? count : 0;
-        } catch (Exception e) {
-            // products table doesn't exist yet (created in Epic 2) — return 0
-            log.debug("products table not yet available in schema {}: {}", schema, e.getMessage());
-            return 0;
-        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM \"" + tenantSchema + "\".products WHERE status = 'ACTIVE'",
+                Integer.class);
+        return count != null ? count : 0;
     }
 }

@@ -8,7 +8,7 @@ class SubscriptionInfo {
   final String? expiresAt; // ISO-8601 string or null (FREE plan has no expiry)
   final int currentStores;
   final int? maxStores; // null = unlimited
-  final int currentProducts;
+  final int? currentProducts; // 16.8: null = the server could not count
   final int? maxProducts;
   final int currentEmployees;
   final int? maxEmployees;
@@ -19,7 +19,7 @@ class SubscriptionInfo {
     this.expiresAt,
     required this.currentStores,
     this.maxStores,
-    required this.currentProducts,
+    this.currentProducts,
     this.maxProducts,
     required this.currentEmployees,
     this.maxEmployees,
@@ -32,7 +32,7 @@ class SubscriptionInfo {
       expiresAt: json['expiresAt'] as String?,
       currentStores: json['currentStores'] as int? ?? 0,
       maxStores: json['maxStores'] as int?,
-      currentProducts: json['currentProducts'] as int? ?? 0,
+      currentProducts: json['currentProducts'] as int?,
       maxProducts: json['maxProducts'] as int?,
       currentEmployees: json['currentEmployees'] as int? ?? 0,
       maxEmployees: json['maxEmployees'] as int?,

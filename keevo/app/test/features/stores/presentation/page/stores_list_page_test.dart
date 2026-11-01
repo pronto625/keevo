@@ -92,7 +92,7 @@ void main() {
           type: any(named: 'type'),
           address: any(named: 'address'),
           phone: any(named: 'phone'),
-        )).thenThrow(StoreException.planLimitExceeded());
+        )).thenThrow(StoreException.planLimitExceeded(limit: 2));
     await tester.pumpWidget(buildPage());
     await tester.pumpAndSettle();
 
@@ -103,8 +103,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nouvelle boutique'), findsNothing);
-    // FREE plan: 1 store (PlanType.FREE) — never the old hard-coded 3.
-    expect(find.textContaining('Vous avez atteint la limite de 1 boutique '),
+    // 16.8: the limit the server sent (configurable), never a hard-coded one.
+    expect(find.textContaining('Vous avez atteint la limite de 2 boutiques '),
         findsOneWidget);
     expect(find.text(StoreException.planLimitExceeded().message), findsNothing);
   });

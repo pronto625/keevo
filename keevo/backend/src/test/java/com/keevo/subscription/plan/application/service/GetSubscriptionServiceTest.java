@@ -12,7 +12,8 @@ import com.keevo.subscription.plan.domain.port.out.UserCountPort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -36,7 +37,34 @@ class GetSubscriptionServiceTest {
     @Mock ProductCountPort productCountPort;
     @Mock UserCountPort userCountPort;
 
-    @InjectMocks GetSubscriptionService service;
+    /** Story 16.8 — the limits come from the plan profiles (mutable here: a change shows on the next call). */
+    private final java.util.Map<PlanType, PlanProfile> profiles = new java.util.EnumMap<>(PlanType.class);
+    GetSubscriptionService service;
+
+    @org.junit.jupiter.api.BeforeEach
+    void init() {
+        profiles.put(PlanType.FREE, PlanProfile.of(PlanType.FREE, 1, 500, 2, java.util.Set.of()));
+        profiles.put(PlanType.PREMIUM_TRIAL, PlanProfile.of(PlanType.PREMIUM_TRIAL, null, null, null, java.util.Set.of()));
+        profiles.put(PlanType.PREMIUM, PlanProfile.of(PlanType.PREMIUM, null, null, null, java.util.Set.of()));
+        PlanProfiles source = type -> profiles.get(type);
+        service = new GetSubscriptionService(subscriptionRepository, storeCountPort, productCountPort, userCountPort,
+                new PlanLimitGuard(source));
+    }
+
+    @Test
+    @DisplayName("16.8 — limits come from the profile, not from the subscription columns; product count fault is unknown (null)")
+    void execute_limitsFromProfile_countFaultShowsZero() {
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeActiveSub()));
+        when(productCountPort.countActiveProducts(any())).thenThrow(new IllegalStateException("db down"));
+        profiles.put(PlanType.FREE, PlanProfile.of(PlanType.FREE, 2, 800, 4, java.util.Set.of()));
+
+        SubscriptionResponse response = service.execute(new GetSubscriptionQuery("user-1"));
+
+        assertThat(response.maxStores()).isEqualTo(2);
+        assertThat(response.maxProducts()).isEqualTo(800);
+        assertThat(response.maxEmployees()).isEqualTo(4);
+        assertThat(response.currentProducts()).isNull(); // unknown, never 0;
+    }
 
     // ── FREE plan ─────────────────────────────────────────────────────────────
 
@@ -57,7 +85,7 @@ class GetSubscriptionServiceTest {
         assertThat(response.currentEmployees()).isEqualTo(2);
         assertThat(response.maxStores()).isEqualTo(1);      // FREE limit
         assertThat(response.maxProducts()).isEqualTo(500);  // FREE limit
-        assertThat(response.maxEmployees()).isEqualTo(3);   // FREE limit
+        assertThat(response.maxEmployees()).isEqualTo(2);   // FREE limit (16.8: validated value, from the profile)
         assertThat(response.expiresAt()).isNull();           // FREE has no expiry
     }
 

@@ -1,7 +1,8 @@
 /**
  * Entitlement capability of the core (Story 12.6a, spec-socle §9): the tenant's current plan
  * ({@link com.keevo.shared.capability.entitlement.TenantPlanQuery} / {@link com.keevo.shared.capability.entitlement.PlanView}),
- * the plan-limit checks ({@link com.keevo.shared.capability.entitlement.PlanLimitCheck}) and the global plan
+ * the plan-limit checks ({@link com.keevo.shared.capability.entitlement.PlanLimitCheck}), the plan profiles
+ * ({@link com.keevo.shared.capability.entitlement.PlanProfiles}, Story 16.8) and the global plan
  * history recorded at registration ({@link com.keevo.shared.capability.entitlement.PlanChangeRecorder} /
  * {@link com.keevo.shared.capability.entitlement.PlanChangeCause}).
  *
@@ -17,9 +18,11 @@
  * for it. That edge points from the provider of the count to subscription and creates no cycle.
  *
  * <p>{@link com.keevo.shared.capability.entitlement.PlanView} and
- * {@link com.keevo.shared.capability.entitlement.PlanChangeRecorder} carry {@code identity.api.PlanType}: plan
- * limits still come from that enum until 16.8 (configurable plan profiles) — the {@code shared → identity :: api}
- * edge is accepted until then.
+ * {@link com.keevo.shared.capability.entitlement.PlanChangeRecorder} carry {@code identity.api.PlanType} as the plan
+ * identifier — the {@code shared → identity :: api} edge stays accepted. Since Story 16.8 the limits and the paid
+ * modules each plan grants come from the plan profiles ({@link com.keevo.shared.capability.entitlement.PlanProfiles},
+ * {@code public.plan_profiles} + {@code public.profile_modules}, implemented by the core); the enum constants are
+ * only their fallback.
  *
  * <p><b>Tenant convention:</b> every tenant-scoped method takes the tenant schema explicitly as its first
  * {@code String tenantSchema} parameter.

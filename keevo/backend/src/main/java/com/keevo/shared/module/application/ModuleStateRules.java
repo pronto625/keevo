@@ -1,5 +1,6 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.application.port.TenantModuleStatePort.Plan;
@@ -41,6 +42,15 @@ final class ModuleStateRules {
      * @param now      the current instant (from the injected {@code Clock})
      */
     static ModuleState stateOf(ModuleManifest manifest, Optional<Map<String, Row>> rows, Plan plan, Instant now) {
+        return stateOf(manifest, rows, plan, null, now);
+    }
+
+    /**
+     * Story 16.8 — same, a paid module without a row following the plan type's profile ({@code null} → built-in
+     * defaults: premium grants every paid module, {@code FREE} none).
+     */
+    static ModuleState stateOf(ModuleManifest manifest, Optional<Map<String, Row>> rows, Plan plan,
+                               PlanProfile profile, Instant now) {
         if (manifest.isCore()) {
             return ModuleState.ENABLED;
         }
@@ -49,7 +59,8 @@ final class ModuleStateRules {
         }
         Row row = rows.get().get(manifest.id());
         if (row == null) {
-            return manifest.free() ? ModuleState.ENABLED : planState(plan, now);
+            return manifest.free() ? ModuleState.ENABLED
+                    : planState(plan, PlanModuleRows.granted(plan, profile, manifest.id()), now);
         }
         return switch (row.status()) {
             case TRIAL, ACTIVE -> row.expiresAt() == null || row.expiresAt().isAfter(now)
@@ -78,6 +89,15 @@ final class ModuleStateRules {
      * Boundaries are exclusive, like module rows.
      */
     static ModuleState planState(Plan plan, Instant now) {
+        return planState(plan, PlanModuleRows.grantedByDefault(plan), now);
+    }
+
+    /**
+     * Story 16.8 — the transition rule of one paid module given whether the plan type's profile grants it: granted to
+     * {@code FREE} → ENABLED; not granted to a premium plan → DISABLED; otherwise as above. Same state as the row
+     * {@link PlanModuleRows#rowFor(Plan, Instant, boolean)} derives (parity).
+     */
+    static ModuleState planState(Plan plan, boolean granted, Instant now) {
         if (plan == null) {
             return ModuleState.DISABLED;
         }
@@ -85,6 +105,12 @@ final class ModuleStateRules {
             return ModuleState.ENABLED;
         }
         boolean premiumType = "PREMIUM".equals(plan.planType()) || "PREMIUM_TRIAL".equals(plan.planType());
+        if ("FREE".equals(plan.planType()) && granted) {
+            return ModuleState.ENABLED;
+        }
+        if (premiumType && !granted) {
+            return ModuleState.DISABLED;
+        }
         if (premiumType && "ACTIVE".equals(plan.status())
                 && (plan.expiresAt() == null || plan.expiresAt().isAfter(now))) {
             return ModuleState.ENABLED;

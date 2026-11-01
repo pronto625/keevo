@@ -149,13 +149,14 @@ public class ImportCsvProductsUseCase {
         List<Map<String, String>> rows = csvParser.parse(command.csvStream());
 
         // ── 3. Determine remaining product capacity ──────────────────────────
-        int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
         var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif trouvé"));
 
-        int maxProducts = plan.maxProducts();
-        int remaining   = maxProducts - currentCount;
+        // 16.8: quota and message from the same plan view; unlimited → no count; unreadable count → refused (fail closed)
+        Integer maxProducts = plan.maxProducts();
+        int remaining = planLimit.remainingProducts(plan,
+                () -> productCountPort.countActiveProducts(TenantContext.getCurrentTenant()));
 
         // ── 4. Build category name→UUID map (case-insensitive) ────────────────
         Map<String, UUID> categoryNameToId = categoryRepository.findAllActive().stream()

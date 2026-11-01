@@ -42,6 +42,14 @@ public interface PlanModuleRowStore {
     List<LiveTenant> liveTenants();
 
     /**
+     * Story 16.8 — the live tenants whose {@code public.tenants.plan_type} is the given one, ordered by code (a
+     * pre-selection: the row sync re-checks the tenant's own subscription).
+     */
+    default List<LiveTenant> liveTenants(String planType) {
+        return liveTenants();
+    }
+
+    /**
      * @param origin             the stored provenance
      * @param provisionedVersion the module's recorded provisioned version ({@code null}: none)
      */

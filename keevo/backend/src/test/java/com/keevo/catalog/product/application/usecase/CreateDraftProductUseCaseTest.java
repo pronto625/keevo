@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -54,7 +55,8 @@ class CreateDraftProductUseCaseTest {
     @Mock private ProductRepository           productRepository;
     @Mock private ProductCountPort            productCountPort;
     @Mock private SubscriptionRepository      subscriptionRepository;
-    @Mock private PlanLimitGuard              planLimitGuard;
+    @Spy private PlanLimitGuard              planLimitGuard =
+            new PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
     @Mock private TransactionLockPort transactionLock;
     @Mock private ApplicationEventPublisher   eventPublisher;
 
@@ -90,7 +92,6 @@ class CreateDraftProductUseCaseTest {
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
         when(productCountPort.countActiveProducts(any())).thenReturn(0);
-        lenient().doNothing().when(planLimitGuard).checkProductLimit(any(), anyInt());
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -189,8 +190,6 @@ class CreateDraftProductUseCaseTest {
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
         when(productCountPort.countActiveProducts(any())).thenReturn(500);
-        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite atteinte"))
-                .when(planLimitGuard).checkProductLimit(any(), anyInt());
 
         var ex = assertThrows(DomainException.class, () -> useCase.execute(employeeCmd("Article C")));
         assertEquals(ErrorCode.PLAN_LIMIT_EXCEEDED.name(), ex.getDomainCode());
@@ -226,9 +225,7 @@ class CreateDraftProductUseCaseTest {
             var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
             when(sub.getPlanType()).thenReturn(PlanType.FREE);
             when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
-            when(productCountPort.countActiveProducts(any())).thenReturn(20);
-            doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite atteinte"))
-                    .when(planLimitGuard).checkProductLimit(PlanType.FREE, 20);
+            when(productCountPort.countActiveProducts(any())).thenReturn(500); // the winner's product reached the Free cap
 
             var ex = assertThrows(DomainException.class, () -> useCase.execute(ownerCmd("Article Perdant")));
 
@@ -255,6 +252,45 @@ class CreateDraftProductUseCaseTest {
             inOrder.verify(productRepository).findById(clientId);
             verify(productRepository, never()).existsByName(any());
             verify(productRepository, never()).save(any());
+        }
+    }
+
+    // ── Story 16.8: fail-closed count, no count when unlimited ────────────────
+
+    private void planOf(PlanType type) {
+        var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
+        when(sub.getPlanType()).thenReturn(type);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
+    }
+
+    @Test
+    @DisplayName("16.8: FREE, product count unreadable → PRODUCT_QUOTA_UNAVAILABLE, nothing saved")
+    void freeCountUnreadable_quotaUnavailable_neverSaves() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            when(productRepository.existsByName("Article Q")).thenReturn(false);
+            planOf(PlanType.FREE);
+            when(productCountPort.countActiveProducts(any())).thenThrow(new IllegalStateException("db down"));
+
+            var ex = assertThrows(DomainException.class, () -> useCase.execute(ownerCmd("Article Q")));
+
+            assertEquals(ErrorCode.PRODUCT_QUOTA_UNAVAILABLE.name(), ex.getDomainCode());
+            verify(productRepository, never()).save(any());
+        }
+    }
+
+    @Test
+    @DisplayName("16.8: PREMIUM (unlimited) → the products are never counted")
+    void premium_neverCounts() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            when(productRepository.existsByName("Article P")).thenReturn(false);
+            planOf(PlanType.PREMIUM);
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            useCase.execute(ownerCmd("Article P"));
+
+            verifyNoInteractions(productCountPort);
         }
     }
 }

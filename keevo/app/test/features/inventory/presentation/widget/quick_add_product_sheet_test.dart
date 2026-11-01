@@ -286,7 +286,7 @@ void main() {
 
       expect(
           find.text('Vous avez atteint la limite de 500 produits '
-              'sur votre plan gratuit'),
+              'de votre forfait'),
           findsOneWidget);
       expect(find.textContaining('PLAN_LIMIT_EXCEEDED'), findsNothing);
       expect(find.byType(SnackBar), findsNothing);

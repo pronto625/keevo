@@ -8,6 +8,8 @@ import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsUseCase;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,7 +59,7 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     static final String FETCH_TENANTS =
             "SELECT id, schema_name FROM public.tenants WHERE status != 'DELETED'";
 
-    // M4 fix: limit values are JDBC ? params — populated from PlanType.FREE at runtime.
+    // M4 fix: limit values are JDBC ? params — populated from the FREE plan profile at runtime (Story 16.8).
     // Schema name injected via String.format (%s) as it cannot be a JDBC param in PostgreSQL.
     // Story 9-2: RETURNING the plan BEFORE the update (CTE) to publish one event per downgrade.
     static final String DOWNGRADE_SQL =
@@ -80,8 +82,9 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
     private final PlanModuleRowSync planModuleRows;
+    private final PlanProfiles planProfiles;
 
-    @Autowired
+    /** Without plan profiles: Free limits from the built-in defaults (tests). */
     public SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
                                      PlanChangeRecorder planChangeRecorder,
                                      ApplicationEventPublisher eventPublisher,
@@ -89,7 +92,19 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
                                      Clock clock,
                                      PlanModuleRowSync planModuleRows) {
         this(jdbcTemplate, planChangeRecorder, eventPublisher, new TransactionTemplate(transactionManager), clock,
-                planModuleRows);
+                planModuleRows, PlanProfiles.ENUM_DEFAULTS);
+    }
+
+    @Autowired
+    public SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
+                                     PlanChangeRecorder planChangeRecorder,
+                                     ApplicationEventPublisher eventPublisher,
+                                     PlatformTransactionManager transactionManager,
+                                     Clock clock,
+                                     PlanModuleRowSync planModuleRows,
+                                     PlanProfiles planProfiles) {
+        this(jdbcTemplate, planChangeRecorder, eventPublisher, new TransactionTemplate(transactionManager), clock,
+                planModuleRows, planProfiles);
     }
 
     /** Test constructor — pre-built transaction template. */
@@ -99,6 +114,19 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
                               TransactionTemplate transactionTemplate,
                               Clock clock,
                               PlanModuleRowSync planModuleRows) {
+        this(jdbcTemplate, planChangeRecorder, eventPublisher, transactionTemplate, clock, planModuleRows,
+                PlanProfiles.ENUM_DEFAULTS);
+    }
+
+    /** Test constructor with the plan profiles (Story 16.8). */
+    SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
+                              PlanChangeRecorder planChangeRecorder,
+                              ApplicationEventPublisher eventPublisher,
+                              TransactionTemplate transactionTemplate,
+                              Clock clock,
+                              PlanModuleRowSync planModuleRows,
+                              PlanProfiles planProfiles) {
+        this.planProfiles = planProfiles;
         this.jdbcTemplate = jdbcTemplate;
         this.planModuleRows = planModuleRows;
         this.planChangeRecorder = planChangeRecorder;
@@ -140,12 +168,13 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
             log.warn("Subscription expiry: tenant {} skipped (invalid schema name)", tenantId);
             return 0;
         }
+        PlanProfile free = planProfiles.profile(PlanType.FREE); // 16.8: legacy columns from the Free profile
         @SuppressWarnings("SqlSourceToSinkFlow")
         List<String> previousPlans = jdbcTemplate.queryForList(
                 String.format(DOWNGRADE_SQL, schema), String.class,
-                PlanType.FREE.getMaxStores(),
-                PlanType.FREE.getMaxProducts(),
-                PlanType.FREE.getMaxEmployees());
+                free.legacyMaxStores(),
+                free.legacyMaxProducts(),
+                free.legacyMaxEmployees());
         if (previousPlans.isEmpty()) return 0;
 
         PlanType previous = PlanType.valueOf(previousPlans.get(0));

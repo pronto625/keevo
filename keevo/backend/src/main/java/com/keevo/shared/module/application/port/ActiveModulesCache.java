@@ -1,5 +1,7 @@
 package com.keevo.shared.module.application.port;
 
+import com.keevo.shared.capability.entitlement.PlanProfile;
+
 import java.util.Map;
 import java.util.Optional;
 
@@ -16,13 +18,23 @@ public interface ActiveModulesCache {
     /**
      * What is cached for a tenant: whether it is a known (registered, not deleted) tenant — Story 12.7 tells an
      * unknown tenant from a tenant whose modules are off — and its {@code tenant_modules} rows (empty for an
-     * unknown tenant).
+     * unknown tenant). Story 16.8: {@code profile} is the profile of the tenant's plan type, read with the rows when a
+     * paid module has no row ({@code null}: not needed, or built-in defaults).
      */
-    record Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows, TenantModuleStatePort.Plan plan) {
+    record Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows, TenantModuleStatePort.Plan plan,
+                 PlanProfile profile) {
 
         public Entry {
             rows = Map.copyOf(rows);
             plan = plan != null ? plan : TenantModuleStatePort.Plan.NONE;
+        }
+
+        /**
+         * Without a plan profile: paid modules without a row follow the built-in defaults.
+         */
+        public Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows,
+                     TenantModuleStatePort.Plan plan) {
+            this(knownTenant, rows, plan, null);
         }
 
         public Entry(boolean knownTenant, Map<String, TenantModuleStatePort.Row> rows) {

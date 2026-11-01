@@ -110,11 +110,12 @@ public class CreateDraftProductUseCase {
         }
 
         // Plan limit check — all roles (DRAFT products count toward the tenant limit)
-        int currentCount = productCountPort.countActiveProducts(TenantContext.getCurrentTenant());
         var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "Aucun abonnement actif"));
-        planLimit.checkProductLimit(plan, currentCount);
+        // 16.8: counted only for a finite limit; an unreadable count refuses the creation (fail closed)
+        planLimit.checkProductLimit(plan,
+                () -> productCountPort.countActiveProducts(TenantContext.getCurrentTenant()));
 
         String sku = generateSku();
         var now = Instant.now();

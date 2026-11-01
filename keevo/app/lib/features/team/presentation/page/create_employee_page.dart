@@ -112,11 +112,12 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
           });
         },
         error: (error, _) {
-          if (error is Exception &&
-              error.toString().contains('PLAN_LIMIT_EXCEEDED')) {
+          if (isPlanLimitError(error)) {
             showPlanLimitBottomSheet(
               context: context,
               entity: 'employees',
+              limit: knownPlanLimit(ref, error, 'employees'),
+              planType: knownPlanType(ref, error),
             );
           }
         },
@@ -293,7 +294,7 @@ class _CreateEmployeePageState extends ConsumerState<CreateEmployeePage> {
     if (error != null && error.toString().contains('PHONE_ALREADY_REGISTERED')) {
       return 'Ce numéro de téléphone est déjà enregistré';
     }
-    if (error != null && error.toString().contains('PLAN_LIMIT_EXCEEDED')) {
+    if (isPlanLimitError(error)) {
       return 'Limite du plan atteinte';
     }
     return 'Une erreur est survenue, réessayez';

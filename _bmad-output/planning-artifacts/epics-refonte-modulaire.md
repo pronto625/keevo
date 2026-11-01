@@ -1544,7 +1544,11 @@ So that **je gère la commercialisation après paiement Mobile Money (MOD-FR16, 
 
 - [ ] [Deferred-from: review 13-10a, 2026-10-30] Deactivating a free module (e.g. `inventory`, `messaging`) on a Premium/trial tenant is refused because rule-enabled paid modules count as dependents — the console must explain it and offer the cascade (deactivate dependents first) [console]
 
+- [ ] [Deferred-from: spec 16-8, 2026-11-01] Console section « Profils & plafonds »: list the plan profiles (`GET /api/v1/admin/plan-profiles` — French plan label, limits with « illimité » for null, granted paid modules by display name) and edit one (`PUT /api/v1/admin/plan-profiles/{planType}` with `maxStores`/`maxProducts`/`maxEmployees` positive or empty = unlimited, and the paid modules as checkboxes from `GET /api/v1/admin/modules` filtered on paid ones); the PUT body must carry the three limit keys (null sent explicitly = unlimited; unknown keys refused), flag a profile whose `fallback` is true (missing row: built-in defaults shown), show the 422 French reason as is, and the re-sync report of a composition change (tenants by code, counts, failures); warn that lowering a limit keeps existing records and only refuses new creations [console / AdminPlanProfileController]
+
 - [ ] [Deferred-from: review 16-5, 2026-11-01] The module backfill (`POST /api/v1/admin/modules/backfill`) runs synchronously in one HTTP request (all tenants + Flyway provisioning): behind a reverse proxy a long run can time out while it carries on, and the report is lost — the console must run it as an async job with progress and a retrievable report, like `provisionAll` [ModuleAdminController / ModuleBackfillService]
+
+- [ ] [Deferred-from: dev run + review 16-8, 2026-11-01] A plan-profile composition change (`PUT /api/v1/admin/plan-profiles/{planType}`) re-syncs every tenant of that plan type in the HTTP request and sends the 16.1 « Modules désactivés » push/WhatsApp synchronously per tenant (≈2 min for 282 Free tenants on keevo_dev): run it as an async job with progress (same job runner as the backfill) and send the notifications asynchronously or batched [PlanProfileAdminService / ModuleExpiryNotificationListener]
 
 ### Story 16.5 : Migration des tenants existants (backfill `tenant_modules`)
 
@@ -1655,7 +1659,14 @@ So that **je peux ajuster l'offre commerciale dynamiquement (MOD-FR13b, décisio
 
 
 **Items (routed 2026-10-29 from review 12-2c/12-2d):**
-- [ ] [Deferred-from: review 12-2c/12-2d, 2026-10-29] `ProductCountPort` returns 0 for an invalid schema / missing table, so the product limit fails open (same JDBC code as before 12.2d) — fail closed when limits become configurable [catalog ProductCountAdapter]
+- [x] [Deferred-from: review 12-2c/12-2d, 2026-10-29] — done in 16.8 (2026-11-01): `ProductCountAdapter` throws instead of answering 0; the guard counts only for a finite limit and refuses the creation with `PRODUCT_QUOTA_UNAVAILABLE` (503, French) when the count cannot be read — `ProductCountPort` returns 0 for an invalid schema / missing table, so the product limit fails open (same JDBC code as before 12.2d) — fail closed when limits become configurable [catalog ProductCountAdapter]
+
+**Done 2026-11-01 (spec `spec-16-8-profils-plan-plafonds-configurables.md`):**
+- [x] Flyway `public` V33 `plan_profiles` + `profile_modules` (explicit `granted` true/false decisions; a paid module without a decision follows the plan default — Premium/trial granted, Free not — so a module shipped later stays Premium), seeded FREE 1/500/**2**, PREMIUM_TRIAL/PREMIUM unlimited with the 8 paid modules granted (free/core modules are never listed: the manifest `free` flag stays the only free/paid switch).
+- [x] `PlanLimitGuard`, `PlanView.max*`, CSV import quota and `GET /subscription/me` read the profile at every check (no cache, no restart); `PlanType` constants are only the fallback of an unreadable profile (ERROR logged); legacy `subscriptions.max_*` / `tenants.max_*` filled from the profile, no longer read for decisions.
+- [x] Plan-derived module rows (16.5 `PlanModuleRows`) and the no-row transition rule follow the profile composition (paid module granted to FREE → ACTIVE/FREE without expiry; not granted to a premium plan → DISABLED); parity property test kept.
+- [x] Super-admin API `GET` / `PUT /api/v1/admin/plan-profiles/{planType}` (422 `PLAN_PROFILE_INVALID` in French, re-sync of the PLAN rows of the plan type's live tenants with the 16.5 report shape, `[ADMIN AUDIT]` log).
+- [x] App: the plan-limit sheet shows the server's limit (`PLAN_LIMIT_EXCEEDED` details or subscription info), no hard-coded numbers (`kFreePlanLimits` removed).
 
 ### Story 16.9 : Facturation électronique DGI (taxation en temps réel, art. L 8 sexies CGI)
 

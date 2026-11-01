@@ -83,7 +83,7 @@ class ReactivateStoreServiceTest {
         assertThat(result.isActive()).isTrue();
         assertThat(result.id()).isEqualTo(storeId);
         verify(transactionLock).lock("store-limit:kv_abc123");
-        verify(planLimitGuard).checkStoreLimit(PlanType.FREE, 1);
+        verify(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(1));
         ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue()).isInstanceOf(StoreReactivatedEvent.class);
@@ -99,7 +99,7 @@ class ReactivateStoreServiceTest {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(subscription));
         when(storeRepository.countActive()).thenReturn(3);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached"))
-                .when(planLimitGuard).checkStoreLimit(PlanType.FREE, 3);
+                .when(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(3));
 
         assertThatThrownBy(() -> service.execute(new ReactivateStoreCommand(storeId, actorId)))
                 .isInstanceOf(DomainException.class)

@@ -31,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -66,7 +67,8 @@ class ImportCsvProductsUseCaseTest {
     @Mock private StoreRepository         storeRepository;
     @Mock private ProductCountPort        productCountPort;
     @Mock private SubscriptionRepository  subscriptionRepository;
-    @Mock private PlanLimitGuard          planLimitGuard;
+    @Spy private PlanLimitGuard          planLimitGuard =
+            new PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
     @Mock private CategoryRepository      categoryRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;
@@ -119,7 +121,6 @@ class ImportCsvProductsUseCaseTest {
         when(sub.getPlanType()).thenReturn(PlanType.FREE);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
         when(productCountPort.countActiveProducts(any())).thenReturn(currentCount);
-        lenient().doNothing().when(planLimitGuard).checkProductLimit(any(), anyInt());
     }
 
     // ── Tests ─────────────────────────────────────────────────────────────────
@@ -405,6 +406,52 @@ class ImportCsvProductsUseCaseTest {
             var ex = assertThrows(DomainException.class, () -> useCase.execute(cmd));
             assertEquals(ErrorCode.STORE_NOT_ACTIVE.name(), ex.getDomainCode());
             verifyNoInteractions(createProductUseCase);
+        }
+    }
+
+    // ── Story 16.8: fail-closed count, no count when unlimited ────────────────
+
+    private void planOf(PlanType type) {
+        var sub = mock(com.keevo.subscription.plan.domain.model.Subscription.class);
+        when(sub.getPlanType()).thenReturn(type);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(sub));
+    }
+
+    @Test
+    @DisplayName("16.8: FREE, product count unreadable → PRODUCT_QUOTA_UNAVAILABLE, nothing imported")
+    void freeCountUnreadable_quotaUnavailable_nothingImported() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            planOf(PlanType.FREE);
+            when(productCountPort.countActiveProducts(any())).thenThrow(new IllegalStateException("db down"));
+            when(csvParser.parse(any())).thenReturn(List.of(Map.of("nom", "T-Shirt", "prix_vente", "5000")));
+
+            var ex = assertThrows(DomainException.class, () -> useCase.execute(ownerCommand(1)));
+
+            assertEquals(ErrorCode.PRODUCT_QUOTA_UNAVAILABLE.name(), ex.getDomainCode());
+            verifyNoInteractions(createProductUseCase);
+        }
+    }
+
+    @Test
+    @DisplayName("16.8: PREMIUM (unlimited) → the products are never counted, every row imported")
+    void premium_neverCounts() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            planOf(PlanType.PREMIUM);
+            when(defaultStorePort.getDefaultStoreId()).thenReturn(storeId);
+            when(categoryRepository.findAllActive()).thenReturn(List.of());
+            var row = Map.of("nom", "T-Shirt", "prix_vente", "5000");
+            when(csvParser.parse(any())).thenReturn(List.of(row));
+            var dto = new CreateProductUseCase.CreateProductDto("T-Shirt", null, null, null, 5000, 0, 0, 0, actorId);
+            when(rowFactory.fromRow(eq(row), any(), anyInt(), any(), any())).thenReturn(dto);
+            when(productRepository.existsByName("T-Shirt")).thenReturn(false);
+            when(createProductUseCase.execute(dto)).thenReturn(stubProduct("T-Shirt"));
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(1, result.getImported());
+            verifyNoInteractions(productCountPort);
         }
     }
 }

@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * PlanTypeTest — Story 14.13: Verify FREE plan limits (FR16 revision 2026-03-06: 1 store, 500 products, 3 employees).
+ * PlanTypeTest — the built-in FREE limits (1 store, 500 products, 2 employees — journal I14). Since Story 16.8 they
+ * are only the fallback of an unreadable {@code public.plan_profiles} row.
  */
 @DisplayName("PlanType")
 class PlanTypeTest {
@@ -32,8 +33,8 @@ class PlanTypeTest {
     }
 
     @Test
-    @DisplayName("FREE plan should allow up to 3 employees (FR16 — Story 14.13)")
-    void freePlan_shouldAllowUpTo3Employees() {
-        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(3);
+    @DisplayName("FREE plan fallback allows up to 2 employees (validated value, 16.8)")
+    void freePlan_shouldAllowUpTo2Employees() {
+        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(2);
     }
 }

@@ -119,7 +119,7 @@ class CreateEmployeeServiceTest {
                 userRepository, membershipRepository, employeeRepository);
         order.verify(transactionLock).lock("employee-limit:kv_test01");
         order.verify(employeeCountPort).countActiveEmployees();
-        order.verify(planLimitGuard).checkEmployeeLimit(PlanType.PREMIUM_TRIAL, 2);
+        order.verify(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.PREMIUM_TRIAL), org.mockito.ArgumentMatchers.eq(2));
         order.verify(userRepository).save(any(User.class));
         order.verify(membershipRepository).save(any(UserTenantMembership.class));
         order.verify(employeeRepository).save(any(Employee.class));
@@ -167,7 +167,7 @@ class CreateEmployeeServiceTest {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub));
         when(employeeCountPort.countActiveEmployees()).thenReturn(5);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "employees limit reached"))
-                .when(planLimitGuard).checkEmployeeLimit(PlanType.FREE, 5);
+                .when(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(5));
 
         CreateEmployeeCommand cmd = new CreateEmployeeCommand(
                 actorId, "+237690000002", "Test", "User", storeId);

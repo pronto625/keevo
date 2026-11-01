@@ -4,6 +4,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.capability.entitlement.PlanLimitCheck;
+import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.capability.entitlement.PlanView;
 import com.keevo.shared.capability.entitlement.TenantPlanQuery;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
@@ -12,6 +13,7 @@ import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.util.function.IntSupplier;
 
 /**
  * Implements {@link TenantPlanQuery} and {@link PlanLimitCheck} (Story 12.2d) over the
@@ -32,22 +34,28 @@ class SubscriptionPlanAdapter implements TenantPlanQuery, PlanLimitCheck {
     @Override
     public Optional<PlanView> findCurrentPlan(String tenantSchema) {
         TenantContext.requireCurrent(tenantSchema);
-        return subscriptionRepository.findActivePlan().map(SubscriptionPlanAdapter::view);
+        return subscriptionRepository.findActivePlan()
+                .map(s -> view(s, planLimitGuard.profile(s.getPlanType())));
     }
 
     @Override
     public void checkStoreLimit(PlanView plan, int currentStores) {
-        planLimitGuard.checkStoreLimit(requirePlan(plan).planType(), currentStores);
+        planLimitGuard.checkStoreLimit(requirePlan(plan), currentStores);
     }
 
     @Override
-    public void checkProductLimit(PlanView plan, int currentProducts) {
-        planLimitGuard.checkProductLimit(requirePlan(plan).planType(), currentProducts);
+    public void checkProductLimit(PlanView plan, IntSupplier currentProducts) {
+        planLimitGuard.checkProductLimit(requirePlan(plan), currentProducts);
+    }
+
+    @Override
+    public int remainingProducts(PlanView plan, IntSupplier currentProducts) {
+        return planLimitGuard.remainingProducts(requirePlan(plan), currentProducts);
     }
 
     @Override
     public void checkEmployeeLimit(PlanView plan, int currentEmployees) {
-        planLimitGuard.checkEmployeeLimit(requirePlan(plan).planType(), currentEmployees);
+        planLimitGuard.checkEmployeeLimit(requirePlan(plan), currentEmployees);
     }
 
     private static PlanView requirePlan(PlanView plan) {
@@ -57,7 +65,7 @@ class SubscriptionPlanAdapter implements TenantPlanQuery, PlanLimitCheck {
         return plan;
     }
 
-    static PlanView view(Subscription s) {
-        return new PlanView(s.getPlanType(), s.isActive(), s.getExpiresAt());
+    static PlanView view(Subscription s, PlanProfile profile) {
+        return new PlanView(s.getPlanType(), s.isActive(), s.getExpiresAt(), profile);
     }
 }

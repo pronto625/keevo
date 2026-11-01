@@ -94,7 +94,7 @@ class CreateStoreServiceTest {
         order.verify(transactionLock).lock("store-limit:kv_abc123");
         order.verify(subscriptionRepository).findActivePlan();
         order.verify(storeRepository).countActive();
-        order.verify(planLimitGuard).checkStoreLimit(PlanType.FREE, 0);
+        order.verify(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(0));
         order.verify(storeRepository).save(any());
     }
 
@@ -105,7 +105,7 @@ class CreateStoreServiceTest {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
         when(storeRepository.countActive()).thenReturn(1);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached"))
-                .when(planLimitGuard).checkStoreLimit(PlanType.FREE, 1);
+                .when(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(1));
 
         assertThatThrownBy(() -> createStoreService.execute(
                 new CreateStoreCommand("Boutique", StoreType.STORE, null, null, actorId)))
@@ -138,7 +138,7 @@ class CreateStoreServiceTest {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
         when(storeRepository.countActive()).thenReturn(3);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached"))
-                .when(planLimitGuard).checkStoreLimit(PlanType.FREE, 3);
+                .when(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(3));
 
         CreateStoreCommand cmd = new CreateStoreCommand("4th Store", StoreType.STORE, null, null, actorId);
         assertThatThrownBy(() -> createStoreService.execute(cmd))
@@ -185,6 +185,6 @@ class CreateStoreServiceTest {
 
         createStoreService.execute(new CreateStoreCommand("New Store", StoreType.STORE, null, null, actorId));
 
-        verify(planLimitGuard).checkStoreLimit(PlanType.FREE, 2);
+        verify(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(2));
     }
 }

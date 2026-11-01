@@ -14,6 +14,6 @@ public record SubscriptionResponse(
         Integer maxProducts,       // null = unlimited
         Integer maxEmployees,      // null = unlimited
         int currentStores,
-        int currentProducts,
+        Integer currentProducts,   // 16.8: null = the count could not be read (unknown)
         int currentEmployees
 ) {}

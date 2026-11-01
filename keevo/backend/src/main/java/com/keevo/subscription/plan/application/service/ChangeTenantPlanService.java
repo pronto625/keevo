@@ -9,6 +9,8 @@ import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanCommand;
 import com.keevo.subscription.plan.domain.port.in.ChangeTenantPlanUseCase;
 import com.keevo.subscription.api.CurrentPlan;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,11 +51,20 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
     private final JdbcTemplate jdbc;
     private final PlanChangeRecorder recorder;
     private final PlanModuleRowSync planModuleRows;
+    private final PlanProfiles planProfiles;
 
+    /** Without plan profiles: legacy columns from the built-in defaults (tests). */
     public ChangeTenantPlanService(JdbcTemplate jdbc, PlanChangeRecorder recorder, PlanModuleRowSync planModuleRows) {
+        this(jdbc, recorder, planModuleRows, PlanProfiles.ENUM_DEFAULTS);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ChangeTenantPlanService(JdbcTemplate jdbc, PlanChangeRecorder recorder, PlanModuleRowSync planModuleRows,
+                                   PlanProfiles planProfiles) {
         this.jdbc = jdbc;
         this.recorder = recorder;
         this.planModuleRows = planModuleRows;
+        this.planProfiles = planProfiles;
     }
 
     @Override
@@ -69,9 +80,10 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "No subscription for tenant " + cmd.tenantId()));
         PlanType plan = cmd.newPlan();
+        PlanProfile profile = planProfiles.profile(plan); // 16.8: legacy columns, no longer read for decisions
         jdbc.update(String.format(UPDATE_PLAN_SQL, TenantSchema.validate(cmd.schemaName())),
                 plan.name(),
-                plan.getMaxStores(), plan.getMaxProducts(), plan.getMaxEmployees(),
+                profile.legacyMaxStores(), profile.legacyMaxProducts(), profile.legacyMaxEmployees(),
                 cmd.expiresAt() != null ? Timestamp.from(cmd.expiresAt()) : null,
                 row.id());
         recorder.syncPublicPlanType(cmd.tenantId(), plan);

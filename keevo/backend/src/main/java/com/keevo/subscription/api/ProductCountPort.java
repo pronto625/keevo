@@ -10,6 +10,9 @@ package com.keevo.subscription.api;
  */
 public interface ProductCountPort {
 
-    /** Active products of the tenant; 0 if the schema is invalid or has no products table. */
+    /**
+     * Active products of the tenant. Story 16.8: fails closed — throws when the count cannot be read (invalid
+     * schema, missing table, database fault); never answers 0 on a fault.
+     */
     int countActiveProducts(String tenantSchema);
 }

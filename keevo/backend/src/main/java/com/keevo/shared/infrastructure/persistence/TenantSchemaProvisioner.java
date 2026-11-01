@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -979,12 +980,26 @@ public class TenantSchemaProvisioner {
     static final String DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION =
             "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS trend_notification_enabled BOOLEAN NOT NULL DEFAULT TRUE";
 
-    // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL (unlimited limits)
+    // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
-    private static final String SEED_SUBSCRIPTION = """
+    // Story 16.8: the legacy max_* columns are filled from the PREMIUM_TRIAL plan profile (NULL = unlimited →
+    // 2147483647; no profile row → unlimited, the built-in default). They are no longer read for decisions.
+    // Without public.plan_profiles (database not migrated to V33) the built-in default is seeded instead.
+    private static final String SEED_SUBSCRIPTION_DEFAULTS = """
             INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status, expires_at)
             SELECT 'PREMIUM_TRIAL', 2147483647, 2147483647, 2147483647, 'ACTIVE',
                    NOW() + INTERVAL '6 months'
+            WHERE NOT EXISTS (SELECT 1 FROM subscriptions)""";
+
+    private static final String PLAN_PROFILES_PRESENT = "SELECT to_regclass('public.plan_profiles') IS NOT NULL";
+
+    private static final String SEED_SUBSCRIPTION = """
+            INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status, expires_at)
+            SELECT 'PREMIUM_TRIAL',
+                   COALESCE((SELECT p.max_stores FROM public.plan_profiles p WHERE p.plan_type = 'PREMIUM_TRIAL'), 2147483647),
+                   COALESCE((SELECT p.max_products FROM public.plan_profiles p WHERE p.plan_type = 'PREMIUM_TRIAL'), 2147483647),
+                   COALESCE((SELECT p.max_employees FROM public.plan_profiles p WHERE p.plan_type = 'PREMIUM_TRIAL'), 2147483647),
+                   'ACTIVE', NOW() + INTERVAL '6 months'
             WHERE NOT EXISTS (SELECT 1 FROM subscriptions)""";
 
     private static final String SEED_STORE = """
@@ -1268,9 +1283,16 @@ public class TenantSchemaProvisioner {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + schemaName + "\"");
             stmt.execute(SEED_ROLES);
-            stmt.execute(SEED_SUBSCRIPTION);
+            stmt.execute(planProfilesPresent(stmt) ? SEED_SUBSCRIPTION : SEED_SUBSCRIPTION_DEFAULTS);
             stmt.execute(SEED_STORE);
             stmt.execute("SET search_path TO public");
+        }
+    }
+
+    /** Story 16.8 — whether the public plan profiles exist (V33): the subscription seed reads them when they do. */
+    private static boolean planProfilesPresent(Statement stmt) throws SQLException {
+        try (ResultSet rs = stmt.executeQuery(PLAN_PROFILES_PRESENT)) {
+            return rs != null && rs.next() && rs.getBoolean(1); // null: statement test doubles
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.TenantModuleStatus;
@@ -31,6 +32,13 @@ import java.util.Objects;
  *   <li>plan unreadable → no rows can be derived ({@link IllegalArgumentException}): the caller skips the tenant.</li>
  * </ul>
  * Paid modules: installed, not {@code free}, not core, not {@code platform}.
+ *
+ * <p>Story 16.8 — the mapping above applies to the paid modules the plan type's profile grants
+ * ({@code public.profile_modules}, {@link PlanProfile#grants}). A paid module granted to {@code FREE} gets
+ * {@code ACTIVE}, tier {@code FREE}, no expiry (the nightly job never expires it); a paid module the profile does not
+ * grant gets {@code DISABLED} on a premium plan and the {@code FREE} mapping above (post-expiry grace, else
+ * {@code DISABLED}) on a free one. Without a profile (overloads without one) the built-in defaults apply: premium
+ * grants every paid module, {@code FREE} none — the behaviour before 16.8.
  */
 public final class PlanModuleRows {
 
@@ -69,11 +77,22 @@ public final class PlanModuleRows {
     }
 
     /**
-     * The row every paid module gets for this plan at {@code now}.
+     * The row every paid module gets for this plan at {@code now} under the built-in defaults (premium grants every
+     * paid module, {@code FREE} none).
      *
      * @throws IllegalArgumentException the plan is {@linkplain Plan#unreadable() unreadable}
      */
     public static Desired rowFor(Plan plan, Instant now) {
+        return rowFor(plan, now, grantedByDefault(plan));
+    }
+
+    /**
+     * The row of a paid module for this plan at {@code now}.
+     *
+     * @param granted whether the plan type's profile grants the module
+     * @throws IllegalArgumentException the plan is {@linkplain Plan#unreadable() unreadable}
+     */
+    public static Desired rowFor(Plan plan, Instant now, boolean granted) {
         Objects.requireNonNull(now, "now");
         if (plan == null) {
             return disabled();
@@ -82,6 +101,13 @@ public final class PlanModuleRows {
             throw new IllegalArgumentException("The plan is unreadable: no row can be derived from it");
         }
         boolean premiumType = "PREMIUM".equals(plan.planType()) || "PREMIUM_TRIAL".equals(plan.planType());
+        boolean free = "FREE".equals(plan.planType());
+        if (free && granted) {
+            return new Desired(TenantModuleStatus.ACTIVE, TIER_FREE, null, null);
+        }
+        if (premiumType && !granted) {
+            return disabled();
+        }
         Instant end = plan.expiresAt();
         if (premiumType && "ACTIVE".equals(plan.status()) && (end == null || end.isAfter(now))) {
             TenantModuleStatus status = "PREMIUM_TRIAL".equals(plan.planType())
@@ -91,10 +117,29 @@ public final class PlanModuleRows {
         if (premiumType && ("ACTIVE".equals(plan.status()) || "EXPIRED".equals(plan.status())) && end != null) {
             return expired(end, now);
         }
-        if ("FREE".equals(plan.planType()) && plan.expiryDowngradeAt() != null) {
+        if (free && plan.expiryDowngradeAt() != null) {
             return expired(plan.expiryDowngradeAt(), now);
         }
         return disabled();
+    }
+
+    /**
+     * Whether the profile grants the paid module to the plan; {@code profile} {@code null} → built-in defaults. No
+     * plan type (no subscription, unknown type) grants nothing.
+     */
+    public static boolean granted(Plan plan, PlanProfile profile, String moduleId) {
+        if (plan == null || plan.planType() == null) {
+            return false;
+        }
+        if (profile == null) {
+            return grantedByDefault(plan);
+        }
+        return profile.planType().name().equals(plan.planType()) && profile.grants(moduleId);
+    }
+
+    /** Built-in defaults (the {@code PlanType} fallback): premium types grant every paid module, {@code FREE} none. */
+    static boolean grantedByDefault(Plan plan) {
+        return plan != null && ("PREMIUM".equals(plan.planType()) || "PREMIUM_TRIAL".equals(plan.planType()));
     }
 
     /**
@@ -109,16 +154,29 @@ public final class PlanModuleRows {
     }
 
     /**
-     * The desired row of every installed paid module (module id → row, catalogue order).
+     * The desired row of every installed paid module (module id → row, catalogue order), built-in defaults.
      *
      * @throws IllegalArgumentException the plan is unreadable
      */
     public static Map<String, Desired> compute(Plan plan, Instant now, Collection<ModuleManifest> installed) {
-        Desired row = rowFor(plan, now);
+        return compute(plan, now, installed, null);
+    }
+
+    /**
+     * The desired row of every installed paid module (module id → row, catalogue order) under the plan type's profile
+     * ({@code null} → built-in defaults).
+     *
+     * @throws IllegalArgumentException the plan is unreadable
+     */
+    public static Map<String, Desired> compute(Plan plan, Instant now, Collection<ModuleManifest> installed,
+                                               PlanProfile profile) {
+        if (plan != null && plan.unreadable()) {
+            throw new IllegalArgumentException("The plan is unreadable: no row can be derived from it");
+        }
         Map<String, Desired> rows = new LinkedHashMap<>();
         for (ModuleManifest module : installed) {
             if (planDerived(module)) {
-                rows.put(module.id(), row);
+                rows.put(module.id(), rowFor(plan, now, granted(plan, profile, module.id())));
             }
         }
         return rows;

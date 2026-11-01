@@ -32,6 +32,8 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
   /// Set when a creation hit the plan limit: the form closes, then the
   /// plan-limit sheet explains it (instead of both at once).
   bool _planLimitHit = false;
+  int? _planLimit;
+  String? _planType;
 
   @override
   void initState() {
@@ -99,7 +101,12 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
     );
     if (_planLimitHit && mounted) {
       _planLimitHit = false;
-      await showPlanLimitBottomSheet(context: context, entity: 'stores');
+      final limit = _planLimit ?? knownPlanLimit(ref, null, 'stores');
+      final planType = _planType ?? knownPlanType(ref, null);
+      _planLimit = null; // never a stale number on a later refusal
+      _planType = null;
+      await showPlanLimitBottomSheet(
+          context: context, entity: 'stores', limit: limit, planType: planType);
     }
   }
 
@@ -131,6 +138,8 @@ class _StoresListPageState extends ConsumerState<StoresListPage> {
     } on StoreException catch (e) {
       if (e.domainCode != 'PLAN_LIMIT_EXCEEDED') rethrow;
       _planLimitHit = true;
+      _planLimit = e.limit;
+      _planType = e.planType;
     }
   }
 

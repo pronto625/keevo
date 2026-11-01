@@ -9,6 +9,8 @@ import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.subscription.plan.domain.model.Subscription;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
 import com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand;
@@ -62,6 +64,7 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     private final TransactionTemplate requiresNewTemplate;
     private final PlanChangeRecorder planChangeRecorder;
     private final PlanModuleRowSync planModuleRows;
+    private final PlanProfiles planProfiles;
 
     /** Production constructor — Spring injects the {@link PlatformTransactionManager}. */
     @org.springframework.beans.factory.annotation.Autowired
@@ -69,9 +72,10 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                                TenantQueryPort tenantQuery,
                                PlatformTransactionManager transactionManager,
                                PlanChangeRecorder planChangeRecorder,
-                               PlanModuleRowSync planModuleRows) {
+                               PlanModuleRowSync planModuleRows,
+                               PlanProfiles planProfiles) {
         this(subscriptionRepository, tenantQuery, buildTemplate(transactionManager), planChangeRecorder,
-                planModuleRows);
+                planModuleRows, planProfiles);
     }
 
     /**
@@ -83,6 +87,18 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                         TransactionTemplate requiresNewTemplate,
                         PlanChangeRecorder planChangeRecorder,
                         PlanModuleRowSync planModuleRows) {
+        this(subscriptionRepository, tenantQuery, requiresNewTemplate, planChangeRecorder, planModuleRows,
+                PlanProfiles.ENUM_DEFAULTS);
+    }
+
+    /** Testing constructor with the plan profiles (Story 16.8 — legacy limit columns filled from the profile). */
+    ActivatePlanService(SubscriptionRepository subscriptionRepository,
+                        TenantQueryPort tenantQuery,
+                        TransactionTemplate requiresNewTemplate,
+                        PlanChangeRecorder planChangeRecorder,
+                        PlanModuleRowSync planModuleRows,
+                        PlanProfiles planProfiles) {
+        this.planProfiles = planProfiles;
         this.subscriptionRepository = subscriptionRepository;
         this.tenantQuery = tenantQuery;
         this.requiresNewTemplate = requiresNewTemplate;
@@ -117,13 +133,15 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                         .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND,
                                 "No subscription found for target tenant: " + schemaName));
 
+                // 16.8: legacy max_* columns filled from the plan profile (no longer read for decisions)
+                PlanProfile profile = planProfiles.profile(command.newPlan());
                 Subscription updated = new Subscription(
                         current.getId(),
                         command.newPlan(),
                         SubscriptionStatus.ACTIVE,
-                        command.newPlan().getMaxStores(),
-                        command.newPlan().getMaxProducts(),
-                        command.newPlan().getMaxEmployees(),
+                        profile.legacyMaxStores(),
+                        profile.legacyMaxProducts(),
+                        profile.legacyMaxEmployees(),
                         current.getCreatedAt(),
                         command.expiresAt()
                 );

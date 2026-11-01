@@ -128,6 +128,8 @@ public enum ErrorCode {
     // ── Subscription / Plan Limits ────────────────────────────────
     SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)
     PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan
+    PRODUCT_QUOTA_UNAVAILABLE, // Story 16.8 — HTTP 503: the product count could not be read for a finite limit (fail closed)
+    PLAN_PROFILE_INVALID,   // Story 16.8 — HTTP 422: a super-admin plan profile edit is invalid; nothing saved
     ACCOUNT_SUSPENDED,      // HTTP 403 — tenant status = SUSPENDED (manual admin lockout)
     ACCOUNT_DELETION_PENDING, // HTTP 403 — tenant status = DELETION_PENDING (Story 14.5)
     RATE_LIMIT_EXCEEDED,    // HTTP 429 — >100 req/min per tenant

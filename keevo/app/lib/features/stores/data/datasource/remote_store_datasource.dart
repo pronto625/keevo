@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import 'package:keevo/core/network/plan_limit_error.dart';
 import 'package:keevo_core/utils/server_date.dart';
 import '../../domain/exception/store_exception.dart';
 import '../../domain/model/store_model.dart';
@@ -117,7 +118,10 @@ class RemoteStoreDataSource {
     final message = e.response?.data?['error'] as String? ?? 'Erreur inconnue';
     return switch (domainCode) {
       'STORE_NOT_FOUND' => StoreException.notFound(),
-      'PLAN_LIMIT_EXCEEDED' => StoreException.planLimitExceeded(),
+      'PLAN_LIMIT_EXCEEDED' => StoreException.planLimitExceeded(
+        limit: planLimitFromError(e),
+        planType: planTypeFromError(e),
+      ),
       'WAREHOUSE_ALREADY_EXISTS' => StoreException.warehouseAlreadyExists(),
       _ => StoreException.unknown(message),
     };

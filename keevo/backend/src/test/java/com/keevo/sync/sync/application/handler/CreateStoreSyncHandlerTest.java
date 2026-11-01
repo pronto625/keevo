@@ -105,7 +105,7 @@ class CreateStoreSyncHandlerTest {
         order.verify(transactionLock).lock("store-limit:" + TENANT_ID);
         order.verify(storeRepository).findById(storeId);
         order.verify(storeRepository).countActive();
-        order.verify(planLimitGuard).checkStoreLimit(PlanType.FREE, 0);
+        order.verify(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(0));
         order.verify(storeRepository).save(any());
     }
 
@@ -157,7 +157,7 @@ class CreateStoreSyncHandlerTest {
         when(storeRepository.countActive()).thenReturn(1);
         doThrow(new com.keevo.shared.domain.exception.DomainException(
                 ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached"))
-                .when(planLimitGuard).checkStoreLimit(PlanType.FREE, 1);
+                .when(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(1));
 
         var op = new SyncOperation("op-8", "CREATE_STORE", storeId.toString(),
                 Map.of("id", storeId.toString(), "name", "Boutique Test", "type", "STORE"),

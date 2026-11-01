@@ -31,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -57,7 +58,8 @@ class QuickAddProductServiceTest {
     @Mock private com.keevo.store.store.domain.port.out.StoreRepository storeRepository;
     @Mock private ProductCountPort productCountPort;
     @Mock private SubscriptionRepository subscriptionRepository;
-    @Mock private PlanLimitGuard planLimitGuard;
+    @Spy private PlanLimitGuard planLimitGuard =
+            new PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
     @Mock private TransactionLockPort transactionLock;
     @Mock private Subscription freeSubscription;
 
@@ -298,9 +300,9 @@ class QuickAddProductServiceTest {
         order.verify(transactionLock).lock("product-limit:" + TENANT);
         order.verify(sessionRepository).findById(SESSION_ID);
         order.verify(productQuery).existsByName(TenantContext.getCurrentTenant(), "Pagne");
-        order.verify(productCountPort).countActiveProducts(any());
         order.verify(subscriptionRepository).findActivePlan();
-        order.verify(planLimitGuard).checkProductLimit(PlanType.FREE, 499);
+        order.verify(planLimitGuard).checkProductLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), any(java.util.function.IntSupplier.class));
+        order.verify(productCountPort).countActiveProducts(any()); // 16.8: counted by the guard, finite limit only
         order.verify(productCommand).register(any(), any());
     }
 
@@ -310,8 +312,6 @@ class QuickAddProductServiceTest {
         when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(inProgressSession));
         when(productQuery.existsByName(TenantContext.getCurrentTenant(), "Pagne")).thenReturn(false);
         when(productCountPort.countActiveProducts(any())).thenReturn(500);
-        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte"))
-                .when(planLimitGuard).checkProductLimit(PlanType.FREE, 500);
 
         var cmd = new QuickAddProductCommand(SESSION_ID, "Pagne", CATEGORY_ID, 1, null, ACTOR_ID);
         assertThatThrownBy(() -> service.execute(cmd))
@@ -339,7 +339,7 @@ class QuickAddProductServiceTest {
                 .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode())
                         .isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND.name()));
 
-        verify(planLimitGuard, never()).checkProductLimit(any(), anyInt());
+        verify(planLimitGuard, never()).checkProductLimit(any(), any(java.util.function.IntSupplier.class));
         verify(productCommand, never()).register(any(), any());
         verify(stockLevelRepository, never()).save(any());
         verify(countRepository, never()).save(any());

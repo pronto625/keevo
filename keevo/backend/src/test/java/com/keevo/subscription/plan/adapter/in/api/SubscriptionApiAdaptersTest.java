@@ -8,6 +8,7 @@ import com.keevo.subscription.api.ActivatePlanInput;
 import com.keevo.subscription.api.ChangePlanInput;
 import com.keevo.subscription.api.CurrentPlan;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.shared.capability.entitlement.PlanView;
 import com.keevo.subscription.plan.application.service.PlanLimitGuard;
 import com.keevo.subscription.plan.domain.model.Subscription;
@@ -42,7 +43,7 @@ class SubscriptionApiAdaptersTest {
     @Mock private ActivatePlanUseCase activatePlanUseCase;
     @Mock private ChangeTenantPlanUseCase changeTenantPlanUseCase;
 
-    private final PlanLimitGuard guard = new PlanLimitGuard();
+    private final PlanLimitGuard guard = new PlanLimitGuard(PlanProfiles.ENUM_DEFAULTS);
 
     @BeforeEach
     void setUp() {
@@ -87,19 +88,19 @@ class SubscriptionApiAdaptersTest {
     }
 
     @Test
-    void freePlanLimits_unchanged_oneStore_500Products_3EmployeeSlots() {
+    void freePlanLimits_oneStore_500Products_2EmployeeSlots() {
         var adapter = new SubscriptionPlanAdapter(subscriptionRepository, guard);
         PlanView free = new PlanView(PlanType.FREE, true, null);
 
         adapter.checkStoreLimit(free, 0);
-        adapter.checkProductLimit(free, 499);
+        adapter.checkProductLimit(free, () -> 499);
         assertThat(free.maxStores()).isEqualTo(1);
         assertThat(free.maxProducts()).isEqualTo(500);
         assertThat(free.maxEmployees()).isEqualTo(PlanType.FREE.getMaxEmployees());
         assertLimitReached(() -> adapter.checkStoreLimit(free, 1));
-        assertLimitReached(() -> adapter.checkProductLimit(free, 500));
+        assertLimitReached(() -> adapter.checkProductLimit(free, () -> 500));
         assertLimitReached(() -> adapter.checkEmployeeLimit(free, PlanType.FREE.getMaxEmployees()));
-        adapter.checkProductLimit(new PlanView(PlanType.PREMIUM_TRIAL, true, null), 100_000);
+        adapter.checkProductLimit(new PlanView(PlanType.PREMIUM_TRIAL, true, null), () -> 100_000);
     }
 
     private static void assertLimitReached(Runnable call) {
@@ -132,7 +133,7 @@ class SubscriptionApiAdaptersTest {
         assertThatThrownBy(() -> new PlanView(null, true, null)).isInstanceOf(IllegalArgumentException.class);
         for (Runnable call : new Runnable[] {
                 () -> adapter.checkStoreLimit(null, 0),
-                () -> adapter.checkProductLimit(null, 0),
+                () -> adapter.checkProductLimit(null, () -> 0),
                 () -> adapter.checkEmployeeLimit(null, 0)}) {
             assertThatThrownBy(call::run).isInstanceOfSatisfying(DomainException.class,
                     e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.SUBSCRIPTION_NOT_FOUND));

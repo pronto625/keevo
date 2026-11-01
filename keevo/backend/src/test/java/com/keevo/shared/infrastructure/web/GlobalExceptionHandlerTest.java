@@ -38,6 +38,28 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("16.8: PRODUCT_QUOTA_UNAVAILABLE maps to 503 with the French quota message")
+    void productQuotaUnavailable_mapsTo503() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp = handler.handleDomainException(
+                new DomainException(ErrorCode.PRODUCT_QUOTA_UNAVAILABLE, "Product count unavailable"));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(resp.getBody()).isNotNull();
+        assertThat(resp.getBody().error()).isEqualTo("Impossible de vérifier votre quota de produits pour le moment. "
+                + "Réessayez dans quelques instants.");
+    }
+
+    @Test
+    @DisplayName("16.8: PLAN_PROFILE_INVALID maps to 422 with the French reason")
+    void planProfileInvalid_mapsTo422() {
+        ResponseEntity<ApiResponseWrapper<Void>> resp = handler.handleDomainException(new DomainException(
+                ErrorCode.PLAN_PROFILE_INVALID, "x", java.util.Map.of("reason", "offre inconnue")));
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(resp.getBody().error()).isEqualTo("Profil non enregistré : offre inconnue");
+    }
+
+    @Test
     @DisplayName("ACCOUNT_SUSPENDED maps to 403 Forbidden")
     void accountSuspended_mapsto403() {
         ResponseEntity<ApiResponseWrapper<Void>> resp =

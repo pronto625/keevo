@@ -1,5 +1,7 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.application.port.PlanModuleRowStore;
@@ -23,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -39,38 +42,63 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
     private final ModuleRegistry registry;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final PlanProfiles profiles;
 
-    /** Without an event publisher (tests that do not observe the licence notifications). */
+    /** Without an event publisher (tests that do not observe the licence notifications), built-in plan profiles. */
     public PlanModuleRowSyncService(ModuleCatalog catalog, PlanModuleRowStore store, ModuleRegistry registry,
                                     Clock clock) {
-        this(catalog, store, registry, clock, event -> { });
+        this(catalog, store, registry, clock, event -> { }, null);
     }
 
-    @Autowired
+    /** Built-in plan profiles (tests). */
     public PlanModuleRowSyncService(ModuleCatalog catalog, PlanModuleRowStore store, ModuleRegistry registry,
                                     Clock clock, ApplicationEventPublisher events) {
+        this(catalog, store, registry, clock, events, null);
+    }
+
+    /**
+     * @param profiles the plan profiles (Story 16.8: which paid modules the plan type grants); {@code null} → built-in
+     *                 defaults (premium grants every paid module, {@code FREE} none)
+     */
+    @Autowired
+    public PlanModuleRowSyncService(ModuleCatalog catalog, PlanModuleRowStore store, ModuleRegistry registry,
+                                    Clock clock, ApplicationEventPublisher events, PlanProfiles profiles) {
         this.catalog = catalog;
         this.store = store;
         this.registry = registry;
         this.clock = clock;
         this.events = events;
+        this.profiles = profiles;
     }
 
     @Override
     @Transactional
     public SyncResult sync(UUID tenantId, String tenantSchema) {
-        SyncResult result = run(tenantId, tenantSchema, true);
+        SyncResult result = run(tenantId, tenantSchema, true, null);
         evictAfterCommit(tenantSchema);
         return result;
     }
 
     @Override
-    @Transactional // not read-only: the plan read locks the subscription row (FOR UPDATE); nothing is written
-    public SyncResult preview(UUID tenantId, String tenantSchema) {
-        return run(tenantId, tenantSchema, false);
+    @Transactional
+    public Optional<SyncResult> syncIfPlanType(UUID tenantId, String tenantSchema, String planType) {
+        Objects.requireNonNull(planType, "planType");
+        SyncResult result = run(tenantId, tenantSchema, true, planType);
+        if (result == null) {
+            return Optional.empty();
+        }
+        evictAfterCommit(tenantSchema);
+        return Optional.of(result);
     }
 
-    private SyncResult run(UUID tenantId, String tenantSchema, boolean write) {
+    @Override
+    @Transactional // not read-only: the plan read locks the subscription row (FOR UPDATE); nothing is written
+    public SyncResult preview(UUID tenantId, String tenantSchema) {
+        return run(tenantId, tenantSchema, false, null);
+    }
+
+    /** @param onlyPlanType when set, nothing is done ({@code null} returned) unless the plan has this type */
+    private SyncResult run(UUID tenantId, String tenantSchema, boolean write, String onlyPlanType) {
         Objects.requireNonNull(tenantId, "tenantId");
         String schema = TenantSchema.validate(tenantSchema);
         Instant now = clock.instant();
@@ -78,7 +106,12 @@ public class PlanModuleRowSyncService implements PlanModuleRowSync {
         if (plan.unreadable()) {
             throw new PlanUnreadableException();
         }
-        Map<String, PlanModuleRows.Desired> desired = PlanModuleRows.compute(plan, now, catalog.manifests());
+        if (onlyPlanType != null && !onlyPlanType.equals(plan.planType())) {
+            return null;
+        }
+        // Story 16.8 — which paid modules the plan type grants: its profile, read live (built-in defaults if absent)
+        PlanProfile profile = profiles != null && plan.planType() != null ? profiles.profile(plan.planType()) : null;
+        Map<String, PlanModuleRows.Desired> desired = PlanModuleRows.compute(plan, now, catalog.manifests(), profile);
         Map<String, StoredRow> stored = store.findRows(tenantId);
         int inserted = 0;
         int updated = 0;

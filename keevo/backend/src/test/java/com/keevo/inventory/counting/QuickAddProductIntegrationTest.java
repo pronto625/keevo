@@ -19,6 +19,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
@@ -48,7 +49,8 @@ class QuickAddProductIntegrationTest {
     // v1s-14-13: plan-limit collaborators (active FREE plan under the cap)
     @Mock private com.keevo.subscription.api.ProductCountPort productCountPort;
     @Mock private com.keevo.subscription.plan.domain.port.out.SubscriptionRepository subscriptionRepository;
-    @Mock private com.keevo.subscription.plan.application.service.PlanLimitGuard planLimitGuard;
+    @Spy private com.keevo.subscription.plan.application.service.PlanLimitGuard planLimitGuard =
+            new com.keevo.subscription.plan.application.service.PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
     @Mock private com.keevo.shared.application.port.TransactionLockPort transactionLock;
     @Mock private com.keevo.subscription.plan.domain.model.Subscription freeSubscription;
 

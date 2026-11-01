@@ -1,5 +1,7 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
@@ -9,6 +11,7 @@ import com.keevo.shared.module.application.port.ActiveModulesCache;
 import com.keevo.shared.module.application.port.TenantModuleStatePort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -37,13 +40,22 @@ public class ModuleRegistryService implements ModuleRegistry {
     private final TenantModuleStatePort states;
     private final ActiveModulesCache cache;
     private final Clock clock;
+    private final PlanProfiles profiles;
 
+    /** Without plan profiles: paid modules without a row follow the built-in defaults (tests). */
     public ModuleRegistryService(ModuleCatalog catalog, TenantModuleStatePort states, ActiveModulesCache cache,
                                  Clock clock) {
+        this(catalog, states, cache, clock, null);
+    }
+
+    @Autowired
+    public ModuleRegistryService(ModuleCatalog catalog, TenantModuleStatePort states, ActiveModulesCache cache,
+                                 Clock clock, PlanProfiles profiles) {
         this.catalog = catalog;
         this.states = states;
         this.cache = cache;
         this.clock = clock;
+        this.profiles = profiles;
     }
 
     @Override
@@ -90,7 +102,8 @@ public class ModuleRegistryService implements ModuleRegistry {
         }
         ActiveModulesCache.Entry entry = lookup(tenantSchema);
         return effectiveStates(catalog.manifests(),
-                entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), entry.plan(), clock);
+                entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), entry.plan(), entry.profile(),
+                clock);
     }
 
     /** The tenant's entry: from the request cache, else one query (cached for the rest of the request). */
@@ -105,10 +118,24 @@ public class ModuleRegistryService implements ModuleRegistry {
             log.debug("Module registry: no tenant registered for the given schema — only core is active");
         }
         ActiveModulesCache.Entry entry = found
-                .map(t -> new ActiveModulesCache.Entry(true, t.rows(), t.plan()))
+                .map(t -> new ActiveModulesCache.Entry(true, t.rows(), t.plan(), profileFor(t)))
                 .orElseGet(() -> new ActiveModulesCache.Entry(false, Map.of(), TenantModuleStatePort.Plan.NONE));
         cache.put(schema, entry);
         return entry;
+    }
+
+    /**
+     * Story 16.8 — the profile of the tenant's plan type, read live (once per request, with the rows) only when a
+     * paid module has no row and the plan is readable; {@code null} otherwise (built-in defaults never needed).
+     */
+    private PlanProfile profileFor(TenantModuleStatePort.TenantRows tenant) {
+        TenantModuleStatePort.Plan plan = tenant.plan();
+        if (profiles == null || plan.unreadable() || plan.planType() == null) {
+            return null;
+        }
+        boolean rowless = catalog.manifests().stream()
+                .anyMatch(m -> PlanModuleRows.planDerived(m) && !tenant.rows().containsKey(m.id()));
+        return rowless ? profiles.profile(plan.planType()) : null;
     }
 
     @Override
@@ -144,11 +171,19 @@ public class ModuleRegistryService implements ModuleRegistry {
     static Map<String, ModuleState> effectiveStates(Collection<ModuleManifest> installed,
                                                     Optional<Map<String, TenantModuleStatePort.Row>> rows,
                                                     TenantModuleStatePort.Plan plan, Clock clock) {
+        return effectiveStates(installed, rows, plan, null, clock);
+    }
+
+    /** Same, paid modules without a row following the plan type's profile ({@code null} → built-in defaults). */
+    static Map<String, ModuleState> effectiveStates(Collection<ModuleManifest> installed,
+                                                    Optional<Map<String, TenantModuleStatePort.Row>> rows,
+                                                    TenantModuleStatePort.Plan plan, PlanProfile profile,
+                                                    Clock clock) {
         var now = clock.instant();
         Map<String, ModuleState> states = new LinkedHashMap<>();
         installed.stream()
                 .sorted(java.util.Comparator.comparing(ModuleManifest::id))
-                .forEach(m -> states.put(m.id(), ModuleStateRules.stateOf(m, rows, plan, now)));
+                .forEach(m -> states.put(m.id(), ModuleStateRules.stateOf(m, rows, plan, profile, now)));
         return Collections.unmodifiableMap(states);
     }
 }

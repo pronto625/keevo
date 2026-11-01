@@ -337,9 +337,12 @@ class _QuickAddProductSheetState
           name: 'QuickAddSheet', error: e);
       if (!mounted) return;
       // v1s-14-13: FREE plan product cap reached → plan sheet, never a code.
-      final data = e.response?.data;
-      if (data is Map && data['domainCode'] == 'PLAN_LIMIT_EXCEEDED') {
-        showPlanLimitBottomSheet(context: context, entity: 'products');
+      if (isPlanLimitError(e)) {
+        showPlanLimitBottomSheet(
+            context: context,
+            entity: 'products',
+            limit: knownPlanLimit(ref, e, 'products'),
+            planType: knownPlanType(ref, e));
         return;
       }
       messenger.showSnackBar(

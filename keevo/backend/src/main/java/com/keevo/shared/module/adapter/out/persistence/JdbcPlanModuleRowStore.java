@@ -68,6 +68,13 @@ public class JdbcPlanModuleRowStore implements PlanModuleRowStore {
             FROM public.tenants t WHERE t.status <> 'DELETED' ORDER BY t.code
             """;
 
+    /** Story 16.8 — the live tenants whose public plan type is the given one. */
+    static final String LIVE_TENANTS_ON_PLAN_SQL = """
+            SELECT t.id, t.code, t.schema_name,
+                   EXISTS (SELECT 1 FROM pg_catalog.pg_namespace n WHERE n.nspname = t.schema_name) AS schema_present
+            FROM public.tenants t WHERE t.status <> 'DELETED' AND t.plan_type = ? ORDER BY t.code
+            """;
+
     private final JdbcTemplate jdbc;
 
     public JdbcPlanModuleRowStore(DataSource dataSource) {
@@ -129,6 +136,12 @@ public class JdbcPlanModuleRowStore implements PlanModuleRowStore {
     public List<LiveTenant> liveTenants() {
         return jdbc.query(LIVE_TENANTS_SQL, (rs, i) -> new LiveTenant(rs.getObject("id", UUID.class),
                 rs.getString("code"), rs.getString("schema_name"), rs.getBoolean("schema_present")));
+    }
+
+    @Override
+    public List<LiveTenant> liveTenants(String planType) {
+        return jdbc.query(LIVE_TENANTS_ON_PLAN_SQL, (rs, i) -> new LiveTenant(rs.getObject("id", UUID.class),
+                rs.getString("code"), rs.getString("schema_name"), rs.getBoolean("schema_present")), planType);
     }
 
     private static Instant instant(OffsetDateTime value) {

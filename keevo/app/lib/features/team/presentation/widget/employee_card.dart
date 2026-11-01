@@ -1,4 +1,3 @@
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -178,9 +177,13 @@ class EmployeeCard extends ConsumerWidget {
     } catch (e) {
       // v1s-14-13 : une réactivation refusée par la limite du forfait ouvre la
       // même feuille « forfait » que la création, pas un message générique.
-      if (_isPlanLimitExceeded(e)) {
+      if (isPlanLimitError(e)) {
         if (context.mounted) {
-          await showPlanLimitBottomSheet(context: context, entity: 'employees');
+          await showPlanLimitBottomSheet(
+              context: context,
+              entity: 'employees',
+              limit: knownPlanLimit(ref, e, 'employees'),
+              planType: knownPlanType(ref, e));
         } else {
           // Carte démontée entre-temps (liste rafraîchie) : jamais de refus muet.
           messenger.showSnackBar(SnackBar(content: Text(appErrorMessage(e))));
@@ -191,12 +194,6 @@ class EmployeeCard extends ConsumerWidget {
       return;
     }
     onActionComplete();
-  }
-
-  static bool _isPlanLimitExceeded(Object e) {
-    if (e is! DioException) return false;
-    final data = e.response?.data;
-    return data is Map && data['domainCode'] == 'PLAN_LIMIT_EXCEEDED';
   }
 
   void _openEditPage(BuildContext context) {

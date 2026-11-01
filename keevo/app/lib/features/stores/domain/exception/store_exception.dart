@@ -3,17 +3,32 @@ class StoreException implements Exception {
   final String domainCode;
   final String message;
 
-  const StoreException({required this.domainCode, required this.message});
+  /// 16.8 — the plan limit the server reported (`PLAN_LIMIT_EXCEEDED`
+  /// details), `null` when unknown.
+  final int? limit;
+
+  /// 16.8 — the tenant's plan type the server reported, `null` when unknown.
+  final String? planType;
+
+  const StoreException({
+    required this.domainCode,
+    required this.message,
+    this.limit,
+    this.planType,
+  });
 
   factory StoreException.notFound() => const StoreException(
         domainCode: 'STORE_NOT_FOUND',
         message: 'Boutique introuvable',
       );
 
-  factory StoreException.planLimitExceeded() => const StoreException(
+  factory StoreException.planLimitExceeded({int? limit, String? planType}) =>
+      StoreException(
         domainCode: 'PLAN_LIMIT_EXCEEDED',
         message:
             'Limite du plan atteinte. Passez à un plan supérieur pour créer plus de boutiques.',
+        limit: limit,
+        planType: planType,
       );
 
   factory StoreException.warehouseAlreadyExists() => const StoreException(

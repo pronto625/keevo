@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 200 — gated: 106, exempt: 94.
+Handlers: 202 — gated: 106, exempt: 96.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -45,6 +45,8 @@ Handlers: 200 — gated: 106, exempt: 94.
 | GET | `/api/v1/admin/operations/overview` | — | — | — | super-admin | AdminOperationsController#getOverview |
 | GET | `/api/v1/admin/operations/tenants` | — | — | — | super-admin | AdminOperationsController#listTenantActivity |
 | GET | `/api/v1/admin/operations/trend` | — | — | — | super-admin | AdminOperationsController#getTrend |
+| GET | `/api/v1/admin/plan-profiles` | — | — | — | super-admin | AdminPlanProfileController#list |
+| PUT | `/api/v1/admin/plan-profiles/{planType}` | — | — | — | super-admin | AdminPlanProfileController#update |
 | GET | `/api/v1/admin/revenue/churn` | — | — | — | super-admin | AdminRevenueController#getChurn |
 | GET | `/api/v1/admin/revenue/churn/export` | — | — | — | super-admin | AdminRevenueController#exportChurn |
 | GET | `/api/v1/admin/revenue/summary` | — | — | — | super-admin | AdminRevenueController#getSummary |

@@ -156,7 +156,7 @@ class ReactivateEmployeeServiceTest {
         order.verify(employeeRepository).findById(employeeId);
         order.verify(subscriptionRepository).findActivePlan();
         order.verify(employeeCountPort).countActiveEmployees();
-        order.verify(planLimitGuard).checkEmployeeLimit(PlanType.FREE, 2);
+        order.verify(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(2));
         order.verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.ACTIVE);
         order.verify(membershipRepository).reactivate(userId, tenant.getId());
     }
@@ -167,7 +167,7 @@ class ReactivateEmployeeServiceTest {
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(inactiveEmployee));
         when(employeeCountPort.countActiveEmployees()).thenReturn(3);
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED))
-                .when(planLimitGuard).checkEmployeeLimit(PlanType.FREE, 3);
+                .when(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(3));
 
         assertThatThrownBy(() -> reactivateEmployeeService.execute(
                 new ReactivateEmployeeCommand(actorId, employeeId)))

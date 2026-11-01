@@ -4,7 +4,7 @@
 // former "X :: events", "commerce :: api" and "store :: api" entries are gone. What remains:
 // - identity :: api (identity is the core-to-be — accepted until core is carved out; also PlanType carried by the
 //   catalogue plan events, and — 12.6a — by the entitlement capability: shared.capability.entitlement.PlanView and
-//   PlanChangeRecorder carry identity.api.PlanType, accepted until 16.8 introduces configurable plan profiles).
+//   PlanChangeRecorder carry identity.api.PlanType as the plan identifier; since 16.8 limits come from plan_profiles).
 // The list is closed on purpose: any new edge from shared is reported as not-allowed and fails
 // ApplicationModulesBaselineTest.
 @org.springframework.modulith.ApplicationModule(

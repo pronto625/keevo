@@ -20,9 +20,10 @@ import static org.mockito.Mockito.when;
 /**
  * ProductCountAdapterTest — Unit tests for {@link ProductCountAdapter}.
  *
- * <p>RED phase: Verifies:
+ * <p>Verifies:
  * <ul>
- *   <li>Returns 0 when {@code products} table does not exist (pre-Epic 2 state).</li>
+ *   <li>Story 16.8 — fails closed: a failing count (missing table, database fault) or an invalid schema throws,
+ *       never answers 0 (the plan-limit guard then refuses the creation with {@code PRODUCT_QUOTA_UNAVAILABLE}).</li>
  *   <li>Returns actual count when table exists.</li>
  *   <li>{@link Transactional#propagation()} is {@link Propagation#NOT_SUPPORTED} —
  *       CRITICAL: without this, a caught SQL exception inside a shared
@@ -53,19 +54,19 @@ class ProductCountAdapterTest {
         com.keevo.shared.infrastructure.persistence.TenantContext.clear();
     }
 
-    // ── Behaviour when products table is absent (pre-Epic 2) ──────────────────
+    // ── Story 16.8 — fail closed ──────────────────────────────────────────────
 
     @Test
-    @DisplayName("countActiveProducts() returns 0 when products table does not exist")
-    void countActiveProducts_tableAbsent_returns0() {
+    @DisplayName("16.8: countActiveProducts() throws when the count cannot be read (never 0)")
+    void countActiveProducts_failure_throws() {
         when(jdbcTemplate.queryForObject(
                 eq("SELECT COUNT(*) FROM \"kv_test01\".products WHERE status = 'ACTIVE'"),
                 eq(Integer.class)))
                 .thenThrow(new org.springframework.dao.DataAccessException("relation products does not exist") {});
 
-        int count = adapter.countActiveProducts(com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant());
-
-        assertThat(count).isZero();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.countActiveProducts(
+                        com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant()))
+                .isInstanceOf(org.springframework.dao.DataAccessException.class);
     }
 
     @Test
@@ -97,11 +98,13 @@ class ProductCountAdapterTest {
     // ── Story 11.4 AC7 — schema validated before interpolation ────────────────
 
     @Test
-    @DisplayName("countActiveProducts() returns 0 and builds no SQL when the tenant schema is invalid")
-    void countActiveProducts_invalidSchema_returns0WithoutSql() {
+    @DisplayName("countActiveProducts() throws and builds no SQL when the tenant schema is invalid (16.8: fail closed)")
+    void countActiveProducts_invalidSchema_throwsWithoutSql() {
         com.keevo.shared.infrastructure.persistence.TenantContext.setCurrentTenant("public");
 
-        assertThat(adapter.countActiveProducts(com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant())).isZero();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.countActiveProducts(
+                        com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant()))
+                .isInstanceOf(IllegalStateException.class);
         org.mockito.Mockito.verifyNoInteractions(jdbcTemplate);
     }
 

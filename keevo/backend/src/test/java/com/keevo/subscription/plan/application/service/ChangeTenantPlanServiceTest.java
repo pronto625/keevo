@@ -11,7 +11,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -38,7 +37,13 @@ class ChangeTenantPlanServiceTest {
     @Mock JdbcTemplate jdbc;
     @Mock PlanChangeRecorder recorder;
     @Mock com.keevo.shared.module.application.port.PlanModuleRowSync planModuleRows;
-    @InjectMocks ChangeTenantPlanService service;
+    ChangeTenantPlanService service;
+
+    @org.junit.jupiter.api.BeforeEach
+    void init() {
+        service = new ChangeTenantPlanService(jdbc, recorder, planModuleRows,
+                com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
+    }
 
     @SuppressWarnings("unchecked")
     private void currentRow(UUID rowId, PlanType plan) throws Exception {
@@ -84,8 +89,23 @@ class ChangeTenantPlanServiceTest {
         service.changePlan(new ChangeTenantPlanCommand(TENANT, SCHEMA, PlanType.FREE, null,
                 PlanChangeCause.ADMIN_DOWNGRADE, ACTOR, null));
 
-        verify(jdbc).update(anyString(), eq("FREE"), eq(1), eq(500), eq(3), isNull(), eq(rowId));
+        verify(jdbc).update(anyString(), eq("FREE"), eq(1), eq(500), eq(2), isNull(), eq(rowId));
         verify(recorder).syncPublicPlanType(TENANT, PlanType.FREE);
+    }
+
+    @Test
+    @DisplayName("16.8: legacy max_* columns are filled from the plan profile (null = unlimited → Integer.MAX_VALUE)")
+    void legacyColumnsFromProfile() throws Exception {
+        UUID rowId = UUID.randomUUID();
+        currentRow(rowId, PlanType.PREMIUM);
+        service = new ChangeTenantPlanService(jdbc, recorder, planModuleRows, type -> type == PlanType.FREE
+                ? com.keevo.shared.capability.entitlement.PlanProfile.of(type, 2, 800, null, java.util.Set.of())
+                : com.keevo.shared.capability.entitlement.PlanProfile.fromEnum(type));
+
+        service.changePlan(new ChangeTenantPlanCommand(TENANT, SCHEMA, PlanType.FREE, null,
+                PlanChangeCause.ADMIN_DOWNGRADE, ACTOR, null));
+
+        verify(jdbc).update(anyString(), eq("FREE"), eq(2), eq(800), eq(Integer.MAX_VALUE), isNull(), eq(rowId));
     }
 
     @Test

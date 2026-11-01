@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -119,15 +120,28 @@ void main() {
         )).called(1);
   });
 
-  // v1s-16-13 follow-up: the plan-limit sheet states the FREE limit (3
-  // employees, PlanType.FREE), never the old hard-coded 5.
-  testWidgets('plan limit shows « limite de 3 employés »', (tester) async {
+  // 16.8: the plan-limit sheet states the limit the server sent (2 employees
+  // on Free, configurable), never a number hard-coded in the app.
+  testWidgets('plan limit shows « limite de 2 employés » from the server',
+      (tester) async {
     when(() => empRepo.createEmployee(
           firstName: any(named: 'firstName'),
           lastName: any(named: 'lastName'),
           phoneNumber: any(named: 'phoneNumber'),
           storeId: any(named: 'storeId'),
-        )).thenThrow(Exception('PLAN_LIMIT_EXCEEDED'));
+        )).thenThrow(DioException(
+      requestOptions: RequestOptions(path: '/api/v1/employees'),
+      type: DioExceptionType.badResponse,
+      // only the server body names the refusal (no matching message)
+      response: Response(
+        requestOptions: RequestOptions(path: '/api/v1/employees'),
+        statusCode: 403,
+        data: {
+          'domainCode': 'PLAN_LIMIT_EXCEEDED',
+          'details': {'entity': 'employees', 'limit': 2, 'current': 2},
+        },
+      ),
+    ));
     await tester.binding.setSurfaceSize(const Size(800, 1600));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(ProviderScope(
@@ -153,7 +167,7 @@ void main() {
     await tester.tap(find.text("Créer l'employé"));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Vous avez atteint la limite de 3 employés'),
+    expect(find.textContaining('Vous avez atteint la limite de 2 employés'),
         findsOneWidget);
   });
 

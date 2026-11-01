@@ -42,6 +42,32 @@ void main() {
       expect(find.text('2 / 3'), findsOneWidget);
     });
 
+    testWidgets('16.8: an unknown product count shows « — », never 0',
+        (tester) async {
+      await tester.pumpWidget(ProviderScope(
+        retry: noProviderRetry,
+        overrides: [
+          subscriptionInfoProvider.overrideWith(
+            (ref) async => const SubscriptionInfo(
+              planType: 'FREE',
+              status: 'ACTIVE',
+              currentStores: 1,
+              maxStores: 1,
+              maxProducts: 500,
+              currentEmployees: 2,
+              maxEmployees: 2,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: SubscriptionPage()),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.text('— / 500'), findsOneWidget);
+      expect(find.text('0 / 500'), findsNothing);
+      expect(find.textContaining('illimités'), findsNothing);
+    });
+
     testWidgets(
         'shows Essai Premium plan with expiry date and unlimited label',
         (tester) async {
