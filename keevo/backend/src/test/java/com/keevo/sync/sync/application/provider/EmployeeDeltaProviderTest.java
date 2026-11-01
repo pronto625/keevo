@@ -1,5 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+
+import com.keevo.shared.application.port.sync.PullScope;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +44,7 @@ class EmployeeDeltaProviderTest {
                 UUID.randomUUID(), "ACTIVE", false, now, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
+        var result = provider.queryDeltaPage(Instant.parse("2026-03-20T10:00:00Z"), null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("firstName", "Jean");
         assertThat(result.get(0)).containsEntry("status", "ACTIVE");

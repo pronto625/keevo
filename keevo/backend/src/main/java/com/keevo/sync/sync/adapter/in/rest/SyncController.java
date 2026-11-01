@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.adapter.in.rest;
 
 import com.keevo.shared.application.port.AuditContext;
+import com.keevo.shared.application.port.sync.PullScope;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -216,12 +217,26 @@ public class SyncController {
                 ? Instant.parse(since)
                 : null;
 
+        boolean owner = CurrentActor.isOwner();
         SyncPullResult result = syncUseCase.pull(
                 new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant,
                         cursor != null && !cursor.isBlank() ? cursor : null,
-                        CurrentActor.isOwner()));
+                        owner, pullScope(owner, actorId),
+                        deviceId != null && !deviceId.isBlank() ? deviceId : null));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
+    }
+
+    /**
+     * Story 16.13 — the only place the pull scope is read from the actor: OWNER / super-admin see the whole
+     * tenant; anyone else is restricted to its assigned store (server-side access state, Story 16.11) — an
+     * EMPLOYEE without a store gets no store-specific data.
+     */
+    static PullScope pullScope(boolean owner, UUID actorId) {
+        if (owner || CurrentActor.isSuperAdmin()) {
+            return PullScope.unrestricted(actorId);
+        }
+        return PullScope.employee(CurrentActor.assignedStoreIdOrNull(), actorId);
     }
 
     @RequiresEntitlement(value = "sync", access = RequiresEntitlement.Access.READ)

@@ -1,5 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+
+import com.keevo.shared.application.port.sync.PullScope;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,7 +45,7 @@ class StockMovementDeltaProviderTest {
                 "SALE", 50, -2, 48, UUID.randomUUID(), "vente", now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(since);
+        var result = provider.queryDeltaPage(since, null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("movementType", "SALE");
         assertThat(result.get(0)).containsEntry("quantityChange", -2);
@@ -54,7 +58,7 @@ class StockMovementDeltaProviderTest {
         when(query.setMaxResults(anyInt())).thenReturn(query);
         when(query.getResultList()).thenReturn(List.of());
 
-        provider.queryDelta(Instant.EPOCH);
+        provider.queryDeltaPage(Instant.EPOCH, null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
 
         // Verify that since is NOT Instant.EPOCH (should be ~30 days ago)
         var captor = org.mockito.ArgumentCaptor.forClass(Timestamp.class);
@@ -75,7 +79,7 @@ class StockMovementDeltaProviderTest {
                 "TRANSFER_IN", 100, 10, 110, UUID.randomUUID(), null, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var map = provider.queryDelta(Instant.now().minusSeconds(60)).get(0);
+        var map = provider.queryDeltaPage(Instant.now().minusSeconds(60), null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows().get(0);
         assertThat(map.get("id")).isEqualTo(id.toString());
         assertThat(map.get("quantityBefore")).isEqualTo(100);
         assertThat(map.get("quantityAfter")).isEqualTo(110);

@@ -1,6 +1,7 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 
@@ -96,6 +97,41 @@ final class DeltaPageQuery {
         List<Object[]> pageRows = rows.subList(0, limit);
         Object[] last = pageRows.get(limit - 1);
         return new Rows(pageRows, new Position(toInstant(last[last.length - 1]), String.valueOf(last[0])));
+    }
+
+    /** Story 16.13 — named parameter carrying the employee's store in a store filter. */
+    static final String SCOPE_STORE_PARAM = "scopeStoreId";
+
+    /** Story 16.13 — named parameter carrying the pulling actor's user id in a personal filter. */
+    static final String SCOPE_ACTOR_PARAM = "scopeActorId";
+
+    private static final Rows EMPTY = new Rows(List.of(), null);
+
+    /**
+     * Story 16.13 — a page of a store-specific dataset: unscoped for an unrestricted pull (OWNER); restricted to
+     * {@code storeFilter} (which references {@code :scopeStoreId}, always bound) for an employee; empty without
+     * any query for a restricted pull without a store. A {@code null} scope fails closed (empty).
+     */
+    static Rows fetchForStore(EntityManager em, String columns, String table, String cursorExpr,
+                              Instant since, Position after, int limit, PullScope scope, String storeFilter) {
+        if (scope == null || scope.excludesEveryStore()) return EMPTY;
+        if (!scope.restricted()) return fetch(em, columns, table, cursorExpr, since, after, limit);
+        return fetch(em, columns, table, cursorExpr, since, after, limit,
+                storeFilter, Map.of(SCOPE_STORE_PARAM, scope.storeId()));
+    }
+
+    /**
+     * Story 16.13 — a page of a personal dataset (e.g. reports): unscoped for an unrestricted pull; restricted to
+     * {@code actorFilter} (which references {@code :scopeActorId}) for an employee; empty when the actor is
+     * unknown or the scope is {@code null}.
+     */
+    static Rows fetchForActor(EntityManager em, String columns, String table, String cursorExpr,
+                              Instant since, Position after, int limit, PullScope scope, String actorFilter) {
+        if (scope == null) return EMPTY;
+        if (!scope.restricted()) return fetch(em, columns, table, cursorExpr, since, after, limit);
+        if (scope.actorId() == null) return EMPTY;
+        return fetch(em, columns, table, cursorExpr, since, after, limit,
+                actorFilter, Map.of(SCOPE_ACTOR_PARAM, scope.actorId()));
     }
 
     static Instant toInstant(Object value) {

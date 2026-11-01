@@ -194,7 +194,8 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
 
     /** First pull page of a provider, read in the tenant schema (as the request-path tenant filter does). */
     private List<Map<String, Object>> pull(DeltaEntityProvider provider, Instant since) {
-        return inTenant(p -> p.queryDeltaPage(since, null, DeltaEntityProvider.PAGE_SIZE).rows(), provider);
+        return inTenant(p -> p.queryDeltaPage(since, null, DeltaEntityProvider.PAGE_SIZE,
+                com.keevo.shared.application.port.sync.PullScope.UNRESTRICTED).rows(), provider);
     }
 
     private <R> R inTenant(Function<DeltaEntityProvider, R> work, DeltaEntityProvider provider) {

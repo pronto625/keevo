@@ -1,5 +1,7 @@
 package com.keevo.sync.sync.domain.model;
 
+import com.keevo.shared.application.port.sync.PullScope;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -14,18 +16,33 @@ import java.util.Objects;
  * <p>{@code hasMore}/{@code nextCursor}: the delta did not fit in one response; pull again
  * with {@code nextCursor}. {@code serverTimestamp} is always safe to resume from (clients
  * that ignore paging then re-receive some rows instead of skipping any).
+ *
+ * <p>Story 16.13 — {@code scope}: the scope the page was computed for (the client purges its local
+ * store-specific rows when it changes); {@code reseed}: the pull ignored the client's {@code since} and restarted
+ * from the beginning because the device's scope changed since its last completed pull.
  */
 public record SyncPullResult(
         Instant serverTimestamp,
         Map<String, List<Map<String, Object>>> entities,
         Map<String, Integer> counts,
         boolean hasMore,
-        String nextCursor
+        String nextCursor,
+        PullScope scope,
+        boolean reseed
 ) {
     public SyncPullResult {
         Objects.requireNonNull(serverTimestamp, "serverTimestamp required");
         entities = entities != null ? entities : Map.of();
         counts = counts != null ? counts : Map.of();
+        scope = scope != null ? scope : PullScope.NONE;
+    }
+
+    public SyncPullResult(Instant serverTimestamp,
+                          Map<String, List<Map<String, Object>>> entities,
+                          Map<String, Integer> counts,
+                          boolean hasMore,
+                          String nextCursor) {
+        this(serverTimestamp, entities, counts, hasMore, nextCursor, null, false);
     }
 
     public SyncPullResult(Instant serverTimestamp,

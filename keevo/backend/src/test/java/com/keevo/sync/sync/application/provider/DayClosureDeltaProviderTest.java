@@ -1,5 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+
+import com.keevo.shared.application.port.sync.PullScope;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,7 +46,7 @@ class DayClosureDeltaProviderTest {
                 12, 50000, 40000, 10000, false, null, null, 0, 0, 0, now};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
+        var result = provider.queryDeltaPage(Instant.parse("2026-03-20T10:00:00Z"), null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
 
         assertThat(result).singleElement().satisfies(map -> {
             assertThat(map).containsEntry("totalSales", 12);
@@ -63,7 +67,7 @@ class DayClosureDeltaProviderTest {
                 12, 54000, 40000, 14000, false, "prod-1", "Savon", 7, 2, 3500, closedAt};
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var map = provider.queryDelta(Instant.parse("2026-10-14T00:00:00Z")).get(0);
+        var map = provider.queryDeltaPage(Instant.parse("2026-10-14T00:00:00Z"), null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows().get(0);
 
         assertThat(map).containsEntry("topProductId", "prod-1")
                 .containsEntry("topProductName", "Savon")

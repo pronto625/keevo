@@ -12,11 +12,14 @@ import com.keevo.sync.sync.application.strategy.LastWriteWinsStrategy;
 import com.keevo.sync.sync.domain.model.*;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+import com.keevo.shared.application.port.sync.PullScope;
 import com.keevo.shared.application.port.sync.SyncOperationHandler;
 import com.keevo.sync.sync.domain.port.in.SyncUseCase;
 import com.keevo.sync.sync.domain.port.out.SyncConflictsLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncErrorLogRepository;
 import com.keevo.sync.sync.domain.port.out.SyncOperationsLogRepository;
+import com.keevo.sync.sync.domain.port.out.UserSyncStateRepository;
+import com.keevo.sync.sync.domain.model.UserSyncState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -45,6 +48,7 @@ public class SyncPushService implements SyncUseCase {
     private final SyncConflictsLogRepository conflictsLogRepository;
     private final SyncErrorLogRepository syncErrorLogRepository;
     private final ModuleRegistry moduleRegistry;
+    private final UserSyncStateRepository userSyncStateRepository;
 
     public SyncPushService(SyncOperationHandlerRegistry handlerRegistry,
                            SyncOperationsLogRepository logRepository,
@@ -54,7 +58,8 @@ public class SyncPushService implements SyncUseCase {
                            ConflictStrategyRegistry conflictStrategyRegistry,
                            SyncConflictsLogRepository conflictsLogRepository,
                            SyncErrorLogRepository syncErrorLogRepository,
-                           ModuleRegistry moduleRegistry) {
+                           ModuleRegistry moduleRegistry,
+                           UserSyncStateRepository userSyncStateRepository) {
         this.handlerRegistry = handlerRegistry;
         this.logRepository = logRepository;
         this.eventPublisher = eventPublisher;
@@ -64,6 +69,7 @@ public class SyncPushService implements SyncUseCase {
         this.conflictsLogRepository = conflictsLogRepository;
         this.syncErrorLogRepository = syncErrorLogRepository;
         this.moduleRegistry = moduleRegistry;
+        this.userSyncStateRepository = userSyncStateRepository;
     }
 
     /**
@@ -494,9 +500,25 @@ public class SyncPushService implements SyncUseCase {
 
     @Override
     public SyncPullResult pull(PullCommand command) {
-        Instant since = command.since() != null ? command.since() : Instant.EPOCH;
+        ScopeKey scope = ScopeKey.of(command.scope());
         PullCursor state = PullCursor.decode(command.cursor());
-        if (state == null) state = new PullCursor(Instant.now(), false, new HashMap<>());
+        boolean restart = false;
+        if (state != null && state.scope() != null && !state.scope().equals(scope)) {
+            // Story 16.13 — the actor's scope changed between two pages of this pull (employee reassigned): the
+            // keyset positions belong to the old scope, so the pull restarts from the beginning as a re-seed.
+            log.info("[Sync] Pull scope changed during a paged pull — pull restarted from the beginning (reseed)");
+            state = null;
+            restart = true;
+        }
+        if (state == null) {
+            // Story 16.13 — first page: decided once, then carried (with the scope) by the cursor.
+            Optional<UserSyncState> stored = readDeviceState(command);
+            boolean reseed = restart || scopeChanged(stored, scope, command);
+            state = new PullCursor(Instant.now(), false, reseed, mustRemember(stored, scope, command), scope,
+                    new HashMap<>());
+        }
+        // A re-seeded pull ignores the client's since: the new scope's whole history must reach the device.
+        Instant since = state.reseed() || command.since() == null ? Instant.EPOCH : command.since();
 
         Map<String, List<Map<String, Object>>> entities = new LinkedHashMap<>();
         Map<String, Integer> counts = new LinkedHashMap<>();
@@ -523,7 +545,7 @@ public class SyncPushService implements SyncUseCase {
                 DeltaEntityProvider.Position after = state.positions().get(key);
                 try {
                     DeltaEntityProvider.Page page = readOnlyTx.execute(status ->
-                            provider.queryDeltaPage(since, after, DeltaEntityProvider.PAGE_SIZE));
+                            provider.queryDeltaPage(since, after, DeltaEntityProvider.PAGE_SIZE, command.scope()));
                     if (page != null && page.rows() != null) rows = page.rows();
                     if (page != null && page.hasMore()) state.positions().put(key, page.next());
                     else state.positions().put(key, PullCursor.DONE);
@@ -555,8 +577,79 @@ public class SyncPushService implements SyncUseCase {
             }
         }
 
+        if (!hasMore && !state.failed() && state.remember()) {
+            // Only a completed pull commits the scope: an interrupted or failed one re-seeds again next time.
+            rememberScope(command, scope);
+        }
+
         return new SyncPullResult(serverTimestamp, entities, counts,
-                hasMore, hasMore ? state.encode() : null);
+                hasMore, hasMore ? state.encode() : null, command.scope(), state.reseed());
+    }
+
+    /** Story 16.13 — the part of a pull scope that decides what the device holds: restricted + store. */
+    record ScopeKey(boolean restricted, UUID storeId) {
+        static ScopeKey of(PullScope scope) {
+            return new ScopeKey(scope.restricted(), scope.storeId());
+        }
+    }
+
+    /** Story 16.13 — the device's sync state (empty without a device id, or when unreadable). */
+    private Optional<UserSyncState> readDeviceState(PullCommand command) {
+        if (command.deviceId() == null || command.deviceId().isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return userSyncStateRepository.findByDeviceId(command.deviceId());
+        } catch (RuntimeException e) {
+            log.warn("[Sync] Device pull scope unreadable ({}) — normal pull", e.getClass().getSimpleName());
+            return Optional.empty();
+        }
+    }
+
+    private static boolean ownRow(Optional<UserSyncState> stored, PullCommand command) {
+        return stored.isPresent() && Objects.equals(stored.get().userId(), command.actorId());
+    }
+
+    private static ScopeKey storedScope(UserSyncState stored) {
+        return new ScopeKey(stored.lastScopeRestricted(), stored.lastScopeStoreId());
+    }
+
+    /**
+     * Story 16.13 — true when the device's last completed pull had a known scope (restricted + store) different
+     * from this pull's (employee reassigned, promoted...). Unknown device, first pull of a device, another user's
+     * row, or unreadable state: not a change.
+     */
+    private static boolean scopeChanged(Optional<UserSyncState> stored, ScopeKey scope, PullCommand command) {
+        if (!ownRow(stored, command) || !stored.get().lastScopeKnown()) {
+            return false;
+        }
+        boolean changed = !storedScope(stored.get()).equals(scope);
+        if (changed) {
+            log.info("[Sync] Pull scope of the device changed since its last pull — pull answered from the "
+                    + "beginning (reseed)");
+        }
+        return changed;
+    }
+
+    /** Story 16.13 — the scope is written at the end of the pull only when unknown or different. */
+    private static boolean mustRemember(Optional<UserSyncState> stored, ScopeKey scope, PullCommand command) {
+        if (command.deviceId() == null || command.deviceId().isBlank() || command.actorId() == null) {
+            return false;
+        }
+        if (stored.isEmpty()) return true; // unreadable or not registered yet: the guarded update decides
+        return ownRow(stored, command)
+                && (!stored.get().lastScopeKnown() || !storedScope(stored.get()).equals(scope));
+    }
+
+    /** Story 16.13 — remembers the scope of the device's completed pull; never fails the pull. */
+    private void rememberScope(PullCommand command, ScopeKey scope) {
+        try {
+            userSyncStateRepository.rememberPullScope(command.deviceId(), command.actorId(),
+                    scope.restricted(), scope.storeId());
+        } catch (RuntimeException e) {
+            log.warn("[Sync] Device pull scope not saved ({}) — next pull compares with the previous one",
+                    e.getClass().getSimpleName());
+        }
     }
 
     /**
@@ -575,10 +668,12 @@ public class SyncPushService implements SyncUseCase {
 
     /**
      * State of a paged pull, round-tripped to the client as an opaque cursor: when the pull
-     * started (its final cursor), whether a provider failed, and each provider's keyset
+     * started (its final cursor), whether a provider failed, whether the pull is a re-seed from the
+     * beginning and whether its scope must be remembered at the end (Story 16.13), the scope the pull
+     * was started with ({@code null} for a cursor from before 16.13), and each provider's keyset
      * position (or DONE).
      */
-    record PullCursor(Instant startedAt, boolean failed,
+    record PullCursor(Instant startedAt, boolean failed, boolean reseed, boolean remember, ScopeKey scope,
                       Map<String, DeltaEntityProvider.Position> positions) {
 
         static final DeltaEntityProvider.Position DONE = new DeltaEntityProvider.Position(Instant.EPOCH, "");
@@ -588,12 +683,19 @@ public class SyncPushService implements SyncUseCase {
         }
 
         PullCursor withFailure() {
-            return new PullCursor(startedAt, true, positions);
+            return new PullCursor(startedAt, true, reseed, remember, scope, positions);
         }
 
         String encode() {
             StringBuilder sb = new StringBuilder();
-            sb.append(startedAt).append('\n').append(failed ? '1' : '0');
+            // Flags line (Story 16.13): failed, reseed, remember, then |restricted|store of the pinned scope.
+            // A one-char line from before reads as reseed = false, remember = true, no pinned scope.
+            sb.append(startedAt).append('\n').append(failed ? '1' : '0').append(reseed ? '1' : '0')
+                    .append(remember ? '1' : '0');
+            if (scope != null) {
+                sb.append('|').append(scope.restricted() ? '1' : '0').append('|')
+                        .append(scope.storeId() != null ? scope.storeId().toString() : "-");
+            }
             positions.forEach((key, pos) -> {
                 sb.append('\n').append(key).append('=');
                 if (pos == DONE) sb.append('-');
@@ -610,7 +712,14 @@ public class SyncPushService implements SyncUseCase {
                 String[] lines = new String(Base64.getUrlDecoder().decode(cursor),
                         java.nio.charset.StandardCharsets.UTF_8).split("\n");
                 Instant startedAt = Instant.parse(lines[0]);
-                boolean failed = "1".equals(lines[1]);
+                String[] header = lines[1].split("\\|");
+                String flags = header[0];
+                boolean failed = flags.startsWith("1");
+                boolean reseed = flags.length() > 1 && flags.charAt(1) == '1';
+                boolean remember = flags.length() <= 2 || flags.charAt(2) == '1';
+                ScopeKey scope = header.length == 3
+                        ? new ScopeKey("1".equals(header[1]), "-".equals(header[2]) ? null : UUID.fromString(header[2]))
+                        : null;
                 Map<String, DeltaEntityProvider.Position> positions = new HashMap<>();
                 for (int i = 2; i < lines.length; i++) {
                     int eq = lines[i].indexOf('=');
@@ -624,7 +733,7 @@ public class SyncPushService implements SyncUseCase {
                                 Instant.parse(value.substring(0, bar)), value.substring(bar + 1)));
                     }
                 }
-                return new PullCursor(startedAt, failed, positions);
+                return new PullCursor(startedAt, failed, reseed, remember, scope, positions);
             } catch (RuntimeException e) {
                 log.warn("[Sync] Ignoring unreadable pull cursor: {}", e.getMessage());
                 return null;

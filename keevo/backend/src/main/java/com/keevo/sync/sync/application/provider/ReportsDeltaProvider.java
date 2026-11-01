@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,9 @@ public class ReportsDeltaProvider implements DeltaEntityProvider {
      * must reach the other devices. EndOfDayReportJpaEntity stamps it on every write.
      */
     static final String CURSOR = "updated_at";
+
+    /** Story 16.13 — bound-parameter filter applied to a restricted (EMPLOYEE) pull. */
+    static final String ACTOR_SCOPE = "actor_id = :scopeActorId";
 
     private final EntityManager em;
 
@@ -37,9 +41,15 @@ public class ReportsDeltaProvider implements DeltaEntityProvider {
 
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
-        var page = DeltaPageQuery.fetch(em,
+        return queryDeltaPage(since, after, limit, PullScope.NONE); // fail closed: the pull always passes its scope
+    }
+
+    /** Story 16.13 — an EMPLOYEE only pulls its own reports (REST parity: ReportController forces the actor id). */
+    @Override
+    public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
+        var page = DeltaPageQuery.fetchForActor(em,
                 "id, tenant_id, store_id, store_name, actor_id, actor_name, report_type, report_date, content, delivery_status, delivery_attempts, last_attempt_at, total_revenue, total_sales, is_automatic, created_at",
-                "reports", CURSOR, since, after, limit);
+                "reports", CURSOR, since, after, limit, scope, ACTOR_SCOPE);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

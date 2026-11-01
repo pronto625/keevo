@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,9 @@ public class StockMovementDeltaProvider implements DeltaEntityProvider {
 
     /** Keyset cursor of the delta pull; the {@code stock_movements} sync keyset index leads with it (Story 11.5). */
     static final String CURSOR = "occurred_at";
+
+    /** Story 16.13 — bound-parameter filter applied to a restricted (EMPLOYEE) pull. */
+    static final String STORE_SCOPE = "store_id = :scopeStoreId";
 
     private final EntityManager em;
 
@@ -34,13 +38,19 @@ public class StockMovementDeltaProvider implements DeltaEntityProvider {
 
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
+        return queryDeltaPage(since, after, limit, PullScope.NONE); // fail closed: the pull always passes its scope
+    }
+
+    /** Story 16.13 — an EMPLOYEE only pulls the stock movements of its assigned store. */
+    @Override
+    public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
         // First-time sync: limit to last 30 days (match local purge policy)
         Instant thirtyDaysAgo = Instant.now().minus(30, ChronoUnit.DAYS);
         Instant effectiveSince = since.isAfter(thirtyDaysAgo) ? since : thirtyDaysAgo;
 
-        var page = DeltaPageQuery.fetch(em,
+        var page = DeltaPageQuery.fetchForStore(em,
                 "id, product_id, variant_id, store_id, movement_type, quantity_before, quantity_change, quantity_after, actor_id, notes, occurred_at",
-                "stock_movements", CURSOR, effectiveSince, after, limit);
+                "stock_movements", CURSOR, effectiveSince, after, limit, scope, STORE_SCOPE);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

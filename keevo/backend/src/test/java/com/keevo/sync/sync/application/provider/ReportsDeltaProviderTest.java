@@ -1,5 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+
+import com.keevo.shared.application.port.sync.PullScope;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +42,7 @@ class ReportsDeltaProviderTest {
         when(query.getResultList()).thenReturn(Collections.emptyList());
 
         var since = Instant.parse("2026-03-20T10:00:00Z");
-        provider.queryDelta(since);
+        provider.queryDeltaPage(since, null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
 
         var sqlCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(em).createNativeQuery(sqlCaptor.capture());
@@ -81,7 +85,7 @@ class ReportsDeltaProviderTest {
         };
         when(query.getResultList()).thenReturn(Collections.singletonList(row));
 
-        var result = provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
+        var result = provider.queryDeltaPage(Instant.parse("2026-03-20T10:00:00Z"), null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
 
         assertThat(result).hasSize(1);
         var mapped = result.get(0);

@@ -59,11 +59,12 @@ class SyncPushServicePullOwnerOnlyTest {
         lenient().when(productProvider.entityKey()).thenReturn("products");
         lenient().when(auditProvider.entityKey()).thenReturn("auditEntries");
         lenient().when(auditProvider.ownerOnly()).thenReturn(true);
-        lenient().when(productProvider.queryDeltaPage(eq(SINCE), isNull(), anyInt())).thenReturn(
+        lenient().when(productProvider.queryDeltaPage(eq(SINCE), isNull(), anyInt(), any())).thenReturn(
                 new DeltaEntityProvider.Page(List.of(Map.of("id", "p1")), null));
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher,
                 transactionManager, List.of(productProvider, auditProvider),
-                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry,
+                org.mockito.Mockito.mock(com.keevo.sync.sync.domain.port.out.UserSyncStateRepository.class));
     }
 
     @Test
@@ -75,7 +76,7 @@ class SyncPushServicePullOwnerOnlyTest {
         assertThat(result.counts()).containsEntry("auditEntries", 0);
         assertThat(result.entities().get("products")).hasSize(1);
         assertThat(result.hasMore()).isFalse();
-        verify(auditProvider, never()).queryDeltaPage(any(), any(), anyInt());
+        verify(auditProvider, never()).queryDeltaPage(any(), any(), anyInt(), any());
     }
 
     @Test
@@ -83,12 +84,12 @@ class SyncPushServicePullOwnerOnlyTest {
         var result = service.pull(new SyncUseCase.PullCommand(ACTOR_ID, TENANT_ID, SINCE));
 
         assertThat(result.entities().get("auditEntries")).isEmpty();
-        verify(auditProvider, never()).queryDeltaPage(any(), any(), anyInt());
+        verify(auditProvider, never()).queryDeltaPage(any(), any(), anyInt(), any());
     }
 
     @Test
     void ownerPull_getsAuditEntriesUnchanged() {
-        when(auditProvider.queryDeltaPage(eq(SINCE), isNull(), anyInt())).thenReturn(
+        when(auditProvider.queryDeltaPage(eq(SINCE), isNull(), anyInt(), any())).thenReturn(
                 new DeltaEntityProvider.Page(List.of(Map.of("id", "a1"), Map.of("id", "a2")), null));
 
         var result = service.pull(new SyncUseCase.PullCommand(ACTOR_ID, TENANT_ID, SINCE, null, true));

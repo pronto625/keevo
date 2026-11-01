@@ -3,6 +3,7 @@ package com.keevo.sync.sync.domain.port.out;
 import com.keevo.sync.sync.domain.model.UserSyncState;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * UserSyncStateRepository — port-out interface for per-device sync state persistence.
@@ -38,6 +39,15 @@ public interface UserSyncStateRepository {
      * @return {@code true} if a row was written, {@code false} if owned by another user
      */
     boolean upsertOnPull(UserSyncState state);
+
+    /**
+     * Story 16.13 — remembers the scope of the device's last completed pull ({@code restricted} = employee;
+     * {@code storeId} null = unrestricted or employee without a store) and marks it known. Only on the device's own row
+     * ({@code device_id} and {@code user_id} both match); nothing written otherwise.
+     *
+     * @return {@code true} if the row was updated
+     */
+    boolean rememberPullScope(String deviceId, UUID userId, boolean restricted, UUID storeId);
 
     /**
      * Returns all device sync states for the given tenant.

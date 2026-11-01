@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,9 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
 
     /** Keyset cursor of the delta pull; the {@code sales} sync keyset index leads with it (Story 11.5). */
     static final String CURSOR = "updated_at";
+
+    /** Story 16.13 — bound-parameter filter applied to a restricted (EMPLOYEE) pull. */
+    static final String STORE_SCOPE = "store_id = :scopeStoreId";
 
     private final EntityManager em;
 
@@ -33,14 +37,20 @@ public class SaleDeltaProvider implements DeltaEntityProvider {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Page queryDeltaPage(Instant since, Position after, int limit) {
+        return queryDeltaPage(since, after, limit, PullScope.NONE); // fail closed: the pull always passes its scope
+    }
+
+    /** Story 16.13 — an EMPLOYEE only pulls the sales of its assigned store (every seller of it); the items follow their sales. */
+    @Override
+    @SuppressWarnings("unchecked")
+    public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
         // updated_at, not created_at: a validation/cancellation must reach the other devices.
-        var page = DeltaPageQuery.fetch(em,
+        var page = DeltaPageQuery.fetchForStore(em,
                 "id, store_id, employee_id, client_id, total_amount, " +
                 "COALESCE(discount_amount, 0) AS discount_amount, payment_mode, " +
                 "COALESCE(status, 'COMPLETED') AS status, occurred_at, created_at, mobile_money_ref",
-                "sales", CURSOR, since, after, limit);
+                "sales", CURSOR, since, after, limit, scope, STORE_SCOPE);
         List<Object[]> saleRows = page.rows();
 
         if (saleRows.isEmpty()) return new Page(List.of(), page.next());

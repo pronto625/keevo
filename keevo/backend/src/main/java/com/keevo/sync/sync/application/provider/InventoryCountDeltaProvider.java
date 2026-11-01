@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +18,9 @@ public class InventoryCountDeltaProvider implements DeltaEntityProvider {
 
     /** Keyset cursor of the delta pull; the {@code inventory_counts} sync keyset index leads with it (Story 11.5). */
     static final String CURSOR = "updated_at";
+
+    /** Story 16.13 — bound-parameter filter applied to a restricted (EMPLOYEE) pull. */
+    static final String STORE_SCOPE = "session_id IN (SELECT s.id FROM inventory_sessions s WHERE s.store_id = :scopeStoreId)";
 
     private final EntityManager em;
 
@@ -36,9 +40,15 @@ public class InventoryCountDeltaProvider implements DeltaEntityProvider {
 
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
-        var page = DeltaPageQuery.fetch(em,
+        return queryDeltaPage(since, after, limit, PullScope.NONE); // fail closed: the pull always passes its scope
+    }
+
+    /** Story 16.13 — an EMPLOYEE only pulls the counts of its assigned store's inventory sessions. */
+    @Override
+    public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
+        var page = DeltaPageQuery.fetchForStore(em,
                 "id, session_id, product_id, variant_id, product_name, variant_label, theoretical, physical, counted_at, counted_by, updated_at",
-                "inventory_counts", CURSOR, since, after, limit);
+                "inventory_counts", CURSOR, since, after, limit, scope, STORE_SCOPE);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

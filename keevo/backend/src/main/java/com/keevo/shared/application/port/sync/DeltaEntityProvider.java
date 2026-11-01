@@ -50,6 +50,15 @@ public interface DeltaEntityProvider {
     Page queryDeltaPage(Instant since, Position after, int limit);
 
     /**
+     * Story 16.13 — the same page restricted to what {@code scope} may see. The pull always calls this overload.
+     * Default: the scope does not apply to the entity (tenant-wide data: catalogue, stores, stock levels...).
+     * A store-specific provider overrides it with a bound-parameter filter; it never reads the security context.
+     */
+    default Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
+        return queryDeltaPage(since, after, limit);
+    }
+
+    /**
      * Story v1s-18-7 — true when only OWNER devices may receive this delta (FR98: e.g. the
      * audit log). For any other role the pull returns an empty list for {@link #entityKey()}
      * and never queries the provider.

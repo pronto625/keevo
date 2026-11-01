@@ -57,7 +57,8 @@ class SyncPushServiceTest {
         lenient().when(moduleRegistry.moduleStates(any())).thenReturn(ModuleStatesFixture.enabled(java.util.Set.of("admin", "catalog", "core", "crm", "inventory", "messaging", "pos", "reporting", "store", "sync")));
         lenient().when(saleHandler.moduleId()).thenReturn("pos");
         service = new SyncPushService(handlerRegistry, logRepository, eventPublisher, transactionManager, List.of(),
-                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry,
+                org.mockito.Mockito.mock(com.keevo.sync.sync.domain.port.out.UserSyncStateRepository.class));
     }
 
     @Test

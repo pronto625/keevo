@@ -1,5 +1,9 @@
 package com.keevo.sync.sync.application.provider;
 
+import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+
+import com.keevo.shared.application.port.sync.PullScope;
+
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +55,7 @@ class SaleDeltaProviderTest {
         Object[] itemRow = {saleId, itemId, UUID.randomUUID(), null, "Produit A", 5000, 5000, 1, 5000};
         when(itemQuery.getResultList()).thenReturn(Collections.singletonList(itemRow));
 
-        var result = provider.queryDelta(since);
+        var result = provider.queryDeltaPage(since, null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("totalAmount", 5000);
     }
@@ -76,7 +80,7 @@ class SaleDeltaProviderTest {
         Object[] item2 = {saleId, UUID.randomUUID(), UUID.randomUUID(), null, "Prod2", 2000, 2000, 1, 2000};
         when(itemQuery.getResultList()).thenReturn(java.util.Arrays.asList(item1, item2));
 
-        var result = provider.queryDelta(Instant.EPOCH);
+        var result = provider.queryDeltaPage(Instant.EPOCH, null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
         var items = (List<?>) result.get(0).get("items");
         assertThat(items).hasSize(2);
         assertThat(result.get(0)).containsEntry("mobileMoneyRef", "MP2603.1234");
@@ -89,7 +93,7 @@ class SaleDeltaProviderTest {
         when(em.createNativeQuery(contains("FROM sales"))).thenReturn(query);
         when(query.getResultList()).thenReturn(Collections.emptyList());
 
-        provider.queryDelta(Instant.parse("2026-03-20T10:00:00Z"));
+        provider.queryDeltaPage(Instant.parse("2026-03-20T10:00:00Z"), null, DeltaEntityProvider.PAGE_SIZE, PullScope.UNRESTRICTED).rows();
 
         var sql = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(em).createNativeQuery(sql.capture());

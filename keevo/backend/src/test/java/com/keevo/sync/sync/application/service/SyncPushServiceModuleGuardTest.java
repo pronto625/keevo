@@ -84,7 +84,8 @@ class SyncPushServiceModuleGuardTest {
         SyncOperationHandlerRegistry registry = new SyncOperationHandlerRegistry(
                 List.of(saleHandler, clientHandler, productHandler), ALL);
         service = new SyncPushService(registry, logRepository, eventPublisher, transactionManager, List.of(),
-                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry);
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry,
+                org.mockito.Mockito.mock(com.keevo.sync.sync.domain.port.out.UserSyncStateRepository.class));
     }
 
     private static SyncOperationHandler handler(String moduleId, String type) {

@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Page;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider.Position;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Component;
 
@@ -18,6 +19,9 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
      * updated afterwards, so its creation on the server is its only change.
      */
     static final String CURSOR = "received_at";
+
+    /** Story 16.13 — bound-parameter filter applied to a restricted (EMPLOYEE) pull. */
+    static final String STORE_SCOPE = "store_id = :scopeStoreId";
 
     private final EntityManager em;
 
@@ -37,10 +41,16 @@ public class DayClosureDeltaProvider implements DeltaEntityProvider {
 
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
-        var page = DeltaPageQuery.fetch(em,
+        return queryDeltaPage(since, after, limit, PullScope.NONE); // fail closed: the pull always passes its scope
+    }
+
+    /** Story 16.13 — an EMPLOYEE only pulls the day closures of its assigned store. */
+    @Override
+    public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
+        var page = DeltaPageQuery.fetchForStore(em,
                 "id, store_id, actor_id, closed_at, total_sales, total_revenue, cash_amount, momo_amount, is_automatic, " +
                 "top_product_id, top_product_name, top_product_qty, pending_sales_count, pending_sales_total",
-                "day_closures", CURSOR, since, after, limit);
+                "day_closures", CURSOR, since, after, limit, scope, STORE_SCOPE);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
 

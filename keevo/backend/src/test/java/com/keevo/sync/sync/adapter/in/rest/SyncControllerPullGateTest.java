@@ -280,4 +280,88 @@ class SyncControllerPullGateTest {
                 .hasSize(65);
         org.assertj.core.api.Assertions.assertThat(SyncController.sanitizeForLog(null)).isNull();
     }
+
+    // ── Story 16.13 — scope resolved once here, carried by the command, exposed in the response ──
+
+    private void mockEmployee(UUID storeId) {
+        mockJwt("EMPLOYEE");
+        if (storeId != null) {
+            ((UsernamePasswordAuthenticationToken) SecurityContextHolder.getContext().getAuthentication())
+                    .setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Awa", storeId));
+        }
+    }
+
+    private SyncUseCase.PullCommand pulled(String deviceHeader) throws Exception {
+        var request = get("/api/v1/sync/pull").header("Authorization", "Bearer fake-jwt")
+                .accept(MediaType.APPLICATION_JSON);
+        if (deviceHeader != null) request = request.header("X-Device-Id", deviceHeader);
+        mockMvc.perform(request).andExpect(status().isOk());
+        var captor = org.mockito.ArgumentCaptor.forClass(SyncUseCase.PullCommand.class);
+        org.mockito.Mockito.verify(syncUseCase).pull(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
+    void story1613_employeePull_scopedToItsStore_withDevice() throws Exception {
+        UUID store = UUID.randomUUID();
+        mockEmployee(store);
+        when(userSyncStateRepository.findByDeviceId("device-e")).thenReturn(Optional.empty());
+        when(userSyncStateRepository.upsertOnPull(any())).thenReturn(true);
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of()));
+
+        var command = pulled("device-e");
+
+        org.assertj.core.api.Assertions.assertThat(command.scope())
+                .isEqualTo(com.keevo.shared.application.port.sync.PullScope.employee(store, actorId));
+        org.assertj.core.api.Assertions.assertThat(command.deviceId()).isEqualTo("device-e");
+    }
+
+    @Test
+    void story1613_employeeWithoutStore_restrictedWithoutStore() throws Exception {
+        mockEmployee(null);
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of()));
+
+        var command = pulled(null);
+
+        org.assertj.core.api.Assertions.assertThat(command.scope().restricted()).isTrue();
+        org.assertj.core.api.Assertions.assertThat(command.scope().storeId()).isNull();
+        org.assertj.core.api.Assertions.assertThat(command.deviceId()).isNull();
+    }
+
+    @Test
+    void story1613_ownerPull_unrestricted() throws Exception {
+        mockJwt("OWNER");
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of()));
+
+        org.assertj.core.api.Assertions.assertThat(pulled(null).scope().restricted()).isFalse();
+    }
+
+    @Test
+    void story1613_responseCarriesScopeAndReseed() throws Exception {
+        UUID store = UUID.randomUUID();
+        mockEmployee(store);
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of(), false, null,
+                com.keevo.shared.application.port.sync.PullScope.employee(store, actorId), true));
+
+        mockMvc.perform(get("/api/v1/sync/pull").header("Authorization", "Bearer fake-jwt")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.scope.storeId").value(store.toString()))
+                .andExpect(jsonPath("$.data.scope.restricted").value(true))
+                .andExpect(jsonPath("$.data.reseed").value(true));
+    }
+
+    @Test
+    void story1613_ownerResponse_storeIdNullIsSerialised() throws Exception {
+        mockJwt("OWNER");
+        when(syncUseCase.pull(any())).thenReturn(new SyncPullResult(Instant.now(), Map.of(), Map.of(), false, null,
+                com.keevo.shared.application.port.sync.PullScope.unrestricted(actorId), false));
+
+        mockMvc.perform(get("/api/v1/sync/pull").header("Authorization", "Bearer fake-jwt")
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.scope.restricted").value(false))
+                .andExpect(jsonPath("$.data.scope").value(org.hamcrest.Matchers.hasKey("storeId")))
+                .andExpect(jsonPath("$.data.reseed").value(false));
+    }
 }

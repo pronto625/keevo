@@ -3,6 +3,7 @@ package com.keevo.sync.sync.application.provider;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner.SyncKeysetIndex;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
+import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.junit.jupiter.api.DisplayName;
@@ -10,9 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.core.type.filter.AssignableTypeFilter;
 
 import java.lang.reflect.Constructor;
@@ -79,8 +77,12 @@ class SyncKeysetIndexesMatchProvidersTest {
         return byTable;
     }
 
-    /** First native SQL a provider sends for a page with no position. */
+    /** First native SQL a provider sends for a page with no position, under the given pull scope. */
     private static String firstSql(Class<?> type) throws Exception {
+        return firstSql(type, PullScope.unrestricted(java.util.UUID.randomUUID()));
+    }
+
+    private static String firstSql(Class<?> type, PullScope scope) throws Exception {
         EntityManager em = mock(EntityManager.class);
         Query query = mock(Query.class);
         when(em.createNativeQuery(anyString())).thenReturn(query);
@@ -89,14 +91,8 @@ class SyncKeysetIndexesMatchProvidersTest {
         when(query.getResultList()).thenReturn(List.of());
         Constructor<?> ctor = type.getDeclaredConstructor(EntityManager.class);
         ctor.setAccessible(true);
-        // Story 16.10 — scoped providers read the actor (fail closed when none): pull as an unscoped OWNER.
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                "owner", null, List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
-        try {
-            ((DeltaEntityProvider) ctor.newInstance(em)).queryDeltaPage(Instant.parse("2026-10-01T00:00:00Z"), null, 50);
-        } finally {
-            SecurityContextHolder.clearContext();
-        }
+        // Story 16.13 — the scope is an argument of the page query (providers read no security context).
+        ((DeltaEntityProvider) ctor.newInstance(em)).queryDeltaPage(Instant.parse("2026-10-01T00:00:00Z"), null, 50, scope);
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(em, atLeastOnce()).createNativeQuery(sql.capture());
         return sql.getAllValues().get(0);
@@ -127,5 +123,25 @@ class SyncKeysetIndexesMatchProvidersTest {
                     .contains(" FROM " + table + " WHERE " + p.cursor() + " >= :since")
                     .endsWith(" ORDER BY " + p.cursor() + ", CAST(id AS text)");
         });
+    }
+
+    @Test
+    @DisplayName("Story 16.13 — an employee-scoped page keeps the keyset shape (filter ANDed after the since bound)")
+    void employeeScopedSqlKeepsTheKeysetShape() throws Exception {
+        PullScope employee = PullScope.employee(java.util.UUID.randomUUID(), java.util.UUID.randomUUID());
+        Map<String, Discovered> providers = providersUsingDeltaPageQuery();
+        int scoped = 0;
+        for (Discovered p : providers.values()) {
+            String sql = firstSql(p.type(), employee);
+            Matcher m = DELTA_TABLE.matcher(sql);
+            assertThat(m.find()).as("delta SQL of %s", p.type().getSimpleName()).isTrue();
+            String table = m.group(1);
+            assertThat(sql).as("employee delta SQL of %s", table)
+                    .contains(" FROM " + table + " WHERE " + p.cursor() + " >= :since")
+                    .endsWith(" ORDER BY " + p.cursor() + ", CAST(id AS text)");
+            if (sql.contains(":scopeStoreId") || sql.contains(":scopeActorId")) scoped++;
+        }
+        // stockMovements, sales, dayClosures, inventorySessions, inventoryCounts, employees, reports, stockTransfers
+        assertThat(scoped).as("providers filtered for an employee").isEqualTo(8);
     }
 }
