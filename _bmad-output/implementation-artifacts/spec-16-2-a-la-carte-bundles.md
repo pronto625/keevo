@@ -162,7 +162,7 @@ Règles de définition : `bundleId` en minuscules, chiffres et tirets (`pack-pro
 | `BUNDLE_INVALID` | 422 | « Pack invalide : <raison> » (ex. « l'identifiant du pack doit contenir uniquement des minuscules, des chiffres et des tirets… », « indiquez le nom du pack », « choisissez au moins un module », « « Socle » fait partie du socle, toujours actif… », « « X » figure plusieurs fois dans le pack », « un des modules demandés n'existe pas », « la demande contient un champ non reconnu ») ; rien n'est enregistré | message dans le formulaire (valider aussi côté client) |
 | `BUNDLE_NOT_FOUND` | 404 | Pack introuvable | recharger la liste |
 | `BUNDLE_NOT_APPLICABLE` | 422 | Le pack « X » contient un module qui n'est plus disponible. Modifiez-le avant de l'appliquer. | message ; proposer de modifier le pack |
-| `VALIDATION_ERROR`, `MODULE_ACTIVATION_BLOCKED`, `MODULE_PROVISIONING_FAILED`, `MODULE_ACTIVATION_FAILED`, `TENANT_NOT_FOUND` | 422 / 409 / 500 / 404 | voir le tableau de 16-4 (ex. `details.expiresAt` « Une date de fin est requise pour un module payant (« Facturation ») ») | idem 16-4 ; aucune ligne écrite |
+| `VALIDATION_ERROR`, `MODULE_ACTIVATION_BLOCKED`, `MODULE_PROVISIONING_FAILED`, `MODULE_ACTIVATION_FAILED`, `TENANT_NOT_FOUND` | 422 / 409 / 500 / 404 | voir le tableau de 16-4 (ex. `error` et `details.expiresAt` « Une date de fin est requise pour un module payant (« Facturation ») » — `error` porte le vrai message depuis 16-14) | idem 16-4 ; aucune ligne écrite |
 
 ### À implémenter côté dashboard
 

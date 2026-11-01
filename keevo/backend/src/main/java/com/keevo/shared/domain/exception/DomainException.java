@@ -20,6 +20,8 @@ public class DomainException extends RuntimeException {
     private final String domainCode;
     private final ErrorCode errorCode;
     private final Map<String, Object> details;
+    /** Story 16.14 — explicit French text for the user (opt-in); {@code null}: the catalogue text is shown. */
+    private String userMessage;
 
     // ── String-based constructors (backward compatible) ────────────
 
@@ -72,6 +74,27 @@ public class DomainException extends RuntimeException {
         this.domainCode = code.name();
         this.errorCode = code;
         this.details = null;
+    }
+
+    /**
+     * Story 16.14 — a domain error whose French {@code userMessage} is shown to the user as is (the {@code error} of
+     * the API response) instead of the catalogue text of its code. Only plain French for a person: never an id, a
+     * UUID, a code or a parameter name.
+     */
+    public static DomainException userFacing(ErrorCode code, String userMessage) {
+        return userFacing(code, userMessage, null);
+    }
+
+    /** Same, with structured details (e.g. field → French message). */
+    public static DomainException userFacing(ErrorCode code, String userMessage, Map<String, Object> details) {
+        DomainException e = new DomainException(code, userMessage, details);
+        e.userMessage = userMessage == null || userMessage.isBlank() ? null : userMessage;
+        return e;
+    }
+
+    /** The explicit French user message ({@link #userFacing}); {@code null} when none was given. */
+    public String getUserMessage() {
+        return userMessage;
     }
 
     public String getDomainCode() {

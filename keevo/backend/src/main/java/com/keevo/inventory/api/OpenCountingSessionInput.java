@@ -22,7 +22,7 @@ public record OpenCountingSessionInput(
 ) {
     public OpenCountingSessionInput {
         if (scope == null) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Inventory session scope is required");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Le périmètre de l'inventaire est obligatoire");
         }
     }
 }

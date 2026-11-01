@@ -209,9 +209,11 @@ public class SyncPushService implements SyncUseCase {
                 // marks the shared transaction rollback-only even though the handler already mapped
                 // it to REJECTED with the precise reason — keep that reason.
                 var decided = handlerOutcome.get();
-                String reason = decided != null && decided.status() == SyncOperationStatus.REJECTED
-                        && decided.reason() != null ? decided.reason() : "TRANSACTION_ROLLED_BACK";
-                result = rejectAfterRollback(operation, reason);
+                boolean keepDecided = decided != null && decided.status() == SyncOperationStatus.REJECTED
+                        && decided.reason() != null;
+                String reason = keepDecided ? decided.reason() : "TRANSACTION_ROLLED_BACK";
+                // 16.14 — keep the rejection details too (PLAN_LIMIT_EXCEEDED: limit / current usage)
+                result = rejectAfterRollback(operation, reason, keepDecided ? decided.conflictData() : null);
             } catch (DataIntegrityViolationException e) {
                 // A DB constraint (e.g. uq_products_name) fires at flush/commit time, i.e. AFTER the
                 // handler returned, so AbstractSyncOperationHandler never sees it. Without this catch
@@ -229,9 +231,11 @@ public class SyncPushService implements SyncUseCase {
                 // operation keeps the batch answering 200; otherwise the device replays it forever.
                 var decided = handlerOutcome.get();
                 String reason;
+                Map<String, Object> details = null;
                 if (decided != null && decided.status() == SyncOperationStatus.REJECTED && decided.reason() != null
                         && !ErrorCode.INTERNAL_ERROR.name().equals(decided.reason())) {
                     reason = decided.reason();
+                    details = decided.conflictData();
                 } else if (e instanceof DataAccessException) {
                     reason = "DATA_INTEGRITY_VIOLATION";
                 } else {
@@ -239,7 +243,7 @@ public class SyncPushService implements SyncUseCase {
                 }
                 log.error("[Sync] Operation {} ({}) failed in its transaction — rejected as {}",
                         operation.operationId(), operation.operationType(), reason, e);
-                result = rejectAfterRollback(operation, reason);
+                result = rejectAfterRollback(operation, reason, details);
             }
 
             results.add(result);
@@ -331,6 +335,12 @@ public class SyncPushService implements SyncUseCase {
 
     /** Builds a REJECTED result and records it in a fresh transaction (the original one rolled back). */
     private SyncOperationResult rejectAfterRollback(SyncOperation operation, String reason) {
+        return rejectAfterRollback(operation, reason, null);
+    }
+
+    /** Same, with the rejection details of the handler's decision ({@code conflictData}, Story 16.14). */
+    private SyncOperationResult rejectAfterRollback(SyncOperation operation, String reason,
+                                                    Map<String, Object> details) {
         try {
             transactionTemplate.execute(status -> {
                 if (!logRepository.existsById(operation.operationId())) {
@@ -349,7 +359,7 @@ public class SyncPushService implements SyncUseCase {
             log.error("[Sync] Failed to save REJECTED log for operation {}: {}",
                     operation.operationId(), logEx.getMessage());
         }
-        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null, reason);
+        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.REJECTED, null, reason, details);
     }
 
     private SyncOperationResult processOperation(SyncOperation originalOperation, PushBatchCommand command,

@@ -210,7 +210,7 @@ Source : `keevo/backend/src/main/java/com/keevo/admin/module/adapter/in/rest/Mod
 | `tenants[]` | `{tenantCode, inserted, updated, provisioned: [noms de modules]}` — seulement les comptes modifiés |
 | `failures[]` | `{tenantCode, reason}` (raison en français, sans SQL) — la tâche continue après un échec |
 
-Codes : 409 `ADMIN_JOB_RUNNING` (« « Migration des modules » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une. ») → suivre la tâche en cours ; tâche `FAILED` avec `error` « Une migration des modules est déjà en cours. Réessayez dans quelques minutes. » quand une autre instance du backend détient le verrou ; `FAILED` « Interrompu par un redémarrage » après un redémarrage → proposer de relancer. Le code `MODULE_BACKFILL_RUNNING` n'est plus renvoyé par la route depuis 16-4.
+Codes : 409 `ADMIN_JOB_RUNNING` (« « Migration des modules » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une. ») → suivre la tâche en cours ; tâche `FAILED` avec `error` « Une migration des modules est déjà en cours. Réessayez dans quelques minutes. » quand une autre instance du backend détient le verrou ; `FAILED` « Interrompu par un redémarrage » après un redémarrage → proposer de relancer. Le code `MODULE_BACKFILL_RUNNING` n'est plus renvoyé par la route depuis 16-4 (il reste dans le catalogue des codes, utilisé en interne pour le texte `error` de la tâche, 16-14 : ne pas le traiter côté dashboard).
 
 ### À implémenter côté dashboard
 

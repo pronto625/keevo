@@ -12,15 +12,15 @@ import jakarta.validation.constraints.Size;
  */
 public record RegistrationRequest(
 
-    @NotBlank(message = "Phone number is required")
+    @NotBlank(message = "Le numéro de téléphone est obligatoire")
     @Pattern(
         regexp = "^\\+?[0-9]{8,15}$",
-        message = "Phone number must be 8-15 digits, optionally starting with +"
+        message = "Numéro de téléphone invalide (8 à 15 chiffres, éventuellement précédés de +)"
     )
     String phoneNumber,
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
+    @NotBlank(message = "Le mot de passe est obligatoire")
+    @Size(min = 8, max = 72, message = "Le mot de passe doit contenir entre 8 et 72 caractères")
     String password
 
 ) {}

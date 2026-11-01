@@ -1077,6 +1077,88 @@ class ModuleLifecycleServiceTest {
         assertThat(code(() -> lifecycle.history(UUID.randomUUID()))).isEqualTo("TENANT_NOT_FOUND");
     }
 
+    @Test
+    @DisplayName("16.14 history paging: limit entries strictly older than before, newest first, limit capped at 500")
+    void historyPaging() {
+        Instant t = Instant.parse("2026-11-01T09:00:00Z");
+        List<AuditPort.AuditEntryRecord> stored = new ArrayList<>();
+        for (int i = 0; i < 250; i++) {
+            stored.add(record(i % 2 == 0 ? "MODULE_ACTIVATED" : "MODULE_DEACTIVATED", "Facturation",
+                    t.minusSeconds(i), "{\"module\":\"Facturation\"}", null));
+        }
+        List<Integer> sizes = new ArrayList<>();
+        when(audit.search(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenAnswer(inv -> {
+            AuditPort.AuditQuery query = inv.getArgument(0);
+            int size = inv.getArgument(3);
+            sizes.add(size);
+            // the adapter's contract: `to` inclusive, newest first, at most `size`
+            return new AuditPort.AuditSlice(stored.stream()
+                    .filter(r -> r.action().equals(query.action()))
+                    .filter(r -> query.to() == null || !r.occurredAt().isAfter(query.to()))
+                    .sorted(java.util.Comparator.comparing(AuditPort.AuditEntryRecord::occurredAt).reversed())
+                    .limit(size).toList(), false, null);
+        });
+
+        Instant before = t.minusSeconds(100);
+        List<ModuleLifecycle.HistoryEntry> page = lifecycle.history(TENANT, 100, before);
+
+        assertThat(page).hasSize(100);
+        assertThat(page).allSatisfy(e -> assertThat(e.occurredAt()).isBefore(before));
+        assertThat(page.get(0).occurredAt()).isEqualTo(t.minusSeconds(101));
+        assertThat(page).extracting(ModuleLifecycle.HistoryEntry::occurredAt)
+                .isSortedAccordingTo(java.util.Comparator.reverseOrder());
+
+        assertThat(lifecycle.history(TENANT, 1000, null)).hasSize(250);
+        assertThat(sizes).contains(500);
+        assertThat(lifecycle.history(TENANT)).hasSize(100);
+    }
+
+    @Test
+    @DisplayName("16.14 history compound keyset: entries sharing a time across the page boundary are neither skipped "
+            + "nor repeated; rows without a history label are dropped before the limit (short page = end)")
+    void historyPaging_tiesAndFilteredRows() {
+        Instant t = Instant.parse("2026-11-01T09:00:00Z");
+        List<AuditPort.AuditEntryRecord> stored = new ArrayList<>();
+        // a pack applied: 5 rows at the very same time, mixed actions, plus non-module rows the mock does not filter
+        for (int i = 0; i < 5; i++) {
+            stored.add(withId(record(i % 2 == 0 ? "MODULE_ACTIVATED" : "MODULE_DEACTIVATED", "M" + i, t,
+                    "{}", null), UUID.fromString("00000000-0000-0000-0000-00000000000" + i)));
+        }
+        stored.add(withId(record("MODULE_ACTIVATED", "Older", t.minusSeconds(60), "{}", null),
+                UUID.fromString("00000000-0000-0000-0000-0000000000ff")));
+        java.util.Comparator<AuditPort.AuditEntryRecord> order = ModuleLifecycleService.HISTORY_ORDER;
+        when(audit.search(any(), any(), any(), org.mockito.ArgumentMatchers.anyInt())).thenAnswer(inv -> {
+            AuditPort.AuditQuery query = inv.getArgument(0);
+            String cursor = inv.getArgument(1);
+            int size = inv.getArgument(3);
+            AuditPort.AuditCursor after = cursor != null ? AuditPort.AuditCursor.decode(cursor) : null;
+            List<AuditPort.AuditEntryRecord> rows = new ArrayList<>(stored.stream()
+                    .filter(r -> r.action().equals(query.action()))
+                    .filter(r -> after == null || order.compare(r, withId(record("X", "X", after.occurredAt(), null,
+                            null), after.id())) > 0)
+                    .sorted(order).limit(size).toList());
+            // a row of another kind slipping into the page (no history label)
+            rows.add(0, record("PRODUCT_CREATED", "Riz", t.plusSeconds(1), null, null));
+            return new AuditPort.AuditSlice(rows, false, null);
+        });
+
+        List<ModuleLifecycle.HistoryEntry> first = lifecycle.history(TENANT, 3, null, null);
+        assertThat(first).hasSize(3).extracting(ModuleLifecycle.HistoryEntry::subject)
+                .containsExactly("M4", "M3", "M2");
+        ModuleLifecycle.HistoryEntry last = first.get(2);
+        List<ModuleLifecycle.HistoryEntry> second = lifecycle.history(TENANT, 3, last.occurredAt(), last.id());
+        assertThat(second).extracting(ModuleLifecycle.HistoryEntry::subject).containsExactly("M1", "M0", "Older");
+        List<ModuleLifecycle.HistoryEntry> end = lifecycle.history(TENANT, 3, second.get(2).occurredAt(),
+                second.get(2).id());
+        assertThat(end).isEmpty();
+    }
+
+    private static AuditPort.AuditEntryRecord withId(AuditPort.AuditEntryRecord r, UUID id) {
+        return new AuditPort.AuditEntryRecord(id, r.entityType(), r.entityId(), r.action(), r.valueBefore(),
+                r.valueAfter(), r.userId(), r.actorPhone(), r.occurredAt(), r.storeId(), r.storeName(),
+                r.entityLabel(), r.deviceId(), r.source(), r.metadata(), r.actorName(), r.actorRole());
+    }
+
     private static AuditPort.AuditEntryRecord record(String action, String label, Instant at, String after,
                                                      String metadata) {
         return new AuditPort.AuditEntryRecord(UUID.randomUUID(), "Module", UUID.randomUUID(), action, null, after,

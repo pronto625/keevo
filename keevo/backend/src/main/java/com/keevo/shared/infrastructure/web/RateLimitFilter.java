@@ -1,5 +1,7 @@
 package com.keevo.shared.infrastructure.web;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -11,6 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -59,13 +63,30 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (bucket.isLimitExceeded()) {
             response.setStatus(429);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-            response.getWriter().write("""
-                    {"error":"Rate limit exceeded","domainCode":"RATE_LIMIT_EXCEEDED",\
-                    "details":{"limitPerMinute":100,"resetInSeconds":60}}""");
+            response.setCharacterEncoding("UTF-8");
+            // Story 16.14 — French text from the shared catalogue
+            response.getWriter().write(rateLimitBody());
             return;
         }
 
         chain.doFilter(request, response);
+    }
+
+    /** Serialised once by Jackson (escaping handled); the constant is only a never-expected fallback. */
+    private static final ObjectMapper JSON = new ObjectMapper();
+    static final String FALLBACK_BODY = "{\"error\":\"Trop de requêtes, veuillez patienter\","
+            + "\"domainCode\":\"RATE_LIMIT_EXCEEDED\",\"details\":{\"limitPerMinute\":100,\"resetInSeconds\":60}}";
+
+    static String rateLimitBody() {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("error", ErrorMessages.of("RATE_LIMIT_EXCEEDED", "Trop de requêtes, veuillez patienter"));
+        body.put("domainCode", "RATE_LIMIT_EXCEEDED");
+        body.put("details", Map.of("limitPerMinute", 100, "resetInSeconds", 60));
+        try {
+            return JSON.writeValueAsString(body);
+        } catch (JsonProcessingException e) {
+            return FALLBACK_BODY;
+        }
     }
 
     // ── Inner class: rate limit bucket per tenant ─────────────────────────────

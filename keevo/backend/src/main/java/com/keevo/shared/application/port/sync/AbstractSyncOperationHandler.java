@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,8 +42,22 @@ public abstract class AbstractSyncOperationHandler implements SyncOperationHandl
     }
 
     protected SyncOperationResult mapDomainException(SyncOperation op, DomainException e) {
-        return new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null,
-                e.getErrorCode() != null ? e.getErrorCode().name() : e.getDomainCode());
+        String reason = e.getErrorCode() != null ? e.getErrorCode().name() : e.getDomainCode();
+        return new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null, reason,
+                rejectionDetails(reason, e));
+    }
+
+    /**
+     * Story 16.14 — a {@code PLAN_LIMIT_EXCEEDED} rejection carries the same details as the REST 403
+     * ({@code entity}, {@code limit}, {@code current}, {@code plan}) in {@code conflictData}, so the client can name
+     * the limit without another call. Every other rejection keeps {@code conflictData = null} (V1 apps only read it on
+     * {@code APPLIED}).
+     */
+    protected static Map<String, Object> rejectionDetails(String reason, DomainException e) {
+        if (!"PLAN_LIMIT_EXCEEDED".equals(reason) || e.getDetails() == null || e.getDetails().isEmpty()) {
+            return null;
+        }
+        return new java.util.LinkedHashMap<>(e.getDetails());
     }
 
     /**

@@ -215,7 +215,7 @@ class ModuleAdminControllerTest {
     @DisplayName("16.4: GET …/modules/history → newest first, French labels, actor name and phone, no id")
     void history() throws Exception {
         as("ROLE_SUPER_ADMIN");
-        when(lifecycle.history(TENANT)).thenReturn(List.of(
+        when(lifecycle.history(TENANT, 100, null, null)).thenReturn(List.of(
                 new ModuleLifecycle.HistoryEntry(Instant.parse("2026-11-01T10:00:00Z"), "Pack appliqué", "Pack Pro",
                         "Modules activés : Facturation · Actif jusqu'au 30/06/2027", "Administrateur Keevo",
                         "+237690000000"),
@@ -228,6 +228,41 @@ class ModuleAdminControllerTest {
                 .andExpect(jsonPath("$.data[0].subject").value("Pack Pro"))
                 .andExpect(jsonPath("$.data[0].actorPhone").value("+237690000000"))
                 .andExpect(jsonPath("$.data[1].detail").value("Données conservées"));
+    }
+
+    @Test
+    @DisplayName("16.14: history limit / before passed through; limit over 500 or below 1, bad before → 400")
+    void history_paging() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        Instant before = Instant.parse("2026-10-15T08:30:00Z");
+        when(lifecycle.history(TENANT, 50, before, null)).thenReturn(List.of(
+                new ModuleLifecycle.HistoryEntry(Instant.parse("2026-10-01T10:00:00Z"), "Module désactivé",
+                        "Facturation", "Données conservées", "Administrateur Keevo", null)));
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT)
+                        .param("limit", "50").param("before", "2026-10-15T08:30:00Z"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].action").value("Module désactivé"));
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT).param("limit", "501"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error").value("Le nombre d'entrées doit être compris entre 1 et 500"));
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT).param("limit", "0"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT).param("before", "hier"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Date de référence invalide"));
+        verify(lifecycle).history(TENANT, 50, before, null);
+        // compound cursor: before + beforeId passed through; beforeId alone → 400
+        UUID lastId = UUID.fromString("00000000-0000-0000-0000-00000000000a");
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT)
+                        .param("before", "2026-10-15T08:30:00Z").param("beforeId", lastId.toString()))
+                .andExpect(status().isOk());
+        verify(lifecycle).history(TENANT, 100, before, lastId);
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules/history", TENANT)
+                        .param("beforeId", lastId.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Date de référence manquante"));
     }
 
     @Test

@@ -12,15 +12,15 @@ import java.util.UUID;
  */
 @Schema(description = "Partial update of employee profile — all fields optional, at least one required")
 public record UpdateEmployeeRequestDto(
-        @Size(min = 1, max = 100, message = "First name must be between 1 and 100 characters")
+        @Size(min = 1, max = 100, message = "Le prénom doit contenir entre 1 et 100 caractères")
         @Schema(description = "First name", example = "Loïc")
         String firstName,
 
-        @Size(min = 1, max = 100, message = "Last name must be between 1 and 100 characters")
+        @Size(min = 1, max = 100, message = "Le nom doit contenir entre 1 et 100 caractères")
         @Schema(description = "Last name", example = "Diallo")
         String lastName,
 
-        @Pattern(regexp = "^\\+?[0-9]{8,15}$", message = "Invalid phone number format")
+        @Pattern(regexp = "^\\+?[0-9]{8,15}$", message = "Numéro de téléphone invalide")
         @Schema(description = "Phone number in international format", example = "+237612345678")
         String phoneNumber,
 

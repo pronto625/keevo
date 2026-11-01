@@ -65,7 +65,7 @@ public class AdminGlobalNotificationController {
             @RequestBody(required = false) GlobalNotificationRequestDto body) {
         CurrentActor.requireSuperAdmin();
         if (body == null) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Missing body", Map.of(
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Le titre est obligatoire", Map.of(
                     "title", "Le titre est obligatoire",
                     "body", "Le message est obligatoire",
                     "target", "La cible est obligatoire"));
@@ -115,7 +115,7 @@ public class AdminGlobalNotificationController {
         try {
             return UUID.fromString(raw);
         } catch (IllegalArgumentException e) {
-            throw new DomainException(ErrorCode.NOT_FOUND, "Annonce introuvable");
+            throw DomainException.userFacing(ErrorCode.NOT_FOUND, "Annonce introuvable");
         }
     }
 }

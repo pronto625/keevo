@@ -17,6 +17,12 @@ spring:
       pool:
         size: 4
 
+  # Story 16.14 — every request is French: bean validation messages (VALIDATION_ERROR details) use Hibernate
+  # Validator's French bundle whatever Accept-Language the client sends.
+  web:
+    locale: fr
+    locale-resolver: fixed
+
   # DataSource — values from env vars, with local-dev defaults
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5444}/${POSTGRES_DB:keevo_dev}

@@ -81,8 +81,8 @@ public class AdminAlertController {
         try {
             return AlertSeverity.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "severity must be HIGH, MEDIUM or LOW",
-                    Map.of("severity", "Valeur attendue : HIGH, MEDIUM ou LOW"));
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Gravité inconnue",
+                    Map.of("severity", "Choisissez une gravité : haute, moyenne ou basse"));
         }
     }
 
@@ -91,8 +91,8 @@ public class AdminAlertController {
         return switch (v) {
             case "", "false" -> false;
             case "true" -> true;
-            default -> throw new DomainException(ErrorCode.VALIDATION_ERROR, "includeHandled must be true or false",
-                    Map.of("includeHandled", "Valeur attendue : true ou false"));
+            default -> throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Choix invalide pour l'affichage des alertes traitées",
+                    Map.of("includeHandled", "Choix invalide pour l'affichage des alertes traitées"));
         };
     }
 }

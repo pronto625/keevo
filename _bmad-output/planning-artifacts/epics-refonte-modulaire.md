@@ -1829,14 +1829,14 @@ As a développeur de l'app React Native,
 I want que l'API donne partout des erreurs exploitables en français et les informations dont l'app et le dashboard ont besoin,
 So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du serveur.
 
-**Items :**
-- Erreurs écrites par `JwtAuthFilter` (401/403 avant le contrôleur) : ajouter `error` (message français) à côté de `domainCode` (aujourd'hui `{"domainCode"}` seul).
-- Codes sans message français côté serveur (dont `ACCOUNT_SUSPENDED`, `MEMBERSHIP_NOT_FOUND`) : compléter `FR_MESSAGES` ; test de garde « tout `ErrorCode` a un message français ».
-- `VALIDATION_ERROR` (422) : message général et messages par champ en français.
-- `GET /api/v1/tenants/me/modules` : envoyer aussi aux employés la date de fin de grâce d'un module en lecture seule (bandeau daté), sans les autres champs réservés au propriétaire.
-- Rejet de synchro `PLAN_LIMIT_EXCEEDED` : joindre la limite et l'usage (comme le 403 REST) dans le détail du rejet.
-- API super-admin (relevé par les sections « Dashboard » des specs 16-x) : référence de module `{id, displayName}` des profils de plan alignée sur `{moduleId, displayName}` (ajout du champ, l'ancien gardé) ; `VALIDATION_ERROR` des routes admin avec le vrai message français dans `error` ; `CORE_MODULE_REQUIRED` garde le nom du module ; `GET /admin/tenants?search=` cherche aussi par code de compte ; retirer `MODULE_BACKFILL_RUNNING` devenu mort ; plan inconnu → 404 comme pack/tâche inconnus ; historique des modules paginé.
-- Mettre à jour les sections « Mobile » et « Dashboard » des specs concernées (16-1, 16-2, 16-4, 16-5, 16-8, 16-10, 16-11).
+**Items :** (livrés le 2026-11-01, spec `spec-16-14-api-prete-client-mobile.md`)
+- [x] Erreurs écrites par `JwtAuthFilter` (401/403 avant le contrôleur) : ajouter `error` (message français) à côté de `domainCode` (aujourd'hui `{"domainCode"}` seul).
+- [x] Codes sans message français côté serveur (dont `ACCOUNT_SUSPENDED`, `MEMBERSHIP_NOT_FOUND`) : compléter `FR_MESSAGES` ; test de garde « tout `ErrorCode` a un message français ».
+- [x] `VALIDATION_ERROR` (422) : message général et messages par champ en français.
+- [x] `GET /api/v1/tenants/me/modules` : envoyer aussi aux employés la date de fin de grâce d'un module en lecture seule (bandeau daté), sans les autres champs réservés au propriétaire.
+- [x] Rejet de synchro `PLAN_LIMIT_EXCEEDED` : joindre la limite et l'usage (comme le 403 REST) dans le détail du rejet.
+- [x] API super-admin (relevé par les sections « Dashboard » des specs 16-x) : référence de module `{id, displayName}` des profils de plan alignée sur `{moduleId, displayName}` (ajout du champ, l'ancien gardé) ; `VALIDATION_ERROR` des routes admin avec le vrai message français dans `error` ; `CORE_MODULE_REQUIRED` garde le nom du module ; `GET /admin/tenants?search=` cherche aussi par code de compte ; ~~retirer `MODULE_BACKFILL_RUNNING` devenu mort~~ (conservé : encore utilisé en interne par `ModuleJobsService` pour le texte d'une tâche refusée — décision spec 16-14) ; plan inconnu → 404 comme pack/tâche inconnus ; historique des modules paginé.
+- [x] Mettre à jour les sections « Mobile » et « Dashboard » des specs concernées (16-1, 16-2, 16-4, 16-5, 16-8, 16-10, 16-11).
 
 **Hors périmètre (documenté, non modifiable avant le retrait des apps V1) :** deux formes de succès (`/auth/*` brut vs `{data}`), deux formes de pagination (`meta` vs `data.content`).
 

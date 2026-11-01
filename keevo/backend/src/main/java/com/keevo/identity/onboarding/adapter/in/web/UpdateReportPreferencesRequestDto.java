@@ -23,7 +23,7 @@ public record UpdateReportPreferencesRequestDto(
 
     @NotNull
     @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-             message = "weeklyReportTime must be HH:mm:ss")
+             message = "Heure du rapport hebdomadaire invalide (HH:mm:ss)")
     String weeklyReportTime,
 
     @NotNull
@@ -41,7 +41,7 @@ public record UpdateReportPreferencesRequestDto(
     String stockAlertChannel,
 
     @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$",
-             message = "eodReportTime must be HH:mm:ss")
+             message = "Heure du rapport de fin de journée invalide (HH:mm:ss)")
     String eodReportTime,
 
     Boolean trendNotificationEnabled       // Story 8.1 — nullable: absent means no change

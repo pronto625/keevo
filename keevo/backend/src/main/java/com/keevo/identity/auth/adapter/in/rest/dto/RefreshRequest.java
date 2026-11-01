@@ -12,7 +12,7 @@ import jakarta.validation.constraints.Size;
  */
 public record RefreshRequest(
 
-    @NotBlank(message = "Refresh token is required")
+    @NotBlank(message = "Le jeton de renouvellement est obligatoire")
     String refreshToken,
     @Size(max = 256) String deviceId,
     @Size(max = 256) String deviceLabel

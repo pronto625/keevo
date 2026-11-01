@@ -176,7 +176,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             return new LocalDate[]{current.atDay(1), current.atEndOfMonth()};
         }
         if (rawFrom == null || rawTo == null) {
-            throw validation("from et to sont requis ensemble");
+            throw validation("Indiquez les deux dates de la période");
         }
         LocalDate from;
         LocalDate to;
@@ -184,7 +184,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             from = LocalDate.parse(rawFrom);
             to = LocalDate.parse(rawTo);
         } catch (DateTimeParseException e) {
-            throw validation("from et to doivent être des dates ISO (yyyy-MM-dd)");
+            throw validation("Dates invalides (format AAAA-MM-JJ)");
         }
         checkYear(from.getYear());
         checkYear(to.getYear());
@@ -201,13 +201,13 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
         String raw = blankToNull(month);
         if (raw == null) return YearMonth.from(today());
         if (!MONTH_PATTERN.matcher(raw).matches()) {
-            throw validation("month doit être au format YYYY-MM");
+            throw validation("Mois invalide (format AAAA-MM)");
         }
         YearMonth ym;
         try {
             ym = YearMonth.parse(raw);
         } catch (DateTimeParseException e) {
-            throw validation("month doit être au format YYYY-MM");
+            throw validation("Mois invalide (format AAAA-MM)");
         }
         checkYear(ym.getYear());
         return ym;
@@ -220,7 +220,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
     }
 
     private static DomainException validation(String message) {
-        return new DomainException(ErrorCode.VALIDATION_ERROR, message);
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message);
     }
 
     private static String blankToNull(String value) {

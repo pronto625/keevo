@@ -215,7 +215,23 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
         assertThat(list.getResponse().getStatus()).as(body(list)).isEqualTo(200);
         assertThat(body(list)).contains("\"label\":\"Gratuit\"").contains("\"label\":\"Essai Premium\"")
                 .contains("\"displayName\":\"Facturation\"").contains("\"fallback\":false")
-                .doesNotContain("\"fallback\":true");
+                .doesNotContain("\"fallback\":true")
+                // 16.14 — moduleId beside id, same value
+                .contains("\"id\":\"invoicing\"").contains("\"moduleId\":\"invoicing\"");
+    }
+
+    @Test
+    @DisplayName("16.14: GET one profile by plan type; unknown plan type → 404 PLAN_PROFILE_NOT_FOUND")
+    void getOne() throws Exception {
+        MvcResult free = mockMvc.perform(get("/api/v1/admin/plan-profiles/{planType}", "free")
+                .header("Authorization", "Bearer " + adminToken)).andReturn();
+        assertThat(free.getResponse().getStatus()).as(body(free)).isEqualTo(200);
+        assertThat(body(free)).contains("\"planType\":\"FREE\"").contains("\"maxStores\":1");
+
+        MvcResult nope = mockMvc.perform(get("/api/v1/admin/plan-profiles/{planType}", "NOPE")
+                .header("Authorization", "Bearer " + adminToken)).andReturn();
+        assertThat(nope.getResponse().getStatus()).isEqualTo(404);
+        assertThat(body(nope)).contains("PLAN_PROFILE_NOT_FOUND").contains("Offre introuvable");
     }
 
     @Test
@@ -243,8 +259,10 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
             assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(422);
             assertThat(body(r)).contains("supérieur à zéro");
         }
-        assertThat(putProfile("GOLD", profile(1, 1, 1, List.of()), adminToken).getResponse().getStatus())
-                .isEqualTo(422);
+        // 16.14 — an unknown plan type is a missing resource (404), like an unknown pack or job
+        MvcResult gold = putProfile("GOLD", profile(1, 1, 1, List.of()), adminToken);
+        assertThat(gold.getResponse().getStatus()).isEqualTo(404);
+        assertThat(body(gold)).contains("PLAN_PROFILE_NOT_FOUND").contains("Offre introuvable");
         // a limit key omitted (or misspelt) never means « unlimited »: refused, nothing saved
         Map<String, Object> missing = profile(1, 500, 2, List.of());
         missing.remove("maxProducts");

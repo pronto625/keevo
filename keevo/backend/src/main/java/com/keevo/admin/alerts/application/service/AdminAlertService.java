@@ -136,7 +136,7 @@ public class AdminAlertService implements ListAdminAlertsUseCase, HandleAdminAle
     @Override
     public void markHandled(String alertKey, UUID actorId) {
         if (alertKey == null || alertKey.length() > KEY_MAX || !KEY_PATTERN.matcher(alertKey).matches()) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Alerte inconnue",
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Alerte inconnue",
                     Map.of("key", "Alerte inconnue"));
         }
         if (alertKey.startsWith("feedback:")) markFeedbackHandled(alertKey.substring("feedback:".length()), actorId);

@@ -311,6 +311,37 @@ class SyncPushServiceTest {
         assertThat(result.results().get(0).reason()).isEqualTo("PRODUCT_NOT_FOUND");
     }
 
+    @Test
+    @org.junit.jupiter.api.DisplayName("16.14: PLAN_LIMIT_EXCEEDED rejection + rollback-only commit → reason and details kept")
+    void pushBatch_planLimitRejection_rollbackOnly_keepsDetails() {
+        assertPlanLimitDetailsKept(new org.springframework.transaction.UnexpectedRollbackException("rollback-only"));
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("16.14: PLAN_LIMIT_EXCEEDED rejection + other failure in its transaction → details kept")
+    void pushBatch_planLimitRejection_runtimeFailure_keepsDetails() {
+        assertPlanLimitDetailsKept(new IllegalStateException("current transaction is aborted"));
+    }
+
+    private void assertPlanLimitDetailsKept(RuntimeException commitFailure) {
+        var op = new SyncOperation("op-1", "CREATE_STORE", "e1", Map.of(), Instant.now());
+        SyncOperationHandler storeHandler = handlerIn("store");
+        Map<String, Object> details = Map.of("entity", "stores", "limit", 1, "current", 1, "plan", "FREE");
+
+        when(logRepository.isSettled(any())).thenReturn(false);
+        when(handlerRegistry.resolve("CREATE_STORE")).thenReturn(Optional.of(storeHandler));
+        when(storeHandler.handle(any(), eq(ACTOR_ID), eq(TENANT_ID))).thenReturn(new SyncOperationResult(
+                "op-1", SyncOperationStatus.REJECTED, null, "PLAN_LIMIT_EXCEEDED", details));
+        doThrow(commitFailure).doNothing().when(logRepository).save(any());
+
+        SyncBatchResult result = service.pushBatch(new com.keevo.sync.sync.domain.port.in.SyncUseCase.PushBatchCommand(
+                ACTOR_ID, TENANT_ID, "device-1", List.of(op)));
+
+        assertThat(result.results().get(0).status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.results().get(0).reason()).isEqualTo("PLAN_LIMIT_EXCEEDED");
+        assertThat(result.results().get(0).conflictData()).isEqualTo(details);
+    }
+
     private List<String> processedOrder(List<SyncOperation> ops) {
         SyncOperationHandler handler = handlerIn("catalog");
         List<String> order = new java.util.ArrayList<>();

@@ -77,6 +77,21 @@ class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("16.14 — search matches the account code (KV-XXXXXX), case-insensitively")
+    void searchByCode() {
+        String tag = "Boutique KSC " + UUID.randomUUID().toString().substring(0, 8);
+        UUID a = tenant(tag + " A");
+        tenant(tag + " B");
+        String code = jdbc.queryForObject("SELECT code FROM public.tenants WHERE id = ?", String.class, a);
+
+        AdminTenantService service = new AdminTenantService(jdbc, mock(TenantDeletionPort.class));
+        assertThat(service.execute(new ListTenantsQuery(code, null, null, null, null, null, null, 0, 25))
+                .getContent()).extracting(AdminTenantListItem::id).containsExactly(a);
+        assertThat(service.execute(new ListTenantsQuery(code.toLowerCase(), null, null, null, null, null, null, 0, 25))
+                .getContent()).extracting(AdminTenantListItem::id).containsExactly(a);
+    }
+
+    @Test
     @DisplayName("9-1 — real SQL: owner name in the list, employee names + last activity, readable audit line")
     void listAndDetailAreReadable() {
         String tag = "Boutique KSB " + UUID.randomUUID().toString().substring(0, 8);

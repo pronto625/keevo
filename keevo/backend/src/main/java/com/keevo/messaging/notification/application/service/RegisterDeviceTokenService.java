@@ -25,14 +25,14 @@ public class RegisterDeviceTokenService implements RegisterDeviceTokenUseCase {
     @Override
     public void register(RegisterDeviceTokenCommand command) {
         if (command.token() == null || command.token().isBlank()) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "FCM token must not be blank");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Le jeton de notification est obligatoire");
         }
 
         DevicePlatform platform;
         try {
             platform = DevicePlatform.valueOf(command.platform());
         } catch (IllegalArgumentException e) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Invalid device platform: " + command.platform());
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Plateforme d'appareil inconnue");
         }
 
         Optional<DeviceToken> existing = deviceTokenRepository.findByToken(command.token());

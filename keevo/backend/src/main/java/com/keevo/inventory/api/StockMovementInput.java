@@ -27,7 +27,7 @@ public record StockMovementInput(
 ) {
     public StockMovementInput {
         if (kind == null) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Stock movement kind is required");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Le type de mouvement de stock est obligatoire");
         }
     }
 

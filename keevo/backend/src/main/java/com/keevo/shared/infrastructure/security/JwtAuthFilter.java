@@ -7,6 +7,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import com.keevo.shared.infrastructure.security.access.AccessState;
 import com.keevo.shared.infrastructure.security.access.AccessStateService;
+import com.keevo.shared.infrastructure.web.ErrorMessages;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -30,6 +31,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -327,14 +329,27 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                       int status) throws IOException {
         response.setStatus(status);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        String body = objectMapper.writeValueAsString(Map.of("domainCode", domainCode));
+        response.setCharacterEncoding("UTF-8"); // French text in `error`
+        String body = objectMapper.writeValueAsString(errorBody(domainCode));
         response.getWriter().write(body);
+    }
+
+    /**
+     * Story 16.14 — {@code {"domainCode", "error"}}: the French text of the shared catalogue
+     * ({@link ErrorMessages}), the same one controller errors carry; {@code domainCode} stays the field to decide on.
+     */
+    static Map<String, String> errorBody(String domainCode) {
+        Map<String, String> body = new LinkedHashMap<>();
+        body.put("domainCode", domainCode);
+        body.put("error", ErrorMessages.of(domainCode, ErrorMessages.of("UNAUTHORIZED")));
+        return body;
     }
 
     private void writeError(HttpServletResponse response, String domainCode) throws IOException {
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        String body = objectMapper.writeValueAsString(Map.of("domainCode", domainCode));
+        response.setCharacterEncoding("UTF-8"); // French text in `error`
+        String body = objectMapper.writeValueAsString(errorBody(domainCode));
         response.getWriter().write(body);
     }
 }

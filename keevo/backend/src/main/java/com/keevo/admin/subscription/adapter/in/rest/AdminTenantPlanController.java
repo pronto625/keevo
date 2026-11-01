@@ -120,7 +120,7 @@ public class AdminTenantPlanController {
             @Valid @RequestBody(required = false) SuspendTenantRequest request) {
         CurrentActor.requireSuperAdmin();
         if (request == null) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Motif requis",
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Motif requis",
                     Map.of("reason", "Motif requis"));
         }
         suspendTenantUseCase.suspend(new SuspendTenantCommand(CurrentActor.actorId(), tenantId, request.reason()));
@@ -195,6 +195,6 @@ public class AdminTenantPlanController {
     }
 
     private static DomainException invalid(String field, String message) {
-        return new DomainException(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
     }
 }

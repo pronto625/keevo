@@ -171,6 +171,46 @@ class CreateStoreSyncHandlerTest {
     }
 
     @Test
+    @org.junit.jupiter.api.DisplayName("16.14: a PLAN_LIMIT_EXCEEDED rejection carries the REST 403 details (limit, usage)")
+    void handle_createStore_planLimitExceeded_carriesDetails() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        Subscription freePlan = samplePlan(PlanType.FREE);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freePlan));
+        when(storeRepository.countActive()).thenReturn(1);
+        Map<String, Object> details = Map.of("entity", "stores", "limit", 1, "current", 1, "plan", "FREE");
+        doThrow(new com.keevo.shared.domain.exception.DomainException(
+                ErrorCode.PLAN_LIMIT_EXCEEDED, "stores limit reached", details))
+                .when(planLimitGuard).checkStoreLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(1));
+
+        var result = handler.handle(new SyncOperation("op-8b", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Boutique Test", "type", "STORE"), Instant.now()),
+                ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("PLAN_LIMIT_EXCEEDED");
+        assertThat(result.conflictData()).isEqualTo(details);
+    }
+
+    @Test
+    @org.junit.jupiter.api.DisplayName("16.14: any other rejection keeps conflictData null")
+    void handle_otherRejection_noDetails() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        Subscription premiumPlan = samplePlan(PlanType.PREMIUM_TRIAL);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumPlan));
+        when(storeRepository.countActive()).thenReturn(1);
+        when(storeRepository.existsWarehouse()).thenReturn(true);
+
+        var result = handler.handle(new SyncOperation("op-9b", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Entrepot", "type", "WAREHOUSE"), Instant.now()),
+                ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.conflictData()).isNull();
+    }
+
+    @Test
     void handle_createStore_warehouseAlreadyExists_returnsRejected() {
         var storeId = UUID.randomUUID();
         when(storeRepository.findById(storeId)).thenReturn(Optional.empty());

@@ -157,6 +157,28 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    @DisplayName("16.14: filter errors carry the French `error` of the shared catalogue beside `domainCode`")
+    void filterErrorsCarryFrenchMessage() throws Exception {
+        String expired = TestJwtKeys.token(UUID.randomUUID(), SCHEMA,
+                Instant.now().minus(3, ChronoUnit.HOURS), Map.of());
+        MockHttpServletResponse response = run(request("GET", "/api/v1/products", expired));
+        Map<String, Object> body = new ObjectMapper().readValue(response.getContentAsByteArray(),
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
+        assertThat(body).containsEntry("domainCode", "TOKEN_EXPIRED")
+                .containsEntry("error", "Session expirée, veuillez vous reconnecter");
+        assertThat(response.getCharacterEncoding()).isEqualToIgnoringCase("UTF-8");
+
+        UUID userId = UUID.randomUUID();
+        String token = TestJwtKeys.token(userId, SCHEMA, Instant.now(), Map.of("tenantStatus", "ACTIVE"));
+        when(accessStates.get(userId, SCHEMA)).thenReturn(withTenantStatus(owner(Set.of()), "SUSPENDED"));
+        Map<String, Object> suspended = new ObjectMapper().readValue(
+                run(request("POST", "/api/v1/products", token)).getContentAsByteArray(),
+                new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { });
+        assertThat(suspended).containsEntry("domainCode", "ACCOUNT_SUSPENDED")
+                .containsEntry("error", "Compte suspendu : consultation seule");
+    }
+
+    @Test
     @DisplayName("malformed token / far-future iat → 401 UNAUTHORIZED")
     void malformedToken() throws Exception {
         assertThat(run(request("GET", "/api/v1/products", "not.a.jwt")).getContentAsString())

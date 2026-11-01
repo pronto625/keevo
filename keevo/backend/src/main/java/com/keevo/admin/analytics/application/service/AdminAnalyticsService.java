@@ -161,7 +161,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
 
     @Override
     public List<GrowthPoint> getGrowth(String months) {
-        int count = boundedInt(months, "months", DEFAULT_GROWTH_MONTHS, MAX_GROWTH_MONTHS);
+        int count = boundedInt(months, "Le nombre de mois", DEFAULT_GROWTH_MONTHS, MAX_GROWTH_MONTHS);
         YearMonth current = YearMonth.from(today());
         YearMonth first = current.minusMonths(count - 1L);
         LocalDate firstDay = first.atDay(1);
@@ -255,7 +255,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
 
     @Override
     public RetentionReport getRetention(String weeks) {
-        int columns = boundedInt(weeks, "weeks", DEFAULT_RETENTION_WEEKS, MAX_RETENTION_WEEKS);
+        int columns = boundedInt(weeks, "Le nombre de semaines", DEFAULT_RETENTION_WEEKS, MAX_RETENTION_WEEKS);
         LocalDate today = today();
         LocalDate currentWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate oldestCohort = currentWeek.minusWeeks(COHORT_ROWS - 1L);
@@ -367,7 +367,7 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
             return new LocalDate[]{today.minusDays(DEFAULT_TOP_STORES_DAYS - 1L), today};
         }
         if (noFrom || noTo) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "from and to must be provided together");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Indiquez les deux dates de la période");
         }
         LocalDate fromDay;
         LocalDate toDay;
@@ -375,19 +375,19 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
             fromDay = LocalDate.parse(from.trim());
             toDay = LocalDate.parse(to.trim());
         } catch (DateTimeParseException e) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "from and to must be ISO dates (yyyy-MM-dd)");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Dates invalides (format AAAA-MM-JJ)");
         }
         if (fromDay.getYear() < MIN_YEAR || fromDay.getYear() > MAX_YEAR
                 || toDay.getYear() < MIN_YEAR || toDay.getYear() > MAX_YEAR) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                    "from and to must be between " + MIN_YEAR + " and " + MAX_YEAR);
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                    "Les dates doivent être comprises entre " + MIN_YEAR + " et " + MAX_YEAR);
         }
         if (fromDay.isAfter(toDay)) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "from must be before or equal to to");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "La date de début doit précéder la date de fin");
         }
         if (ChronoUnit.DAYS.between(fromDay, toDay) + 1 > MAX_RANGE_DAYS) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                    "the range cannot exceed " + MAX_RANGE_DAYS + " days");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                    "La période ne peut pas dépasser " + MAX_RANGE_DAYS + " jours");
         }
         return new LocalDate[]{fromDay, toDay};
     }
@@ -447,16 +447,16 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
     }
 
     /** Optional integer query parameter in 1..max (null/blank → default), else 422 VALIDATION_ERROR. */
-    static int boundedInt(String raw, String name, int defaultValue, int max) {
+    static int boundedInt(String raw, String name, int defaultValue, int max) { // name: French label (« Le nombre de mois »)
         if (raw == null || raw.isBlank()) return defaultValue;
         int value;
         try {
             value = Integer.parseInt(raw.trim());
         } catch (NumberFormatException e) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, name + " must be an integer between 1 and " + max);
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, name + " doit être un nombre entier entre 1 et " + max);
         }
         if (value < 1 || value > max) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, name + " must be between 1 and " + max);
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, name + " doit être compris entre 1 et " + max);
         }
         return value;
     }

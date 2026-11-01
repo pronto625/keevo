@@ -140,10 +140,10 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         int pageNumber = page == null ? 0 : page;
         int size = pageSize == null ? DEFAULT_PAGE_SIZE : pageSize;
         if (pageNumber < 0) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "page must be >= 0");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Le numéro de page doit être positif");
         }
         if (size < 1 || size > MAX_PAGE_SIZE) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "pageSize must be between 1 and " + MAX_PAGE_SIZE);
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "La taille de page doit être comprise entre 1 et " + MAX_PAGE_SIZE);
         }
 
         List<TenantActivity> rows = new ArrayList<>();
@@ -225,14 +225,14 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
             case "30D" -> window(today.minusDays(29), today, "30 derniers jours");
             case "90D" -> window(today.minusDays(89), today, "90 derniers jours");
             case "CUSTOM" -> customWindow(query.from(), query.to());
-            default -> throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                    "period must be one of TODAY, 7D, 30D, 90D, CUSTOM");
+            default -> throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                    "Période inconnue");
         };
     }
 
     private Window customWindow(String from, String to) {
         if (from == null || from.isBlank() || to == null || to.isBlank()) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "from and to are required for a CUSTOM period");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Indiquez les deux dates de la période personnalisée");
         }
         LocalDate fromDay;
         LocalDate toDay;
@@ -240,19 +240,19 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
             fromDay = LocalDate.parse(from.trim());
             toDay = LocalDate.parse(to.trim());
         } catch (DateTimeParseException e) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "from and to must be ISO dates (yyyy-MM-dd)");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Dates invalides (format AAAA-MM-JJ)");
         }
         if (fromDay.getYear() < MIN_YEAR || fromDay.getYear() > MAX_YEAR
                 || toDay.getYear() < MIN_YEAR || toDay.getYear() > MAX_YEAR) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                    "from and to must be between " + MIN_YEAR + " and " + MAX_YEAR);
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                    "Les dates doivent être comprises entre " + MIN_YEAR + " et " + MAX_YEAR);
         }
         if (fromDay.isAfter(toDay)) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "from must be before or equal to to");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "La date de début doit précéder la date de fin");
         }
         if (ChronoUnit.DAYS.between(fromDay, toDay) + 1 > MAX_CUSTOM_DAYS) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                    "a CUSTOM period cannot exceed " + MAX_CUSTOM_DAYS + " days");
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                    "Une période personnalisée ne peut pas dépasser " + MAX_CUSTOM_DAYS + " jours");
         }
         return window(fromDay, toDay, "Du " + fromDay.format(FR_DATE) + " au " + toDay.format(FR_DATE));
     }

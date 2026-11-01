@@ -105,7 +105,7 @@ public class GlobalNotificationService implements ScheduleGlobalNotificationUseC
             return;
         }
         if (repository.findById(id).isEmpty()) {
-            throw new DomainException(ErrorCode.NOT_FOUND, "Annonce introuvable");
+            throw DomainException.userFacing(ErrorCode.NOT_FOUND, "Annonce introuvable");
         }
         throw new DomainException(ErrorCode.INVALID_STATE, "Seule une annonce programmée peut être annulée");
     }
@@ -207,6 +207,8 @@ public class GlobalNotificationService implements ScheduleGlobalNotificationUseC
     }
 
     private static DomainException invalid(Map<String, Object> errors) {
-        return new DomainException(ErrorCode.VALIDATION_ERROR, "Invalid global notification", errors);
+        // 16.14 — `errors` is a LinkedHashMap filled in form order: its first message is the French `error`
+        String first = errors.values().stream().map(String::valueOf).findFirst().orElse("Annonce invalide");
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, first, errors);
     }
 }

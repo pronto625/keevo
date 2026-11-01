@@ -262,6 +262,11 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /** Escapes the LIKE wildcards ({@code \\} first, then {@code %} and {@code _}) for {@code ESCAPE '\\'}. */
+    static String escapeLike(String term) {
+        return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
     private String buildWhereClause(ListTenantsQuery q, List<Object> params) {
         StringBuilder sb = new StringBuilder("WHERE t.id <> '")
                 .append(ADMIN_TENANT_ID).append("'::uuid");
@@ -269,9 +274,12 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         if (q.search() != null && !q.search().isBlank()) {
             // Story 12.12 — phones are stored as '+<digits>' (V10): match the raw term and its
             // normalised form so '237…' still finds '+237…'.
-            sb.append(" AND (t.name ILIKE ? OR owner.phone_number IN (?, ?))");
+            // Story 16.14 — the account code (KV-XXXXXX) matches too, like the name (case-insensitive, partial).
+            // `%` / `_` / `\` typed in a code are literal characters, not wildcards.
+            sb.append(" AND (t.name ILIKE ? OR t.code ILIKE ? ESCAPE '\\' OR owner.phone_number IN (?, ?))");
             String like = "%" + q.search().trim() + "%";
             params.add(like);
+            params.add("%" + escapeLike(q.search().trim()) + "%");
             params.add(q.search().trim());
             params.add(PhoneNumbers.normalize(q.search()));
         }

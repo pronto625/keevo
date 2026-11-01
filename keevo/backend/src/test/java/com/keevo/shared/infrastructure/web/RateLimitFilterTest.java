@@ -121,5 +121,12 @@ class RateLimitFilterTest {
 
         assertThat(response.getStatus()).isEqualTo(429);
         assertThat(response.getContentAsString()).contains("RATE_LIMIT_EXCEEDED");
+        // 16.14 — French `error` of the shared catalogue, UTF-8
+        assertThat(response.getCharacterEncoding()).isEqualToIgnoringCase("UTF-8");
+        java.util.Map<String, Object> body = new com.fasterxml.jackson.databind.ObjectMapper().readValue(
+                response.getContentAsByteArray(),
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() { });
+        assertThat(body).containsEntry("error", "Trop de requêtes, veuillez patienter")
+                .containsEntry("domainCode", "RATE_LIMIT_EXCEEDED");
     }
 }

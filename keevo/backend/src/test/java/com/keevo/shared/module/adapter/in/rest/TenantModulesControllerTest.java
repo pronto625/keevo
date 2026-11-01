@@ -103,15 +103,18 @@ class TenantModulesControllerTest {
     }
 
     @Test
-    @DisplayName("EMPLOYEE → 200 with every module's state, free and category; dates and status hidden (15.1, 15.6)")
+    @DisplayName("EMPLOYEE → 200 with every module's state, free and category; expiry hidden, but status and grace "
+            + "date of a read-only module shown (15.1, 15.6, 16.14)")
     void employee() throws Exception {
         as("ROLE_EMPLOYEE");
         when(lifecycle.tenantModules(SCHEMA)).thenReturn(List.of(
                 new ModuleLifecycle.TenantModuleView("crm", "Clients et fournisseurs", ModuleState.READ_ONLY,
-                        TenantModuleStatus.ACTIVE, Instant.parse("2026-10-29T10:00:00Z"),
+                        TenantModuleStatus.EXPIRED, Instant.parse("2026-10-29T10:00:00Z"),
                         Instant.parse("2026-11-05T10:00:00Z"), "1"),
                 new ModuleLifecycle.TenantModuleView("multi-store", "Multi-boutiques et transferts",
-                        ModuleState.DISABLED, null, null, null, null)));
+                        ModuleState.DISABLED, null, null, null, null),
+                new ModuleLifecycle.TenantModuleView("invoicing", "Facturation", ModuleState.ENABLED,
+                        TenantModuleStatus.TRIAL, Instant.parse("2026-12-01T10:00:00Z"), null, "1")));
 
         mockMvc.perform(get("/api/v1/tenants/me/modules"))
                 .andExpect(status().isOk())
@@ -119,12 +122,16 @@ class TenantModulesControllerTest {
                 .andExpect(jsonPath("$.data[0].displayName").value("Clients et fournisseurs"))
                 .andExpect(jsonPath("$.data[0].state").value("READ_ONLY"))
                 .andExpect(jsonPath("$.data[0].expiresAt").doesNotExist())
-                .andExpect(jsonPath("$.data[0].graceUntil").doesNotExist())
-                .andExpect(jsonPath("$.data[0].status").doesNotExist())
+                .andExpect(jsonPath("$.data[0].graceUntil").value("2026-11-05T10:00:00Z"))
+                .andExpect(jsonPath("$.data[0].status").value("EXPIRED"))
                 .andExpect(jsonPath("$.data[0].free").value(false))
                 .andExpect(jsonPath("$.data[0].category").value("business"))
                 .andExpect(jsonPath("$.data[1].state").value("DISABLED"))
-                .andExpect(jsonPath("$.data[1].free").value(false));
+                .andExpect(jsonPath("$.data[1].free").value(false))
+                .andExpect(jsonPath("$.data[2].state").value("ENABLED"))
+                .andExpect(jsonPath("$.data[2].expiresAt").doesNotExist())
+                .andExpect(jsonPath("$.data[2].graceUntil").doesNotExist())
+                .andExpect(jsonPath("$.data[2].status").doesNotExist());
     }
 
     @Test

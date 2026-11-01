@@ -25,7 +25,7 @@ public record DraftProductPendingEvent(
     /** Same guard as the former {@code PendingDraftInput} (12.2e): a draft without product or tenant is a bug. */
     public DraftProductPendingEvent {
         if (productId == null || tenantId == null || tenantId.isBlank()) {
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Product id and tenant are required");
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Le produit et le compte sont obligatoires");
         }
     }
 }

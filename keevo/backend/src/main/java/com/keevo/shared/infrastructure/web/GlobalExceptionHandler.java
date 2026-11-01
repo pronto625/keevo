@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.validation.ObjectError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -21,7 +22,9 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Instant;
-import java.util.HashMap;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,125 +46,6 @@ public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    /**
-     * French user-facing error messages mapped by domain code.
-     * These are shown in the {@code error} field of the API response.
-     * NEVER expose technical details — all messages are human-readable French.
-     */
-    private static final Map<String, String> FR_MESSAGES = Map.ofEntries(
-            Map.entry("USER_NOT_FOUND",           "Utilisateur introuvable"),
-            Map.entry("USER_ALREADY_EXISTS",       "Ce numéro est déjà associé à un compte"),
-            Map.entry("INVALID_CREDENTIALS",       "Téléphone ou mot de passe incorrect"),
-            Map.entry("ACCOUNT_LOCKED",            "Compte temporairement bloqué, réessayez dans 15 minutes"),
-            Map.entry("TOKEN_EXPIRED",             "Session expirée, veuillez vous reconnecter"),
-            Map.entry("REFRESH_TOKEN_INVALID",     "Session expirée, veuillez vous reconnecter"),
-            Map.entry("TOKEN_INVALID",             "Jeton d'authentification invalide"),
-            Map.entry("UNAUTHORIZED",              "Accès non autorisé"),
-            Map.entry("FORBIDDEN",                 "Vous n'avez pas les droits nécessaires"),
-            Map.entry("TENANT_NOT_FOUND",          "Espace de travail introuvable"),
-            Map.entry("PLAN_LIMIT_EXCEEDED",       "Limite de votre plan atteinte"),
-            Map.entry("PRODUCT_QUOTA_UNAVAILABLE", "Impossible de vérifier votre quota de produits pour le moment. Réessayez dans quelques instants."),
-            Map.entry("PLAN_PROFILE_INVALID",      "Profil non enregistré : {reason}"),
-            Map.entry("RATE_LIMIT_EXCEEDED",       "Trop de requêtes, veuillez patienter"),
-            Map.entry("AUDIT_IMMUTABLE",           "Les entrées du journal d'audit ne peuvent pas être modifiées"),
-            Map.entry("AUDIT_ENTRY_NOT_FOUND",     "Entrée du journal d'audit introuvable"),
-            Map.entry("INSUFFICIENT_STOCK",        "Stock insuffisant pour cette opération"),
-            Map.entry("STOCK_NOT_FOUND",           "Niveau de stock introuvable"),
-            Map.entry("CLIENT_NOT_FOUND",          "Client introuvable"),
-            Map.entry("SUPPLIER_NOT_FOUND",        "Fournisseur introuvable"),
-            Map.entry("SUBSCRIPTION_NOT_FOUND",    "Aucun abonnement actif trouvé"),
-            Map.entry("PRODUCT_NAME_ALREADY_EXISTS", "Un produit avec ce nom existe déjà dans votre catalogue"),
-            Map.entry("WAREHOUSE_ALREADY_EXISTS",   "Vous avez déjà un entrepôt. Un seul entrepôt est autorisé par compte."),
-            Map.entry("STORE_NOT_FOUND",             "Boutique introuvable"),
-            Map.entry("PRODUCT_NOT_FOUND",           "Produit introuvable"),
-            Map.entry("PRODUCT_PHOTO_TOO_LARGE",     "La photo est trop lourde (200 Ko maximum)"),
-            Map.entry("PRODUCT_PHOTO_INVALID",       "Format de photo non pris en charge (JPEG, PNG ou WebP)"),
-            Map.entry("PRODUCT_PHOTO_NOT_FOUND",     "Ce produit n'a pas de photo"),
-            Map.entry("STORE_NOT_ACTIVE",           "Cette boutique est désactivée"),
-            Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
-            Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),
-            Map.entry("EMPLOYEE_NOT_FOUND",        "Employé introuvable"),
-            Map.entry("DEVICE_SESSION_NOT_FOUND",  "Cet appareil n'est plus connecté"),
-            Map.entry("PHONE_ALREADY_REGISTERED",  "Ce numéro de téléphone est déjà utilisé par un autre compte"),
-            Map.entry("CANNOT_CHANGE_OWN_ROLE",    "Vous ne pouvez pas modifier votre propre rôle"),
-            Map.entry("CANNOT_DEMOTE_LAST_OWNER",  "Impossible de retirer le dernier propriétaire actif du compte"), // demotion AND deactivation (v1s-13-9)
-            Map.entry("CANNOT_SET_OWN_PASSWORD",   "Vous ne pouvez pas définir votre propre mot de passe via cet endpoint"),
-            Map.entry("PASSWORD_CHANGE_REQUIRED",  "Vous devez changer votre mot de passe avant de continuer"),
-            Map.entry("STORE_REASSIGNED",          "Votre boutique a été modifiée, veuillez vous reconnecter"),
-            Map.entry("ACCOUNT_INACTIVE",          "Ce compte a été désactivé"),
-            Map.entry("SESSION_REVOKED",           "Votre session a été révoquée, veuillez vous reconnecter"),
-            Map.entry("SALE_NOT_FOUND",            "Vente introuvable"),
-            Map.entry("SALE_ALREADY_EXISTS",       "Cette vente a déjà été enregistrée"),
-            Map.entry("VALIDATION_FAILED",         "Données invalides"),
-            Map.entry("VALIDATION_ERROR",          "Données invalides"),
-            Map.entry("DISCOUNT_EXCEEDS_SUBTOTAL","La réduction dépasse le sous-total"),
-            Map.entry("SALE_NOT_PENDING",          "Cette vente n'est pas en attente de validation"),
-            Map.entry("JUSTIFICATION_REQUIRED",    "Une justification est requise"),
-            Map.entry("JUSTIFICATION_TOO_SHORT",   "La justification doit contenir au moins 10 caractères"),
-            Map.entry("SALE_ALREADY_CANCELLED",    "Cette vente a déjà été annulée"),
-            Map.entry("SALE_NOT_COMPLETED",        "Seule une vente complétée peut être corrigée"),
-            Map.entry("INTERNAL_ERROR",            "Une erreur inattendue s'est produite"),
-            Map.entry("DAY_ALREADY_CLOSED",        "La journée a déjà été clôturée pour cette boutique"),
-            Map.entry("MISSING_PARAMETER",         "Paramètre requis manquant"),
-            Map.entry("INVALID_OR_EXPIRED_CODE", "Code invalide ou expiré"),
-            Map.entry("CODE_LOCKED",             "Trop de tentatives, demandez un nouveau code"),
-            Map.entry("SYNC_REQUIRED",              "Synchronisation requise — données trop anciennes"),
-            Map.entry("DEVICE_ID_MISMATCH",       "Ce device n'est pas associé à votre compte"),
-            Map.entry("MODULE_INACTIVE",          "Module non activé pour votre compte"),
-            Map.entry("MODULE_NOT_ENTITLED",      "Ce module n'est pas inclus dans votre abonnement"),
-            Map.entry("MODULE_READ_ONLY",         "Ce module est en lecture seule : abonnement expiré"),
-            Map.entry("MODULE_NOT_FOUND",         "Module introuvable"),
-            Map.entry("MODULE_ACTIVATION_BLOCKED", "Activation impossible : {reasons}"),
-            Map.entry("MODULE_HAS_DEPENDENTS",    "Désactivation impossible : ce module est utilisé par {dependents}"),
-            Map.entry("CORE_MODULE_REQUIRED",     "Ce module fait partie du socle et ne peut pas être désactivé"),
-            Map.entry("MODULE_PROVISIONING_FAILED", "Le module n'a pas été activé : la création de ses tables a échoué. Vous pouvez réessayer."),
-            Map.entry("MODULE_ACTIVATION_FAILED", "Le module n'a pas été activé : sa mise en service a échoué. Vous pouvez réessayer."),
-            Map.entry("MODULE_DEACTIVATION_FAILED", "Le module n'a pas été désactivé : sa mise hors service a échoué. Vous pouvez réessayer."),
-            Map.entry("MODULE_BACKFILL_RUNNING", "Une migration des modules est déjà en cours. Réessayez dans quelques minutes."),
-            Map.entry("BUNDLE_NOT_FOUND",         "Pack introuvable"),
-            Map.entry("ADMIN_JOB_RUNNING",        "« {label} » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une."),
-            Map.entry("ADMIN_JOB_NOT_FOUND",      "Tâche introuvable"),
-            Map.entry("BUNDLE_INVALID",           "Pack invalide : {reason}"),
-            Map.entry("BUNDLE_NOT_APPLICABLE",    "Le pack « {name} » contient un module qui n'est plus disponible. Modifiez-le avant de l'appliquer."),
-            Map.entry("INVENTORY_SESSION_ALREADY_ACTIVE", "Un inventaire est déjà en cours pour cette boutique"),
-            Map.entry("INVENTORY_SESSION_NOT_FOUND",     "Session d'inventaire introuvable"),
-            Map.entry("INVENTORY_SESSION_NOT_IN_PROGRESS", "Cette session d'inventaire n'est pas en cours"),
-            Map.entry("INVENTORY_STORE_NOT_FOUND",       "Boutique cible introuvable"),
-            Map.entry("INVENTORY_INVALID_CATEGORIES",    "Une ou plusieurs catégories sont invalides"),
-            Map.entry("ACCOUNT_DELETION_PENDING",  "Suppression de compte en cours — écriture bloquée"),
-            Map.entry("DELETION_ALREADY_REQUESTED", "Une demande de suppression est déjà en cours"),
-            Map.entry("DELETION_NOT_PENDING",       "Aucune demande de suppression en cours"),
-            Map.entry("SERVICE_UNAVAILABLE",        "Service momentanément indisponible, réessayez dans un instant"),
-            Map.entry("INVALID_STATE",              "Action impossible dans l'état actuel du compte"),
-            Map.entry("WHATSAPP_DELIVERY_FAILED",         "Envoi WhatsApp échoué. Vérifiez votre connexion et réessayez."),
-            Map.entry("PLAN_FEATURE_REQUIRED",       "Cette fonctionnalité nécessite l'offre Premium"),
-            Map.entry("EXPORT_NOT_FOUND",            "Export introuvable"),
-            Map.entry("EXPORT_EXPIRED",              "Ce fichier d'export a expiré, relancez l'export"),
-            Map.entry("EXPORT_NOT_READY",            "Cet export n'est pas encore prêt"),
-            Map.entry("EXPORT_DATASET_UNKNOWN",      "Jeu de données inconnu"),
-            Map.entry("EXPORT_FORMAT_UNSUPPORTED",   "Ce format d'export n'est pas encore disponible"),
-            Map.entry("EXPORT_LINK_INVALID",         "Lien de téléchargement invalide"),
-            Map.entry("EXPORT_QUEUE_FULL",           "Trop d'exports en cours, réessayez dans quelques minutes"),
-            Map.entry("EXPORT_PDF_TOO_LARGE",        "Ce PDF dépasserait la limite de {limit} {unit} : réduisez la période, choisissez une boutique ou exportez en Excel"),
-            Map.entry("INVOICE_NOT_FOUND",           "Facture introuvable"),
-            Map.entry("INVOICE_NOT_EDITABLE",        "Cette facture a été émise : elle ne peut plus être modifiée ni supprimée"),
-            Map.entry("INVOICE_INVALID_TRANSITION",  "Cette action n'est pas possible pour une facture {status}"),
-            Map.entry("INVOICE_NOT_ISSUABLE",        "La facture ne peut pas être émise : {reason}"),
-            Map.entry("INVOICE_PAYMENT_DATE_INVALID", "Date de paiement invalide : {reason}"),
-            Map.entry("INVOICE_PHONE_REQUIRED",      "Indiquez le numéro WhatsApp du client"),
-            Map.entry("INVOICE_PHONE_INVALID",       "Le numéro WhatsApp du client n'est pas valide"),
-            Map.entry("INVOICE_LINK_INVALID",        "Ce lien de facture n'est pas valide"),
-            Map.entry("INVOICE_LINK_RATE_LIMITED",   "Trop de demandes pour ce lien, réessayez plus tard"),
-            Map.entry("INVOICE_LINK_EXPIRED",        "Ce lien de facture a expiré : demandez un nouvel envoi à votre commerçant"),
-            Map.entry("CREDIT_NOTE_NOT_FOUND",       "Avoir introuvable"),
-            Map.entry("CREDIT_NOTE_INVALID",         "L'avoir n'est pas valide : {reason}"),
-            Map.entry("WHATSAPP_UNAVAILABLE",        "L'envoi WhatsApp n'est pas disponible pour le moment"),
-            Map.entry("COMPANY_LOGO_INVALID",        "Format de logo non pris en charge (PNG ou JPEG)"),
-            Map.entry("COMPANY_LOGO_TOO_LARGE",      "Le logo est trop lourd (200 Ko maximum)"),
-            Map.entry("COMPANY_LOGO_TOO_HEAVY",      "Logo trop lourd après traitement : choisissez une image plus simple"),
-            Map.entry("COMPANY_LOGO_NOT_FOUND",      "Aucun logo n'a été ajouté"),
-            Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer")
-    );
 
     /**
      * Story 11.2 — {@code keevo_errors_total{domainCode}}: every handler counts the {@code domainCode}
@@ -186,7 +70,8 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponseWrapper<Void>> handleDomainException(DomainException ex) {
         countDomainError(ex.getDomainCode());
         HttpStatus status = domainCodeToHttpStatus(ex.getDomainCode());
-        String userMessage = userMessage(ex.getDomainCode(), ex.getMessage(), ex.getDetails());
+        String userMessage = ErrorMessages.userMessage(ex.getDomainCode(), ex.getUserMessage(), ex.getMessage(),
+                ex.getDetails());
         return ResponseEntity.status(status)
                 .body(ApiResponseWrapper.error(
                         userMessage,
@@ -199,14 +84,27 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponseWrapper<Void>> handleValidation(
             MethodArgumentNotValidException ex) {
-        Map<String, String> fieldErrors = new HashMap<>();
-        for (FieldError fe : ex.getBindingResult().getFieldErrors()) {
-            fieldErrors.put(fe.getField(), fe.getDefaultMessage());
+        // Story 16.14 — field → French message (custom annotation messages, else Hibernate Validator's French
+        // bundle: spring.web.locale = fr); the response's `error` is the first field's message. The validator reports
+        // violations in no fixed order: sorted by field name, then constraint code, so the answer is deterministic.
+        Map<String, String> fieldErrors = new LinkedHashMap<>();
+        List<FieldError> sorted = ex.getBindingResult().getFieldErrors().stream()
+                .sorted(Comparator.comparing(FieldError::getField)
+                        .thenComparing(fe -> fe.getCode() == null ? "" : fe.getCode()))
+                .toList();
+        for (FieldError fe : sorted) {
+            fieldErrors.putIfAbsent(fe.getField(), fe.getDefaultMessage());
         }
+        String error = fieldErrors.values().stream().filter(m -> m != null && !m.isBlank()).findFirst()
+                .orElseGet(() -> ex.getBindingResult().getGlobalErrors().stream()
+                        .map(ObjectError::getDefaultMessage)
+                        .filter(m -> m != null && !m.isBlank())
+                        .findFirst()
+                        .orElse(ErrorMessages.of("VALIDATION_ERROR", "Données invalides")));
         countDomainError("VALIDATION_ERROR");
         return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
                 .body(ApiResponseWrapper.error(
-                        "Validation failed",
+                        error,
                         HttpStatus.UNPROCESSABLE_ENTITY.name(),
                         "VALIDATION_ERROR",
                         fieldErrors
@@ -258,7 +156,7 @@ public class GlobalExceptionHandler {
         countDomainError("FORBIDDEN");
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiResponseWrapper.error(
-                        FR_MESSAGES.getOrDefault("FORBIDDEN", "Vous n'avez pas les droits nécessaires"),
+                        ErrorMessages.of("FORBIDDEN", "Vous n'avez pas les droits nécessaires"),
                         HttpStatus.FORBIDDEN.name(),
                         "FORBIDDEN",
                         null
@@ -285,7 +183,7 @@ public class GlobalExceptionHandler {
         countDomainError("OPTIMISTIC_LOCK");
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponseWrapper.error(
-                        FR_MESSAGES.getOrDefault("OPTIMISTIC_LOCK", "Conflit de version"),
+                        ErrorMessages.of("OPTIMISTIC_LOCK", "Conflit de version"),
                         HttpStatus.CONFLICT.name(),
                         "OPTIMISTIC_LOCK",
                         null
@@ -299,7 +197,7 @@ public class GlobalExceptionHandler {
         countDomainError("NOT_FOUND");
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ApiResponseWrapper.error(
-                        FR_MESSAGES.getOrDefault("NOT_FOUND", "Ressource introuvable"),
+                        ErrorMessages.of("NOT_FOUND", "Ressource introuvable"),
                         HttpStatus.NOT_FOUND.name(),
                         "NOT_FOUND",
                         null
@@ -325,7 +223,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponseWrapper<Void>> handleGeneral(Exception ex) {
         log.error("Unhandled exception — {}: {}", ex.getClass().getSimpleName(), ex.getMessage(), ex);
         countDomainError("INTERNAL_ERROR");
-        String userMessage = FR_MESSAGES.getOrDefault("INTERNAL_ERROR", "Une erreur inattendue s'est produite");
+        String userMessage = ErrorMessages.of("INTERNAL_ERROR", "Une erreur inattendue s'est produite");
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ApiResponseWrapper.error(
                         userMessage,
@@ -335,23 +233,14 @@ public class GlobalExceptionHandler {
                 ));
     }
 
-    /**
-     * French message of a domain code with its {@code {key}} placeholders filled from the details
-     * (v1s-18-3); without a French message, the exception's own message, never substituted.
-     */
+    /** Kept for the existing callers/tests: see {@link ErrorMessages#userMessage}. */
     static String userMessage(String domainCode, String fallback, Map<String, Object> details) {
-        String fr = domainCode != null ? FR_MESSAGES.get(domainCode) : null;
-        return fr != null ? withDetails(fr, details) : fallback;
+        return ErrorMessages.userMessage(domainCode, null, fallback, details);
     }
 
-    /** Fills {@code {key}} placeholders of a French message from the exception details (v1s-18-3). */
+    /** See {@link ErrorMessages#withDetails}. */
     static String withDetails(String message, Map<String, Object> details) {
-        if (message == null || details == null || details.isEmpty() || message.indexOf('{') < 0) return message;
-        String result = message;
-        for (Map.Entry<String, Object> e : details.entrySet()) {
-            result = result.replace("{" + e.getKey() + "}", String.valueOf(e.getValue()));
-        }
-        return result;
+        return ErrorMessages.withDetails(message, details);
     }
 
     private HttpStatus domainCodeToHttpStatus(String domainCode) {
@@ -375,6 +264,7 @@ public class GlobalExceptionHandler {
                  "MODULE_NOT_FOUND",
                  "BUNDLE_NOT_FOUND",
                  "ADMIN_JOB_NOT_FOUND",
+                 "PLAN_PROFILE_NOT_FOUND",
                  "INVOICE_NOT_FOUND",
                  "CREDIT_NOTE_NOT_FOUND",
                  "INVOICE_LINK_INVALID",

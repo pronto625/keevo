@@ -15,7 +15,7 @@ public record ResetPasswordRequestDto(
         String phoneNumber,
 
         @NotBlank
-        @Pattern(regexp = "^\\d{6}$", message = "OTP code must be exactly 6 digits")
+        @Pattern(regexp = "^\\d{6}$", message = "Le code doit contenir exactement 6 chiffres")
         String code,
 
         @NotBlank

@@ -123,8 +123,6 @@ public class ModuleLifecycleService implements ModuleLifecycle {
      */
     static final String KIND_FORCED = "FORCED";
     static final String KIND_BUNDLE = "BUNDLE";
-    /** Story 16.4 — how many history entries the console shows. */
-    static final int HISTORY_SIZE = 100;
     static final String ENTITY_TYPE = "Module";
     static final String ACTOR_LABEL = "Administrateur Keevo";
     static final String TIER_FREE = "FREE";
@@ -572,7 +570,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         registerEviction(schema);
 
         if (target.isCore() || target.category() == ModuleCategory.CORE) {
-            throw new DomainException(ErrorCode.CORE_MODULE_REQUIRED,
+            throw DomainException.userFacing(ErrorCode.CORE_MODULE_REQUIRED,
                     "Le module « " + target.displayName() + " » fait partie du socle et ne peut pas être désactivé");
         }
         if (registry.moduleState(schema, target.id()) == ModuleState.DISABLED) {
@@ -596,7 +594,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
             for (String id : order) {
                 ModuleManifest dependent = catalog.find(id).orElseThrow();
                 if (dependent.isCore() || dependent.category() == ModuleCategory.CORE) {
-                    throw new DomainException(ErrorCode.CORE_MODULE_REQUIRED, "Le module « "
+                    throw DomainException.userFacing(ErrorCode.CORE_MODULE_REQUIRED, "Le module « "
                             + dependent.displayName() + " » fait partie du socle et ne peut pas être désactivé");
                 }
                 toDisable.add(dependent);
@@ -719,7 +717,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     }
 
     private static DomainException invalid(String field, String message) {
-        return new DomainException(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
     }
 
     private String displayName(String moduleId) {
@@ -803,21 +801,32 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     // ── history (Story 16.4) ────────────────────────────────────────────────
 
     @Override
-    public List<HistoryEntry> history(UUID tenantId) {
+    public List<HistoryEntry> history(UUID tenantId, int limit, Instant before, UUID beforeId) {
+        int size = Math.max(1, Math.min(limit, HISTORY_MAX_LIMIT));
+        // Keyset: with beforeId, the audit cursor (occurredAt, id) — the audit log's own order, so entries sharing a
+        // time (a pack writes several at once) are never skipped; with before alone, strictly older entries (the audit
+        // read bound is inclusive, entries are stored to the microsecond).
+        String cursor = before != null && beforeId != null
+                ? new AuditPort.AuditCursor(before, beforeId).encode() : null;
+        Instant to = before != null && beforeId == null ? before.minus(1, ChronoUnit.MICROS) : null;
         TenantRef tenant = requireTenant(tenantId);
         String previous = TenantContext.getCurrentTenant();
         TenantContext.setCurrentTenant(tenant.tenantSchema());
         try {
-            // the module actions only, filtered in the queries, then merged newest first and limited
+            // the module actions only, filtered in the queries, then merged in the audit log's order
+            // (occurred_at DESC, id DESC — uuid compared as unsigned bytes, i.e. as its lowercase text), labelled,
+            // then cut: a page shorter than the limit is the end of the history
             List<AuditPort.AuditEntryRecord> records = new ArrayList<>();
             for (String action : List.of(ACTION_ACTIVATED, ACTION_DEACTIVATED)) {
-                records.addAll(audit.search(new AuditPort.AuditQuery(null, null, null, null, action, ENTITY_TYPE,
-                        null), null, 0, HISTORY_SIZE).entries());
+                records.addAll(audit.search(new AuditPort.AuditQuery(null, to, null, null, action, ENTITY_TYPE,
+                        null), cursor, cursor == null ? 0 : null, size).entries());
             }
-            records.sort(java.util.Comparator.comparing(AuditPort.AuditEntryRecord::occurredAt,
-                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())));
+            records.sort(HISTORY_ORDER);
             List<HistoryEntry> entries = new ArrayList<>();
-            for (AuditPort.AuditEntryRecord entry : records.subList(0, Math.min(records.size(), HISTORY_SIZE))) {
+            for (AuditPort.AuditEntryRecord entry : records) {
+                if (entries.size() == size) {
+                    break;
+                }
                 String kind = kindOf(entry.metadata());
                 String label = historyLabel(entry.action(), kind);
                 if (label == null) {
@@ -825,7 +834,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
                 }
                 entries.add(new HistoryEntry(entry.occurredAt(), label, entry.entityLabel(),
                         historyDetail(entry.action(), kind, entry.valueAfter()), entry.actorName(),
-                        entry.actorPhone()));
+                        entry.actorPhone(), entry.id()));
             }
             return List.copyOf(entries);
         } finally {
@@ -836,6 +845,12 @@ public class ModuleLifecycleService implements ModuleLifecycle {
             }
         }
     }
+
+    /** The audit log's order: newest first, then id descending as PostgreSQL compares uuids (unsigned bytes). */
+    static final java.util.Comparator<AuditPort.AuditEntryRecord> HISTORY_ORDER = java.util.Comparator
+            .comparing(AuditPort.AuditEntryRecord::occurredAt,
+                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
+            .thenComparing(r -> r.id() == null ? "" : r.id().toString(), java.util.Comparator.reverseOrder());
 
     /** French label of a module audit entry in the console history; {@code null}: not a module lifecycle entry. */
     static String historyLabel(String action, String kind) {

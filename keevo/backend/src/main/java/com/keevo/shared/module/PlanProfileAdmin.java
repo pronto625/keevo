@@ -58,8 +58,17 @@ public interface PlanProfileAdmin {
         }
     }
 
-    /** A module by id and French display name. */
+    /**
+     * A module by id and French display name. Story 16.14: {@code moduleId} repeats {@code id} (same value), the name
+     * every other admin module reference uses; {@code id} stays for the clients already reading it.
+     */
     record ModuleRef(String id, String displayName) {
+
+        /** Story 16.14 — same value as {@code id}, serialised as {@code moduleId} (derived, not a component). */
+        @com.fasterxml.jackson.annotation.JsonProperty("moduleId")
+        public String moduleId() {
+            return id;
+        }
     }
 
     /**

@@ -228,7 +228,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         }
         TargetTenant tenant = tenantLookup.load(cmd.tenantId());
         TenantPayment payment = paymentRepository.findById(tenant.id(), cmd.paymentId())
-                .orElseThrow(() -> new DomainException(ErrorCode.NOT_FOUND, "Paiement introuvable"));
+                .orElseThrow(() -> DomainException.userFacing(ErrorCode.NOT_FOUND, "Paiement introuvable"));
         if (payment.isVoided()
                 || !paymentRepository.voidPayment(tenant.id(), payment.id(), cmd.actorId(), reason, clock.instant())) {
             throw new DomainException(ErrorCode.INVALID_STATE, "Payment already voided: " + payment.id());
@@ -326,7 +326,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     }
 
     static DomainException validation(String field, String message) {
-        return new DomainException(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
     }
 
     private Map<String, Object> expiringRow(UUID tenantId, String schema, Timestamp now, Timestamp horizon) {

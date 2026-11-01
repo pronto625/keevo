@@ -148,8 +148,8 @@ Status: done
 | `moduleId` | `core`, `sync`, `catalog`, `inventory`, `pos`, `crm`, `store`, `reporting`, `messaging`, `admin`, `invoicing`, `counting`, `exports`, `profitability`, `alerts`, `report-config`, `multi-store`, `advanced-reports` | clé technique, **jamais affichée** |
 | `displayName` | ex. « Facturation », « Multi-boutiques et transferts » | seul libellé à afficher |
 | `state` | `ENABLED` \| `READ_ONLY` \| `DISABLED` | **la seule valeur qui décide** de l'accès |
-| `status` | `AVAILABLE` \| `TRIAL` \| `ACTIVE` \| `EXPIRED` \| `DISABLED` \| null | statut d'abonnement stocké, **owner seulement** (null pour un employé) ; informatif (« Essai », « Actif »…) |
-| `expiresAt`, `graceUntil` | ISO-8601 UTC ou null | owner seulement |
+| `status` | `AVAILABLE` \| `TRIAL` \| `ACTIVE` \| `EXPIRED` \| `DISABLED` \| null | statut d'abonnement stocké, **owner seulement** (null pour un employé, sauf sur un module `READ_ONLY` depuis 16-14) ; informatif (« Essai », « Actif »…) |
+| `expiresAt`, `graceUntil` | ISO-8601 UTC ou null | owner seulement — sauf `graceUntil` d'un module `READ_ONLY`, envoyé aussi à l'employé depuis 16-14 (bandeau daté, cf. 16-1) |
 | `free` | booléen | module inclus dans l'offre gratuite |
 | `category` | `core` \| `business` \| `premium` \| `platform` | |
 

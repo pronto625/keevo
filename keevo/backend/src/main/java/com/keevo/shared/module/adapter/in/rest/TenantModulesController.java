@@ -9,6 +9,7 @@ import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.shared.module.ModuleLifecycle;
 import com.keevo.shared.module.ModuleManifest;
+import com.keevo.shared.module.ModuleState;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,7 +28,8 @@ import java.util.stream.Collectors;
  * TenantModulesController — the current tenant's modules (Story 13.8a, spec-socle §10; feeds the Flutter
  * {@code entitlementsProvider} of 15.1 and the « Mes modules » screen of 15.6). OWNER and EMPLOYEE (Story 15.1):
  * employees gate their UI too, so they read every module's state; the subscription dates ({@code expiresAt},
- * {@code graceUntil}) stay the owner's business and are {@code null} for them. The tenant is the one bound to the
+ * {@code graceUntil}) stay the owner's business and are {@code null} for them — except, since Story 16.14, the
+ * {@code status} and {@code graceUntil} of a module in read-only grace, so the employee's banner can show its end date. The tenant is the one bound to the
  * request ({@link TenantContext}). Since Story 15.6 each module also carries whether it is part of the free offer and its
  * category (manifest) for every role, and its stored subscription {@code status} for the owner only (like the
  * dates), so the owner's « Mes modules » screen can group and label it. {@code platform} modules are never listed
@@ -50,10 +52,10 @@ public class TenantModulesController {
      *
      * @param state      {@code ENABLED} | {@code READ_ONLY} (subscription ended, grace running) | {@code DISABLED}
      * @param expiresAt  end of the trial / subscription ({@code null}: none, or a non-owner caller)
-     * @param graceUntil end of the read-only grace ({@code null}: none, or a non-owner caller)
+     * @param graceUntil end of the read-only grace ({@code null}: none, or a non-owner caller on a module not in grace)
      * @param status     stored subscription status ({@code TRIAL} | {@code ACTIVE} | {@code EXPIRED} |
      *                   {@code DISABLED} | {@code AVAILABLE}; {@code null}: never subscribed / core, or a non-owner
-     *                   caller)
+     *                   caller on a module not in grace)
      * @param free       part of the free offer (manifest {@code free})
      * @param category   manifest category code ({@code core} | {@code business} | {@code premium})
      */
@@ -75,9 +77,12 @@ public class TenantModulesController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(lifecycle.tenantModules(schema).stream()
                 .map(v -> {
                     ModuleManifest manifest = manifests.get(v.moduleId());
+                    // 16.14 — an employee also needs the grace date of a read-only module (banner « jusqu'au … »)
+                    boolean inGrace = v.state() == ModuleState.READ_ONLY;
+                    boolean showGrace = owner || inGrace;
                     return new TenantModuleDto(v.moduleId(), v.displayName(), v.state().name(),
-                            owner ? v.expiresAt() : null, owner ? v.graceUntil() : null,
-                            owner && v.status() != null ? v.status().name() : null,
+                            owner ? v.expiresAt() : null, showGrace ? v.graceUntil() : null,
+                            showGrace && v.status() != null ? v.status().name() : null,
                             manifest != null && manifest.free(),
                             manifest != null ? manifest.category().code() : null);
                 })

@@ -71,7 +71,7 @@ public class AdminJobController {
             return AdminJobs.Kind.valueOf(value.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             String message = "Type de tâche inconnu";
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, message, Map.of("kind", message));
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of("kind", message));
         }
     }
 }

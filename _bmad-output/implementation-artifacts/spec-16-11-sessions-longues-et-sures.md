@@ -185,8 +185,8 @@ Base locale : `http://localhost:4500` ; toutes les routes sont sous `/api/v1/...
 - Succès des contrôleurs ordinaires : `{"data": …, "timestamp": "…"}` (+ `meta` pour certaines listes paginées).
 - Succès de `/auth/login`, `/auth/select-tenant`, `/auth/refresh`, `/auth/change-password`, `/auth/register`, `/auth/profile` : **JSON brut, sans `data`**.
 - Erreur métier : `{"error": "<message français>", "code": "<statut HTTP>", "domainCode": "<ErrorCode>", "details": {…}, "timestamp": "…"}`.
-- Erreur du filtre d'authentification (401/403 avant le contrôleur) : **uniquement** `{"domainCode": "…"}` (pas de message) → l'app porte elle-même les textes français ci-dessous.
-- Toujours décider sur `domainCode` (jamais sur le texte). Catalogue complet : `keevo/backend/src/main/java/com/keevo/shared/domain/exception/ErrorCode.java` ; messages et statuts : `GlobalExceptionHandler.java` (`FR_MESSAGES`, `domainCodeToHttpStatus`).
+- Erreur du filtre d'authentification (401/403 avant le contrôleur) : `{"domainCode": "…", "error": "<message français>"}` (depuis 16-14 ; avant : `domainCode` seul) — même texte que les erreurs des contrôleurs. Garder un repli local sur le tableau ci-dessous si `error` manque.
+- Toujours décider sur `domainCode` (jamais sur le texte). Catalogue complet : `keevo/backend/src/main/java/com/keevo/shared/domain/exception/ErrorCode.java` ; messages : `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/ErrorMessages.java` (tout code a un message français depuis 16-14) ; statuts : `GlobalExceptionHandler.java` (`domainCodeToHttpStatus`).
 
 **Connexion en deux étapes** (`keevo/backend/src/main/java/com/keevo/identity/auth/adapter/in/rest/AuthController.java`, DTO dans `.../rest/dto/`) :
 
@@ -228,15 +228,15 @@ Une seule appartenance → enchaîner l'étape 2 sans écran ; plusieurs → éc
 | `TOKEN_INVALID` / `UNAUTHORIZED` | 401 | Jeton d'authentification invalide / Accès non autorisé | Ne pas renouveler (comme la référence) : erreur de la requête. Au démarrage, un jeton stocké illisible est effacé → écran de connexion |
 | `INVALID_CREDENTIALS` | 401 | Téléphone ou mot de passe incorrect | Message sous le formulaire ; **ne pas** tenter de renouvellement (route publique) |
 | `ACCOUNT_LOCKED` | 401 | Compte temporairement bloqué, réessayez dans 15 minutes | Message ; pas de renouvellement |
-| `TENANT_NOT_FOUND` / `MEMBERSHIP_NOT_FOUND` | 404 | Espace de travail introuvable / (pas de message FR : porter « Vous n'avez pas accès à cette entreprise ») | Retour au choix d'entreprise |
+| `TENANT_NOT_FOUND` / `MEMBERSHIP_NOT_FOUND` | 404 | Espace de travail introuvable / Vous n'avez pas accès à cette entreprise | Retour au choix d'entreprise |
 | `PASSWORD_CHANGE_REQUIRED` | 403 | Vous devez changer votre mot de passe avant de continuer | Écran de changement de mot de passe obligatoire (seules `/auth/change-password` et `GET /auth/profile` passent) |
-| `ACCOUNT_SUSPENDED` | 403 | (pas de message FR : filtre) porter « Compte suspendu : consultation seule » | Écritures refusées, lectures OK ; bandeau, pas de déconnexion |
+| `ACCOUNT_SUSPENDED` | 403 | Compte suspendu : consultation seule | Écritures refusées, lectures OK ; bandeau, pas de déconnexion |
 | `ACCOUNT_DELETION_PENDING` | 403 | Suppression de compte en cours — écriture bloquée | Écritures refusées sauf `POST /api/v1/account/delete/cancel` |
 | `FORBIDDEN` | 403 | Vous n'avez pas les droits nécessaires | Message ; masquer l'action (ex. employé sur les routes OWNER) |
 | `DEVICE_SESSION_NOT_FOUND` | 404 | Cet appareil n'est plus connecté | Rafraîchir la liste ; aussi renvoyé par « fermer les autres » quand la session courante est inconnue |
 | `EMPLOYEE_NOT_FOUND` | 404 | Employé introuvable | Message |
 | `RATE_LIMIT_EXCEEDED` | 429 | Trop de requêtes, veuillez patienter | Sur `/auth/refresh` : **ne pas** déconnecter, réessayer plus tard |
-| `VALIDATION_ERROR` | 422 | `error` = « Validation failed » (anglais), `details` = champ → message anglais | Ne jamais afficher tel quel : valider côté app avec des libellés français |
+| `VALIDATION_ERROR` | 422 | `error` = message français du premier champ invalide (« Données invalides » à défaut), `details` = champ → message français (depuis 16-14) | Valider aussi côté app ; afficher `error` (ou `details.<champ>` sous le champ) |
 | `INTERNAL_ERROR` | 500 | Une erreur inattendue s'est produite | Erreur réseau « réessayer » ; ne pas déconnecter |
 
 ### À implémenter côté mobile
@@ -287,8 +287,8 @@ curl -s $BASE/api/v1/auth/sessions -H "Authorization: Bearer $AT" | jq .data
 ### Incohérences API à connaître
 
 - Deux formes de succès : routes `/auth/*` (login, select-tenant, refresh, change-password, register, profile) en JSON brut ; toutes les autres sous `data`.
-- Les erreurs du filtre d'authentification n'ont que `domainCode` (pas `error`), et certaines (`ACCOUNT_SUSPENDED`, `MEMBERSHIP_NOT_FOUND`) n'ont aucun message français côté serveur.
-- `VALIDATION_ERROR` (422) renvoie « Validation failed » et des messages de champ en anglais.
+- ~~Les erreurs du filtre d'authentification n'ont que `domainCode`~~ — corrigé par 16-14 : `error` français ajouté, et tout code a un message français (`ACCOUNT_SUSPENDED`, `MEMBERSHIP_NOT_FOUND` compris).
+- ~~`VALIDATION_ERROR` (422) renvoie « Validation failed » et des messages de champ en anglais~~ — corrigé par 16-14 : messages français.
 - `TOKEN_EXPIRED` est aussi renvoyé par `/auth/select-tenant` (jeton de connexion de 5 min expiré) : ce n'est pas un cas de renouvellement.
 - Le jeton porte encore des claims hérités (`role`, `storeId`…) tant que 16.7 n'a pas coupé le drapeau : les ignorer, ils disparaîtront.
 

@@ -191,7 +191,7 @@ Status: done
 | `PLAN_LIMIT_EXCEEDED` | 403 | Limite de votre plan atteinte | `{"entity": "stores"\|"products"\|"employees", "limit": n, "current": n, "plan": "FREE"\|…}` | Feuille « plafond atteint » avec le nombre **reçu** |
 | `PRODUCT_QUOTA_UNAVAILABLE` | 503 | Impossible de vérifier votre quota de produits pour le moment. Réessayez dans quelques instants. | — | Message tel quel, proposer de réessayer ; ce n'est **pas** un plafond atteint |
 
-En synchro, une création refusée revient `REJECTED` avec `reason` = `PLAN_LIMIT_EXCEEDED` **sans** `details` : prendre alors la limite dans `GET /subscription/me`.
+En synchro, une création refusée revient `REJECTED` avec `reason` = `PLAN_LIMIT_EXCEEDED` et, depuis 16-14, `conflictData` = les mêmes `details` que le 403 (`{entity, limit, current, plan}`) : prendre la limite dans `conflictData.limit` (repli sur `GET /subscription/me` si absent, ex. serveur plus ancien). `conflictData` sert aussi aux conflits des opérations `APPLIED` : ne le lire comme plafond que sur `REJECTED` + `PLAN_LIMIT_EXCEEDED` (`keevo/backend/src/main/java/com/keevo/sync/sync/adapter/in/rest/dto/SyncOperationResultDto.java`).
 
 ### À implémenter côté mobile
 
@@ -241,17 +241,19 @@ Source : `keevo/backend/src/main/java/com/keevo/admin/plan/adapter/in/rest/Admin
 
 | Méthode | Route | Corps | Réponse `data` |
 |---|---|---|---|
-| GET | `/api/v1/admin/plan-profiles` | — | `[{planType ("FREE"\|"PREMIUM_TRIAL"\|"PREMIUM"), label ("Gratuit"\|"Essai Premium"\|"Premium"), maxStores, maxProducts, maxEmployees (null = illimité), modules: [{id, displayName}], fallback}]` |
+| GET | `/api/v1/admin/plan-profiles` | — | `[{planType ("FREE"\|"PREMIUM_TRIAL"\|"PREMIUM"), label ("Gratuit"\|"Essai Premium"\|"Premium"), maxStores, maxProducts, maxEmployees (null = illimité), modules: [{id, moduleId, displayName}], fallback}]` |
+| GET | `/api/v1/admin/plan-profiles/{planType}` (16-14) | — | un profil, même forme ; offre inconnue → 404 `PLAN_PROFILE_NOT_FOUND` |
 | PUT | `/api/v1/admin/plan-profiles/{planType}` | `{"maxStores": n\|null, "maxProducts": n\|null, "maxEmployees": n\|null, "modules": [moduleId…]}` — **les quatre clés obligatoires**, `null` envoyé explicitement pour illimité, toute autre clé refusée ; `modules` = modules **payants** inclus (liste vide si aucun ; tout autre module payant est enregistré comme non inclus) | 200 `{profile: <même forme que GET>, compositionChanged, jobId (null si les modules n'ont pas changé)}` |
 | GET | `/api/v1/admin/jobs/{jobId}` | — | tâche `PROFILE_RESYNC`, `params = {planType, plan}`, rapport de forme 16.5 (`modulesProvisioned` = 0) — voir 16-4 / 16-5 |
 
-- Attention : dans les profils, un module est `{id, displayName}` (et non `{moduleId, displayName}` comme ailleurs).
+- Dans les profils, un module est `{id, moduleId, displayName}` : depuis 16-14, `moduleId` (même valeur que `id`) aligne la forme sur les autres routes admin — **lire `moduleId`** ; `id` reste pour les anciens clients.
 - `fallback = true` : le profil enregistré est absent ou illisible, ce sont les valeurs intégrées qui s'appliquent.
 - Modules proposables = `GET /api/v1/admin/modules` avec `free = false` (et hors `category = "core"`).
 
 | `domainCode` | HTTP | Message (`error`) | Réaction attendue |
 |---|---|---|---|
-| `PLAN_PROFILE_INVALID` | 422 | « Profil non enregistré : <raison> » (ex. « indiquez le plafond de boutiques (vide pour illimité) », « le plafond de produits doit être un nombre entier (vide pour illimité) », « le nombre d'employés maximal doit être supérieur à zéro (laissez vide pour illimité) », « indiquez les modules inclus dans l'offre (liste vide si aucun) », « « X » est un module gratuit, inclus dans toutes les offres », « « X » fait partie du socle, inclus dans toutes les offres », « un des modules demandés n'existe pas », « la demande contient un champ non reconnu », « offre inconnue ») ; rien n'est enregistré | message dans la carte de l'offre |
+| `PLAN_PROFILE_INVALID` | 422 | « Profil non enregistré : <raison> » (ex. « indiquez le plafond de boutiques (vide pour illimité) », « le plafond de produits doit être un nombre entier (vide pour illimité) », « le nombre d'employés maximal doit être supérieur à zéro (laissez vide pour illimité) », « indiquez les modules inclus dans l'offre (liste vide si aucun) », « « X » est un module gratuit, inclus dans toutes les offres », « « X » fait partie du socle, inclus dans toutes les offres », « un des modules demandés n'existe pas », « la demande contient un champ non reconnu ») ; rien n'est enregistré | message dans la carte de l'offre |
+| `PLAN_PROFILE_NOT_FOUND` | 404 | Offre introuvable (offre inconnue dans l'URL, `GET` ou `PUT` ; 422 avant 16-14) | recharger la page |
 | `ADMIN_JOB_RUNNING` | 409 | « « Mise à jour des comptes d'une offre » est déjà en cours. Attendez la fin de la tâche avant d'en relancer une. » — **rien n'est enregistré** | message ; suivre la tâche en cours ; l'utilisateur ré-enregistre après |
 | `FORBIDDEN` | 403 | Vous n'avez pas les droits nécessaires | session non super-admin |
 

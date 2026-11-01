@@ -61,7 +61,7 @@ public class ModuleJobsService implements ModuleJobs {
                 .orElseThrow(() -> new DomainException(ErrorCode.MODULE_NOT_FOUND, "Module introuvable"));
         if (!provisioner.hasMigrations(module.id())) {
             String message = "Le module « " + module.displayName() + " » n'a pas de tables à créer";
-            throw new DomainException(ErrorCode.VALIDATION_ERROR, message, Map.of("moduleId", message));
+            throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of("moduleId", message));
         }
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("moduleId", module.id());

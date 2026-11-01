@@ -12,6 +12,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.shared.module.ModuleJobs;
 import com.keevo.shared.module.ModuleLifecycle;
@@ -98,13 +99,45 @@ public class ModuleAdminController {
     }
 
     @Operation(summary = "Module history of a tenant: activations, deactivations, forced deactivations, packs applied",
-            description = "Newest first (last 100), French labels, actor by name and phone, no identifier.",
+            description = "Newest first, French labels, actor by name and phone, no identifier. Story 16.14: optional "
+                    + "limit (1..500, default 100) and before (ISO instant: only entries strictly older, keyset on "
+                    + "occurredAt) and beforeId (with before: compound keyset (occurredAt, id) — pass the occurredAt and id "
+                    + "of the last entry received for the next page; a short page is the end); 400 "
+                    + "VALIDATION_ERROR otherwise.",
             security = @SecurityRequirement(name = "bearerAuth"))
     @GetMapping("/tenants/{tenantId}/modules/history")
-    public ResponseEntity<ApiResponseWrapper<List<ModuleHistoryEntryDto>>> history(@PathVariable UUID tenantId) {
+    public ResponseEntity<ApiResponseWrapper<List<ModuleHistoryEntryDto>>> history(
+            @PathVariable UUID tenantId,
+            @RequestParam(name = "limit", required = false) Integer limit,
+            @RequestParam(name = "before", required = false) String before,
+            @RequestParam(name = "beforeId", required = false) UUID beforeId) {
         CurrentActor.requireSuperAdmin();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(
-                lifecycle.history(tenantId).stream().map(ModuleHistoryEntryDto::from).toList()));
+        int size = limit != null ? limit : ModuleLifecycle.HISTORY_DEFAULT_LIMIT;
+        if (size < 1 || size > ModuleLifecycle.HISTORY_MAX_LIMIT) {
+            throw new InvalidRequestParameterException("limit", "limit must be between 1 and "
+                    + ModuleLifecycle.HISTORY_MAX_LIMIT, "Le nombre d'entrées doit être compris entre 1 et "
+                    + ModuleLifecycle.HISTORY_MAX_LIMIT);
+        }
+        Instant beforeAt = historyBefore(before);
+        if (beforeId != null && beforeAt == null) {
+            throw new InvalidRequestParameterException("before", "beforeId requires before",
+                    "Date de référence manquante");
+        }
+        return ResponseEntity.ok(ApiResponseWrapper.ok(lifecycle.history(tenantId, size, beforeAt, beforeId)
+                .stream().map(ModuleHistoryEntryDto::from).toList()));
+    }
+
+    /** The {@code before} cursor of the history: an ISO instant (offset accepted); {@code null} when absent. */
+    private static Instant historyBefore(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        try {
+            return OffsetDateTime.parse(raw.trim()).toInstant();
+        } catch (DateTimeParseException e) {
+            throw new InvalidRequestParameterException("before", "before must be an ISO instant",
+                    "Date de référence invalide");
+        }
     }
 
     @Operation(summary = "Module catalogue (installed tenant modules)",

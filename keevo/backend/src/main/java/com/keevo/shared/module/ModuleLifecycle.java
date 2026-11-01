@@ -74,7 +74,27 @@ public interface ModuleLifecycle {
      * Story 16.4 — the module history of the tenant targeted by id ({@code TENANT_NOT_FOUND} otherwise): activations,
      * deactivations, forced deactivations and packs applied, newest first, French labels, no identifier.
      */
-    List<HistoryEntry> history(UUID tenantId);
+    default List<HistoryEntry> history(UUID tenantId) {
+        return history(tenantId, HISTORY_DEFAULT_LIMIT, null, null);
+    }
+
+    /** {@link #history(UUID, int, Instant, UUID)} without the entry id of the cursor. */
+    default List<HistoryEntry> history(UUID tenantId, int limit, Instant before) {
+        return history(tenantId, limit, before, null);
+    }
+
+    /** Story 16.14 — default and maximum page size of {@link #history(UUID, int, Instant)}. */
+    int HISTORY_DEFAULT_LIMIT = 100;
+    int HISTORY_MAX_LIMIT = 500;
+
+    /**
+     * Story 16.14 — one page of the module history: at most {@code limit} entries ({@code 1..500}), newest first,
+     * after the cursor ({@code null}: from the newest). Pass the {@code occurredAt} and {@code id} of the last entry
+     * received ({@code before}, {@code beforeId}) for the next page — compound keyset {@code (occurredAt, id)}, so
+     * entries sharing a time are never skipped; {@code before} alone means strictly older than that time. A page
+     * shorter than {@code limit} is the end of the history.
+     */
+    List<HistoryEntry> history(UUID tenantId, int limit, Instant before, UUID beforeId);
 
     /** The installed modules a tenant can be given (every category but {@code platform}), sorted by id. */
     List<ModuleManifest> catalogue();
@@ -187,9 +207,15 @@ public interface ModuleLifecycle {
      * @param detail     French summary (status, end date, modules of a pack); may be {@code null}
      * @param actorName  who acted, by name ({@code null}: unknown)
      * @param actorPhone the actor's phone number ({@code null}: unknown)
+     * @param id         the audit entry id — the paging cursor ({@code beforeId}), never shown (Story 16.14)
      */
     record HistoryEntry(Instant occurredAt, String action, String subject, String detail, String actorName,
-                        String actorPhone) {
+                        String actorPhone, UUID id) {
+
+        public HistoryEntry(Instant occurredAt, String action, String subject, String detail, String actorName,
+                            String actorPhone) {
+            this(occurredAt, action, subject, detail, actorName, actorPhone, null);
+        }
     }
 
     /**

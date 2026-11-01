@@ -12,11 +12,11 @@ import jakarta.validation.constraints.Size;
  */
 public record LoginRequest(
 
-    @NotBlank(message = "Phone number is required")
-    @Pattern(regexp = "^\\+[1-9]\\d{7,14}$", message = "Phone number must be in E.164 format")
+    @NotBlank(message = "Le numéro de téléphone est obligatoire")
+    @Pattern(regexp = "^\\+[1-9]\\d{7,14}$", message = "Numéro de téléphone invalide (format international, ex. +237612345678)")
     String phoneNumber,
 
-    @NotBlank(message = "Password is required")
-    @Size(min = 8, max = 72, message = "Password must be between 8 and 72 characters")
+    @NotBlank(message = "Le mot de passe est obligatoire")
+    @Size(min = 8, max = 72, message = "Le mot de passe doit contenir entre 8 et 72 caractères")
     String password
 ) {}

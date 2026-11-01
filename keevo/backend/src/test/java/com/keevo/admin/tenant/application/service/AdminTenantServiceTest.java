@@ -127,7 +127,7 @@ class AdminTenantServiceTest {
 
         verify(jdbcTemplate).queryForObject(
                 org.mockito.ArgumentMatchers.contains("owner.phone_number IN (?, ?)"), eq(Long.class),
-                eq("%237600000001%"), eq("237600000001"), eq("+237600000001"));
+                eq("%237600000001%"), eq("%237600000001%"), eq("237600000001"), eq("+237600000001"));
     }
 
     @Test
