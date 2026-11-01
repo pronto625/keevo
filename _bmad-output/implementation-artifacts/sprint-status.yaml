@@ -341,7 +341,7 @@ development_status:
   m16-13-scope-employe-donnees-synchro: backlog  # API 2339512d — champs de pull `scope`/`reseed`, purge locale des données d'autres boutiques au changement de portée, pull complet
   m16-14-api-prete-client-mobile: backlog  # API 525cbdaa — `error` français sur les erreurs du filtre d'auth, VALIDATION_ERROR français, graceUntil employé, limite dans le rejet synchro PLAN_LIMIT_EXCEEDED (`conflictData`)
   m17-10-compteur-produits-ecran-abonnement: backlog  # API 513008e1 — « Produits » = currentProducts relu à chaque ouverture (jamais en cache de session), hors ligne comptage local actifs non archivés, null → « — »
-  m17-11-stock-initial-creation-produit: backlog  # API vérifiée (InitialStockAtCreationFullContextTest ; même id de mouvement renvoyé → DUPLICATE / MOVEMENT_ID_ALREADY_USED ; fusion sur un produit archivé → avis + « Restaurer ») — champ « Quantité initiale » facultatif ; Q > 0 → CREATE_PRODUCT puis RECORD_STOCK_ENTRY (entityId = id du mouvement local) dans la même transaction locale ; vide/0 → pas d'op de stock ; fusion MERGED_INTO, création refusée → suites retirées
+  m17-11-stock-initial-creation-produit: backlog  # API d6a3eccd, vérifiée (InitialStockAtCreationFullContextTest ; même id de mouvement renvoyé → DUPLICATE / MOVEMENT_ID_ALREADY_USED ; fusion sur un produit archivé → avis + « Restaurer ») — champ « Quantité initiale » facultatif ; Q > 0 → CREATE_PRODUCT puis RECORD_STOCK_ENTRY (entityId = id du mouvement local) dans la même transaction locale ; vide/0 → pas d'op de stock ; fusion MERGED_INTO, création refusée → suites retirées
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

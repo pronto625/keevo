@@ -131,7 +131,7 @@ deferred: []
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; protocole de synchro et politique de rejet : section « Mobile » de `spec-16-10-scope-employe-historique-transferts.md` ; messages d'erreur : `spec-16-14-api-prete-client-mobile.md` ; plafond produits : `spec-17-10-compteur-produits-ecran-abonnement.md`. Aucun nouvel endpoint, aucun changement de forme de réponse (compatible V1 2.0.1).
 
-**Statut** : API vérifiée — le contrat est tenu par les opérations de synchro existantes ; seul ajout serveur (compatible) : une entrée remise en file avec un id de mouvement déjà enregistré répond `DUPLICATE` / `MOVEMENT_ID_ALREADY_USED` au lieu de `INTERNAL_ERROR` (test `sync/sync/adapter/in/rest/InitialStockAtCreationFullContextTest.java`) — mobile à faire.
+**Statut** : API livrée (commit `d6a3eccd`) — le contrat est tenu par les opérations de synchro existantes ; seul ajout serveur (compatible) : une entrée remise en file avec un id de mouvement déjà enregistré répond `DUPLICATE` / `MOVEMENT_ID_ALREADY_USED` au lieu de `INTERNAL_ERROR` (test `sync/sync/adapter/in/rest/InitialStockAtCreationFullContextTest.java`) — mobile à faire.
 
 **Clé de suivi mobile** : `m17-11-stock-initial-creation-produit`
 
