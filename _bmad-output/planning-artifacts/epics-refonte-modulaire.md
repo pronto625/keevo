@@ -1821,6 +1821,24 @@ As a **propriétaire**, I want **qu'un téléphone d'employé ne contienne que l
 
 **Acceptance Criteria (provisoires):** **Given** un employé de la boutique A dont l'appareil contient des données de B **When** il met à jour l'app et synchronise **Then** plus aucune donnée propre à B (transferts, mouvements, ventes…) n'est présente sur l'appareil ni envoyée par le serveur ; **Given** l'employé réaffecté de A vers B **When** il synchronise **Then** les données de A disparaissent et l'historique de B est téléchargé.
 
+### Story 16.14 : API prête pour le client mobile React Native (incohérences additives)
+
+> Clé tracker : `16-14-api-prete-client-mobile` — créée le 2026-11-01 lors de la rédaction des sections « Mobile » des specs 16-x. Backend seul, **compatible V1 2.0.1** (ajouts uniquement : aucune forme de réponse existante ne change). Après 16.13.
+
+As a développeur de l'app React Native,
+I want que l'API donne partout des erreurs exploitables en français et les informations dont l'app a besoin,
+So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du serveur.
+
+**Items :**
+- Erreurs écrites par `JwtAuthFilter` (401/403 avant le contrôleur) : ajouter `error` (message français) à côté de `domainCode` (aujourd'hui `{"domainCode"}` seul).
+- Codes sans message français côté serveur (dont `ACCOUNT_SUSPENDED`, `MEMBERSHIP_NOT_FOUND`) : compléter `FR_MESSAGES` ; test de garde « tout `ErrorCode` a un message français ».
+- `VALIDATION_ERROR` (422) : message général et messages par champ en français.
+- `GET /api/v1/tenants/me/modules` : envoyer aussi aux employés la date de fin de grâce d'un module en lecture seule (bandeau daté), sans les autres champs réservés au propriétaire.
+- Rejet de synchro `PLAN_LIMIT_EXCEEDED` : joindre la limite et l'usage (comme le 403 REST) dans le détail du rejet.
+- Mettre à jour les sections « Mobile » des specs concernées (16-1, 16-8, 16-10, 16-11).
+
+**Hors périmètre (documenté, non modifiable avant le retrait des apps V1) :** deux formes de succès (`/auth/*` brut vs `{data}`), deux formes de pagination (`meta` vs `data.content`).
+
 ## Epic 17 : Complétion Fonctionnelle & Gating Produit (Phase 7)
 
 > **Objectif :** refermer les FR produit non planifiés + livrer les features Premium décidées, **gâtées** par le moteur d'entitlements. Dépend d'Epic 13 (gating) et du classement §6.1. Rend l'app **fonctionnellement complète** sur les 3 surfaces. (Comble les gaps G5-G13.)

@@ -125,3 +125,77 @@ Status: done
 **Review:** 27 findings — 11 patched entries (4 medium, 7 low), 16 rejected with reasons. Follow-up review recommended: true — several medium entries patched on a first pass; named risk: the forced network-back refresh combined with the session-rebuild fetch (possible duplicate request), covered by unit tests only.
 
 **Verification:** app `flutter analyze` 0 errors/warnings; `test/core` 534, every `test/features/*` folder (run one by one) green, keevo_core 334. Backend: shared.infrastructure.security 96, shared.module 430 green. Redmi (implementer, `com.example.keevo` debug, local backend WhatsApp noop / FCM off, owner KV-ZGGT7G): `invoicing` set DISABLED in DB → reopening within 60 s sent no request (throttle), reopening after 60 s → « Factures » gone from « Plus » without sign-out; row restored → reopening → « Factures » back. Row restored to TRIAL/PLAN with its original dates; backend stopped.
+
+## Mobile (React Native — dépôt AI/bref)
+
+> Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API (enveloppes, erreurs, renouvellement) : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md`. Correspond à la story fusion 22.8 (`_bmad-output/planning-artifacts/epics-fusion-keevo-bref.md`).
+
+**Statut** : API livrée (commit `8325d05c`) — mobile à faire.
+
+**Clé de suivi mobile** : `m16-3-modules-actifs-app-sans-claim-jwt`
+
+### Ce qui est fait côté API
+
+- Aucun jeton ne porte la liste des modules (et n'en portera jamais) : l'état des modules ne s'obtient que par `GET /api/v1/tenants/me/modules`.
+- Cette route renvoie **tous** les modules du catalogue (gratuits, payants, socle) avec leur état calculé en temps réel à partir des dates d'abonnement.
+
+### À utiliser
+
+`GET /api/v1/tenants/me/modules` (OWNER ou EMPLOYEE ; contrôleur `keevo/backend/src/main/java/com/keevo/shared/module/adapter/in/rest/TenantModulesController.java`) → `{"data": [ … ], "timestamp"}`, un élément par module :
+
+| Champ | Valeurs | Remarque |
+|---|---|---|
+| `moduleId` | `core`, `sync`, `catalog`, `inventory`, `pos`, `crm`, `store`, `reporting`, `messaging`, `admin`, `invoicing`, `counting`, `exports`, `profitability`, `alerts`, `report-config`, `multi-store`, `advanced-reports` | clé technique, **jamais affichée** |
+| `displayName` | ex. « Facturation », « Multi-boutiques et transferts » | seul libellé à afficher |
+| `state` | `ENABLED` \| `READ_ONLY` \| `DISABLED` | **la seule valeur qui décide** de l'accès |
+| `status` | `AVAILABLE` \| `TRIAL` \| `ACTIVE` \| `EXPIRED` \| `DISABLED` \| null | statut d'abonnement stocké, **owner seulement** (null pour un employé) ; informatif (« Essai », « Actif »…) |
+| `expiresAt`, `graceUntil` | ISO-8601 UTC ou null | owner seulement |
+| `free` | booléen | module inclus dans l'offre gratuite |
+| `category` | `core` \| `business` \| `premium` \| `platform` | |
+
+Sémantique : `ENABLED` = lecture + écriture ; `READ_ONLY` = abonnement échu, 7 jours de grâce : lectures acceptées, écritures refusées (voir 16-1) ; `DISABLED` = aucun accès (données conservées à vie, réapparaissent à la réactivation).
+
+Appel REST sur un module non actif — liste des routes et de leur module : `keevo/backend/docs/entitlements/endpoints.md` ; table écran → module : `keevo/contracts/module-routes.json` (routes Flutter, à transposer aux routes Expo) :
+
+| `domainCode` | HTTP | Message serveur | Réaction |
+|---|---|---|---|
+| `MODULE_NOT_ENTITLED` | 403 | Ce module n'est pas inclus dans votre abonnement | Quitter l'écran vers « module non activé » / « Mes modules » ; relancer `GET /tenants/me/modules` |
+| `MODULE_READ_ONLY` | 403 | Ce module est en lecture seule : abonnement expiré | Voir 16-1 (bandeau, action désactivée) |
+
+Points d'extension (ex. action « Facturer » au paiement) : `GET /api/v1/tenants/me/extensions/{pointId}` → `{"data": [{"id", "label", "order", "action"}]}` — seules les contributions des modules actifs et permises au rôle ; point inconnu → 404 « Point d'extension inconnu ».
+
+### À implémenter côté mobile
+
+1. **Graine au démarrage** : le dernier instantané persistant de la réponse **pour ce compte** (clé liée à l'utilisateur + entreprise), sinon état « inconnu ». Ne jamais lire le jeton pour les modules.
+2. **État inconnu** (première ouverture hors ligne, aucun instantané) : ne pas traiter le compte comme « sans modules » ; garder le parcours gratuit / par défaut jusqu'à la réponse.
+3. **Rafraîchissements** (pas de minuterie de sondage) : (a) retour au premier plan (`AppState` → `active`), au plus une fois par 60 s, mesurées sur une horloge monotone, une tentative échouée compte aussi ; (b) passage hors ligne → en ligne : une requête forcée (sans le délai de 60 s) ; (c) chaque changement de session : connexion, choix d'entreprise, renouvellement de jeton. Une seule requête en vol ; une réponse plus ancienne n'écrase jamais une plus récente ; une réponse d'une session précédente est ignorée.
+4. **Échec / hors ligne** : garder les états connus, ne rien persister, aucune erreur affichée. **Succès** : persister la réponse (instantané du compte).
+5. **Garde de routes** : chaque écran appartient à un module ; route d'un module non lisible (`DISABLED`) → écran « Module non activé » nommant le `displayName`, avec accès à « Mes modules » ; les menus (onglets, « Plus ») masquent les entrées des modules `DISABLED`. Quand une réponse change la lisibilité, réévaluer la garde **immédiatement** : un écran ouvert d'un module désactivé se ferme, un module réactivé réapparaît sans redémarrer.
+6. **Synchro** : quand un module redevient lisible (`DISABLED` → `ENABLED`/`READ_ONLY`) par rapport à l'instantané précédent du même compte, demander un **pull complet** au prochain pull (le pull delta n'envoie rien d'un module `DISABLED` mais avance son curseur ; voir 16-10 / protocole de synchro). Les opérations locales en attente ne sont pas touchées.
+7. Aucun identifiant de module, statut brut ou date ISO à l'écran : `displayName` et dates formatées en français.
+
+### Implémentation de référence (Flutter, `keevo/app`)
+
+- `lib/core/entitlements/entitlements_provider.dart` (graine, `refreshIfStale`, persistance, demande de pull complet), `lib/core/entitlements/entitlements_refresh_trigger.dart` (premier plan / réseau)
+- `packages/keevo_core/lib/entitlements/entitlements.dart` (états, `isReadable`, état inconnu)
+- `lib/core/modules/feature_modules.dart`, `lib/core/router/module_routes.dart`, `lib/core/router/module_unavailable_page.dart`, `lib/core/router/app_router.dart` (garde, `ModuleGateRefresh`)
+- `lib/features/settings/presentation/page/my_modules_page.dart` (« Mes modules »)
+
+### Critères d'acceptation mobile / scénarios de test
+
+Préparation (backend local WhatsApp noop / FCM coupé ; owner connecté sur l'app) — changer l'état d'un module en base locale, puis remettre la ligne d'origine après le test :
+
+```bash
+psql "$KEEVO_DB_URL" -c "SELECT module_id,status,expires_at,grace_until,origin FROM public.tenant_modules WHERE tenant_id=(SELECT id FROM public.tenants WHERE code='KV-XXXXXX') AND module_id='invoicing';"
+psql "$KEEVO_DB_URL" -c "UPDATE public.tenant_modules SET status='DISABLED', disabled_at=now() WHERE tenant_id=(SELECT id FROM public.tenants WHERE code='KV-XXXXXX') AND module_id='invoicing';"
+curl -s $BASE/api/v1/tenants/me/modules -H "Authorization: Bearer $AT" | jq '.data[] | {moduleId,state}'
+```
+(Alternative super-admin : `POST /api/v1/admin/tenants/{tenantUuid}/modules/invoicing/deactivate` puis `…/activate` avec `{"status":"TRIAL"}`.)
+
+1. **Désactivation vue au retour** — Given `invoicing` passé `DISABLED` côté serveur, When l'app passe en arrière-plan puis revient après plus de 60 s, Then l'entrée « Factures » disparaît des menus sans déconnexion, et un écran Factures ouvert est remplacé par « Module non activé ».
+2. **Délai de 60 s** — Given deux retours au premier plan à moins de 60 s, Then une seule requête `GET /tenants/me/modules`.
+3. **Réactivation** — Given la ligne restaurée (`TRIAL`/`ACTIVE` non échue), When l'app revient au premier plan (> 60 s), Then « Factures » revient, et le pull suivant est complet (les factures créées entre-temps apparaissent).
+4. **Retour du réseau** — Given l'app hors ligne, When le réseau revient, Then une requête immédiate et les états à jour.
+5. **Démarrage hors ligne** — Given un instantané existant, When l'app démarre sans réseau, Then les menus suivent l'instantané, aucune erreur affichée.
+6. **Première installation** — Given aucun instantané, Then état inconnu jusqu'à la réponse (pas d'écran « module non activé » à tort).
+7. **Employé** — Given un employé connecté, Then la liste reçue n'a ni `status` ni dates, et la garde fonctionne de la même façon.

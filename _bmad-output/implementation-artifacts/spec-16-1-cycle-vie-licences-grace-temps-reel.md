@@ -179,3 +179,55 @@ Status: done
 **Verification:** backend packages one at a time, all green — shared.module 409, subscription 73, messaging 176, shared.infrastructure 604, sync 491, invoicing 170, architecture 32, admin 521. App: `flutter analyze` 0 errors/warnings, `test/core` 521 and `test/features/settings` 110 passed. keevo_dev: job processed 331 tenants (40 grace-over PLAN rows disabled), backfill re-run 0 writes. Redmi (2.0.18 debug, tenant KV-ZGGT7G owner, invoicing set to an expired ADMIN row): Factures shows the banner « Module en lecture seule jusqu'au 08/11/2026 » + « Réactiver », invoices readable; a draft save was refused with the French read-only message (implementer run). Test row restored afterwards; « Réactiver » not tapped (opens WhatsApp).
 
 **Residual risks:** the app reads module states from its stored snapshot until a token is issued (refresh on reconnection is 16.3); paid→paid dependency cascade undecided (no such module ships).
+
+## Mobile (React Native — dépôt AI/bref)
+
+> Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; lecture des états de modules : section « Mobile » de `spec-16-3-modules-actifs-app-sans-claim-jwt.md` (à faire d'abord).
+
+**Statut** : API livrée (commit `6ea22538`) — mobile à faire.
+
+**Clé de suivi mobile** : `m16-1-cycle-vie-licences-grace-temps-reel`
+
+### Ce qui est fait côté API
+
+- Le blocage est calculé **en temps réel** à chaque requête depuis les dates d'abonnement d'un module : échu → `READ_ONLY` pendant la grâce (7 jours après l'échéance) → `DISABLED`. Aucune attente du job de nuit.
+- Job de nuit (02:30 heure de Douala) qui matérialise les statuts et prévient le propriétaire (push + WhatsApp, une fois par transition). Les données d'un module désactivé ne sont jamais supprimées.
+- Un essai (`TRIAL`) accordé par le super-admin sans date dure 14 jours.
+
+### À utiliser
+
+- États : `GET /api/v1/tenants/me/modules` (voir 16-3). Pour un module `READ_ONLY`, `graceUntil` (ISO-8601 UTC) donne la fin de la lecture seule — **owner seulement** (null pour un employé).
+- Écriture REST sur un module en grâce : **403** `MODULE_READ_ONLY` « Ce module est en lecture seule : abonnement expiré » ; les lectures (GET) passent. Module désactivé : 403 `MODULE_NOT_ENTITLED` « Ce module n'est pas inclus dans votre abonnement ». Routes → module : `keevo/backend/docs/entitlements/endpoints.md`.
+- Synchro : une opération poussée d'un module `READ_ONLY` / `DISABLED` revient `REJECTED` avec `reason` = `MODULE_READ_ONLY` / `MODULE_INACTIVE` → opération **retenue** sur l'appareil (voir protocole de synchro, section « Mobile » de `spec-16-10-scope-employe-historique-transferts.md`).
+- Notifications push au propriétaire (`keevo/backend/src/main/java/com/keevo/messaging/notification/application/listener/ModuleExpiryNotificationListener.java`) : données FCM `type` = `MODULE_EXPIRED` (module accordé par le super-admin arrivé à échéance : « Votre module X est arrivé à échéance : il reste consultable en lecture seule jusqu'au JJ/MM/AAAA. Contactez-nous pour le renouveler. ») ou `MODULE_DISABLED` (« Les modules X, Y sont désactivés. Vos données sont conservées et réapparaîtront dès la réactivation. »), `deepLink` = `/settings/modules` (route Flutter de « Mes modules »). Enregistrement du jeton push : `POST /api/v1/devices/token` (module `messaging`, contrôleur `.../messaging/notification/adapter/in/rest/DeviceTokenController.java`).
+
+### À implémenter côté mobile
+
+1. **Bandeau persistant** au-dessus de **chaque écran** d'un module dont `state` = `READ_ONLY` : « Module en lecture seule jusqu'au JJ/MM/AAAA » (date = `graceUntil` convertie en heure de Douala, WAT = UTC+1 sans heure d'été, format `dd/MM/yyyy`) ; sans `graceUntil` (employé) : « Module en lecture seule ». Le bandeau suit la navigation (apparaît/disparaît selon l'écran courant) sans réinitialiser la pile de navigation.
+2. **Bouton « Réactiver »** dans le bandeau, **owner seulement** : ouvre WhatsApp vers le support Keevo avec le même message que « Mes modules » (nom du module, nom du commerce, téléphone de l'owner). L'employé voit le bandeau sans bouton.
+3. **Actions d'écriture** désactivées ou interceptées sur un module `READ_ONLY` ; si le serveur répond 403 `MODULE_READ_ONLY`, afficher le message français, ne rien perdre de la saisie locale.
+4. Les données du module restent consultables pendant la grâce (lectures en ligne et données locales).
+5. **Notifications** `MODULE_EXPIRED` / `MODULE_DISABLED` : afficher titre/texte reçus ; à l'ouverture, aller sur l'écran « Mes modules » de l'app RN (mapper le `deepLink` Flutter `/settings/modules`) et relancer `GET /tenants/me/modules`.
+6. Aucune date ISO, aucun identifiant de module ni statut brut à l'écran.
+
+### Implémentation de référence (Flutter, `keevo/app`)
+
+- `lib/core/entitlements/module_read_only_banner.dart` (texte, date WAT, bouton owner, placement au-dessus du navigateur), branché dans `lib/main.dart`
+- `lib/features/settings/presentation/page/my_modules_page.dart` (`supportMessage`, « Mes modules »)
+- `lib/core/notification/fcm_service.dart` (ouverture du `deepLink`), `lib/core/router/app_router.dart`
+
+### Critères d'acceptation mobile / scénarios de test
+
+Préparation (backend local WhatsApp noop / FCM coupé ; owner connecté) — mettre `invoicing` en grâce en base, puis restaurer la ligne d'origine :
+
+```bash
+psql "$KEEVO_DB_URL" -c "UPDATE public.tenant_modules SET status='ACTIVE', expires_at=now()-interval '1 minute', grace_until=now()+interval '7 days' WHERE tenant_id=(SELECT id FROM public.tenants WHERE code='KV-XXXXXX') AND module_id='invoicing';"
+curl -s $BASE/api/v1/tenants/me/modules -H "Authorization: Bearer $AT" | jq '.data[] | select(.moduleId=="invoicing")'
+```
+
+1. **Bandeau owner** — Given `invoicing` en grâce (`READ_ONLY`, `graceUntil` dans 7 jours), When l'owner ouvre Factures (après rafraîchissement des états, cf. 16-3), Then le bandeau « Module en lecture seule jusqu'au JJ/MM/AAAA » (date de Douala) et le bouton « Réactiver » s'affichent sur chaque écran Factures, et les factures restent lisibles. (En test sur appareil, **ne pas toucher « Réactiver »** : il ouvre WhatsApp.)
+2. **Écriture refusée** — Given le même état, When l'owner tente d'enregistrer un brouillon, Then message « Ce module est en lecture seule : abonnement expiré », la saisie n'est pas perdue.
+3. **Employé** — Given un employé du même compte, Then bandeau « Module en lecture seule » sans date ni bouton.
+4. **Fin de grâce** — Given `grace_until` passé (`UPDATE … SET grace_until=now()-interval '1 minute'`), When l'app rafraîchit les états, Then Factures quitte les menus (« Module non activé »), les données réapparaissent à la réactivation.
+5. **Synchro retenue** — Given une opération de facture créée hors ligne puis poussée pendant la grâce, Then elle reste sur l'appareil (retenue, non supprimée) et part dès que le module redevient `ENABLED`.
+6. **Notification** — Given une notification `MODULE_DISABLED` reçue (FCM réel requis : sinon vérifier dans les journaux backend `[NOTIFICATION STUB]`), When l'owner la touche, Then l'app ouvre « Mes modules ».

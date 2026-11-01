@@ -159,3 +159,135 @@ Status: done
 **Verification:** backend every package one at a time (shared, identity, admin, sync, architecture, commerce, inventory, catalog, store, subscription, crm, invoicing, messaging, reporting, feedback, acceptance) — 4691 tests, 0 failures; `flutter analyze` no errors/warnings, `flutter test` green in all 26 folders + `keevo_core`; dashboard lint, 379 tests, build green. Redmi (before fixes, implementation agent): 2-min access token, two silent renewals over ~6 min, no password asked, Redmi listed as current device, closing it → sign-in screen. Redmi (after fixes): sign-in, home loads, Redmi listed as « Xiaomi 23106RN0DA · Android 15 » in the API session list, « close all others » from an API session → Redmi back to the sign-in screen at its next request.
 
 **Residual risks:** each instance holds one DB connection for `LISTEN`; per-IP limit assumes a single appending reverse proxy; V1 2.0.1 renewal every 30 min verified in code only (real-device check in 16.7).
+
+## Mobile (React Native — dépôt AI/bref)
+
+> Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop` : routes `app/`, métier `features/<module>/{api,hooks,screens,services,types}`, client HTTP `lib/sdk/api/api.client.ts` + `lib/sdk/api/api.interceptor.ts`, jetons `lib/sdk/storage/` sur `expo-secure-store`, TanStack Query). Cette section sert aussi de **référence de conventions API** pour les sections « Mobile » des autres specs 16-x.
+
+**Statut** : API livrée (commit `7b8f04d9`) — mobile à faire.
+
+**Clé de suivi mobile** : `m16-11-sessions-longues-et-sures`
+
+### Ce qui est fait côté API
+
+- Jeton d'accès (JWT RS256) valable **30 min**, qui ne prouve que l'identité : `sub` (id utilisateur), `tenantId` (schéma du compte), `sid` (session de l'appareil), `iat`, `exp`. Tant que `keevo.jwt.legacy-claims=true` (jusqu'à 16.7), il porte aussi `role`, `tenantStatus`, `storeId`, `passwordChangeRequired` pour les apps V1 installées — **indicatifs, jamais lus par le serveur, à ne pas lire par l'app**. Plus de `firstName`, aucune liste de modules.
+- Jeton de renouvellement (opaque) valable **365 jours glissants** : chaque renouvellement le remplace (rotation) et repart pour 365 jours. Un utilisateur qui ouvre l'app au moins une fois par an ne ressaisit jamais son mot de passe.
+- Le serveur relit à chaque requête le rôle, la boutique, les statuts (compte, employé), l'obligation de changer le mot de passe et l'ouverture de la session (cache ≤ 30 s invalidé à chaque changement) : un droit retiré s'applique à la requête suivante.
+- Une session par appareil (identifiant + libellé envoyés par l'app), listable et fermable : « Appareils connectés » (mes appareils) et, pour le propriétaire, les appareils d'un employé.
+- Renouvellement limité à 10 appels/min par jeton et 300/min par IP (`RATE_LIMIT_EXCEEDED`, 429).
+- Profil `GET /api/v1/auth/profile` = seule source du rôle, de la boutique, du prénom, du statut du compte, de l'obligation de changer le mot de passe et de l'onboarding (lisible même pendant un changement de mot de passe forcé).
+
+### À utiliser
+
+Base locale : `http://localhost:4500` ; toutes les routes sont sous `/api/v1/...` (attention : le client Bref actuel appelle `/v1/...` — la base URL Keevo ne contient pas `/api`). En-tête `Authorization: Bearer <accessToken>` sur toute route non publique. Routes publiques (aucun Bearer) : `/api/v1/auth/{register,login,refresh,logout,select-tenant,forgot-password,reset-password}`.
+
+**Enveloppes de réponse (deux formes, cf. incohérences plus bas)** — source : `keevo/backend/src/main/java/com/keevo/shared/infrastructure/web/ApiResponseWrapper.java`, `GlobalExceptionHandler.java`, `shared/infrastructure/security/JwtAuthFilter.java` :
+- Succès des contrôleurs ordinaires : `{"data": …, "timestamp": "…"}` (+ `meta` pour certaines listes paginées).
+- Succès de `/auth/login`, `/auth/select-tenant`, `/auth/refresh`, `/auth/change-password`, `/auth/register`, `/auth/profile` : **JSON brut, sans `data`**.
+- Erreur métier : `{"error": "<message français>", "code": "<statut HTTP>", "domainCode": "<ErrorCode>", "details": {…}, "timestamp": "…"}`.
+- Erreur du filtre d'authentification (401/403 avant le contrôleur) : **uniquement** `{"domainCode": "…"}` (pas de message) → l'app porte elle-même les textes français ci-dessous.
+- Toujours décider sur `domainCode` (jamais sur le texte). Catalogue complet : `keevo/backend/src/main/java/com/keevo/shared/domain/exception/ErrorCode.java` ; messages et statuts : `GlobalExceptionHandler.java` (`FR_MESSAGES`, `domainCodeToHttpStatus`).
+
+**Connexion en deux étapes** (`keevo/backend/src/main/java/com/keevo/identity/auth/adapter/in/rest/AuthController.java`, DTO dans `.../rest/dto/`) :
+
+| Étape | Requête | Réponse 200 (brute) |
+|---|---|---|
+| 1 | `POST /api/v1/auth/login` `{"phoneNumber": "+2376…" (E.164), "password": "…" (8–72)}` | `{"loginToken": "…" (5 min), "memberships": [{"tenantCode": "KV-XXXXXX", "tenantName": "…", "role": "OWNER"\|"EMPLOYEE", "schemaName": "…"}]}` |
+| 2 | `POST /api/v1/auth/select-tenant` `{"loginToken", "tenantCode", "deviceId"?, "deviceLabel"?}` (≤ 256 car.) | `{"accessToken", "refreshToken", "userId", "tenantId", "role", "expiresIn" (secondes), "storeId", "passwordChangeRequired"}` |
+
+Une seule appartenance → enchaîner l'étape 2 sans écran ; plusieurs → écran de choix d'entreprise (afficher `tenantName`, jamais `tenantCode`/`schemaName` comme libellé principal). `login` ne prend **pas** les champs appareil : ils partent à l'étape 2 et à chaque renouvellement.
+
+**Renouvellement** : `POST /api/v1/auth/refresh` `{"refreshToken", "deviceId"?, "deviceLabel"?}` → même corps que l'étape 2 ; **stocker les deux nouveaux jetons** (l'ancien jeton de renouvellement est consommé). Règles serveur (`.../identity/auth/application/service/RefreshTokenService.java`) : jeton inconnu, expiré, révoqué ou compte retiré → 401 `REFRESH_TOKEN_INVALID` ; présentation d'un jeton déjà remplacé par un **autre** détenteur (rejeu) → toute la chaîne de l'appareil est révoquée + 401 `REFRESH_TOKEN_INVALID` ; tolérance « réponse perdue » : si l'app n'a jamais reçu la réponse d'un renouvellement, re-présenter l'ancien jeton dans les 7 jours fonctionne **une fois** (le successeur jamais reçu est écarté).
+
+**Déconnexion** : `POST /api/v1/auth/logout` `{"refreshToken"}` → toujours 204, même avec un jeton d'accès expiré (ne pas renouveler avant).
+
+**Changement de mot de passe** : `POST /api/v1/auth/change-password` (Bearer) `{"currentPassword", "newPassword" (8–72)}` → corps de connexion avec de **nouveaux jetons** (même session d'appareil) ; remplacer les jetons stockés.
+
+**Profil** : `GET /api/v1/auth/profile` → `{"userId", "phoneNumber", "role", "firstName", "lastName", "storeId", "storeName", "passwordChangeRequired", "tenantStatus", "onboardingCompleted"}` (`firstName/lastName/storeId/storeName` null pour un propriétaire sans fiche employé).
+
+**Appareils connectés** (`.../identity/auth/adapter/in/rest/DeviceSessionController.java`), réponses enveloppées `{data}` :
+
+| Méthode | Route | Qui | Réponse `data` |
+|---|---|---|---|
+| GET | `/api/v1/auth/sessions` | tout utilisateur | `[{"sessionId", "deviceLabel" ("Appareil inconnu" si absent), "lastUsedAt", "current"}]` |
+| DELETE | `/api/v1/auth/sessions/{sessionId}` | tout utilisateur | `null` |
+| DELETE | `/api/v1/auth/sessions` | tout utilisateur (ferme toutes les autres) | `{"closed": n}` |
+| GET | `/api/v1/employees/{employeeId}/sessions` | OWNER | idem liste |
+| DELETE | `/api/v1/employees/{employeeId}/sessions/{sessionId}` | OWNER | `null` |
+| DELETE | `/api/v1/employees/{employeeId}/sessions` | OWNER (toutes) | `{"closed": n}` |
+
+**Codes à gérer** :
+
+| `domainCode` | HTTP | Message français (serveur ou à porter) | Réaction attendue de l'app |
+|---|---|---|---|
+| `TOKEN_EXPIRED` | 401 | Session expirée, veuillez vous reconnecter | Renouveler (single-flight) puis rejouer **une fois** la requête ; rien à l'écran. Sur `/auth/select-tenant` : le `loginToken` a expiré → recommencer la connexion |
+| `STORE_REASSIGNED` | 401 | Votre boutique a été modifiée, veuillez vous reconnecter | Comme `TOKEN_EXPIRED` (ne concerne que des jetons à claims hérités), puis recharger le profil |
+| `SESSION_REVOKED` | 401 | Votre session a été révoquée, veuillez vous reconnecter | Effacer les jetons et l'identité en cache → écran de connexion avec ce message ; **ne pas renouveler** |
+| `ACCOUNT_INACTIVE` | 401 | Ce compte a été désactivé | Idem `SESSION_REVOKED` |
+| `REFRESH_TOKEN_INVALID` | 401 | Session expirée, veuillez vous reconnecter | (sur `/auth/refresh`) fin de session → écran de connexion |
+| `TOKEN_INVALID` / `UNAUTHORIZED` | 401 | Jeton d'authentification invalide / Accès non autorisé | Ne pas renouveler (comme la référence) : erreur de la requête. Au démarrage, un jeton stocké illisible est effacé → écran de connexion |
+| `INVALID_CREDENTIALS` | 401 | Téléphone ou mot de passe incorrect | Message sous le formulaire ; **ne pas** tenter de renouvellement (route publique) |
+| `ACCOUNT_LOCKED` | 401 | Compte temporairement bloqué, réessayez dans 15 minutes | Message ; pas de renouvellement |
+| `TENANT_NOT_FOUND` / `MEMBERSHIP_NOT_FOUND` | 404 | Espace de travail introuvable / (pas de message FR : porter « Vous n'avez pas accès à cette entreprise ») | Retour au choix d'entreprise |
+| `PASSWORD_CHANGE_REQUIRED` | 403 | Vous devez changer votre mot de passe avant de continuer | Écran de changement de mot de passe obligatoire (seules `/auth/change-password` et `GET /auth/profile` passent) |
+| `ACCOUNT_SUSPENDED` | 403 | (pas de message FR : filtre) porter « Compte suspendu : consultation seule » | Écritures refusées, lectures OK ; bandeau, pas de déconnexion |
+| `ACCOUNT_DELETION_PENDING` | 403 | Suppression de compte en cours — écriture bloquée | Écritures refusées sauf `POST /api/v1/account/delete/cancel` |
+| `FORBIDDEN` | 403 | Vous n'avez pas les droits nécessaires | Message ; masquer l'action (ex. employé sur les routes OWNER) |
+| `DEVICE_SESSION_NOT_FOUND` | 404 | Cet appareil n'est plus connecté | Rafraîchir la liste ; aussi renvoyé par « fermer les autres » quand la session courante est inconnue |
+| `EMPLOYEE_NOT_FOUND` | 404 | Employé introuvable | Message |
+| `RATE_LIMIT_EXCEEDED` | 429 | Trop de requêtes, veuillez patienter | Sur `/auth/refresh` : **ne pas** déconnecter, réessayer plus tard |
+| `VALIDATION_ERROR` | 422 | `error` = « Validation failed » (anglais), `details` = champ → message anglais | Ne jamais afficher tel quel : valider côté app avec des libellés français |
+| `INTERNAL_ERROR` | 500 | Une erreur inattendue s'est produite | Erreur réseau « réessayer » ; ne pas déconnecter |
+
+### À implémenter côté mobile
+
+1. **Stockage** : `accessToken`, `refreshToken` dans `expo-secure-store` ; un `deviceId` UUID v4 généré une fois par installation et conservé en stockage sécurisé (le même que pour la synchro, `X-Device-Id` / `deviceId` du push) ; `deviceLabel` lisible « Marque Modèle · Android 15 » (ex. via `expo-device`).
+2. **Connexion** : flux 2 étapes ci-dessus ; `deviceId` + `deviceLabel` envoyés à `select-tenant` et à **chaque** `refresh`.
+3. **Intercepteur** (remplace la logique Bref « tout 401 → refresh ») : renouveler **seulement** sur 401 `TOKEN_EXPIRED` ou `STORE_REASSIGNED`, et proactivement avant l'envoi quand `exp` (seul champ du jeton que l'app lit) est à moins d'1 min. Un seul renouvellement à la fois (promesse partagée) : deux renouvellements parallèles se rejouent mutuellement et ferment la session. Si le jeton stocké a changé pendant que la requête était en vol, rejouer avec lui sans renouveler. Rejouer la requête d'origine **une seule fois**.
+4. **Issue du renouvellement** : 400/401/403 → session terminée (effacer jetons + identité en cache, écran de connexion) ; 429, 408, 5xx, hors ligne → **garder la session** et continuer hors ligne (ventes, clôture, file de synchro ne dépendent jamais d'un jeton valide).
+5. **Fin de session serveur** : 401 `SESSION_REVOKED` ou `ACCOUNT_INACTIVE` → effacer jetons et identité, écran de connexion avec le message français. Les secrets d'appareil (`deviceId`, clé de la base locale) restent.
+6. **Démarrage** : jeton absent → connexion ; jeton expiré → renouveler ; injoignable → entrer quand même (session hors ligne) ; refusé → connexion. Puis ordre de routage : `passwordChangeRequired` → écran de changement de mot de passe ; onboarding non terminé → assistant ; sinon OWNER → tableau de bord, EMPLOYEE → caisse.
+7. **Identité** : rôle, boutique (`storeId`, `storeName`), prénom, `tenantStatus`, `onboardingCompleted`, `passwordChangeRequired` lus **uniquement** dans `GET /auth/profile`, rechargé à chaque connexion / changement d'entreprise / renouvellement de session, et mis en cache pour l'affichage hors ligne. Jusqu'à la première réponse d'une nouvelle session, n'utiliser que `role`/`storeId`/`passwordChangeRequired` de la réponse de connexion, jamais l'identité d'un utilisateur précédent. **Ne jamais lire de droit dans le jeton.**
+8. **Écran « Appareils connectés »** (Paramètres › Compte, tout rôle) : liste (appareil courant en premier, « Cet appareil »), libellé + « Dernière activité » en date locale, bouton « Déconnecter » par ligne (confirmation, puis toast « Appareil déconnecté ») et « Déconnecter tous les autres appareils » (confirmation « Cet appareil reste connecté. », toast « Toutes les autres sessions fermées »). Jamais de `sessionId` ni d'UUID à l'écran.
+9. **Fiche employé (OWNER)** : section « Appareils » avec la même liste et les mêmes actions via `/api/v1/employees/{employeeId}/sessions…` ; erreurs affichées avec le message français (pas « hors ligne » par défaut).
+10. **Changement de mot de passe forcé** : écran bloquant ; à la réussite, remplacer les jetons par ceux de la réponse puis recharger le profil.
+
+### Implémentation de référence (Flutter, `keevo/app`)
+
+- `lib/core/network/auth_interceptor.dart`, `lib/core/auth/session_refresher.dart` (single-flight, issues renewed/rejected/unreachable)
+- `lib/core/device/device_descriptor.dart` (deviceId + libellé), `lib/core/router/startup_route.dart` (décision de démarrage)
+- `lib/features/auth/data/session_identity.dart`, `lib/features/auth/domain/model/account_profile.dart`, `lib/features/auth/presentation/provider/session_claims_applier.dart`, `lib/features/auth/data/repository/secure_token_storage.dart`
+- `lib/features/devices/` (page `connected_devices_page.dart`, `widget/employee_devices_section.dart`, `data/remote_device_sessions_datasource.dart`), hôte owner : `lib/features/team/presentation/page/edit_employee_page.dart`
+
+### Critères d'acceptation mobile / scénarios de test
+
+Préparation (backend local ; toujours WhatsApp noop et FCM coupé ; arrêt par `fuser -k 4500/tcp`) :
+
+```bash
+cd keevo/backend && mvn -q spring-boot:run -Dspring-boot.run.arguments="--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false --keevo.jwt.access-token-expiry-minutes=2"
+BASE=http://localhost:4500
+LT=$(curl -s -X POST $BASE/api/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"phoneNumber":"+2376XXXXXXXX","password":"<mot de passe>"}' | jq -r .loginToken)
+TOKENS=$(curl -s -X POST $BASE/api/v1/auth/select-tenant -H 'Content-Type: application/json' \
+  -d "{\"loginToken\":\"$LT\",\"tenantCode\":\"KV-XXXXXX\",\"deviceId\":\"curl-poste\",\"deviceLabel\":\"Poste de test\"}")
+AT=$(echo "$TOKENS" | jq -r .accessToken)
+curl -s $BASE/api/v1/auth/sessions -H "Authorization: Bearer $AT" | jq .data
+```
+
+1. **Renouvellements silencieux** — Given l'app connectée sur un backend dont le jeton d'accès dure 2 min, When l'owner navigue ~6 min (au moins deux expirations), Then aucune demande de mot de passe, les écrans se chargent, et `GET /auth/sessions` montre l'appareil avec un `lastUsedAt` qui avance.
+2. **Appareil courant listé** — Given l'app connectée, When on ouvre « Appareils connectés », Then l'appareil apparaît en premier avec son libellé (ex. « Xiaomi 23106RN0DA · Android 15 ») et la mention « Cet appareil », sans UUID.
+3. **Session fermée à distance** — Given l'app connectée et une session curl du même owner, When `curl -X DELETE $BASE/api/v1/auth/sessions -H "Authorization: Bearer $AT"` (ferme toutes les autres) ou `DELETE …/sessions/{sessionId de l'app}`, Then à la requête suivante de l'app (401 `SESSION_REVOKED`) elle revient à l'écran de connexion avec « Votre session a été révoquée, veuillez vous reconnecter ».
+4. **Employé coupé par l'owner** — Given un employé connecté sur l'appareil, When l'owner ferme sa session depuis la fiche employé (ou `DELETE $BASE/api/v1/employees/{employeeId}/sessions`), Then l'appareil de l'employé revient à la connexion à sa requête suivante.
+5. **Hors ligne prolongé** — Given l'app connectée, When le réseau est coupé plusieurs jours (ou le backend arrêté), Then l'app démarre et vend hors ligne sans écran de connexion ; au retour du réseau, renouvellement et synchro sans mot de passe.
+6. **Renouvellement limité** — Given > 10 renouvellements/min du même jeton (`curl` en boucle sur `/auth/refresh`), Then 429 `RATE_LIMIT_EXCEEDED` ; l'app, elle, ne se déconnecte pas sur un 429.
+7. **Rejeu** — Given un jeton de renouvellement R1 échangé contre R2 (curl), puis R2 échangé contre R3, When R1 est re-présenté à `/auth/refresh`, Then 401 `REFRESH_TOKEN_INVALID` et toute la session de cet appareil est fermée : le détenteur de R3 reçoit `SESSION_REVOKED` à sa requête suivante et revient à la connexion. (Re-présenter R1 alors que R2 n'a jamais servi est au contraire accepté une fois : tolérance « réponse perdue ».)
+8. **Mot de passe forcé** — Given un employé créé avec mot de passe temporaire, When il se connecte, Then l'app ouvre directement le changement de mot de passe (aussi après redémarrage), et toute autre route renvoie 403 `PASSWORD_CHANGE_REQUIRED` ; après changement, l'app continue avec les nouveaux jetons.
+9. **Droits côté serveur** — Given un utilisateur dont l'owner change le rôle ou qu'il désactive, When l'app fait sa requête suivante, Then refus immédiat (403 / 401 `ACCOUNT_INACTIVE`) et l'app réagit selon le tableau ; après rechargement du profil, le rôle affiché change.
+
+### Incohérences API à connaître
+
+- Deux formes de succès : routes `/auth/*` (login, select-tenant, refresh, change-password, register, profile) en JSON brut ; toutes les autres sous `data`.
+- Les erreurs du filtre d'authentification n'ont que `domainCode` (pas `error`), et certaines (`ACCOUNT_SUSPENDED`, `MEMBERSHIP_NOT_FOUND`) n'ont aucun message français côté serveur.
+- `VALIDATION_ERROR` (422) renvoie « Validation failed » et des messages de champ en anglais.
+- `TOKEN_EXPIRED` est aussi renvoyé par `/auth/select-tenant` (jeton de connexion de 5 min expiré) : ce n'est pas un cas de renouvellement.
+- Le jeton porte encore des claims hérités (`role`, `storeId`…) tant que 16.7 n'a pas coupé le drapeau : les ignorer, ils disparaîtront.

@@ -114,3 +114,65 @@ Status: done
 **Review:** 22 findings — 7 patched entries (2 medium, 5 low), 3 routed to the new story 16-13 (stock movements of other stores, purge of data already on devices / reassignment, scope via the pull command), 12 rejected with reasons. Follow-up review recommended: false.
 
 **Verification:** inventory 387, sync 506, architecture 32 — all green (one package at a time).
+
+## Mobile (React Native — dépôt AI/bref)
+
+> Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). **Ne pas reprendre** la synchro Bref (`lib/database/sync.ts`, `local-mutations.ts`, `mutation-defaults.ts`) : le protocole Keevo ci-dessous est différent (file d'opérations + pull delta par curseur). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md`. Stories fusion correspondantes : 22.4 à 22.7 (`_bmad-output/planning-artifacts/epics-fusion-keevo-bref.md`). Cette section sert aussi de **référence du protocole de synchro** pour les autres specs.
+
+**Statut** : API livrée (commit `05314200`) — mobile à faire.
+
+**Clé de suivi mobile** : `m16-10-scope-employe-historique-transferts`
+
+### Ce qui est fait côté API
+
+- Un **employé** ne reçoit plus que les transferts dont la source **ou** la destination est sa boutique, dans l'historique REST comme dans le pull de synchro. Un filtre sur une autre boutique renvoie une page vide (jamais 403, pour ne pas révéler l'existence d'une boutique). Un employé sans boutique reçoit une liste vide. L'**owner** n'est pas limité.
+- **À venir (16-13, API pas encore livrée)** : même confidentialité pour les mouvements de stock et les autres données propres à une boutique, **purge sur l'appareil** des données d'autres boutiques (à la mise à jour de l'app et à chaque changement de boutique de l'employé, suivie d'un pull complet de la nouvelle boutique), portée transmise par la commande de pull. Ne pas l'implémenter avant la livraison de 16-13 ; prévoir dans le schéma local de pouvoir supprimer les lignes par boutique.
+
+### À utiliser
+
+**Historique des transferts** : `GET /api/v1/stock/transfers?source=&destination=&store=&status=&from=&to=&page=0&size=25` (`keevo/backend/src/main/java/com/keevo/inventory/transfer/adapter/in/web/StockTransferController.java`) → `{"data": {"content": [...], "totalElements", "totalPages", "number", "size"}}` (pagination **dans** `data`, pas dans `meta`). Pour un employé, la portée de sa boutique est ajoutée côté serveur à ses propres filtres.
+
+**Protocole de synchro** (`keevo/backend/src/main/java/com/keevo/sync/sync/adapter/in/rest/SyncController.java`, `.../application/service/SyncPushService.java`, DTO dans `.../rest/dto/`) :
+
+- **Push** `POST /api/v1/sync/push` (OWNER/EMPLOYEE) `{"deviceId": "<uuid de l'installation>", "operations": [{"operationId": "<uuid unique>", "operationType": "CREATE_SALE", "entityId": "<uuid>", "payload": {…}, "clientTimestamp": "<ISO-8601 UTC>"}]}` → `{"data": {"processedAt", "results": [{"operationId", "status", "serverEntityId", "reason", "conflictData"}]}}`. Chaque opération est traitée seule (succès partiel possible) ; le serveur ordonne les créations référencées (catégories/boutiques/contacts, puis produits/employés, puis sessions d'inventaire) puis l'ordre `clientTimestamp`.
+  - `status` : `APPLIED` (retirer de la file ; `reason` = `LWW_SUPERSEDED` si une version plus récente existait déjà : la version serveur reviendra par le pull), `DUPLICATE` (déjà traitée : retirer), `CONFLICT` (`reason` = `STOCK_NEGATIVE`, appliquée mais stock passé négatif : retirer, prévenir), `REJECTED` (voir politique ci-dessous).
+  - Types d'opérations et module de chacune : `CREATE_SALE`, `VALIDATE_SALE`, `CANCEL_SALE`, `CREATE_DAY_CLOSURE` (`pos`) ; `CREATE_PRODUCT`, `CREATE_DRAFT_PRODUCT`, `UPDATE_PRODUCT`, `PROMOTE_PRODUCT`, `ARCHIVE_PRODUCT`, `UNARCHIVE_PRODUCT`, `CREATE_CATEGORY`, `RENAME_CATEGORY`, `TOGGLE_CATEGORY` (`catalog`) ; `STOCK_ADJUST`, `RECORD_STOCK_ENTRY` (`inventory`) ; `STOCK_TRANSFER` (`multi-store`) ; `CREATE_INVENTORY_SESSION`, `SAVE_INVENTORY_COUNT`, `VALIDATE_INVENTORY` (`counting`) ; `CREATE_CLIENT`, `UPDATE_CLIENT`, `ARCHIVE_CLIENT`, `UNARCHIVE_CLIENT`, `CREATE_SUPPLIER`, `UPDATE_SUPPLIER`, `ARCHIVE_SUPPLIER`, `UNARCHIVE_SUPPLIER` (`crm`) ; `CREATE_STORE`, `UPDATE_STORE`, `DEACTIVATE_STORE` (`store`) ; `CREATE_EMPLOYEE`, `DEACTIVATE_EMPLOYEE`, `REACTIVATE_EMPLOYEE`, `REASSIGN_EMPLOYEE`, `SUBMIT_FEEDBACK` (`core`) ; `CREATE_INVOICE`, `UPDATE_INVOICE`, `ISSUE_INVOICE`, `PAY_INVOICE`, `CANCEL_INVOICE` (`invoicing`, charges utiles : `keevo/contracts/invoice-sync-payloads.json`). Charges utiles des autres : handlers `keevo/backend/src/main/java/com/keevo/sync/sync/application/handler/` et l'émetteur Flutter (référence ci-dessous) — reproduire **à l'identique**.
+  - Erreurs de requête : 423 `SYNC_REQUIRED` « Synchronisation requise — données trop anciennes » (`details`: `daysSinceLastSync`, `lastPushAt`) quand l'appareil n'a ni poussé ni tiré depuis plus de 7 jours ; 403 `DEVICE_ID_MISMATCH` « Ce device n'est pas associé à votre compte » (le `deviceId` appartient à un autre utilisateur).
+- **Pull** `GET /api/v1/sync/pull?since=<ISO>&cursor=<opaque>` + en-tête `X-Device-Id` → `{"data": {"serverTimestamp", "entities": {"<clé>": [lignes]}, "counts": {"<clé>": n}, "hasMore", "nextCursor"}}`. Sans `since` : pull complet. Pages de 1 000 lignes par entité ; tant que `hasMore` est vrai, rappeler avec **le même `since`** et `cursor=nextCursor` ; n'enregistrer `serverTimestamp` comme prochain `since` qu'à la dernière page (il inclut une marge de 30 s : lignes re-reçues → upsert idempotent). Clés d'entités : `products`, `categories`, `stockLevels`, `stockMovements`, `stockTransfers`, `sales`, `dayClosures`, `stores`, `employees`, `clients`, `suppliers`, `inventorySessions`, `inventoryCounts`, `reports`, `invoices`, `auditEntries` (owner seulement). Les entités d'un module `DISABLED` reviennent vides mais leur curseur avance → pull complet quand le module redevient lisible (voir 16-3).
+
+**Politique de rejet** (`REJECTED`, `reason` = nom d'`ErrorCode` ou texte) — à reproduire depuis la référence Flutter :
+- *Transitoires* (garder en file, réessayer) : `OPTIMISTIC_LOCK`, `INTERNAL_ERROR`, `TRANSACTION_ROLLED_BACK`, `DATA_INTEGRITY_VIOLATION`, `UNAUTHORIZED`, `SUBSCRIPTION_NOT_FOUND`, `TENANT_NOT_FOUND`, `SERVICE_UNAVAILABLE`, `reason` absent.
+- *Retenues* (module inactif ou en lecture seule) : `MODULE_INACTIVE`, `MODULE_READ_ONLY` → rien n'est annulé, l'opération reste et est renvoyée au démarrage puis au plus toutes les 6 h.
+- *Définitives* : opérations d'argent / de stock (`CREATE_SALE`, `VALIDATE_SALE`, `CANCEL_SALE`, `CREATE_DAY_CLOSURE`, `STOCK_ADJUST`, `RECORD_STOCK_ENTRY`, `STOCK_TRANSFER`) → **quarantaine** (jamais supprimées ; écran « Opérations bloquées » : Renvoyer / Rattacher / Abandonner après export) ; créations de catalogue/contact/boutique refusées (ex. `PLAN_LIMIT_EXCEEDED`) → ligne locale fantôme annulée et suites retirées ; autres → retirées après un avis.
+
+### À implémenter côté mobile
+
+1. Écriture locale + opération dans la **même transaction** SQLite ; `operationId` UUID unique par opération ; push par lots, toutes les 30 s et au retour du réseau, un seul push à la fois.
+2. Pull : `X-Device-Id` = le même `deviceId` que le push et la session (16-11) ; pages enchaînées comme décrit ; une donnée locale encore en file n'est jamais écrasée par le pull ; un seul pull à la fois.
+3. **Portée employé (16-10)** : l'app d'un employé ne demande et n'affiche que ce que le serveur renvoie ; ne pas compléter l'historique des transferts par des données d'autres boutiques ; filtre de boutique de l'écran historique limité à la boutique de l'employé (un filtre sur une autre boutique donne une liste vide, c'est normal : afficher « Aucun transfert »).
+4. `SYNC_REQUIRED` (423) : bloquer les écritures, autoriser la lecture, inviter à synchroniser ; bandeaux d'avertissement à J5 / J6 (story fusion 22.7).
+5. **Préparer 16-13** (à venir) : pouvoir supprimer localement toutes les lignes d'une boutique donnée et relancer un pull complet à la mise à jour de l'app ou quand le profil (16-11) indique une autre boutique pour l'employé.
+6. Aucun `reason`, `operationType` ou identifiant brut à l'écran : libellés français (ex. « Vente bloquée — action requise »).
+
+### Implémentation de référence (Flutter, `keevo/app`)
+
+- `lib/core/sync/rest_sync_service.dart` (push, pull paginé, mergers, `X-Device-Id`), `lib/core/sync/sync_trigger_notifier.dart` (cadences), `lib/core/sync/sync_gate_guard.dart` (gate 7 j)
+- `packages/keevo_core/lib/sync/sync_rejection_policy.dart` (classification des rejets), `lib/core/modules/module_sync_queue.dart`
+- `lib/features/inventory/presentation/page/transfer_history_page.dart` (historique des transferts)
+
+### Critères d'acceptation mobile / scénarios de test
+
+Préparation : compte avec boutiques A, B, C (module `multi-store` actif), un employé de A connecté sur l'appareil, transferts A→B, B→A, B→C créés par l'owner.
+
+```bash
+curl -s "$BASE/api/v1/stock/transfers?page=0&size=25" -H "Authorization: Bearer $AT_EMPLOYE" | jq '.data.totalElements'   # 2
+curl -s "$BASE/api/v1/stock/transfers?source=<id boutique C>" -H "Authorization: Bearer $AT_EMPLOYE" | jq '.data.content'  # []
+curl -s "$BASE/api/v1/sync/pull" -H "Authorization: Bearer $AT_EMPLOYE" -H "X-Device-Id: curl-poste" | jq '.data.counts.stockTransfers'
+```
+
+1. **Historique employé** — Given l'employé de A, When il ouvre l'historique des transferts, Then il voit A→B et B→A seulement ; l'owner voit les trois.
+2. **Filtre autre boutique** — Given l'employé, When le filtre vise C, Then « Aucun transfert », pas d'erreur.
+3. **Pull employé** — Given une installation neuve de l'employé, When le pull complet se termine, Then la base locale ne contient que A→B et B→A.
+4. **Pagination** — Given plus de 1 000 lignes d'une entité, Then l'app enchaîne les pages avec le même `since` et n'avance son `since` qu'à la fin.
+5. **Opération retenue** — Given un module désactivé, When une opération de ce module est poussée, Then `REJECTED`/`MODULE_INACTIVE`, l'opération reste en file sans rollback et part après réactivation.
+6. *(à venir, 16-13)* Given un employé dont l'appareil contient des transferts de B→C reçus avant 16-10, When l'app mise à jour synchronise, Then ces lignes disparaissent ; réaffecté de A vers B, l'historique de A disparaît et celui de B est téléchargé.

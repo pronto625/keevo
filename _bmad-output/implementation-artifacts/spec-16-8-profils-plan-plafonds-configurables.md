@@ -156,3 +156,67 @@ Status: done
 **Incident during the implementer's dev run:** the backend ran with `.env`'s real Wassender provider while a composition change re-synced 282 Free tenants; every logged WhatsApp call got 401 (token rejected), no successful send in the logs, no FCM owner token. Memory rule added: local runs force WhatsApp noop and FCM off.
 
 **Residual risks:** composition re-sync is synchronous (16.4); keevo_dev keeps test tenant KV-I3NPYM.
+
+## Mobile (React Native — dépôt AI/bref)
+
+> Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`, qui a déjà `lib/plan-limit-alert.ts` côté Bref). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md`.
+
+**Statut** : API livrée (commit `f6492009`) — mobile à faire.
+
+**Clé de suivi mobile** : `m16-8-profils-plan-plafonds-configurables`
+
+### Ce qui est fait côté API
+
+- Les plafonds de chaque offre (boutiques, produits, employés) et les modules payants qu'elle inclut sont réglés par le super-admin, sans redéploiement, et lus en direct à chaque contrôle. Valeurs initiales : `FREE` = 1 boutique / 500 produits / **2 employés** ; `PREMIUM_TRIAL` et `PREMIUM` = illimité. Ces nombres peuvent changer à tout moment : **l'app n'en code aucun en dur**.
+- Un plafond abaissé ne supprime rien : seules les nouvelles créations / réactivations sont refusées.
+- Le comptage des produits échoue « fermé » : s'il ne peut être lu pour une offre à plafond fini, la création est refusée (503).
+
+### À utiliser
+
+**Abonnement et usage** : `GET /api/v1/subscription/me` (OWNER ou EMPLOYEE ; `keevo/backend/src/main/java/com/keevo/subscription/plan/adapter/in/rest/SubscriptionController.java`, DTO `.../dto/SubscriptionResponse.java`) → `{"data": {…}}` :
+
+| Champ | Type | Sens |
+|---|---|---|
+| `planType` | `FREE` \| `PREMIUM_TRIAL` \| `PREMIUM` | offre (afficher « Gratuit », « Essai Premium », « Premium ») |
+| `status` | `ACTIVE` \| `SUSPENDED` \| `EXPIRED` | |
+| `expiresAt` | ISO-8601 ou null (Free) | |
+| `maxStores`, `maxProducts`, `maxEmployees` | entier ou **null = illimité** | |
+| `currentStores`, `currentEmployees` | entier | |
+| `currentProducts` | entier ou **null = comptage indisponible** | |
+
+**Refus de plafond** (création/réactivation : `POST /api/v1/stores`, `PATCH /api/v1/stores/{storeId}/reactivate`, `POST /api/v1/employees`, `PATCH /api/v1/employees/{employeeId}/reactivate`, `POST /api/v1/products`, `POST /api/v1/products/import`, et les opérations de synchro de création) :
+
+| `domainCode` | HTTP | Message serveur | `details` | Réaction |
+|---|---|---|---|---|
+| `PLAN_LIMIT_EXCEEDED` | 403 | Limite de votre plan atteinte | `{"entity": "stores"\|"products"\|"employees", "limit": n, "current": n, "plan": "FREE"\|…}` | Feuille « plafond atteint » avec le nombre **reçu** |
+| `PRODUCT_QUOTA_UNAVAILABLE` | 503 | Impossible de vérifier votre quota de produits pour le moment. Réessayez dans quelques instants. | — | Message tel quel, proposer de réessayer ; ce n'est **pas** un plafond atteint |
+
+En synchro, une création refusée revient `REJECTED` avec `reason` = `PLAN_LIMIT_EXCEEDED` **sans** `details` : prendre alors la limite dans `GET /subscription/me`.
+
+### À implémenter côté mobile
+
+1. **Feuille « plafond atteint »** : texte « Vous avez atteint la limite de N boutique(s) / produit(s) / employé(s) de votre forfait » avec N = `details.limit` ; si aucun nombre n'est connu (ni dans l'erreur, ni dans l'abonnement en cache) : « Vous avez atteint le nombre maximal de boutiques / de produits / d'employés de votre forfait ». Jamais de nombre codé en dur.
+2. Bouton « Passer au plan Premium » seulement si l'offre est `FREE` ou `PREMIUM_TRIAL` (sinon « Contactez le support Keevo pour augmenter cette limite. » et « Compris »).
+3. **Écran Abonnement** : afficher « Utilisation » à partir de `GET /subscription/me` (valeurs `null` de plafond → « Illimité » ; `currentProducts` null → ne pas afficher 0 : « — » ou comptage local, voir story 17.10 à venir). Mettre la réponse en cache pour l'affichage hors ligne.
+4. `PRODUCT_QUOTA_UNAVAILABLE` : message de réessai, la saisie du produit est conservée.
+5. Création hors ligne refusée en synchro pour plafond : suivre la politique de rejet (la création fantôme est annulée localement et l'utilisateur est prévenu une fois, voir protocole de synchro dans la section « Mobile » de `spec-16-10-scope-employe-historique-transferts.md`).
+
+### Implémentation de référence (Flutter, `keevo/app`)
+
+- `lib/core/network/plan_limit_error.dart` (lecture de `details.limit` / `details.plan`), `lib/core/network/auth_interceptor.dart` (403 `PLAN_LIMIT_EXCEEDED`)
+- `lib/features/settings/presentation/widget/plan_limit_bottom_sheet.dart` (textes), `lib/features/settings/presentation/page/subscription_page.dart`
+
+### Critères d'acceptation mobile / scénarios de test
+
+Préparation : compte Free local, owner connecté ; profils modifiables par le super-admin (`PUT /api/v1/admin/plan-profiles/{planType}`, corps avec **toutes** les clés `maxStores`, `maxProducts`, `maxEmployees`, `modules`, cf. `.../admin/.../AdminPlanProfileController.java`) — toujours remettre les valeurs d'origine (`FREE` 1/500/2, `modules` d'origine relus via `GET /api/v1/admin/plan-profiles`).
+
+```bash
+curl -s $BASE/api/v1/subscription/me -H "Authorization: Bearer $AT" | jq .data
+curl -s -X POST $BASE/api/v1/employees -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' -d '{…}' | jq '{domainCode,details}'
+```
+
+1. **Limite employés reçue** — Given un compte Free avec 2 employés actifs (plafond 2), When l'owner crée un 3e employé, Then 403 `PLAN_LIMIT_EXCEEDED` et la feuille dit « 2 employés » (pas 3), avec « Passer au plan Premium ».
+2. **Plafond relevé sans mise à jour** — Given le super-admin passe `FREE.maxStores` à 2, When l'owner crée une 2e boutique, Then elle est acceptée sans nouvelle version de l'app ; remis à 1, une 3e création est refusée avec « 1 boutique ».
+3. **Premium** — Given un compte Premium, Then aucune feuille de plafond, et l'écran Abonnement affiche « Illimité ».
+4. **Quota illisible** — Given le serveur renvoie 503 `PRODUCT_QUOTA_UNAVAILABLE`, Then message de réessai, pas de feuille « plafond atteint ».
+5. **Hors ligne** — Given une boutique créée hors ligne au-delà du plafond, When la synchro la refuse (`REJECTED`/`PLAN_LIMIT_EXCEEDED`), Then la boutique fantôme disparaît localement, l'owner est prévenu une fois avec la limite issue de l'abonnement.
