@@ -338,6 +338,7 @@ development_status:
   m16-3-modules-actifs-app-sans-claim-jwt: backlog  # API 8325d05c — modules actifs lus par l'API, rafraîchissement, instantané hors ligne
   m16-1-cycle-vie-licences-grace-temps-reel: backlog  # API 6ea22538 — bandeau lecture seule, dates WAT, notifications
   m16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — plafonds envoyés par le serveur, PRODUCT_QUOTA_UNAVAILABLE
+  m16-13-scope-employe-donnees-synchro: backlog  # API 16-13 — champs de pull `scope`/`reseed`, purge locale des données d'autres boutiques au changement de portée, pull complet
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -415,6 +416,7 @@ development_status:
   20-9-reporting-multi-source: backlog
   20-10-module-expenses: backlog
   20-11-module-finance: backlog
+  20-13-api-super-admin-heritee-bref: backlog  # 2026-11-01 décision utilisateur — l'API Keevo absorbe toute l'API Bref, partie dashboard comprise (FUS-FR38)
   20-12-acceptation-parcours-bref: backlog
   epic-20-retrospective: optional
 

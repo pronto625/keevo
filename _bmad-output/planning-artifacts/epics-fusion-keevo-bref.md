@@ -126,6 +126,7 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 - **FUS-FR35 :** L'app n'affiche que les modules actifs du tenant et les permissions du rôle ; une route d'un module inactif n'est jamais atteignable.
 - **FUS-FR36 :** L'app propose verrouillage par PIN et biométrie, 7 langues (fr et en exposées d'abord), thème clair/sombre.
 - **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy) ⚠️§9.5.
+- **FUS-FR38 :** L'API Keevo absorbe **toute** l'API Bref, y compris sa partie super-admin (dashboard Bref) : vue plateforme (`/v1/dashboard` overview, growth, top-shops, activity, owner-summary), listes inter-comptes (clients, produits, dépenses `*-admin`), gestion des utilisateurs (liste, stats, appareils, statut, plan, suppression), versions d'app, offres, campagnes plateforme. Après la convergence, aucun client (app ou dashboard) n'appelle plus api-bref. *(Décision utilisateur du 01/11/2026.)*
 
 ### Exigences de migration (`FUS-MIG`)
 
@@ -217,7 +218,23 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 **Exigences :** FUS-FR13–FR26.
 **Dépend de :** 19.1, 19.5, 19.7, 19.8.
 
-### Epic 21 : Monétisation en libre-service et engagement (P1b)
+#### Story 20.13 : API super-admin héritée de Bref (vue plateforme, listes inter-comptes, utilisateurs)
+
+As a **super-admin**,
+I want **retrouver dans l'API Keevo tout ce que le dashboard Bref obtient aujourd'hui d'api-bref**,
+So that **le dashboard super-admin (livré depuis un autre dépôt) n'appelle plus qu'une seule API (FUS-FR38)**.
+
+**Périmètre (inventaire `api-bref` develop, 01/11/2026) :** `dashboard.controller.ts` (owner-summary, overview, growth, top-shops, activity) ; `customer-admin.controller.ts` (liste, détail, création, modification, consentement marketing) ; `product-admin.controller.ts` et `expense-admin.controller.ts` (listes inter-comptes) ; `users.controller.ts` côté admin (liste, stats, `:id/devices`, `:id/status`, `:id/plan`, suppression) ; `app-version.controller.ts` (recoupe 19.10) ; `plans.controller.ts` ; `campaign.controller.ts` (recoupe 21.6). Pour chaque route : équivalent Keevo existant (console 16-4, `/admin/tenants`, sessions 16-11, profils 16-8…), à étendre, ou nouveau ; contrat documenté dans la section « Dashboard super-admin (autre dépôt) » de la spec.
+
+**Acceptance Criteria:**
+
+**Given** la table de correspondance route Bref → route Keevo
+**When** on la confronte à `api-bref/src/**/*.controller.ts` (develop)
+**Then** chaque route admin Bref a un équivalent Keevo livré et testé, ou une décision d'abandon écrite par l'utilisateur ; les indicateurs plateforme (comptes, croissance, boutiques les plus actives, activité) couvrent les tenants Keevo et les owners migrés sans double comptage (R4)
+
+---
+
+## Epic 21 : Monétisation en libre-service et engagement (P1b)
 **Valeur :** l'owner paie seul, Keevo encaisse et active ; les fonctions d'engagement de Bref (IA, WhatsApp Business, portail client, notifications, campagnes) sont reprises.
 **Exigences :** FUS-FR9, FR10, FR27–FR32.
 **Dépend de :** 19.7, 19.8, 19.9.
