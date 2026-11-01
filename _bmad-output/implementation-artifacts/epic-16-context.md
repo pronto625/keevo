@@ -4,7 +4,7 @@
 
 ## Goal
 
-Make modular commercialisation real and ship the refonte to production: per-tenant module lifecycle (trial, read-only grace, real-time enforcement), à-la-carte modules and bundles ("packs"), super-admin-configurable plan profiles and limits, a super-admin console, migration of existing tenants to `tenant_modules`, session hardening, employee store confidentiality, an API ready for the new mobile client, GDPR verification, and a canary go-live. The go-live is **backend-only**: this repo delivers the API (`keevo/backend`) and the Next.js super-admin dashboard; the production mobile app becomes a React Native (Expo) app built by another developer in the `AI/bref` repo, while the V1 2.0.1 Flutter apps already installed keep running against the new backend until the RN app forces its minimum version.
+Make modular commercialisation real and ship the refonte to production: per-tenant module lifecycle (trial, read-only grace, real-time enforcement), à-la-carte modules and bundles ("packs"), super-admin-configurable plan profiles and limits, a super-admin console, migration of existing tenants to `tenant_modules`, session hardening, employee store confidentiality, an API ready for the new mobile and dashboard clients, GDPR verification, and a canary go-live. This repo delivers **the backend API only** (`keevo/backend`): the production mobile app is a React Native (Expo) app built by another developer's agent in the `AI/bref` repo, and the super-admin dashboard is built in another repo — both agents read this repo's specs. The go-live is **backend-only**: V1 2.0.1 Flutter apps already installed keep running against the new backend until the RN app forces its minimum version. The Keevo API will ultimately absorb all of api-bref, including its admin/dashboard part (fusion FUS-FR38, story 20-13).
 
 ## Stories
 
@@ -20,13 +20,13 @@ Make modular commercialisation real and ship the refonte to production: per-tena
 - Story 16.10: Employee store scope on transfer history — done
 - Story 16.11: Long and safe sessions — done
 - Story 16.12: Convert remaining tenant DDL to module migrations
-- Story 16.13: Employee confidentiality of other stores' data (sync + device purge)
-- Story 16.14: API ready for the React Native mobile client (additive fixes)
+- Story 16.13: Employee confidentiality of other stores' data (sync + device purge) — done (API)
+- Story 16.14: API ready for the React Native mobile and dashboard clients (additive fixes)
 
 ## Requirements & Constraints
 
-- **Delivery scope**: backend + super-admin dashboard only. `keevo/app` (Flutter) is a test client for basic checks on the Redmi, not a deliverable; no Flutter feature work is shipped. Mobile parts of remaining stories (e.g. 16.13 device purge) are API here + handoff.
-- **Every spec ends with a « ## Mobile (React Native — dépôt AI/bref) » section**: what the API does, which endpoints/fields/error codes to use, mobile requirements and mobile test scenarios. Each story gets a separate mobile tracking key `m<story-key>` in the MOBILE block of `sprint-status.yaml` (backlog → in-progress → review → done after we test the delivered RN app). `m16-11` carries the API conventions and `m16-10` the sync protocol.
+- **Delivery scope**: backend API only. `keevo/app` (Flutter) and `keevo/dashboard` here are basic test clients of the API, not deliverables; no Flutter or dashboard feature work is shipped. Mobile and dashboard parts of stories are API here + handoff.
+- **Every spec ends with handoff sections** « ## Mobile (React Native — dépôt AI/bref) » and/or « ## Dashboard super-admin (autre dépôt) »: what the API does, which endpoints/fields/error codes to use, client requirements and test scenarios. Each gets a separate tracking key in `sprint-status.yaml` — `m<story-key>` (MOBILE block) and `d<story-key>` (DASHBOARD block), backlog → in-progress → review → done after we test the delivered client. Read first: `m16-11` (API conventions), `m16-10` (sync protocol), `d16-11` (super-admin session), `d16-4` (admin conventions, async jobs).
 - **V1 2.0.1 compatibility is mandatory**: any API change must be additive — no existing response shape, error code or sync reason may change in a way that breaks installed V1 apps. Known untouchable inconsistencies: two success shapes (`/auth/*` raw vs `{data}`) and two pagination shapes (`meta` vs `data.content`). `keevo.jwt.legacy-claims=true` stays on (indicative V1 claims, never read by the server) until the RN app forces its minimum version.
 - Lifecycle per tenant module: `AVAILABLE → TRIAL → ACTIVE → EXPIRED (7-day read-only grace) → DISABLED (hidden, data kept forever)`. Enforcement is real time from `expires_at`/`grace_until` at each request; the nightly job only materialises states and sends notifications. Core is never auto-blocked. Hybrid trial: 6 months global at signup, 14 days per reactivated module.
 - Data of disabled modules is never purged; only a GDPR account deletion purges (drop of the tenant schema + anonymisation of public identity, audited).
@@ -49,13 +49,15 @@ Make modular commercialisation real and ship the refonte to production: per-tena
 
 ## UX & Interaction Patterns
 
-- Super-admin console (Next.js): Modules in the tenant drawer (status/expiry, dependency and cascade feedback, forced deactivation after hook failure), pages Modules, Packs, Profils & plafonds; French labels, 422 reasons shown as returned.
+- Super-admin console behaviour (Modules in the tenant record with status/expiry, dependency and cascade feedback, forced deactivation after hook failure; pages Modules, Packs, Profils & plafonds; French labels, 422 reasons shown as returned) is specified for the external dashboard in each spec's Dashboard section; the local `keevo/dashboard` only smoke-tests the API.
 - Mobile behaviour (read-only banner with grace date, plan-limit sheet using server limits, silent token renewal, connected devices) is specified for the RN app in each spec's Mobile section, not built here.
 
 ## Cross-Story Dependencies
 
-- Execution order: 16.13 → 16.14 → epic 17 (17.10 → 17.11 → 17.12 → 17.8 → 17.7 → 17.2) → 16.6 → 10-8 (ops) → 17.9 (go-live gate) → 16.7 (canary) → 16.12 (after go-live); 16.9 waits for DGI specs.
-- 16.14 updates the Mobile sections of 16.1, 16.8, 16.10, 16.11 specs (French messages for auth-filter errors and every `ErrorCode`, French `VALIDATION_ERROR`, grace date to employees, limit/usage on `PLAN_LIMIT_EXCEEDED` sync rejections).
+- Execution order: 16.14 → epic 17 (17.10 → 17.11 → 17.12 → 17.8 → 17.7 → 17.2) → 16.6 → 10-8 (ops) → 17.9 (go-live gate) → 16.7 (canary) → 16.12 (after go-live); 16.9 waits for DGI specs.
+- 16.14 (additive only) fixes client-facing gaps and updates the Mobile/Dashboard sections of 16.1, 16.2, 16.4, 16.5, 16.8, 16.10, 16.11: French messages for auth-filter errors and every `ErrorCode`, French `VALIDATION_ERROR`, grace date to employees, limit/usage on `PLAN_LIMIT_EXCEEDED` sync rejections; admin API — `moduleId` added beside `id` in profile module refs, `CORE_MODULE_REQUIRED` keeps the module name, tenant search by account code, dead `MODULE_BACKFILL_RUNNING` removed, unknown plan → 404, paginated module history.
+- 16.13 device purge (pull `scope`/`reseed`) is the RN app's job (`m16-13`); V1 2.0.1 apps get the re-seed but cannot purge (documented limit).
+- Fusion epic 20 (story 20-13) extends the admin API so the external dashboard calls only Keevo; reuse 16.4/16.8/16.11 admin endpoints rather than duplicating them.
 - 16.7 carries open go-live items: legacy claims off with forced minimum app version, backfill dry run on prod copy, invoice-link secret/public URL/logo volume config, 415 mapping, French `NOT_FOUND` messages, stray global-table copies decision, and the gate that module enforcement codes (`MODULE_INACTIVE`/`MODULE_READ_ONLY`/`MODULE_NOT_ENTITLED`) must not hurt V1 clients.
 - Before disabling or letting `pos`/`crm` expire in prod, held-operation gaps (inventory sessions, stock ops, day summaries) remain open.
 - Epic 18–25 (Keevo × Bref fusion) starts only once the refonte is in production.
