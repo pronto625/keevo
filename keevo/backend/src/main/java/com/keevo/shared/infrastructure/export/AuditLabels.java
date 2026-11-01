@@ -68,6 +68,10 @@ public final class AuditLabels {
             entry("EMPLOYEE_UPDATED", "Employé modifié"),
             entry("EMPLOYEE_ROLE_CHANGED", "Rôle modifié"),
             entry("EMPLOYEE_PASSWORD_SET_BY_OWNER", "Mot de passe défini"),
+            // Device sessions (Story 16.11)
+            entry("DEVICE_SESSION_CLOSED", "Appareil déconnecté"),
+            entry("DEVICE_SESSIONS_CLOSED", "Toutes les autres sessions fermées"),
+            entry("DEVICE_SESSION_REPLAY_REVOKED", "Session coupée par sécurité"),
             // Sales
             entry("SALE_COMPLETED", "Vente enregistrée"),
             entry("SALE_PENDING_VALIDATION", "Vente en attente"),
@@ -170,6 +174,7 @@ public final class AuditLabels {
             entry("role", "Rôle"),
             entry("fieldsChanged", "Champs modifiés"),
             entry("forcedReset", "Changement de mot de passe imposé"),
+            entry("sessions", "Sessions fermées"),
             entry("itemsSnapshot", "Articles"),
             entry("scheduledDeletionAt", "Suppression prévue le"),
             entry("cancelledAt", "Annulée le"),

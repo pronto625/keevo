@@ -7,6 +7,8 @@ import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.security.access.AccessStateChangePublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -21,15 +23,25 @@ import java.util.UUID;
 public class EmployeeRepositoryAdapter implements EmployeeRepository {
 
     private final EmployeeSpringRepository jpa;
+    /** Story 16.11 — null only in unit tests built without Spring. */
+    private final AccessStateChangePublisher accessStateChanges;
 
-    public EmployeeRepositoryAdapter(EmployeeSpringRepository jpa) {
+    @Autowired
+    public EmployeeRepositoryAdapter(EmployeeSpringRepository jpa, AccessStateChangePublisher accessStateChanges) {
         this.jpa = jpa;
+        this.accessStateChanges = accessStateChanges;
+    }
+
+    /** Unit tests without the access-state broadcast. */
+    public EmployeeRepositoryAdapter(EmployeeSpringRepository jpa) {
+        this(jpa, null);
     }
 
     @Override
     public Employee save(Employee employee) {
         EmployeeJpaEntity entity = domainToEntity(employee);
         EmployeeJpaEntity saved = jpa.save(entity);
+        accessChanged(saved);
         return entityToDomain(saved);
     }
 
@@ -53,21 +65,21 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     public Employee updateStoreId(UUID employeeId, UUID newStoreId) {
         EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
         entity.setStoreId(newStoreId);
-        return entityToDomain(jpa.save(entity));
+        return entityToDomain(accessChanged(jpa.save(entity)));
     }
 
     @Override
     public Employee updateStatus(UUID employeeId, EmployeeStatus status) {
         EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
         entity.setStatus(status.name());
-        return entityToDomain(jpa.save(entity));
+        return entityToDomain(accessChanged(jpa.save(entity)));
     }
 
     @Override
     public Employee updatePasswordChangeRequired(UUID employeeId, boolean required) {
         EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
         entity.setPasswordChangeRequired(required);
-        return entityToDomain(jpa.save(entity));
+        return entityToDomain(accessChanged(jpa.save(entity)));
     }
 
     @Override
@@ -75,7 +87,7 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
         EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
         entity.setFirstName(firstName);
         entity.setLastName(lastName);
-        return entityToDomain(jpa.save(entity));
+        return entityToDomain(accessChanged(jpa.save(entity)));
     }
 
     @Override
@@ -85,6 +97,17 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     }
 
     // ── Private helpers ──────────────────────────────────────────
+
+    /**
+     * Story 16.11 — an employee row (store, status, password flag, name) is part of the server-side
+     * access state: evict it on every instance (delivered on commit).
+     */
+    private EmployeeJpaEntity accessChanged(EmployeeJpaEntity saved) {
+        if (accessStateChanges != null && saved.getUserId() != null) {
+            accessStateChanges.userChanged(saved.getUserId());
+        }
+        return saved;
+    }
 
     private EmployeeJpaEntity findEntityOrThrow(UUID id) {
         return jpa.findById(id).orElseThrow(

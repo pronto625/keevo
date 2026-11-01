@@ -6,6 +6,7 @@ import com.keevo.identity.api.UserQueryPort;
 import com.keevo.shared.event.catalog.auth.AccountDeletionCancelledEvent;
 import com.keevo.shared.event.catalog.auth.AccountDeletionRequestedEvent;
 import com.keevo.shared.event.catalog.auth.UserAuthenticatedEvent;
+import com.keevo.shared.event.catalog.auth.DeviceSessionClosedEvent;
 import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetRequestedEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
@@ -508,6 +509,45 @@ public class AuditEventListener {
                 null, map("forcedReset", true), null, null, null, null);
         log.info("AUDIT: employee_password_set_by_owner employeeId={} tenantId={} actorId={}",
                 event.employeeId(), event.tenantId(), event.actorId());
+    }
+
+    // ── Device sessions (Story 16.11) ────────────────────────────────────────
+
+    static final String ACTION_DEVICE_SESSION_CLOSED = "DEVICE_SESSION_CLOSED";
+    static final String ACTION_DEVICE_SESSIONS_CLOSED = "DEVICE_SESSIONS_CLOSED";
+    static final String ACTION_DEVICE_SESSION_REPLAY_REVOKED = "DEVICE_SESSION_REPLAY_REVOKED";
+
+    /**
+     * « Appareil déconnecté » / « Toutes les autres sessions fermées » / « Session coupée par
+     * sécurité ». The replay case comes from the public {@code /auth/refresh}: no TenantContext is
+     * set, so the event's account is bound for the write and restored afterwards.
+     */
+    @EventListener
+    public void on(DeviceSessionClosedEvent event) {
+        String action = switch (event.scope()) {
+            case ONE -> ACTION_DEVICE_SESSION_CLOSED;
+            case ALL_OTHERS -> ACTION_DEVICE_SESSIONS_CLOSED;
+            case REPLAY -> ACTION_DEVICE_SESSION_REPLAY_REVOKED;
+        };
+        UUID actor = event.actorId() != null ? event.actorId() : event.targetUserId();
+        String previous = TenantContext.getCurrentTenant();
+        boolean bind = previous == null || !previous.equals(event.tenantId());
+        if (bind) {
+            TenantContext.setCurrentTenant(event.tenantId());
+        }
+        try {
+            write(actor, event.tenantId(), action, "User", event.targetUserId(),
+                    null, map("sessions", event.sessions()),
+                    null, event.deviceLabel(), null, null);
+        } finally {
+            if (bind) {
+                if (previous == null) TenantContext.clear();
+                else TenantContext.setCurrentTenant(previous);
+            }
+        }
+        log.info("AUDIT: {} targetUser={} sessions={} tenantId={} actorId={}",
+                action.toLowerCase(java.util.Locale.ROOT), event.targetUserId(), event.sessions(),
+                event.tenantId(), event.actorId());
     }
 
     // ── Account deletion events (Story 14.5, FR91) ──────────────────────────

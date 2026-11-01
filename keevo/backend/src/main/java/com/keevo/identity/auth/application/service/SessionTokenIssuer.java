@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
+import com.keevo.identity.auth.domain.model.DeviceInfo;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
@@ -49,39 +50,56 @@ public class SessionTokenIssuer {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /** New device session without device data (registration, tests). */
     public IssuedSession issue(UUID userId, Tenant tenant, String role) {
+        return issue(userId, tenant, role, null, DeviceInfo.NONE);
+    }
+
+    /**
+     * Story 16.11 — issues an access token (identity only: sub, tenantId, sid, iat, exp; plus the
+     * indicative legacy claims while {@code keevo.jwt.legacy-claims} is on) and a refresh token in
+     * device session {@code sessionId} (a new session when null). The refresh token lives
+     * {@code refresh-token-expiry-days} from now (365, sliding: every renewal issues a new one), or
+     * {@code super-admin-refresh-expiry-hours} (12) for the super-admin.
+     */
+    public IssuedSession issue(UUID userId, Tenant tenant, String role, UUID sessionId, DeviceInfo device) {
         // Story 11.4 AC7: throws before the schema reaches any SQL (employee lookup, onboarding probe).
         // The SUPER_ADMIN system tenant (schema "public") is the only exception: no tenant SQL runs for it.
         boolean platformAdmin = TenantSchema.isPlatformAdminSession(tenant.getSchemaName(), role);
         String schema = platformAdmin ? tenant.getSchemaName() : TenantSchema.validate(tenant.getSchemaName());
+        DeviceInfo dev = device != null ? device : DeviceInfo.NONE;
 
         UUID storeId = null;
         boolean passwordChangeRequired = false;
-        String firstName = null;
         if ("EMPLOYEE".equals(role)) {
             try {
                 Map<String, Object> row = jdbcTemplate.queryForMap(
-                        "SELECT store_id, password_change_required, first_name FROM \""
+                        "SELECT store_id, password_change_required FROM \""
                         + schema + "\".employees WHERE user_id = ? LIMIT 1", userId);
                 storeId = (UUID) row.get("store_id");
                 passwordChangeRequired = Boolean.TRUE.equals(row.get("password_change_required"));
-                firstName = (String) row.get("first_name");
             } catch (EmptyResultDataAccessException ignored) {
                 // No employee row yet — JwtAuthFilter rejects the request as ACCOUNT_INACTIVE.
             }
         }
 
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                userId, schema, role, tenant.getStatus().name(),
-                storeId, passwordChangeRequired, firstName, platformAdmin || onboardingCompleted(schema));
+        UUID sid = sessionId != null ? sessionId : UUID.randomUUID();
+        JwtTokenProvider.LegacyClaims legacy = jwtProperties.isLegacyClaims()
+                ? new JwtTokenProvider.LegacyClaims(role, tenant.getStatus().name(), storeId,
+                        passwordChangeRequired, platformAdmin || onboardingCompleted(schema))
+                : null;
+        String accessToken = jwtTokenProvider.generateAccessToken(userId, schema, sid, legacy);
 
+        Instant now = Instant.now();
         String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
-        Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
-        RefreshToken saved = refreshTokenRepository.save(
-                RefreshToken.create(userId, schema, hash(rawRefreshToken), expiresAt));
+        Instant expiresAt = platformAdmin
+                ? now.plus(jwtProperties.getSuperAdminRefreshExpiryHours(), ChronoUnit.HOURS)
+                : now.plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
+        RefreshToken saved = refreshTokenRepository.save(RefreshToken.create(
+                userId, schema, hash(rawRefreshToken), expiresAt, sid, dev.deviceId(), dev.deviceLabel(), now));
 
-        long expiresIn = (long) jwtProperties.getAccessTokenExpiryHours() * 3600;
-        AuthTokens tokens = new AuthTokens(accessToken, rawRefreshToken, expiresIn, userId, schema, role,
+        AuthTokens tokens = new AuthTokens(accessToken, rawRefreshToken,
+                jwtProperties.getAccessTokenExpirySeconds(), userId, schema, role,
                 storeId != null ? storeId.toString() : null, passwordChangeRequired);
         return new IssuedSession(tokens, saved.id());
     }
@@ -98,7 +116,12 @@ public class SessionTokenIssuer {
      * swallowed here.
      */
     private boolean onboardingCompleted(String schema) {
-        TenantSchema.validate(schema); // issue() already validated it; re-checked at use
+        return isOnboardingCompleted(schema);
+    }
+
+    /** Story 16.11 — onboarding state for the profile (the app no longer reads it from the token). */
+    public boolean isOnboardingCompleted(String schema) {
+        TenantSchema.validate(schema); // re-checked at use
         Boolean tableExists = jdbcTemplate.queryForObject(
                 "SELECT to_regclass(?) IS NOT NULL", Boolean.class,
                 "\"" + schema + "\".tenant_preferences");

@@ -95,23 +95,26 @@ Future<String> resolveStartupRoute({
 
   await applyClaims(token);
 
-  // The server says whether the setup wizard was completed. A wizard finished
-  // on this device wins over a claim of false: the registration token says
-  // false and is only replaced when the session is renewed. tenantStatus is
-  // ACTIVE as soon as the account exists, so it is only a fallback for tokens
-  // issued before the claim existed.
-  final completedHere = prefs.getBool(kOnboardingWizardCompletedKey) ?? false;
-  final wizardDone = completedHere ||
-      (claims.onboardingCompleted ??
-          ((prefs.getBool(kOnboardingWizardSeenKey) ?? false) ||
-              claims.tenantStatus == 'ACTIVE'));
-  await prefs.setBool(kOnboardingWizardSeenKey, wizardDone);
-  if (!wizardDone) return '/onboarding/sector';
-
+  // Story 16.11 — onboarding, account status and role come from the profile
+  // cached by [applyClaims] (the token proves identity only). A wizard
+  // finished on this device wins over a stale "not completed": the profile is
+  // only reloaded with the session. The account status is a fallback for a
+  // profile from a server that predates the onboarding field.
+  // A forced password change comes first, also when only the sign-in seed is
+  // cached (profile not loaded yet): onboarding and status are then unknown.
   if (prefs.getBool(kPasswordChangeRequiredKey) ?? false) {
     return '/auth/change-password';
   }
-  return routeForRole(claims.role);
+
+  final completedHere = prefs.getBool(kOnboardingWizardCompletedKey) ?? false;
+  final wizardDone = completedHere ||
+      (prefs.getBool(kOnboardingCompletedKey) ??
+          ((prefs.getBool(kOnboardingWizardSeenKey) ?? false) ||
+              prefs.getString(kTenantStatusKey) == 'ACTIVE'));
+  await prefs.setBool(kOnboardingWizardSeenKey, wizardDone);
+  if (!wizardDone) return '/onboarding/sector';
+
+  return routeForRole(prefs.getString(kUserRoleKey));
 }
 
 String _signedOutRoute(SharedPreferences prefs) {

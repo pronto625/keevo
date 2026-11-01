@@ -135,7 +135,7 @@ class ModularVisionAcceptanceTest extends FullContextIntegrationTest {
         jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'PREMIUM', status = 'ACTIVE', "
                 + "expires_at = now() + interval '1 year'");
         registry.evict(schema);
-        token = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        token = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
         year = String.valueOf(LocalDate.now(ZoneId.of("Africa/Douala")).getYear());
         context.addApplicationListener(recorder);
     }

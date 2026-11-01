@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/network/api_base_url.dart';
 import 'package:keevo_core/network/log_redaction.dart';
@@ -17,6 +16,7 @@ import 'package:keevo_core/widget/notice_throttle.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../core/auth/session_refresher.dart';
+import '../../../../core/device/device_descriptor.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/sync/sync_trigger_notifier.dart';
@@ -84,6 +84,38 @@ final _refreshDioProvider = Provider<Dio>((ref) {
   return dio;
 });
 
+/// Story 16.11 — this device's id and label for « Appareils connectés ».
+final deviceDescriptorProvider = Provider<DeviceDescriptor>(
+    (ref) => DeviceDescriptor(ref.read(flutterSecureStorageProvider)));
+
+/// HTTP client of [sessionProfileFetcherProvider]: the one without the auth
+/// interceptor (overridable in tests).
+final sessionProfileDioProvider = Provider<Dio>((ref) => ref.read(_refreshDioProvider));
+
+/// Signature of the profile loader: `GET /api/v1/auth/profile` with
+/// [accessToken], null when it cannot be loaded (offline, server error).
+typedef SessionProfileFetcher = Future<AccountProfile?> Function(
+    String accessToken);
+
+/// Story 16.11 — loads the profile of a session (role, store, first name,
+/// password flag, account status) with an explicit token, through the client
+/// that bypasses the auth interceptor: it runs inside a renewal.
+final sessionProfileFetcherProvider = Provider<SessionProfileFetcher>((ref) {
+  final dio = ref.read(sessionProfileDioProvider);
+  return (accessToken) async {
+    try {
+      final response = await dio.get<Map<String, dynamic>>(
+        '/api/v1/auth/profile',
+        options: Options(headers: {'Authorization': 'Bearer $accessToken'}),
+      );
+      final body = response.data;
+      return body == null ? null : AccountProfile.fromJson(body);
+    } catch (_) {
+      return null;
+    }
+  };
+});
+
 /// The app's single session refresher, shared by the HTTP interceptor and the
 /// splash so that only one refresh ever runs at a time (refresh tokens are
 /// single-use). Every renewed token is applied to app state.
@@ -93,6 +125,7 @@ final sessionRefresherProvider = Provider<SessionRefresher>((ref) {
     refreshDio: ref.read(_refreshDioProvider),
     onRenewed: (accessToken) =>
         ref.read(sessionClaimsApplierProvider).apply(accessToken),
+    deviceFields: ref.read(deviceDescriptorProvider).fields,
   );
 });
 
@@ -185,7 +218,10 @@ final dioProvider = Provider<Dio>((ref) {
 
 /// Remote data source provider.
 final remoteAuthDataSourceProvider = Provider<RemoteAuthDataSource>((ref) {
-  return RemoteAuthDataSource(dio: ref.watch(dioProvider));
+  return RemoteAuthDataSource(
+    dio: ref.watch(dioProvider),
+    deviceFields: ref.read(deviceDescriptorProvider).fields,
+  );
 });
 
 /// Repository provider (typed as interface — dependency inversion).
@@ -289,15 +325,14 @@ class Registration extends _$Registration {
     bool discardPreviousAccountData = false,
   }) async {
     try {
+      // Story 16.11 — the role comes from the profile; registration creates
+      // an OWNER, so that is only the seed when the profile cannot be loaded.
       await ref.read(sessionClaimsApplierProvider).apply(result.token,
           newSession: true,
-          discardPreviousAccountData: discardPreviousAccountData);
+          discardPreviousAccountData: discardPreviousAccountData,
+          seedRole: 'OWNER');
       if (!ref.mounted) return;
       final prefs = ref.read(sharedPreferencesProvider);
-      // The server's role claim wins; registration creates an OWNER, so that
-      // is only the fallback for a token without the claim.
-      await prefs.setString(
-          kUserRoleKey, JwtClaims.tryParse(result.token)?.role ?? 'OWNER');
       await prefs.setString(kUserPhoneKey, phoneNumber);
       if (!ref.mounted) return;
       ref.read(activeStoreIdProvider.notifier).setActiveStore(null);
@@ -383,7 +418,10 @@ class Login extends _$Login {
       await ref.read(sessionClaimsApplierProvider).apply(
           result.tokens.accessToken,
           newSession: true,
-          discardPreviousAccountData: discardPreviousAccountData);
+          discardPreviousAccountData: discardPreviousAccountData,
+          seedRole: result.tokens.role,
+          seedStoreId: result.tokens.storeId,
+          seedPasswordChangeRequired: result.tokens.passwordChangeRequired);
       if (!ref.mounted) return;
       await ref.read(sharedPreferencesProvider).setString(kUserPhoneKey, phoneNumber);
       if (!ref.mounted) return;
@@ -466,7 +504,10 @@ class SelectTenant extends _$SelectTenant {
     try {
       await ref.read(sessionClaimsApplierProvider).apply(tokens.accessToken,
           newSession: true,
-          discardPreviousAccountData: discardPreviousAccountData);
+          discardPreviousAccountData: discardPreviousAccountData,
+          seedRole: tokens.role,
+          seedStoreId: tokens.storeId,
+          seedPasswordChangeRequired: tokens.passwordChangeRequired);
       if (!ref.mounted) return;
 
       // Story 16.8 AC2: pull latest server state after tenant selection.

@@ -74,7 +74,7 @@ public class SelectTenantService implements SelectTenantUseCase {
         // data — the same path refresh uses, so a renewed token never differs from a login).
         String schemaName = tenant.getSchemaName();
         String role       = membership.getRole();
-        AuthTokens tokens = sessionTokenIssuer.issue(userId, tenant, role).tokens();
+        AuthTokens tokens = sessionTokenIssuer.issue(userId, tenant, role, null, command.device()).tokens();
 
         // Step 7 — Publish audit event (now we know the tenant context)
         eventPublisher.publishEvent(new UserAuthenticatedEvent(

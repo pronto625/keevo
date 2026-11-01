@@ -5,7 +5,6 @@ import com.keevo.inventory.counting.domain.model.ValidateInventoryResult;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +42,6 @@ class InventorySessionControllerValidateTest {
     @Mock private CancelInventorySessionUseCase cancelSessionUseCase;
     @Mock private ListInventorySessionsUseCase listSessionsUseCase;
     @Mock private ValidateInventoryUseCase validateInventoryUseCase;
-    @Mock private JwtTokenProvider jwtTokenProvider;
 
     private MockMvc mockMvc;
     private UUID actorId;
@@ -53,7 +51,7 @@ class InventorySessionControllerValidateTest {
         var controller = new InventorySessionController(
                 createSessionUseCase, getActiveSessionUseCase,
                 cancelSessionUseCase, listSessionsUseCase,
-                validateInventoryUseCase, jwtTokenProvider);
+                validateInventoryUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

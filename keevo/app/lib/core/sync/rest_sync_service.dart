@@ -5,8 +5,7 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:keevo_core/auth/jwt_claims.dart';
-import 'package:keevo_core/di/core_providers.dart' show kUserRoleKey;
+import 'package:keevo_core/di/core_providers.dart' show kTenantStatusKey, kUserRoleKey;
 import 'package:keevo_core/module/module_records.dart';
 import 'package:keevo_core/photo/product_photo_files.dart';
 import 'package:keevo_core/storage/app_constants.dart';
@@ -21,7 +20,6 @@ import 'package:keevo_core/sync/sync_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../features/auth/data/repository/secure_token_storage.dart';
 import '../../features/catalog/data/datasource/remote_product_datasource.dart';
 
 /// RestSyncService — REST implementation for offline queue batch push sync.
@@ -119,14 +117,13 @@ class RestSyncService implements SyncService {
     return push;
   }
 
-  /// The read-only state of the account per the stored access token's
-  /// `tenantStatus` claim (A50). Null — writes allowed — when the token cannot
-  /// be read: the server stays the authority.
+  /// The read-only state of the account per the cached profile's account
+  /// status (A50; Story 16.11 — never read from the token). Null — writes
+  /// allowed — when unknown: the server stays the authority.
   Future<AccountReadOnlyException?> _accountReadOnly() async {
     try {
-      final token = await SecureTokenStorage(_secureStorage).getToken();
       return AccountReadOnlyException.forTenantStatus(
-          JwtClaims.tryParse(token)?.tenantStatus);
+          _prefs.getString(kTenantStatusKey));
     } catch (_) {
       return null;
     }

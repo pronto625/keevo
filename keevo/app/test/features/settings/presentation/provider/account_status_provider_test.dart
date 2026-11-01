@@ -8,7 +8,9 @@ import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/settings/domain/model/subscription_info.dart';
 import 'package:keevo/features/settings/presentation/provider/account_status_provider.dart';
 import 'package:keevo/features/settings/presentation/provider/subscription_info_provider.dart';
+import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/state/provider_retry.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockTokenStorage extends Mock implements TokenStorage {}
@@ -18,6 +20,24 @@ class MockTokenStorage extends Mock implements TokenStorage {}
 String _jwtWith(Map<String, dynamic> claims) {
   final payload = base64Url.encode(utf8.encode(jsonEncode(claims)));
   return 'eyJhbGciOiJIUzI1NiJ9.$payload.fakeSignature';
+}
+
+/// Story 16.11 — the account status comes from the cached profile
+/// (`session_tenant_status`). These tests carry the profile's status in the
+/// test token payload; the provider itself never reads the token.
+Future<SharedPreferences> _prefsFrom(String? token) async {
+  String? status;
+  try {
+    final payload = jsonDecode(utf8.decode(
+            base64Url.decode(base64Url.normalize(token!.split('.')[1]))))
+        as Map<String, dynamic>;
+    status = payload['tenantStatus'] as String?;
+  } catch (_) {
+    status = null;
+  }
+  SharedPreferences.setMockInitialValues(
+      {if (status != null) 'session_tenant_status': status});
+  return SharedPreferences.getInstance();
 }
 
 void main() {
@@ -38,6 +58,8 @@ void main() {
 
       final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        sharedPreferencesProvider.overrideWithValue(
+            await _prefsFrom(await mockTokenStorage.getToken())),
         subscriptionInfoProvider.overrideWith((ref) async => subscription),
       ]);
 
@@ -146,6 +168,8 @@ void main() {
 
       final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        sharedPreferencesProvider.overrideWithValue(
+            await _prefsFrom(await mockTokenStorage.getToken())),
         subscriptionInfoProvider.overrideWith(
           (ref) async => const SubscriptionInfo(
             planType: 'PREMIUM_TRIAL',
@@ -172,6 +196,8 @@ void main() {
 
       final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        sharedPreferencesProvider.overrideWithValue(
+            await _prefsFrom(await mockTokenStorage.getToken())),
         subscriptionInfoProvider.overrideWith(
           (ref) async => throw Exception('network error'),
         ),
@@ -204,6 +230,8 @@ void main() {
 
       final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        sharedPreferencesProvider.overrideWithValue(
+            await _prefsFrom(await mockTokenStorage.getToken())),
         subscriptionInfoProvider.overrideWith((ref) {
           calls++;
           if (calls == 1) {
@@ -247,6 +275,8 @@ void main() {
 
       final c = ProviderContainer(retry: noProviderRetry, overrides: [
         tokenStorageProvider.overrideWith((ref) => mockTokenStorage),
+        sharedPreferencesProvider.overrideWithValue(
+            await _prefsFrom(await mockTokenStorage.getToken())),
         subscriptionInfoProvider.overrideWith((ref) async {
           calls++;
           if (calls == 1) {

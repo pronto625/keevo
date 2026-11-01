@@ -20,3 +20,17 @@ export interface LoginResponse {
   storeId: string | null;
   passwordChangeRequired: boolean;
 }
+
+/** Story 16.11 — `GET /api/v1/auth/profile`: the session's identity (the token carries none). */
+export interface UserProfile {
+  userId: string;
+  phoneNumber: string;
+  role: string;
+  firstName: string | null;
+  lastName: string | null;
+  storeId: string | null;
+  storeName: string | null;
+  passwordChangeRequired: boolean;
+  tenantStatus: string | null;
+  onboardingCompleted: boolean;
+}

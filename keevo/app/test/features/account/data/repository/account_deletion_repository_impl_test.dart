@@ -100,10 +100,13 @@ void main() {
           isNull);
     });
 
-    test('DELETION_PENDING claim without local trace → pending, no date',
+    test('DELETION_PENDING profile status without local trace → pending, no date',
         () async {
+      // Story 16.11 — from the cached profile; a token claim alone is ignored.
       when(() => storage.getToken())
           .thenAnswer((_) async => _jwt(tenantStatus: 'DELETION_PENDING'));
+      expect(await build().currentStatus(), isNull);
+      await prefs.setString('session_tenant_status', 'DELETION_PENDING');
 
       final status = await build().currentStatus();
       expect(status, isNotNull);

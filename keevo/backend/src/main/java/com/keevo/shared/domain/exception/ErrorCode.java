@@ -63,7 +63,8 @@ public enum ErrorCode {
     PASSWORD_CHANGE_REQUIRED,
     STORE_REASSIGNED,
     ACCOUNT_INACTIVE,
-    SESSION_REVOKED,   // Story 12.2 — NFR12: token issued before tokens_valid_after cutoff (401)
+    SESSION_REVOKED,   // Story 12.2 — NFR12: token issued before tokens_valid_after cutoff (401); 16.11: device session closed
+    DEVICE_SESSION_NOT_FOUND, // Story 16.11 — « Appareils connectés »: unknown or already closed session (404)
     PHONE_ALREADY_REGISTERED, // Story 14.11 — phone number already taken by another user (409)
     CANNOT_CHANGE_OWN_ROLE,   // Story 14.11 — cannot change your own role (403)
     CANNOT_DEMOTE_LAST_OWNER, // Story 14.11 — cannot demote the last active owner (403)

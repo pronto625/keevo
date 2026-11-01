@@ -15,7 +15,22 @@ import '../../domain/model/registration_result.dart';
 class RemoteAuthDataSource {
   final Dio _dio;
 
-  RemoteAuthDataSource({required Dio dio}) : _dio = dio;
+  /// Story 16.11 — device id and label sent at tenant selection.
+  final Future<Map<String, String>> Function()? _deviceFields;
+
+  RemoteAuthDataSource({
+    required Dio dio,
+    Future<Map<String, String>> Function()? deviceFields,
+  })  : _dio = dio,
+        _deviceFields = deviceFields;
+
+  Future<Map<String, String>> _device() async {
+    try {
+      return await _deviceFields?.call() ?? const {};
+    } catch (_) {
+      return const {};
+    }
+  }
 
   /// POST /api/v1/auth/register
   Future<RegistrationResult> register({
@@ -81,6 +96,7 @@ class RemoteAuthDataSource {
         data: {
           'loginToken': loginToken,
           'tenantCode': tenantCode,
+          ...await _device(),
         },
       );
       return _mapAuthTokens(response.data!);

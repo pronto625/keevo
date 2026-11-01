@@ -64,7 +64,7 @@ class ModuleConsoleFullContextTest extends FullContextIntegrationTest {
         awaitJobs();
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
-        adminToken = jwtTokenProvider.generateAccessToken(adminId, "public", "SUPER_ADMIN");
+        adminToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, adminId, "public", "SUPER_ADMIN");
     }
 
     @AfterEach

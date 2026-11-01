@@ -1,36 +1,24 @@
 package com.keevo.identity.auth.adapter.out.persistence.impl;
 
 import com.keevo.identity.api.TokenRevocationPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
 import java.util.UUID;
 
 /**
  * JdbcTokenRevocationAdapter — Raw JDBC adapter for token revocation (Story 12.2, NFR12).
  *
- * <p>Reads/writes the {@code tokens_valid_after} column on {@code public.user_tenant_memberships}
+ * <p>Writes the {@code tokens_valid_after} column on {@code public.user_tenant_memberships}
  * using fully-qualified table names and parameterized queries (ARCH18: no search_path dependency).
  * Resolves JWT claim {@code tenantId} (schema name {@code kv_xxxxxx}) to tenant UUID via
  * JOIN on {@code public.tenants}.
  *
- * <p>NOT the bean injected into consumers — {@link CachedTokenRevocationAdapter} is {@code @Primary}.
+ * <p>Story 16.11 — reads of the cutoff moved to the access state ({@code AccessStateLoader}); the
+ * membership trigger broadcasts each write to every instance.
  */
 @Component
 public class JdbcTokenRevocationAdapter implements TokenRevocationPort {
-
-    private static final Logger log = LoggerFactory.getLogger(JdbcTokenRevocationAdapter.class);
-
-    private static final String SELECT_TVA =
-            "SELECT m.tokens_valid_after " +
-            "FROM public.user_tenant_memberships m " +
-            "JOIN public.tenants t ON t.id = m.tenant_id " +
-            "WHERE m.user_id = ? AND t.schema_name = ?";
 
     private static final String REVOKE_TVA =
             "UPDATE public.user_tenant_memberships " +
@@ -47,43 +35,6 @@ public class JdbcTokenRevocationAdapter implements TokenRevocationPort {
 
     public JdbcTokenRevocationAdapter(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-    }
-
-    @Override
-    public Instant getTokensValidAfter(UUID userId, String tenantSchema) {
-        try {
-            return loadTokensValidAfter(userId, tenantSchema);
-        } catch (DataAccessException e) {
-            // Fail-open (code-review decision 2026-07-21): on DB unavailability (conn refused,
-            // timeout, IncorrectResultSize, ...) we cannot determine revocation state — treat
-            // as not-revoked (allow) rather than 500-ing every request for ALL roles. The filter
-            // runs before @RestControllerAdvice, so an uncaught exception here would leak a
-            // stack trace and bypass the JSON contract. Security cost: a revoked token may pass
-            // during the outage (<5min cross-instance propagation is already contractual per
-            // NFR12).
-            log.warn("Token revocation lookup failed for user {} tenant {}: {} — fail-open (allow)",
-                    userId, tenantSchema, e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * Story 12.12 — raw lookup for the caching decorator: a missing membership row is
-     * {@code null} (never revoked), but a {@link DataAccessException} PROPAGATES so the cache can
-     * fail open for that request only, without caching the failure as "never revoked".
-     */
-    Instant loadTokensValidAfter(UUID userId, String tenantSchema) {
-        try {
-            return jdbcTemplate.queryForObject(SELECT_TVA,
-                    (rs, rowNum) -> {
-                        java.sql.Timestamp ts = rs.getTimestamp("tokens_valid_after");
-                        return ts != null ? ts.toInstant() : null;
-                    }, userId, tenantSchema);
-        } catch (EmptyResultDataAccessException e) {
-            // No membership row for (userId, tenant) → treat as never-revoked (allow).
-            // The EMPLOYEE branch will separately reject via ACCOUNT_INACTIVE/STORE_REASSIGNED.
-            return null;
-        }
     }
 
     @Override

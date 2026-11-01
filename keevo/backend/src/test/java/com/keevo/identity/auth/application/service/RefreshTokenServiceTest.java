@@ -1,6 +1,9 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
+import com.keevo.identity.auth.domain.model.DeviceInfo;
+import com.keevo.shared.event.catalog.auth.DeviceSessionClosedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Tenant;
@@ -43,6 +46,7 @@ class RefreshTokenServiceTest {
     @Mock TenantRepository tenantRepository;
     @Mock UserMembershipRepository membershipRepository;
     @Mock SessionTokenIssuer issuer;
+    @Mock ApplicationEventPublisher events;
 
     private RefreshTokenService service;
 
@@ -55,7 +59,7 @@ class RefreshTokenServiceTest {
     @BeforeEach
     void setUp() {
         service = new RefreshTokenService(refreshTokenRepository, tenantRepository,
-                membershipRepository, issuer);
+                membershipRepository, issuer, events);
     }
 
     private RefreshToken stored(boolean revoked, UUID replacedBy, Instant rotatedAt) {
@@ -75,6 +79,45 @@ class RefreshTokenServiceTest {
                 .thenReturn(Optional.of(membership));
     }
 
+    private void verifyReplayAudited() {
+        var event = ArgumentCaptor.forClass(Object.class);
+        verify(events).publishEvent(event.capture());
+        assertThat(event.getValue()).isInstanceOfSatisfying(DeviceSessionClosedEvent.class, e -> {
+            assertThat(e.scope()).isEqualTo(DeviceSessionClosedEvent.Scope.REPLAY);
+            assertThat(e.targetUserId()).isEqualTo(userId);
+            assertThat(e.tenantId()).isEqualTo(SCHEMA);
+        });
+    }
+
+    @Test
+    @DisplayName("16.11 — renewal keeps the device session (sid) and its device; new device data replaces it")
+    void renewalKeepsTheDeviceSession() {
+        UUID sessionId = UUID.randomUUID();
+        var old = new RefreshToken(UUID.randomUUID(), userId, SCHEMA, SessionTokenIssuer.hash(RAW),
+                Instant.now().plus(300, ChronoUnit.DAYS), false, null, null, sessionId, "dev-1",
+                "Redmi Note 12 · Android 14", Instant.now().minus(11 * 30, ChronoUnit.DAYS));
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
+        activeEmployeeMembership();
+        when(issuer.issue(eq(userId), eq(tenant), eq("EMPLOYEE"), any(), any())).thenReturn(issued());
+
+        service.refresh(RAW);
+        verify(issuer).issue(userId, tenant, "EMPLOYEE", sessionId,
+                DeviceInfo.of("dev-1", "Redmi Note 12 · Android 14"));
+
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
+        service.refresh(RAW, DeviceInfo.of("dev-1", "Redmi Note 13 · Android 15"));
+        verify(issuer).issue(userId, tenant, "EMPLOYEE", sessionId,
+                DeviceInfo.of("dev-1", "Redmi Note 13 · Android 15"));
+        // Only one field sent: the other one is kept, never wiped.
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
+        service.refresh(RAW, DeviceInfo.of(null, "Chrome · Linux"));
+        verify(issuer).issue(userId, tenant, "EMPLOYEE", sessionId, DeviceInfo.of("dev-1", "Chrome · Linux"));
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
+        service.refresh(RAW, DeviceInfo.of("dev-2", null));
+        verify(issuer).issue(userId, tenant, "EMPLOYEE", sessionId,
+                DeviceInfo.of("dev-2", "Redmi Note 12 · Android 14"));
+    }
+
     private void assertInvalid(Runnable call) {
         assertThatThrownBy(call::run)
                 .isInstanceOf(DomainException.class)
@@ -89,7 +132,7 @@ class RefreshTokenServiceTest {
         when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
         activeEmployeeMembership();
         var session = issued();
-        when(issuer.issue(userId, tenant, "EMPLOYEE")).thenReturn(session);
+        when(issuer.issue(eq(userId), eq(tenant), eq("EMPLOYEE"), any(), any())).thenReturn(session);
 
         AuthTokens result = service.refresh(RAW);
 
@@ -162,7 +205,7 @@ class RefreshTokenServiceTest {
         when(refreshTokenRepository.findById(successor.id())).thenReturn(Optional.of(successor));
         activeEmployeeMembership();
         var session = issued();
-        when(issuer.issue(userId, tenant, "EMPLOYEE")).thenReturn(session);
+        when(issuer.issue(eq(userId), eq(tenant), eq("EMPLOYEE"), any(), any())).thenReturn(session);
 
         assertThat(service.refresh(RAW)).isSameAs(session.tokens());
 
@@ -177,23 +220,24 @@ class RefreshTokenServiceTest {
         assertThat(repointed.id()).isEqualTo(old.id());
         assertThat(repointed.replacedById()).isEqualTo(session.refreshTokenId());
         assertThat(repointed.rotatedAt()).isEqualTo(old.rotatedAt());
-        verify(refreshTokenRepository, never()).revokeAllByUserId(any());
+        verify(refreshTokenRepository, never()).revokeSessionChain(any());
     }
 
     @Test
-    @DisplayName("superseded token presented (someone else recovered past it) → all sessions revoked")
+    @DisplayName("superseded token presented (someone else recovered past it) → the device chain is revoked and audited")
     void supersededTokenPresented() {
         var superseded = stored(true, null, Instant.now().minus(1, ChronoUnit.HOURS));
         when(refreshTokenRepository.findByHash(any())).thenReturn(Optional.of(superseded));
 
         assertInvalid(() -> service.refresh(RAW));
 
-        verify(refreshTokenRepository).revokeAllByUserId(userId);
+        verify(refreshTokenRepository).revokeSessionChain(superseded.id());
+        verifyReplayAudited();
         verifyNoInteractions(issuer);
     }
 
     @Test
-    @DisplayName("replay of a token whose successor was superseded → all sessions revoked")
+    @DisplayName("replay of a token whose successor was superseded → the device chain is revoked and audited")
     void successorSupersededMeansTwoHolders() {
         var supersededSuccessor = new RefreshToken(UUID.randomUUID(), userId, SCHEMA, "succ-hash",
                 Instant.now().plus(300, ChronoUnit.DAYS), true, null, Instant.now());
@@ -204,7 +248,8 @@ class RefreshTokenServiceTest {
 
         assertInvalid(() -> service.refresh(RAW));
 
-        verify(refreshTokenRepository).revokeAllByUserId(userId);
+        verify(refreshTokenRepository).revokeSessionChain(old.id());
+        verify(refreshTokenRepository, never()).revokeAllByUserId(any());
     }
 
     @Test
@@ -219,14 +264,14 @@ class RefreshTokenServiceTest {
 
         assertInvalid(() -> service.refresh(RAW));
 
-        verify(refreshTokenRepository, never()).revokeAllByUserId(any());
+        verify(refreshTokenRepository, never()).revokeSessionChain(any());
         verifyNoInteractions(issuer);
     }
 
     @Test
     @DisplayName("refresh keeps the replay revocation when it throws (noRollbackFor DomainException)")
     void refreshKeepsRevocationOnDomainException() throws NoSuchMethodException {
-        Transactional tx = RefreshTokenService.class.getMethod("refresh", String.class)
+        Transactional tx = RefreshTokenService.class.getMethod("refresh", String.class, DeviceInfo.class)
                 .getAnnotation(Transactional.class);
 
         assertThat(tx).isNotNull();
@@ -234,7 +279,7 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("replay of a token whose successor was already used → all sessions revoked")
+    @DisplayName("replay of a token whose successor was already used → the device chain is revoked and audited")
     void replayDetected() {
         var usedSuccessor = new RefreshToken(UUID.randomUUID(), userId, SCHEMA, "succ-hash",
                 Instant.now().plus(300, ChronoUnit.DAYS), true, UUID.randomUUID(), Instant.now());
@@ -244,7 +289,9 @@ class RefreshTokenServiceTest {
 
         assertInvalid(() -> service.refresh(RAW));
 
-        verify(refreshTokenRepository).revokeAllByUserId(userId);
+        verify(refreshTokenRepository).revokeSessionChain(old.id());
+        verify(refreshTokenRepository, never()).revokeAllByUserId(any());
+        verifyReplayAudited();
         verifyNoInteractions(issuer);
     }
 

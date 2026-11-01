@@ -96,8 +96,8 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
         tenantCode = jdbc.queryForObject("SELECT code FROM public.tenants WHERE id = ?", String.class, tenantId);
-        adminToken = jwtTokenProvider.generateAccessToken(adminId, "public", "SUPER_ADMIN");
-        ownerToken = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        adminToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, adminId, "public", "SUPER_ADMIN");
+        ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
     }
 
     @AfterEach

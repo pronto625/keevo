@@ -42,6 +42,19 @@ public class RefreshTokenJpaEntity extends JpaBaseEntity {
     @Column(name = "rotated_at")
     private Instant rotatedAt;
 
+    /** Story 16.11 — device session (stable across rotations). */
+    @Column(name = "session_id")
+    private UUID sessionId;
+
+    @Column(name = "device_id", length = 128)
+    private String deviceId;
+
+    @Column(name = "device_label", length = 120)
+    private String deviceLabel;
+
+    @Column(name = "last_used_at")
+    private Instant lastUsedAt;
+
     protected RefreshTokenJpaEntity() {}
 
     public RefreshTokenJpaEntity(UUID id, UUID userId, String tenantId,
@@ -62,6 +75,17 @@ public class RefreshTokenJpaEntity extends JpaBaseEntity {
         this.rotatedAt    = rotatedAt;
     }
 
+    public RefreshTokenJpaEntity(UUID id, UUID userId, String tenantId,
+                                 String tokenHash, Instant expiresAt, boolean revoked,
+                                 UUID replacedById, Instant rotatedAt,
+                                 UUID sessionId, String deviceId, String deviceLabel, Instant lastUsedAt) {
+        this(id, userId, tenantId, tokenHash, expiresAt, revoked, replacedById, rotatedAt);
+        this.sessionId   = sessionId;
+        this.deviceId    = deviceId;
+        this.deviceLabel = deviceLabel;
+        this.lastUsedAt  = lastUsedAt;
+    }
+
     public UUID    getUserId()    { return userId; }
     public String  getTenantId()  { return tenantId; }
     public String  getTokenHash() { return tokenHash; }
@@ -69,4 +93,8 @@ public class RefreshTokenJpaEntity extends JpaBaseEntity {
     public boolean isRevoked()    { return revoked; }
     public UUID    getReplacedById() { return replacedById; }
     public Instant getRotatedAt()    { return rotatedAt; }
+    public UUID    getSessionId()    { return sessionId; }
+    public String  getDeviceId()     { return deviceId; }
+    public String  getDeviceLabel()  { return deviceLabel; }
+    public Instant getLastUsedAt()   { return lastUsedAt; }
 }

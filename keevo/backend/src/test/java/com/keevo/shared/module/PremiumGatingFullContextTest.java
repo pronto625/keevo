@@ -85,7 +85,7 @@ class PremiumGatingFullContextTest extends FullContextIntegrationTest {
             TenantContext.clear();
             SecurityContextHolder.clearContext();
         }
-        token = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        token = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
         // what a real (onboarded) tenant has: preferences and stock in its store — so valid premium calls are 2xx
         TenantContext.setCurrentTenant(schema);
         try {

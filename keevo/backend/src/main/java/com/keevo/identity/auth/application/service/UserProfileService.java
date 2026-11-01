@@ -5,6 +5,11 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.identity.auth.domain.port.out.TenantRepository;
+import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
+import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.auth.domain.model.UserTenantMembership;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
@@ -34,13 +39,22 @@ public class UserProfileService implements GetUserProfileUseCase {
     private final UserRepository userRepository;
     private final EmployeeRepository employeeRepository;
     private final StoreQueryPort storeQuery;
+    private final TenantRepository tenantRepository;
+    private final UserMembershipRepository membershipRepository;
+    private final SessionTokenIssuer sessionTokenIssuer;
 
     public UserProfileService(UserRepository userRepository,
                                EmployeeRepository employeeRepository,
-                               StoreQueryPort storeQuery) {
+                               StoreQueryPort storeQuery,
+                               TenantRepository tenantRepository,
+                               UserMembershipRepository membershipRepository,
+                               SessionTokenIssuer sessionTokenIssuer) {
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
         this.storeQuery = storeQuery;
+        this.tenantRepository = tenantRepository;
+        this.membershipRepository = membershipRepository;
+        this.sessionTokenIssuer = sessionTokenIssuer;
     }
 
     @Override
@@ -49,32 +63,50 @@ public class UserProfileService implements GetUserProfileUseCase {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new DomainException(ErrorCode.INVALID_CREDENTIALS));
 
-        Optional<Employee> employeeOpt = employeeRepository.findByUserId(userId);
+        // Story 16.11 — role and account status from the membership / account (never the token).
+        Optional<Tenant> tenant = tenantRepository.findBySchemaName(tenantId);
+        String tenantStatus = tenant.map(t -> t.getStatus().name()).orElse("ACTIVE");
+        Optional<String> membershipRole = tenant.flatMap(t ->
+                        membershipRepository.findByUserIdAndTenantId(userId, t.getId()))
+                .map(UserTenantMembership::getRole);
+        boolean platformAdmin = TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantId);
+        boolean onboardingCompleted = platformAdmin || sessionTokenIssuer.isOnboardingCompleted(tenantId);
+
+        Optional<Employee> employeeOpt = platformAdmin ? Optional.empty() : employeeRepository.findByUserId(userId);
+        String role = membershipRole.orElse(employeeOpt.isPresent() ? "EMPLOYEE" : "OWNER");
 
         if (employeeOpt.isPresent()) {
             Employee emp = employeeOpt.get();
-            String storeName = storeQuery.findById(TenantContext.getCurrentTenant(), emp.getStoreId())
-                    .map(s -> s.name())
-                    .orElse(null);
+            boolean employeeRole = "EMPLOYEE".equals(role);
+            String storeName = employeeRole && emp.getStoreId() != null
+                    ? storeQuery.findById(TenantContext.getCurrentTenant(), emp.getStoreId())
+                            .map(s -> s.name()).orElse(null)
+                    : null;
             return new UserProfileData(
                     user.getId(),
                     user.getPhoneNumber(),
-                    "EMPLOYEE",
+                    role,
                     emp.getFirstName(),
                     emp.getLastName(),
-                    emp.getStoreId().toString(),
-                    storeName
+                    employeeRole && emp.getStoreId() != null ? emp.getStoreId().toString() : null,
+                    storeName,
+                    employeeRole && emp.isPasswordChangeRequired(),
+                    tenantStatus,
+                    onboardingCompleted
             );
         }
 
         return new UserProfileData(
                 user.getId(),
                 user.getPhoneNumber(),
-                "OWNER",
+                role,
                 null,
                 null,
                 null,
-                null
+                null,
+                false,
+                tenantStatus,
+                onboardingCompleted
         );
     }
 }

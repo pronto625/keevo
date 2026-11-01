@@ -60,7 +60,7 @@ class InvoicingCrmIntegrationFullContextTest extends FullContextIntegrationTest 
     void setUp() {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
-        ownerToken = jwtTokenProvider.generateAccessToken(UUID.randomUUID(), schema, "OWNER");
+        ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, UUID.randomUUID(), schema, "OWNER");
         mireille = client("Mireille Ngo", "+237690000011", false);
         amir = client("Amir Bello", "+237690000012", false);
         client("Mirabelle (archivée)", "+237690000013", true);

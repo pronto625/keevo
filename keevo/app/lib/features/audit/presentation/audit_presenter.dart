@@ -139,6 +139,25 @@ class AuditPresenter {
     'USER_AUTHENTICATED': AuditActionInfo(
         'Connexion', 'connecté(e)', Icons.login_rounded, AuditCategory.account,
         takesObject: false, reflexive: true),
+    // Story 16.11 — « Appareils connectés ».
+    'DEVICE_SESSION_CLOSED': AuditActionInfo(
+        'Appareil déconnecté',
+        'déconnecté l\'appareil',
+        Icons.phonelink_erase_rounded,
+        AuditCategory.account,
+        fallbackObject: 'un appareil'),
+    'DEVICE_SESSIONS_CLOSED': AuditActionInfo(
+        'Toutes les autres sessions fermées',
+        'fermé toutes les autres sessions',
+        Icons.devices_rounded,
+        AuditCategory.account,
+        takesObject: false),
+    'DEVICE_SESSION_REPLAY_REVOKED': AuditActionInfo(
+        'Session coupée par sécurité',
+        'vu sa session coupée par sécurité sur',
+        Icons.gpp_maybe_outlined,
+        AuditCategory.account,
+        fallbackObject: 'un appareil'),
     'PASSWORD_RESET_REQUESTED': AuditActionInfo(
         'Réinitialisation demandée',
         'demandé la réinitialisation de son mot de passe',

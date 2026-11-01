@@ -187,7 +187,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
 
     @SafeVarargs
     private ResultActions push(Map<String, Object>... ops) throws Exception {
-        return pushAs(jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER"), ops);
+        return pushAs(com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER"), ops);
     }
 
     @SafeVarargs
@@ -356,7 +356,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
     @Test
     @DisplayName("platform-admin session: sync push is not allowed (403 before any module read) — unchanged")
     void platformAdmin_pushForbidden() throws Exception {
-        String token = jwtTokenProvider.generateAccessToken(UUID.randomUUID(), "public", "SUPER_ADMIN");
+        String token = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, UUID.randomUUID(), "public", "SUPER_ADMIN");
 
         pushAs(token, createClient("Client admin")).andExpect(status().isForbidden());
 

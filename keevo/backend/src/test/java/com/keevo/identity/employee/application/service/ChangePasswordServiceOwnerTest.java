@@ -8,8 +8,6 @@ import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
-import com.keevo.shared.infrastructure.security.JwtProperties;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -43,8 +41,8 @@ class ChangePasswordServiceOwnerTest {
     @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock TokenRevocationPort tokenRevocationPort;
     @Mock PasswordEncoder passwordEncoder;
-    @Mock JwtTokenProvider jwtTokenProvider;
-    @Mock JwtProperties jwtProperties;
+    @Mock com.keevo.identity.auth.application.service.SessionTokenIssuer sessionTokenIssuer;
+    @Mock com.keevo.identity.auth.domain.port.out.TenantRepository tenantRepository;
     @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ChangePasswordService changePasswordService;
@@ -67,10 +65,7 @@ class ChangePasswordServiceOwnerTest {
         when(passwordEncoder.encode("NewOwner1234")).thenReturn("$2a$12$newOwnerHash");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
-        when(jwtTokenProvider.generateAccessToken(any(), any(), eq("OWNER"), any(), isNull(), anyBoolean(), isNull()))
-                .thenReturn("ownerAccessToken");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("ownerRefreshToken");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("ownerAccessToken");
 
         ChangePasswordCommand cmd = new ChangePasswordCommand(userId, "OwnerPass1", "NewOwner1234");
         AuthTokens result = changePasswordService.execute(cmd);
@@ -88,10 +83,7 @@ class ChangePasswordServiceOwnerTest {
         when(passwordEncoder.encode("NewOwner1234")).thenReturn("$2a$12$newOwnerHash");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("token");
 
         changePasswordService.execute(new ChangePasswordCommand(userId, "OwnerPass1", "NewOwner1234"));
 
@@ -107,14 +99,23 @@ class ChangePasswordServiceOwnerTest {
         when(passwordEncoder.encode("NewOwner1234")).thenReturn("$2a$12$newOwnerHash");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("token");
 
         changePasswordService.execute(new ChangePasswordCommand(userId, "OwnerPass1", "NewOwner1234"));
 
         verify(refreshTokenRepository).revokeAllByUserId(userId);
-        verify(refreshTokenRepository).save(any());
+        verify(sessionTokenIssuer).issue(eq(userId), any(), eq("OWNER"), any(), any());
+    }
+
+    /** Story 16.11 — tokens are issued by SessionTokenIssuer (same path as login / refresh). */
+    private void stubIssuer(String accessToken) {
+        when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-ABC123", "kv_abc123",
+                        com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
+                        Instant.now())));
+        when(sessionTokenIssuer.issue(any(), any(), any(), any(), any())).thenAnswer(inv ->
+                new com.keevo.identity.auth.application.service.SessionTokenIssuer.IssuedSession(
+                        new AuthTokens(accessToken, "refresh", 1800, inv.getArgument(0), "kv_abc123",
+                                inv.getArgument(2)), UUID.randomUUID()));
     }
 }

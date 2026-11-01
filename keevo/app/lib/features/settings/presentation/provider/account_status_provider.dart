@@ -1,12 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:keevo_core/di/core_providers.dart';
 
-import '../../../auth/domain/repository/token_storage.dart';
-import '../../../auth/presentation/provider/auth_provider.dart';
 import 'subscription_info_provider.dart';
 
-/// AccountStatus — reflects the tenant's account state from the JWT or subscription.
+/// AccountStatus — reflects the tenant's account state from the profile or subscription.
 ///
 /// Used by [SuspensionBanner] to show contextual banners.
 enum AccountStatus {
@@ -14,7 +11,7 @@ enum AccountStatus {
   active,
 
   /// Tenant is manually suspended by Super Admin — writes are blocked.
-  /// Source: JWT claim `tenantStatus = SUSPENDED` (decoded via TokenStorage).
+  /// Source: the profile's account status `SUSPENDED` (Story 16.11).
   suspended,
 
   /// Tenant was on PREMIUM_TRIAL but it expired → downgraded to FREE.
@@ -23,30 +20,9 @@ enum AccountStatus {
   trialExpired,
 }
 
-/// Decodes the `tenantStatus` claim from the stored JWT access token.
-///
-/// Returns `null` if the token is absent, malformed, or the claim is missing.
-/// Mirroring the JWT-decode pattern used in app_router.dart:_isTenantActive
-/// and auth_provider.dart:_extractFirstNameFromJwt.
-Future<String?> _readTenantStatusClaim(TokenStorage storage) async {
-  final token = await storage.getToken();
-  if (token == null) return null;
-
-  final parts = token.split('.');
-  if (parts.length != 3) return null;
-
-  try {
-    final payload = utf8.decode(
-      base64Url.decode(base64Url.normalize(parts[1])),
-    );
-    final claims = jsonDecode(payload) as Map<String, dynamic>;
-    return claims['tenantStatus'] as String?;
-  } catch (_) {
-    return null;
-  }
-}
-
-/// FutureProvider that asynchronously reads the tenantStatus claim.
+/// The account status (`ACTIVE`, `SUSPENDED`, `DELETION_PENDING`…) of the
+/// cached profile — Story 16.11: read from `GET /api/v1/auth/profile` with
+/// every session, never from the token.
 ///
 /// Public so tests can `await .future` before reading [accountStatusProvider].
 /// Invalidated at every auth transition (login, tenant selection, logout —
@@ -56,13 +32,13 @@ Future<String?> _readTenantStatusClaim(TokenStorage storage) async {
 /// new session and on sign-out (v1s-16-13), and [accountStatusProvider]
 /// ignores it while it reloads, so a previous tenant's plan never shows.
 final tenantStatusClaimProvider = FutureProvider<String?>(
-  (ref) => _readTenantStatusClaim(ref.watch(tokenStorageProvider)),
+  (ref) async => ref.watch(sharedPreferencesProvider).getString(kTenantStatusKey),
 );
 
 /// [accountStatusProvider] — provides the current account status.
 ///
 /// Derived from two sources (evaluated in priority order):
-/// 1. JWT claim `tenantStatus` == 'SUSPENDED' → [AccountStatus.suspended]
+/// 1. Profile account status == 'SUSPENDED'  → [AccountStatus.suspended]
 /// 2. Subscription `planType` == 'FREE'       → [AccountStatus.trialExpired]
 /// 3. Otherwise                                → [AccountStatus.active]
 ///

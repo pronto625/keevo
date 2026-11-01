@@ -52,7 +52,7 @@ class AuthControllerChangePasswordTest {
     @BeforeEach
     void setUp() {
         // AuthController — standalone setup; pass null for unused use cases (Story 14.12 adds 2 more)
-        AuthController authController = new AuthController(null, null, null, null, changePasswordUseCase, null, null, null);
+        AuthController authController = new AuthController(null, null, null, null, changePasswordUseCase, null, null, null, null);
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

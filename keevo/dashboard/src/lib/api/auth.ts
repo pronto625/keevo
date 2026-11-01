@@ -1,5 +1,6 @@
 import axios, { isAxiosError } from "axios";
-import type { LoginResponse, LoginSessionResponse } from "@/types/auth";
+import type { LoginResponse, LoginSessionResponse, UserProfile } from "@/types/auth";
+import { deviceLabel } from "@/lib/auth/session";
 
 export const INVALID_CREDENTIALS_MESSAGE = "Numéro ou mot de passe incorrect";
 export const ACCESS_DENIED_MESSAGE = "Accès refusé — compte super admin requis.";
@@ -50,8 +51,27 @@ export async function login(
 
   const step2 = await authClient.post<LoginResponse>(
     "/auth/select-tenant",
-    { tenantCode: "KV-ADMIN", loginToken }
+    { tenantCode: "KV-ADMIN", loginToken, deviceLabel: deviceLabel() }
   );
 
+  // Story 16.11 — the access token proves identity only: the role is read from the profile.
+  const profile = await fetchProfile(step2.data.accessToken);
+  if (profile.role !== "SUPER_ADMIN") {
+    // Close the session tenant selection just opened (best effort).
+    try {
+      await authClient.post("/auth/logout", { refreshToken: step2.data.refreshToken });
+    } catch {
+      // ignored: the refusal below is what matters
+    }
+    throw new Error(ACCESS_DENIED_MESSAGE);
+  }
   return step2.data;
+}
+
+/** Story 16.11 — identity of the session (role, first name…) from `GET /auth/profile`. */
+export async function fetchProfile(accessToken: string): Promise<UserProfile> {
+  const res = await authClient.get<UserProfile>("/auth/profile", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  return res.data;
 }

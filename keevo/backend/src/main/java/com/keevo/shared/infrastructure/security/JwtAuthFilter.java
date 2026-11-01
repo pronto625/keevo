@@ -1,11 +1,12 @@
 package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.keevo.identity.api.TokenRevocationPort;
 import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.infrastructure.security.access.AccessState;
+import com.keevo.shared.infrastructure.security.access.AccessStateService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -17,10 +18,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.dao.DataAccessException;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -74,25 +73,29 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/v1/auth/change-password"
     );
 
+    /**
+     * Story 16.11 — read-only path also allowed during a forced password change: the app learns
+     * the flag (and onboarding / account status) from the profile.
+     */
+    private static final String PROFILE_PATH = "/api/v1/auth/profile";
+
     private final JwtTokenProvider jwtTokenProvider;
     private final ObjectMapper objectMapper;
     private final TenantSchemaSyncService tenantSchemaSyncService;
-    private final JdbcTemplate jdbcTemplate;
-    private final TokenRevocationPort tokenRevocationPort;
+    /** Story 16.11 — server-side access state (role, store, statuses, revocation, sessions). */
+    private final AccessStateService accessStates;
     /** Story 9-4 — DAU/MAU tracking (asynchronous, never throws). */
     private final UserActivityRecorder userActivityRecorder;
 
     public JwtAuthFilter(JwtTokenProvider jwtTokenProvider,
                          ObjectMapper objectMapper,
                          TenantSchemaSyncService tenantSchemaSyncService,
-                         JdbcTemplate jdbcTemplate,
-                         TokenRevocationPort tokenRevocationPort,
+                         AccessStateService accessStates,
                          UserActivityRecorder userActivityRecorder) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
         this.tenantSchemaSyncService = tenantSchemaSyncService;
-        this.jdbcTemplate = jdbcTemplate;
-        this.tokenRevocationPort = tokenRevocationPort;
+        this.accessStates = java.util.Objects.requireNonNull(accessStates, "accessStates");
         this.userActivityRecorder = java.util.Objects.requireNonNull(userActivityRecorder, "userActivityRecorder");
     }
 
@@ -133,39 +136,86 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
+            // Story 16.11 — the token proves identity only (sub, tenantId, sid, iat, exp). Role,
+            // store, membership/employee status, password flag, account status, revocation cutoff
+            // and session validity are read from the database (cached ≤ 30 s, evicted on every
+            // change on all instances). Legacy claims of V1 tokens are never read here.
             String tenantId = jwtTokenProvider.extractTenantId(claims);
-            String role = jwtTokenProvider.extractRole(claims);
             UUID userId = jwtTokenProvider.extractUserId(claims);
-            String tenantStatus = jwtTokenProvider.extractTenantStatus(claims);
-            String firstName = jwtTokenProvider.extractFirstName(claims); // Story 14.10 — may be null
+            UUID sessionId = jwtTokenProvider.extractSessionId(claims);
 
-            // S5 / ARCH18 (B-HIGH-6, Story 12-5): validate tenantId for ALL roles before it
-            // reaches any SQL path. The connection provider's search_path gate is bypassed by
-            // fully-qualified "schema"."table" JDBC (revocation adapter, EMPLOYEE branch) — the
-            // schema portion MUST be validated. RS256 mitigates forgery but defense-in-depth
-            // requires no unvalidated claim ever enters a SQL string.
-            // The SUPER_ADMIN system tenant (schema "public") is the only exception: its requests run
-            // no tenant-qualified SQL (EMPLOYEE branch is role-gated, revocation query is parameterized).
+            // S5 / ARCH18 (Story 12-5): validate tenantId before it reaches any SQL path. The
+            // super-admin system account (schema "public") is the only exception; its role is
+            // checked against the database below.
+            boolean platformSchema = TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantId);
             String schema;
             try {
-                schema = TenantSchema.isPlatformAdminSession(tenantId, role)
-                        ? tenantId
-                        : TenantSchema.validate(tenantId);
+                schema = platformSchema ? tenantId : TenantSchema.validate(tenantId);
             } catch (IllegalArgumentException ex) {
                 writeError(response, "TOKEN_INVALID");
                 return;
             }
 
-            // Story 12.2 — NFR12 (<5min session revocation, B-HIGH-5/S2): reject access tokens
-            // issued BEFORE the membership's tokens_valid_after cutoff. Applies to ALL roles
-            // (OWNER + EMPLOYEE), BEFORE TenantContext is set so a revoked token never seeds
-            // the ThreadLocal. EMPLOYEE per-request DB check below remains as defense-in-depth.
-            // NB: `iat` is a JWT NumericDate (seconds, RFC 7519) while `tva` is a timestamp(6)
-            // (microseconds). Truncate tva to seconds before comparing — otherwise a freshly-
-            // minted post-revoke token (revoke + mint within the same second, sub-second tva)
-            // is falsely rejected as SESSION_REVOKED, locking the user out right after a
-            // password change. Sub-second race is within NFR12's <5min tolerance.
-            Instant tva = tokenRevocationPort.getTokensValidAfter(userId, tenantId);
+            // Story 16.11 — a token without sid predates device sessions (60-day tokens): closing
+            // its device could not cut it. Past the current access-token lifetime it is treated as
+            // expired; installed V1 apps renew on TOKEN_EXPIRED (their refresh rows carry a session).
+            if (sessionId == null) {
+                Instant iat = jwtTokenProvider.extractIssuedAt(claims);
+                if (iat == null || iat.plus(jwtTokenProvider.accessTokenLifetime())
+                        .plusSeconds(JwtTokenProvider.CLOCK_SKEW_SECONDS).isBefore(Instant.now())) {
+                    writeError(response, "TOKEN_EXPIRED");
+                    return;
+                }
+            }
+
+            AccessState state;
+            try {
+                state = accessStates.get(userId, schema);
+            } catch (DataAccessException ex) {
+                // Fail closed: without the access state the role cannot be known.
+                log.error("Access state lookup failed for user {} tenant {}", userId, tenantId, ex);
+                writeErrorWithStatus(response, "INTERNAL_ERROR",
+                        HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                return;
+            }
+            if (state == null) {
+                writeError(response, "ACCOUNT_INACTIVE");
+                return;
+            }
+            // Story 16.11 — the device session was closed (« Appareils connectés », sign-out,
+            // replay): this device must sign in again. Tokens without sid are bounded by the
+            // access-token lifetime check above.
+            try {
+                if (sessionId != null) {
+                    // A session missing from the cached state reloads it: go on with the fresh one.
+                    state = accessStates.withOpenSession(userId, schema, state, sessionId);
+                    if (state == null) {
+                        writeError(response, "SESSION_REVOKED");
+                        return;
+                    }
+                }
+            } catch (DataAccessException ex) {
+                log.error("Session lookup failed for user {} tenant {}", userId, tenantId, ex);
+                writeErrorWithStatus(response, "INTERNAL_ERROR",
+                        HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                return;
+            }
+
+            if ("DELETED".equals(state.tenantStatus())) {
+                writeError(response, "ACCOUNT_INACTIVE");
+                return;
+            }
+            String role = state.role();
+            if (platformSchema != TenantSchema.isPlatformAdminSession(schema, role)) {
+                // "public" is the super-admin's account only; a super-admin never acts in a shop.
+                writeError(response, "TOKEN_INVALID");
+                return;
+            }
+
+            // Story 12.2 — tokens issued before the membership's tokens_valid_after cutoff are
+            // revoked. `iat` is in seconds (RFC 7519), `tva` in microseconds: truncate tva so a
+            // token minted in the same second right after a revoke is not refused.
+            Instant tva = state.tokensValidAfter();
             if (tva != null) {
                 Instant iat = jwtTokenProvider.extractIssuedAt(claims);
                 if (iat != null && iat.isBefore(tva.truncatedTo(ChronoUnit.SECONDS))) {
@@ -173,102 +223,74 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     return;
                 }
             }
-
+            if (!state.membershipActive()) {
+                writeError(response, "ACCOUNT_INACTIVE");
+                return;
+            }
             // Set multi-tenant context for JPA routing
             TenantContext.setCurrentTenant(tenantId);
-            // Story 11.1 — per-tenant log correlation. Seeded only after the revocation check, so an
-            // invalid/expired/login_pending/revoked token never reaches the MDC. Later rejections
-            // (SUSPENDED tenant, employee guards) do carry tenantId/userId — wanted for diagnosis.
-            // Removed in the same finally as TenantContext.
-            if (tenantId != null) {
-                MDC.put(MDC_TENANT_ID, tenantId);
-            }
-            if (userId != null) {
-                MDC.put(MDC_USER_ID, userId.toString());
-            }
+            // Story 11.1 — per-tenant log correlation. Seeded only after the revocation checks, so a
+            // revoked token never reaches the MDC. Removed in the same finally as TenantContext.
+            MDC.put(MDC_TENANT_ID, tenantId);
+            MDC.put(MDC_USER_ID, userId.toString());
 
+            String tenantStatus = state.tenantStatus();
             // SUSPENDED tenants: block all write operations (manual admin lockout).
             // Read operations (GET, HEAD) are always permitted — data is preserved.
-            // Note: natural trial/premium expiry does NOT set SUSPENDED — it downgrades to FREE.
-            if ("SUSPENDED".equals(tenantStatus)
-                    && isWriteMethod(request.getMethod())) {
-                writeErrorWithStatus(response, "ACCOUNT_SUSPENDED",
-                        jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+            if ("SUSPENDED".equals(tenantStatus) && isWriteMethod(request.getMethod())) {
+                writeErrorWithStatus(response, "ACCOUNT_SUSPENDED", HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
 
-            // DELETION_PENDING tenants: block all write operations (Story 14.5, FR91).
-            // Mirror of SUSPENDED above — same pattern, distinct domainCode for client diagnostics.
-            // Read operations (GET, HEAD) are always permitted during the grace period.
-            // EXCEPTION: /api/v1/account/delete/cancel is whitelisted (owner must be able to cancel).
+            // DELETION_PENDING tenants: block all write operations (Story 14.5, FR91), except the
+            // cancellation itself. Reads stay permitted during the grace period.
             if ("DELETION_PENDING".equals(tenantStatus)
                     && isWriteMethod(request.getMethod())
                     && !request.getRequestURI().equals("/api/v1/account/delete/cancel")) {
-                writeErrorWithStatus(response, "ACCOUNT_DELETION_PENDING",
-                        jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
+                writeErrorWithStatus(response, "ACCOUNT_DELETION_PENDING", HttpServletResponse.SC_FORBIDDEN);
                 return;
             }
 
             // Sync tenant schema against public (no-op if already done this JVM lifetime)
             tenantSchemaSyncService.syncIfNeeded(tenantId);
 
-            // Story 3.5 — EMPLOYEE runtime guards (DB-backed, runs AFTER TenantContext is set).
-            // `schema` was validated above for ALL roles (Story 12-5 defense-in-depth); re-checked at use.
+            // Story 3.5 — EMPLOYEE runtime guards, from the employee row of the access state.
+            AccessState.EmployeeState employee = state.employee();
             if ("EMPLOYEE".equals(role)) {
-                try {
-                    Map<String, Object> empRow = jdbcTemplate.queryForMap(
-                            "SELECT store_id, status, password_change_required FROM \""
-                            + TenantSchema.validate(schema) + "\".employees WHERE user_id = ? LIMIT 1", userId);
-
-                    if ("INACTIVE".equals(empRow.get("status"))) {
-                        writeError(response, "ACCOUNT_INACTIVE");
-                        return;
-                    }
-
-                    UUID jwtStoreId = jwtTokenProvider.extractStoreId(claims);
-                    UUID dbStoreId = (UUID) empRow.get("store_id");
-                    // Reject if storeId is absent from JWT (pre-3.5 token) or doesn't match DB.
-                    if (!java.util.Objects.equals(dbStoreId, jwtStoreId)) {
-                        writeError(response, "STORE_REASSIGNED");
-                        return;
-                    }
-
-                    Boolean pwdChangeReq = (Boolean) empRow.get("password_change_required");
-                    String path = request.getRequestURI();
-                    if (Boolean.TRUE.equals(pwdChangeReq)
-                            && !PASSWORD_CHANGE_ALLOWED.contains(path)) {
-                        writeErrorWithStatus(response, "PASSWORD_CHANGE_REQUIRED",
-                                HttpServletResponse.SC_FORBIDDEN);
-                        return;
-                    }
-                } catch (EmptyResultDataAccessException ex) {
+                if (employee == null || "INACTIVE".equals(employee.status())) {
                     writeError(response, "ACCOUNT_INACTIVE");
                     return;
-                } catch (DataAccessException ex) {
-                    // Story 12.12 (D10): `LIMIT 1` + UNIQUE(user_id) make >1 row impossible; any
-                    // remaining DB failure must not escape the filter (servlet HTML 500 + stack).
-                    log.error("EMPLOYEE guard lookup failed for user {} tenant {}", userId, tenantId, ex);
-                    writeErrorWithStatus(response, "INTERNAL_ERROR",
-                            HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                }
+                // Story 16.11 — compatibility only: an installed V1 app holding a token whose legacy
+                // storeId claim differs from the database renews once (STORE_REASSIGNED). A token
+                // without the claim simply follows the database store.
+                UUID legacyStoreId = jwtTokenProvider.extractLegacyStoreId(claims);
+                if (legacyStoreId != null && !legacyStoreId.equals(employee.storeId())) {
+                    writeError(response, "STORE_REASSIGNED");
+                    return;
+                }
+                boolean profileRead = "GET".equals(request.getMethod())
+                        && PROFILE_PATH.equals(request.getRequestURI());
+                if (employee.passwordChangeRequired()
+                        && !PASSWORD_CHANGE_ALLOWED.contains(request.getRequestURI()) && !profileRead) {
+                    writeErrorWithStatus(response, "PASSWORD_CHANGE_REQUIRED", HttpServletResponse.SC_FORBIDDEN);
                     return;
                 }
             }
 
-            // Populate Spring Security context
+            // Populate Spring Security context — authorities from the database role only.
             var auth = new UsernamePasswordAuthenticationToken(
                     userId, null,
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-            // Story 14.10: store firstName + storeId in AuthDetails for controller access
             if ("EMPLOYEE".equals(role)) {
-                UUID storeId = jwtTokenProvider.extractStoreId(claims);
-                auth.setDetails(AuthDetails.employee(firstName, storeId));
+                auth.setDetails(new AuthDetails(employee.firstName(), employee.storeId(), sessionId));
             } else {
-                auth.setDetails(AuthDetails.owner(firstName));
+                // Owner: first name of its employee row when it has one (promoted employee).
+                auth.setDetails(new AuthDetails(employee != null ? employee.firstName() : null, null, sessionId));
             }
             SecurityContextHolder.getContext().setAuthentication(auth);
 
             // Story 9-4 — DAU/MAU: authentication succeeded, record the user's activity of the day.
-            // Asynchronous and deduplicated in memory (no DB write on this thread); SUPER_ADMIN skipped.
             recordActivity(userId, tenantId, role);
 
             filterChain.doFilter(request, response);

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:keevo_core/auth/jwt_claims.dart';
+import 'package:keevo_core/di/core_providers.dart' show kTenantStatusKey;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../auth/domain/repository/token_storage.dart';
@@ -82,7 +83,9 @@ class AccountDeletionRepositoryImpl implements AccountDeletionRepository {
         await _prefs.remove(prefsKey(tenantId));
       }
     }
-    if (claims?.tenantStatus == 'DELETION_PENDING') {
+    // Story 16.11 — the account status of the cached profile (refreshed with
+    // every session renewal), never a token claim.
+    if (_prefs.getString(kTenantStatusKey) == 'DELETION_PENDING') {
       return const DeletionPendingStatus();
     }
     return null;

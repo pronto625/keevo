@@ -144,7 +144,19 @@ public final class CurrentActor {
     }
 
     /**
-     * Human-readable actor label for notifications: the JWT {@code firstName} when present,
+     * Story 16.11 — the device session ({@code sid}) of the current access token, or {@code null}
+     * when unauthenticated or the token predates device sessions.
+     */
+    public static UUID sessionIdOrNull() {
+        Authentication auth = authentication();
+        if (auth != null && auth.getDetails() instanceof AuthDetails ad) {
+            return ad.sessionId();
+        }
+        return null;
+    }
+
+    /**
+     * Human-readable actor label for notifications: the employee first name when known,
      * otherwise a role-based fallback. Never returns a raw UUID.
      */
     public static String actorLabel() {

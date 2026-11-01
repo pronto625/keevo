@@ -109,7 +109,7 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
             jdbc.update("INSERT INTO \"" + schema + "\".stock_levels (product_id, store_id, quantity) "
                     + "VALUES (?, ?, 100)", productId, storeId);
         }
-        token = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        token = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
         year = String.valueOf(LocalDate.now(ZoneId.of("Africa/Douala")).getYear());
     }
 

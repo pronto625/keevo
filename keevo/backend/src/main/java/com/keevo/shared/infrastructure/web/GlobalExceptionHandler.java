@@ -54,6 +54,7 @@ public class GlobalExceptionHandler {
             Map.entry("INVALID_CREDENTIALS",       "Téléphone ou mot de passe incorrect"),
             Map.entry("ACCOUNT_LOCKED",            "Compte temporairement bloqué, réessayez dans 15 minutes"),
             Map.entry("TOKEN_EXPIRED",             "Session expirée, veuillez vous reconnecter"),
+            Map.entry("REFRESH_TOKEN_INVALID",     "Session expirée, veuillez vous reconnecter"),
             Map.entry("TOKEN_INVALID",             "Jeton d'authentification invalide"),
             Map.entry("UNAUTHORIZED",              "Accès non autorisé"),
             Map.entry("FORBIDDEN",                 "Vous n'avez pas les droits nécessaires"),
@@ -80,6 +81,7 @@ public class GlobalExceptionHandler {
             Map.entry("SAME_SOURCE_DESTINATION",    "Source et destination doivent être différentes"),
             Map.entry("CSV_PARSE_ERROR",           "Erreur de lecture du fichier CSV"),
             Map.entry("EMPLOYEE_NOT_FOUND",        "Employé introuvable"),
+            Map.entry("DEVICE_SESSION_NOT_FOUND",  "Cet appareil n'est plus connecté"),
             Map.entry("PHONE_ALREADY_REGISTERED",  "Ce numéro de téléphone est déjà utilisé par un autre compte"),
             Map.entry("CANNOT_CHANGE_OWN_ROLE",    "Vous ne pouvez pas modifier votre propre rôle"),
             Map.entry("CANNOT_DEMOTE_LAST_OWNER",  "Impossible de retirer le dernier propriétaire actif du compte"), // demotion AND deactivation (v1s-13-9)
@@ -361,6 +363,7 @@ public class GlobalExceptionHandler {
                  "CLIENT_NOT_FOUND", "SUPPLIER_NOT_FOUND",
                  "STOCK_NOT_FOUND", "STORE_NOT_FOUND",
                  "EMPLOYEE_NOT_FOUND",
+                 "DEVICE_SESSION_NOT_FOUND",
                  "MEMBERSHIP_NOT_FOUND",
                  "SUBSCRIPTION_NOT_FOUND",
                  "SALE_NOT_FOUND",

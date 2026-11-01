@@ -7,6 +7,7 @@ import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -52,13 +53,29 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
         springRepository.revokeAllByUserId(userId);
     }
 
+    @Override
+    public List<RefreshToken> findLiveSessions(UUID userId, String tenantId, Instant now) {
+        return springRepository.findLive(userId, tenantId, now).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public int revokeSession(UUID userId, String tenantId, UUID sessionId) {
+        return springRepository.revokeSession(userId, tenantId, sessionId);
+    }
+
+    @Override
+    public int revokeSessionChain(UUID sessionId) {
+        return springRepository.revokeSessionChain(sessionId);
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private RefreshTokenJpaEntity toEntity(RefreshToken t) {
         return new RefreshTokenJpaEntity(
             t.id(), t.userId(), t.tenantId(),
             t.tokenHash(), t.expiresAt(), t.revoked(),
-            t.replacedById(), t.rotatedAt()
+            t.replacedById(), t.rotatedAt(),
+            t.sessionId(), t.deviceId(), t.deviceLabel(), t.lastUsedAt()
         );
     }
 
@@ -66,7 +83,9 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
         return new RefreshToken(
             e.getId(), e.getUserId(), e.getTenantId(),
             e.getTokenHash(), e.getExpiresAt(), e.isRevoked(),
-            e.getReplacedById(), e.getRotatedAt()
+            e.getReplacedById(), e.getRotatedAt(),
+            e.getSessionId() != null ? e.getSessionId() : e.getId(),
+            e.getDeviceId(), e.getDeviceLabel(), e.getLastUsedAt()
         );
     }
 }

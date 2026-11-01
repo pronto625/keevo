@@ -7,7 +7,6 @@ import com.keevo.inventory.counting.domain.model.InventorySessionStatus;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -49,7 +48,6 @@ class InventorySessionControllerTest {
     @Mock private CancelInventorySessionUseCase cancelSessionUseCase;
     @Mock private ListInventorySessionsUseCase listSessionsUseCase;
     @Mock private ValidateInventoryUseCase validateInventoryUseCase;
-    @Mock private JwtTokenProvider jwtTokenProvider;
 
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -62,7 +60,7 @@ class InventorySessionControllerTest {
         var controller = new InventorySessionController(
                 createSessionUseCase, getActiveSessionUseCase,
                 cancelSessionUseCase, listSessionsUseCase,
-                validateInventoryUseCase, jwtTokenProvider);
+                validateInventoryUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -79,9 +77,6 @@ class InventorySessionControllerTest {
 
     private void mockJwtRole(String role) {
         authenticateAs(role);
-        when(jwtTokenProvider.parseToken(anyString())).thenReturn(
-                Jwts.claims().subject(actorId.toString()).add("role", role).build());
-        when(jwtTokenProvider.extractRole(any(Claims.class))).thenReturn(role);
     }
 
     @Test

@@ -41,9 +41,10 @@ public class ReassignStoreService implements ReassignStoreUseCase {
         // 2. Update store assignment
         Employee updated = employeeRepository.updateStoreId(command.employeeId(), command.newStoreId());
 
-        // 3. No session revocation: JwtAuthFilter answers STORE_REASSIGNED to the
-        //    old token and the app renews through its refresh token, which issues
-        //    a token carrying the new storeId — no re-login needed.
+        // 3. No session revocation (Story 16.11): the store is read from the database on every
+        //    request (access state, evicted on all instances by the repository write), so the
+        //    employee works in the new store at the next request. STORE_REASSIGNED only remains
+        //    for tokens carrying a legacy storeId claim (installed V1 apps), which then renew.
 
         // 4. Publish event
         eventPublisher.publishEvent(new EmployeeStoreReassignedEvent(

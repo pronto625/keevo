@@ -72,6 +72,14 @@ final currentUserPhoneProvider = Provider<String?>((ref) {
 /// Stored in SharedPreferences (not secret, just a UI routing flag).
 const kPasswordChangeRequiredKey = 'pwd_change_req';
 
+/// Story 16.11 — server-side identity cached from `GET /api/v1/auth/profile`
+/// for offline display only (the access token proves identity, never rights;
+/// the server decides on every request). Written by the session applier.
+const kTenantStatusKey = 'session_tenant_status';
+const kUserStoreIdKey = 'session_store_id';
+const kUserStoreNameKey = 'session_store_name';
+const kOnboardingCompletedKey = 'session_onboarding_completed';
+
 final passwordChangeRequiredProvider = Provider<bool>((ref) {
   return ref.watch(sharedPreferencesProvider).getBool(kPasswordChangeRequiredKey) ?? false;
 });

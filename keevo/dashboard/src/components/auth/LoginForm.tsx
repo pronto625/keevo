@@ -19,7 +19,7 @@ export function LoginForm() {
     setLoading(true);
     try {
       const res = await login(phoneNumber, password);
-      storeToken(res.accessToken);
+      storeToken(res.accessToken, res.refreshToken);
       router.push("/tenants");
     } catch (err: unknown) {
       setError(loginErrorMessage(err));

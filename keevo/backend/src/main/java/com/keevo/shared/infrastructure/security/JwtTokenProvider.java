@@ -48,108 +48,67 @@ public class JwtTokenProvider {
     }
 
     /**
-     * Generate a signed RS256 JWT access token with tenant status and firstName claims.
+     * Story 16.11 — indicative V1 claims, written only while {@code keevo.jwt.legacy-claims} is on
+     * (until Story 16.7 forces the minimum app version). Installed V1 apps read them for display;
+     * <b>no server code ever reads them</b> (guard test {@code TokenClaimsGuardTest}) — role, store,
+     * account status and the password-change flag come from the database on every request.
+     */
+    public record LegacyClaims(String role, String tenantStatus, UUID storeId,
+                               boolean passwordChangeRequired, Boolean onboardingCompleted) {
+    }
+
+    /**
+     * Story 16.11 — access token proving identity only: {@code sub}, {@code tenantId}, {@code sid}
+     * (device session), {@code iat}, {@code exp}. Lifetime {@code keevo.jwt.access-token-expiry-minutes}.
      *
-     * @param userId       subject (user UUID)
-     * @param tenantId     tenant schema name (e.g., "kv_abc123")
-     * @param role         user role
-     * @param tenantStatus tenant status ("ACTIVE" | "SUSPENDED")
-     * @param firstName    user's first name (nullable — omitted from JWT if null)
+     * @param userId    subject (user UUID)
+     * @param tenantId  tenant schema name (e.g. {@code kv_abc123}, {@code public} for the super-admin)
+     * @param sessionId device session id ({@code refresh_tokens.session_id}); omitted when null
+     * @param legacy    indicative V1 claims, written only when the legacy flag is on; may be null
      * @return compact JWT string
      */
-    public String generateAccessToken(UUID userId, String tenantId, String role,
-                                       String tenantStatus, String firstName) {
+    public String generateAccessToken(UUID userId, String tenantId, UUID sessionId, LegacyClaims legacy) {
         Instant now = Instant.now();
         var builder = Jwts.builder()
                 .subject(userId.toString())
                 .claim("tenantId", tenantId)
-                .claim("role", role)
-                .claim("tenantStatus", tenantStatus)
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(jwtProperties.getAccessTokenExpiryHours(), ChronoUnit.HOURS)))
+                .expiration(Date.from(now.plus(jwtProperties.getAccessTokenExpiryMinutes(), ChronoUnit.MINUTES)))
                 .signWith(privateKey, Jwts.SIG.RS256);
-        if (firstName != null) {
-            builder.claim("firstName", firstName);
+        if (sessionId != null) {
+            builder.claim("sid", sessionId.toString());
+        }
+        if (legacy != null && jwtProperties.isLegacyClaims()) {
+            if (legacy.role() != null) builder.claim("role", legacy.role());
+            if (legacy.tenantStatus() != null) builder.claim("tenantStatus", legacy.tenantStatus());
+            if (legacy.storeId() != null) builder.claim("storeId", legacy.storeId().toString());
+            if (legacy.passwordChangeRequired()) builder.claim("passwordChangeRequired", true);
+            if (legacy.onboardingCompleted() != null) {
+                builder.claim("onboardingCompleted", legacy.onboardingCompleted());
+            }
         }
         return builder.compact();
     }
 
-    /** Backward-compatible overload — firstName defaults to null. */
-    public String generateAccessToken(UUID userId, String tenantId, String role, String tenantStatus) {
-        return generateAccessToken(userId, tenantId, role, tenantStatus, (String) null);
+    /** Story 16.11 — configured access-token lifetime. */
+    public java.time.Duration accessTokenLifetime() {
+        return java.time.Duration.ofMinutes(jwtProperties.getAccessTokenExpiryMinutes());
     }
 
     /**
-     * Generate a signed RS256 JWT access token (defaults tenantStatus to "ACTIVE", no firstName).
-     *
-     * @param userId   subject (user UUID)
-     * @param tenantId tenant schema name (e.g., "kv_abc123")
-     * @param role     user role
-     * @return compact JWT string
+     * Session-less access token (tests and tooling). The role is only an indicative legacy claim:
+     * the server reads the real role from the database.
      */
     public String generateAccessToken(UUID userId, String tenantId, String role) {
-        return generateAccessToken(userId, tenantId, role, "ACTIVE", (String) null);
+        return generateAccessToken(userId, tenantId, null, new LegacyClaims(role, "ACTIVE", null, false, null));
     }
 
-    /**
-     * Generate a signed RS256 JWT with storeId, passwordChangeRequired, and firstName claims.
-     * Story 3.5 — EMPLOYEE tokens include store assignment and forced-change flag.
-     * Story 7.1 — firstName claim for dashboard greeting.
-     *
-     * @param userId                  subject (user UUID)
-     * @param tenantId                tenant schema name
-     * @param role                    user role
-     * @param tenantStatus            tenant status
-     * @param storeId                 assigned store UUID (null for OWNER)
-     * @param passwordChangeRequired  true if employee must change password
-     * @param firstName               user's first name (nullable — omitted if null)
-     * @return compact JWT string
-     */
-    public String generateAccessToken(UUID userId, String tenantId, String role,
-                                       String tenantStatus, UUID storeId,
-                                       boolean passwordChangeRequired, String firstName) {
-        return generateAccessToken(userId, tenantId, role, tenantStatus, storeId,
-                passwordChangeRequired, firstName, null);
-    }
-
-    /**
-     * Full-claims access token. {@code onboardingCompleted} is the authoritative
-     * "setup wizard done" signal for the app (tenantStatus is ACTIVE from the
-     * moment the account exists, so it cannot tell); omitted when null.
-     */
-    public String generateAccessToken(UUID userId, String tenantId, String role,
-                                       String tenantStatus, UUID storeId,
-                                       boolean passwordChangeRequired, String firstName,
-                                       Boolean onboardingCompleted) {
-        Instant now = Instant.now();
-        var builder = Jwts.builder()
-                .subject(userId.toString())
-                .claim("tenantId", tenantId)
-                .claim("role", role)
-                .claim("tenantStatus", tenantStatus)
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(jwtProperties.getAccessTokenExpiryHours(), ChronoUnit.HOURS)))
-                .signWith(privateKey, Jwts.SIG.RS256);
-        if (storeId != null) {
-            builder.claim("storeId", storeId.toString());
-        }
-        if (passwordChangeRequired) {
-            builder.claim("passwordChangeRequired", true);
-        }
-        if (firstName != null) {
-            builder.claim("firstName", firstName);
-        }
-        if (onboardingCompleted != null) {
-            builder.claim("onboardingCompleted", onboardingCompleted);
-        }
-        return builder.compact();
-    }
-
-    /** Backward-compatible overload — firstName defaults to null. */
+    /** Session-less access token with legacy store / password claims (tests and tooling). */
     public String generateAccessToken(UUID userId, String tenantId, String role,
                                        String tenantStatus, UUID storeId,
                                        boolean passwordChangeRequired) {
-        return generateAccessToken(userId, tenantId, role, tenantStatus, storeId, passwordChangeRequired, null);
+        return generateAccessToken(userId, tenantId, null,
+                new LegacyClaims(role, tenantStatus, storeId, passwordChangeRequired, null));
     }
 
     /**
@@ -238,35 +197,33 @@ public class JwtTokenProvider {
         return claims.get("tenantId", String.class);
     }
 
-    /** Extract role from parsed claims. */
-    public String extractRole(Claims claims) {
-        return claims.get("role", String.class);
+    /**
+     * Story 16.11 — device session id ({@code sid}), or {@code null} for a token issued before
+     * device sessions existed (or malformed).
+     */
+    public UUID extractSessionId(Claims claims) {
+        String sid = claims.get("sid", String.class);
+        if (sid == null) return null;
+        try {
+            return UUID.fromString(sid);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /**
-     * Extract tenantStatus from parsed claims.
-     * Defaults to "ACTIVE" if the claim is absent (backward-compatible with old tokens).
+     * Story 16.11 — compatibility only: the legacy {@code storeId} claim of an installed V1 app's
+     * token, used by {@link JwtAuthFilter} solely to answer {@code STORE_REASSIGNED} once so the
+     * old app renews. Never an authorization input (the store always comes from the database).
      */
-    public String extractTenantStatus(Claims claims) {
-        String status = claims.get("tenantStatus", String.class);
-        return status != null ? status : "ACTIVE";
-    }
-
-    /** Extract storeId from parsed claims. Returns null if absent (OWNER tokens). */
-    public UUID extractStoreId(Claims claims) {
+    UUID extractLegacyStoreId(Claims claims) {
         String storeId = claims.get("storeId", String.class);
-        return storeId != null ? UUID.fromString(storeId) : null;
-    }
-
-    /** Extract passwordChangeRequired from parsed claims. Returns false if absent. */
-    public boolean extractPasswordChangeRequired(Claims claims) {
-        Boolean val = claims.get("passwordChangeRequired", Boolean.class);
-        return val != null && val;
-    }
-
-    /** Extract firstName from parsed claims. Returns null if absent (backward-compatible). */
-    public String extractFirstName(Claims claims) {
-        return claims.get("firstName", String.class);
+        if (storeId == null) return null;
+        try {
+            return UUID.fromString(storeId);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     /**

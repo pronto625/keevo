@@ -39,6 +39,7 @@ import '../../features/contact/presentation/provider/contact_provider.dart';
 import '../../features/dashboard/presentation/page/dashboard_page.dart';
 import '../../features/dashboard/presentation/page/store_dashboard_page.dart';
 import '../../features/debug/presentation/page/category_debug_page.dart';
+import '../../features/devices/presentation/page/connected_devices_page.dart';
 import '../../features/export/domain/model/export_models.dart';
 import '../../features/export/presentation/page/export_page.dart';
 import '../../features/export/presentation/page/local_export_page.dart';
@@ -818,6 +819,11 @@ List<RouteBase> buildAppRoutes({bool includeDebug = kDebugMode}) => [
     GoRoute(
       path: '/settings/account',
       builder: (_, __) => const AccountPage(),
+    ),
+    // ── Settings > Appareils connectés (Story 16.11 — all roles) ─────────
+    GoRoute(
+      path: '/settings/devices',
+      builder: (_, __) => const ConnectedDevicesPage(),
     ),
     // ── Settings > Change Password (Story 8.6 — OWNER + EMPLOYEE) ────────
     GoRoute(

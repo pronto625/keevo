@@ -36,7 +36,7 @@ class JwtTokenProviderTest {
     void setUp() throws Exception {
         privateKey = loadTestPrivateKey();
         publicKey = loadTestPublicKey();
-        JwtProperties props = new JwtProperties(24, 30);
+        JwtProperties props = new JwtProperties(30, 365);
         provider = new JwtTokenProvider(privateKey, publicKey, props);
     }
 
@@ -66,13 +66,12 @@ class JwtTokenProviderTest {
         // Every generator: all access-token overloads (sign-in, tenant selection,
         // renewal and super-admin all go through them) and the login token.
         java.util.List<String> tokens = java.util.List.of(
-                provider.generateAccessToken(user, "kv_a", "OWNER", "ACTIVE", "Awa"),
-                provider.generateAccessToken(user, "kv_a", "OWNER", "ACTIVE"),
                 provider.generateAccessToken(user, "kv_a", "OWNER"),
-                provider.generateAccessToken(user, "kv_a", "EMPLOYEE", "ACTIVE", store, true, "Paul"),
-                provider.generateAccessToken(user, "kv_a", "EMPLOYEE", "ACTIVE", store, true, "Paul", true),
                 provider.generateAccessToken(user, "kv_a", "EMPLOYEE", "ACTIVE", store, false),
-                provider.generateAccessToken(user, "public", "SUPER_ADMIN", "ACTIVE", null, false, "Toor", true),
+                provider.generateAccessToken(user, "kv_a", UUID.randomUUID(),
+                        new JwtTokenProvider.LegacyClaims("EMPLOYEE", "ACTIVE", store, true, true)),
+                provider.generateAccessToken(user, "public", UUID.randomUUID(),
+                        new JwtTokenProvider.LegacyClaims("SUPER_ADMIN", "ACTIVE", null, false, true)),
                 provider.generateLoginToken(user));
 
         for (String token : tokens) {
@@ -104,13 +103,23 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    @DisplayName("extractRole returns correct role from claims")
-    void should_extract_role_from_claims() {
-        String role = "EMPLOYEE";
-        String token = provider.generateAccessToken(UUID.randomUUID(), "KV-ABC", role);
+    @DisplayName("16.11 — access token: sub, tenantId, sid, iat, exp (+ indicative legacy claims while the flag is on), 30 min")
+    void identityOnlyToken() {
+        UUID sid = UUID.randomUUID();
+        UUID store = UUID.randomUUID();
+        var legacy = new JwtTokenProvider.LegacyClaims("EMPLOYEE", "ACTIVE", store, true, true);
 
-        Claims claims = provider.parseToken(token);
-        assertThat(provider.extractRole(claims)).isEqualTo(role);
+        Claims withLegacy = provider.parseToken(provider.generateAccessToken(UUID.randomUUID(), "kv_a", sid, legacy));
+        assertThat(provider.extractSessionId(withLegacy)).isEqualTo(sid);
+        assertThat(withLegacy.keySet()).contains("role", "storeId").doesNotContain("firstName");
+        assertThat(provider.extractLegacyStoreId(withLegacy)).isEqualTo(store);
+
+        JwtProperties strictProps = new JwtProperties(30, 365);
+        strictProps.setLegacyClaims(false);
+        JwtTokenProvider strict = new JwtTokenProvider(privateKey, publicKey, strictProps);
+        Claims minimal = strict.parseToken(strict.generateAccessToken(UUID.randomUUID(), "kv_a", sid, legacy));
+        assertThat(minimal.keySet()).containsExactlyInAnyOrder("sub", "tenantId", "sid", "iat", "exp");
+        assertThat(minimal.getExpiration().getTime() - minimal.getIssuedAt().getTime()).isEqualTo(30 * 60_000L);
     }
 
     // ── Token expiry ───────────────────────────────────────────────────────
@@ -232,53 +241,14 @@ class JwtTokenProviderTest {
         assertThat(provider.extractScope(claims)).isNull();
     }
 
-    // ── firstName claim (Story 7.1) ──────────────────────────────────────────
-
     @Test
-    @DisplayName("generateAccessToken includes firstName claim when provided")
-    void should_include_firstName_claim_when_provided() {
-        UUID userId = UUID.randomUUID();
-        String token = provider.generateAccessToken(userId, "kv_abc123", "EMPLOYEE",
-                "ACTIVE", "Simon");
-
+    @DisplayName("16.11 — no generator ever writes firstName")
+    void noFirstNameClaim() {
+        String token = provider.generateAccessToken(UUID.randomUUID(), "kv_test", "OWNER");
         Claims claims = provider.parseToken(token);
-        assertThat(provider.extractFirstName(claims)).isEqualTo("Simon");
-    }
-
-    @Test
-    @DisplayName("generateAccessToken omits firstName claim when null")
-    void should_omit_firstName_claim_when_null() {
-        String token = provider.generateAccessToken(UUID.randomUUID(), "kv_abc123", "OWNER");
-
-        Claims claims = provider.parseToken(token);
-        assertThat(provider.extractFirstName(claims)).isNull();
-    }
-
-    @Test
-    @DisplayName("7-arg generateAccessToken includes firstName claim for EMPLOYEE")
-    void should_include_firstName_in_7arg_overload() {
-        UUID userId = UUID.randomUUID();
-        UUID storeId = UUID.randomUUID();
-        String token = provider.generateAccessToken(userId, "kv_abc123", "EMPLOYEE",
-                "ACTIVE", storeId, true, "Loïc");
-
-        Claims claims = provider.parseToken(token);
-        assertThat(provider.extractFirstName(claims)).isEqualTo("Loïc");
-        assertThat(claims.get("storeId", String.class)).isEqualTo(storeId.toString());
-        assertThat(claims.get("passwordChangeRequired", Boolean.class)).isTrue();
-    }
-
-    @Test
-    @DisplayName("existing endpoints still work — 3-arg overload backward compatible")
-    void should_remain_backward_compatible_3arg() {
-        UUID userId = UUID.randomUUID();
-        String token = provider.generateAccessToken(userId, "kv_test", "OWNER");
-
-        Claims claims = provider.parseToken(token);
-        assertThat(claims.getSubject()).isEqualTo(userId.toString());
+        assertThat(claims.getSubject()).isNotNull();
         assertThat(claims.get("tenantId", String.class)).isEqualTo("kv_test");
-        assertThat(claims.get("role", String.class)).isEqualTo("OWNER");
-        assertThat(provider.extractFirstName(claims)).isNull();
+        assertThat(claims).doesNotContainKey("firstName");
     }
 
     // ── Refresh token ──────────────────────────────────────────────────────

@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -75,6 +76,7 @@ class AuthControllerTest {
     @MockitoBean GetUserProfileUseCase getUserProfileUseCase;
     @MockitoBean RequestPasswordResetUseCase requestPasswordResetUseCase;
     @MockitoBean ResetPasswordUseCase  resetPasswordUseCase;
+    @MockitoBean com.keevo.identity.auth.application.service.RefreshRateLimiter refreshRateLimiter;
     @MockitoBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach
@@ -255,7 +257,7 @@ class AuthControllerTest {
         UUID userId = UUID.randomUUID();
         AuthTokens tokens = new AuthTokens("new.access.token", "new-opaque-refresh-token",
                 86400L, userId, "kv_abc123", "OWNER");
-        when(refreshTokenUseCase.refresh("valid-refresh-token")).thenReturn(tokens);
+        when(refreshTokenUseCase.refresh(eq("valid-refresh-token"), any())).thenReturn(tokens);
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -270,7 +272,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("POST /refresh → 401 REFRESH_TOKEN_INVALID on expired or unknown token")
     void refresh_returns401OnInvalidRefreshToken() throws Exception {
-        when(refreshTokenUseCase.refresh(any()))
+        when(refreshTokenUseCase.refresh(any(), any()))
                 .thenThrow(new DomainException(ErrorCode.REFRESH_TOKEN_INVALID));
 
         mockMvc.perform(post("/api/v1/auth/refresh")

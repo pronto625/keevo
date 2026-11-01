@@ -8,10 +8,44 @@ import React, {
 } from "react";
 
 const STORAGE_KEY = "ks_admin_token";
+const REFRESH_KEY = "ks_admin_refresh";
+/** Story 16.11 — the super-admin session slides over 12 h (server side); the cookie follows. */
+const SESSION_COOKIE_MAX_AGE = 12 * 3600;
 
-// Module-level singleton so axios interceptor can read it without React
+// Module-level singletons so the axios interceptor can read them without React
 let _token: string | null = null;
+let _refreshToken: string | null = null;
 export const getToken = () => _token;
+export const getRefreshToken = () => {
+  if (_refreshToken) return _refreshToken;
+  try {
+    _refreshToken = typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_KEY);
+  } catch {
+    _refreshToken = null;
+  }
+  return _refreshToken;
+};
+
+function setAuthCookie() {
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `ks_admin_auth=1; path=/; max-age=${SESSION_COOKIE_MAX_AGE}; SameSite=Strict${secure}`;
+}
+
+/**
+ * Story 16.11 — stores a new token pair (sign-in or silent renewal). The access token lives
+ * 30 minutes; the refresh token renews it (12 h sliding for the super-admin).
+ */
+export function setSessionTokens(accessToken: string, refreshToken: string | null) {
+  _token = accessToken;
+  if (refreshToken) _refreshToken = refreshToken;
+  try {
+    sessionStorage.setItem(STORAGE_KEY, accessToken);
+    if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
+  } catch {
+    // storage blocked: the session lives in memory for this page only
+  }
+  setAuthCookie();
+}
 
 /**
  * Drops the in-memory token, its sessionStorage copy and the auth cookie read by the proxy.
@@ -21,8 +55,10 @@ export const getToken = () => _token;
  */
 export function clearSession() {
   _token = null;
+  _refreshToken = null;
   try {
     sessionStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(REFRESH_KEY);
   } catch {
     // storage blocked: nothing persisted
   }
@@ -31,7 +67,7 @@ export function clearSession() {
 
 interface AuthContextValue {
   token: string | null;
-  login: (token: string) => void;
+  login: (token: string, refreshToken?: string | null) => void;
   logout: () => void;
 }
 
@@ -57,16 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return stored;
   });
 
-  const login = useCallback((newToken: string) => {
-    _token = newToken;
-    try {
-      sessionStorage.setItem(STORAGE_KEY, newToken);
-    } catch {
-      // storage blocked: the session lives in memory for this page only
-    }
-    // Set a short-lived cookie so Next.js middleware can check auth
-    const secure = window.location.protocol === "https:" ? "; Secure" : "";
-    document.cookie = `ks_admin_auth=1; path=/; max-age=86400; SameSite=Strict${secure}`;
+  const login = useCallback((newToken: string, refreshToken?: string | null) => {
+    // Also sets the cookie the Next.js middleware checks.
+    setSessionTokens(newToken, refreshToken ?? null);
     setToken(newToken);
   }, []);
 

@@ -52,6 +52,9 @@ class UserProfileServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private EmployeeRepository employeeRepository;
     @Mock private StoreRepository storeRepository;
+    @Mock private com.keevo.identity.auth.domain.port.out.TenantRepository tenantRepository;
+    @Mock private com.keevo.identity.auth.domain.port.out.UserMembershipRepository membershipRepository;
+    @Mock private SessionTokenIssuer sessionTokenIssuer;
 
     private UserProfileService sut;
 
@@ -63,7 +66,8 @@ class UserProfileServiceTest {
     @BeforeEach
     void setUp() {
         // 12.2d: the real store API adapter over the mocked repository
-        sut = new UserProfileService(userRepository, employeeRepository, StoreApiTestSupport.queryPort(storeRepository));
+        sut = new UserProfileService(userRepository, employeeRepository, StoreApiTestSupport.queryPort(storeRepository),
+                tenantRepository, membershipRepository, sessionTokenIssuer);
         userId   = UUID.randomUUID();
         storeId  = UUID.randomUUID();
         tenantId = "kv_test123";
@@ -129,6 +133,49 @@ class UserProfileServiceTest {
         assertThat(result.role()).isEqualTo("EMPLOYEE");
         assertThat(result.storeId()).isEqualTo(storeId.toString());
         assertThat(result.storeName()).isNull();
+    }
+
+    @Test
+    @DisplayName("16.11 — role, account status, password flag and onboarding come from the database")
+    void profileCarriesServerSideIdentity() {
+        var tenant = new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-TEST12", tenantId,
+                com.keevo.identity.api.TenantStatus.SUSPENDED, com.keevo.identity.api.PlanType.FREE, Instant.now());
+        Employee employee = new Employee(UUID.randomUUID(), userId, storeId,
+                "Awa", "Ngo", EmployeeStatus.ACTIVE, true, Instant.now());
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(tenantRepository.findBySchemaName(tenantId)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())).thenReturn(Optional.of(
+                com.keevo.identity.auth.domain.model.UserTenantMembership.create(userId, tenant.getId(), "EMPLOYEE")));
+        when(sessionTokenIssuer.isOnboardingCompleted(tenantId)).thenReturn(true);
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+
+        UserProfileData result = sut.execute(userId, tenantId);
+
+        assertThat(result.role()).isEqualTo("EMPLOYEE");
+        assertThat(result.passwordChangeRequired()).isTrue();
+        assertThat(result.tenantStatus()).isEqualTo("SUSPENDED");
+        assertThat(result.onboardingCompleted()).isTrue();
+    }
+
+    @Test
+    @DisplayName("16.11 — employee promoted to OWNER: role from the membership, no store scope")
+    void promotedOwnerKeepsNamesWithoutStore() {
+        var tenant = new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-TEST12", tenantId,
+                com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE, Instant.now());
+        Employee employee = new Employee(UUID.randomUUID(), userId, storeId,
+                "Awa", "Ngo", EmployeeStatus.ACTIVE, false, Instant.now());
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(tenantRepository.findBySchemaName(tenantId)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())).thenReturn(Optional.of(
+                com.keevo.identity.auth.domain.model.UserTenantMembership.create(userId, tenant.getId(), "OWNER")));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+
+        UserProfileData result = sut.execute(userId, tenantId);
+
+        assertThat(result.role()).isEqualTo("OWNER");
+        assertThat(result.firstName()).isEqualTo("Awa");
+        assertThat(result.storeId()).isNull();
     }
 
     @Test

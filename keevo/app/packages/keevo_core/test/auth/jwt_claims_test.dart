@@ -14,27 +14,26 @@ int epoch(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
 void main() {
   final now = DateTime(2026, 10, 2, 12);
 
-  test('reads the session claims', () {
+  test('16.11 — reads identity only: sub, tenantId, sid', () {
     final claims = JwtClaims.tryParse(jwt({
-      'exp': epoch(now.add(const Duration(hours: 1))),
-      'role': 'EMPLOYEE',
-      'storeId': 's1',
-      'firstName': 'Loïc',
-      'tenantStatus': 'ACTIVE',
-      'passwordChangeRequired': true,
-      'onboardingCompleted': false,
+      'sub': 'u1',
+      'tenantId': 'kv_abc123',
+      'sid': 's-1',
+      'exp': epoch(now.add(const Duration(minutes: 30))),
+      // Indicative legacy claims for V1 apps: this app never reads them.
+      'role': 'SUPER_ADMIN',
     }))!;
 
-    expect(claims.role, 'EMPLOYEE');
-    expect(claims.storeId, 's1');
-    expect(claims.firstName, 'Loïc');
-    expect(claims.passwordChangeRequired, isTrue);
-    expect(claims.onboardingCompleted, isFalse);
+    expect(claims.subject, 'u1');
+    expect(claims.tenantId, 'kv_abc123');
+    expect(claims.sessionId, 's-1');
+    expect(claims.isPlatformAdmin, isFalse,
+        reason: 'a role claim never makes a platform admin');
   });
 
-  test('onboardingCompleted is null on tokens issued before the claim', () {
-    final claims = JwtClaims.tryParse(jwt({'exp': epoch(now)}))!;
-    expect(claims.onboardingCompleted, isNull);
+  test('16.11 — the super-admin is told by its system account', () {
+    expect(JwtClaims.tryParse(jwt({'tenantId': 'public', 'exp': epoch(now)}))!
+        .isPlatformAdmin, isTrue);
   });
 
   test('expiry honours the renewal margin', () {

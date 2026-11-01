@@ -3,6 +3,7 @@ package com.keevo.identity.auth.domain.port.out;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -25,6 +26,15 @@ public interface RefreshTokenRepository {
 
     /** Revoke all refresh tokens for a user (e.g., on logout or password change). */
     void revokeAllByUserId(UUID userId);
+
+    /** Story 16.11 — live tokens (one per open device session) of a user in one account, latest use first. */
+    List<RefreshToken> findLiveSessions(UUID userId, String tenantId, Instant now);
+
+    /** Story 16.11 — closes one device session of the user in that account. Returns tokens revoked. */
+    int revokeSession(UUID userId, String tenantId, UUID sessionId);
+
+    /** Story 16.11 — revokes the live tokens of a device chain (replay). Returns tokens revoked. */
+    int revokeSessionChain(UUID sessionId);
 
     /**
      * Story 12.12 — delete refresh tokens whose {@code expires_at} is before the cutoff

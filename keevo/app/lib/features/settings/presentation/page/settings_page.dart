@@ -11,6 +11,7 @@ import 'package:keevo_core/widget/soft_icon_badge.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/module_routes.dart';
 import '../../../auth/presentation/provider/sign_out_service.dart';
+import '../../../devices/presentation/page/connected_devices_page.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/domain/model/store_type.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
@@ -129,6 +130,14 @@ class SettingsPage extends ConsumerWidget {
                       title: 'Mon Compte',
                       subtitle: phone ?? 'Chargement...',
                       onTap: () => context.push('/settings/account'),
+                    ),
+                    // Story 16.11 — sessions of every device (all roles).
+                    _SettingsTile(
+                      icon: Icons.devices_rounded,
+                      iconColor: AppTheme.iconBlue,
+                      title: ConnectedDevicesPage.title,
+                      subtitle: 'Voir et déconnecter vos appareils',
+                      onTap: () => context.push('/settings/devices'),
                     ),
                   ],
                 ),

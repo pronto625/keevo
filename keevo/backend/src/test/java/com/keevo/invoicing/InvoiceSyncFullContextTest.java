@@ -72,8 +72,8 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
         UUID storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
         jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
                 + "password_change_required) VALUES (?, ?, 'Paul', 'Ekane', false)", employeeId, storeId);
-        ownerToken = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
-        employeeToken = jwtTokenProvider.generateAccessToken(employeeId, schema, "EMPLOYEE", "ACTIVE", storeId,
+        ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
+        employeeToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, employeeId, schema, "EMPLOYEE", "ACTIVE", storeId,
                 false);
         year = String.valueOf(LocalDate.now(ZoneId.of("Africa/Douala")).getYear());
         Map<String, Object> settings = new LinkedHashMap<>();
@@ -510,7 +510,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             UUID draft = UUID.randomUUID();
             jdbc.update("INSERT INTO " + q + "invoices (id, client_name, vat_registered, vat_rate, prices_include_vat) "
                     + "VALUES (?, 'Brouillon V5', false, 19.25, true)", draft);
-            String token = jwtTokenProvider.generateAccessToken(UUID.randomUUID(), old, "OWNER");
+            String token = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, UUID.randomUUID(), old, "OWNER");
 
             List<JsonNode> rows = pullInvoices(token);
 

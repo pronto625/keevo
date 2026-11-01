@@ -57,6 +57,7 @@ const kFeatureModules = <String, FeatureModules>{
         route: '/stock/overview'),
   ]),
   'contact': FeatureModules('crm'),
+  'devices': FeatureModules('core'),
   'dashboard': FeatureModules('reporting', premium: [
     FeatureSurface('multi-store', 'Stock bas multi-boutiques',
         route: '/stock/overview'),

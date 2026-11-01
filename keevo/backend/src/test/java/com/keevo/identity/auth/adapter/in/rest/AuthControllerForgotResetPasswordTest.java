@@ -41,7 +41,7 @@ class AuthControllerForgotResetPasswordTest {
     void setUp() {
         AuthController authController = new AuthController(
                 null, null, null, null, null, null,
-                requestPasswordResetUseCase, resetPasswordUseCase);
+                requestPasswordResetUseCase, resetPasswordUseCase, null);
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

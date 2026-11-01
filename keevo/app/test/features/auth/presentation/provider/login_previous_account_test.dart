@@ -52,10 +52,10 @@ void main() {
           phoneNumber: any(named: 'phoneNumber'),
           password: any(named: 'password'),
         )).thenAnswer((_) async => AuthenticatedResult(tokens));
-    when(() => applier.apply('access-b', newSession: true))
+    when(() => applier.apply('access-b', newSession: true, seedRole: any(named: 'seedRole'), seedStoreId: any(named: 'seedStoreId'), seedPasswordChangeRequired: any(named: 'seedPasswordChangeRequired')))
         .thenThrow(const PreviousAccountDataException(3));
     when(() => applier.apply('access-b',
-            newSession: true, discardPreviousAccountData: true))
+            newSession: true, discardPreviousAccountData: true, seedRole: any(named: 'seedRole'), seedStoreId: any(named: 'seedStoreId'), seedPasswordChangeRequired: any(named: 'seedPasswordChangeRequired')))
         .thenAnswer((_) async {});
     when(() => applier.abandonSignIn()).thenAnswer((_) async {});
 
@@ -97,12 +97,12 @@ void main() {
 
     verify(() => applier.abandonSignIn()).called(1);
     verifyNever(() => applier.apply('access-b',
-        newSession: true, discardPreviousAccountData: true));
+        newSession: true, discardPreviousAccountData: true, seedRole: any(named: 'seedRole'), seedStoreId: any(named: 'seedStoreId'), seedPasswordChangeRequired: any(named: 'seedPasswordChangeRequired')));
     expect(container.read(loginProvider).value, isNull);
   });
 
   test('a storage failure ends in an error, never an endless spinner', () async {
-    when(() => applier.apply('access-b', newSession: true))
+    when(() => applier.apply('access-b', newSession: true, seedRole: any(named: 'seedRole'), seedStoreId: any(named: 'seedStoreId'), seedPasswordChangeRequired: any(named: 'seedPasswordChangeRequired')))
         .thenThrow(StateError('keystore'));
 
     await login();

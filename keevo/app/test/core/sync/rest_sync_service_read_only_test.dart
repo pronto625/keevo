@@ -49,7 +49,8 @@ void main() {
 
   Future<RestSyncService> service(String tenantStatus) async {
     FlutterSecureStorage.setMockInitialValues({'jwt_token': _jwt(tenantStatus)});
-    SharedPreferences.setMockInitialValues({});
+    // Story 16.11 — the account status comes from the cached profile.
+    SharedPreferences.setMockInitialValues({'session_tenant_status': tenantStatus});
     return RestSyncService(
       database: db,
       remoteProducts: MockRemoteProductDataSource(),

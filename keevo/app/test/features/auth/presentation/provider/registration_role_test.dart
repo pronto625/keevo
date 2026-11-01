@@ -21,8 +21,9 @@ String _jwt(Map<String, dynamic> claims) {
   return '${part({'alg': 'RS256'})}.${part({'exp': 4102444800, ...claims})}.sig';
 }
 
-/// v1s-15-10: the role stored at registration comes from the token's role
-/// claim; 'OWNER' is only the fallback for a token without the claim.
+/// Story 16.11 (was v1s-15-10): the role comes from the profile loaded by the
+/// session applier, never from a token claim; registration only seeds 'OWNER'
+/// for when the profile cannot be loaded.
 void main() {
   late _MockRegisterUseCase useCase;
   late _MockApplier applier;
@@ -39,7 +40,11 @@ void main() {
     when(() => applier.apply(any(),
             newSession: any(named: 'newSession'),
             discardPreviousAccountData:
-                any(named: 'discardPreviousAccountData')))
+                any(named: 'discardPreviousAccountData'),
+            seedRole: any(named: 'seedRole'),
+            seedStoreId: any(named: 'seedStoreId'),
+            seedPasswordChangeRequired:
+                any(named: 'seedPasswordChangeRequired')))
         .thenAnswer((_) async {});
 
     container = ProviderContainer(retry: noProviderRetry, overrides: [
@@ -65,22 +70,23 @@ void main() {
         .register(phoneNumber: '+237600000000', password: 'secret');
   }
 
-  test('role claim present: kUserRoleKey is the claim role', () async {
-    await registerWithToken(_jwt({'role': 'EMPLOYEE'}));
+  test('the session applier gets the token with OWNER as the seed role', () async {
+    final token = _jwt({'sub': 'u1'});
+    await registerWithToken(token);
 
     expect(container.read(registrationProvider).hasError, isFalse);
-    expect(prefs.getString(kUserRoleKey), 'EMPLOYEE');
+    verify(() => applier.apply(token,
+        newSession: true,
+        discardPreviousAccountData: false,
+        seedRole: 'OWNER',
+        seedStoreId: any(named: 'seedStoreId'),
+        seedPasswordChangeRequired:
+            any(named: 'seedPasswordChangeRequired'))).called(1);
   });
 
-  test('no role claim: falls back to OWNER', () async {
-    await registerWithToken(_jwt({'sub': 'u1'}));
+  test('a role claim in the token is never stored', () async {
+    await registerWithToken(_jwt({'role': 'EMPLOYEE'}));
 
-    expect(prefs.getString(kUserRoleKey), 'OWNER');
-  });
-
-  test('unparseable token: falls back to OWNER', () async {
-    await registerWithToken('not-a-jwt');
-
-    expect(prefs.getString(kUserRoleKey), 'OWNER');
+    expect(prefs.getString(kUserRoleKey), isNull);
   });
 }

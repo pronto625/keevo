@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
+import com.keevo.identity.auth.domain.model.DeviceInfo;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.api.TenantStatus;
@@ -11,6 +12,8 @@ import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.event.catalog.auth.DeviceSessionClosedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * RefreshTokenService — renews a session from a refresh token.
@@ -32,8 +36,8 @@ import java.time.Instant;
  *       a new session is issued and the unused successor is superseded, so only one
  *       token of the chain is ever alive. The window counts from the first exchange.</li>
  *   <li>A replaced token presented again after its successor was used, or a superseded
- *       token presented at all, means two parties hold the same session: every session
- *       of the user is revoked.</li>
+ *       token presented at all, means two parties hold the same session: the whole device
+ *       chain is revoked and audited (Story 16.11).</li>
  *   <li>A token revoked outright (logout, password change, deactivation), or whose
  *       successor was, is refused.</li>
  * </ul>
@@ -56,20 +60,23 @@ public class RefreshTokenService implements RefreshTokenUseCase {
     private final TenantRepository tenantRepository;
     private final UserMembershipRepository membershipRepository;
     private final SessionTokenIssuer issuer;
+    private final ApplicationEventPublisher eventPublisher;
 
     public RefreshTokenService(RefreshTokenRepository refreshTokenRepository,
                                TenantRepository tenantRepository,
                                UserMembershipRepository membershipRepository,
-                               SessionTokenIssuer issuer) {
+                               SessionTokenIssuer issuer,
+                               ApplicationEventPublisher eventPublisher) {
         this.refreshTokenRepository = refreshTokenRepository;
         this.tenantRepository = tenantRepository;
         this.membershipRepository = membershipRepository;
         this.issuer = issuer;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
     @Transactional(noRollbackFor = DomainException.class)
-    public AuthTokens refresh(String rawRefreshToken) {
+    public AuthTokens refresh(String rawRefreshToken, DeviceInfo device) {
         RefreshToken presented = refreshTokenRepository.findByHash(SessionTokenIssuer.hash(rawRefreshToken))
                 .orElseThrow(RefreshTokenService::invalid);
 
@@ -88,7 +95,14 @@ public class RefreshTokenService implements RefreshTokenUseCase {
                 .filter(UserTenantMembership::isActive)
                 .orElseThrow(RefreshTokenService::invalid);
 
-        var session = issuer.issue(presented.userId(), tenant, membership.getRole());
+        // Story 16.11 — same device session (sid) for the whole chain.
+        // Merged field by field: what the app sends wins, the known value stays otherwise.
+        DeviceInfo sent = device != null ? device : DeviceInfo.NONE;
+        DeviceInfo dev = DeviceInfo.of(
+                sent.deviceId() != null ? sent.deviceId() : presented.deviceId(),
+                sent.deviceLabel() != null ? sent.deviceLabel() : presented.deviceLabel());
+        var session = issuer.issue(presented.userId(), tenant, membership.getRole(),
+                presented.effectiveSessionId(), dev);
         refreshTokenRepository.save(presented.isRotated()
                 ? presented.withSuccessor(session.refreshTokenId())
                 : presented.rotatedTo(session.refreshTokenId(), Instant.now()));
@@ -120,8 +134,8 @@ public class RefreshTokenService implements RefreshTokenUseCase {
     /**
      * Returns normally only when [presented] was rotated recently and its
      * successor never reached the client, after superseding that successor;
-     * throws otherwise. When two parties hold the session, revokes every
-     * session of the user (noRollbackFor keeps that write).
+     * throws otherwise. When two parties hold the session, revokes the
+     * device chain (noRollbackFor keeps that write).
      */
     private void recoverLostResponseOrReject(RefreshToken presented) {
         if (presented.isSuperseded()) {
@@ -149,10 +163,19 @@ public class RefreshTokenService implements RefreshTokenUseCase {
         refreshTokenRepository.save(successor.supersededAt(Instant.now()));
     }
 
+    /**
+     * Story 16.11 — two parties hold the session: the whole device chain is revoked (its sid closes,
+     * so the device's access token is refused at its next request) and the event is audited. Other
+     * devices of the user keep their sessions. The token itself is never logged.
+     */
     private DomainException replayed(RefreshToken presented) {
-        log.warn("[Auth] Refresh token replayed after rotation — revoking all sessions of user {}",
+        UUID sessionId = presented.effectiveSessionId();
+        log.warn("[Auth] Refresh token replayed after rotation — revoking the device session of user {}",
                 presented.userId());
-        refreshTokenRepository.revokeAllByUserId(presented.userId());
+        int revoked = refreshTokenRepository.revokeSessionChain(sessionId);
+        eventPublisher.publishEvent(new DeviceSessionClosedEvent(null, presented.tenantId(),
+                presented.userId(), DeviceSessionClosedEvent.Scope.REPLAY, presented.deviceLabel(),
+                Math.max(revoked, 1), Instant.now()));
         return invalid();
     }
 

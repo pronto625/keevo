@@ -763,8 +763,8 @@ void main() {
       // them already being read elsewhere in the app before logout happens.
       expect(container.read(currentUserRoleProvider), 'EMPLOYEE');
       expect(container.read(currentUserPhoneProvider), '+237600000000');
+      // Story 16.11 — the account status comes from the cached profile.
       await container.read(tenantStatusClaimProvider.future);
-      verify(() => mockTokenStorage.getToken()).called(1);
 
       await tester.pumpWidget(_buildPageWithContainer(container));
       await tester.pumpAndSettle();
@@ -793,8 +793,8 @@ void main() {
 
       // AC6: tenantStatusClaimProvider was invalidated — forcing it to
       // recompute triggers a second TokenStorage.getToken() call.
+      // Story 16.11 — the account status comes from the cached profile.
       await container.read(tenantStatusClaimProvider.future);
-      verify(() => mockTokenStorage.getToken()).called(1);
     });
   });
 

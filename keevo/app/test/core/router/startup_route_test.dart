@@ -18,6 +18,22 @@ String _jwt(Map<String, dynamic> claims, {Duration expiresIn = const Duration(ho
   return '${part({'alg': 'RS256'})}.${part({'exp': exp, ...claims})}.sig';
 }
 
+/// Story 16.11 — the session applier caches `GET /api/v1/auth/profile`; in
+/// these tests the fake profile answer is carried by the test token's payload
+/// (role, onboardingCompleted, tenantStatus). The route itself only reads the
+/// cached profile, never the token.
+Future<void> _profileSays(SharedPreferences prefs, String token) async {
+  final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(token.split('.')[1]))))
+      as Map<String, dynamic>;
+  final role = payload['role'] as String?;
+  if (role != null) await prefs.setString(kUserRoleKey, role);
+  final onboarding = payload['onboardingCompleted'] as bool?;
+  if (onboarding != null) await prefs.setBool(kOnboardingCompletedKey, onboarding);
+  final status = payload['tenantStatus'] as String?;
+  if (status != null) await prefs.setString(kTenantStatusKey, status);
+}
+
 void main() {
   late SharedPreferences prefs;
   late _MockRefresher refresher;
@@ -28,7 +44,10 @@ void main() {
         storage: storage,
         prefs: prefs,
         refresher: refresher,
-        applyClaims: (token) async => applied.add(token),
+        applyClaims: (token) async {
+          applied.add(token);
+          await _profileSays(prefs, token);
+        },
       );
 
   Future<void> signedIn(String accessToken, {String? refreshToken = 'r1'}) async {
@@ -89,6 +108,15 @@ void main() {
       await prefs.setBool(kPasswordChangeRequiredKey, true);
       expect(await route(), '/auth/change-password');
     });
+
+    test('16.11 — only the sign-in seed cached (no profile): password change before the wizard', () async {
+      // Seed written by the sign-in when the profile could not be loaded.
+      await prefs.setString(kUserRoleKey, 'EMPLOYEE');
+      await prefs.setBool(kPasswordChangeRequiredKey, true);
+      await signedIn(_jwt({'sub': 'u1', 'tenantId': 'kv_a'}));
+
+      expect(await route(), '/auth/change-password');
+    });
   });
 
   group('expired access token', () {
@@ -137,7 +165,10 @@ void main() {
           storage: storage,
           prefs: prefs,
           refresher: refresher,
-          applyClaims: (token) async => applied.add(token),
+          applyClaims: (token) async {
+            applied.add(token);
+            await _profileSays(prefs, token);
+          },
           onPlatformAdminSessionRefused: () => refusals++,
         );
 
@@ -162,9 +193,9 @@ void main() {
     });
 
     test('renewed at startup: the renewed session is cleared too', () async {
-      await signedIn(_jwt({'role': 'SUPER_ADMIN'},
+      await signedIn(_jwt({'role': 'SUPER_ADMIN', 'tenantId': 'public'},
           expiresIn: const Duration(days: -1)));
-      final renewed = _jwt({'role': 'SUPER_ADMIN'});
+      final renewed = _jwt({'role': 'SUPER_ADMIN', 'tenantId': 'public'});
       when(() => refresher.refresh()).thenAnswer((_) async {
         await storage.write(key: 'jwt_token', value: renewed);
         return RefreshOutcome.renewed;

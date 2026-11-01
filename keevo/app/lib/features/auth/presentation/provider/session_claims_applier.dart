@@ -13,6 +13,8 @@ import '../../../pos/presentation/provider/cart_provider.dart';
 import '../../../settings/presentation/provider/account_status_provider.dart';
 import '../../../settings/presentation/provider/subscription_info_provider.dart';
 import '../../../stores/presentation/provider/active_store_provider.dart';
+import '../../data/session_identity.dart';
+import '../../domain/model/account_profile.dart';
 import 'auth_provider.dart';
 
 /// The local DB holds operations of another account that never reached the
@@ -28,9 +30,15 @@ class PreviousAccountDataException implements Exception {
       'PreviousAccountDataException($pendingOperations pending operations)';
 }
 
-/// Applies an access token's claims to app state. Called with every token the
-/// app receives — login, tenant selection, startup and silent renewal — so a
-/// renewed token (new store, password-change flag…) takes effect immediately.
+/// Applies a new access token to app state. Called with every token the app
+/// receives — login, tenant selection, startup and silent renewal.
+///
+/// Story 16.11 — the token proves identity only (user, account, device
+/// session): it decides which account owns the local data. Role, store, first
+/// name, password-change flag and account status come from the profile
+/// (`GET /api/v1/auth/profile`), cached for offline display; when the profile
+/// cannot be loaded the cached identity stays (a new session starts from what
+/// the sign-in answer said). A reassigned employee moves at the next renewal.
 class SessionClaimsApplier {
   final Ref _ref;
 
@@ -42,10 +50,15 @@ class SessionClaimsApplier {
   /// Throws [PreviousAccountDataException] when a different account signs in
   /// while the previous one still has unsynced operations, unless
   /// [discardPreviousAccountData] says the user accepted losing them.
+  /// [seedRole] / [seedStoreId] / [seedPasswordChangeRequired]: what the
+  /// sign-in answer body said, used only when the profile cannot be loaded.
   Future<void> apply(
     String accessToken, {
     bool newSession = false,
     bool discardPreviousAccountData = false,
+    String? seedRole,
+    String? seedStoreId,
+    bool seedPasswordChangeRequired = false,
   }) async {
     final claims = JwtClaims.tryParse(accessToken);
     if (claims == null) return;
@@ -58,23 +71,29 @@ class SessionClaimsApplier {
     }
 
     final prefs = _ref.read(sharedPreferencesProvider);
-    final role = claims.role;
-    if (role != null) await prefs.setString(kUserRoleKey, role);
-    await prefs.setBool(kPasswordChangeRequiredKey, claims.passwordChangeRequired);
-    // Always overwrite so a previous user's name is never shown.
-    final firstName = claims.firstName;
-    if (firstName != null && firstName.isNotEmpty) {
-      await prefs.setString('user_first_name', firstName);
-    } else {
-      await prefs.remove('user_first_name');
+    AccountProfile? profile;
+    try {
+      profile = await _ref.read(sessionProfileFetcherProvider)(accessToken);
+    } catch (_) {
+      profile = null; // offline or server error: keep the cached identity
     }
+    if (profile != null) {
+      await SessionIdentity.save(prefs, profile);
+    } else if (newSession) {
+      await SessionIdentity.reset(prefs,
+          role: seedRole,
+          storeId: seedStoreId,
+          passwordChangeRequired: seedPasswordChangeRequired);
+    }
+    final role = SessionIdentity.role(prefs);
 
-    // An employee works in the store of their token — a renewal after a
-    // reassignment moves them. An owner keeps the store they picked, except
-    // on sign-in where "all stores" is the default.
+    // An employee works in their assigned store — a reassignment moves them at
+    // the next renewal. An owner keeps the store they picked, except on
+    // sign-in where "all stores" is the default.
     final activeStore = _ref.read(activeStoreIdProvider.notifier);
     if (role == 'EMPLOYEE') {
-      activeStore.setActiveStore(claims.storeId);
+      final storeId = SessionIdentity.storeId(prefs);
+      if (storeId != null || newSession) activeStore.setActiveStore(storeId);
     } else if (newSession) {
       activeStore.setActiveStore(null);
     }
@@ -99,8 +118,8 @@ class SessionClaimsApplier {
     // cache; a renewal keeps it (it follows the readable module set).
     if (newSession) _ref.invalidate(extensionContributionsProvider);
     // Same for the account-deletion banner (cached per process) — on every
-    // token: a renewal after a deletion request / cancellation carries the
-    // new tenantStatus (A50).
+    // token: the profile loaded with a renewal carries the account status
+    // after a deletion request / cancellation (A50).
     if (_ref.exists(deletionPendingStatusProvider)) {
       _ref.invalidate(deletionPendingStatusProvider);
     }

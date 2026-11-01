@@ -4,6 +4,9 @@ import 'dart:convert';
 /// mobile app never opens a session with it.
 const kPlatformAdminRole = 'SUPER_ADMIN';
 
+/// Account (schema) of the platform super-admin's sessions.
+const kPlatformAdminTenant = 'public';
+
 /// Read-only view of an access token's payload. The signature is not checked
 /// here — the server does that; the app only reads its own claims.
 class JwtClaims {
@@ -44,16 +47,15 @@ class JwtClaims {
   /// Tenant schema the session belongs to.
   String? get tenantId => _data['tenantId'] as String?;
 
-  String? get role => _data['role'] as String?;
+  /// Story 16.11 — device session id (« Appareils connectés »), null for tokens
+  /// issued before device sessions.
+  String? get sessionId => _data['sid'] as String?;
 
   /// Platform super-admin session: reserved for the web admin dashboard,
-  /// never usable in the mobile app.
-  bool get isPlatformAdmin => role == kPlatformAdminRole;
-  String? get storeId => _data['storeId'] as String?;
-  String? get firstName => _data['firstName'] as String?;
-  String? get tenantStatus => _data['tenantStatus'] as String?;
-  bool get passwordChangeRequired => _data['passwordChangeRequired'] == true;
-
-  /// Setup wizard done. Null for tokens issued before the claim existed.
-  bool? get onboardingCompleted => _data['onboardingCompleted'] as bool?;
+  /// never usable in the mobile app. Story 16.11 — told by the account the
+  /// token belongs to (the super-admin's system account, schema `public`),
+  /// never by a role claim: the token proves identity only. Role, store,
+  /// first name, account status and the password flag come from
+  /// `GET /api/v1/auth/profile`.
+  bool get isPlatformAdmin => tenantId == kPlatformAdminTenant;
 }

@@ -1,15 +1,13 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.commerce.sale.adapter.in.rest.dto.*;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.model.SaleItem;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase.SalesHistoryQuery;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
-import io.jsonwebtoken.Claims;
-import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -36,12 +34,9 @@ public class SaleHistoryController {
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
 
     private final GetSalesHistoryUseCase getSalesHistoryUseCase;
-    private final JwtTokenProvider jwtTokenProvider;
 
-    public SaleHistoryController(GetSalesHistoryUseCase getSalesHistoryUseCase,
-                                  JwtTokenProvider jwtTokenProvider) {
+    public SaleHistoryController(GetSalesHistoryUseCase getSalesHistoryUseCase) {
         this.getSalesHistoryUseCase = getSalesHistoryUseCase;
-        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     /**
@@ -65,8 +60,7 @@ public class SaleHistoryController {
             @RequestParam(required = false) String to,
             @RequestParam(required = false) UUID employeeId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
-            HttpServletRequest httpRequest) {
+            @RequestParam(defaultValue = "20") int size) {
 
         // Validate size
         size = Math.min(size, 100);
@@ -80,9 +74,9 @@ public class SaleHistoryController {
         Instant toInstant = toDate.plusDays(1).atStartOfDay(WAT).toInstant();
 
         // Extract JWT claims
-        Claims claims = extractClaims(httpRequest);
-        UUID actorId = UUID.fromString(claims.getSubject());
-        String role = jwtTokenProvider.extractRole(claims);
+        // Story 16.11 — role from the server-side access state, never the token.
+        UUID actorId = CurrentActor.actorId();
+        String role = CurrentActor.role();
 
         // Security: EMPLOYEE can only see their own sales
         UUID effectiveEmployeeId = "EMPLOYEE".equals(role) ? actorId : employeeId;
@@ -119,14 +113,6 @@ public class SaleHistoryController {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private Claims extractClaims(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            String token = authHeader.substring(7);
-            return jwtTokenProvider.parseToken(token);
-        }
-        throw new IllegalStateException("No valid JWT token found");
-    }
 
     private SaleHistoryItemDto toHistoryDto(Sale sale) {
         List<SaleItemHistoryDto> items = sale.getItems().stream()

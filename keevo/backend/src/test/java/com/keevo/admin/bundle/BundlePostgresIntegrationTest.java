@@ -72,8 +72,8 @@ class BundlePostgresIntegrationTest extends FullContextIntegrationTest {
     void setUp() {
         schema = tx.execute(s -> tenantFactory.create()).getSchemaName();
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
-        adminToken = jwtTokenProvider.generateAccessToken(adminId, "public", "SUPER_ADMIN");
-        ownerToken = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        adminToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, adminId, "public", "SUPER_ADMIN");
+        ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
         // a Free tenant: paid modules disabled by the plan, free modules enabled
         jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', status = 'ACTIVE', "
                 + "expires_at = NULL");

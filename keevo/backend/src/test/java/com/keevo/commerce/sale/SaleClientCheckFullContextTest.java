@@ -81,7 +81,7 @@ class SaleClientCheckFullContextTest extends FullContextIntegrationTest {
             jdbc.update("INSERT INTO \"" + schema + "\".stock_levels (product_id, store_id, quantity) VALUES (?, ?, 50)",
                     productId, storeId);
         }
-        token = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        token = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
     }
 
     @AfterEach

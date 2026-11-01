@@ -99,7 +99,7 @@
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
+            <!-- Story 16.11: compile scope for PGConnection.getNotifications (LISTEN keevo_access_state) -->
         </dependency>
 
         <!-- ── Flyway ───────────────────────────────────────────── -->

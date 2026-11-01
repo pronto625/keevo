@@ -60,6 +60,32 @@ void main() {
     expect(renewed, ['a2']);
   });
 
+  test('16.11 — the device id and label go with the renewal; a failing description never blocks it', () async {
+    refreshAnswers(() async => _tokens('a2', 'r2'));
+    final withDevice = SessionRefresher(
+      storage: storage,
+      refreshDio: dio,
+      deviceFields: () async =>
+          {'deviceId': 'dev-1', 'deviceLabel': 'Xiaomi Redmi Note 12 · Android 14'},
+    );
+
+    expect(await withDevice.refresh(), RefreshOutcome.renewed);
+    verify(() => dio.post<Map<String, dynamic>>('/api/v1/auth/refresh', data: {
+          'refreshToken': 'r1',
+          'deviceId': 'dev-1',
+          'deviceLabel': 'Xiaomi Redmi Note 12 · Android 14',
+        })).called(1);
+
+    final broken = SessionRefresher(
+      storage: storage,
+      refreshDio: dio,
+      deviceFields: () async => throw StateError('keystore'),
+    );
+    expect(await broken.refresh(), RefreshOutcome.renewed);
+    verify(() => dio.post<Map<String, dynamic>>('/api/v1/auth/refresh',
+        data: {'refreshToken': 'r1'})).called(1);
+  });
+
   test('concurrent callers share one refresh call', () async {
     final gate = Completer<Response<Map<String, dynamic>>>();
     refreshAnswers(() => gate.future);

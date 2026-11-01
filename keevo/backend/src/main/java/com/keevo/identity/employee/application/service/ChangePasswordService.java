@@ -2,7 +2,6 @@ package com.keevo.identity.employee.application.service;
 
 import com.keevo.shared.domain.PasswordLimits;
 import com.keevo.identity.auth.domain.model.AuthTokens;
-import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import com.keevo.identity.api.TokenRevocationPort;
@@ -15,15 +14,17 @@ import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.infrastructure.security.JwtProperties;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
+import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.identity.auth.application.service.SessionTokenIssuer;
+import com.keevo.identity.auth.domain.model.DeviceInfo;
+import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -44,8 +45,8 @@ public class ChangePasswordService implements ChangePasswordUseCase {
     private final RefreshTokenRepository refreshTokenRepository;
     private final TokenRevocationPort tokenRevocationPort;
     private final PasswordEncoder passwordEncoder;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final JwtProperties jwtProperties;
+    private final SessionTokenIssuer sessionTokenIssuer;
+    private final TenantRepository tenantRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public ChangePasswordService(UserRepository userRepository,
@@ -53,16 +54,16 @@ public class ChangePasswordService implements ChangePasswordUseCase {
                                   RefreshTokenRepository refreshTokenRepository,
                                   TokenRevocationPort tokenRevocationPort,
                                   PasswordEncoder passwordEncoder,
-                                  JwtTokenProvider jwtTokenProvider,
-                                  JwtProperties jwtProperties,
+                                  SessionTokenIssuer sessionTokenIssuer,
+                                  TenantRepository tenantRepository,
                                   ApplicationEventPublisher eventPublisher) {
         this.userRepository = userRepository;
         this.employeeRepository = employeeRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenRevocationPort = tokenRevocationPort;
         this.passwordEncoder = passwordEncoder;
-        this.jwtTokenProvider = jwtTokenProvider;
-        this.jwtProperties = jwtProperties;
+        this.sessionTokenIssuer = sessionTokenIssuer;
+        this.tenantRepository = tenantRepository;
         this.eventPublisher = eventPublisher;
     }
 
@@ -97,58 +98,43 @@ public class ChangePasswordService implements ChangePasswordUseCase {
         // An employee promoted to OWNER still has an employee record, so employeeOpt.isPresent()
         // would incorrectly return "EMPLOYEE". User.role is kept in sync by ChangeEmployeeRoleService.
         String role = updatedUser.getRole().name();
-        UUID storeId = null;
-        String firstName = null;
         UUID employeeId = null;
 
         if (employeeOpt.isPresent()) {
             Employee emp = employeeOpt.get();
             employeeRepository.updatePasswordChangeRequired(emp.getId(), false);
-            storeId    = emp.getStoreId();
-            firstName  = emp.getFirstName();
             employeeId = emp.getId();
         }
 
-        // 6. Revoke all existing refresh tokens
+        // 6. Story 16.11 — keep this device signed in: remember its session (sid) and label
+        // before every refresh token of the user is revoked.
+        String tenantId = TenantContext.getCurrentTenant();
+        UUID sessionId = CurrentActor.sessionIdOrNull();
+        DeviceInfo device = DeviceInfo.NONE;
+        if (sessionId != null && tenantId != null) {
+            device = refreshTokenRepository.findLiveSessions(command.actorId(), tenantId, Instant.now()).stream()
+                    .filter(t -> sessionId.equals(t.effectiveSessionId()))
+                    .findFirst()
+                    .map(t -> DeviceInfo.of(t.deviceId(), t.deviceLabel()))
+                    .orElse(DeviceInfo.NONE);
+        }
         refreshTokenRepository.revokeAllByUserId(command.actorId());
 
-        // Story 12.2 — revoke access tokens issued before now (<5min propagation, NFR12).
-        // Password change = credential compromise → revoke across ALL the user's memberships
-        // (multi-tenant, not just the current tenant — a token for another tenant would otherwise
-        // stay valid). Must execute BEFORE step 7 (new token issuance) so the new token's
-        // iat >= tokens_valid_after.
-        String tenantId = TenantContext.getCurrentTenant();
+        // Story 12.2 — revoke access tokens issued before now. Password change = credential
+        // compromise → revoke across ALL the user's memberships (multi-tenant). Must execute BEFORE
+        // step 7 (new token issuance) so the new token's iat >= tokens_valid_after.
         tokenRevocationPort.revokeAllSessionsEverywhere(command.actorId());
 
-        // 7. Generate fresh tokens
-        String accessToken = jwtTokenProvider.generateAccessToken(
-                command.actorId(), tenantId, role, "ACTIVE",
-                storeId, false, firstName);
-        String rawRefreshToken = jwtTokenProvider.generateRefreshToken();
-        String tokenHash = hashToken(rawRefreshToken);
-        Instant expiresAt = Instant.now().plus(jwtProperties.getRefreshTokenExpiryDays(), ChronoUnit.DAYS);
-        refreshTokenRepository.save(RefreshToken.create(
-                command.actorId(), tenantId, tokenHash, expiresAt));
+        // 7. Generate fresh tokens (same path as login / refresh: identity-only access token).
+        Tenant tenant = tenantRepository.findBySchemaName(tenantId)
+                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
+        AuthTokens tokens = sessionTokenIssuer.issue(command.actorId(), tenant, role, sessionId, device).tokens();
 
         // 8. Publish event after all writes are complete (EMPLOYEE only)
         if (employeeId != null) {
             eventPublisher.publishEvent(new EmployeePasswordSetEvent(
                     command.actorId(), employeeId, Instant.now()));
         }
-
-        long expiresIn = (long) jwtProperties.getAccessTokenExpiryHours() * 3600;
-        return new AuthTokens(accessToken, rawRefreshToken, expiresIn,
-                command.actorId(), tenantId, role,
-                storeId != null ? storeId.toString() : null, false);
-    }
-
-    private String hashToken(String rawToken) {
-        try {
-            var digest = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(rawToken.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(hash);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 not available", e);
-        }
+        return tokens;
     }
 }

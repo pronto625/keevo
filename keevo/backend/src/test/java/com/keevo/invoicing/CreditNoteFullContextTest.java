@@ -74,8 +74,8 @@ class CreditNoteFullContextTest extends FullContextIntegrationTest {
         UUID storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
         jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
                 + "password_change_required) VALUES (?, ?, 'Paul', 'Ekane', false)", employeeId, storeId);
-        ownerToken = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
-        employeeToken = jwtTokenProvider.generateAccessToken(employeeId, schema, "EMPLOYEE", "ACTIVE", storeId,
+        ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
+        employeeToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, employeeId, schema, "EMPLOYEE", "ACTIVE", storeId,
                 false);
         year = String.valueOf(LocalDate.now(ZoneId.of("Africa/Douala")).getYear());
         Map<String, Object> s = new LinkedHashMap<>();

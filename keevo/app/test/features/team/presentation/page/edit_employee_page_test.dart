@@ -3,6 +3,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:keevo/features/devices/domain/device_session.dart';
+import 'package:keevo/features/devices/presentation/provider/device_sessions_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:keevo_core/state/provider_retry.dart';
@@ -75,6 +77,10 @@ void main() {
         employeeRepositoryProvider.overrideWithValue(empRepo),
         storeRepositoryProvider.overrideWithValue(storeRepo),
         currentUserIdProvider.overrideWith((ref) async => currentUserId),
+        // Story 16.11 — « Appareils » section: one phone signed in.
+        employeeDeviceSessionsProvider.overrideWith((ref, id) async => const [
+              DeviceSession(sessionId: 's1', label: 'Tecno Spark · Android 13'),
+            ]),
       ],
       child: MaterialApp.router(routerConfig: router),
     ));

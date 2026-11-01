@@ -7,7 +7,6 @@ import com.keevo.shared.event.catalog.sale.*;
 import com.keevo.commerce.api.*;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase.SalesHistoryQuery;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
@@ -48,7 +47,6 @@ class SaleHistoryControllerTest {
     }
 
     @Mock private GetSalesHistoryUseCase getSalesHistoryUseCase;
-    @Mock private JwtTokenProvider jwtTokenProvider;
 
     private MockMvc mockMvc;
     private final ObjectMapper mapper = new ObjectMapper();
@@ -59,7 +57,7 @@ class SaleHistoryControllerTest {
     @BeforeEach
     void setUp() {
         mapper.registerModule(new JavaTimeModule());
-        var controller = new SaleHistoryController(getSalesHistoryUseCase, jwtTokenProvider);
+        var controller = new SaleHistoryController(getSalesHistoryUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -85,8 +83,6 @@ class SaleHistoryControllerTest {
 
     private void mockJwt(String role) {
         authenticateAs(role);
-        when(jwtTokenProvider.parseToken(anyString())).thenReturn(claimsWithStore(role));
-        when(jwtTokenProvider.extractRole(any(Claims.class))).thenReturn(role);
     }
 
     private Sale createSale() {

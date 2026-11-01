@@ -40,7 +40,7 @@ class SessionTokenIssuerTest {
 
     @BeforeEach
     void setUp() {
-        JwtProperties props = new JwtProperties(24, 360);
+        JwtProperties props = new JwtProperties(30, 365);
         jwt = TestJwt.provider(props);
         issuer = new SessionTokenIssuer(jwt, props, refreshTokenRepository, jdbcTemplate);
         lenient().when(refreshTokenRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -82,11 +82,16 @@ class SessionTokenIssuerTest {
         var session = issuer.issue(USER_ID, admin, "SUPER_ADMIN");
 
         var claims = jwt.parseToken(session.tokens().accessToken());
-        assertThat(jwt.extractRole(claims)).isEqualTo("SUPER_ADMIN");
+        assertThat(claims.get("role")).isEqualTo("SUPER_ADMIN"); // indicative legacy claim
         assertThat(jwt.extractTenantId(claims)).isEqualTo("public");
+        // Story 16.11 — super-admin sessions slide over 12 h, not 365 days.
+        var saved = ArgumentCaptor.forClass(RefreshToken.class);
+        verify(refreshTokenRepository).save(saved.capture());
+        assertThat(saved.getValue().expiresAt())
+                .isBetween(Instant.now().plus(11, java.time.temporal.ChronoUnit.HOURS),
+                        Instant.now().plus(12, java.time.temporal.ChronoUnit.HOURS).plusSeconds(5));
         assertThat(claims.get("onboardingCompleted")).isEqualTo(true);
         verifyNoInteractions(jdbcTemplate);
-        verify(refreshTokenRepository).save(any());
     }
 
     @Test
@@ -109,13 +114,54 @@ class SessionTokenIssuerTest {
 
         var session = issuer.issue(USER_ID, tenant(TenantStatus.SUSPENDED), "EMPLOYEE");
 
+        // Story 16.11 — legacy claims stay indicative for V1 apps; never a first name.
         var claims = jwt.parseToken(session.tokens().accessToken());
-        assertThat(jwt.extractStoreId(claims)).isEqualTo(store);
-        assertThat(jwt.extractTenantStatus(claims)).isEqualTo("SUSPENDED");
-        assertThat(jwt.extractPasswordChangeRequired(claims)).isTrue();
-        assertThat(jwt.extractFirstName(claims)).isEqualTo("Loïc");
-        assertThat(jwt.extractRole(claims)).isEqualTo("EMPLOYEE");
+        assertThat(claims.get("storeId")).isEqualTo(store.toString());
+        assertThat(claims.get("tenantStatus")).isEqualTo("SUSPENDED");
+        assertThat(claims.get("passwordChangeRequired")).isEqualTo(true);
+        assertThat(claims.get("role")).isEqualTo("EMPLOYEE");
+        assertThat(claims).doesNotContainKey("firstName");
+        assertThat(jwt.extractSessionId(claims)).isNotNull();
         assertThat(session.tokens().storeId()).isEqualTo(store.toString());
+    }
+
+    @Test
+    void legacyClaimsOff_tokenCarriesIdentityOnly() {
+        JwtProperties props = new JwtProperties(30, 365);
+        props.setLegacyClaims(false);
+        JwtTokenProvider strict = TestJwt.provider(props);
+        SessionTokenIssuer strictIssuer = new SessionTokenIssuer(strict, props, refreshTokenRepository, jdbcTemplate);
+        when(jdbcTemplate.queryForMap(contains("employees"), eq(USER_ID))).thenReturn(Map.of(
+                "store_id", UUID.randomUUID(), "password_change_required", true));
+
+        var session = strictIssuer.issue(USER_ID, tenant(TenantStatus.ACTIVE), "EMPLOYEE");
+
+        var claims = strict.parseToken(session.tokens().accessToken());
+        assertThat(claims.keySet()).containsExactlyInAnyOrder("sub", "tenantId", "sid", "iat", "exp");
+        // 30-minute access token
+        assertThat(claims.getExpiration().toInstant().getEpochSecond() - claims.getIssuedAt().toInstant().getEpochSecond())
+                .isEqualTo(30 * 60);
+        assertThat(session.tokens().expiresIn()).isEqualTo(30 * 60);
+    }
+
+    @Test
+    void sessionAndDevice_areStoredOnTheRefreshToken_andRefreshSlides365Days() {
+        onboardingDone(true);
+        UUID sid = UUID.randomUUID();
+
+        var session = issuer.issue(USER_ID, tenant(TenantStatus.ACTIVE), "OWNER", sid,
+                com.keevo.identity.auth.domain.model.DeviceInfo.of("dev-1", "Redmi Note 12 · Android 14"));
+
+        assertThat(jwt.extractSessionId(jwt.parseToken(session.tokens().accessToken()))).isEqualTo(sid);
+        var saved = ArgumentCaptor.forClass(RefreshToken.class);
+        verify(refreshTokenRepository).save(saved.capture());
+        assertThat(saved.getValue().sessionId()).isEqualTo(sid);
+        assertThat(saved.getValue().deviceId()).isEqualTo("dev-1");
+        assertThat(saved.getValue().deviceLabel()).isEqualTo("Redmi Note 12 · Android 14");
+        assertThat(saved.getValue().lastUsedAt()).isNotNull();
+        assertThat(saved.getValue().expiresAt())
+                .isBetween(Instant.now().plus(364, java.time.temporal.ChronoUnit.DAYS),
+                        Instant.now().plus(365, java.time.temporal.ChronoUnit.DAYS).plusSeconds(5));
     }
 
     @Test

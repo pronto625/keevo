@@ -8,12 +8,10 @@ import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.RecordSaleCommand;
 import com.keevo.commerce.sale.domain.port.in.RecordSaleUseCase.SaleItemCommand;
 import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
-import io.jsonwebtoken.Claims;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,24 +27,20 @@ import java.util.UUID;
 public class SaleController {
 
     private final RecordSaleUseCase recordSaleUseCase;
-    private final JwtTokenProvider jwtTokenProvider;
 
-    public SaleController(RecordSaleUseCase recordSaleUseCase,
-                          JwtTokenProvider jwtTokenProvider) {
+    public SaleController(RecordSaleUseCase recordSaleUseCase) {
         this.recordSaleUseCase = recordSaleUseCase;
-        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @RequiresEntitlement("pos")
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<RecordSaleResponseDto>> recordSale(
-            @Valid @RequestBody RecordSaleRequestDto request,
-            HttpServletRequest httpRequest) {
+            @Valid @RequestBody RecordSaleRequestDto request) {
 
         UUID actorId = extractActorId();
-        Claims claims = extractClaims(httpRequest);
-        UUID jwtStoreId = jwtTokenProvider.extractStoreId(claims);
-        String role = jwtTokenProvider.extractRole(claims);
+        // Story 16.11 — role and store come from the server-side access state, never the token.
+        String role = CurrentActor.role();
+        UUID jwtStoreId = CurrentActor.assignedStoreIdOrNull();
 
         // storeId guard: EMPLOYEE must sell only in their assigned store
         if ("EMPLOYEE".equals(role) && jwtStoreId == null) {
@@ -110,9 +104,4 @@ public class SaleController {
         return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 
-    private Claims extractClaims(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        String token = authHeader.substring(7); // "Bearer " prefix
-        return jwtTokenProvider.parseToken(token);
-    }
 }

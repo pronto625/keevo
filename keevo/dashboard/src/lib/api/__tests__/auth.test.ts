@@ -54,3 +54,37 @@ describe("loginErrorMessage (W2)", () => {
     expect(loginErrorMessage("oops")).toBe(LOGIN_FAILED_MESSAGE);
   });
 });
+
+describe("login reads the role from the profile (16.11)", () => {
+  async function loginWithProfileRole(role: string) {
+    const { vi } = await import("vitest");
+    vi.resetModules();
+    const axios = (await import("axios")).default;
+    const sent: { url?: string; auth?: unknown; body?: unknown }[] = [];
+    axios.defaults.adapter = async (config) => {
+      sent.push({ url: config.url, auth: config.headers?.Authorization, body: config.data });
+      const data =
+        config.url === "/auth/login"
+          ? { loginToken: "lt", memberships: [{ tenantCode: "KV-ADMIN", role: "SUPER_ADMIN" }] }
+          : config.url === "/auth/select-tenant"
+            ? { accessToken: "a1", refreshToken: "r1" }
+            : { role };
+      return { data, status: 200, statusText: "OK", headers: {}, config };
+    };
+    const mod = await import("@/lib/api/auth");
+    return { result: mod.login("+237600000000", "secret"), sent, mod };
+  }
+
+  it("a super-admin profile signs in; the profile is read with the new token", async () => {
+    const { result, sent } = await loginWithProfileRole("SUPER_ADMIN");
+    await expect(result).resolves.toMatchObject({ accessToken: "a1", refreshToken: "r1" });
+    expect(sent[2]).toMatchObject({ url: "/auth/profile", auth: "Bearer a1" });
+  });
+
+  it("any other profile role is refused and the session just opened is signed out", async () => {
+    const { result, mod, sent } = await loginWithProfileRole("OWNER");
+    await expect(result).rejects.toThrow(mod.ACCESS_DENIED_MESSAGE);
+    expect(sent[3]).toMatchObject({ url: "/auth/logout" });
+    expect(JSON.parse(String(sent[3].body))).toEqual({ refreshToken: "r1" });
+  });
+});

@@ -193,7 +193,7 @@ public class ProductImportController {
         String role = CurrentActor.role();
         if (role == null) {
             throw new DomainException(ErrorCode.FORBIDDEN,
-                    "Rôle introuvable dans le jeton d'authentification");
+                    "Rôle de l'utilisateur introuvable");
         }
         return role;
     }

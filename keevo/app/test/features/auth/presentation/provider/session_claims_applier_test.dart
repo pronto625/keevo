@@ -7,6 +7,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
 import 'package:keevo/core/extension/extension_slot.dart';
+import 'package:keevo/features/auth/domain/model/account_profile.dart';
+import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/auth/presentation/provider/session_claims_applier.dart';
 import 'package:keevo/features/pos/domain/model/cart_item.dart';
 import 'package:keevo/features/pos/presentation/provider/cart_provider.dart';
@@ -53,8 +55,28 @@ String _employee(String user, {String tenant = 'kv_a', String store = 's1'}) => 
 String _owner(String user, {String tenant = 'kv_a'}) =>
     _jwt({'sub': user, 'tenantId': tenant, 'role': 'OWNER'});
 
+/// Story 16.11 — the profile the fake server answers for [token]: the test
+/// tokens carry it in their payload (the applier itself never reads it).
+AccountProfile? _profileFromPayload(String token) {
+  final p = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(token.split('.')[1]))))
+      as Map<String, dynamic>;
+  return AccountProfile(
+    userId: p['sub'] as String? ?? 'u',
+    phoneNumber: '+237600000000',
+    role: p['role'] as String? ?? 'OWNER',
+    firstName: p['firstName'] as String?,
+    storeId: p['storeId'] as String?,
+    passwordChangeRequired: p['passwordChangeRequired'] == true,
+    tenantStatus: p['tenantStatus'] as String? ?? 'ACTIVE',
+  );
+}
+
 void main() {
   setUpAll(_overrideSqlite3ForLinuxTesting);
+
+  /// Fake `GET /api/v1/auth/profile`; null = offline.
+  AccountProfile? Function(String token) profileOf = _profileFromPayload;
 
   late AppDatabase db;
   late SharedPreferences prefs;
@@ -69,9 +91,12 @@ void main() {
     });
     prefs = await SharedPreferences.getInstance();
     db = AppDatabase.forTesting();
+    profileOf = _profileFromPayload;
     container = ProviderContainer(retry: noProviderRetry, overrides: [
       sharedPreferencesProvider.overrideWithValue(prefs),
       appDatabaseProvider.overrideWithValue(db),
+      sessionProfileFetcherProvider
+          .overrideWithValue((token) async => profileOf(token)),
     ]);
   });
 
@@ -91,7 +116,43 @@ void main() {
         ),
       );
 
-  test('stores the claims the app reads elsewhere', () async {
+  test('16.11 — role and store come from the profile, never from the token', () async {
+    profileOf = (_) => const AccountProfile(
+        userId: 'u1', phoneNumber: '+237600000000', role: 'EMPLOYEE',
+        storeId: 's9', firstName: 'Awa', tenantStatus: 'SUSPENDED');
+
+    await applier().apply(_owner('u1'), newSession: true);
+
+    expect(container.read(currentUserRoleProvider), 'EMPLOYEE');
+    expect(container.read(activeStoreIdProvider), 's9');
+    expect(prefs.getString('user_first_name'), 'Awa');
+    expect(prefs.getString(kTenantStatusKey), 'SUSPENDED');
+  });
+
+  test('16.11 — offline renewal keeps the cached identity', () async {
+    await applier().apply(_employee('u1'), newSession: true);
+    profileOf = (_) => null;
+
+    await applier().apply(_employee('u1', store: 's2'));
+
+    expect(container.read(currentUserRoleProvider), 'EMPLOYEE');
+    expect(container.read(activeStoreIdProvider), 's1');
+    expect(prefs.getString('user_first_name'), 'Loïc');
+  });
+
+  test('16.11 — new session without profile: previous identity gone, sign-in answer seeds', () async {
+    await applier().apply(_employee('u1'), newSession: true);
+    profileOf = (_) => null;
+
+    await applier().apply(_owner('u1'),
+        newSession: true, seedRole: 'OWNER', seedPasswordChangeRequired: false);
+
+    expect(container.read(currentUserRoleProvider), 'OWNER');
+    expect(prefs.getString('user_first_name'), isNull);
+    expect(prefs.getBool(kPasswordChangeRequiredKey), isFalse);
+  });
+
+  test('stores the profile the app reads elsewhere', () async {
     await applier().apply(_employee('u1'), newSession: true);
 
     expect(container.read(currentUserRoleProvider), 'EMPLOYEE');

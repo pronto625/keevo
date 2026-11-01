@@ -10,6 +10,7 @@ import 'package:keevo_core/widget/app_error_widget.dart';
 import 'package:keevo_core/widget/phone_validation.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../devices/presentation/widget/employee_devices_section.dart';
 import '../../../stores/domain/model/store_model.dart';
 import '../../../stores/presentation/provider/store_provider.dart';
 import '../../domain/model/employee_model.dart';
@@ -415,6 +416,9 @@ class _EditEmployeePageState extends ConsumerState<EditEmployeePage> {
                     onTap: _saving ? null : _setPassword,
                   ),
                 ),
+                // Story 16.11 — devices the employee is signed in on.
+                const SizedBox(height: 32),
+                EmployeeDevicesSection(employeeId: widget.employee.id),
               ],
             ],
           ),

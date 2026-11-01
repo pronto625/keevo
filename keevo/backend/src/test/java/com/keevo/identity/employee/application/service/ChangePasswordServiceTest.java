@@ -14,8 +14,6 @@ import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.infrastructure.security.JwtProperties;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -49,8 +47,8 @@ class ChangePasswordServiceTest {
     @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock TokenRevocationPort tokenRevocationPort;
     @Mock PasswordEncoder passwordEncoder;
-    @Mock JwtTokenProvider jwtTokenProvider;
-    @Mock JwtProperties jwtProperties;
+    @Mock com.keevo.identity.auth.application.service.SessionTokenIssuer sessionTokenIssuer;
+    @Mock com.keevo.identity.auth.domain.port.out.TenantRepository tenantRepository;
     @Mock ApplicationEventPublisher eventPublisher;
 
     @InjectMocks ChangePasswordService changePasswordService;
@@ -84,10 +82,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("newAccessToken");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("newRefreshToken");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("newAccessToken");
 
         ChangePasswordCommand cmd = new ChangePasswordCommand(userId, "tempPass123", "NewPass1234");
         AuthTokens result = changePasswordService.execute(cmd);
@@ -110,10 +105,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("token");
 
         changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
 
@@ -143,10 +135,7 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("token");
 
         changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
 
@@ -164,16 +153,13 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("freshAccessToken");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("freshRefreshToken");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("freshAccessToken");
 
         AuthTokens result = changePasswordService.execute(
                 new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
 
         assertThat(result.accessToken()).isEqualTo("freshAccessToken");
-        assertThat(result.refreshToken()).isEqualTo("freshRefreshToken");
+        assertThat(result.refreshToken()).isEqualTo("refresh");
         verify(refreshTokenRepository).revokeAllByUserId(userId);
     }
 
@@ -188,16 +174,45 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateAccessToken(any(), any(), any(), any(), any(), anyBoolean(), any()))
-                .thenReturn("token");
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("token");
         TenantContext.setCurrentTenant("kv_abc123");
 
         changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
 
         // Password change = credential compromise → revoke across ALL the user's memberships
         verify(tokenRevocationPort).revokeAllSessionsEverywhere(eq(userId));
+    }
+
+    @Test
+    @DisplayName("16.11 — the caller's device keeps its session (sid) and device after the change")
+    void keepsTheCallersDeviceSession() {
+        UUID sid = UUID.randomUUID();
+        var auth = new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                userId, null, java.util.List.of());
+        auth.setDetails(new com.keevo.shared.infrastructure.security.AuthDetails("Loïc", null, sid));
+        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
+        try {
+            TenantContext.setCurrentTenant("kv_abc123");
+            when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+            when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+            when(passwordEncoder.encode("NewPass1234")).thenReturn("$2a$12$newHash");
+            when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+            when(employeeRepository.updatePasswordChangeRequired(employeeId, false))
+                    .thenReturn(employee.withPasswordChangeRequired(false));
+            when(refreshTokenRepository.findLiveSessions(eq(userId), eq("kv_abc123"), any())).thenReturn(
+                    java.util.List.of(new com.keevo.identity.auth.domain.model.RefreshToken(UUID.randomUUID(),
+                            userId, "kv_abc123", "h", Instant.now().plusSeconds(3600), false, null, null,
+                            sid, "dev-1", "Redmi Note 12 · Android 14", Instant.now())));
+            stubIssuer("token");
+
+            changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
+
+            verify(sessionTokenIssuer).issue(eq(userId), any(), any(), eq(sid),
+                    eq(com.keevo.identity.auth.domain.model.DeviceInfo.of("dev-1", "Redmi Note 12 · Android 14")));
+        } finally {
+            org.springframework.security.core.context.SecurityContextHolder.clearContext();
+        }
     }
 
     @Test
@@ -214,23 +229,16 @@ class ChangePasswordServiceTest {
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
         when(employeeRepository.updatePasswordChangeRequired(employeeId, false)).thenReturn(employee.withPasswordChangeRequired(false));
-        when(jwtTokenProvider.generateRefreshToken()).thenReturn("refresh");
-        when(jwtProperties.getAccessTokenExpiryHours()).thenReturn(24);
+        stubIssuer("token");
         TenantContext.setCurrentTenant("kv_abc123");
 
         changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
 
         // CRITICAL: the role passed to generateAccessToken MUST be "OWNER" (from User.role),
         // NOT "EMPLOYEE" (from the old heuristic employeeOpt.isPresent() ? "EMPLOYEE" : "OWNER")
-        verify(jwtTokenProvider).generateAccessToken(
-                eq(userId),
-                any(),
+        verify(sessionTokenIssuer).issue(eq(userId), any(),
                 eq("OWNER"),       // ← this is the regression assertion
-                any(),
-                any(),
-                anyBoolean(),
-                any()
-        );
+                any(), any());
     }
 
     @Test
@@ -260,5 +268,17 @@ class ChangePasswordServiceTest {
                 .extracting(e -> ((DomainException) e).getDomainCode())
                 .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
         verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    /** Story 16.11 — tokens are issued by SessionTokenIssuer (same path as login / refresh). */
+    private void stubIssuer(String accessToken) {
+        when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-ABC123", "kv_abc123",
+                        com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
+                        Instant.now())));
+        when(sessionTokenIssuer.issue(any(), any(), any(), any(), any())).thenAnswer(inv ->
+                new com.keevo.identity.auth.application.service.SessionTokenIssuer.IssuedSession(
+                        new AuthTokens(accessToken, "refresh", 1800, inv.getArgument(0), "kv_abc123",
+                                inv.getArgument(2)), UUID.randomUUID()));
     }
 }

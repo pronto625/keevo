@@ -74,8 +74,8 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
         // Story 13.9: registration provisions the free modules with migrations (crm) and materialises their
         // ACTIVE/FREE row — these tests start from the free rule without any row
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId);
-        adminToken = jwtTokenProvider.generateAccessToken(adminId, "public", "SUPER_ADMIN");
-        ownerToken = jwtTokenProvider.generateAccessToken(ownerId, schema, "OWNER");
+        adminToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, adminId, "public", "SUPER_ADMIN");
+        ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
     }
 
     @AfterEach

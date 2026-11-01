@@ -1,5 +1,7 @@
 package com.keevo.identity.auth.domain.port.in;
 
+import com.keevo.identity.auth.domain.model.DeviceInfo;
+
 import com.keevo.identity.auth.domain.model.AuthTokens;
 
 /**
@@ -16,7 +18,12 @@ public interface RefreshTokenUseCase {
      * @return new token pair
      * @throws com.keevo.shared.domain.exception.DomainException REFRESH_TOKEN_INVALID
      */
-    AuthTokens refresh(String rawRefreshToken);
+    AuthTokens refresh(String rawRefreshToken, DeviceInfo device);
+
+    /** Refresh without device data (the session keeps its known device). */
+    default AuthTokens refresh(String rawRefreshToken) {
+        return refresh(rawRefreshToken, DeviceInfo.NONE);
+    }
 
     /**
      * Logout: revoke the refresh token so it can never renew a session again.

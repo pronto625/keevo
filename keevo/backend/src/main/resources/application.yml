@@ -134,8 +134,15 @@ keevo:
   jwt:
     private-key-path: ${KEEVO_JWT_PRIVATE_KEY_PATH:classpath:keys/private_key.pem}
     public-key-path: ${KEEVO_JWT_PUBLIC_KEY_PATH:classpath:keys/public_key.pem}
-    access-token-expiry-hours: 1440  # 60 days
-    refresh-token-expiry-days: 360   # 360 days
+    # Story 16.11 — short access token renewed silently; refresh token valid 365 days from its last
+    # use (sliding); the super-admin dashboard session slides over 12 h.
+    access-token-expiry-minutes: ${KEEVO_JWT_ACCESS_TOKEN_EXPIRY_MINUTES:30}
+    refresh-token-expiry-days: 365
+    super-admin-refresh-expiry-hours: 12
+    # Indicative V1 claims (role, tenantStatus, storeId, passwordChangeRequired, onboardingCompleted)
+    # for installed V1 apps — never read by the server. Switched off by Story 16.7 once the minimum
+    # app version is forced.
+    legacy-claims: ${KEEVO_JWT_LEGACY_CLAIMS:true}
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.

@@ -14,6 +14,9 @@ import com.keevo.identity.auth.adapter.in.rest.dto.ForgotPasswordResponseDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.ResetPasswordRequestDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.ResetPasswordResponseDto;
 import com.keevo.identity.auth.domain.model.AuthTokens;
+import com.keevo.identity.auth.domain.model.DeviceInfo;
+import com.keevo.identity.auth.application.service.RefreshRateLimiter;
+import jakarta.servlet.http.HttpServletRequest;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
@@ -82,6 +85,7 @@ public class AuthController {
     private final GetUserProfileUseCase  getUserProfileUseCase;
     private final RequestPasswordResetUseCase requestPasswordResetUseCase;
     private final ResetPasswordUseCase   resetPasswordUseCase;
+    private final RefreshRateLimiter     refreshRateLimiter;
 
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
@@ -90,7 +94,8 @@ public class AuthController {
                           ChangePasswordUseCase changePasswordUseCase,
                           GetUserProfileUseCase getUserProfileUseCase,
                           RequestPasswordResetUseCase requestPasswordResetUseCase,
-                          ResetPasswordUseCase resetPasswordUseCase) {
+                          ResetPasswordUseCase resetPasswordUseCase,
+                          RefreshRateLimiter refreshRateLimiter) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
@@ -99,6 +104,7 @@ public class AuthController {
         this.getUserProfileUseCase  = getUserProfileUseCase;
         this.requestPasswordResetUseCase = requestPasswordResetUseCase;
         this.resetPasswordUseCase   = resetPasswordUseCase;
+        this.refreshRateLimiter     = refreshRateLimiter;
     }
 
     @Operation(
@@ -190,8 +196,8 @@ public class AuthController {
             Story 1.7 — Two-step login step 2.
 
             Validates the loginToken from step 1, verifies the user's membership in
-            the requested tenant, and issues a full RS256 access token (24h) +
-            opaque refresh token (30 days) scoped to that tenant.
+            the requested tenant, and issues a full RS256 access token (30 min) +
+            opaque refresh token (365 days sliding, one device session) scoped to that tenant.
 
             No JWT authentication required — publicly accessible.
             """
@@ -209,8 +215,9 @@ public class AuthController {
     public ResponseEntity<LoginResponse> selectTenant(
             @Valid @RequestBody SelectTenantRequest request) {
 
-        AuthTokens tokens = selectTenantUseCase.select(
-                new SelectTenantCommand(request.loginToken(), request.tenantCode()));
+        AuthTokens tokens = selectTenantUseCase.select(new SelectTenantCommand(
+                request.loginToken(), request.tenantCode(),
+                DeviceInfo.of(request.deviceId(), request.deviceLabel())));
 
         return ResponseEntity.ok(toLoginResponse(tokens));
     }
@@ -233,9 +240,12 @@ public class AuthController {
     @SecurityRequirements
     @PostMapping("/refresh")
     public ResponseEntity<LoginResponse> refresh(
-            @Valid @RequestBody RefreshRequest request) {
+            @Valid @RequestBody RefreshRequest request, HttpServletRequest httpRequest) {
 
-        AuthTokens tokens = refreshTokenUseCase.refresh(request.refreshToken());
+        // Story 16.11 — per-token and per-IP rate limit (429 « Trop de requêtes »).
+        refreshRateLimiter.acquire(request.refreshToken(), clientIp(httpRequest));
+        AuthTokens tokens = refreshTokenUseCase.refresh(request.refreshToken(),
+                DeviceInfo.of(request.deviceId(), request.deviceLabel()));
         return ResponseEntity.ok(toLoginResponse(tokens));
     }
 
@@ -358,6 +368,20 @@ public class AuthController {
 
     // ── Mapping helpers ───────────────────────────────────────────────────────
 
+    /**
+     * Client IP for the refresh rate limit: the right-most {@code X-Forwarded-For} entry (the one the
+     * reverse proxy appended — a client cannot forge it), else the socket address.
+     */
+    static String clientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            String[] parts = forwarded.split(",");
+            String last = parts[parts.length - 1].trim();
+            if (!last.isEmpty()) return last;
+        }
+        return request.getRemoteAddr();
+    }
+
     private UserProfileResponse toProfileResponse(UserProfileData data) {
         return new UserProfileResponse(
             data.userId(),
@@ -366,7 +390,10 @@ public class AuthController {
             data.firstName(),
             data.lastName(),
             data.storeId(),
-            data.storeName()
+            data.storeName(),
+            data.passwordChangeRequired(),
+            data.tenantStatus(),
+            data.onboardingCompleted()
         );
     }
 

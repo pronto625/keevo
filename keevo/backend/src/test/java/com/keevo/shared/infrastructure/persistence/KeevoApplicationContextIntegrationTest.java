@@ -1,6 +1,6 @@
 package com.keevo.shared.infrastructure.persistence;
 
-import com.keevo.identity.auth.adapter.out.persistence.impl.CachedTokenRevocationAdapter;
+import com.keevo.shared.infrastructure.security.access.AccessStateService;
 import com.keevo.identity.auth.application.service.AuthTokenCleanupJob;
 import com.keevo.identity.auth.application.service.PasswordResetRateLimiter;
 import com.keevo.identity.auth.application.service.TenantFactory;
@@ -77,13 +77,13 @@ class KeevoApplicationContextIntegrationTest extends FullContextIntegrationTest 
     @Test
     @DisplayName("ClockConfig: one Clock bean, injected into the time-driven auth beans")
     void clockBeanWired() {
-        // Exactly one Clock bean: every constructor-injected Clock (CachedTokenRevocationAdapter and
+        // Exactly one Clock bean: every constructor-injected Clock (AccessStateService and
         // PasswordResetRateLimiter keep it only inside their Caffeine tickers) is necessarily this one.
         assertThat(context.getBeansOfType(Clock.class)).hasSize(1);
         Clock clock = context.getBean(Clock.class);
 
         assertThat(clock.getZone()).isEqualTo(Clock.systemUTC().getZone());
-        assertThat(context.getBean(CachedTokenRevocationAdapter.class)).isNotNull();
+        assertThat(context.getBean(AccessStateService.class)).isNotNull();
         assertThat(context.getBean(PasswordResetRateLimiter.class)).isNotNull();
         assertThat(ReflectionTestUtils.getField(context.getBean(AuthTokenCleanupJob.class), "clock")).isSameAs(clock);
     }

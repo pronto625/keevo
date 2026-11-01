@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 210 — gated: 106, exempt: 104.
+Handlers: 216 — gated: 106, exempt: 110.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -90,6 +90,9 @@ Handlers: 210 — gated: 106, exempt: 104.
 | POST | `/api/v1/auth/register` | — | — | — | authentification | AuthController#register |
 | POST | `/api/v1/auth/reset-password` | — | — | — | authentification | AuthController#resetPassword |
 | POST | `/api/v1/auth/select-tenant` | — | — | — | authentification | AuthController#selectTenant |
+| DELETE | `/api/v1/auth/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeMyOthers |
+| GET | `/api/v1/auth/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#mySessions |
+| DELETE | `/api/v1/auth/sessions/{sessionId}` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeMine |
 | GET | `/api/v1/categories` | `catalog` | READ | — |  | CategoryController#getAllCategories |
 | POST | `/api/v1/categories` | `catalog` | WRITE | — |  | CategoryController#createCategory |
 | GET | `/api/v1/categories/roots` | `catalog` | READ | — |  | CategoryController#getRootCategories |
@@ -119,6 +122,9 @@ Handlers: 210 — gated: 106, exempt: 104.
 | PATCH | `/api/v1/employees/{employeeId}/reactivate` | — | — | — | core: employés (plafond du plan) | EmployeeController#reactivateEmployee |
 | POST | `/api/v1/employees/{employeeId}/regenerate-password` | — | — | — | core: employés (plafond du plan) | EmployeeController#regeneratePassword |
 | PATCH | `/api/v1/employees/{employeeId}/role` | — | — | — | core: employés (plafond du plan) | EmployeeController#changeRole |
+| DELETE | `/api/v1/employees/{employeeId}/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeEmployeeSessions |
+| GET | `/api/v1/employees/{employeeId}/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#employeeSessions |
+| DELETE | `/api/v1/employees/{employeeId}/sessions/{sessionId}` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeEmployeeSession |
 | PATCH | `/api/v1/employees/{employeeId}/store` | — | — | — | core: employés (plafond du plan) | EmployeeController#reassignStore |
 | GET | `/api/v1/exports` | `reporting` | READ | — |  | ExportController#list |
 | POST | `/api/v1/exports` | `reporting` | READ (produit un fichier à partir des données existantes, sans les modifier) | — |  | ExportController#request |

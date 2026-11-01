@@ -8,14 +8,12 @@ import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,20 +35,17 @@ public class InventorySessionController {
     private final CancelInventorySessionUseCase cancelSessionUseCase;
     private final ListInventorySessionsUseCase listSessionsUseCase;
     private final ValidateInventoryUseCase validateInventoryUseCase;
-    private final JwtTokenProvider jwtTokenProvider;
 
     public InventorySessionController(CreateInventorySessionUseCase createSessionUseCase,
                                        GetActiveSessionUseCase getActiveSessionUseCase,
                                        CancelInventorySessionUseCase cancelSessionUseCase,
                                        ListInventorySessionsUseCase listSessionsUseCase,
-                                       ValidateInventoryUseCase validateInventoryUseCase,
-                                       JwtTokenProvider jwtTokenProvider) {
+                                       ValidateInventoryUseCase validateInventoryUseCase) {
         this.createSessionUseCase = createSessionUseCase;
         this.getActiveSessionUseCase = getActiveSessionUseCase;
         this.cancelSessionUseCase = cancelSessionUseCase;
         this.listSessionsUseCase = listSessionsUseCase;
         this.validateInventoryUseCase = validateInventoryUseCase;
-        this.jwtTokenProvider = jwtTokenProvider;
     }
 
     @Operation(summary = "Start a new inventory session")
@@ -108,10 +103,10 @@ public class InventorySessionController {
     @RequiresEntitlement("counting")
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponseWrapper<InventorySessionResponseDto>> cancelSession(
-            @PathVariable UUID id, HttpServletRequest httpRequest) {
+            @PathVariable UUID id) {
 
         UUID actorId = extractActorId();
-        String role = extractRole(httpRequest);
+        String role = CurrentActor.role();
 
         InventorySession result = cancelSessionUseCase.execute(
                 new CancelInventorySessionCommand(id, actorId, role));
@@ -166,14 +161,5 @@ public class InventorySessionController {
 
     private UUID extractActorId() {
         return (UUID) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-    }
-
-    private String extractRole(HttpServletRequest request) {
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return "EMPLOYEE";
-        }
-        String token = authHeader.substring(7);
-        return jwtTokenProvider.extractRole(jwtTokenProvider.parseToken(token));
     }
 }
