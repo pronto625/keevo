@@ -808,6 +808,27 @@ class ModuleLifecycleServiceTest {
         verify(locks, never()).lock(anyString());
     }
 
+    @Test
+    @DisplayName("16.3 — GET /tenants/me/modules source: every catalogue module (core, free, paid) with its state")
+    void tenantModulesListsEveryCatalogueModule() {
+        rows.put("lcpaid", TenantModuleStatus.ACTIVE, NOW.minusSeconds(60), NOW.plus(Duration.ofDays(7)));
+        rows.put("lcpremium", TenantModuleStatus.DISABLED, null, null);
+
+        Map<String, ModuleState> states = new LinkedHashMap<>();
+        lifecycle.tenantModules(SCHEMA).forEach(v -> states.put(v.moduleId(), v.state()));
+
+        assertThat(states.keySet()).containsExactlyInAnyOrderElementsOf(
+                lifecycle.catalogue().stream().map(m -> m.id()).toList());
+        assertThat(states).containsEntry("core", ModuleState.ENABLED)
+                .containsEntry("lcsync", ModuleState.ENABLED)
+                .containsEntry("lcbase", ModuleState.ENABLED)
+                .containsEntry("lcplain", ModuleState.ENABLED)
+                .containsEntry("lcpaid", ModuleState.READ_ONLY)
+                .containsEntry("lcpremium", ModuleState.DISABLED);
+        assertThat(states.values()).allMatch(s -> s == ModuleState.ENABLED || s == ModuleState.READ_ONLY
+                || s == ModuleState.DISABLED);
+    }
+
     // ── Story 13.9 — KeevoModule hooks ──────────────────────────────────────
 
     /** Records its hook calls; optionally throws. */

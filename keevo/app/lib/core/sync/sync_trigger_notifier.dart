@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:developer' as dev;
 import 'dart:math';
 
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/state/settable_notifier.dart';
@@ -118,11 +117,7 @@ class SyncTriggerNotifier extends _$SyncTriggerNotifier {
   SyncTriggerState build() {
     ref.listen(connectivityStreamProvider, (prev, next) {
       next.whenData((results) {
-        final isOnline = results.any((r) =>
-            r == ConnectivityResult.mobile ||
-            r == ConnectivityResult.wifi ||
-            r == ConnectivityResult.ethernet);
-        if (isOnline) {
+        if (isOnline(results)) {
           _onConnectivityRestored();
         } else {
           // A44: no retry while offline — the restore resumes the sync.

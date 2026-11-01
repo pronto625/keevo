@@ -7,9 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:keevo/core/entitlements/entitlements_provider.dart';
+import 'package:keevo/features/auth/domain/repository/token_storage.dart';
 import 'package:keevo/features/auth/presentation/provider/auth_provider.dart';
 import 'package:keevo/features/inventory/presentation/page/local_low_stock_page.dart';
-import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
 import 'package:keevo_core/state/provider_retry.dart';
@@ -101,6 +101,45 @@ class _FailingPersist extends FakeEntitlementsNotifier {
       throw StateError('stockage plein');
 }
 
+/// Real notifier with settable clocks (Story 16.3 throttle): [tick] is the
+/// monotonic time, [at] the wall clock of the answers.
+class _ClockedNotifier extends EntitlementsNotifier {
+  Duration tick = Duration.zero;
+  DateTime at = DateTime(2026, 11, 1, 10);
+
+  /// The first build fails (seed unreadable) when set.
+  bool failFirstSeed = false;
+
+  @override
+  Duration elapsed() => tick;
+
+  @override
+  DateTime now() => at;
+
+  @override
+  Future<Entitlements> loadSeed() {
+    if (failFirstSeed) {
+      failFirstSeed = false;
+      throw StateError('stockage illisible');
+    }
+    return super.loadSeed();
+  }
+}
+
+/// Counts the reads of the access token (Story 16.3: the seed never reads it).
+class _CountingTokens extends Fake implements TokenStorage {
+  final String? token;
+  int reads = 0;
+
+  _CountingTokens(this.token);
+
+  @override
+  Future<String?> getToken() async {
+    reads++;
+    return token;
+  }
+}
+
 void main() {
   late _Adapter adapter;
   late SharedPreferences prefs;
@@ -170,8 +209,7 @@ void main() {
     expect(await cursor(), _cursor, reason: 'the sync consumes the marker');
   });
 
-  test('claim present: seeded from the claim, then replaced by the API',
-      () async {
+  test('16.3: legacy modules claim ignored → unknown, then the API', () async {
     final c = await setUpContainer(
       token: _token(modules: ['invoicing']),
       server: {'invoicing': 'READ_ONLY', 'pos': 'ENABLED'},
@@ -179,9 +217,8 @@ void main() {
     adapter.gate = Completer<void>();
 
     final seed = await c.read(entitlementsProvider.future);
-    expect(seed.status, EntitlementsStatus.claim);
-    expect(seed.isActive('invoicing'), isTrue);
-    expect(seed.isReadable('pos'), isFalse);
+    expect(seed.status, EntitlementsStatus.unknown);
+    expect(seed.isReadable('invoicing'), isFalse, reason: 'claim not read');
 
     adapter.gate!.complete();
     await settle();
@@ -224,11 +261,12 @@ void main() {
     expect(e.status, EntitlementsStatus.unknown);
   });
 
-  test('a snapshot newer than the token wins over its claim', () async {
+  test('16.3: legacy claim ignored even when the snapshot is older', () async {
     final c = await setUpContainer(
       token: _token(modules: ['invoicing']),
-      snapshot: _snapshot({'invoicing': 'DISABLED'},
-          at: DateTime.now().add(const Duration(minutes: 5))),
+      snapshot: _snapshot({
+        'invoicing': 'DISABLED',
+      }, at: DateTime.now().subtract(const Duration(days: 30))),
     );
 
     final e = await c.read(entitlementsProvider.future);
@@ -450,6 +488,171 @@ void main() {
         reason: 'background confirmation joins');
   });
 
+  group('16.3 refreshIfStale (resume / network back)', () {
+    Future<(ProviderContainer, _ClockedNotifier)> clocked({
+      Map<String, String>? server,
+      String? snapshot,
+      bool failFirstSeed = false,
+    }) async {
+      final base = await setUpContainer(
+        token: _token(),
+        server: server,
+        snapshot: snapshot,
+      );
+      final notifier = _ClockedNotifier()..failFirstSeed = failFirstSeed;
+      final c = ProviderContainer(
+        parent: base,
+        retry: noProviderRetry,
+        overrides: [entitlementsProvider.overrideWith(() => notifier)],
+      );
+      addTearDown(c.dispose);
+      try {
+        await c.read(entitlementsProvider.future);
+      } catch (_) {
+        // failFirstSeed: the build fails.
+      }
+      await settle();
+      return (c, notifier);
+    }
+
+    test(
+      'two resumes within 60 s → one request, then 60 s later another',
+      () async {
+        final (c, clock) = await clocked(server: {'invoicing': 'ENABLED'});
+        expect(adapter.paths, hasLength(1), reason: 'build confirmation');
+        final notifier = c.read(entitlementsProvider.notifier);
+
+        clock.tick += const Duration(seconds: 30);
+        await notifier.refreshIfStale();
+        clock.tick += const Duration(seconds: 20);
+        await notifier.refreshIfStale();
+        expect(adapter.paths, hasLength(1), reason: 'last request too recent');
+
+        // Server-side disable seen on the next resume after 60 s.
+        adapter.states = {'invoicing': 'DISABLED'};
+        clock.tick += const Duration(seconds: 15);
+        await notifier.refreshIfStale();
+        expect(adapter.paths, hasLength(2));
+        expect(
+          c.read(entitlementsProvider).requireValue.isReadable('invoicing'),
+          isFalse,
+        );
+        expect(persisted()!.states, {'invoicing': 'DISABLED'});
+      },
+    );
+
+    test('two failed resumes within 60 s → one request', () async {
+      final (c, clock) = await clocked(
+        snapshot: _snapshot({'invoicing': 'ENABLED'}),
+      );
+      expect(adapter.paths, hasLength(1), reason: 'build, failed');
+      final notifier = c.read(entitlementsProvider.notifier);
+
+      clock.tick += const Duration(seconds: 61);
+      await notifier.refreshIfStale();
+      clock.tick += const Duration(seconds: 5);
+      await notifier.refreshIfStale(); // notification shade bounce
+      expect(adapter.paths, hasLength(2));
+      final e = c.read(entitlementsProvider);
+      expect(e.hasError, isFalse);
+      expect(e.requireValue.status, EntitlementsStatus.cached);
+      expect(e.requireValue.isReadable('invoicing'), isTrue);
+      expect(persisted()!.states, {'invoicing': 'ENABLED'});
+    });
+
+    test('network back right after a failed resume → a request', () async {
+      final (c, clock) = await clocked(
+        snapshot: _snapshot({'invoicing': 'ENABLED'}),
+      );
+      final notifier = c.read(entitlementsProvider.notifier);
+      clock.tick += const Duration(seconds: 61);
+      await notifier.refreshIfStale();
+      expect(adapter.paths, hasLength(2));
+
+      adapter.states = {'invoicing': 'DISABLED'};
+      clock.tick += const Duration(seconds: 1);
+      await notifier.refreshIfStale(force: true);
+      expect(adapter.paths, hasLength(3));
+      expect(
+        c.read(entitlementsProvider).requireValue.isReadable('invoicing'),
+        isFalse,
+      );
+    });
+
+    test(
+      'a device clock moved backwards does not suppress the refresh',
+      () async {
+        final (c, clock) = await clocked(server: {'invoicing': 'ENABLED'});
+        final notifier = c.read(entitlementsProvider.notifier);
+        // The answer was stamped a day ahead, then the wall clock went back.
+        clock.at = clock.at.subtract(const Duration(days: 1));
+        clock.tick += const Duration(seconds: 61);
+
+        await notifier.refreshIfStale();
+        expect(adapter.paths, hasLength(2));
+      },
+    );
+
+    test('quick resumes join the request running (one GET)', () async {
+      final (c, clock) = await clocked(server: {'pos': 'ENABLED'});
+      clock.tick += const Duration(minutes: 5);
+      adapter.gate = Completer<void>();
+      final notifier = c.read(entitlementsProvider.notifier);
+      final a = notifier.refreshIfStale();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      final b = notifier.refreshIfStale();
+      adapter.gate!.complete();
+      await Future.wait([a, b]);
+      expect(adapter.paths, hasLength(2), reason: 'build + one refresh');
+    });
+
+    test('build failed (no value) → the resume still asks', () async {
+      final (c, _) = await clocked(
+        server: {'pos': 'ENABLED'},
+        failFirstSeed: true,
+      );
+      expect(c.read(entitlementsProvider).hasError, isTrue);
+      expect(adapter.paths, isEmpty);
+
+      await c.read(entitlementsProvider.notifier).refreshIfStale();
+      expect(adapter.paths, hasLength(1));
+      expect(c.read(entitlementsProvider).requireValue.isActive('pos'), isTrue);
+    });
+
+    test('signed out: nothing asked, forced or not', () async {
+      final c = await setUpContainer(server: {'pos': 'ENABLED'});
+      final notifier = c.read(entitlementsProvider.notifier);
+      await notifier.refreshIfStale();
+      await notifier.refreshIfStale(force: true);
+      expect(adapter.paths, isEmpty);
+    });
+  });
+
+  test('16.3: the seed never reads the access token', () async {
+    final base = await setUpContainer(
+      server: {'invoicing': 'ENABLED'},
+      snapshot: _snapshot({'invoicing': 'DISABLED'}),
+    );
+    final tokens = _CountingTokens(_token(modules: ['invoicing']));
+    final c = ProviderContainer(
+      parent: base,
+      retry: noProviderRetry,
+      overrides: [
+        tokenStorageProvider.overrideWithValue(tokens),
+        // Scoped here so it reads the counting storage.
+        entitlementsProvider.overrideWith(EntitlementsNotifier.new),
+      ],
+    );
+    addTearDown(c.dispose);
+
+    final seed = await c.read(entitlementsProvider.future);
+    await settle();
+
+    expect(seed.status, EntitlementsStatus.cached);
+    expect(seed.isReadable('invoicing'), isFalse, reason: 'claim not used');
+    expect(tokens.reads, 1, reason: 'only hasSession() reads the token');
+  });
+
   group('isMultiStoreOverviewAvailable', () {
     test('error → false, not cached: the next call asks again', () async {
       final c = await setUpContainer(token: _token());
@@ -599,21 +802,6 @@ void main() {
     test('malformed API answer → FormatException (states kept)', () {
       expect(() => Entitlements.parseApiStates({'oops': 1}),
           throwsFormatException);
-    });
-  });
-
-  group('JwtClaims.modules', () {
-    test('list of strings → ids; absent or malformed → null', () {
-      expect(JwtClaims.tryParse(_token(modules: ['pos', 'crm']))!.modules,
-          ['pos', 'crm']);
-      expect(JwtClaims.tryParse(_token())!.modules, isNull);
-      expect(JwtClaims.tryParse(_jwt({'modules': 'pos'}))!.modules, isNull);
-      expect(
-          JwtClaims.tryParse(_jwt({
-            'modules': [1, 'pos']
-          }))!
-              .modules,
-          isNull);
     });
   });
 }

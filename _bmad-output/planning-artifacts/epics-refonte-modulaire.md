@@ -1207,7 +1207,7 @@ So that **l'UI s'adapte aux modules souscrits (MOD-FR15, MOD-FR18)**.
 **Then** le module disparaît de `entitlementsProvider`
 
 **Implementation Notes:**
-- Lire le claim `modules` (Epic 16.3) ; fallback `GET /tenants/me/modules`.
+- ~~Lire le claim `modules` (Epic 16.3)~~ — abandonné le 2026-11-01 (aucun claim de modules) : `GET /tenants/me/modules`, redemandé à chaque changement de session, au retour au premier plan et au retour du réseau (16.3).
 - Offline : respecter le dernier état signé (cohérent gate 7 jours).
 
 - [x] [Deferred-from: review 13-10a, 2026-10-30] When a module becomes ENABLED again for the tenant, the app must re-pull that module's entities from scratch (the 13.10a pull skips DISABLED providers but advances the cursor, so rows changed meanwhile are never re-sent); hide premium export datasets the tenant cannot use (`GET /exports/datasets` is not filtered) [Flutter entitlements / sync] — ✅ 15.1 (2026-10-31): full-pull marker raised by `entitlementsProvider` and consumed by `RestSyncService._pull`; `GET /exports/datasets` filtered by readable module
@@ -1516,9 +1516,9 @@ So that **le gating fonctionne hors ligne, suit vite les changements faits côt�
 - Pas de modification de `JwtTokenProvider` pour les modules ; la réponse de `/tenants/me/modules` porte l'état de chaque module (`ENABLED`, `READ_ONLY`, `TRIAL`…) au lieu d'une liste mélangée.
 - Le backend continue d'appliquer `@RequiresEntitlement` (défense).
 
-- [ ] [Deferred-from: review 13-5, 2026-10-29 ; reformulé le 2026-11-01] The modules answer must carry read-only modules (`{id: state}`) built from `ModuleRegistry.moduleStates` — `enabledModules` mixes ENABLED and READ_ONLY [`GET /tenants/me/modules` — plus de claim JWT]
+- [x] [Deferred-from: review 13-5, 2026-10-29 ; reformulé le 2026-11-01] The modules answer must carry read-only modules (`{id: state}`) built from `ModuleRegistry.moduleStates` — `enabledModules` mixes ENABLED and READ_ONLY [`GET /tenants/me/modules` — plus de claim JWT] — fait (16.3) : la réponse porte déjà `{moduleId, state}` depuis `moduleStates`, épinglé par `ModuleLifecycleServiceTest.tenantModulesListsEveryCatalogueModule` ; aucun claim de modules dans les jetons (`JwtTokenProviderTest.access_tokens_carry_no_module_claim`)
 
-- [ ] [Deferred-from: review 15-2, 2026-10-31 ; reformulé le 2026-11-01] The app's route guard (15.2) treats a module absent from known states as not readable: the modules answer that seeds `entitlementsProvider` must list every usable module (free ones included, e.g. `crm`), or the app must treat absent free modules as readable [modules answer / app entitlements]
+- [x] [Deferred-from: review 15-2, 2026-10-31 ; reformulé le 2026-11-01] The app's route guard (15.2) treats a module absent from known states as not readable: the modules answer that seeds `entitlementsProvider` must list every usable module (free ones included, e.g. `crm`), or the app must treat absent free modules as readable [modules answer / app entitlements] — fait (16.3) : la réponse liste tout le catalogue (socle, gratuits, payants) ; l'app ne lit plus de claim (instantané du compte, sinon inconnu) et redemande au retour au premier plan / du réseau / à chaque changement de session
 
 ### Story 16.4 : Console super-admin « Modules »
 

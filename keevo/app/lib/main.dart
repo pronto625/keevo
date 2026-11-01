@@ -15,6 +15,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqlite3/open.dart';
 
+import 'core/entitlements/entitlements_refresh_trigger.dart';
 import 'core/entitlements/module_read_only_banner.dart';
 import 'core/extension/extension_actions.dart';
 import 'core/router/app_router.dart';
@@ -96,8 +97,9 @@ class KeevoApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Story 15.2 — module states changed: the router re-runs its module guard.
-    listenModuleGate(ref);
+    // Story 15.2 / 16.3 — module states changed: the router re-runs its
+    // module guard; they are asked again on resume / network back.
+    listenEntitlements(ref);
     return MaterialApp.router(
       title: 'Keevo',
       scaffoldMessengerKey: rootScaffoldMessengerKey,

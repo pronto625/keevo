@@ -26,6 +26,13 @@ final connectivityStreamProvider =
   yield* connectivity.onConnectivityChanged;
 });
 
+/// Story 16.3 — a connectivity event says a link is up: any result other
+/// than [ConnectivityResult.none] (wifi, mobile, ethernet, vpn, other…). The
+/// server decides whether it is reachable. Shared by the sync trigger and the
+/// module-state refresh trigger.
+bool isOnline(List<ConnectivityResult> results) =>
+    results.any((r) => r != ConnectivityResult.none);
+
 /// First offline date read from SharedPreferences (production) or overridden
 /// directly in tests via [ProviderContainer.overrides].
 ///

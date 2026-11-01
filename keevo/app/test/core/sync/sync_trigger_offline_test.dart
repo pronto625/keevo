@@ -104,6 +104,15 @@ void main() {
     verify(() => sync.pull()).called(1);
   });
 
+  test('16.3: a vpn-only link counts as the network coming back', () async {
+    container.listen(syncTriggerNotifierProvider, (_, __) {});
+    connectivity.online = true;
+    connectivityEvents.add([ConnectivityResult.vpn]);
+    await Future<void>.delayed(const Duration(milliseconds: 3300));
+
+    verify(() => sync.push()).called(1);
+  });
+
   test('read-only account: the push is held, the pull still runs, no retry',
       () async {
     connectivity.online = true;

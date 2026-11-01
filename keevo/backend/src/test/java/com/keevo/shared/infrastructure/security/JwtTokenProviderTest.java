@@ -59,6 +59,31 @@ class JwtTokenProviderTest {
     }
 
     @Test
+    @DisplayName("16.3 — no token of any generator carries a module claim (owner, employee, super-admin, login)")
+    void tokens_carry_no_module_claim() {
+        UUID user = UUID.randomUUID();
+        UUID store = UUID.randomUUID();
+        // Every generator: all access-token overloads (sign-in, tenant selection,
+        // renewal and super-admin all go through them) and the login token.
+        java.util.List<String> tokens = java.util.List.of(
+                provider.generateAccessToken(user, "kv_a", "OWNER", "ACTIVE", "Awa"),
+                provider.generateAccessToken(user, "kv_a", "OWNER", "ACTIVE"),
+                provider.generateAccessToken(user, "kv_a", "OWNER"),
+                provider.generateAccessToken(user, "kv_a", "EMPLOYEE", "ACTIVE", store, true, "Paul"),
+                provider.generateAccessToken(user, "kv_a", "EMPLOYEE", "ACTIVE", store, true, "Paul", true),
+                provider.generateAccessToken(user, "kv_a", "EMPLOYEE", "ACTIVE", store, false),
+                provider.generateAccessToken(user, "public", "SUPER_ADMIN", "ACTIVE", null, false, "Toor", true),
+                provider.generateLoginToken(user));
+
+        for (String token : tokens) {
+            Claims claims = provider.parseToken(token);
+            assertThat(claims.keySet())
+                    .isNotEmpty()
+                    .noneMatch(k -> k.toLowerCase(java.util.Locale.ROOT).contains("module"));
+        }
+    }
+
+    @Test
     @DisplayName("extractUserId returns correct UUID from claims")
     void should_extract_user_id_from_claims() {
         UUID userId = UUID.randomUUID();

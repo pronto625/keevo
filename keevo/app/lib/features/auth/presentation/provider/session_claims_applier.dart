@@ -87,11 +87,10 @@ class SessionClaimsApplier {
     if (newSession && _ref.exists(subscriptionInfoProvider)) {
       _ref.invalidate(subscriptionInfoProvider);
     }
-    // 15.1: every token re-seeds the module states (its `modules` claim, or
-    // this account's snapshot) and asks the server again — a renewal follows a
-    // plan change / purchase, and is how a module disabled server-side
-    // disappears. Mounted now, not on the next read, so a re-enabled module's
-    // pull-cursor reset happens before the next sync.
+    // 15.1 / 16.3: every token (sign-in, tenant selection, renewal) re-seeds
+    // the module states from this account's snapshot and asks the server
+    // again — tokens carry no module list. Mounted now, not on the next read,
+    // so a re-enabled module's pull-cursor reset happens before the next sync.
     if (_ref.exists(entitlementsProvider)) {
       _ref.invalidate(entitlementsProvider);
     }

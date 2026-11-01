@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:keevo_core/auth/jwt_claims.dart';
 import 'package:keevo_core/di/core_providers.dart';
 import 'package:keevo_core/entitlements/entitlements.dart';
 import 'package:keevo_core/storage/app_constants.dart';
@@ -20,16 +19,20 @@ typedef ModulesAnswer = ({
 
 /// Story 15.1 — the tenant's module states, for every session role.
 ///
-/// The value is available at once from what the device knows — the access
-/// token's `modules` claim (Epic 16.3) or the last server answer persisted for
-/// this account ([kEntitlementsSnapshotKey]) — then replaced by the answer of
+/// The value is available at once from what the device knows — the last
+/// server answer persisted for this account ([kEntitlementsSnapshotKey]), else
+/// [Entitlements.unknown] — then replaced by the answer of
 /// `GET /api/v1/tenants/me/modules` (the backend is the source of truth),
 /// which is persisted in turn. A failed request (offline, server error) keeps
 /// the known states and is not cached: the next token / [refresh] /
+/// [EntitlementsNotifier.refreshIfStale] /
 /// [EntitlementsNotifier.ensureServerState] asks again.
 ///
-/// Rebuilt after every token ([SessionClaimsApplier]): a renewed token is how
-/// a module disabled server-side disappears from the app.
+/// Story 16.3 — tokens carry no module list: the server is asked again on
+/// every session change (rebuilt by [SessionClaimsApplier] after a sign-in,
+/// a tenant selection or a renewal), and on app resume / network back
+/// (`entitlementsRefreshTriggerProvider` → [EntitlementsNotifier.refreshIfStale]):
+/// that is how a module disabled or enabled server-side shows in the app.
 final entitlementsProvider =
     AsyncNotifierProvider<EntitlementsNotifier, Entitlements>(
         EntitlementsNotifier.new);
@@ -94,7 +97,57 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
     }
   }
 
+  /// Story 16.3 — after a request (answered or failed), a resume does not
+  /// ask again before this.
+  static const staleAfter = Duration(seconds: 60);
+
+  /// Monotonic time of the last request started (any trigger), null before
+  /// the first. Not the wall clock: a device clock moved backwards must not
+  /// suppress refreshes.
+  Duration? _lastAttemptAt;
+  final Stopwatch _monotonic = Stopwatch()..start();
+
+  /// Story 16.3 — app resume ([force] false) / network back ([force] true):
+  /// asks the server again. A resume joins the request running and is skipped
+  /// within [staleAfter] of the last request, answered or failed; network
+  /// back always starts one. A failure keeps the known states. Signed out:
+  /// nothing asked. Works too when the build failed (no value).
+  Future<void> refreshIfStale({bool force = false}) async {
+    try {
+      try {
+        await future;
+      } catch (_) {
+        // Build failed: no value, still ask.
+      }
+      if (!ref.mounted) return;
+      if (!force) {
+        final running = _inFlight;
+        if (running != null) {
+          await running;
+          return;
+        }
+        final last = _lastAttemptAt;
+        if (last != null && elapsed() - last < staleAfter) return;
+      }
+      if (!await hasSession() || !ref.mounted) return;
+      await (force
+          ? _startFetch(_generation)
+          : _inFlight ?? _startFetch(_generation));
+    } catch (e) {
+      debugPrint('[Entitlements] refresh failed: $e');
+    }
+  }
+
+  /// Monotonic elapsed time (overridden by tests).
+  @protected
+  Duration elapsed() => _monotonic.elapsed;
+
+  /// Wall clock of an answer's [Entitlements.fetchedAt] (overridden by tests).
+  @protected
+  DateTime now() => DateTime.now();
+
   Future<Entitlements> _startFetch(int generation) {
+    _lastAttemptAt = elapsed();
     final fetch = _fetch(generation, ++_requestSeq);
     _inFlight = fetch;
     fetch.whenComplete(() {
@@ -108,7 +161,7 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
     final fresh = Entitlements(
       states: answer.states,
       status: EntitlementsStatus.server,
-      fetchedAt: DateTime.now(),
+      fetchedAt: now(),
       displayNames: answer.displayNames,
       details: answer.details,
     );
@@ -127,31 +180,14 @@ class EntitlementsNotifier extends AsyncNotifier<Entitlements> {
     return fresh;
   }
 
-  /// What the device knows before the server answers: the token claim, or
-  /// the snapshot of this account when it is newer than the token.
+  /// What the device knows before the server answers: the snapshot of this
+  /// account, else unknown. Story 16.3 — the token is never read for modules
+  /// (a legacy `modules` claim is ignored).
   @protected
   Future<Entitlements> loadSeed() async {
     final prefs = ref.read(sharedPreferencesProvider);
     final owner = prefs.getString(kLocalDataOwnerKey);
     final snapshot = owner == null ? null : readSnapshot(prefs, owner);
-    JwtClaims? claims;
-    try {
-      claims =
-          JwtClaims.tryParse(await ref.read(tokenStorageProvider).getToken());
-    } catch (e) {
-      debugPrint('[Entitlements] token read failed: $e');
-    }
-    final claimed = claims?.modules;
-    if (claimed != null) {
-      final issuedAt = claims!.issuedAt;
-      final snapshotAt = snapshot?.fetchedAt;
-      final snapshotIsNewer = snapshotAt != null &&
-          issuedAt != null &&
-          snapshotAt.isAfter(issuedAt);
-      if (!snapshotIsNewer) {
-        return Entitlements.fromClaim(claimed, issuedAt: issuedAt);
-      }
-    }
     return snapshot ?? Entitlements.unknown;
   }
 

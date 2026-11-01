@@ -12,14 +12,10 @@ const kMultiStoreModuleId = 'multi-store';
 
 /// Where the current [Entitlements] come from.
 enum EntitlementsStatus {
-  /// Nothing known yet (first launch offline, no `modules` claim): callers keep
+  /// Nothing known yet (first launch offline, no snapshot): callers keep
   /// their free / default path instead of treating the tenant as having no
   /// module at all.
   unknown,
-
-  /// Seeded from the access token's `modules` claim (Epic 16.3), not yet
-  /// confirmed by the server.
-  claim,
 
   /// Last server answer persisted on the device (restart, offline).
   cached,
@@ -118,15 +114,14 @@ class Entitlements {
   final EntitlementsStatus status;
 
   /// Story 15.2 — module id → French display name (server answer, persisted
-  /// with the snapshot). Empty for a claim seed or an older snapshot.
+  /// with the snapshot). Empty for an older snapshot.
   final Map<String, String> displayNames;
 
   /// Story 15.6 — module id → subscription details (server answer, persisted
-  /// with the snapshot). Empty for a claim seed or an older snapshot.
+  /// with the snapshot). Empty for an older snapshot.
   final Map<String, ModuleDetails> details;
 
-  /// When the server answered (server / cached), or when the token carrying
-  /// the claim was issued (claim). Null when unknown.
+  /// When the server answered (server / cached). Null when unknown.
   final DateTime? fetchedAt;
 
   const Entitlements._(this.states, this.status, this.fetchedAt,
@@ -145,14 +140,6 @@ class Entitlements {
   /// Nothing known yet.
   static const unknown = Entitlements._(<String, String>{},
       EntitlementsStatus.unknown, null, <String, String>{}, <String, ModuleDetails>{});
-
-  /// From the token's `modules` claim: the listed modules are usable.
-  factory Entitlements.fromClaim(List<String> modules, {DateTime? issuedAt}) =>
-      Entitlements(
-        states: {for (final id in modules) id: kModuleEnabled},
-        status: EntitlementsStatus.claim,
-        fetchedAt: issuedAt,
-      );
 
   bool get isKnown => status != EntitlementsStatus.unknown;
 

@@ -107,7 +107,7 @@ class _MyModulesPageState extends ConsumerState<MyModulesPage> {
     } else if (!_offline &&
         entitlements.status != EntitlementsStatus.server &&
         groupModules(entitlements).isEmpty) {
-      // Claim seed without names / nothing known: the server is being asked.
+      // Snapshot without names / nothing known: the server is being asked.
       body = const Center(
           child: CircularProgressIndicator(key: Key('my-modules-loading')));
     } else {

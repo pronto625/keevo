@@ -397,11 +397,13 @@ void main() {
     expect(find.text('Catalogue'), findsOneWidget);
   });
 
-  testWidgets('claim seed without names: spinner while the server is asked, '
+  testWidgets('snapshot without names (2.0.8): spinner while the server is asked, '
       'never the « impossible » message', (tester) async {
     final answer = Completer<Map<String, String>>();
     final fake = FakeEntitlementsNotifier(() => answer.future,
-        seed: Entitlements.fromClaim(const ['invoicing']),
+        seed: Entitlements(
+            states: const {'invoicing': kModuleEnabled},
+            status: EntitlementsStatus.cached),
         displayNames: _names,
         details: _details);
     await pump(tester, fake, settle: false);
