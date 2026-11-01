@@ -1405,11 +1405,12 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 
 **Chemin restant jusqu'à la mise en production de la refonte** (ordre conseillé) :
 
-1. **16.5** backfill `tenant_modules` puis **16.12** fin du DDL tenant sous Flyway (débloquent 16.8 et la charge de la fusion) ; **16.1** cycle de vie (grâce, temps réel) ; **16.8** profils et plafonds configurables ; **16.2** bundles ; **16.3** modules actifs côté app (sans claim dans le jeton).
+1. **16.5** backfill `tenant_modules` (fait le 2026-11-01, débloque 16.8) ; **16.1** cycle de vie (grâce, temps réel) ; **16.8** profils et plafonds configurables ; **16.2** bundles ; **16.3** modules actifs côté app (sans claim dans le jeton).
 2. **16.4** console super-admin modules ; **16.10** scope employé de l'historique des transferts ; **16.11** sessions longues et sûres (jeton d'accès court, session glissante d'un an, appareils connectés) ; **17.10**, **17.11**, **17.12**, **17.8**, **17.7**, **17.2** (fonctionnel, peuvent s'intercaler ; 17.12 après 17.11, dont elle réutilise la saisie de stock initial).
 3. **16.6** vérification RGPD ; **10-8** exécution serveur des runbooks (secrets, TLS staging, S3, alertes, Prometheus).
 4. **17.9** régression E2E sur staging = **gate go-live** ; puis **16.7** canary (avec la version minimale d'app forcée, cf. items de 16.7).
-5. **16.9** (facturation électronique DGI) reste en attente des spécifications DGI ; elle ne bloque pas le go-live.
+5. **16.12** (DDL tenant sous Flyway) **après le go-live** : le shim `TenantSchemaSyncService` suffit d'ici là ; chantier risqué (29 tables) sans effet visible, à faire avant la charge de la fusion.
+6. **16.9** (facturation électronique DGI) reste en attente des spécifications DGI ; elle ne bloque pas le go-live.
 
 **Suite** : une fois la refonte en production (gate G0 de la fusion), la **fusion Keevo × Bref Point** prend le relais — epics **18 à 25**, décrits dans `epics-fusion-keevo-bref.md` et suivis dans `sprint-status.yaml`. Les stories 18.1 (mesures) et 18.2 (décisions) peuvent être menées dès maintenant, en parallèle, car elles ne touchent pas au code.
 

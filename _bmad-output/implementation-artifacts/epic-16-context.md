@@ -60,7 +60,7 @@ Make modular selling real and ship the refonte to production. The module engine 
 
 ## Cross-Story Dependencies
 
-- Recommended order: 16.5 (backfill of plan-derived `tenant_modules` rows) → 16.12 (tenant DDL under Flyway) → 16.1 → 16.8 → 16.2 → 16.3. Then 16.4, 16.10 and 16.11. Then 16.6 and 10-8 (server runbooks). Then the 17.9 E2E regression on staging (go-live gate). Then 16.7 canary with a forced minimum app version.
+- Recommended order: 16.5 (backfill of plan-derived `tenant_modules` rows, done) → 16.1 → 16.8 → 16.2 → 16.3. Then 16.4, 16.10 and 16.11. Then 16.6 and 10-8 (server runbooks). Then the 17.9 E2E regression on staging (go-live gate). Then 16.7 canary with a forced minimum app version. 16.12 (tenant DDL under Flyway) comes after go-live.
 - 16.5 unblocks 16.8. 16.2 and 16.8 feed the 16.4 console. 16.3 and 16.11 both depend on the forced minimum app version from 16.7 before the legacy JWT claims can be dropped.
 - Builds on Epic 13 (registry, resolver, provisioner, lifecycle API), Epic 15 (`entitlementsProvider`, route guards, "Mes modules"), and Epic 10 (staging, backups).
 - Blocker before disabling or expiring `pos`/`crm` in prod: held offline operations are invisible in server-first reads (inventory session, stock ops badges, day totals).
