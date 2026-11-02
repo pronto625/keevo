@@ -168,7 +168,7 @@ deferred: []
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; protocole de synchro et politique de rejet : section « Mobile » de `spec-16-10-scope-employe-historique-transferts.md` ; messages d'erreur : `spec-16-14-api-prete-client-mobile.md` ; stock initial à la création : `spec-17-11-stock-initial-creation-produit.md` (sa règle « champ masqué pour un produit non suivi » est livrée ici). Tous les ajouts sont **additifs** (compatibles V1 2.0.1) : un client qui n'envoie jamais `trackStock` crée des produits suivis et ne change jamais le réglage.
 
-**Statut** : API livrée (branche `refonte/modulaire`, test `sync/sync/adapter/in/rest/StockTrackingFullContextTest.java`) — mobile à faire.
+**Statut** : API livrée (commit `874719b7`, test `sync/sync/adapter/in/rest/StockTrackingFullContextTest.java`) — mobile à faire.
 
 **Clé de suivi mobile** : `m17-12-suivi-stock-par-produit`
 
