@@ -132,7 +132,7 @@ The flag lives with the other tenant preferences (identity owns `tenant_preferen
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; erreurs : `spec-16-14-api-prete-client-mobile.md`. Changements additifs seulement : un champ de plus dans les préférences, un endpoint owner, un champ `me` dans les lignes du classement ; l'employé peut désormais lire le classement quand l'owner l'a partagé. Aucun changement de synchro.
 
-**Statut** : API livrée (commit `COMMIT` ; tests `reporting/leaderboard/adapter/in/rest/LeaderboardControllerTest.java`, `reporting/leaderboard/LeaderboardEmployeeFullContextTest.java`, `identity/onboarding/adapter/in/web/ReportPreferencesControllerTest.java`) — mobile à faire.
+**Statut** : API livrée (commit `9448d043` ; tests `reporting/leaderboard/adapter/in/rest/LeaderboardControllerTest.java`, `reporting/leaderboard/LeaderboardEmployeeFullContextTest.java`, `identity/onboarding/adapter/in/web/ReportPreferencesControllerTest.java`) — mobile à faire.
 
 **Clé de suivi mobile** : `m17-2-leaderboard-vendeurs`
 
