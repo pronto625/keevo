@@ -7,6 +7,7 @@ import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.onboarding.adapter.in.api.TenantPreferencesQueryAdapter;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -36,27 +37,37 @@ public class TenantPreferencesController {
     private final JdbcTemplate jdbcTemplate;
     private final UpdateReportPreferencesUseCase updateReportPreferencesUseCase;
     private final SendTestReportUseCase sendTestReportUseCase;
+    private final TenantPreferencesQueryAdapter tenantPreferencesQuery;
 
     public TenantPreferencesController(TenantPreferencesRepository tenantPreferencesRepository,
                                        JdbcTemplate jdbcTemplate,
                                        UpdateReportPreferencesUseCase updateReportPreferencesUseCase,
-                                       SendTestReportUseCase sendTestReportUseCase) {
+                                       SendTestReportUseCase sendTestReportUseCase,
+                                       TenantPreferencesQueryAdapter tenantPreferencesQuery) {
         this.tenantPreferencesRepository = tenantPreferencesRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.updateReportPreferencesUseCase = updateReportPreferencesUseCase;
         this.sendTestReportUseCase = sendTestReportUseCase;
+        this.tenantPreferencesQuery = tenantPreferencesQuery;
     }
 
     /**
      * Get current tenant preferences including sector type.
      * GET /api/v1/tenant/preferences
+     *
+     * <p>Story 17.8: the report / alert values are the effective ones (what the jobs really use: the fixed
+     * defaults when {@code report-config} is DISABLED), plus {@code reportConfigEditable} (ENABLED only). One row
+     * read and one module-state read give both; an unreadable state → stored values, not editable (WARN logged).
      */
     @EntitlementExempt("core: préférences du commerce")
     @GetMapping("/preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> getPreferences() {
+        String schema = TenantContext.getCurrentTenant();
         return tenantPreferencesRepository.findByCurrentTenant()
             .map(prefs -> {
-                TenantPreferencesResponseDto dto = TenantPreferencesResponseDto.fromDomain(prefs);
+                var effective = tenantPreferencesQuery.effective(schema, prefs);
+                TenantPreferencesResponseDto dto = TenantPreferencesResponseDto.effective(prefs, effective.view(),
+                        effective.reportConfigEditable());
                 return ResponseEntity.ok(ApiResponseWrapper.ok(dto));
             })
             .orElse(ResponseEntity.notFound().build());

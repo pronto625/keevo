@@ -1856,12 +1856,12 @@ So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du
 > | 17.5 Santé, alertes, push global | **done** | 9-5 ; `PlatformHealthService`, `AdminGlobalNotificationController` |
 > | 17.6 Exports PDF/Excel | **done (remplacée)** | v1s-epic-18 (2026-10-12) |
 > | 17.7 Notification changement de prix | backlog | `SalePriceOverriddenEvent` seulement audité (`AuditEventListener`), aucune notification owner |
-> | 17.8 Gating config rapports | backlog (résidu) | endpoint gaté `report-config` (13.10) ; reste l'item ci-dessous (EOD par défaut quand `report-config` est DISABLED) |
+> | 17.8 Gating config rapports | **done** (2026-11-02) | endpoint gaté `report-config` (13.10) + valeurs fixes quand `report-config` est DISABLED (`TenantPreferencesQueryAdapter.effective`, spec-17-8) |
 > | 17.9 Régression E2E | backlog | **gate go-live** : à passer sur staging avant 16.7 |
 > | 17.10, 17.11 | backlog | résidus V1 réintégrés (v1s-16-25, v1s-16-26) |
 > | 17.12 | backlog | demande du 2026-11-01 : suivi de stock réglé par produit |
 
-- [ ] [Deferred-from: review 13-10a, 2026-10-30] With `report-config` DISABLED the end-of-day report must use the fixed default (hour/channel) — stored `report_preferences` set during a trial must be ignored; retire/replace the 13.10a transition rule (plan → paid modules without row) by `profile_modules` [plan profiles]
+- [x] [Deferred-from: review 13-10a, 2026-10-30] With `report-config` DISABLED the end-of-day report must use the fixed default (hour/channel) — stored `report_preferences` set during a trial must be ignored; retire/replace the 13.10a transition rule (plan → paid modules without row) by `profile_modules` [plan profiles] — ✅ 17.8 (2026-11-02): `TenantPreferencesQueryAdapter` (the single `TenantPreferencesQueryPort` read used by EOD report, auto-closure, weekly report, stock alerts, trends, draft-sale notifications) returns `TenantPreferencesView.fixedDefaults()` (EOD on 20:00:00 WhatsApp, weekly on Sunday 20:00:00 WhatsApp, inventory on WhatsApp, stock alerts on push, trends on) when `report-config` is DISABLED; ENABLED / READ_ONLY keep the stored row (never modified), unreadable state → stored + WARN; `GET /tenant/preferences` returns the effective values + additive `reportConfigEditable`. Tests: `TenantPreferencesQueryAdapterTest`, `ReportPreferencesControllerTest` (GET), `DayClosureAutoSchedulerTest.reportConfigDisabled_*`, `EndOfDayReportListenerTest.onDayClosed_reportConfigDisabled_*`, `ReportConfigGatingFullContextTest`. Second half already satisfied by 16.8: the no-row transition rule reads `profile_modules` (`ModuleStateRules.stateOf(..., PlanProfile, ...)` → `PlanModuleRows.granted(plan, profile, moduleId)`)
 
 ### Story 17.1 : Annulation / correction de vente (FR90)
 As a **propriétaire**, I want **annuler ou corriger une vente avec justification, stock réajusté**, So that **les erreurs de caisse sont gérables (FR90)**.

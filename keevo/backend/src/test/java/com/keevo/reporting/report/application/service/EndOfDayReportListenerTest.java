@@ -119,6 +119,24 @@ class EndOfDayReportListenerTest {
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
+    /** Story 17.8: a Free tenant that disabled the EOD report during its trial still gets a WhatsApp report. */
+    @Test
+    void onDayClosed_reportConfigDisabled_ignoresTrialPreferences_whatsappReport() {
+        listener = new EndOfDayReportListener(generateReportUseCase, builder,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository,
+                        com.keevo.shared.module.ModuleState.DISABLED));
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(java.util.Optional.of(new TenantPreferences(
+                UUID.randomUUID(), null, "23:00:00", false, Instant.now(), false, ReportChannel.IN_APP_ONLY,
+                false, 3, "07:00:00", ReportChannel.IN_APP_ONLY, false, ReportChannel.IN_APP_ONLY,
+                com.keevo.identity.api.StockAlertChannel.BOTH, false)));
+        ArgumentCaptor<GenerateReportCommand> captor = ArgumentCaptor.forClass(GenerateReportCommand.class);
+
+        listener.onDayClosed(buildEvent(true));
+
+        verify(generateReportUseCase).generateReport(captor.capture());
+        assertThat(captor.getValue().deliveryChannel()).isEqualTo(ReportChannel.WHATSAPP);
+    }
+
     private TenantPreferences enabledPrefs() {
         return TenantPreferences.withDefaults(UUID.randomUUID(), null, "20:00:00", true, Instant.now());
     }

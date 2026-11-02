@@ -8,6 +8,9 @@ import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
+import com.keevo.identity.onboarding.adapter.in.api.TenantPreferencesQueryAdapter;
+import com.keevo.shared.module.EntitlementService;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -16,7 +19,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +38,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -51,8 +54,9 @@ class ReportPreferencesControllerTest {
     @Mock private JdbcTemplate jdbcTemplate;
     @Mock private UpdateReportPreferencesUseCase updateReportPreferencesUseCase;
     @Mock private SendTestReportUseCase sendTestReportUseCase;
+    @Mock private EntitlementService entitlementService;
 
-    @InjectMocks private TenantPreferencesController controller;
+    private TenantPreferencesController controller;
 
     private MockMvc mockMvc;
     private ObjectMapper objectMapper;
@@ -62,6 +66,9 @@ class ReportPreferencesControllerTest {
 
     @BeforeEach
     void setUp() {
+        controller = new TenantPreferencesController(tenantPreferencesRepository, jdbcTemplate,
+                updateReportPreferencesUseCase, sendTestReportUseCase,
+                new TenantPreferencesQueryAdapter(tenantPreferencesRepository, entitlementService));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -74,6 +81,86 @@ class ReportPreferencesControllerTest {
     void tearDown() {
         SecurityContextHolder.clearContext();
         tenantContextMock.close();
+    }
+
+    // ── GET /api/v1/tenant/preferences (Story 17.8) ───────────────────────────
+
+    /** What the tenant configured during its trial: EOD off at 23:00 in-app only, weekly Wednesday 07:00, … */
+    private static TenantPreferences trialPrefs() {
+        return new TenantPreferences(UUID.randomUUID(), SectorType.OTHER, "23:00", false,
+                Instant.parse("2026-05-01T10:00:00Z"), false, ReportChannel.IN_APP_ONLY, false, 3, "07:00",
+                ReportChannel.IN_APP_ONLY, false, ReportChannel.IN_APP_ONLY, StockAlertChannel.BOTH, false);
+    }
+
+    private void storedTrialPrefs() {
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trialPrefs()));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions getPrefsReturnsStoredValues() throws Exception {
+        return mockMvc.perform(get("/api/v1/tenant/preferences"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.eodReportTime").value("23:00"))
+                .andExpect(jsonPath("$.data.eodReportEnabled").value(false))
+                .andExpect(jsonPath("$.data.eodReportChannel").value("IN_APP_ONLY"))
+                .andExpect(jsonPath("$.data.weeklyReportDay").value(3))
+                .andExpect(jsonPath("$.data.stockAlertChannel").value("BOTH"));
+    }
+
+    @Test
+    void GET_preferences_reportConfigDisabled_returnsFixedDefaultsAndNotEditable() throws Exception {
+        authenticateAs("OWNER");
+        storedTrialPrefs();
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.DISABLED);
+
+        mockMvc.perform(get("/api/v1/tenant/preferences"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sectorType").value("OTHER"))
+                .andExpect(jsonPath("$.data.createdAt").exists())
+                .andExpect(jsonPath("$.data.eodReportTime").value("20:00"))
+                .andExpect(jsonPath("$.data.eodReportEnabled").value(true))
+                .andExpect(jsonPath("$.data.eodReportChannel").value("WHATSAPP"))
+                .andExpect(jsonPath("$.data.weeklyReportDay").value(0))
+                .andExpect(jsonPath("$.data.weeklyReportTime").value("20:00"))
+                .andExpect(jsonPath("$.data.stockAlertChannel").value("PUSH"))
+                .andExpect(jsonPath("$.data.reportConfigEditable").value(false));
+        verify(tenantPreferencesRepository, times(1)).findByCurrentTenant();
+        verify(entitlementService, times(1)).state(TENANT_ID, "report-config");
+    }
+
+    @Test
+    void GET_preferences_reportConfigEnabled_returnsStoredValuesAndEditable() throws Exception {
+        authenticateAs("OWNER");
+        storedTrialPrefs();
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.ENABLED);
+
+        getPrefsReturnsStoredValues().andExpect(jsonPath("$.data.reportConfigEditable").value(true));
+    }
+
+    @Test
+    void GET_preferences_readOnlyGrace_storedValuesNotEditable() throws Exception {
+        authenticateAs("OWNER");
+        storedTrialPrefs();
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.READ_ONLY);
+
+        getPrefsReturnsStoredValues().andExpect(jsonPath("$.data.reportConfigEditable").value(false));
+    }
+
+    @Test
+    void GET_preferences_stateUnreadable_storedValuesNotEditable() throws Exception {
+        authenticateAs("OWNER");
+        storedTrialPrefs();
+        when(entitlementService.state(TENANT_ID, "report-config")).thenThrow(new IllegalStateException("db down"));
+
+        getPrefsReturnsStoredValues().andExpect(jsonPath("$.data.reportConfigEditable").value(false));
+    }
+
+    @Test
+    void GET_preferences_noRow_returns404() throws Exception {
+        authenticateAs("OWNER");
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/tenant/preferences")).andExpect(status().isNotFound());
+        verifyNoInteractions(entitlementService);
     }
 
     // ── PUT /api/v1/tenant/report-preferences ─────────────────────────────────
@@ -89,7 +176,8 @@ class ReportPreferencesControllerTest {
                         .content(validPutBody()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.eodReportTime").value("22:00:00"))
-                .andExpect(jsonPath("$.data.eodReportEnabled").value(true));
+                .andExpect(jsonPath("$.data.eodReportEnabled").value(true))
+                .andExpect(jsonPath("$.data.reportConfigEditable").value(true));
     }
 
     @Test

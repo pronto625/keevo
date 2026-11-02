@@ -268,6 +268,45 @@ class DayClosureAutoSchedulerTest {
         verifyNoInteractions(closeDayUseCase);
     }
 
+    /** Story 17.8: Free tenant whose trial preferences disable the EOD at 23:00 → closed at 20:05 WAT anyway. */
+    @Test
+    void reportConfigDisabled_ignoresTrialPreferences_closesAtFixedTime() {
+        scheduler = new DayClosureAutoScheduler(
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository),
+                dayClosureRepository, closeDayUseCase,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository,
+                        com.keevo.shared.module.ModuleState.DISABLED),
+                fixedClockAt(MONDAY_DATE, "20:05:00", WAT));
+        var tenant = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant));
+        when(storeRepository.findAllActive()).thenReturn(List.of(createStore(STORE_ID, "Boutique Test")));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(defaultEodPrefs("23:00:00", false)));
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), eq(MONDAY_DATE))).thenReturn(false);
+
+        scheduler.runAutoClosure();
+
+        verify(closeDayUseCase).closeDay(any(CloseDayCommand.class));
+    }
+
+    /** Story 17.8 converse: DISABLED with a stored earlier time (18:00) → the fixed 20:00 applies, no closure at 19:05. */
+    @Test
+    void reportConfigDisabled_ignoresStoredEarlierTime_noClosureBeforeFixedTime() {
+        scheduler = new DayClosureAutoScheduler(
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository),
+                dayClosureRepository, closeDayUseCase,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository,
+                        com.keevo.shared.module.ModuleState.DISABLED),
+                fixedClockAt(MONDAY_DATE, "19:05:00", WAT));
+        when(tenantRepository.findAll()).thenReturn(List.of(createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE)));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(defaultEodPrefs("18:00:00", true)));
+
+        scheduler.runAutoClosure();
+
+        verifyNoInteractions(closeDayUseCase);
+    }
+
     @Test
     void shouldUseDefaultEodTimeWhenPrefsNull() {
         // Given: no prefs → fallback 20:00 WAT, trigger at 20:05
