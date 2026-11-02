@@ -169,7 +169,7 @@ Deleting `feedback` rather than anonymising it: the description and screenshot a
 
 **Follow-up review recommended:** true — four medium entries patched on a first pass; named risk: the export sweep of DELETED tenants in `ExportPurgeScheduler` and the billing free-text redaction were only re-tested, not re-reviewed.
 
-**Verification performed (2026-11-02):** after the patches, one package at a time: identity 493, admin 561, reporting 420, feedback 52, sync 635, architecture 32, shared 1154 — all rc=0, 0 failures/errors. Live (local backend, noop messaging; V40 applied on keevo_dev at boot): KV-EW02A2 owner `POST /account/delete` 200 then `/cancel` 200 → trace REQUESTED/OWNER (with scheduled date) then CANCELLED/OWNER, tenant back to ACTIVE, `account_deletion_log` present only in `public`; 0 ERROR. Not done: Redmi check — the phone was locked (personal device, not unlocked); the story changes no app-facing contract.
+**Verification performed (2026-11-02):** after the patches, one package at a time: identity 493, admin 561, reporting 420, feedback 52, sync 635, architecture 32, shared 1154 — all rc=0, 0 failures/errors. Live (local backend, noop messaging; V40 applied on keevo_dev at boot): KV-EW02A2 owner `POST /account/delete` 200 then `/cancel` 200 → trace REQUESTED/OWNER (with scheduled date) then CANCELLED/OWNER, tenant back to ACTIVE, `account_deletion_log` present only in `public`; 0 ERROR. Redmi (Flutter test client, after the user unlocked it): « En ligne », fresh `last_pull_at`, no « suppression programmée » banner after the cancel, 0 ERROR.
 
 **Mobile / dashboard:** no section — endpoints, request bodies and responses are unchanged (V1 2.0.1 and the RN app unaffected); no new admin API.
 
