@@ -149,7 +149,7 @@ The port is the right seam: identity owns the preferences and already depends on
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; protocole de synchro : section « Mobile » de `spec-16-10-scope-employe-historique-transferts.md` ; messages d'erreur : `spec-16-14-api-prete-client-mobile.md`. Ajout **additif** (compatible V1 2.0.1) : un champ booléen en plus dans la réponse, aucun champ retiré, aucun code d'erreur changé.
 
-**Statut** : API livrée (commit `COMMIT` ; tests `shared/module/ReportConfigGatingFullContextTest.java`, `identity/onboarding/adapter/in/web/ReportPreferencesControllerTest.java`) — mobile à faire.
+**Statut** : API livrée (commit `bab15029` ; tests `shared/module/ReportConfigGatingFullContextTest.java`, `identity/onboarding/adapter/in/web/ReportPreferencesControllerTest.java`) — mobile à faire.
 
 **Clé de suivi mobile** : `m17-8-gating-config-rapports`
 
