@@ -1,59 +1,43 @@
-# Epic 18 Context: Export de données & Audit détaillé (Piste V1, tag C)
+# Epic 18 Context: Cadrage de la fusion Keevo × Bref (P0)
 
 <!-- Generated from planning artifacts. Regenerate with compile-epic-context if planning docs change. -->
 
 ## Goal
 
-Let the owner take all of their business data out of Keevo in the format they choose, and understand every action the system records. Server-side export covers the full multi-store data: CSV, Excel and branded PDF templates, with large exports run in the background. On-device export produces a CSV of local data, even offline. The audit log records who, what, on what, where and how, and the app gets a clickable "Historique des actions" screen. This is tag C work: it ships in V1 and the modular refonte takes it over unchanged, so `reporting/export` is a self-contained hexagonal module and each domain contributes its own dataset provider. The epic replaces the old `17-6` and `v1s-14-7` export stories.
+Decide the Keevo × Bref Point merger on facts rather than assumptions. This epic ships no product code: it measures both production databases, writes down every open product decision as an ADR, freezes the functional scope of Bref, secures the app-store identities under which each user base will receive the unified app, and produces the fusion brief/PRD. Its output is the G0 gate: no P1 story (epics 19–25) starts until the numbers are known, the decisions are written, and the Keevo refonte (epic 16) is in production or dated. Duration target: two weeks.
 
 ## Stories
 
-- Story 18.1: Socle du module export (backend) (done)
-- Story 18.2: Jeux de données exportables (done)
-- Story 18.3: Modèles PDF (done)
-- Story 18.4: Écran « Exporter » (app) (done)
-- Story 18.5: Export local hors ligne (CSV)
-- Story 18.6: Audit enrichi (backend) (done)
-- Story 18.7: Journal d'audit consultable (app) (done)
+- Story 18.1: Measure the Bref and Keevo databases (Q1–Q9, Q13)
+- Story 18.2: Settle the open product decisions (gate P0)
+- Story 18.3: Freeze the functional scope of Bref
+- Story 18.4: Secure app identities and store accounts
+- Story 18.5: Fusion product brief and PRD
 
 ## Requirements & Constraints
 
-- **Formats and gating:** CSV is available on every plan (data portability). Excel, PDF and background exports are Premium. On a Free plan the backend returns 403 `PLAN_FEATURE_REQUIRED` and the app opens the offer sheet.
-- **Datasets:** every business dataset can be exported, filtered by store (one or all) and by period, within the filters each dataset declares. Only matching rows are included.
-- **Data conventions:** amounts are integer XAF and dates are in WAT (`Africa/Douala`). Column schemas are stable and documented, and the server CSV and the on-device CSV share the same schema.
-- **Large exports:** they run in the background, the owner is notified when the file is ready, and the file is kept for 24 h. Downloading an expired file returns 410. A 50,000-row export must stream without exhausting memory.
-- **Offline export (any user, 18.5):** CSV only, built from device data. The file is marked « données de cet appareil », opens directly in French-locale Excel and is shared through the share sheet. It must work in airplane mode, and 10,000 rows must be generated without UI jank.
-- **Audit:** each entry is immutable and records identity, timestamp, store, a readable object label, device, source and field-by-field before/after values. Entries written before the migration stay readable.
-- **Security:** server export and the audit log are owner-only: an EMPLOYEE gets 403 and the screens are hidden. Exports are tenant-isolated and rate-limited per tenant.
+- **Measurement report (18.1)** must be dated and contain aggregates only: owners total / active < 90 days / paying by plan and payment method (Apple, MyCoolPay, admin); row volumes per table (shops, invoices by type, items, payments, customers, products, expenses, members); owners and members without a phone; intersection of E.164-normalised phones between Bref and Keevo; shops outside CM, VAT ≠ 19.25 %, non-integer amounts; remaining account credits and SMS packs; invoices whose stored total differs from a recalculation; owners with `plan ≠ free` but no subscription in force; the date `develop` reached production on api-bref (`develop` reached `main` on 2026-10-26, a3faeb2; the server-side status rules of b957867 are among the later `develop` commits and are not yet deployed; Q7 concerns documents created before that date); the real published Keevo `applicationId`, signing key and available Google/Apple developer accounts.
+- **Privacy and safety**: scripts are read-only, run against a replica or locally restored dump, never against prod directly; no personal data (phones, names, emails) in the report, only counts and sums.
+- **Decisions (18.2)**: one ADR per open question — unified FREE plan (employee count, documents/month, keep 6-month trial?) and single price grid; final brand (one store listing or two durable brands); country scope (CM-XAF only or CM/GA/TD/CD/SN with their VAT, currency, time zone implications); recently expired Mobile Money subscriptions (30-day grace recommended vs immediate FREE); clients at tenant level with optional store (recommended); early publication of the unified app under `com.brefpoint.app` with legacy mode (recommended). ADRs are appended to the fusion epics document; its frontmatter `status` flips to `ready`. A decision that contradicts a recommendation must list and update the ⚠️-tagged stories before they become ready-for-dev.
+- **Freeze (18.3)**: tag `develop` of `AI/bref` and `AI/api-bref` as `pre-fusion-freeze`; only security fixes, blocking fixes and epic-24 migration enablers are allowed; exceptions are logged; any business-rule change shipped on Bref gets a mirror story in epic 20 or 21.
+- **Identities (18.4)**: document the Play Store identity and make the upload key available for EAS; if the published app really is `com.example.keevo`, record the keep-or-republish decision and its impact (new listing = reinstall). For iOS, create the Keevo App ID/bundle/certificates on Bref's Apple team or record the decision not to ship Keevo on iOS in P2.
+- **Brief/PRD (18.5)**: `prd-fusion-keevo-bref.md` must restate the FUS-FR/MIG/NFR/UX requirements without contradiction, and `architecture.md` gains a "Fusion Bref" section.
+- **Golden rule to carry into every ADR**: no user reinstalls, loses data, changes password or pays twice.
 
 ## Technical Decisions
 
-- **Tenancy:** schema per tenant (`kv_xxxxxx`). New tables or columns need tenant DDL plus a public Flyway migration. The latest migration is V16, so the next one is V17.
-- **Dataset port:** `ExportDatasetProvider` lives in `shared/application/port/export` and has `key()`, a French `label()` and typed `columns()` (`TEXT, INTEGER, AMOUNT_XAF, DECIMAL, BOOLEAN, DATE, DATETIME`). It reads pages by keyset, and it declares whether it supports the store filter and the period filter and which criteria keys it accepts. Each provider lives in its owning module (`<module>/adapter/out/export/`).
-- **The 16 datasets:** `products`, `categories`, `stock_levels`, `stock_movements`, `stock_transfers`, `clients`, `suppliers`, `sales`, `sale_items`, `day_closures`, `inventory_sessions`, `inventory_counts`, `employees` (no credentials), `stores`, `reports`, `audit_log`.
-  - Event datasets filter the period on their event column. Reference datasets (products, categories, stock_levels, clients, suppliers, employees, stores) ignore the period.
-  - Archived and cancelled rows are exported with a status column.
-  - Column keys are camelCase with French labels, and enum codes are rendered as French labels.
-  - The column schema is pinned by `ExportDatasetCatalogTest`. The test does not pin the code→French label maps, which live in each provider.
-- **CSV format (server; 18.5 must match it):** UTF-8 with BOM, `;` separator, CRLF line endings, and a guard against formula injection. A multi-dataset export is a zip of `<key>.csv` files. Cells use `dd/MM/yyyy` for dates, `dd/MM/yyyy HH:mm:ss` in WAT for timestamps, a decimal comma and Oui/Non for booleans.
-- **Other renderers:** XLSX uses POI SXSSF with one sheet per dataset. PDF uses Thymeleaf and OpenHTMLtoPDF, and the template is the single requested dataset: `day_closures`, `inventory_counts`, `stock_levels` or `sales`. PDF exports are bounded and return 422 `EXPORT_PDF_TOO_LARGE` when too big.
-- **Export API:**
-  - `POST /api/v1/exports` either streams the file directly (up to 5,000 rows, or any FREE CSV) or creates a Premium background `ExportJob`, which sends FCM `EXPORT_READY` / `EXPORT_FAILED` linking to `/exports/{id}`.
-  - Other endpoints: `GET /api/v1/exports` for « Mes exports », `/{id}`, `/{id}/file`, `/datasets` (metadata including `criteria` and `pdfTemplate`), and a signed `/download?token=`.
-  - Every export is audited as `DATA_EXPORTED`.
-  - Criteria (`userId`, `action`, `entityType`, `entityId`, `q`) are declared only by `audit_log`. They apply to the whole request, so sending a criterion that one of the requested datasets does not declare returns 400.
-- **Audit:** `audit_log` has `store_id`, `entity_label`, `device_id`, `source` (`ONLINE`|`SYNC`|`SYSTEM`) and `metadata` jsonb, with DB-level immutability triggers. `GET /api/v1/audit` supports filters and cursor pagination, and `/{id}` returns one entry. The `auditEntries` sync pull is OWNER-only, and the app stores the enriched rows in Drift.
-- **App export feature:** lives in `keevo/app/lib/features/export/` (`export_page.dart`, `export_models.dart` with `buildExportRequest`, `remote_export_datasource.dart`). Routes `/exports`, `/exports/new` and `/exports/:id` are OWNER-only. Direct exports are written to a temp file and then shared with `share_plus`.
-- **On-device CSV (18.5):** generated from Drift in an isolate, for the datasets available locally, using the server column schema (keys, French labels, types), the server label maps and the server cell formats. The file is shared via `share_plus`.
-
-## UX & Interaction Patterns
-
-- **"Exporter mes données":** opened from Settings, or from a pre-filled Exporter button on Rapports, Stock, Ventes and Historique des actions. The flow goes datasets → filters (store; Aujourd'hui / 7 jours / Mois / Personnalisé) → format (Excel and PDF carry a Premium badge; PDF adds a template choice). A small export downloads and then opens the share sheet. A large one shows « Votre export se prépare… », and its notification opens the file. Errors show a clear message with a retry.
-- **Offline:** only « CSV — données de cet appareil » is offered, with the note « Contient uniquement les données synchronisées sur cet appareil ». The entry tile already exists, disabled, under the offline banner (key `export-local-csv-entry`, « Bientôt disponible »).
-- **Historique des actions (delivered):** a list of readable sentences grouped by day, with filter chips. The detail view shows Qui / Quoi / Sur quoi / Quand et où / Changements / Contexte.
+- **Locked decisions (D1–D8) frame all measurements**: Keevo Spring Boot is the single backend; one Bref owner = one Keevo tenant (schema `kv_xxxxxx`), shops → stores, members → employees + memberships; identity reconciliation by E.164 phone first, then email; Bref bcrypt hashes reused as-is; Bref plans become Keevo plan profiles/bundles; strangler migration owner by owner with api-bref kept alive for the unmigrated; two store identities from one React Native code base; AI by a tool layer (MCP), not generated SQL.
+- **api-bref** (`/home/toor/Project/FreeLance/AI/api-bref`, branch `develop`): NestJS 11 + TypeORM 0.3 + PostgreSQL, single shared schema. Entities live under `src/**/entities` and `src/**/infrastructure/persistence/relational/entities`; migrations under `src/database/migrations`. Table names are singular (`user`, `shop`, `invoice`, `invoice_item`, `invoice_payment`, `customer`, `client`, `product`, `expense`, `subscription`, `usage_counter`, `account_credit`, `refresh_token`, `plan_payment_request`, `apple_iap_transaction`, `sms_recharge_request`). `user` holds owners and members in one table (`role`, nullable unique `phone`, `email`, `username`, `plan`, `emailVerified`); amounts are `decimal(14,2)`; `shop.country` defaults to `'CM'`. There is no last-login column: "active < 90 days" must be proxied (e.g. `refresh_token.createdAt`, latest invoice) and the proxy stated in the report.
+- **Plan in force rule**: the authoritative Bref rule is `SUBSCRIPTION_IN_FORCE` in `src/entitlement/entitlement.service.ts` (`status='active'`, started, not ended or within Apple grace, `paymentMethod` not null). Q8 and all plan counts must apply this predicate, never `user.plan`.
+- **Keevo backend** (`/home/toor/Project/FreeLance/AI/Keevo/keevo/backend`): Spring Boot + PostgreSQL, Flyway `db/migration` for the `public` schema (V1 baseline + V2–V40), per-module tenant DDL under `db/modules/<id>/`, one schema per tenant. Identity lives in `public.users` (`phone_number` NOT NULL, `password_hash`, `role`), `public.tenants` (`code`, `schema_name`, `plan_type`, `status`), `public.user_tenant_memberships`; `subscriptions` and `tenant_preferences` are per-tenant tables; payments/plan events are `public.tenant_payments` / `tenant_plan_events`. Q4 reads only `public.users.phone_number`; the tenant count feeds FUS-NFR3 (capacity = measured tenants × 2).
+- **Phone normalisation for Q4**: apply the `PhoneNumbers.normalize` rule (`com.keevo.shared.domain`) on both sides in SQL — trim, strip spaces/`-`/`.`/`(`/`)`, prefix `+` when missing — before joining; Keevo accepts any E.164, Bref restricts OTP to prefixes 237/241/235/243/221.
+- **Measurement artefacts**: versioned read-only SQL under `_bmad-output/planning-artifacts/research/fusion-mesures/` (directory to create), one file per question group, plus the dated aggregate report. Keep the scripts rerunnable so epic 24 can replay them on each wave's export.
+- **Known identity facts to verify in 18.4**: Keevo Flutter repo declares `applicationId`/`namespace` `com.example.keevo` (`keevo/app/android/app/build.gradle.kts`); Bref declares bundle/package `com.brefpoint.app`, Apple team `N9534K29PS`, EAS project `bb0b6dbe-c342-43e4-95cc-2902d7bd4d45` (`bref/app.json`). Keevo prod deploys run from the `origin2` (pronto625/keevo) GHCR images.
+- **Sprint tracking**: fusion stories use the `epic-18` block in `sprint-status.yaml`; no story file for epics 19+ may be created before G0.
 
 ## Cross-Story Dependencies
 
-- Delivery order: 18.6 → 18.7, then 18.1 → 18.2 → 18.4 → 18.3 → 18.5. Everything except 18.5 is done.
-- 18.5 depends on the 18.2 column schema (`ExportDatasetCatalogTest`) and each provider's code→French label maps, the 18.1 CSV cell formats, and the 18.4 « Exporter » screen. Its routed item is to enable the disabled offline tile and route it to the on-device CSV flow while keeping the « synchronisées sur cet appareil » note.
-- Dependencies outside the epic: plan gating (subscription module), FCM notifications, per-tenant rate limiting.
+- 18.1 feeds 18.2 (decisions rest on the numbers) and 18.4 (Q9 identity facts); 18.2 feeds 18.5 (ADRs are PRD inputs) and unblocks epic 19 (Q10/Q12) and epic 24 (Q1–Q8 sizing, wave order, collision wave).
+- 18.3 must be pronounced before any epic 20/21 story starts, otherwise the target keeps moving; it also conditions R12 (solo load).
+- Risks owned here: R1 tenant volume, R2 identity collisions, R3 inconsistent invoices (via Q7/Q13), R11 Keevo app identity (18.4), R12 via the freeze.
+- External prerequisite for G0: epic 16 (refonte in production) done or dated; 17.12 (`products.track_stock`) is already delivered and no longer an open question.

@@ -1,0 +1,6 @@
+-- Définitions partagées du kit (incluses par \ir dans les fichiers Q1, Q6, Q8). Lecture seule : aucune requête ici.
+--
+-- IN_FORCE = prédicat SUBSCRIPTION_IN_FORCE de api-bref/src/entitlement/entitlement.service.ts (alias s), texte identique
+-- à l'espace près ; run-mesures.sh compare cette ligne au code source et avertit en cas de divergence.
+-- Utilisation : WHERE :IN_FORCE
+\set IN_FORCE 's.status = \'active\' AND (s."startedAt" IS NULL OR s."startedAt" <= NOW()) AND (s."endsAt" IS NULL OR s."endsAt" > NOW() OR s."gracePeriodEndsAt" > NOW()) AND s."paymentMethod" IS NOT NULL'
