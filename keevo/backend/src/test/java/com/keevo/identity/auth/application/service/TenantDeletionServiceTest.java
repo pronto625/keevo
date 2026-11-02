@@ -6,6 +6,7 @@ import com.keevo.identity.api.Role;
 import com.keevo.identity.api.TenantStatus;
 
 import com.keevo.identity.auth.domain.model.*;
+import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.capability.notification.WhatsAppSender;
@@ -390,5 +391,71 @@ class TenantDeletionServiceTest {
         assertThat(withPurger.deleteNow(tenantId)).isFalse();
 
         verify(purger, never()).purgeTenant(anyString());
+    }
+
+    // ── Story 16.6 — RGPD: complete public purge + durable trace ─────────────
+
+    private TenantDeletionService schedulerWithLog(AccountDeletionLogRepository deletionLog) {
+        Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T03:00:00Z"), ZoneOffset.UTC);
+        return new TenantDeletionService(tenantRepository, userRepository, whatsAppSender,
+                schemaProvisioner, jdbcTemplate, transactionManager, fixedClock, List.of(), deletionLog);
+    }
+
+    @Test
+    @DisplayName("16.6 daily run: reset tokens before users, tenant public rows purged, EXECUTED/SYSTEM, anonymised DELETED row")
+    void executeDeletions_purgesPublicRowsAndLogsExecutedBySystem() {
+        AccountDeletionLogRepository deletionLog = mock(AccountDeletionLogRepository.class);
+        TenantDeletionService withLog = schedulerWithLog(deletionLog);
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(tenant));
+        stubPending(tenant, "+243812345678");
+
+        withLog.executeDeletions();
+
+        InOrder order = inOrder(jdbcTemplate, schemaProvisioner, deletionLog, tenantRepository);
+        order.verify(schemaProvisioner).dropSchemaForDeletion(schemaName);
+        order.verify(jdbcTemplate).update(startsWith("DELETE FROM public.password_reset_tokens"), any(Object.class));
+        order.verify(jdbcTemplate).queryForList(startsWith("DELETE FROM public.users"), eq(UUID.class), any(Object.class));
+        order.verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.EXECUTED,
+                AccountDeletionLogRepository.Source.SYSTEM, null);
+        order.verify(tenantRepository).save(argThat(t -> t.getStatus() == TenantStatus.DELETED
+                && t.getDeletionScheduledAt() == null
+                && TenantDeletionService.DELETED_TENANT_NAME.equals(t.getName())
+                && t.getCode().equals(tenant.getCode())));
+        verify(jdbcTemplate).update("DELETE FROM public.feedback WHERE tenant_id = ?", (Object) schemaName);
+        verify(jdbcTemplate).update("DELETE FROM public.user_sync_state WHERE tenant_id = ?", (Object) schemaName);
+        verify(jdbcTemplate).update("DELETE FROM public.user_daily_activity WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.plan_expiry_reminders WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.sync_silence_notices WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update(startsWith("UPDATE public.tenants SET designation = NULL"), eq((Object) tenantId));
+        verify(jdbcTemplate).update(startsWith("UPDATE public.tenant_payments SET note = NULL"),
+                eq(TenantDeletionService.VOID_REASON_REDACTED), eq(tenantId));
+        verify(jdbcTemplate).update("UPDATE public.tenant_plan_events SET reason = NULL WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.global_notifications WHERE target_tenant_id = ?", (Object) tenantId);
+    }
+
+    @Test
+    @DisplayName("16.6 force-delete (deleteNow): EXECUTED/ADMIN")
+    void deleteNow_logsExecutedByAdmin() {
+        AccountDeletionLogRepository deletionLog = mock(AccountDeletionLogRepository.class);
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        stubPending(tenant, "+243812345678");
+
+        assertThat(schedulerWithLog(deletionLog).deleteNow(tenantId)).isTrue();
+
+        verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.EXECUTED,
+                AccountDeletionLogRepository.Source.ADMIN, null);
+    }
+
+    @Test
+    @DisplayName("16.6 skipped deletion (already DELETED): no second EXECUTED trace")
+    void skippedDeletion_writesNoTrace() {
+        AccountDeletionLogRepository deletionLog = mock(AccountDeletionLogRepository.class);
+        TenantDeletionService withLog = schedulerWithLog(deletionLog);
+        stubLock(tenantId, TenantStatus.DELETED, null);
+
+        assertThat(withLog.deleteNow(tenantId)).isFalse();
+        verifyNoInteractions(deletionLog);
     }
 }

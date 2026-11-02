@@ -5,6 +5,7 @@ import com.keevo.shared.event.catalog.auth.AccountDeletionRequestedEvent;
 import com.keevo.identity.api.AccountDeletionPolicy;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.*;
+import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.capability.notification.WhatsAppSender;
@@ -45,11 +46,15 @@ public class AccountDeletionService {
     private final UserRepository userRepository;
     private final WhatsAppSender whatsAppSender;
     private final ApplicationEventPublisher eventPublisher;
+    /** Story 16.6 — durable RGPD trace that survives the schema drop (the tenant audit_log does not). */
+    private final AccountDeletionLogRepository deletionLog;
 
     public AccountDeletionService(TenantRepository tenantRepository,
                                    UserRepository userRepository,
                                    WhatsAppSender whatsAppSender,
-                                   ApplicationEventPublisher eventPublisher) {
+                                   ApplicationEventPublisher eventPublisher,
+                                   AccountDeletionLogRepository deletionLog) {
+        this.deletionLog = deletionLog;
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.whatsAppSender = whatsAppSender;
@@ -83,6 +88,8 @@ public class AccountDeletionService {
         Instant deletionDate = Instant.now().plus(AccountDeletionPolicy.GRACE_PERIOD);
         Tenant updated = tenant.withStatus(TenantStatus.DELETION_PENDING, deletionDate);
         tenantRepository.save(updated);
+        deletionLog.record(tenant.getId(), AccountDeletionLogRepository.Event.REQUESTED,
+                AccountDeletionLogRepository.Source.OWNER, deletionDate);
 
         // Publish audit event
         AccountDeletionRequestedEvent event =
@@ -134,6 +141,8 @@ public class AccountDeletionService {
             throw new DomainException(ErrorCode.DELETION_NOT_PENDING,
                     "Deletion already executing, executed or past its grace period for tenant: " + tenantId);
         }
+        deletionLog.record(tenant.getId(), AccountDeletionLogRepository.Event.CANCELLED,
+                AccountDeletionLogRepository.Source.OWNER, null);
 
         // Publish audit event
         AccountDeletionCancelledEvent event =

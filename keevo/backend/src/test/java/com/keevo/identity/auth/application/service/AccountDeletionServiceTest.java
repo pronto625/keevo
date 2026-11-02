@@ -6,6 +6,7 @@ import com.keevo.identity.api.Role;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.PlanType;
 import com.keevo.identity.auth.domain.model.*;
+import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.capability.notification.WhatsAppSender;
@@ -43,6 +44,7 @@ class AccountDeletionServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private WhatsAppSender whatsAppSender;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private AccountDeletionLogRepository deletionLog;
 
     private AccountDeletionService service;
 
@@ -54,7 +56,7 @@ class AccountDeletionServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountDeletionService(tenantRepository, userRepository,
-                whatsAppSender, eventPublisher);
+                whatsAppSender, eventPublisher, deletionLog);
         tenantId = UUID.randomUUID();
         actorId = UUID.randomUUID();
         schemaName = "kv_abc123";
@@ -81,6 +83,9 @@ class AccountDeletionServiceTest {
                 .isAfter(Instant.now().plus(29, ChronoUnit.DAYS));
 
         verify(eventPublisher).publishEvent(any(AccountDeletionRequestedEvent.class));
+        // 16.6 — durable trace: REQUESTED by the owner, with the planned date
+        verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.REQUESTED,
+                AccountDeletionLogRepository.Source.OWNER, savedCaptor.getValue().getDeletionScheduledAt());
     }
 
     @Test
@@ -96,6 +101,7 @@ class AccountDeletionServiceTest {
                 .isEqualTo(ErrorCode.DELETION_ALREADY_REQUESTED.name());
 
         verify(tenantRepository, never()).save(any());
+        verifyNoInteractions(deletionLog);
     }
 
     @Test
@@ -160,6 +166,8 @@ class AccountDeletionServiceTest {
 
         verify(eventPublisher).publishEvent(any(AccountDeletionCancelledEvent.class));
         verify(whatsAppSender, never()).sendReport(anyString(), anyString());
+        verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.CANCELLED,
+                AccountDeletionLogRepository.Source.OWNER, null);
     }
 
     @Test
@@ -190,5 +198,6 @@ class AccountDeletionServiceTest {
 
         verify(tenantRepository, never()).save(any());
         verify(eventPublisher, never()).publishEvent(any(AccountDeletionCancelledEvent.class));
+        verifyNoInteractions(deletionLog);
     }
 }

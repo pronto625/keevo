@@ -224,6 +224,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
                     "Tenant not found, not DELETION_PENDING or schema already dropped: " + tenantId);
         }
+        // Story 16.6 — durable RGPD trace, same transaction as the status change
+        tenantDeletion.recordAdminDeletionCancel(tenantId);
     }
 
     /**
@@ -248,6 +250,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
             throw new DomainException(ErrorCode.TENANT_NOT_FOUND,
                     "Tenant not found or already deleted: " + tenantId);
         }
+        // Story 16.6 — durable RGPD trace (REQUESTED/ADMIN, due now); deleteNow writes EXECUTED/ADMIN
+        tenantDeletion.recordAdminDeletionRequest(tenantId);
         if (!tenantDeletion.deleteNow(tenantId)) {
             // A concurrent daily run may have deleted it between the marker and the routine:
             // the admin's intent is fulfilled, so that is a success, not a conflict.

@@ -399,6 +399,11 @@ class ModuleExpiryMaterializerPostgresIntegrationTest {
         job(T0).materialize();
         assertThat(rows(REACTIVATED).get("invoicing")).startsWith("DISABLED/ADMIN/");
         assertThat(registry(T0).moduleState(REACTIVATED.schema(), "invoicing")).isEqualTo(ModuleState.DISABLED);
+        // Story 16.6 (AC2): DISABLED long past its grace — no purge, ever (only an account deletion drops data)
+        job(T0.plus(Duration.ofDays(400))).materialize();
+        assertThat(rows(REACTIVATED).get("invoicing")).startsWith("DISABLED/ADMIN/");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + REACTIVATED.schema() + "\".invoices",
+                Integer.class)).isEqualTo(5);
 
         ModuleLifecycle.ActivationResult result = lifecycle(T0).activate(REACTIVATED.id(), "invoicing",
                 new ModuleLifecycle.ActivationRequest(TenantModuleStatus.TRIAL, null), admin);

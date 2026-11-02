@@ -5,6 +5,7 @@ import com.keevo.identity.api.Role;
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.api.TenantView;
 import com.keevo.identity.auth.application.service.TenantDeletionService;
+import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
@@ -23,6 +24,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -79,16 +81,32 @@ class IdentityAuthApiAdaptersTest {
         UUID tenantId = UUID.randomUUID();
         TenantDeletionService service = mock(TenantDeletionService.class);
         when(service.deleteNow(tenantId)).thenReturn(true, false);
-        var adapter = new TenantDeletionAdapter(service);
+        var adapter = new TenantDeletionAdapter(service, mock(AccountDeletionLogRepository.class));
 
         assertThat(adapter.deleteNow(tenantId)).isTrue();
         assertThat(adapter.deleteNow(tenantId)).isFalse();
     }
 
     @Test
+    void tenantDeletion_recordsTheAdminTrace() {
+        UUID tenantId = UUID.randomUUID();
+        AccountDeletionLogRepository deletionLog = mock(AccountDeletionLogRepository.class);
+        var adapter = new TenantDeletionAdapter(mock(TenantDeletionService.class), deletionLog);
+
+        adapter.recordAdminDeletionRequest(tenantId);
+        adapter.recordAdminDeletionCancel(tenantId);
+
+        verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.REQUESTED,
+                AccountDeletionLogRepository.Source.ADMIN, null); // date read from the marker row
+        verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.CANCELLED,
+                AccountDeletionLogRepository.Source.ADMIN, null);
+        assertThatThrownBy(() -> adapter.recordAdminDeletionCancel(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     void tenantDeletion_nullIdFailsFast() {
         TenantDeletionService service = mock(TenantDeletionService.class);
-        var adapter = new TenantDeletionAdapter(service);
+        var adapter = new TenantDeletionAdapter(service, mock(AccountDeletionLogRepository.class));
 
         assertThatThrownBy(() -> adapter.deleteNow(null)).isInstanceOf(NullPointerException.class);
         verifyNoInteractions(service);

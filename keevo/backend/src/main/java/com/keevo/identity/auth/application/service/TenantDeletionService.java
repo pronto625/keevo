@@ -2,6 +2,7 @@ package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.model.*;
+import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.capability.notification.WhatsAppSender;
@@ -55,6 +56,12 @@ public class TenantDeletionService {
     static final String LOCK_TENANT_SQL =
             "SELECT status, deletion_scheduled_at FROM public.tenants WHERE id = ? FOR UPDATE";
 
+    /** Story 16.6 (RGPD) — name kept on the anonymised {@code public.tenants} row. */
+    static final String DELETED_TENANT_NAME = "Commerce supprimé";
+
+    /** Story 16.6 (RGPD) — replaces the free-text reason of a voided payment of a deleted tenant. */
+    static final String VOID_REASON_REDACTED = "Motif supprimé (RGPD)";
+
     static final String FINAL_WHATSAPP_MESSAGE =
             "Votre compte Keevo a été supprimé. Merci d'avoir utilisé Keevo.";
 
@@ -67,6 +74,8 @@ public class TenantDeletionService {
     private final Clock clock;
     /** Files stored outside the database (product photos…), deleted with the tenant (epic 8). */
     private final List<TenantFilesPurger> filePurgers;
+    /** Story 16.6 — durable, non-personal trace of the execution (EXECUTED row). */
+    private final AccountDeletionLogRepository deletionLog;
 
     /** Production constructor — system clock. */
     @org.springframework.beans.factory.annotation.Autowired
@@ -76,9 +85,10 @@ public class TenantDeletionService {
                                      TenantSchemaProvisioner schemaProvisioner,
                                      JdbcTemplate jdbcTemplate,
                                      PlatformTransactionManager transactionManager,
-                                     List<TenantFilesPurger> filePurgers) {
+                                     List<TenantFilesPurger> filePurgers,
+                                     AccountDeletionLogRepository deletionLog) {
         this(tenantRepository, userRepository, whatsAppSender, schemaProvisioner,
-             jdbcTemplate, transactionManager, Clock.systemUTC(), filePurgers);
+             jdbcTemplate, transactionManager, Clock.systemUTC(), filePurgers, deletionLog);
     }
 
     /** Test constructor — injectable clock. */
@@ -93,7 +103,7 @@ public class TenantDeletionService {
              jdbcTemplate, transactionManager, clock, List.of());
     }
 
-    /** Full constructor — injectable clock and file purgers. */
+    /** Test constructor — injectable clock and file purgers, no deletion trace. */
     public TenantDeletionService(TenantRepository tenantRepository,
                                      UserRepository userRepository,
                                      WhatsAppSender whatsAppSender,
@@ -102,6 +112,21 @@ public class TenantDeletionService {
                                      PlatformTransactionManager transactionManager,
                                      Clock clock,
                                      List<TenantFilesPurger> filePurgers) {
+        this(tenantRepository, userRepository, whatsAppSender, schemaProvisioner,
+             jdbcTemplate, transactionManager, clock, filePurgers, (id, event, source, at) -> { });
+    }
+
+    /** Full constructor — injectable clock, file purgers and deletion trace. */
+    public TenantDeletionService(TenantRepository tenantRepository,
+                                     UserRepository userRepository,
+                                     WhatsAppSender whatsAppSender,
+                                     TenantSchemaProvisioner schemaProvisioner,
+                                     JdbcTemplate jdbcTemplate,
+                                     PlatformTransactionManager transactionManager,
+                                     Clock clock,
+                                     List<TenantFilesPurger> filePurgers,
+                                     AccountDeletionLogRepository deletionLog) {
+        this.deletionLog = java.util.Objects.requireNonNull(deletionLog, "deletionLog");
         this.filePurgers = filePurgers != null ? List.copyOf(filePurgers) : List.of();
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
@@ -195,7 +220,12 @@ public class TenantDeletionService {
      *   <li>Capture the OWNER phone numbers (memberships still exist).</li>
      *   <li>DROP schema CASCADE — own auto-commit connection, {@code IF EXISTS} so idempotent.
      *       If it throws, the transaction rolls back and nothing is persisted.</li>
-     *   <li>Delete memberships, orphaned users, refresh tokens, device tokens (orphans only).</li>
+     *   <li>Delete memberships, the password-reset tokens then the rows of orphaned users, refresh
+     *       tokens, device tokens (orphans only).</li>
+     *   <li>Story 16.6 (RGPD): delete the tenant's remaining {@code public} rows (feedback, daily
+     *       activity, sync state, module licences, plan reminders, silence notices, tenant-targeted
+     *       push announcements), clear the admin free text of the kept billing rows, write the
+     *       EXECUTED trace, anonymise the kept tenants row.</li>
      *   <li>Mark tenant DELETED — last, so DELETED always means "schema gone".</li>
      * </ol>
      * A failure after a successful DROP rolls back the public deletes: the tenant stays
@@ -235,6 +265,14 @@ public class TenantDeletionService {
         // 6. Delete ONLY orphaned users (not multi-tenant users)
         List<UUID> orphanedUserIds = new ArrayList<>();
         if (!affectedUserIds.isEmpty()) {
+            // 16.6: password_reset_tokens references users without cascade — a recent token made the
+            // user DELETE fail and postponed the whole deletion. Delete the orphans' tokens first (a
+            // user still member of another tenant keeps its own tokens).
+            jdbcTemplate.update(
+                    "DELETE FROM public.password_reset_tokens p " +
+                    "WHERE p.user_id = ANY(?::uuid[]) " +
+                    "AND NOT EXISTS (SELECT 1 FROM public.user_tenant_memberships m WHERE m.user_id = p.user_id)",
+                    (Object) affectedUserIds.toArray(new UUID[0]));
             List<UUID> deletedIds = jdbcTemplate.queryForList(
                     "DELETE FROM public.users u " +
                     "WHERE u.id = ANY(?::uuid[]) " +
@@ -256,8 +294,35 @@ public class TenantDeletionService {
                     (Object) orphanedUserIds.toArray(new UUID[0]));
         }
 
-        // 9. Mark tenant DELETED — only once the schema is gone
-        tenantRepository.save(fresh.withStatus(TenantStatus.DELETED, null));
+        // 9. Story 16.6 (RGPD): the tenant's other public rows. Tenant columns differ per table:
+        //    schema name (feedback, user_sync_state) or tenant uuid (the others).
+        jdbcTemplate.update("DELETE FROM public.feedback WHERE tenant_id = ?", (Object) schemaName);
+        jdbcTemplate.update("DELETE FROM public.user_sync_state WHERE tenant_id = ?", (Object) schemaName);
+        jdbcTemplate.update("DELETE FROM public.user_daily_activity WHERE tenant_id = ?", (Object) tenantId);
+        jdbcTemplate.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", (Object) tenantId);
+        jdbcTemplate.update("DELETE FROM public.plan_expiry_reminders WHERE tenant_id = ?", (Object) tenantId);
+        jdbcTemplate.update("DELETE FROM public.sync_silence_notices WHERE tenant_id = ?", (Object) tenantId);
+        // Free text not mapped by the JPA entity (company designation, admin suspension reason)
+        jdbcTemplate.update("UPDATE public.tenants SET designation = NULL, suspended_reason = NULL WHERE id = ?",
+                (Object) tenantId);
+        // Billing rows are the accounting trace (amounts, dates, ids kept) but their admin-written free
+        // text may name the owner: notes and reasons cleared, a void keeps a neutral reason.
+        jdbcTemplate.update("UPDATE public.tenant_payments SET note = NULL, "
+                + "void_reason = CASE WHEN void_reason IS NULL THEN NULL ELSE ? END WHERE tenant_id = ?",
+                VOID_REASON_REDACTED, tenantId);
+        jdbcTemplate.update("UPDATE public.tenant_plan_events SET reason = NULL WHERE tenant_id = ?",
+                (Object) tenantId);
+        // Push announcements written for this tenant only (title/body); no table references them
+        jdbcTemplate.update("DELETE FROM public.global_notifications WHERE target_tenant_id = ?",
+                (Object) tenantId);
+
+        // 10. Durable, non-personal trace — same transaction: rolled back with a failed purge
+        deletionLog.record(tenantId, AccountDeletionLogRepository.Event.EXECUTED,
+                requireExpired ? AccountDeletionLogRepository.Source.SYSTEM
+                               : AccountDeletionLogRepository.Source.ADMIN, null);
+
+        // 11. Mark tenant DELETED (name anonymised) — only once the schema is gone
+        tenantRepository.save(fresh.anonymisedAsDeleted(DELETED_TENANT_NAME));
 
         log.info("[TenantDeletionService] Tenant {} ({}) fully deleted: {} users orphaned, schema dropped.",
                 tenantId, schemaName, orphanedUserIds.size());

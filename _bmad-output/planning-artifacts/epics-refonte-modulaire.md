@@ -1399,7 +1399,7 @@ So that **un compte Free ne voit pas d'écrans Premium et l'expérience est coh�
 | Bloc | État | Reste à faire |
 |---|---|---|
 | Epics 10–15 | **done** (sauf 10-8) | 10-8 : exécution serveur des runbooks (ops) |
-| Epic 16 | backlog | 16.1 → 16.9 + **16.10** (résidu sécurité V1) + **16.11** (sessions longues et sûres, décision du 2026-11-01) + **16.12** (conversion du DDL tenant, issue de 16.5) ; 16.3 révisée (plus de claim `modules` dans le jeton) ; 16.6 : cœur livré en V1, AC refonte à vérifier |
+| Epic 16 | backlog | 16.1 → 16.9 + **16.10** (résidu sécurité V1) + **16.11** (sessions longues et sûres, décision du 2026-11-01) + **16.12** (conversion du DDL tenant, issue de 16.5) ; 16.3 révisée (plus de claim `modules` dans le jeton) ; 16.6 **done** (2026-11-02 : purge `public` complète + trace `account_deletion_log`) |
 | Epic 17 | in-progress | 17.1, 17.3, 17.4, 17.5 livrés (V1 puis portés) ; 17.6 remplacée ; restent 17.2 (résidu), 17.7, 17.8, **17.9 (gate go-live)**, **17.10**, **17.11** (résidus V1), **17.12** (suivi de stock par produit, demande du 2026-11-01) |
 | Piste V1 (`v1s-*`) | close | V1 figée en 2.0.1 (`release/2.0.x`) ; ses derniers items ouverts sont réintégrés ici (16.10, 17.10, 17.11) ou sans objet (v1s-16-24 : app en portrait depuis 15-8) |
 
@@ -1605,6 +1605,11 @@ So that **mes droits RGPD sont respectés (MOD-FR20, FR91)**.
 **Implementation Notes:**
 - **Seule** la suppression de compte RGPD purge (décision validée — pas de purge à 90 j). Suppression = `DROP SCHEMA` (propre, complet).
 - Aucun job de purge des modules `DISABLED` : leurs tables/données restent dans le schéma tenant indéfiniment.
+
+**Statut : done (2026-11-02, API)** — cœur V1 (v1s-14-5 : demande, grâce de 30 j, annulation, purge quotidienne, force-delete admin) vérifié et complété (spec-16-6) :
+- [x] AC1 purge `public` complète, dans la transaction de la suppression (après le `DROP SCHEMA`) : jetons de réinitialisation des utilisateurs orphelins supprimés **avant** les utilisateurs (un jeton récent bloquait le `DELETE users` et reportait la suppression d'un jour), `feedback`, `user_sync_state`, `user_daily_activity`, `tenant_modules`, `plan_expiry_reminders`, `sync_silence_notices` du tenant supprimés ; ligne `tenants` gardée et anonymisée (« Commerce supprimé », `designation`/`suspended_reason` à null ; code, schéma, plan, `DELETED`) ; `tenant_payments`/`tenant_plan_events` gardés (trace comptable) mais textes libres effacés (`note`, `reason` à null, `void_reason` → « Motif supprimé (RGPD) ») ; notifications push ciblées sur le tenant supprimées. Fichiers d'export `<storage-dir>/<schema>/` purgés après commit (`LocalDiskExportFileStorage` devient un `TenantFilesPurger`) puis à chaque purge horaire des exports pour tout tenant DELETED. Un utilisateur membre d'un autre tenant garde son compte, ses jetons et cet autre tenant.
+- [x] AC1 trace d'audit durable : `public.account_deletion_log` (V40, sans nom/téléphone/id utilisateur, sans FK) — REQUESTED/CANCELLED (owner ou admin), EXECUTED (SYSTEM pour le job quotidien, ADMIN pour le force-delete), annulée avec la transaction si la purge échoue, jamais écrite deux fois (`AccountDeletionRgpdPostgresIntegrationTest`, `TenantDeletionServiceTest`, `AccountDeletionServiceTest`, `AdminTenantServiceTest`).
+- [x] AC2 aucun changement du cycle de vie des modules : un module `DISABLED` 400 jours après sa grâce garde ses tables et ses lignes et revient à la réactivation (`ModuleExpiryMaterializerPostgresIntegrationTest.reactivationKeepsData`, `ModuleLifecyclePostgresIntegrationTest.deactivateKeepsData`).
 
 ### Story 16.7 : Go-live progressif (canary) + runbook
 

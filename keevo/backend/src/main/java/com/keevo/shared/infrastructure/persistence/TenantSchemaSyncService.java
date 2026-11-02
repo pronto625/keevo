@@ -44,7 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code tenant_modules}, and since Story 13.4 {@code shedlock}, {@code flyway_schema_history},
  * {@code event_publication}, {@code event_listener_receipt}, {@code refresh_tokens},
  * {@code password_reset_tokens}, {@code user_tenant_memberships}, {@code user_sync_state},
- * {@code feedback}. Copies of those created by earlier versions are left in place (never dropped by an
+ * {@code feedback}, and since Story 16.6 {@code account_deletion_log}. Copies of those created by earlier versions are left in place (never dropped by an
  * update) and counted at boot by {@link GlobalTableStrayCopiesReporter}.
  *
  * <p>Architecture: shared infrastructure — zero knowledge of business domain.
@@ -82,7 +82,9 @@ public class TenantSchemaSyncService {
             // sync — device sync state (tenant_id = schema name, public.user_sync_state)
             "user_sync_state",
             // feedback — global inbox of the super admin (FeedbackJpaEntity schema = public)
-            "feedback");
+            "feedback",
+            // Story 16.6 — RGPD account deletion trace, must survive the tenant schema drop (public only)
+            "account_deletion_log");
 
     /** The public tables never mirrored into tenant schemas (read-only view, used by tests). */
     public static Set<String> globalOnlyTables() {

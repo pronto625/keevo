@@ -279,7 +279,9 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
                 "global_notifications", "module_definitions", "tenant_modules",
                 // Story 13.4 audit
                 "shedlock", "flyway_schema_history", "event_publication", "event_listener_receipt",
-                "refresh_tokens", "password_reset_tokens", "user_tenant_memberships", "user_sync_state", "feedback");
+                "refresh_tokens", "password_reset_tokens", "user_tenant_memberships", "user_sync_state", "feedback",
+                // Story 16.6 — RGPD deletion trace
+                "account_deletion_log");
         // tenant tables stay mirrored / provisioned
         assertThat(tables).contains("users", "subscriptions", "stores", "products", "sales", "audit_log");
     }

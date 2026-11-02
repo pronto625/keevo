@@ -6,6 +6,7 @@ import com.keevo.identity.api.TenantView;
 import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.auth.application.service.TenantDeletionService;
 import com.keevo.identity.auth.domain.model.Tenant;
+import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 
@@ -27,7 +28,13 @@ public final class IdentityAuthApiTestSupport {
 
     /** The real {@code TenantDeletionPort} adapter over the given deletion routine (Story 12.2f). */
     public static TenantDeletionPort tenantDeletionPort(TenantDeletionService tenantDeletionService) {
-        return new TenantDeletionAdapter(tenantDeletionService);
+        return new TenantDeletionAdapter(tenantDeletionService, (id, event, source, at) -> { });
+    }
+
+    /** Same, writing the admin deletion trace through {@code deletionLog} (Story 16.6). */
+    public static TenantDeletionPort tenantDeletionPort(TenantDeletionService tenantDeletionService,
+                                                        AccountDeletionLogRepository deletionLog) {
+        return new TenantDeletionAdapter(tenantDeletionService, deletionLog);
     }
 
     /** The published view of a tenant, mapped exactly as the adapter does. */

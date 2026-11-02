@@ -2,6 +2,7 @@ package com.keevo.reporting.export.adapter.out.storage;
 
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
 import com.keevo.reporting.export.domain.port.out.ExportFileStorage;
+import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,17 +18,23 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * Local-disk export storage (Story v1s-18-1). Files live at
  * {@code <keevo.export.storage-dir>/<tenant schema>/<job uuid>.<ext>}; a write goes to a
  * {@code .part} file first and is published by an atomic move. Storage paths are relative
  * ({@code <schema>/<file>}) and re-validated on every read, so a path can never escape the root.
+ *
+ * <p>Story 16.6 (RGPD) — also a {@link TenantFilesPurger}: the account deletion removes the whole
+ * {@code <storage-dir>/<schema>/} directory after its transaction has committed.
  */
 @Component
-public class LocalDiskExportFileStorage implements ExportFileStorage {
+public class LocalDiskExportFileStorage implements ExportFileStorage, TenantFilesPurger {
 
     private static final Logger log = LoggerFactory.getLogger(LocalDiskExportFileStorage.class);
     private static final Pattern EXTENSION = Pattern.compile("^[a-z0-9]{1,8}$");
@@ -94,6 +101,43 @@ public class LocalDiskExportFileStorage implements ExportFileStorage {
         } catch (IOException e) {
             log.warn("EXPORT_PART_DELETE_FAILED jobId={} error={}", jobId, e.getMessage());
         }
+    }
+
+    /**
+     * Deletes {@code <storage-dir>/<schema>/} recursively. No-op when absent or when the schema is
+     * invalid (never outside the root); never throws — a failure is logged. Called after the
+     * deletion commits, then again for every DELETED tenant by the hourly export purge
+     * ({@code ExportPurgeScheduler}), which retries a failed purge and removes files an export
+     * still running at deletion time wrote afterwards.
+     */
+    @Override
+    public void purgeTenant(String tenantSchema) {
+        Path dir;
+        try {
+            dir = tenantDir(tenantSchema);
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+        if (!dir.getParent().equals(root) || !Files.isDirectory(dir)) return;
+        List<Path> paths;
+        try (Stream<Path> walk = Files.walk(dir)) {
+            paths = walk.sorted(Comparator.reverseOrder()).toList(); // children before parents
+        } catch (IOException | RuntimeException e) {
+            log.warn("EXPORT_TENANT_PURGE_FAILED schema={} error={}", tenantSchema, e.getMessage());
+            return;
+        }
+        for (Path p : paths) {
+            try {
+                Files.deleteIfExists(p);
+            } catch (IOException e) {
+                log.warn("EXPORT_TENANT_PURGE_FAILED schema={} error={}", tenantSchema, e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void deleteTenantFiles(String tenantSchema) {
+        purgeTenant(tenantSchema);
     }
 
     private Path tenantDir(String tenantSchema) {

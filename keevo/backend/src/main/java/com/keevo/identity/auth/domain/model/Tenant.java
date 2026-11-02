@@ -71,6 +71,15 @@ public final class Tenant {
                           newDeletionScheduledAt);
     }
 
+    /**
+     * Story 16.6 (RGPD) — the row kept after a definitive deletion: {@code DELETED}, no scheduled
+     * date, the shop name replaced by {@code placeholderName}; code, schema and plan are kept.
+     */
+    public Tenant anonymisedAsDeleted(String placeholderName) {
+        return new Tenant(id, code, schemaName, Objects.requireNonNull(placeholderName, "placeholderName"),
+                          TenantStatus.DELETED, planType, createdAt, null);
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

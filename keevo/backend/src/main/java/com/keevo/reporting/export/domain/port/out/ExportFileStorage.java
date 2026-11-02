@@ -24,6 +24,12 @@ public interface ExportFileStorage {
     /** Delete any leftover part file of {@code jobId} (interrupted job). */
     void deletePartials(String tenantSchema, UUID jobId);
 
+    /**
+     * Story 16.6 (RGPD) — delete every export file of a deleted tenant (its whole directory).
+     * Missing directory or invalid schema is a no-op; never throws.
+     */
+    void deleteTenantFiles(String tenantSchema);
+
     /** An in-progress write. */
     interface WriteHandle {
 

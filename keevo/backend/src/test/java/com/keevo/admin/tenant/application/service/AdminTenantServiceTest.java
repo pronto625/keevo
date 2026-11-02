@@ -290,6 +290,7 @@ class AdminTenantServiceTest {
         assertThat(sql.getValue())
                 .contains("status = 'DELETION_PENDING'")
                 .contains("to_regnamespace(schema_name) IS NOT NULL");
+        verify(tenantDeletion).recordAdminDeletionCancel(id); // Story 16.6 — durable trace
     }
 
     @Test
@@ -301,6 +302,7 @@ class AdminTenantServiceTest {
         assertThatThrownBy(() -> service.cancelDeletion(id))
                 .isInstanceOf(DomainException.class)
                 .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("TENANT_NOT_FOUND"));
+        verifyNoInteractions(tenantDeletion); // no CANCELLED trace for a refused cancel
     }
 
     @Test
@@ -315,6 +317,7 @@ class AdminTenantServiceTest {
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         var order = inOrder(jdbcTemplate, tenantDeletion);
         order.verify(jdbcTemplate).update(sql.capture(), eq(id));
+        order.verify(tenantDeletion).recordAdminDeletionRequest(id); // Story 16.6 — REQUESTED/ADMIN
         order.verify(tenantDeletion).deleteNow(id);
         assertThat(sql.getValue())
                 .contains("status = 'DELETION_PENDING', deletion_scheduled_at = now()")

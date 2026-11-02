@@ -6,6 +6,7 @@ import com.keevo.identity.api.TenantStatus;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.api.PlanType;
 import com.keevo.reporting.export.adapter.out.config.ExportProperties;
+import com.keevo.reporting.export.adapter.out.storage.LocalDiskExportFileStorage;
 import com.keevo.reporting.export.domain.model.ExportFormat;
 import com.keevo.reporting.export.domain.model.ExportJob;
 import com.keevo.reporting.export.domain.model.ExportJobStatus;
@@ -17,9 +18,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -109,6 +113,9 @@ class ExportPurgeSchedulerTest {
 
         assertThat(seen).containsExactly("kv_aaaaaa", "kv_bbbbbb", "kv_cccccc");
         verify(jobRepository, never()).save(any());
+        // Story 16.6 — the DELETED tenant's export directory is swept, the live ones never
+        verify(storage).deleteTenantFiles("kv_dddddd");
+        verify(storage, never()).deleteTenantFiles("kv_aaaaaa");
         assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
@@ -137,8 +144,30 @@ class ExportPurgeSchedulerTest {
         assertThat(running.getErrorCode()).isEqualTo("EXPORT_INTERRUPTED");
         verify(storage).deletePartials("kv_aaaaaa", pending.getId());
         verify(storage).deletePartials("kv_aaaaaa", running.getId());
+        verify(storage, never()).deleteTenantFiles(any()); // recovery never purges
         verify(jobRepository, times(2)).save(any());
         assertThat(TenantContext.getCurrentTenant()).isNull();
+    }
+
+    @Test
+    @DisplayName("16.6: a DELETED tenant's leftover export dir is removed by the hourly purge; live tenants' files kept")
+    void purgeRemovesLeftoverExportDirOfDeletedTenant(@TempDir Path root) throws Exception {
+        Path leftover = Files.createDirectories(root.resolve("kv_dddddd"));
+        Files.writeString(leftover.resolve(UUID.randomUUID() + ".csv"), "Nom;Téléphone");
+        Path live = Files.createDirectories(root.resolve("kv_aaaaaa"));
+        Path liveFile = Files.writeString(live.resolve(UUID.randomUUID() + ".csv"), "keep");
+        ExportProperties properties = new ExportProperties();
+        properties.setStorageDir(root.toString());
+        when(tenantRepository.findAll()).thenReturn(List.of(tenant("kv_aaaaaa", TenantStatus.ACTIVE),
+                tenant("kv_dddddd", TenantStatus.DELETED)));
+        when(jobRepository.findReadyExpiredAt(any())).thenReturn(List.of());
+        when(jobRepository.findStale(any())).thenReturn(List.of());
+
+        new ExportPurgeScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), jobRepository,
+                new LocalDiskExportFileStorage(properties), properties, Clock.fixed(NOW, ZoneOffset.UTC)).purge();
+
+        assertThat(leftover).doesNotExist();
+        assertThat(liveFile).exists();
     }
 
     private static Tenant tenant(String schema, TenantStatus status) {

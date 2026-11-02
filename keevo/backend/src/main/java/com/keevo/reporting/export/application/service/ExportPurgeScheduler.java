@@ -24,7 +24,9 @@ import java.util.function.Consumer;
 
 /**
  * Purge and recovery of background exports (Story v1s-18-1), for every tenant not DELETED
- * (files of SUSPENDED / DELETION_PENDING tenants expire too).
+ * (files of SUSPENDED / DELETION_PENDING tenants expire too). Story 16.6 (RGPD): the hourly purge
+ * also removes the whole export directory of every DELETED tenant — it retries a failed purge of the
+ * account deletion and catches files an export running at deletion time wrote afterwards.
  *
  * <ul>
  *   <li><b>Hourly purge</b>: READY jobs past {@code expiresAt} → file deleted, EXPIRED; stale jobs
@@ -62,16 +64,17 @@ public class ExportPurgeScheduler {
     @Scheduled(cron = "0 20 * * * *")
     @SchedulerLock(name = "exportPurge", lockAtMostFor = "PT50M", lockAtLeastFor = "PT1M")
     public void purge() {
-        forEachTenant("EXPORT_PURGE_FAILED", this::purgeTenant);
+        forEachTenant("EXPORT_PURGE_FAILED", this::purgeTenant, storage::deleteTenantFiles);
     }
 
     /** Fail every job left PENDING / RUNNING by the previous process (single-instance V1). */
     @EventListener(ApplicationReadyEvent.class)
     public void recoverInterruptedJobs() {
-        forEachTenant("EXPORT_RECOVERY_FAILED", this::recoverTenant);
+        forEachTenant("EXPORT_RECOVERY_FAILED", this::recoverTenant, null);
     }
 
-    private void forEachTenant(String errorTag, Consumer<String> action) {
+    /** {@code action} per live tenant; {@code onDeleted} (nullable) per DELETED tenant. */
+    private void forEachTenant(String errorTag, Consumer<String> action, Consumer<String> onDeleted) {
         List<TenantView> tenants;
         try {
             tenants = tenantQuery.findAll();
@@ -80,9 +83,9 @@ public class ExportPurgeScheduler {
             return;
         }
         for (TenantView tenant : tenants) {
-            if (tenant.status() == TenantStatus.DELETED) continue;
+            if (tenant.status() == TenantStatus.DELETED && onDeleted == null) continue;
             try {
-                action.accept(tenant.schemaName());
+                (tenant.status() == TenantStatus.DELETED ? onDeleted : action).accept(tenant.schemaName());
             } catch (Exception e) {
                 log.error("{} tenant={} error={}", errorTag, tenant.schemaName(), e.getMessage(), e);
             }
