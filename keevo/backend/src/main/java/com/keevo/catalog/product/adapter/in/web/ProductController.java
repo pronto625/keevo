@@ -8,6 +8,7 @@ import com.keevo.catalog.product.adapter.in.web.dto.UpdateProductRequestDto;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductResponseDto;
 import com.keevo.catalog.product.adapter.in.web.dto.ProductSupplierResponseDto;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
+import com.keevo.catalog.product.application.usecase.CreateOrRestoreProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.GetProductPricingUseCase;
@@ -37,7 +38,7 @@ import java.util.UUID;
 @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
 public class ProductController {
 
-    private final CreateProductUseCase createProductUseCase;
+    private final CreateOrRestoreProductUseCase createOrRestoreProductUseCase; // 17.13: archived name → restored
     private final UpdateProductUseCase updateProductUseCase;
     private final ArchiveProductUseCase archiveProductUseCase;
     private final ProductRepository productRepository;
@@ -45,14 +46,14 @@ public class ProductController {
     private final SupplierQueryPort supplierQueryPort; // 12.2a: crm through its public API
     private final StoreQueryPort storeQuery; // Story 14.10: resolve store names
 
-    public ProductController(CreateProductUseCase createProductUseCase,
+    public ProductController(CreateOrRestoreProductUseCase createOrRestoreProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
                            ArchiveProductUseCase archiveProductUseCase,
                            ProductRepository productRepository,
                            GetProductPricingUseCase getProductPricingUseCase,
                            SupplierQueryPort supplierQueryPort,
                            StoreQueryPort storeQuery) {
-        this.createProductUseCase = createProductUseCase;
+        this.createOrRestoreProductUseCase = createOrRestoreProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
         this.productRepository = productRepository;
@@ -64,6 +65,10 @@ public class ProductController {
     /**
      * Create new product
      * POST /api/v1/products
+     *
+     * <p>Story 17.13 — a name held by an ARCHIVED product restores that product instead (200, {@code restored: true},
+     * see {@link CreateOrRestoreProductUseCase}); nothing of the request is applied to it — in particular
+     * {@code stockQuantity}, which never creates stock here anyway (legacy column only, 17-11), is ignored.
      */
     @RequiresEntitlement("catalog")
     @PostMapping
@@ -94,8 +99,17 @@ public class ProductController {
                 request.trackStock() // Story 17.12 — null → tracked
         );
         
-        Product product = createProductUseCase.execute(dto);
-        ProductResponseDto response = ProductResponseDto.fromDomain(product);
+        // Story 17.13: a name held by an ARCHIVED product restores it (limit-checked, existing fields kept) → 200
+        // with the existing product and restored = true; a draft creation whose restore is refused gets the archived
+        // product as is (200, no marker); a visible product's name keeps the 409.
+        var outcome = createOrRestoreProductUseCase.execute(dto);
+        if (outcome.restored()) {
+            return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(outcome.product(), true)));
+        }
+        if (outcome.merged()) {
+            return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(outcome.product())));
+        }
+        ProductResponseDto response = ProductResponseDto.fromDomain(outcome.product());
         
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(response));

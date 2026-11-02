@@ -53,20 +53,51 @@ public class UnarchiveProductUseCase {
         UUID actorId
     ) {}
 
+    /**
+     * Restores the product. Story 17.13: a product that is no longer archived (e.g. restored concurrently between the
+     * caller's lookup and this call) is a no-op — no event, no audit — and answers {@code false}.
+     *
+     * @return {@code true} when the product was actually restored
+     * @throws DomainException PRODUCT_NOT_FOUND; PLAN_LIMIT_EXCEEDED (archived ACTIVE product at the plan limit)
+     */
     @Transactional
-    public void execute(UnarchiveProductDto dto) {
+    public boolean execute(UnarchiveProductDto dto) {
+        return restore(dto, false);
+    }
+
+    /**
+     * Story 17.13 — same restore, but an archived ACTIVE product at the plan limit is left archived and answers
+     * {@code false} instead of throwing, so a caller sharing the transaction (sync draft creation) can fall back
+     * without the transaction being marked rollback-only. An unreadable count still fails closed (throws).
+     */
+    @Transactional
+    public boolean tryExecute(UnarchiveProductDto dto) {
+        return restore(dto, true);
+    }
+
+    private boolean restore(UnarchiveProductDto dto, boolean refuseQuietly) {
         String tenantId = TenantContext.getCurrentTenant();
         // same key as product creation: the count → restore cannot interleave with a concurrent create
         transactionLock.lock("product-limit:" + tenantId);
 
         var product = productRepository.findById(dto.productId())
-            .orElseThrow(() -> new IllegalArgumentException("Product not found: " + dto.productId()));
+            .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND, "Produit introuvable"));
 
-        if (Boolean.TRUE.equals(product.getArchived()) && product.getStatus() == ProductStatus.ACTIVE) {
+        if (!Boolean.TRUE.equals(product.getArchived())) {
+            return false;
+        }
+
+        if (product.getStatus() == ProductStatus.ACTIVE) {
             var plan = tenantPlanQuery.findCurrentPlan(tenantId)
                     .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                             "Aucun abonnement actif"));
-            planLimit.checkProductLimit(plan, () -> productCountPort.countActiveProducts(tenantId));
+            if (refuseQuietly) {
+                if (planLimit.remainingProducts(plan, () -> productCountPort.countActiveProducts(tenantId)) <= 0) {
+                    return false;
+                }
+            } else {
+                planLimit.checkProductLimit(plan, () -> productCountPort.countActiveProducts(tenantId));
+            }
         }
 
         productRepository.unarchive(dto.productId());
@@ -79,5 +110,6 @@ public class UnarchiveProductUseCase {
             dto.actorId(),
             Instant.now()
         ));
+        return true;
     }
 }

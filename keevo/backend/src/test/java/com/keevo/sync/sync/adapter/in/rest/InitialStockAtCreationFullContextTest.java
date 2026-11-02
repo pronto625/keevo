@@ -156,6 +156,39 @@ class InitialStockAtCreationFullContextTest extends FullContextIntegrationTest {
                 .filter(n -> n.path("productId").asText().equals(productId.toString())).toList();
     }
 
+    /**
+     * Switches the tenant to FREE and inserts active copies of {@code template} until the active non-archived
+     * product count reaches the FREE limit; returns that limit.
+     */
+    private int fillToFreeLimit(UUID template) {
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', expires_at = NULL");
+        jdbc.update("UPDATE public.tenants SET plan_type = 'FREE' WHERE id = ?", tenantId);
+        Integer limit = jdbc.queryForObject(
+                "SELECT max_products FROM public.plan_profiles WHERE plan_type = 'FREE'", Integer.class);
+        assertThat(limit).as("FREE max_products").isNotNull().isGreaterThan(1);
+        // copy every column except the id, the name, the sku and any other uniquely indexed column (barcode...)
+        List<String> unique = jdbc.queryForList("SELECT a.attname FROM pg_index i JOIN pg_attribute a "
+                + "ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
+                + "WHERE i.indrelid = ?::regclass AND i.indisunique", String.class, "\"" + schema + "\".products");
+        List<String> cols = jdbc.queryForList("SELECT column_name FROM information_schema.columns "
+                + "WHERE table_schema = ? AND table_name = 'products' AND column_name NOT IN "
+                + "('id', 'name', 'sku', 'status', 'archived')", String.class, schema).stream()
+                .filter(c -> !unique.contains(c)).toList();
+        String list = String.join(", ", cols);
+        int current = activeProductCount();
+        jdbc.update("INSERT INTO \"" + schema + "\".products (id, name, sku, status, archived, " + list + ") "
+                + "SELECT gen_random_uuid(), 'Remplissage ' || g, 'KEV-F' || lpad(g::text, 5, '0'), 'ACTIVE', false, "
+                + list + " FROM \"" + schema + "\".products, generate_series(1, ?) g WHERE id = ?",
+                limit - current, template);
+        assertThat(activeProductCount()).isEqualTo(limit);
+        return limit;
+    }
+
+    private int activeProductCount() {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM \"" + schema + "\".products "
+                + "WHERE archived = false AND status = 'ACTIVE'", Integer.class);
+    }
+
     private int productCount() {
         return jdbc.queryForObject("SELECT COUNT(*) FROM \"" + schema + "\".products", Integer.class);
     }
@@ -302,26 +335,264 @@ class InitialStockAtCreationFullContextTest extends FullContextIntegrationTest {
         assertThat(stockLevel(e)).isEqualTo(16);
     }
 
-    @Test
-    @DisplayName("merged by name onto an ARCHIVED product: today the merge targets the archived E and the stock lands on it (E stays archived)")
-    void mergedByName_ontoArchivedProduct_pinsTodaysBehaviour() throws Exception {
+    // ── Story 17.13: a creation named like an ARCHIVED product restores it ─────────────────────────────
+
+    private UUID archivedRiz() throws Exception {
         UUID e = UUID.randomUUID();
         push(createProduct(e, "Riz", null));
         Map<String, Object> archive = op("ARCHIVE_PRODUCT", e.toString(), Map.of("productId", e.toString()));
         assertApplied(push(archive).get(0));
+        return e;
+    }
+
+    private boolean archived(UUID productId) {
+        return jdbc.queryForObject("SELECT archived FROM \"" + schema + "\".products WHERE id = ?",
+                Boolean.class, productId);
+    }
+
+    @Test
+    @DisplayName("17.13 sync, archived match: E « Riz » archived; CREATE_PRODUCT X « riz » + RECORD_STOCK_ENTRY X/4 → E restored, MERGED_INTO:E + restored, stock(E) 4, pulled active")
+    void mergedByName_ontoArchivedProduct_restoresIt() throws Exception {
+        UUID e = archivedRiz();
         int before = productCount();
+        UUID x = UUID.randomUUID();
+        UUID movementId = UUID.randomUUID();
+
+        List<JsonNode> results = push(createProduct(x, "riz", null), stockEntry(x, movementId, 4));
+
+        assertApplied(results.get(0));
+        assertThat(results.get(0).path("serverEntityId").asText()).isEqualTo(e.toString());
+        assertThat(results.get(0).path("reason").asText()).isEqualTo("MERGED_INTO:" + e);
+        assertThat(results.get(0).path("conflictData").path("restored").asBoolean()).as(results.get(0).toString())
+                .isTrue();
+        assertApplied(results.get(1));
+        assertThat(productCount()).isEqualTo(before);
+        assertThat(archived(e)).isFalse();
+        // existing fields kept: the name is still « Riz », not the payload's « riz »
+        assertThat(jdbc.queryForObject("SELECT name FROM \"" + schema + "\".products WHERE id = ?", String.class, e))
+                .isEqualTo("Riz");
+        assertThat(stockLevel(e)).isEqualTo(4);
+        assertThat(movementCount(x)).isZero();
+        assertThat(jdbc.queryForObject("SELECT product_id FROM \"" + schema + "\".stock_movements WHERE id = ?",
+                UUID.class, movementId)).isEqualTo(e);
+        // the existing unarchive audit (no raw id in its label)
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM \"" + schema + "\".audit_log "
+                + "WHERE action = 'PRODUCT_UNARCHIVED' AND entity_id = ?", Integer.class, e)).isEqualTo(1);
+
+        Map<String, List<JsonNode>> pulled = pullAll();
+        assertThat(pulled.getOrDefault("products", List.of()))
+                .noneMatch(n -> n.path("id").asText().equals(x.toString()))
+                .anySatisfy(n -> {
+                    assertThat(n.path("id").asText()).isEqualTo(e.toString());
+                    assertThat(n.path("archived").asBoolean()).isFalse();
+                });
+        assertThat(ofProduct(pulled, "stockLevels", e)).singleElement()
+                .satisfies(n -> assertThat(n.path("quantity").asInt()).isEqualTo(4));
+    }
+
+    @Test
+    @DisplayName("17.13 sync, active match: unchanged merge, no restore marker")
+    void mergedByName_ontoActiveProduct_noRestoreMarker() throws Exception {
+        UUID e = UUID.randomUUID();
+        push(createProduct(e, "Mil", null));
+
+        JsonNode result = push(createProduct(UUID.randomUUID(), "MIL", null)).get(0);
+
+        assertApplied(result);
+        assertThat(result.path("reason").asText()).isEqualTo("MERGED_INTO:" + e);
+        assertThat(result.path("conflictData").isNull() || result.path("conflictData").isMissingNode())
+                .as(result.toString()).isTrue();
+    }
+
+    @Test
+    @DisplayName("17.13 sync, at limit: Free at its limit → REJECTED PLAN_LIMIT_EXCEEDED (+details), E stays archived, the entry is not applied")
+    void mergedByName_ontoArchivedProduct_atLimit_rejected() throws Exception {
+        UUID e = archivedRiz();
+        int limit = fillToFreeLimit(e);
         UUID x = UUID.randomUUID();
 
         List<JsonNode> results = push(createProduct(x, "Riz", null), stockEntry(x, UUID.randomUUID(), 4));
 
-        assertApplied(results.get(0));
-        assertThat(results.get(0).path("reason").asText()).isEqualTo("MERGED_INTO:" + e);
+        assertThat(results.get(0).path("status").asText()).as(results.get(0).toString()).isEqualTo("REJECTED");
+        assertThat(results.get(0).path("reason").asText()).isEqualTo("PLAN_LIMIT_EXCEEDED");
+        JsonNode details = results.get(0).path("conflictData");
+        assertThat(details.path("entity").asText()).as(details.toString()).isEqualTo("products");
+        assertThat(details.path("limit").asInt()).isEqualTo(limit);
+        assertThat(details.path("current").asInt()).isEqualTo(limit);
+        assertThat(results.get(1).path("status").asText()).as(results.get(1).toString()).isEqualTo("REJECTED");
+        assertThat(results.get(1).path("reason").asText()).isEqualTo("PRODUCT_NOT_FOUND");
+        assertThat(archived(e)).isTrue();
+        assertThat(stockLevel(e)).isNull();
+        assertThat(movementCount(e)).isZero();
+    }
+
+    @Test
+    @DisplayName("17.13 sync, leftover stock: E archived with 6 in stock → CREATE_PRODUCT « riz » + entry 4 → E restored with 10")
+    void restoredProduct_withLeftoverStock_entryAdds() throws Exception {
+        UUID e = UUID.randomUUID();
+        push(createProduct(e, "Riz", null), stockEntry(e, UUID.randomUUID(), 6));
+        assertApplied(push(op("ARCHIVE_PRODUCT", e.toString(), Map.of("productId", e.toString()))).get(0));
+        UUID x = UUID.randomUUID();
+
+        List<JsonNode> results = push(createProduct(x, "riz", null), stockEntry(x, UUID.randomUUID(), 4));
+
+        assertThat(results.get(0).path("conflictData").path("restored").asBoolean()).as(results.get(0).toString()).isTrue();
         assertApplied(results.get(1));
+        assertThat(archived(e)).isFalse();
+        assertThat(stockLevel(e)).isEqualTo(10);
+        assertThat(movementCount(e)).isEqualTo(2);
+    }
+
+    private Map<String, Object> createDraft(UUID id, String name) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("id", id.toString());
+        p.put("name", name);
+        p.put("priceVente", 800);
+        return op("CREATE_DRAFT_PRODUCT", id.toString(), p);
+    }
+
+    private String status(UUID productId) {
+        return jdbc.queryForObject("SELECT status FROM \"" + schema + "\".products WHERE id = ?", String.class, productId);
+    }
+
+    @Test
+    @DisplayName("17.13 sync, archived DRAFT matched by CREATE_PRODUCT → restored as a draft, marker carries status DRAFT")
+    void archivedDraft_matchedByCreateProduct_restoredAsDraft() throws Exception {
+        UUID e = UUID.randomUUID();
+        assertApplied(push(createDraft(e, "Mangue")).get(0));
+        assertApplied(push(op("ARCHIVE_PRODUCT", e.toString(), Map.of("productId", e.toString()))).get(0));
+
+        JsonNode result = push(createProduct(UUID.randomUUID(), "mangue", null)).get(0);
+
+        assertApplied(result);
+        assertThat(result.path("reason").asText()).isEqualTo("MERGED_INTO:" + e);
+        assertThat(result.path("conflictData").path("restored").asBoolean()).as(result.toString()).isTrue();
+        assertThat(result.path("conflictData").path("status").asText()).isEqualTo("DRAFT");
+        assertThat(archived(e)).isFalse();
+        assertThat(status(e)).isEqualTo("DRAFT");
+    }
+
+    @Test
+    @DisplayName("17.13 sync, CREATE_DRAFT_PRODUCT on an archived E → E restored, marker")
+    void draftCreation_archivedMatch_restored() throws Exception {
+        UUID e = archivedRiz();
+
+        JsonNode result = push(createDraft(UUID.randomUUID(), "riz")).get(0);
+
+        assertApplied(result);
+        assertThat(result.path("reason").asText()).isEqualTo("MERGED_INTO:" + e);
+        assertThat(result.path("conflictData").path("restored").asBoolean()).as(result.toString()).isTrue();
+        assertThat(archived(e)).isFalse();
+    }
+
+    @Test
+    @DisplayName("17.13 sync, CREATE_DRAFT_PRODUCT on an archived E at the limit → plain merge (sale target kept), no marker, E archived")
+    void draftCreation_archivedMatch_atLimit_plainMerge() throws Exception {
+        UUID e = archivedRiz();
+        fillToFreeLimit(e);
+        UUID x = UUID.randomUUID();
+
+        JsonNode result = push(createDraft(x, "Riz")).get(0);
+
+        assertApplied(result);
+        assertThat(result.path("serverEntityId").asText()).isEqualTo(e.toString());
+        assertThat(result.path("reason").asText()).isEqualTo("MERGED_INTO:" + e);
+        assertThat(result.path("conflictData").isNull() || result.path("conflictData").isMissingNode())
+                .as(result.toString()).isTrue();
+        assertThat(archived(e)).isTrue();
+        // the alias is recorded: a stock entry queued on X lands on E (a sale would too)
+        assertApplied(push(stockEntry(x, UUID.randomUUID(), 2)).get(0));
+        assertThat(stockLevel(e)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("17.13 replay: the restoring CREATE_PRODUCT re-pushed with the same operation id → DUPLICATE (marker only on the first answer)")
+    void restoringCreate_replayed_duplicate() throws Exception {
+        archivedRiz();
+        var create = createProduct(UUID.randomUUID(), "riz", null);
+        push(create);
+
+        JsonNode again = push(create).get(0);
+
+        assertThat(again.path("status").asText()).as(again.toString()).isEqualTo("DUPLICATE");
+        assertThat(again.path("conflictData").isNull() || again.path("conflictData").isMissingNode()).isTrue();
+    }
+
+    // ── Story 17.13: REST POST /api/v1/products ─────────────────────────────────────────────────────────
+
+    private MvcResult postProduct(String name) throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/products")
+                .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", name, "price", 9999)))).andReturn();
+    }
+
+    @Test
+    @DisplayName("17.13 REST, archived match: POST « riz » → 200, product E, restored = true, E active and listed")
+    void rest_archivedName_restored() throws Exception {
+        UUID e = archivedRiz();
+        int before = productCount();
+
+        MvcResult r = postProduct("riz");
+
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(200);
+        JsonNode data = objectMapper.readTree(body(r)).path("data");
+        assertThat(data.path("id").asText()).isEqualTo(e.toString());
+        assertThat(data.path("name").asText()).isEqualTo("Riz");
+        assertThat(data.path("price").asInt()).isEqualTo(1500); // existing fields kept
+        assertThat(data.path("archived").asBoolean()).isFalse();
+        assertThat(data.path("restored").asBoolean()).isTrue();
         assertThat(productCount()).isEqualTo(before);
-        assertThat(jdbc.queryForObject("SELECT archived FROM \"" + schema + "\".products WHERE id = ?",
-                Boolean.class, e)).isTrue();
-        assertThat(stockLevel(e)).isEqualTo(4);
-        assertThat(movementCount(x)).isZero();
+        assertThat(archived(e)).isFalse();
+
+        MvcResult list = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/products")
+                .header("Authorization", "Bearer " + token)).andReturn();
+        assertThat(objectMapper.readTree(body(list)).path("data"))
+                .anyMatch(n -> n.path("id").asText().equals(e.toString()));
+    }
+
+    @Test
+    @DisplayName("17.13 REST, active match: POST « Riz » → 409 PRODUCT_NAME_ALREADY_EXISTS (unchanged); new name → 201 without restored")
+    void rest_activeName_conflict_newName_created() throws Exception {
+        push(createProduct(UUID.randomUUID(), "Riz", null));
+
+        MvcResult r = postProduct("Riz");
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(409);
+        assertThat(body(r)).contains("PRODUCT_NAME_ALREADY_EXISTS");
+
+        MvcResult created = postProduct("Haricot");
+        assertThat(created.getResponse().getStatus()).as(body(created)).isEqualTo(201);
+        assertThat(objectMapper.readTree(body(created)).path("data").has("restored")).isFalse();
+    }
+
+    @Test
+    @DisplayName("17.13 REST, draft creation on an archived E at the limit → 200, E as is (archived), no restored field")
+    void rest_draftOnArchived_atLimit_mergedWithoutRestore() throws Exception {
+        UUID e = archivedRiz();
+        fillToFreeLimit(e);
+
+        MvcResult r = mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/products")
+                .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("name", "riz", "status", "DRAFT")))).andReturn();
+
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(200);
+        JsonNode data = objectMapper.readTree(body(r)).path("data");
+        assertThat(data.path("id").asText()).isEqualTo(e.toString());
+        assertThat(data.path("archived").asBoolean()).isTrue();
+        assertThat(data.has("restored")).isFalse();
+        assertThat(archived(e)).isTrue();
+    }
+
+    @Test
+    @DisplayName("17.13 REST, archived match at the limit → 403 PLAN_LIMIT_EXCEEDED, E stays archived")
+    void rest_archivedName_atLimit_forbidden() throws Exception {
+        UUID e = archivedRiz();
+        fillToFreeLimit(e);
+
+        MvcResult r = postProduct("Riz");
+
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(403);
+        assertThat(body(r)).contains("PLAN_LIMIT_EXCEEDED");
+        assertThat(archived(e)).isTrue();
     }
 
     @Test
@@ -406,25 +677,7 @@ class InitialStockAtCreationFullContextTest extends FullContextIntegrationTest {
     void creationRefused_stockEntryNotApplied() throws Exception {
         UUID template = UUID.randomUUID();
         push(createProduct(template, "Modèle", null));
-        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', expires_at = NULL");
-        jdbc.update("UPDATE public.tenants SET plan_type = 'FREE' WHERE id = ?", tenantId);
-        Integer limit = jdbc.queryForObject(
-                "SELECT max_products FROM public.plan_profiles WHERE plan_type = 'FREE'", Integer.class);
-        assertThat(limit).as("FREE max_products").isNotNull().isGreaterThan(1);
-        // copy every column except the id, the name, the sku and any other uniquely indexed column (barcode...)
-        List<String> unique = jdbc.queryForList("SELECT a.attname FROM pg_index i JOIN pg_attribute a "
-                + "ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) "
-                + "WHERE i.indrelid = ?::regclass AND i.indisunique", String.class, "\"" + schema + "\".products");
-        List<String> cols = jdbc.queryForList("SELECT column_name FROM information_schema.columns "
-                + "WHERE table_schema = ? AND table_name = 'products' AND column_name NOT IN "
-                + "('id', 'name', 'sku', 'status', 'archived')", String.class, schema).stream()
-                .filter(c -> !unique.contains(c)).toList();
-        String list = String.join(", ", cols);
-        int current = productCount();
-        jdbc.update("INSERT INTO \"" + schema + "\".products (id, name, sku, status, archived, " + list + ") "
-                + "SELECT gen_random_uuid(), 'Remplissage ' || g, 'KEV-F' || lpad(g::text, 5, '0'), 'ACTIVE', false, "
-                + list + " FROM \"" + schema + "\".products, generate_series(1, ?) g WHERE id = ?",
-                limit - current, template);
+        int limit = fillToFreeLimit(template);
         assertThat(productCount()).isEqualTo(limit);
         UUID x = UUID.randomUUID();
 

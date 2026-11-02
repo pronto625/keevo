@@ -11,6 +11,8 @@ import com.keevo.catalog.product.domain.event.ProductImportedFromCsvEvent;
 import com.keevo.catalog.product.domain.port.out.CsvParserPort;
 import com.keevo.catalog.product.domain.port.out.DefaultStorePort;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.product.domain.entity.Product;
+import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.api.InitialStockPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -64,6 +66,7 @@ public class ImportCsvProductsUseCase {
     private final CsvParserPort             csvParser;
     private final ProductCsvRowFactory      rowFactory;
     private final CreateProductUseCase      createProductUseCase;
+    private final UnarchiveProductUseCase   unarchiveProductUseCase; // 17.13: archived name → restored
     private final ProductRepository         productRepository;
     // 12.2b: implemented by inventory; optional — catalog must start without inventory
     private final ObjectProvider<InitialStockPort> initialStockPort;
@@ -82,6 +85,7 @@ public class ImportCsvProductsUseCase {
             CsvParserPort csvParser,
             ProductCsvRowFactory rowFactory,
             CreateProductUseCase createProductUseCase,
+            UnarchiveProductUseCase unarchiveProductUseCase,
             ProductRepository productRepository,
             ObjectProvider<InitialStockPort> initialStockPort,
             DefaultStorePort defaultStorePort,
@@ -95,6 +99,7 @@ public class ImportCsvProductsUseCase {
         this.csvParser             = csvParser;
         this.rowFactory            = rowFactory;
         this.createProductUseCase  = createProductUseCase;
+        this.unarchiveProductUseCase = unarchiveProductUseCase;
         this.productRepository     = productRepository;
         this.initialStockPort      = initialStockPort;
         this.defaultStorePort      = defaultStorePort;
@@ -181,8 +186,9 @@ public class ImportCsvProductsUseCase {
             lineNumber++;
 
             // Once the plan limit is hit, count all remaining rows as skipped
-            // (no break — we iterate to the end so the skipped counter is accurate)
-            if (remaining <= 0) {
+            // (no break — we iterate to the end so the skipped counter is accurate).
+            // Story 17.13: a row naming an archived DRAFT is still restored — drafts never count toward the limit.
+            if (remaining <= 0 && !namesArchivedDraft(row, command, lineNumber, categoryNameToId)) {
                 if (!limitHit) {
                     builder.markLimitReached(
                             "Limite du plan atteinte (" + maxProducts + " produits maximum)");
@@ -197,15 +203,30 @@ public class ImportCsvProductsUseCase {
                 var dto = rowFactory.fromRow(row, command.mapping(), lineNumber,
                         command.actorId(), categoryNameToId);
 
-                // Name uniqueness check (AC8) — skip row gracefully
-                if (productRepository.existsByName(dto.name())) {
-                    builder.addError(new CsvRowError(lineNumber, "Nom",
-                            "Un produit avec ce nom existe déjà : « " + dto.name() + " »"));
-                    continue;
+                // Name uniqueness check (AC8) — skip row gracefully. Story 17.13: a name held by an ARCHIVED product
+                // restores it instead (17.10 unarchive: limit-checked, « désarchivé » audit, existing fields kept).
+                Product saved;
+                boolean restored = false;
+                var existing = productRepository.findByName(dto.name());
+                if (existing.isPresent()) {
+                    boolean archived = Boolean.TRUE.equals(existing.get().getArchived());
+                    // not archived, or restored concurrently meanwhile (unarchive no-op): a visible product's name
+                    if (!archived || !unarchiveProductUseCase.execute(
+                            new UnarchiveProductUseCase.UnarchiveProductDto(existing.get().getId(), command.actorId()))) {
+                        builder.addError(new CsvRowError(lineNumber, "Nom",
+                                "Un produit avec ce nom existe déjà : « " + dto.name() + " »"));
+                        continue;
+                    }
+                    saved = productRepository.findById(existing.get().getId())
+                            .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND, "Produit introuvable"));
+                    restored = true;
+                    builder.incrementRestored();
+                    builder.addWarning(new CsvRowError(lineNumber, "Nom",
+                            "Produit archivé restauré : " + saved.getName()));
+                } else {
+                    // Create product via use case (saves + publishes ProductCreatedEvent)
+                    saved = createProductUseCase.execute(dto);
                 }
-
-                // Create product via use case (saves + publishes ProductCreatedEvent)
-                var saved = createProductUseCase.execute(dto);
 
                 // Stock movement if initial quantity > 0 — Story 17.12: never for an untracked product
                 // (« suivi_stock » = non): no stock row, the quantity column is ignored.
@@ -231,8 +252,8 @@ public class ImportCsvProductsUseCase {
                     );
                 }
 
-                // Per-product domain event
-                eventPublisher.publishEvent(new ProductImportedFromCsvEvent(
+                // Per-product domain event — a restored product is audited by its unarchive event, not as imported
+                if (!restored) eventPublisher.publishEvent(new ProductImportedFromCsvEvent(
                         saved.getId(),
                         saved.getName(),
                         command.actorId(),
@@ -242,7 +263,8 @@ public class ImportCsvProductsUseCase {
                 ));
 
                 builder.incrementImported();
-                remaining--;
+                // a restored draft does not count toward the limit (17.10)
+                if (!restored || saved.getStatus() == ProductStatus.ACTIVE) remaining--;
 
             } catch (CsvValidationException e) {
                 builder.addError(new CsvRowError(e.getLineNumber(), e.getColumnName(), e.getMessage()));
@@ -282,6 +304,23 @@ public class ImportCsvProductsUseCase {
                 result.getImported(), result.getSkipped(), result.isLimitReached());
 
         return result;
+    }
+
+    /**
+     * Story 17.13 — whether the row names an archived DRAFT (restored without consuming the plan quota). Any problem
+     * reading the row answers {@code false}: the row is then skipped by the limit like before.
+     */
+    private boolean namesArchivedDraft(Map<String, String> row, ImportCsvCommand command, int lineNumber,
+                                       Map<String, UUID> categoryNameToId) {
+        try {
+            var dto = rowFactory.fromRow(row, command.mapping(), lineNumber, command.actorId(), categoryNameToId);
+            if (dto == null || dto.name() == null) return false;
+            return productRepository.findByName(dto.name())
+                    .filter(p -> Boolean.TRUE.equals(p.getArchived()) && p.getStatus() == ProductStatus.DRAFT)
+                    .isPresent();
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /** The exception message without its « CODE: » prefix; a generic French text if empty. */

@@ -88,9 +88,15 @@ class ProductCommandAdapter implements ProductCommandPort {
     }
 
     @Override
-    public void unarchive(String tenantSchema, UUID productId, UUID actorId) {
+    public boolean unarchive(String tenantSchema, UUID productId, UUID actorId) {
         TenantContext.requireCurrent(tenantSchema);
-        unarchiveProduct.execute(new UnarchiveProductUseCase.UnarchiveProductDto(productId, actorId));
+        return unarchiveProduct.execute(new UnarchiveProductUseCase.UnarchiveProductDto(productId, actorId));
+    }
+
+    @Override
+    public boolean unarchiveIfAllowed(String tenantSchema, UUID productId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return unarchiveProduct.tryExecute(new UnarchiveProductUseCase.UnarchiveProductDto(productId, actorId));
     }
 
     @Override

@@ -60,6 +60,7 @@ class ImportCsvProductsUseCaseTest {
     @Mock private CsvParserPort           csvParser;
     @Mock private ProductCsvRowFactory    rowFactory;
     @Mock private CreateProductUseCase    createProductUseCase;
+    @Mock private UnarchiveProductUseCase unarchiveProductUseCase;
     @Mock private ProductRepository       productRepository;
     @Mock private InitialStockPort        initialStockPort;
     @Mock private ObjectProvider<InitialStockPort> initialStockProvider;
@@ -81,7 +82,7 @@ class ImportCsvProductsUseCaseTest {
     void setUp() {
         lenient().when(initialStockProvider.getIfAvailable()).thenReturn(initialStockPort);
         useCase = new ImportCsvProductsUseCase(
-                csvParser, rowFactory, createProductUseCase, productRepository,
+                csvParser, rowFactory, createProductUseCase, unarchiveProductUseCase, productRepository,
                 initialStockProvider, defaultStorePort, StoreApiTestSupport.queryPort(storeRepository), productCountPort,
                 SubscriptionApiTestSupport.queryPort(subscriptionRepository), SubscriptionApiTestSupport.limitPort(planLimitGuard), categoryRepository, eventPublisher,
                 transactionManager);
@@ -156,8 +157,6 @@ class ImportCsvProductsUseCaseTest {
             var dto2 = new CreateProductUseCase.CreateProductDto("Pantalon", null, null, null, 8000, 0, 0, 0, actorId);
             when(rowFactory.fromRow(eq(row1), any(), anyInt(), any(), any())).thenReturn(dto1);
             when(rowFactory.fromRow(eq(row2), any(), anyInt(), any(), any())).thenReturn(dto2);
-            when(productRepository.existsByName("T-Shirt")).thenReturn(false);
-            when(productRepository.existsByName("Pantalon")).thenReturn(false);
             when(createProductUseCase.execute(dto1)).thenReturn(stubProduct("T-Shirt"));
             when(createProductUseCase.execute(dto2)).thenReturn(stubProduct("Pantalon"));
 
@@ -183,7 +182,6 @@ class ImportCsvProductsUseCaseTest {
             var dto = new CreateProductUseCase.CreateProductDto("Livraison", null, null, null, 500, 0, 0, 8, actorId,
                     0, null, null, null, null, null, false);
             when(rowFactory.fromRow(eq(row), any(), anyInt(), any(), any())).thenReturn(dto);
-            when(productRepository.existsByName("Livraison")).thenReturn(false);
             var untracked = new Product(UUID.randomUUID(), "Livraison", null, "KEV-LIVR01", null, 500, 0, 0, null,
                     false, ProductStatus.ACTIVE, 0, false, Instant.now(), Instant.now());
             when(createProductUseCase.execute(dto)).thenReturn(untracked);
@@ -217,7 +215,6 @@ class ImportCsvProductsUseCaseTest {
             when(rowFactory.fromRow(eq(goodRow), any(), anyInt(), any(), any())).thenReturn(goodDto);
             when(rowFactory.fromRow(eq(badRow), any(), anyInt(), any(), any()))
                     .thenThrow(new com.keevo.catalog.product.adapter.out.csv.validator.CsvValidationException(3, "nom", "Nom requis"));
-            when(productRepository.existsByName("Chemise")).thenReturn(false);
             when(createProductUseCase.execute(goodDto)).thenReturn(stubProduct("Chemise"));
 
             ImportResult result = useCase.execute(ownerCommand(2));
@@ -245,7 +242,6 @@ class ImportCsvProductsUseCaseTest {
 
             var dto1 = new CreateProductUseCase.CreateProductDto("A", null, null, null, 100, 0, 0, 0, actorId);
             when(rowFactory.fromRow(eq(row1), any(), anyInt(), any(), any())).thenReturn(dto1);
-            when(productRepository.existsByName("A")).thenReturn(false);
             when(createProductUseCase.execute(dto1)).thenReturn(stubProduct("A"));
 
             ImportResult result = useCase.execute(ownerCommand(3));
@@ -270,7 +266,7 @@ class ImportCsvProductsUseCaseTest {
 
             var dto = new CreateProductUseCase.CreateProductDto("Produit existant", null, null, null, 5000, 0, 0, 0, actorId);
             when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
-            when(productRepository.existsByName("Produit existant")).thenReturn(true);
+            when(productRepository.findByName("Produit existant")).thenReturn(Optional.of(stubProduct("Produit existant")));
 
             ImportResult result = useCase.execute(ownerCommand(1));
 
@@ -280,6 +276,218 @@ class ImportCsvProductsUseCaseTest {
             // J12 — French field label, never the raw key « nom ».
             assertEquals("Nom", result.getErrors().get(0).column());
             verify(createProductUseCase, never()).execute(any());
+        }
+    }
+
+    // ── Story 17.13: a row named like an ARCHIVED product restores it ─────────────────────────────
+
+    private Product archivedProduct(String name, boolean tracked) {
+        return new Product(UUID.randomUUID(), name, null, "KEV-ARC001", null, 700, 0, 0, null,
+                true, ProductStatus.ACTIVE, 0, tracked, Instant.now(), Instant.now());
+    }
+
+    private Product restoredCopy(Product p) {
+        return new Product(p.getId(), p.getName(), null, p.getSku(), null, 700, 0, 0, null,
+                false, p.getStatus(), 0, p.isTrackStock(), p.getCreatedAt(), Instant.now());
+    }
+
+    private CreateProductUseCase.CreateProductDto stubArchivedRow(String csvName, int qty) {
+        when(defaultStorePort.getDefaultStoreId()).thenReturn(storeId);
+        when(categoryRepository.findAllActive()).thenReturn(List.of());
+        var row = Map.of("nom", csvName, "prix_vente", "999", "quantite_initiale", String.valueOf(qty));
+        when(csvParser.parse(any())).thenReturn(List.of(row));
+        var dto = new CreateProductUseCase.CreateProductDto(csvName, null, null, null, 999, 0, 0, qty, actorId);
+        when(rowFactory.fromRow(eq(row), any(), anyInt(), any(), any())).thenReturn(dto);
+        return dto;
+    }
+
+    @Test
+    @DisplayName("17.13 — archived « Riz », row « riz » qty 3 (tracked) → restored, +3 on it, imported with a French warning")
+    void archivedName_tracked_restoredWithInitialStock() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            stubArchivedRow("riz", 3);
+            var archived = archivedProduct("Riz", true);
+            when(productRepository.findByName("riz")).thenReturn(Optional.of(archived));
+            when(productRepository.findById(archived.getId())).thenReturn(Optional.of(restoredCopy(archived)));
+            when(unarchiveProductUseCase.execute(any())).thenReturn(true);
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(1, result.getImported());
+            assertEquals(1, result.getRestored());
+            assertTrue(result.getErrors().isEmpty());
+            assertEquals(1, result.getWarnings().size());
+            assertEquals("Produit archivé restauré : Riz", result.getWarnings().get(0).message());
+            var captor = ArgumentCaptor.forClass(UnarchiveProductUseCase.UnarchiveProductDto.class);
+            verify(unarchiveProductUseCase).execute(captor.capture());
+            assertEquals(archived.getId(), captor.getValue().productId());
+            assertEquals(actorId, captor.getValue().actorId());
+            verify(initialStockPort).recordInitialStock(eq("kv_test"), eq(archived.getId()), eq(storeId), eq(3),
+                    eq(actorId), anyString());
+            verify(createProductUseCase, never()).execute(any());
+            // never a second product, never the « imported » audit for a restore (its unarchive event is the audit)
+            verify(eventPublisher, never()).publishEvent(any(
+                    com.keevo.catalog.product.domain.event.ProductImportedFromCsvEvent.class));
+        }
+    }
+
+    @Test
+    @DisplayName("17.13 — archived untracked product, row with a quantity → restored, quantity ignored with its warning")
+    void archivedName_untracked_restoredQuantityIgnored() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            stubArchivedRow("Livraison", 4);
+            var archived = archivedProduct("Livraison", false);
+            when(productRepository.findByName("Livraison")).thenReturn(Optional.of(archived));
+            when(productRepository.findById(archived.getId())).thenReturn(Optional.of(restoredCopy(archived)));
+            when(unarchiveProductUseCase.execute(any())).thenReturn(true);
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(1, result.getImported());
+            assertEquals(List.of("Produit archivé restauré : Livraison",
+                            "Quantité initiale ignorée : produit sans suivi de stock"),
+                    result.getWarnings().stream().map(w -> w.message()).toList());
+            verifyNoInteractions(initialStockPort);
+        }
+    }
+
+    @Test
+    @DisplayName("17.13 — archived name at the plan limit → row failed with the French limit message, nothing restored")
+    void archivedName_atLimit_rowFailed() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            stubArchivedRow("Riz", 3);
+            var archived = archivedProduct("Riz", true);
+            when(productRepository.findByName("Riz")).thenReturn(Optional.of(archived));
+            doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite de produits atteinte pour votre plan"))
+                    .when(unarchiveProductUseCase).execute(any());
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(0, result.getImported());
+            assertEquals(1, result.getErrors().size());
+            assertEquals("Limite de produits atteinte pour votre plan", result.getErrors().get(0).message());
+            assertTrue(result.getWarnings().isEmpty());
+            verifyNoInteractions(initialStockPort);
+        }
+    }
+
+    private Product archivedOf(String name, ProductStatus status) {
+        return new Product(UUID.randomUUID(), name, null, "KEV-ARC00" + name.length(), null, 700, 0, 0, null,
+                true, status, 0, true, Instant.now(), Instant.now());
+    }
+
+    /** Two rows: an archived product's name first, then a brand-new product; plan with exactly one slot left. */
+    private void stubArchivedThenNewRow(Product archived) {
+        stubPlan(500, 499);
+        when(defaultStorePort.getDefaultStoreId()).thenReturn(storeId);
+        when(categoryRepository.findAllActive()).thenReturn(List.of());
+        var archivedRow = Map.of("nom", archived.getName(), "prix_vente", "100");
+        var newRow = Map.of("nom", "Nouveau", "prix_vente", "100");
+        when(csvParser.parse(any())).thenReturn(List.of(archivedRow, newRow));
+        var archivedDto = new CreateProductUseCase.CreateProductDto(archived.getName(), null, null, null, 100, 0, 0, 0, actorId);
+        var newDto = new CreateProductUseCase.CreateProductDto("Nouveau", null, null, null, 100, 0, 0, 0, actorId);
+        lenient().when(rowFactory.fromRow(eq(archivedRow), any(), anyInt(), any(), any())).thenReturn(archivedDto);
+        lenient().when(rowFactory.fromRow(eq(newRow), any(), anyInt(), any(), any())).thenReturn(newDto);
+        when(productRepository.findByName(archived.getName())).thenReturn(Optional.of(archived));
+        when(productRepository.findById(archived.getId())).thenReturn(Optional.of(restoredCopy(archived)));
+        when(unarchiveProductUseCase.execute(any())).thenReturn(true);
+        lenient().when(createProductUseCase.execute(newDto)).thenReturn(stubProduct("Nouveau"));
+    }
+
+    @Test
+    @DisplayName("17.13 — archived DRAFT restored with one slot left → it consumes no quota, the next new row is imported")
+    void archivedDraft_restoredAtRemainingOne_nextRowImported() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubArchivedThenNewRow(archivedOf("Brouillon", ProductStatus.DRAFT));
+
+            ImportResult result = useCase.execute(ownerCommand(2));
+
+            assertEquals(2, result.getImported());
+            assertEquals(1, result.getRestored());
+            assertEquals(0, result.getSkipped());
+            assertFalse(result.isLimitReached());
+            verify(createProductUseCase).execute(any());
+        }
+    }
+
+    @Test
+    @DisplayName("17.13 — archived ACTIVE restored with one slot left → it takes the slot, the next row is skipped with the limit message")
+    void archivedActive_restoredAtRemainingOne_nextRowSkippedByLimit() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubArchivedThenNewRow(archivedOf("Riz", ProductStatus.ACTIVE));
+
+            ImportResult result = useCase.execute(ownerCommand(2));
+
+            assertEquals(1, result.getImported());
+            assertEquals(1, result.getRestored());
+            assertEquals(1, result.getSkipped());
+            assertTrue(result.isLimitReached());
+            assertTrue(result.getLimitMessage().contains("Limite du plan atteinte"));
+            verify(createProductUseCase, never()).execute(any());
+        }
+    }
+
+    @Test
+    @DisplayName("17.13 — archived DRAFT named after the limit is reached → still restored (drafts are not counted)")
+    void archivedDraft_afterLimit_stillRestored() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 500);
+            stubArchivedRow("Brouillon", 0);
+            var archived = archivedOf("Brouillon", ProductStatus.DRAFT);
+            when(productRepository.findByName("Brouillon")).thenReturn(Optional.of(archived));
+            when(productRepository.findById(archived.getId())).thenReturn(Optional.of(restoredCopy(archived)));
+            when(unarchiveProductUseCase.execute(any())).thenReturn(true);
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(1, result.getImported());
+            assertEquals(1, result.getRestored());
+            assertFalse(result.isLimitReached());
+        }
+    }
+
+    @Test
+    @DisplayName("17.13 — archived product restored concurrently meanwhile (unarchive no-op) → row « existe déjà », nothing counted")
+    void archivedName_concurrentRestore_rowRejected() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            stubArchivedRow("Riz", 3);
+            when(productRepository.findByName("Riz")).thenReturn(Optional.of(archivedProduct("Riz", true)));
+            when(unarchiveProductUseCase.execute(any())).thenReturn(false);
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(0, result.getImported());
+            assertEquals(0, result.getRestored());
+            assertTrue(result.getErrors().get(0).message().contains("existe déjà"));
+            verifyNoInteractions(initialStockPort);
+        }
+    }
+
+    @Test
+    @DisplayName("17.13 — name held by a VISIBLE product → unchanged: row skipped « existe déjà », no restore")
+    void activeName_unchanged() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            stubArchivedRow("Riz", 3);
+            when(productRepository.findByName("Riz")).thenReturn(Optional.of(stubProduct("Riz")));
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(0, result.getImported());
+            assertTrue(result.getErrors().get(0).message().contains("existe déjà"));
+            verifyNoInteractions(unarchiveProductUseCase);
         }
     }
 
@@ -296,7 +504,6 @@ class ImportCsvProductsUseCaseTest {
             when(csvParser.parse(any())).thenReturn(List.of(row));
             var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 0, actorId);
             when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
-            when(productRepository.existsByName("Produit")).thenReturn(false);
             when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
 
             useCase.execute(ownerCommand(1));
@@ -317,7 +524,6 @@ class ImportCsvProductsUseCaseTest {
         when(csvParser.parse(any())).thenReturn(List.of(row));
         var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 0, actorId);
         when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
-        when(productRepository.existsByName("Produit")).thenReturn(false);
         when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
     }
 
@@ -367,7 +573,6 @@ class ImportCsvProductsUseCaseTest {
             when(csvParser.parse(any())).thenReturn(List.of(row));
             var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 5, actorId);
             when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
-            when(productRepository.existsByName("Produit")).thenReturn(false);
             when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
 
             useCase.execute(ownerCommandForStore(activeStoreId));
@@ -394,7 +599,6 @@ class ImportCsvProductsUseCaseTest {
             when(csvParser.parse(any())).thenReturn(List.of(row, row));
             var dto = new CreateProductUseCase.CreateProductDto("Produit", null, null, null, 1000, 0, 0, 5, actorId);
             when(rowFactory.fromRow(any(), any(), anyInt(), any(), any())).thenReturn(dto);
-            when(productRepository.existsByName("Produit")).thenReturn(false);
             when(createProductUseCase.execute(dto)).thenReturn(stubProduct("Produit"));
 
             useCase.execute(ownerCommandForStore(activeStoreId));
@@ -476,7 +680,6 @@ class ImportCsvProductsUseCaseTest {
             when(csvParser.parse(any())).thenReturn(List.of(row));
             var dto = new CreateProductUseCase.CreateProductDto("T-Shirt", null, null, null, 5000, 0, 0, 0, actorId);
             when(rowFactory.fromRow(eq(row), any(), anyInt(), any(), any())).thenReturn(dto);
-            when(productRepository.existsByName("T-Shirt")).thenReturn(false);
             when(createProductUseCase.execute(dto)).thenReturn(stubProduct("T-Shirt"));
 
             ImportResult result = useCase.execute(ownerCommand(1));

@@ -180,6 +180,140 @@ class ProductSyncHandlerTest {
         assertThat(result.serverEntityId()).isEqualTo(existingId.toString());
         assertThat(result.reason()).isEqualTo("MERGED_INTO:" + existingId);
         verify(productCommand, never()).create(any(), any());
+        verify(productCommand, never()).unarchive(any(), any(), any());
+        assertThat(result.conflictData()).isNull(); // active match: no restore marker
+    }
+
+    private ProductView archivedProduct(UUID id, String name) {
+        return archivedProduct(id, name, ProductState.ACTIVE, true);
+    }
+
+    private ProductView archivedProduct(UUID id, String name, ProductState status, boolean tracked) {
+        return new ProductView(id, name, "desc", "KEV-ABC123", null,
+                5000, 3000, 0, 10, true, status, 0, Instant.now(), Instant.now(), tracked);
+    }
+
+    private SyncOperation create(String type, UUID localId, String name) {
+        return new SyncOperation("op-1", type, localId.toString(),
+                Map.of("id", localId.toString(), "name", name, "price", 9999), Instant.now());
+    }
+
+    @Test
+    void handle_createProduct_nameOfArchivedProduct_restoresItAndMergesWithRestoredMarker() {
+        var localId = UUID.randomUUID();
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "riz")).thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Riz")));
+        when(productCommand.unarchive(TENANT_ID, archivedId, ACTOR_ID)).thenReturn(true);
+
+        var result = handler.handle(create("CREATE_PRODUCT", localId, "riz"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.serverEntityId()).isEqualTo(archivedId.toString());
+        assertThat(result.reason()).isEqualTo("MERGED_INTO:" + archivedId);
+        assertThat(result.conflictData()).isEqualTo(Map.of("restored", true));
+        // the creation payload never changes the restored product
+        verify(productCommand, never()).create(any(), any());
+        verify(productCommand, never()).update(any(), any());
+    }
+
+    @Test
+    void handle_createProduct_nameOfArchivedDraft_restoredAsDraft_markerCarriesStatus() {
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Riz"))
+                .thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Riz", ProductState.DRAFT, true)));
+        when(productCommand.unarchive(TENANT_ID, archivedId, ACTOR_ID)).thenReturn(true);
+
+        var result = handler.handle(create("CREATE_PRODUCT", UUID.randomUUID(), "Riz"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.conflictData()).isEqualTo(Map.of("restored", true, "status", "DRAFT"));
+    }
+
+    @Test
+    void handle_createProduct_archivedProductRestoredConcurrently_plainMergeWithoutMarker() {
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Riz")).thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Riz")));
+        when(productCommand.unarchive(TENANT_ID, archivedId, ACTOR_ID)).thenReturn(false);
+
+        var result = handler.handle(create("CREATE_PRODUCT", UUID.randomUUID(), "Riz"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.reason()).isEqualTo("MERGED_INTO:" + archivedId);
+        assertThat(result.conflictData()).isNull();
+    }
+
+    @Test
+    void handle_createProduct_nameOfArchivedProduct_atPlanLimit_rejectedWithDetails() {
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Riz")).thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Riz")));
+        org.mockito.Mockito.doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "Limite atteinte",
+                        Map.of("entity", "products", "limit", 20, "current", 20, "plan", "FREE")))
+                .when(productCommand).unarchive(TENANT_ID, archivedId, ACTOR_ID);
+
+        var result = handler.handle(create("CREATE_PRODUCT", UUID.randomUUID(), "Riz"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("PLAN_LIMIT_EXCEEDED");
+        assertThat(result.serverEntityId()).isNull();
+        assertThat(result.conflictData()).containsEntry("limit", 20).containsEntry("entity", "products");
+    }
+
+    @Test
+    void handle_createProduct_employee_nameOfArchivedUntrackedProduct_forbidden() {
+        SyncTestAuth.employee(UUID.randomUUID());
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Livraison"))
+                .thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Livraison", ProductState.ACTIVE, false)));
+
+        var result = handler.handle(create("CREATE_PRODUCT", UUID.randomUUID(), "Livraison"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verify(productCommand, never()).unarchive(any(), any(), any());
+        verify(productCommand, never()).unarchiveIfAllowed(any(), any(), any());
+    }
+
+    @Test
+    void handle_createDraftProduct_nameOfArchivedProduct_restoredWhenAllowed() {
+        var localId = UUID.randomUUID();
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Riz")).thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Riz")));
+        when(productCommand.unarchiveIfAllowed(TENANT_ID, archivedId, ACTOR_ID)).thenReturn(true);
+
+        var result = handler.handle(create("CREATE_DRAFT_PRODUCT", localId, "Riz"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.reason()).isEqualTo("MERGED_INTO:" + archivedId);
+        assertThat(result.conflictData()).isEqualTo(Map.of("restored", true));
+        verify(productCommand, never()).unarchive(any(), any(), any());
+        verify(productCommand, never()).createDraft(any(), any());
+    }
+
+    @Test
+    void handle_createDraftProduct_nameOfArchivedProduct_atLimit_plainMergeSaleKept() {
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Riz")).thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Riz")));
+        when(productCommand.unarchiveIfAllowed(TENANT_ID, archivedId, ACTOR_ID)).thenReturn(false);
+
+        var result = handler.handle(create("CREATE_DRAFT_PRODUCT", UUID.randomUUID(), "Riz"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.reason()).isEqualTo("MERGED_INTO:" + archivedId);
+        assertThat(result.conflictData()).isNull();
+    }
+
+    @Test
+    void handle_createDraftProduct_employee_nameOfArchivedUntrackedProduct_plainMergeWithoutRestore() {
+        SyncTestAuth.employee(UUID.randomUUID());
+        var archivedId = UUID.randomUUID();
+        when(productQuery.findByName(TENANT_ID, "Livraison"))
+                .thenReturn(java.util.Optional.of(archivedProduct(archivedId, "Livraison", ProductState.ACTIVE, false)));
+
+        var result = handler.handle(create("CREATE_DRAFT_PRODUCT", UUID.randomUUID(), "Livraison"), ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(result.reason()).isEqualTo("MERGED_INTO:" + archivedId);
+        assertThat(result.conflictData()).isNull();
+        verify(productCommand, never()).unarchiveIfAllowed(any(), any(), any());
     }
 
     @Test

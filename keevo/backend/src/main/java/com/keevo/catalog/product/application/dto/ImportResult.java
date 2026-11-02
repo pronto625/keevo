@@ -30,9 +30,11 @@ public final class ImportResult {
     private final boolean limitReached;
     private final String limitMessage;  // null unless limitReached
     private final List<CsvRowError> warnings; // Story 17.12 — imported rows with an ignored value
+    private final int restored; // Story 17.13 — imported rows that restored an archived product (included in imported)
 
     private ImportResult(int imported, int skipped, List<CsvRowError> errors,
-                         boolean limitReached, String limitMessage, List<CsvRowError> warnings) {
+                         boolean limitReached, String limitMessage, List<CsvRowError> warnings, int restored) {
+        this.restored     = restored;
         this.warnings     = Collections.unmodifiableList(new ArrayList<>(warnings));
         this.imported     = imported;
         this.skipped      = skipped;
@@ -47,6 +49,7 @@ public final class ImportResult {
     public boolean isLimitReached() { return limitReached; }
     public String getLimitMessage() { return limitMessage; }
     public List<CsvRowError> getWarnings() { return warnings; }
+    public int getRestored()        { return restored; }
 
     // ── Builder ───────────────────────────────────────────────────────────────
 
@@ -57,9 +60,12 @@ public final class ImportResult {
         private final List<CsvRowError> warnings = new ArrayList<>();
         private boolean limitReached = false;
         private String  limitMessage = null;
+        private int restored = 0;
 
         public void incrementImported()          { imported++; }
         public void incrementSkipped()           { skipped++; }
+        /** Story 17.13 — the imported row restored an archived product (call with {@link #incrementImported()}). */
+        public void incrementRestored()          { restored++; }
         public void addError(CsvRowError error)  { errors.add(error); skipped++; }
         /** Story 17.12 — the row was imported, one of its values was ignored (never counted as skipped). */
         public void addWarning(CsvRowError warning) { warnings.add(warning); }
@@ -73,7 +79,7 @@ public final class ImportResult {
         public int getSkipped()  { return skipped;  }
 
         public ImportResult build() {
-            return new ImportResult(imported, skipped, errors, limitReached, limitMessage, warnings);
+            return new ImportResult(imported, skipped, errors, limitReached, limitMessage, warnings, restored);
         }
     }
 }

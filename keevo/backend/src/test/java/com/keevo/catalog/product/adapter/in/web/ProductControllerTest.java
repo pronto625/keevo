@@ -20,6 +20,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
+import com.keevo.catalog.product.application.usecase.CreateOrRestoreProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.GetProductPricingUseCase;
@@ -53,7 +54,7 @@ class ProductControllerTest {
     }
 
     @Mock
-    private CreateProductUseCase createProductUseCase;
+    private CreateOrRestoreProductUseCase createOrRestoreProductUseCase;
 
     @Mock
     private UpdateProductUseCase updateProductUseCase;
@@ -118,7 +119,8 @@ class ProductControllerTest {
     @DisplayName("POST /api/v1/products should create product with valid data")
     void should_create_product_with_valid_data() throws Exception {
         // Given
-        when(createProductUseCase.execute(any())).thenReturn(sampleProduct);
+        when(createOrRestoreProductUseCase.execute(any()))
+                .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
 
         String requestBody = """
             {
@@ -137,7 +139,49 @@ class ProductControllerTest {
                 .andExpect(jsonPath("$.data.name").value("Test Product"))
                 .andExpect(jsonPath("$.data.sku").value("KEV-TST123"));
 
-        verify(createProductUseCase).execute(any());
+        verify(createOrRestoreProductUseCase).execute(any());
+    }
+
+    @Test
+    @DisplayName("17.13: POST with the name of an archived product → 200, the restored product, restored = true")
+    void create_restoringArchived_returns200_withRestoredMarker() throws Exception {
+        when(createOrRestoreProductUseCase.execute(any()))
+                .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, true));
+
+        mockMvc.perform(post("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"test product\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(sampleProduct.getId().toString()))
+                .andExpect(jsonPath("$.data.name").value("Test Product"))
+                .andExpect(jsonPath("$.data.restored").value(true));
+    }
+
+    @Test
+    @DisplayName("17.13: draft creation whose restore was refused → 200, the archived product as is, no restored field")
+    void create_draftFallbackMerge_returns200_withoutMarker() throws Exception {
+        when(createOrRestoreProductUseCase.execute(any()))
+                .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false, true));
+
+        mockMvc.perform(post("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"test product\", \"status\": \"DRAFT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.id").value(sampleProduct.getId().toString()))
+                .andExpect(jsonPath("$.data.restored").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("17.13: a plain creation carries no restored field (additive, V1 shape unchanged)")
+    void create_plain_hasNoRestoredField() throws Exception {
+        when(createOrRestoreProductUseCase.execute(any()))
+                .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
+
+        mockMvc.perform(post("/api/v1/products")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\": \"Test Product\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.restored").doesNotExist());
     }
 
     // Unit test with MockMvc standalone doesn't activate @Valid validation
@@ -161,7 +205,7 @@ class ProductControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
 
-        verifyNoInteractions(createProductUseCase);
+        verifyNoInteractions(createOrRestoreProductUseCase);
     }
     */
 
@@ -379,7 +423,8 @@ class ProductControllerTest {
                 java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_EMPLOYEE")));
         auth.setDetails(com.keevo.shared.infrastructure.security.AuthDetails.employee(null, storeId));
         org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(auth);
-        when(createProductUseCase.execute(any())).thenReturn(sampleProduct);
+        when(createOrRestoreProductUseCase.execute(any()))
+                .thenReturn(new CreateOrRestoreProductUseCase.Outcome(sampleProduct, false));
 
         mockMvc.perform(post("/api/v1/products")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -387,7 +432,7 @@ class ProductControllerTest {
                 .andExpect(status().isCreated());
 
         var captor = org.mockito.ArgumentCaptor.forClass(CreateProductUseCase.CreateProductDto.class);
-        verify(createProductUseCase).execute(captor.capture());
+        verify(createOrRestoreProductUseCase).execute(captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().actorName())
                 .isEqualTo("Un employé")
                 .doesNotContain(actorId.toString());

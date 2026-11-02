@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -96,15 +97,61 @@ class UnarchiveProductUseCaseTest {
     }
 
     @Test
-    @DisplayName("draft or non-archived product: no limit check (not counted either way)")
-    void notCounted_noCheck() {
+    @DisplayName("archived draft: restored without limit check")
+    void archivedDraft_noCheck() {
         when(productRepository.findById(id)).thenReturn(Optional.of(product(true, ProductStatus.DRAFT)));
-        useCase.execute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID()));
 
-        when(productRepository.findById(id)).thenReturn(Optional.of(product(false, ProductStatus.ACTIVE)));
-        useCase.execute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID()));
+        assertThat(useCase.execute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID()))).isTrue();
 
         verifyNoInteractions(planLimit, tenantPlanQuery);
-        verify(productRepository, times(2)).unarchive(id);
+        verify(productRepository).unarchive(id);
+        verify(eventPublisher).publishEvent(any(ProductUnarchivedEvent.class));
+    }
+
+    @Test
+    @DisplayName("17.13 — product no longer archived (concurrent restore): no-op, no event / audit, false")
+    void notArchived_noOp() {
+        when(productRepository.findById(id)).thenReturn(Optional.of(product(false, ProductStatus.ACTIVE)));
+
+        assertThat(useCase.execute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID()))).isFalse();
+
+        verifyNoInteractions(planLimit, tenantPlanQuery, eventPublisher);
+        verify(productRepository, never()).unarchive(any());
+    }
+
+    @Test
+    @DisplayName("17.13 — unknown product → DomainException PRODUCT_NOT_FOUND (not IllegalArgumentException)")
+    void notFound_domainException() {
+        when(productRepository.findById(id)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> useCase.execute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID())))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("PRODUCT_NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("17.13 — tryExecute at the limit: false, nothing restored, no throw")
+    void tryExecute_atLimit_false() {
+        when(productRepository.findById(id)).thenReturn(Optional.of(product(true, ProductStatus.ACTIVE)));
+        when(tenantPlanQuery.findCurrentPlan("kv_test01")).thenReturn(Optional.of(free));
+        when(planLimit.remainingProducts(eq(free), any())).thenReturn(0);
+
+        assertThat(useCase.tryExecute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID()))).isFalse();
+
+        verify(productRepository, never()).unarchive(any());
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("17.13 — tryExecute under the limit: restored, event, true")
+    void tryExecute_underLimit_true() {
+        when(productRepository.findById(id)).thenReturn(Optional.of(product(true, ProductStatus.ACTIVE)));
+        when(tenantPlanQuery.findCurrentPlan("kv_test01")).thenReturn(Optional.of(free));
+        when(planLimit.remainingProducts(eq(free), any())).thenReturn(1);
+
+        assertThat(useCase.tryExecute(new UnarchiveProductUseCase.UnarchiveProductDto(id, UUID.randomUUID()))).isTrue();
+
+        verify(productRepository).unarchive(id);
+        verify(eventPublisher).publishEvent(any(ProductUnarchivedEvent.class));
     }
 }

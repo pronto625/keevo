@@ -16,7 +16,19 @@ public interface ProductCommandPort {
 
     void archive(String tenantSchema, UUID productId, UUID actorId);
 
-    void unarchive(String tenantSchema, UUID productId, UUID actorId);
+    /**
+     * Restores an archived product (17.10 limit check for an ACTIVE one). Story 17.13: {@code false} when the product
+     * was no longer archived (no-op, no audit).
+     *
+     * @throws com.keevo.shared.domain.exception.DomainException PRODUCT_NOT_FOUND, PLAN_LIMIT_EXCEEDED
+     */
+    boolean unarchive(String tenantSchema, UUID productId, UUID actorId);
+
+    /**
+     * Story 17.13 — same restore, but at the plan limit the product stays archived and {@code false} is answered
+     * instead of throwing (the caller's transaction stays usable).
+     */
+    boolean unarchiveIfAllowed(String tenantSchema, UUID productId, UUID actorId);
 
     /** DRAFT product creation (POS / offline). */
     ProductView createDraft(String tenantSchema, CreateDraftProductInput input);

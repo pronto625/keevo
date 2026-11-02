@@ -22,6 +22,12 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
 
     public static final String MERGED_INTO_PREFIX = "MERGED_INTO:";
 
+    /** Story 17.13 — additive {@code conflictData} of a merge that restored an archived product. */
+    public static final Map<String, Object> RESTORED_MARKER = Map.of("restored", true);
+
+    /** Story 17.13 — same, for an archived draft restored as a draft (the device maps its product to a draft). */
+    public static final Map<String, Object> RESTORED_DRAFT_MARKER = Map.of("restored", true, "status", "DRAFT");
+
     // 12.2a: catalog reached only through its public API.
     private final ProductCommandPort productCommand;
     private final ProductQueryPort productQuery;
@@ -61,7 +67,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                     throw new DomainException(ErrorCode.FORBIDDEN,
                             "Seul le propriétaire peut créer un produit sans suivi de stock");
                 }
-                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId);
+                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId,
+                        actorId, false);
                 if (merged != null) yield merged;
                 var product = productCommand.create(tenantId, new CreateProductInput(
                         clientId,
@@ -112,7 +119,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 // Create draft with the client-specified UUID so subsequent ops (CREATE_SALE,
                 // VALIDATE_SALE) can reference the same ID without remapping.
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
-                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId);
+                var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId,
+                        actorId, true);
                 if (merged != null) yield merged;
                 var draft = productCommand.createDraft(tenantId, new CreateDraftProductInput(
                         clientId,
@@ -162,17 +170,53 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
      * creation and answer APPLIED against the existing product instead of failing on uq_products_name.
      * The client-generated id is recorded as an alias via the {@code MERGED_INTO:<serverId>} reason
      * (see {@code SyncPushService}) so the stock entries / sales queued against that local id land
-     * on the existing product. Checked BEFORE calling the @Transactional use cases: letting them throw
+     * on the existing product. Checked BEFORE calling the creation use cases: letting them throw
      * PRODUCT_NAME_ALREADY_EXISTS would mark the surrounding sync transaction rollback-only.
+     *
+     * <p>Story 17.13 — the existing product E is ARCHIVED:
+     * <ul>
+     *   <li>{@code CREATE_PRODUCT}: E is restored through the @Transactional 17.10 unarchive (product-limit check under
+     *   the same per-tenant lock, « Produit désarchivé » audit), keeps its fields, and the merge carries
+     *   {@link #RESTORED_MARKER} (plus {@code "status": "DRAFT"} for an archived draft, restored as a draft). At the
+     *   plan limit the unarchive throws {@code PLAN_LIMIT_EXCEEDED}: that marks the sync transaction rollback-only, and
+     *   the rejection keeps its reason and 16.14 details through {@code SyncPushService}'s rollback path; E stays
+     *   archived and no alias is recorded (the queued stock entry answers {@code PRODUCT_NOT_FOUND}). E untracked and
+     *   the actor not the OWNER → {@code FORBIDDEN} (17.12: untracked products are the owner's).</li>
+     *   <li>{@code CREATE_DRAFT_PRODUCT} (POS): E is restored when allowed ({@code unarchiveIfAllowed}, never throws
+     *   at the limit); refused (limit, or untracked E for a non-owner) → plain merge without marker, E stays archived,
+     *   so the queued sale is never lost.</li>
+     * </ul>
+     * The marker is set only when a restore really happened (a concurrent restore makes the unarchive a no-op).
      */
     private SyncOperationResult mergeIntoExistingByName(SyncOperation operation, String name, UUID clientId,
-                                                         String tenantId) {
+                                                         String tenantId, UUID actorId, boolean draftCreation) {
         if (name == null || name.isBlank()) return null;
         var existing = productQuery.findByName(tenantId, name);
         if (existing.isEmpty() || existing.get().id().equals(clientId)) return null;
-        String targetId = existing.get().id().toString();
+        var target = existing.get();
+        String targetId = target.id().toString();
+        if (target.archived()) {
+            boolean ownerOnly = !target.trackStock() && !isOwnerRole();
+            if (ownerOnly && !draftCreation) {
+                throw new DomainException(ErrorCode.FORBIDDEN,
+                        "Seul le propriétaire peut créer un produit sans suivi de stock");
+            }
+            if (!ownerOnly) {
+                boolean restored = draftCreation
+                        ? productCommand.unarchiveIfAllowed(tenantId, target.id(), actorId)
+                        : productCommand.unarchive(tenantId, target.id(), actorId);
+                if (restored) {
+                    return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
+                            targetId, MERGED_INTO_PREFIX + targetId, restoredMarker(target));
+                }
+            }
+        }
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 targetId, MERGED_INTO_PREFIX + targetId);
+    }
+
+    private static Map<String, Object> restoredMarker(com.keevo.catalog.api.ProductView restored) {
+        return restored.status() == com.keevo.catalog.api.ProductState.DRAFT ? RESTORED_DRAFT_MARKER : RESTORED_MARKER;
     }
 
     /** Story 17.12 — an optional JSON boolean; anything else is rejected ({@code Invalid <field>: …}). */
