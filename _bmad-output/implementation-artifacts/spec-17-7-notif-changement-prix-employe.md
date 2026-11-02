@@ -182,7 +182,7 @@ Source : `PriceChangeNotificationListener` (`keevo/backend/src/main/java/com/kee
 
 ### Implémentation de référence
 
-Gestion des notifications owner du client Flutter (types `EMPLOYEE_STOCK_MODIFIED*`) : `keevo/app/lib/features/notifications/` — même schéma à étendre (le client Flutter ne connaît pas encore `EMPLOYEE_PRICE_CHANGED*`).
+Gestion des notifications owner du client Flutter : `keevo/app/lib/features/notifications/` (centre de notifications) et le routage au toucher des types `EMPLOYEE_STOCK_MODIFIED*` dans `keevo/app/lib/core/scaffold/main_shell.dart` — même schéma à étendre (le client Flutter ne connaît pas encore `EMPLOYEE_PRICE_CHANGED*`).
 
 ### Critères d'acceptation mobile / scénarios de test
 
