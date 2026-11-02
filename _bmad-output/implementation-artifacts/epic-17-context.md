@@ -4,7 +4,7 @@
 
 ## Goal
 
-Close the remaining product functional requirements and deliver the decided Premium features, each gated by the entitlement engine, so Keevo is functionally complete before the refonte goes live. Most of the epic already shipped through the V1 track and is present on `refonte/modulaire` (17.1, 17.3, 17.4, 17.5 done; 17.6 superseded by the V1 exports epic). The V1 residues and the stock-tracking request are now done on the API side too (17.10 product counter, 17.11 optional initial stock, 17.12 per-product stock tracking, 17.13 creating a product with an archived product's name) and report-config gating (17.8). What remains: price-change notification (17.7), leaderboard visibility for employees (17.2), and the end-to-end regression that is the **go-live gate** (17.9). Since 2026-11-01 this repo delivers **the backend API only** (`keevo/backend`); mobile and dashboard parts become handoff sections for other teams.
+Close the remaining product functional requirements and deliver the decided Premium features, each gated by the entitlement engine, so Keevo is functionally complete before the refonte goes live. Most of the epic already shipped through the V1 track and is present on `refonte/modulaire` (17.1, 17.3, 17.4, 17.5 done; 17.6 superseded by the V1 exports epic). The V1 residues and the stock-tracking request are now done on the API side too (17.10 product counter, 17.11 optional initial stock, 17.12 per-product stock tracking, 17.13 creating a product with an archived product's name), as are report-config gating (17.8) and employee price-change notification (17.7). What remains: leaderboard visibility for employees (17.2), and the end-to-end regression that is the **go-live gate** (17.9). Since 2026-11-01 this repo delivers **the backend API only** (`keevo/backend`); mobile and dashboard parts become handoff sections for other teams.
 
 ## Stories
 
@@ -14,7 +14,7 @@ Close the remaining product functional requirements and deliver the decided Prem
 - Story 17.4: Feedback / signalement in-app — done
 - Story 17.5: Santé système, alertes proactives, push global — done
 - Story 17.6: Exports PDF / Excel — done (remplacée)
-- Story 17.7: Notification owner sur changement de prix par un employé (Premium)
+- Story 17.7: Notification owner sur changement de prix par un employé (Premium) — done (API ; mobile en handover)
 - Story 17.8: Gating « configuration des rapports » (Free fixe / Premium configurable) — done (API ; mobile en handover)
 - Story 17.9: Régression E2E multi-surface (gate go-live)
 - Story 17.10: Compteur « Produits » juste sur l'écran Abonnement — done (API ; mobile en handover)
@@ -29,7 +29,6 @@ Close the remaining product functional requirements and deliver the decided Prem
 - **V1 2.0.1 compatibility is mandatory**: installed V1 apps keep running against the new backend. Changes must be additive — no existing response shape, error code or sync reason may change in a breaking way (17.9 verifies this). New fields need safe defaults for clients that never send them.
 - French labels only; no UUIDs or raw codes in screens, exports or audit detail.
 - Free/Premium gating goes through the entitlement engine (`@RequiresEntitlement`, module states); Free gets a fixed, sensible behaviour, never an error loop.
-- **17.7**: Premium owner gets WhatsApp/push when an employee overrides a sale price; Free gets nothing.
 - **17.2**: owner setting « Afficher le leaderboard aux employés » — OFF by default, confirmation on activation, anonymised ranking for employees once ON; employee access stays 403 while OFF; Premium-gated.
 - **17.9**: on staging, critical paths green — signup→onboarding, offline sale→sync, transfer, inventory, WhatsApp report, module activation/deactivation, auto-invoicing, Free/Premium gating — plus V1 2.0.1 compatibility. Must pass before the canary (16.7).
 - **Delivered product/stock rules later stories and 17.9 must preserve**:
@@ -43,11 +42,18 @@ Close the remaining product functional requirements and deliver the decided Prem
   - `GET /api/v1/tenant/preferences` returns effective values plus additive `reportConfigEditable` (one row read, one state read so they never disagree). PUT stays gated: 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`.
   - Known asymmetry kept for compatibility: GET returns times as `HH:mm`, PUT requires `HH:mm:ss`.
   - The no-row transition rule already reads `profile_modules` (16.8); 13.10a's rule is retired.
+- **Delivered price-change notification rules (17.7) to preserve**:
+  - Gated by module `alerts` (Premium, trial, à-la-carte); Free gets nothing; an owner's own price change gets nothing.
+  - Triggers: catalogue price change by an employee (REST `PATCH /products/{id}` or sync `UPDATE_PRODUCT` → `ProductPriceChangedEvent`, published only on a real price change) and till override (`SalePriceOverriddenEvent`, seller resolved as employee by user id).
+  - Delivery: push to all owners + WhatsApp to the primary owner; push types `EMPLOYEE_PRICE_CHANGED` (`source` CATALOGUE/SALE, route to product edit) and `EMPLOYEE_PRICE_CHANGED_BATCH` (recap « a modifié N prix (k au catalogue, m à la caisse) »).
+  - Batched per (tenant, employee) window `keevo.notification.employee-action-window-min` (default 5; set 0 for live tests). Windows are in memory (lost on restart, like stock-modification alerts).
+  - Employee lookup failures propagate (event publication resubmitted); send failures are best effort. Overrides on PENDING_VALIDATION sales are not notified (event only for completed sales).
+  - No REST/sync contract change — only the two new push types.
 
 ## Technical Decisions
 
 - Modules communicate only through public APIs/events; no direct cross-context imports (ArchUnit/Modulith verify is blocking). Owner notifications go through `messaging` with owner resolution via the existing owner-recipient port (blank phone → in-app only).
-- `SalePriceOverriddenEvent` already exists and is only audited; 17.7 adds a gated listener rather than a new event.
+- Module-gated event listeners use `@ModuleScoped("<module>")` (as 17.7's price-change listener in `messaging`); scheduled sweeps must be covered by the scheduler-lock coverage test, and new events need a registry serialization round-trip.
 - Leaderboard core (`GET /api/v1/reporting/leaderboard`, OWNER-only, gated `advanced-reports`) already exists; 17.2 adds the setting and the anonymised employee view.
 - The report-config endpoint is already gated `report-config`; plan profiles (`plan_profiles` + `profile_modules`) are the source of truth for plan composition.
 - Sync: new operations or fields must be additive; employee scope is passed through the pull command.
@@ -56,7 +62,7 @@ Close the remaining product functional requirements and deliver the decided Prem
 
 ## Cross-Story Dependencies
 
-- Remaining execution order: 17.7 → 17.2 → 16.6 → 10-8 (ops) → **17.9** (go-live gate) → 16.7 (canary).
-- 17.2 and 17.7 depend on the epic 13 entitlement engine and the 16.1 module lifecycle.
-- 17.9 extends the existing Python E2E scripts and dashboard tests (15.7), requires staging (10-8 runbooks executed), and must cover the delivered 17.8 and 17.10–17.13 behaviours and V1 compatibility.
-- Mobile handover keys `m17-8` and `m17-10` … `m17-13` remain backlog for the RN team (fusion RN app story 22.10 depends on 17.11/17.12).
+- Remaining execution order: 17.2 → 16.6 → 10-8 (ops) → **17.9** (go-live gate) → 16.7 (canary).
+- 17.2 depends on the epic 13 entitlement engine and the 16.1 module lifecycle.
+- 17.9 extends the existing Python E2E scripts and dashboard tests (15.7), requires staging (10-8 runbooks executed), and must cover the delivered 17.7, 17.8 and 17.10–17.13 behaviours and V1 compatibility.
+- Mobile handover keys `m17-7`, `m17-8` and `m17-10` … `m17-13` remain backlog for the RN team (fusion RN app story 22.10 depends on 17.11/17.12).
