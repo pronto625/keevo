@@ -434,10 +434,12 @@ development_status:
   21-1-payments-mobile-money: backlog
   21-2-storekit-revenuecat: backlog
   21-3-credit-packs-sms: backlog
-  21-4-ai-assistant: backlog
+  21-4-ai-assistant: backlog  # 2026-11-02 réécrite : assistant par outils (21-8), parité Bref Point, pas de SQL généré
   21-5-whatsapp-cloud: backlog
   21-6-campagnes: backlog
   21-7-client-portal: backlog
+  21-8-couche-outils-ia-mcp: backlog  # 2026-11-02 décision utilisateur : IA par outils MCP directement (FUS-FR39) — avant 21-4
+  21-9-serveur-mcp-externe: backlog  # 2026-11-02 FUS-FR39 — après 21-4
   epic-21-retrospective: optional
 
   epic-22: backlog  # P2 App RN parité Keevo

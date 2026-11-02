@@ -112,7 +112,7 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 
 - **FUS-FR25 :** Module `expenses` : dépenses par boutique et catégorie (10 catégories Bref), hors ligne.
 - **FUS-FR26 :** Module `finance` : résultat (CA HT − dépenses), marge, variations, séries par période.
-- **FUS-FR27 :** Module `ai-assistant` : questions guidées gratuites, chat libre décompté par quota, fournisseur configurable.
+- **FUS-FR27 :** Module `ai-assistant` : questions guidées gratuites, chat libre décompté par quota, fournisseur configurable. **Le chat libre répond par appels d'outils (FUS-FR39), jamais par génération de SQL** ; parité fonctionnelle avec « Bref Point » dès la vague de migration. *(Décision utilisateur du 02/11/2026.)*
 - **FUS-FR28 :** Module `whatsapp-cloud` : compte WhatsApp Business par tenant, boîte de réception, modèles de messages, campagnes clients respectant le consentement marketing.
 - **FUS-FR29 :** Module `client-portal` : un client final retrouve, par OTP sur son téléphone, toutes ses factures quel que soit le commerçant.
 - **FUS-FR30 :** Notifications in-app persistantes (liste, lu/non lu) en plus des push FCM.
@@ -127,6 +127,7 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 - **FUS-FR36 :** L'app propose verrouillage par PIN et biométrie, 7 langues (fr et en exposées d'abord), thème clair/sombre.
 - **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy) ⚠️§9.5.
 - **FUS-FR38 :** L'API Keevo absorbe **toute** l'API Bref, y compris sa partie super-admin (dashboard Bref) : vue plateforme (`/v1/dashboard` overview, growth, top-shops, activity, owner-summary), listes inter-comptes (clients, produits, dépenses `*-admin`), gestion des utilisateurs (liste, stats, appareils, statut, plan, suppression), versions d'app, offres, campagnes plateforme. Après la convergence, aucun client (app ou dashboard) n'appelle plus api-bref. *(Décision utilisateur du 01/11/2026.)*
+- **FUS-FR39 :** Une **couche d'outils IA** unique, construite sur les use cases Keevo (ports `in/` purs, commandes/requêtes `{Action}{Entity}Command/Query`), sert deux consommateurs : l'assistant intégré (`ai-assistant`, appel d'outils par le fournisseur de modèle) et un **serveur MCP** (Spring AI MCP Server, `adapter/in/mcp/` de chaque module) pour les clients IA externes. Chaque outil applique les mêmes contrôles que le REST (tenant, module `@RequiresEntitlement`, rôle, périmètre employé, quota) ; l'acteur et le tenant viennent toujours de la session, jamais du modèle ; outils en lecture d'abord, écriture seulement avec confirmation explicite ; chaque appel est audité. *(Décision utilisateur du 02/11/2026 : approche par outils MCP directement, sans porter le constructeur SQL de Bref.)*
 
 ### Exigences de migration (`FUS-MIG`)
 
@@ -186,6 +187,7 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 | FUS-FR24 | **20** | reporting multi-source |
 | FUS-FR25, FR26 | **20** / **23** | expenses, finance |
 | FUS-FR27–FR32 | **21** / **23** | IA, WhatsApp Cloud, portail, notifications, versions, campagnes |
+| FUS-FR39 | **21** (21.8, 21.4, 21.9) / **23** (23.6) | couche d'outils IA, assistant par outils, serveur MCP |
 | FUS-FR33–FR36 | **22** | app RN, identités, offline, modules |
 | FUS-FR37 | **23** | mode legacy |
 | FUS-MIG1–MIG5, MIG8–MIG10 | **24** | outil de migration et vagues |
@@ -235,11 +237,57 @@ So that **le dashboard super-admin (livré depuis un autre dépôt) n'appelle pl
 ---
 
 ## Epic 21 : Monétisation en libre-service et engagement (P1b)
-**Valeur :** l'owner paie seul, Keevo encaisse et active ; les fonctions d'engagement de Bref (IA, WhatsApp Business, portail client, notifications, campagnes) sont reprises.
-**Exigences :** FUS-FR9, FR10, FR27–FR32.
+**Valeur :** l'owner paie seul, Keevo encaisse et active ; les fonctions d'engagement de Bref (IA, WhatsApp Business, portail client, notifications, campagnes) sont reprises. L'IA passe par une couche d'outils unique, exposée aussi en MCP.
+**Exigences :** FUS-FR9, FR10, FR27–FR32, FR39. Ordre IA : 21.8 (outils) → 21.4 (assistant) → 21.9 (MCP externe).
 **Dépend de :** 19.7, 19.8, 19.9.
 
-### Epic 22 : App React Native — fondations et parité Keevo (P2)
+#### Story 21.8 : Couche d'outils IA sur les use cases (MCP-ready)
+
+As a **plateforme**,
+I want **définir une seule fois, sur les use cases Keevo, les outils que l'IA peut appeler**,
+So that **l'assistant intégré et les clients MCP externes utilisent les mêmes règles métier, sans SQL généré (FUS-FR39)**.
+
+**Acceptance Criteria:**
+
+**Given** les use cases de lecture utiles aux questions (ventes et CA par période/boutique/vendeur, encaissements, impayés et liste d'appel, clients, produits et stock, dépenses et résultat, classement des vendeurs, comparaison de périodes)
+**When** la couche est livrée
+**Then** chaque outil est un bean `{Module}McpTools` dans `adapter/in/mcp/` (Spring AI `@Tool`), paramètres = records `…Query` existants (schéma JSON généré), description en français, résultat structuré sans identifiant technique inutile
+
+**Given** un appel d'outil
+**When** il s'exécute
+**Then** acteur et tenant viennent du contexte de session (jamais des paramètres), le module est contrôlé comme `@RequiresEntitlement` (READ), le rôle et le périmètre employé (16-13) s'appliquent, l'appel est audité (outil, acteur, durée, sans contenu personnel)
+
+**Given** le build
+**When** les tests tournent
+**Then** un test de couverture (équivalent de `EndpointEntitlementCoverageTest`) échoue si un outil n'a pas de module ou d'exemption justifiée, ou s'il expose un paramètre d'acteur/tenant ; un tableau des outils est généré (`docs/ai/tools.md`)
+
+**Given** un outil d'écriture (plus tard)
+**When** il est ajouté
+**Then** il exige une confirmation explicite de l'utilisateur avant exécution (hors périmètre de cette story : lecture seule)
+
+**Notes :** Spring AI compatible avec la version Spring Boot du backend à vérifier ; le placeholder `AuditMcpPlaceholder` et la règle 10 de l'architecture sont remplacés par le vrai adaptateur.
+
+### Story 21.9 : Serveur MCP externe
+
+As a **owner Premium**,
+I want **brancher mon assistant IA (Claude, ChatGPT…) ou celui de mon comptable sur mes données Keevo**,
+So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
+
+**Acceptance Criteria:**
+
+**Given** le serveur MCP (Spring AI, transport HTTP/SSE)
+**When** un client MCP se connecte
+**Then** il s'authentifie par un jeton personnel créé par l'owner dans l'app (révocable, limité à des outils, expirant), chaque requête passe par les mêmes contrôles que 21.8 et compte dans le quota IA du tenant
+
+**Given** le module payant `mcp-access` désactivé (Free)
+**When** un client se connecte
+**Then** refus `MODULE_NOT_ENTITLED` ; aucune donnée exposée
+
+**Given** l'owner révoque le jeton
+**When** le client rappelle
+**Then** refus immédiat (même mécanisme que les sessions 16-11)
+
+## Epic 22 : App React Native — fondations et parité Keevo (P2)
 **Valeur :** les utilisateurs Keevo passent sur la nouvelle app par une simple mise à jour, sans perte, avec un hors-ligne au moins aussi fiable qu'en Flutter.
 **Exigences :** FUS-FR33–FR36, FUS-MIG7, FUS-NFR5, NFR6, NFR8, FUS-UX1–UX3.
 **Dépend de :** 18.4 (identité Keevo), 19.2 (login), contrats `keevo/contracts/`.
@@ -883,21 +931,37 @@ So that **je ne perds pas d'argent dans la fusion (FUS-FR10, R9)**.
 **When** elle est confirmée
 **Then** le pack est crédité et visible dans « Mon plan »
 
-### Story 21.4 : Module `ai-assistant`
+### Story 21.4 : Module `ai-assistant` — assistant par outils, parité « Bref Point »
 
 As a **owner**,
-I want **poser des questions sur mon activité**,
-So that **je retrouve l'assistant de Bref (FUS-FR27)**.
+I want **poser des questions sur mon activité, par questions guidées ou en texte libre**,
+So that **je retrouve l'assistant de Bref, avec des réponses justes qui respectent mes droits (FUS-FR27, FR39)**.
 
 **Acceptance Criteria:**
 
-**Given** les questions guidées (chips) gratuites et le chat libre décompté (quota IA, 19.8)
-**When** une question est posée
-**Then** le contexte est construit à partir des ports publics (reporting, finance, crm) du tenant seulement, le fournisseur est configurable (porté de `src/ai/*`), les conversations sont stockées par tenant, et aucune donnée d'un autre tenant ne peut apparaître (test d'isolation)
+**Given** l'API de « Bref Point » (`POST /v1/ai/chat`, CRUD `/v1/ai/conversations`, suppression groupée)
+**When** le module `ai-assistant` est livré
+**Then** Keevo expose les mêmes opérations (mêmes formes de réponse que celles consommées par l'app Bref, contrat dans `keevo/contracts/`), conversations stockées par tenant (`kv_x.ai_conversations`), limite de 20 messages par conversation et quota IA journalier/mensuel (19.8) identiques
 
-**Given** le fournisseur indisponible
-**When** l'appel échoue
-**Then** le quota n'est pas consommé et un message d'erreur clair est renvoyé
+**Given** les sujets guidés de Bref (diagnostic, chiffre d'affaires, impayés, encaissements, vendeurs, boutiques, clients ; période, comparaison, drill-down boutique → vendeurs, liste d'appel des impayés)
+**When** l'app les utilise
+**Then** chaque sujet a ses données servies par un outil de 21.8 (ou un endpoint de statistiques existant), **gratuitement** (aucun appel au modèle, aucun crédit)
+
+**Given** une question en texte libre
+**When** elle est posée
+**Then** le fournisseur de modèle (configurable, porté de `src/ai/*` : OpenAI / Gemini / Ollama) reçoit la question et la liste des outils de 21.8 autorisés pour cet utilisateur, **appelle des outils** (aucune génération ni exécution de SQL), et rédige la réponse en français à partir de leurs résultats ; un appel décompte le quota une fois par question (pas par outil)
+
+**Given** un corpus de parité (≥ 30 questions réelles tirées des sujets Bref et des conversations migrées, avec réponses attendues calculées sur des données de test)
+**When** il est rejoué contre l'assistant Keevo
+**Then** toutes les réponses chiffrées sont exactes ; le corpus tourne en test (fournisseur simulé pour les appels d'outils attendus) et sert de critère d'acceptation de la vague 24.x
+
+**Given** un employé (périmètre 16-13), un module désactivé ou un autre tenant
+**When** il pose une question qui toucherait ces données
+**Then** l'outil refuse ou filtre exactement comme le REST ; aucune donnée d'un autre tenant ou d'une autre boutique n'apparaît (test d'isolation)
+
+**Given** le fournisseur indisponible, une erreur d'outil ou une question en cours pour le même compte
+**When** l'appel échoue ou est refusé
+**Then** le quota n'est pas consommé, un message clair en français est renvoyé, une seule question à la fois par compte (comme Bref)
 
 ### Story 21.5 : Module `whatsapp-cloud` — compte, boîte de réception, modèles
 
@@ -1754,6 +1818,8 @@ So that **la documentation reflète le système réel**.
   21-5-whatsapp-cloud: backlog
   21-6-campagnes: backlog
   21-7-client-portal: backlog
+  21-8-couche-outils-ia-mcp: backlog  # avant 21-4
+  21-9-serveur-mcp-externe: backlog  # après 21-4
   epic-21-retrospective: optional
 
   epic-22: backlog  # P2 App RN parité Keevo
