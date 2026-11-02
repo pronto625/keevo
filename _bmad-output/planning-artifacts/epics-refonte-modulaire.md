@@ -1855,7 +1855,7 @@ So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du
 > | 17.4 Feedback | **done** | v1s-14-5 + boîte « Retours utilisateurs » (8-4) ; module `feedback` |
 > | 17.5 Santé, alertes, push global | **done** | 9-5 ; `PlatformHealthService`, `AdminGlobalNotificationController` |
 > | 17.6 Exports PDF/Excel | **done (remplacée)** | v1s-epic-18 (2026-10-12) |
-> | 17.7 Notification changement de prix | backlog | `SalePriceOverriddenEvent` seulement audité (`AuditEventListener`), aucune notification owner |
+> | 17.7 Notification changement de prix | **done** (2026-11-02) | `PriceChangeNotificationListener` (`@ModuleScoped("alerts")`, après commit) : prix catalogue modifié par un employé (`ProductPriceChangedEvent` publié par `UpdateProductUseCase`, REST + sync) ou vente à un autre prix (`SalePriceOverriddenEvent`) → push owners + WhatsApp owner, fenêtre par employé (récap si plusieurs) ; owner / Free → rien (spec-17-7, `PriceChangeNotificationListenerTest`, `AlertsModuleScopedFullContextTest`) |
 > | 17.8 Gating config rapports | **done** (2026-11-02) | endpoint gaté `report-config` (13.10) + valeurs fixes quand `report-config` est DISABLED (`TenantPreferencesQueryAdapter.effective`, spec-17-8) |
 > | 17.9 Régression E2E | backlog | **gate go-live** : à passer sur staging avant 16.7 |
 > | 17.10, 17.11 | backlog | résidus V1 réintégrés (v1s-16-25, v1s-16-26) |

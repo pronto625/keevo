@@ -1,12 +1,16 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.identity.api.EmployeeQueryPort;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductPriceChangedEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
 import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.module.ModuleScoped;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +30,8 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
@@ -46,6 +52,7 @@ class AlertsModuleScopedFullContextTest extends FullContextIntegrationTest {
     @Autowired TenantFactory tenantFactory;
     @Autowired JdbcTemplate jdbc;
     @MockitoSpyBean TenantPreferencesQueryPort preferences;
+    @MockitoSpyBean EmployeeQueryPort employees; // Story 17.7: the price-change handlers look the actor up first
 
     private String schema;
     private UUID tenantId;
@@ -72,9 +79,13 @@ class AlertsModuleScopedFullContextTest extends FullContextIntegrationTest {
     }
 
     private Object awaitCompletion(UUID productId) throws InterruptedException {
+        return awaitCompletion(productId, "StockAlertNotificationListener");
+    }
+
+    private Object awaitCompletion(UUID productId, String listener) throws InterruptedException {
         for (int i = 0; i < 200; i++) {
             List<Map<String, Object>> rows = jdbc.queryForList("SELECT completion_date FROM public.event_publication "
-                    + "WHERE listener_id LIKE ? AND serialized_event LIKE ?", "%StockAlertNotificationListener%",
+                    + "WHERE listener_id LIKE ? AND serialized_event LIKE ?", "%" + listener + "%",
                     "%" + productId + "%");
             if (!rows.isEmpty() && rows.get(0).get("completion_date") != null) {
                 return rows.get(0).get("completion_date");
@@ -104,6 +115,50 @@ class AlertsModuleScopedFullContextTest extends FullContextIntegrationTest {
         verify(preferences, timeout(5000)).find(schema);
     }
 
+    /** Story 17.7 — one catalogue price change and one till override by the same (unknown) user. */
+    private UUID[] publishPriceChanges(UUID actor) {
+        UUID catalogueProduct = UUID.randomUUID();
+        UUID tillProduct = UUID.randomUUID();
+        // the till event is also audited synchronously (AuditEventListener): publish inside the tenant
+        TenantContext.setCurrentTenant(schema);
+        try {
+            tx.executeWithoutResult(s -> {
+                publisher.publishEvent(new ProductPriceChangedEvent(catalogueProduct, "Riz", 1500, 1200, actor,
+                        "EMPLOYEE", schema, Instant.now()));
+                publisher.publishEvent(new SalePriceOverriddenEvent(tillProduct, UUID.randomUUID(), "Riz", 1500,
+                        1200, actor, schema, Instant.now()));
+            });
+        } finally {
+            TenantContext.clear();
+        }
+        return new UUID[] {catalogueProduct, tillProduct};
+    }
+
+    @Test
+    @DisplayName("Free tenant → price-change handlers not invoked, publications completed (Story 17.7)")
+    void freeTenantPriceChangesSkipped() throws InterruptedException {
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', expires_at = NULL");
+        UUID actor = UUID.randomUUID();
+
+        UUID[] products = publishPriceChanges(actor);
+
+        assertThat(awaitCompletion(products[0], "PriceChangeNotificationListener")).isNotNull();
+        assertThat(awaitCompletion(products[1], "PriceChangeNotificationListener")).isNotNull();
+        verify(employees, never()).findByUserId(any(), eq(actor));
+    }
+
+    @Test
+    @DisplayName("Registration trial → both price-change handlers invoked (Story 17.7)")
+    void trialPriceChangesDelivered() throws InterruptedException {
+        UUID actor = UUID.randomUUID();
+
+        UUID[] products = publishPriceChanges(actor);
+
+        assertThat(awaitCompletion(products[0], "PriceChangeNotificationListener")).isNotNull();
+        assertThat(awaitCompletion(products[1], "PriceChangeNotificationListener")).isNotNull();
+        verify(employees, timeout(5000).times(2)).findByUserId(schema, actor);
+    }
+
     @Test
     @DisplayName("@ModuleScoped(\"alerts\") on the owner alerts, not on the CSV import feedback")
     void placement() throws NoSuchMethodException {
@@ -116,5 +171,10 @@ class AlertsModuleScopedFullContextTest extends FullContextIntegrationTest {
         assertThat(ProductCreationNotificationListener.class.getMethod("onCsvImportCompleted",
                 CsvImportCompletedEvent.class).getAnnotation(ModuleScoped.class)).isNull();
         assertThat(ProductCreationNotificationListener.class.getAnnotation(ModuleScoped.class)).isNull();
+        // Story 17.7
+        assertThat(PriceChangeNotificationListener.class.getMethod("onProductPriceChanged",
+                ProductPriceChangedEvent.class).getAnnotation(ModuleScoped.class).value()).isEqualTo("alerts");
+        assertThat(PriceChangeNotificationListener.class.getMethod("onSalePriceOverridden",
+                SalePriceOverriddenEvent.class).getAnnotation(ModuleScoped.class).value()).isEqualTo("alerts");
     }
 }

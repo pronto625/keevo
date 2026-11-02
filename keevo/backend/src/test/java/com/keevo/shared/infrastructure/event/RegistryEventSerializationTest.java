@@ -8,6 +8,8 @@ import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
 import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
 import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
+import com.keevo.shared.event.catalog.product.ProductPriceChangedEvent;
+import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
 import com.keevo.shared.event.catalog.stock.MovementKind;
 import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.shared.event.catalog.stock.StockThresholdBreachedEvent;
@@ -110,6 +112,10 @@ class RegistryEventSerializationTest {
         f.put(StockAdjustedEvent.class, new StockAdjustedEvent(A, null, B, MovementKind.ADJUSTMENT, 10, -2, 8, C,
                 "casse", TENANT, "EMPLOYEE", "Awa", "Akwa", "Riz 5kg", T0, "Bonamoussadi"));
         f.put(CsvImportCompletedEvent.class, new CsvImportCompletedEvent(7, TENANT, A, "Awa", "EMPLOYEE", T0));
+        // 17.7: owner notification on an employee price change (catalogue edit / till override)
+        f.put(ProductPriceChangedEvent.class, new ProductPriceChangedEvent(A, "Riz 5kg", 1500, 1200, B, "EMPLOYEE",
+                TENANT, T0));
+        f.put(SalePriceOverriddenEvent.class, new SalePriceOverriddenEvent(A, C, "Riz 5kg", 1500, 1200, B, TENANT, T0));
         // 16.1: nightly module licence transitions → owner notifications
         f.put(ModuleLicencesChangedEvent.class, new ModuleLicencesChangedEvent(TENANT, List.of(
                 new ModuleLicencesChangedEvent.Transition("invoicing", "Facturation",

@@ -5,6 +5,7 @@ import com.keevo.shared.infrastructure.event.EventPublicationResubmissionJob;
 import com.keevo.reporting.export.application.service.ExportPurgeScheduler;
 import com.keevo.commerce.sale.application.service.DayClosureAutoScheduler;
 import com.keevo.identity.auth.application.service.AuthTokenCleanupJob;
+import com.keevo.messaging.notification.application.listener.PriceChangeNotificationListener;
 import com.keevo.messaging.notification.application.listener.ProductCreationNotificationListener;
 import com.keevo.messaging.notification.application.listener.StockAlertNotificationListener;
 import com.keevo.messaging.notification.application.listener.StockModificationNotificationListener;
@@ -89,6 +90,7 @@ class SchedulerLockCoverageTest {
             ProductCreationNotificationListener.class,
             StockModificationNotificationListener.class,
             StockAlertNotificationListener.class,
+            PriceChangeNotificationListener.class, // 17.7
             SyncLagMetrics.class); // 11.2
 
     @Test

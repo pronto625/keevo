@@ -19,6 +19,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.shared.event.catalog.product.DraftProductValidatedEvent;
+import com.keevo.shared.event.catalog.product.ProductPriceChangedEvent;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.mockito.MockedStatic;
 import org.springframework.context.ApplicationEventPublisher;
@@ -330,6 +331,68 @@ class UpdateProductUseCaseTest {
             // 12.6a: messaging acknowledges the pending record on this event (DraftValidationTrackingListenerTest)
             verify(eventPublisher).publishEvent((Object) argThat(e -> e instanceof DraftProductValidatedEvent v
                     && v.productId().equals(productId) && v.actorId().equals(actorId) && v.tenantId().equals("kv_test")));
+        }
+    }
+
+    // ── Story 17.7: catalogue price change event ──────────────────────────────
+
+    private Product active(UUID id, int price) {
+        return new Product(id, "Riz", null, "KEV-RIZ001", null,
+                price, 0, 0, 0, false, ProductStatus.ACTIVE, 0, Instant.now(), Instant.now());
+    }
+
+    @Test
+    void priceChanged_publishesPriceChangedEvent_withRoleAndBothPrices() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            var productId = UUID.randomUUID();
+            var actorId = UUID.randomUUID();
+            when(productRepository.findById(productId)).thenReturn(Optional.of(active(productId, 1500)));
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                    1200, null, null, null, actorId, "EMPLOYEE"));
+
+            verify(eventPublisher).publishEvent((Object) argThat(e -> e instanceof ProductPriceChangedEvent v
+                    && v.productId().equals(productId) && v.productName().equals("Riz")
+                    && v.oldPrice() == 1500 && v.newPrice() == 1200 && v.actorId().equals(actorId)
+                    && "EMPLOYEE".equals(v.actorRole()) && "kv_test".equals(v.tenantId())));
+        }
+    }
+
+    @Test
+    void ownerPriceChange_alsoPublished_listenerFiltersTheRole() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            var productId = UUID.randomUUID();
+            when(productRepository.findById(productId)).thenReturn(Optional.of(active(productId, 1500)));
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                    1000, null, null, null, UUID.randomUUID(), "OWNER"));
+
+            verify(eventPublisher).publishEvent((Object) argThat(e -> e instanceof ProductPriceChangedEvent v
+                    && "OWNER".equals(v.actorRole()) && "kv_test".equals(v.tenantId())));
+        }
+    }
+
+    @Test
+    void samePriceOrNoPrice_noPriceChangedEvent() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            var productId = UUID.randomUUID();
+            when(productRepository.findById(productId)).thenReturn(Optional.of(active(productId, 1500)));
+            when(productRepository.save(any())).thenAnswer(i -> i.getArgument(0));
+
+            useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                    1500, null, null, null, UUID.randomUUID(), "EMPLOYEE"));
+            useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, "Riz parfumé", null, null, null,
+                    null, 900, null, null, UUID.randomUUID(), "EMPLOYEE"));
+
+            verify(eventPublisher, never()).publishEvent(isA(ProductPriceChangedEvent.class));
+            verify(eventPublisher, times(2)).publishEvent((Object) argThat(e ->
+                    e instanceof com.keevo.shared.event.catalog.product.ProductUpdatedEvent u
+                            && "kv_test".equals(u.tenantId())));
         }
     }
 }

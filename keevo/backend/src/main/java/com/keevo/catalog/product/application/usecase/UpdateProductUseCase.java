@@ -4,6 +4,7 @@ import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.shared.event.catalog.product.ProductActivatedEvent;
+import com.keevo.shared.event.catalog.product.ProductPriceChangedEvent;
 import com.keevo.shared.event.catalog.product.ProductUpdatedEvent;
 import com.keevo.shared.event.catalog.product.DraftProductValidatedEvent;
 import com.keevo.shared.domain.exception.DomainException;
@@ -200,7 +201,21 @@ public class UpdateProductUseCase {
             dto.actorId(),
             Instant.now()
         ));
-        
+
+        // Story 17.7: a real catalogue price change (any role — the owner notification keeps employees only)
+        if (dto.price() != null && dto.price() != existing.getPriceValue()) {
+            eventPublisher.publishEvent(new ProductPriceChangedEvent(
+                saved.getId(),
+                saved.getName(),
+                existing.getPriceValue(),
+                saved.getPriceValue(),
+                dto.actorId(),
+                dto.actorRole(),
+                tenantId,
+                Instant.now()
+            ));
+        }
+
         return saved;
     }
 
