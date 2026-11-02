@@ -345,7 +345,7 @@ development_status:
   m17-12-suivi-stock-par-produit: backlog  # API 874719b7 (StockTrackingFullContextTest) — case « Suivre le stock » (création / modification, owner seul), trackStock dans CREATE_PRODUCT / UPDATE_PRODUCT, SET_PRODUCT_STOCK_TRACKING (quantité de départ facultative, movementId local), colonne locale track_stock, POS « Sans suivi de stock » sans plafond de quantité, champ « Quantité initiale » masqué pour un produit non suivi, confirmations activation / désactivation
   m17-13-creation-produit-nom-archive: backlog  # API 7929ec89 (InitialStockAtCreationFullContextTest) — CREATE_PRODUCT au nom d'un archivé → MERGED_INTO:E + conflictData.restored, fusion locale X→E, E non archivé, avis « Produit restauré : <nom> » ; plafond → création refusée (16-10), E reste archivé ; REST 200 + restored ; import CSV avertissement de ligne
   m17-8-gating-config-rapports: backlog  # API bab15029 — écran Rapports : modifiable seulement si reportConfigEditable, sinon lecture seule « Rapport de fin de journée à 20:00 sur WhatsApp » + incitation Premium ; heures GET "HH:mm", PUT "HH:mm:ss"
-  m17-7-notif-changement-prix-employe: backlog  # API COMMIT — notifications push EMPLOYEE_PRICE_CHANGED (ouvre la fiche produit) et EMPLOYEE_PRICE_CHANGED_BATCH (récapitulatif) : libellés, routage au toucher, centre de notifications ; rien à envoyer
+  m17-7-notif-changement-prix-employe: backlog  # API 0e578d9d — notifications push EMPLOYEE_PRICE_CHANGED (ouvre la fiche produit) et EMPLOYEE_PRICE_CHANGED_BATCH (récapitulatif) : libellés, routage au toucher, centre de notifications ; rien à envoyer
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

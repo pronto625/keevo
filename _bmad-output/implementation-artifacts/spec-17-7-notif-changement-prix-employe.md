@@ -152,7 +152,7 @@ A dedicated `ProductPriceChangedEvent` rather than parsing `ProductUpdatedEvent`
 
 > Destinataire : agent IA qui implémente l'app Expo / React Native sur une branche du dépôt `/home/toor/Project/FreeLance/AI/bref` (base `develop`). Conventions API : section « Mobile » de `spec-16-11-sessions-longues-et-sures.md` ; synchro : `spec-16-10-scope-employe-historique-transferts.md` ; erreurs : `spec-16-14-api-prete-client-mobile.md`. Aucun changement de contrat REST ni de synchro : seulement deux nouveaux types de notification push reçus par l'owner.
 
-**Statut** : API livrée (commit `COMMIT` ; tests `messaging/notification/application/listener/PriceChangeNotificationListenerTest.java`, `AlertsModuleScopedFullContextTest.java`) — mobile à faire.
+**Statut** : API livrée (commit `0e578d9d` ; tests `messaging/notification/application/listener/PriceChangeNotificationListenerTest.java`, `AlertsModuleScopedFullContextTest.java`) — mobile à faire.
 
 **Clé de suivi mobile** : `m17-7-notif-changement-prix-employe`
 
