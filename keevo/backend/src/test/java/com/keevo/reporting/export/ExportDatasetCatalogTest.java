@@ -48,6 +48,7 @@ class ExportDatasetCatalogTest {
                 transportCost:Frais de transport:AMOUNT_XAF
                 minimumThreshold:Seuil minimum:INTEGER
                 stockQuantity:Stock:INTEGER
+                trackStock:Suivi du stock:BOOLEAN
                 suppliers:Fournisseurs:TEXT
                 archived:Archivé:BOOLEAN
                 createdAt:Créé le:DATETIME

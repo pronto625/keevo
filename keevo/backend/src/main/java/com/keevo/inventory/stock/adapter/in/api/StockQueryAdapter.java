@@ -5,6 +5,7 @@ import com.keevo.inventory.api.StockQueryPort;
 import com.keevo.inventory.stock.domain.entity.StockLevel;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.stock.domain.port.out.StockMovementRepository;
+import com.keevo.inventory.stock.domain.service.StockTrackingPolicy;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
@@ -20,9 +21,12 @@ class StockQueryAdapter implements StockQueryPort {
 
     private final StockLevelRepository stockLevelRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final StockTrackingPolicy trackingPolicy;
 
     StockQueryAdapter(StockLevelRepository stockLevelRepository,
-                      StockMovementRepository stockMovementRepository) {
+                      StockMovementRepository stockMovementRepository,
+                      StockTrackingPolicy trackingPolicy) {
+        this.trackingPolicy = trackingPolicy;
         this.stockLevelRepository = stockLevelRepository;
         this.stockMovementRepository = stockMovementRepository;
     }
@@ -34,6 +38,12 @@ class StockQueryAdapter implements StockQueryPort {
                 ? stockLevelRepository.findByProductVariantAndStore(productId, variantId, storeId)
                 : stockLevelRepository.findByProductAndStore(productId, storeId);
         return level.map(StockLevel::getQuantity).orElse(0);
+    }
+
+    @Override
+    public boolean isUntracked(String tenantSchema, UUID productId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return trackingPolicy.isUntracked(tenantSchema, productId);
     }
 
     @Override

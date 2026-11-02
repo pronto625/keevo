@@ -60,4 +60,15 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
     @Query("UPDATE ProductJpaEntity p SET p.photoUrl = :photoUrl, p.updatedAt = :updatedAt WHERE p.id = :id")
     int updatePhotoUrl(@Param("id") UUID id, @Param("photoUrl") String photoUrl,
                        @Param("updatedAt") Instant updatedAt);
+
+    /**
+     * Story 17.12 — conditional switch of the stock tracking: writes only when the value differs, so two
+     * concurrent identical requests change it once (the second one re-evaluates the WHERE after the first commits
+     * and updates 0 rows). Bumps {@code updated_at} for the pull.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ProductJpaEntity p SET p.trackStock = :tracked, p.updatedAt = :updatedAt "
+            + "WHERE p.id = :id AND p.trackStock <> :tracked")
+    int updateTrackStockIfDifferent(@Param("id") UUID id, @Param("tracked") boolean tracked,
+                                    @Param("updatedAt") Instant updatedAt);
 }

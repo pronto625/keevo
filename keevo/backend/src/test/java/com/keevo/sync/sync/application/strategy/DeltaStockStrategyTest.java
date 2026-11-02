@@ -28,12 +28,13 @@ class DeltaStockStrategyTest {
     @Mock private EntityManager entityManager;
     @Mock private Query nativeQuery;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private com.keevo.inventory.api.StockQueryPort stockQuery; // 17.12: default false = tracked
 
     private DeltaStockStrategy strategy;
 
     @BeforeEach
     void setUp() {
-        strategy = new DeltaStockStrategy(entityManager, eventPublisher);
+        strategy = new DeltaStockStrategy(entityManager, eventPublisher, stockQuery);
     }
 
     @Test
@@ -196,6 +197,20 @@ class DeltaStockStrategyTest {
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    // Story 17.12 — a sale of an untracked product moved nothing: its frozen negative level is no conflict
+    @Test
+    void evaluate_untrackedProduct_withNegativeFrozenLevel_noConflictNoEvent() {
+        UUID productId = UUID.randomUUID();
+        var op = saleOperation(productId.toString(), UUID.randomUUID().toString(), 3);
+        var handlerResult = new SyncOperationResult("op-1", SyncOperationStatus.APPLIED, "srv-1", null);
+        when(stockQuery.isUntracked("kv_abc123", productId)).thenReturn(true);
+
+        var result = strategy.evaluate(op, handlerResult, UUID.randomUUID(), "kv_abc123");
+
+        assertThat(result.conflictType()).isNull();
+        verifyNoInteractions(entityManager, eventPublisher);
+    }
 
     private SyncOperation saleOperation(String productId, String storeId, int quantity) {
         return new SyncOperation("op-1", "CREATE_SALE", "sale-1",

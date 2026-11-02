@@ -25,6 +25,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -386,5 +387,56 @@ class ProductSyncHandlerTest {
         var result = handler.handle(op, ACTOR_ID, TENANT_ID);
 
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+    }
+
+    // ── Story 17.12 ─────────────────────────────────────────────────────────────
+
+    @Test
+    void createProduct_untrackedByAnEmployee_isForbidden_nothingCreated() {
+        SyncTestAuth.employee(UUID.randomUUID());
+        var id = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "CREATE_PRODUCT", id.toString(),
+                Map.of("id", id.toString(), "name", "Livraison", "price", 500, "trackStock", false), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(productCommand);
+    }
+
+    @Test
+    void createProduct_untrackedByTheOwner_passesTheSetting() {
+        var id = UUID.randomUUID();
+        when(productCommand.create(any(), any())).thenReturn(dummyProduct(id, "Livraison"));
+        var op = new SyncOperation("op-1", "CREATE_PRODUCT", id.toString(),
+                Map.of("id", id.toString(), "name", "Livraison", "price", 500, "trackStock", false), Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(productCommand).create(eq(TENANT_ID), argThat(in -> Boolean.FALSE.equals(in.trackStock())));
+    }
+
+    @Test
+    void updateProduct_trackStockNotABoolean_isRejected() {
+        var productId = UUID.randomUUID();
+        var op = new SyncOperation("op-1", "UPDATE_PRODUCT", productId.toString(),
+                Map.of("productId", productId.toString(), "trackStock", "non"), Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("Invalid trackStock: must be a boolean");
+        verifyNoInteractions(productCommand);
+    }
+
+    @Test
+    void updateProduct_trackStockFalse_passesTheSetting() {
+        var productId = UUID.randomUUID();
+        when(productCommand.update(any(), any())).thenReturn(dummyProduct(productId, "Huile"));
+        var op = new SyncOperation("op-1", "UPDATE_PRODUCT", productId.toString(),
+                Map.of("productId", productId.toString(), "trackStock", false), Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(productCommand).update(eq(TENANT_ID), argThat(in -> Boolean.FALSE.equals(in.trackStock())));
     }
 }

@@ -90,7 +90,8 @@ public class ProductController {
                 actorRole,
                 actorName,
                 storeName,
-                null  // clientId — online direct creation always generates the id server-side
+                null, // clientId — online direct creation always generates the id server-side
+                request.trackStock() // Story 17.12 — null → tracked
         );
         
         Product product = createProductUseCase.execute(dto);
@@ -154,7 +155,8 @@ public class ProductController {
                 request.transportCost(),
                 request.stockQuantity(),
                 actorId,
-                CurrentActor.role()  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
+                CurrentActor.role(),  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
+                request.trackStock()  // Story 17.12 — null → unchanged; a change is OWNER-only
         );
         
         // Domain errors (404 PRODUCT_NOT_FOUND, 422 VALIDATION_ERROR) go through the global

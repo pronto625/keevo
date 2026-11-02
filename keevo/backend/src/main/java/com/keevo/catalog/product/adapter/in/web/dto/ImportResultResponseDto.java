@@ -16,7 +16,8 @@ public record ImportResultResponseDto(
         int                  skipped,
         boolean              limitReached,
         String               limitMessage,
-        List<CsvRowErrorDto> errors
+        List<CsvRowErrorDto> errors,
+        List<CsvRowErrorDto> warnings   // Story 17.12 — imported rows with an ignored value (additive)
 ) {
 
     public record CsvRowErrorDto(
@@ -35,7 +36,10 @@ public record ImportResultResponseDto(
                 result.getSkipped(),
                 result.isLimitReached(),
                 result.getLimitMessage(),
-                errorDtos
+                errorDtos,
+                result.getWarnings().stream()
+                        .map(e -> new CsvRowErrorDto(e.lineNumber(), e.column(), e.message()))
+                        .toList()
         );
     }
 }

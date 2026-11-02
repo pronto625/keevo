@@ -438,7 +438,8 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
         put.apply("crm").accept(List.of("CREATE_CLIENT", "UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT",
                 "CREATE_SUPPLIER", "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER", "UNARCHIVE_SUPPLIER"));
         put.apply("store").accept(List.of("CREATE_STORE", "UPDATE_STORE", "DEACTIVATE_STORE"));
-        put.apply("inventory").accept(List.of("STOCK_ADJUST", "RECORD_STOCK_ENTRY"));
+        put.apply("inventory").accept(List.of("STOCK_ADJUST", "RECORD_STOCK_ENTRY",
+                "SET_PRODUCT_STOCK_TRACKING")); // Story 17.12
         // Story 13.10a: premium operations declare their paid module (plan §6.1)
         put.apply("multi-store").accept(List.of("STOCK_TRANSFER"));
         put.apply("counting").accept(List.of("SAVE_INVENTORY_COUNT", "CREATE_INVENTORY_SESSION", "VALIDATE_INVENTORY"));
@@ -448,7 +449,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
         put.apply("invoicing").accept(List.of("CREATE_INVOICE", "UPDATE_INVOICE", "ISSUE_INVOICE", "PAY_INVOICE",
                 "CANCEL_INVOICE"));
 
-        assertThat(handlers).hasSize(20);
+        assertThat(handlers).hasSize(21); // 17.12: StockTrackingSyncHandler
         assertThat(moduleByType).isEqualTo(expected);
     }
 }

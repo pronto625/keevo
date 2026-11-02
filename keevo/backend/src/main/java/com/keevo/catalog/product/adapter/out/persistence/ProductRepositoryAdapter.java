@@ -127,10 +127,15 @@ public class ProductRepositoryAdapter implements ProductRepository {
         return springRepository.updatePhotoUrl(id, photoUrl, updatedAt) > 0;
     }
 
+    @Override
+    public boolean updateTrackStock(UUID id, boolean tracked, Instant updatedAt) {
+        return springRepository.updateTrackStockIfDifferent(id, tracked, updatedAt) > 0;
+    }
+
     // ── Conversion methods ─────────────────────────────────────────────────────
 
     private ProductJpaEntity toJpaEntity(Product product) {
-        return new ProductJpaEntity(
+        var entity = new ProductJpaEntity(
             product.getId(),
             product.getName(),
             product.getDescription(),
@@ -147,6 +152,8 @@ public class ProductRepositoryAdapter implements ProductRepository {
             product.getCreatedAt(),
             product.getUpdatedAt()
         );
+        entity.setTrackStock(product.isTrackStock()); // Story 17.12
+        return entity;
     }
 
     private Product toDomain(ProductJpaEntity entity) {
@@ -163,6 +170,7 @@ public class ProductRepositoryAdapter implements ProductRepository {
             entity.getArchived(),
             entity.getStatus(),
             entity.getMinimumThreshold(),
+            entity.getTrackStock(), // Story 17.12 — null (legacy row) → tracked
             entity.getCreatedAt(),
             entity.getUpdatedAt()
         );

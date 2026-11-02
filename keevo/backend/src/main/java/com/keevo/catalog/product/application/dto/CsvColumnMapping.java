@@ -16,8 +16,20 @@ public record CsvColumnMapping(
         String categoryColumn,      // optional — catégorie (matched by name)
         String skuColumn,           // optional — SKU (auto-generated if blank/invalid)
         String quantityColumn,      // optional — quantite_initiale
-        String thresholdColumn      // optional — seuil_min
+        String thresholdColumn,     // optional — seuil_min
+        String trackStockColumn     // optional — suivi_stock (Story 17.12); null → the « suivi_stock » header if present
 ) {
+    /** Story 17.12 — default header of the stock-tracking column (French yes/no, blank/absent → « oui »). */
+    public static final String DEFAULT_TRACK_STOCK_COLUMN = "suivi_stock";
+
+    /** Without an explicit stock-tracking column (the « suivi_stock » header is still read when present). */
+    public CsvColumnMapping(String nameColumn, String priceColumn, String buyPriceColumn,
+                            String transportCostColumn, String categoryColumn, String skuColumn,
+                            String quantityColumn, String thresholdColumn) {
+        this(nameColumn, priceColumn, buyPriceColumn, transportCostColumn, categoryColumn, skuColumn,
+                quantityColumn, thresholdColumn, null);
+    }
+
     public CsvColumnMapping {
         if (nameColumn == null || nameColumn.isBlank()) {
             throw new IllegalArgumentException("nameColumn is required and cannot be blank");

@@ -46,6 +46,7 @@ import com.keevo.shared.event.catalog.export.DataExportedEvent;
 import com.keevo.shared.event.catalog.store.StoreCreatedEvent;
 import com.keevo.shared.event.catalog.store.StoreDeactivatedEvent;
 import com.keevo.shared.event.catalog.store.StoreReactivatedEvent;
+import com.keevo.shared.event.catalog.product.ProductStockTrackingChangedEvent;
 import com.keevo.shared.event.catalog.product.ProductUnarchivedEvent;
 import com.keevo.shared.event.catalog.product.ProductPhotoUpdatedEvent;
 import com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent;
@@ -262,6 +263,18 @@ public class AuditEventListener {
                 null, event.productName(), null, null);
         log.info("AUDIT: product_unarchived productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    /** Story 17.12 — « Suivi du stock activé / désactivé » (French labels only, no technical value). */
+    @EventListener
+    public void on(ProductStockTrackingChangedEvent event) {
+        write(event.actorId(), event.tenantId(),
+                event.tracked() ? "STOCK_TRACKING_ENABLED" : "STOCK_TRACKING_DISABLED", "Product", event.productId(),
+                null,
+                map("productName", event.productName()),
+                null, event.productName(), null, null);
+        log.info("AUDIT: stock_tracking_{} productId={} tenantId={} actorId={}",
+                event.tracked() ? "enabled" : "disabled", event.productId(), event.tenantId(), event.actorId());
     }
 
     @EventListener

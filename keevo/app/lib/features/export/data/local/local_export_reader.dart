@@ -482,6 +482,7 @@ class LocalExportReader {
           r.readNullable<int>('transport_cost'),
           null, // minimumThreshold: not stored on the device
           stock[r.read<String>('id')] ?? 0,
+          null, // trackStock (17.12): not stored on this test client
           suppliers[r.read<String>('id')]?.join(', '),
           r.readNullable<bool>('archived'),
           r.read<DateTime>('created_at'),

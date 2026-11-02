@@ -39,6 +39,7 @@ class ValidateInventoryServiceTest {
     @Mock StockOperationService stockOperationService;
     @Mock StockLevelRepository stockLevelRepo;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.keevo.catalog.api.ProductQueryPort productQuery; // 17.12: unknown product → tracked
     @InjectMocks ValidateInventoryService service;
 
     private final UUID sessionId = UUID.randomUUID();
@@ -295,6 +296,33 @@ class ValidateInventoryServiceTest {
 
         verify(stockOperationService).recordOperation(
                 prodA, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId, null, false);
+    }
+
+    // Story 17.12 — a product made untracked after it was counted is skipped: not adjusted, not in the summary
+    @Test
+    void execute_untrackedProductCount_skipped_othersApplied_summaryExcludesIt() {
+        InventorySession session = inProgressSession();
+        UUID tracked = UUID.randomUUID();
+        UUID untracked = UUID.randomUUID();
+
+        when(sessionRepo.findById(sessionId)).thenReturn(Optional.of(session));
+        when(countRepo.findBySessionId(sessionId)).thenReturn(List.of(
+                count(tracked, null, 10, 7), count(untracked, null, 6, 1)));
+        lenient().when(productQuery.findById(any(), eq(untracked))).thenReturn(Optional.of(new com.keevo.catalog.api.ProductView(
+                untracked, "Livraison", null, "KEV-LIVR01", null, 500, 0, 0, 0, false,
+                com.keevo.catalog.api.ProductState.ACTIVE, 0, Instant.now(), Instant.now(), false)));
+        when(stockLevelRepo.findByProductAndStore(tracked, storeId)).thenReturn(Optional.of(stockLevel(tracked, storeId, 10)));
+        when(sessionRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = service.execute(new ValidateInventoryCommand(sessionId, actorId));
+
+        verify(stockOperationService).recordOperation(
+                tracked, null, storeId, MovementType.ADJUSTMENT, -3, actorId, "INVENTORY:" + sessionId, null, false);
+        verify(stockOperationService, never()).recordOperation(eq(untracked), any(), any(), any(), anyInt(), any(),
+                any(), any(), anyBoolean());
+        assertThat(result.adjustmentsApplied()).isEqualTo(1);
+        verify(eventPublisher).publishEvent(argThat((Object e) ->
+                e instanceof com.keevo.shared.event.catalog.counting.InventoryValidatedEvent v && v.adjustmentCount() == 1));
     }
 
     @Test

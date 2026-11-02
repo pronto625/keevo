@@ -31,5 +31,9 @@ public record UpdateProductRequestDto(
         Integer transportCost,
         
         @Min(value = 0, message = "Le stock ne peut pas être négatif")
-        Integer stockQuantity
+        Integer stockQuantity,
+
+        /// Story 17.12 — optional stock tracking; absent → unchanged. A change is OWNER-only (403 otherwise),
+        /// audited, and never takes a starting quantity (use PUT /api/v1/products/{id}/stock-tracking for that).
+        Boolean trackStock
 ) {}

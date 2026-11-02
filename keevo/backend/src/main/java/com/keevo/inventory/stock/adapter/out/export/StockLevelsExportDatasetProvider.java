@@ -73,7 +73,9 @@ public class StockLevelsExportDatasetProvider extends NativeKeysetExportDataset 
     @Override
     protected String fromClause() {
         return "stock_levels sl LEFT JOIN stores st ON st.id = sl.store_id"
-                + " LEFT JOIN products p ON p.id = sl.product_id"
+                // Story 17.12: products without stock tracking are not in the stock export (nor its value);
+                // their frozen levels stay in the database for a later re-activation.
+                + " JOIN products p ON p.id = sl.product_id AND p.track_stock = true"
                 + " LEFT JOIN categories c ON c.id = p.category_id";
     }
 

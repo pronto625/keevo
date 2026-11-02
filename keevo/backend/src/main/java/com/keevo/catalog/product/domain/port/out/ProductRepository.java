@@ -113,4 +113,11 @@ public interface ProductRepository {
      * {@code updatedAt} so the sync pull delivers it. Returns {@code false} when no such product.
      */
     boolean updatePhotoUrl(UUID id, String photoUrl, java.time.Instant updatedAt);
+
+    /**
+     * Story 17.12 — sets the stock tracking only if it differs (conditional update, safe under concurrency).
+     *
+     * @return {@code true} when this call changed it
+     */
+    boolean updateTrackStock(UUID id, boolean tracked, java.time.Instant updatedAt);
 }

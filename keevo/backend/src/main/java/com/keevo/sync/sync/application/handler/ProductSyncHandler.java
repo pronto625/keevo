@@ -55,6 +55,12 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                 // so subsequent offline ops (RECORD_STOCK_ENTRY, CREATE_SALE, ...) that
                 // reference this product by its local id keep resolving after push.
                 UUID clientId = p.get("id") != null ? UUID.fromString((String) p.get("id")) : null;
+                // 17.12: a product without stock tracking is created by the OWNER only (the input carries no role)
+                Boolean trackStock = optionalBoolean(p.get("trackStock"), "trackStock");
+                if (Boolean.FALSE.equals(trackStock) && !isOwnerRole()) {
+                    throw new DomainException(ErrorCode.FORBIDDEN,
+                            "Seul le propriétaire peut créer un produit sans suivi de stock");
+                }
                 var merged = mergeIntoExistingByName(operation, (String) p.get("name"), clientId, tenantId);
                 if (merged != null) yield merged;
                 var product = productCommand.create(tenantId, new CreateProductInput(
@@ -67,7 +73,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         optionalIntegralInt(p.get("buyPrice"), "buyPrice"),
                         optionalIntegralInt(p.get("transportCost"), "transportCost"),
                         optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
-                        actorId));
+                        actorId,
+                        trackStock));  // 17.12: absent (V1) → tracked
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.id().toString(), null);
             }
@@ -84,7 +91,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         optionalIntegralInt(p.get("transportCost"), "transportCost"),
                         optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
                         actorId,
-                        actorRole()));  // v1s-12-10: real role → Story 2.4 draft guard fires for EMPLOYEE
+                        actorRole(),  // v1s-12-10: real role → Story 2.4 draft guard fires for EMPLOYEE
+                        optionalBoolean(p.get("trackStock"), "trackStock")));  // 17.12: absent → unchanged; change OWNER-only
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.id().toString(), null);
             }
@@ -165,5 +173,12 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
         String targetId = existing.get().id().toString();
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 targetId, MERGED_INTO_PREFIX + targetId);
+    }
+
+    /** Story 17.12 — an optional JSON boolean; anything else is rejected ({@code Invalid <field>: …}). */
+    static Boolean optionalBoolean(Object raw, String field) {
+        if (raw == null) return null;
+        if (raw instanceof Boolean b) return b;
+        throw new IllegalArgumentException("Invalid " + field + ": must be a boolean");
     }
 }

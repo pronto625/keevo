@@ -35,6 +35,7 @@ public class ProductCsvRowFactory {
     private final PositiveIntegerValidator positiveInteger = new PositiveIntegerValidator();
     private final OptionalIntegerValidator optionalInteger = new OptionalIntegerValidator();
     private final OptionalStringValidator  optionalString  = new OptionalStringValidator();
+    private final OptionalYesNoValidator   optionalYesNo   = new OptionalYesNoValidator();
 
     /**
      * Create a {@link CreateProductUseCase.CreateProductDto} from a single CSV row.
@@ -79,6 +80,12 @@ public class ProductCsvRowFactory {
         // threshold
         int threshold = optionalInteger.validate(get(row, mapping.thresholdColumn()), lineNumber, "Seuil minimum");
 
+        // Story 17.12 — stock tracking: optional « suivi_stock » column (oui/non), blank or absent → tracked
+        String trackColumn = mapping.trackStockColumn() != null
+                ? mapping.trackStockColumn() : CsvColumnMapping.DEFAULT_TRACK_STOCK_COLUMN;
+        Boolean tracked = optionalYesNo.validate(getIgnoringCase(row, trackColumn), lineNumber, "Suivi du stock");
+        boolean trackStock = tracked == null || tracked;
+
         return new CreateProductUseCase.CreateProductDto(
                 name,
                 null,           // description — not in CSV
@@ -89,7 +96,11 @@ public class ProductCsvRowFactory {
                 transportCost,
                 initialQty,
                 actorId,
-                threshold
+                threshold,
+                null,           // status — ACTIVE
+                null, null, null, // actorRole / actorName / storeName — set by the import use case if needed
+                null,           // clientId — server-generated
+                trackStock
         );
     }
 
@@ -99,6 +110,18 @@ public class ProductCsvRowFactory {
     private String get(Map<String, String> row, String columnName) {
         if (columnName == null || row == null) return null;
         return row.get(columnName);
+    }
+
+    /** Story 17.12 — header matched case-insensitively and trimmed (« Suivi_Stock », « SUIVI_STOCK »…). */
+    private String getIgnoringCase(Map<String, String> row, String columnName) {
+        if (columnName == null || row == null) return null;
+        String exact = row.get(columnName);
+        if (exact != null) return exact;
+        String wanted = columnName.trim();
+        for (Map.Entry<String, String> e : row.entrySet()) {
+            if (e.getKey() != null && e.getKey().trim().equalsIgnoreCase(wanted)) return e.getValue();
+        }
+        return null;
     }
 
     private String generateSku() {

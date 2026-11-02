@@ -25,7 +25,8 @@ public record ProductResponseDto(
         ProductStatus status,
         int minimumThreshold,   // Story 2.3
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        boolean trackStock      // Story 17.12 — false: sold without stock
 ) {
     /**
      * Factory method to create DTO from domain entity
@@ -45,7 +46,8 @@ public record ProductResponseDto(
                 product.getStatus(),
                 product.getMinimumThreshold(),
                 product.getCreatedAt(),
-                product.getUpdatedAt()
+                product.getUpdatedAt(),
+                product.isTrackStock()
         );
     }
 }

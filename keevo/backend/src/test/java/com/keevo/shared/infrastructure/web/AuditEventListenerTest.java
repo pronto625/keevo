@@ -586,6 +586,25 @@ class AuditEventListenerTest {
         }
 
         @Test
+        @DisplayName("17.12 ProductStockTrackingChanged → STOCK_TRACKING_ENABLED / _DISABLED, label = product name, FR")
+        void stockTrackingChanged() throws Exception {
+            UUID productId = UUID.randomUUID();
+            listener.on(new com.keevo.shared.event.catalog.product.ProductStockTrackingChangedEvent(
+                    productId, "Livraison", false, "kv_abc123", actorId, Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("STOCK_TRACKING_DISABLED");
+            assertThat(e.entityType()).isEqualTo("Product");
+            assertThat(e.entityLabel()).isEqualTo("Livraison");
+            assertThat(e.valueBefore()).isNull();
+            assertThat(objectMapper.readTree(e.valueAfter()).get("productName").asText()).isEqualTo("Livraison");
+            assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("STOCK_TRACKING_DISABLED"))
+                    .isEqualTo("Suivi du stock désactivé");
+            assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("STOCK_TRACKING_ENABLED"))
+                    .isEqualTo("Suivi du stock activé");
+        }
+
+        @Test
         @DisplayName("J10 StockThresholdChanged → STOCK_THRESHOLD_UPDATED, before/after threshold")
         void stockThresholdChanged() throws Exception {
             UUID productId = UUID.randomUUID();

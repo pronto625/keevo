@@ -381,9 +381,9 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
                 ExportFormat.CSV, ExportFilter.none()));
 
         String products = String.join("\n", all.get("products"));
-        assertThat(products).contains("SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;Actif;1500;1000;50;5;13;"
+        assertThat(products).contains("SKU-1;" + a.tag() + "-P1;" + a.tag() + "-Cat;Actif;1500;1000;50;5;13;Oui;"
                 + a.tag() + "-Sup;Non;10/01/2026 11:00:00");
-        assertThat(products).contains("SKU-2;" + a.tag() + "-P2;" + a.tag() + "-Cat;Brouillon;800;500;0;0;0;;Oui");
+        assertThat(products).contains("SKU-2;" + a.tag() + "-P2;" + a.tag() + "-Cat;Brouillon;800;500;0;0;0;Oui;;Oui");
 
         String sales = String.join("\n", all.get("sales"));
         assertThat(sales).contains("Vente du 15/03/2026 à 11:00:00 — " + a.tag() + "-S1;15/03/2026 11:00:00;"

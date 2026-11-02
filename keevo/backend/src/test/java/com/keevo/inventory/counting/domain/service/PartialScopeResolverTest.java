@@ -118,4 +118,32 @@ class PartialScopeResolverTest {
         assertThat(rows).isEmpty();
         verifyNoInteractions(stockLevelRepository);
     }
+
+    // Story 17.12 — products without stock tracking are never counted
+    @Test
+    void resolveProducts_excludesUntrackedProducts() {
+        when(stockLevelRepository.findAllByStoreId(STORE_ID)).thenReturn(List.of());
+        var tracked = CatalogProductApiTestSupport.view(new Product(PRODUCT_A, "Produit A", "d", "KEV-PRA001",
+                CATEGORY_A, 100, 50, 0, 50, false, ProductStatus.ACTIVE, Instant.now(), Instant.now()));
+        var untracked = CatalogProductApiTestSupport.view(new Product(PRODUCT_B, "Livraison", "d", "KEV-PRB001",
+                CATEGORY_A, 100, 0, 0, 0, false, ProductStatus.ACTIVE, 0, false, Instant.now(), Instant.now()));
+        when(productQuery.findByCategoryIds(TenantContext.getCurrentTenant(), List.of(CATEGORY_A)))
+                .thenReturn(List.of(tracked, untracked));
+        when(productQuery.findPhotoUrlsByIds(any(), anyList())).thenReturn(Map.of());
+
+        List<InventoryProductRow> rows = resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of());
+
+        assertThat(rows).extracting(InventoryProductRow::productId).containsExactly(PRODUCT_A);
+    }
+
+    @Test
+    void resolveProducts_onlyUntrackedProducts_isEmpty_noStockRead() {
+        var untracked = CatalogProductApiTestSupport.view(new Product(PRODUCT_B, "Livraison", "d", "KEV-PRB001",
+                CATEGORY_A, 100, 0, 0, 0, false, ProductStatus.ACTIVE, 0, false, Instant.now(), Instant.now()));
+        when(productQuery.findByCategoryIds(TenantContext.getCurrentTenant(), List.of(CATEGORY_A)))
+                .thenReturn(List.of(untracked));
+
+        assertThat(resolver.resolveProducts(STORE_ID, List.of(CATEGORY_A), List.of())).isEmpty();
+        verifyNoInteractions(stockLevelRepository);
+    }
 }

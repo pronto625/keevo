@@ -9,6 +9,7 @@ import com.keevo.catalog.api.UpdateProductInput;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
+import com.keevo.catalog.product.application.usecase.SetProductStockTrackingUseCase;
 import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.domain.entity.Product;
@@ -40,6 +41,7 @@ class ProductCommandAdapter implements ProductCommandPort {
     private final CreateDraftProductUseCase createDraftProduct;
     private final ProductRepository productRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final SetProductStockTrackingUseCase setStockTracking;
 
     ProductCommandAdapter(CreateProductUseCase createProduct,
                           UpdateProductUseCase updateProduct,
@@ -47,7 +49,9 @@ class ProductCommandAdapter implements ProductCommandPort {
                           UnarchiveProductUseCase unarchiveProduct,
                           CreateDraftProductUseCase createDraftProduct,
                           ProductRepository productRepository,
-                          ApplicationEventPublisher eventPublisher) {
+                          ApplicationEventPublisher eventPublisher,
+                          SetProductStockTrackingUseCase setStockTracking) {
+        this.setStockTracking = setStockTracking;
         this.createProduct = createProduct;
         this.updateProduct = updateProduct;
         this.archiveProduct = archiveProduct;
@@ -63,7 +67,7 @@ class ProductCommandAdapter implements ProductCommandPort {
         Product created = createProduct.execute(new CreateProductUseCase.CreateProductDto(
                 in.name(), in.description(), in.sku(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(), in.stockQuantity(),
-                in.actorId(), 0, null, null, null, null, in.id()));
+                in.actorId(), 0, null, null, null, null, in.id(), in.trackStock()));
         return ProductViews.of(created);
     }
 
@@ -73,7 +77,7 @@ class ProductCommandAdapter implements ProductCommandPort {
         Product updated = updateProduct.execute(new UpdateProductUseCase.UpdateProductDto(
                 in.productId(), in.name(), in.description(), in.sku(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(), in.stockQuantity(),
-                in.actorId(), in.actorRole()));
+                in.actorId(), in.actorRole(), in.trackStock()));
         return ProductViews.of(updated);
     }
 
@@ -131,5 +135,14 @@ class ProductCommandAdapter implements ProductCommandPort {
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + productId));
         return ProductViews.of(productRepository.save(product.withMinimumThreshold(threshold)));
+    }
+
+    @Override
+    public com.keevo.catalog.api.StockTrackingUpdate setStockTracking(String tenantSchema, UUID productId,
+                                                                      boolean tracked, UUID actorId,
+                                                                      String actorRole) {
+        TenantContext.requireCurrent(tenantSchema);
+        var result = setStockTracking.execute(productId, tracked, actorId, actorRole);
+        return new com.keevo.catalog.api.StockTrackingUpdate(ProductViews.of(result.product()), result.changed());
     }
 }

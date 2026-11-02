@@ -97,8 +97,8 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
             total    += safeCount("SELECT COUNT(*) FROM " + s + ".products");
             active   += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE status = 'ACTIVE' AND archived = false"); // 17.10: same as the plan count
             draft    += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE status = 'DRAFT'");
-            lowStock += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE stock_quantity > 0 AND stock_quantity <= 5");
-            outStock += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE stock_quantity = 0");
+            lowStock += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE stock_quantity > 0 AND stock_quantity <= 5 AND track_stock = true"); // 17.12
+            outStock += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE stock_quantity = 0 AND track_stock = true"); // 17.12: untracked never « out of stock »
             thisWeek += safeCount("SELECT COUNT(*) FROM " + s + ".products WHERE created_at >= NOW() - INTERVAL '7 days'");
         }
 

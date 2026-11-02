@@ -149,6 +149,7 @@ const localExportCatalog = <LocalExportDataset>[
       LocalExportColumn(
           'minimumThreshold', 'Seuil minimum', LocalColumnType.integer),
       LocalExportColumn('stockQuantity', 'Stock', LocalColumnType.integer),
+      LocalExportColumn('trackStock', 'Suivi du stock', LocalColumnType.boolean),
       LocalExportColumn('suppliers', 'Fournisseurs', LocalColumnType.text),
       LocalExportColumn('archived', 'Archivé', LocalColumnType.boolean),
       LocalExportColumn('createdAt', 'Créé le', LocalColumnType.datetime),

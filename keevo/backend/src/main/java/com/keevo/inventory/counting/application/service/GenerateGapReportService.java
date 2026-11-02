@@ -80,6 +80,9 @@ public class GenerateGapReportService implements GenerateGapReportUseCase {
         for (InventoryCount count : counts) {
             if (!count.isCounted()) continue; // skip uncounted
             ProductView product = productsMap.get(count.getProductId());
+            // Story 17.12: a product made untracked after it was counted is not adjusted at validation — its gap is
+            // left out of the report too (never a gap that was not applied)
+            if (product != null && !product.trackStock()) continue;
             int unitPrice = product != null ? product.price() : 0;
             builder.addRow(count, unitPrice);
         }

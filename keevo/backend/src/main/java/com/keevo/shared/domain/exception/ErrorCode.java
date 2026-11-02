@@ -47,6 +47,7 @@ public enum ErrorCode {
     // ── Inventory ─────────────────────────────────────────────────
     INSUFFICIENT_STOCK,
     STOCK_NOT_FOUND,
+    STOCK_NOT_TRACKED,  // Story 17.12 — HTTP 422: stock operation on a product whose stock tracking is off
 
     // ── Inventory Session (Story 6.1) ─────────────────────────────
     INVENTORY_SESSION_ALREADY_ACTIVE,    // HTTP 409 — store already has an in-progress session
@@ -84,6 +85,7 @@ public enum ErrorCode {
     SAME_SOURCE_DESTINATION,    // HTTP 422 — sourceStoreId == destinationStoreId
     TRANSFER_NOT_FOUND,         // HTTP 404 — transfer id does not exist (two-step flow)
     TRANSFER_INVALID_STATUS,    // HTTP 422 — transfer is not IN_TRANSIT, cannot be completed
+    TRANSFER_IN_TRANSIT,        // HTTP 409 — Story 17.12: stock tracking cannot be turned off while a transfer of the product is in transit
 
     // ── Sale (Story 4.1) ──────────────────────────────────────────
     SALE_NOT_FOUND,

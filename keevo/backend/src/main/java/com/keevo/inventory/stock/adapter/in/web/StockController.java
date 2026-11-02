@@ -7,6 +7,10 @@ import com.keevo.inventory.stock.adapter.in.web.dto.ProductThresholdResponseDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.SetThresholdRequestDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.StockLevelResponseDto;
 import com.keevo.inventory.stock.adapter.in.web.dto.StockMovementResponseDto;
+import com.keevo.inventory.stock.adapter.in.web.dto.StockTrackingRequestDto;
+import com.keevo.inventory.stock.adapter.in.web.dto.StockTrackingResponseDto;
+import com.keevo.inventory.api.StockTrackingChange;
+import com.keevo.inventory.stock.application.usecase.ChangeStockTrackingUseCase;
 import com.keevo.inventory.stock.application.usecase.AdjustStockUseCase;
 import com.keevo.inventory.stock.application.usecase.GetCurrentStockUseCase;
 import com.keevo.inventory.stock.application.usecase.GetStockMovementHistoryUseCase;
@@ -41,6 +45,7 @@ import java.util.UUID;
  * POST   /api/v1/products/{productId}/stock/adjust      → set absolute quantity
  * PATCH  /api/v1/products/{productId}/threshold         → set alert threshold
  * GET    /api/v1/products/{productId}/stock/history     → paginated movements
+ * PUT    /api/v1/products/{productId}/stock-tracking    → enable / disable stock tracking (17.12)
  * </pre>
  */
 @RestController
@@ -53,12 +58,15 @@ public class StockController {
     private final AdjustStockUseCase adjustStockUseCase;
     private final SetStockThresholdUseCase setStockThresholdUseCase;
     private final GetStockMovementHistoryUseCase getStockMovementHistoryUseCase;
+    private final ChangeStockTrackingUseCase changeStockTrackingUseCase;
 
     public StockController(GetCurrentStockUseCase getCurrentStockUseCase,
                            RecordStockEntryUseCase recordStockEntryUseCase,
                            AdjustStockUseCase adjustStockUseCase,
                            SetStockThresholdUseCase setStockThresholdUseCase,
-                           GetStockMovementHistoryUseCase getStockMovementHistoryUseCase) {
+                           GetStockMovementHistoryUseCase getStockMovementHistoryUseCase,
+                           ChangeStockTrackingUseCase changeStockTrackingUseCase) {
+        this.changeStockTrackingUseCase    = changeStockTrackingUseCase;
         this.getCurrentStockUseCase        = getCurrentStockUseCase;
         this.recordStockEntryUseCase       = recordStockEntryUseCase;
         this.adjustStockUseCase            = adjustStockUseCase;
@@ -163,6 +171,26 @@ public class StockController {
         UUID actorId = CurrentActor.actorId();
         var product = setStockThresholdUseCase.execute(productId, request.minimumThreshold(), actorId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(ProductThresholdResponseDto.from(product)));
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    // PUT /api/v1/products/{productId}/stock-tracking
+    // ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Story 17.12 — turns the product's stock tracking on or off (OWNER only, 403 otherwise). Enabling may carry
+     * a starting quantity for one store (one STOCK_ENTRY); disabling freezes the levels. Same value → no-op.
+     */
+    @RequiresEntitlement("inventory")
+    @PutMapping("/stock-tracking")
+    public ResponseEntity<ApiResponseWrapper<StockTrackingResponseDto>> changeStockTracking(
+            @PathVariable UUID productId,
+            @Valid @RequestBody StockTrackingRequestDto request) {
+
+        var result = changeStockTrackingUseCase.execute(new StockTrackingChange(
+                productId, request.tracked(), request.initialQuantity(), request.storeId(),
+                null, CurrentActor.actorId(), CurrentActor.role()));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(StockTrackingResponseDto.from(result)));
     }
 
     // ──────────────────────────────────────────────────────────────────

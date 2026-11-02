@@ -106,6 +106,8 @@ public class ValidateSaleService implements ValidateSaleUseCase, CancelPendingSa
         // level that is decremented (the item's variant, null for a simple product), as
         // RecordSaleService does (Story 12.2c; previously the no-variant level was read).
         for (SaleItem item : sale.getItems()) {
+            // Story 17.12: an untracked product has no stock to check, force or decrement
+            if (stockQuery.isUntracked(tenantId, item.getProductId())) continue;
             int available = stockQuery.availableQuantity(tenantId, item.getProductId(), item.getVariantId(), sale.getStoreId());
 
             int effectiveDecrement = Math.min(available, item.getQuantity());

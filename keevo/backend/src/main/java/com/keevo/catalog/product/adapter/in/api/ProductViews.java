@@ -24,6 +24,7 @@ final class ProductViews {
                 ProductState.valueOf(product.getStatus().name()),
                 product.getMinimumThreshold(),
                 product.getCreatedAt(),
-                product.getUpdatedAt());
+                product.getUpdatedAt(),
+                product.isTrackStock());
     }
 }

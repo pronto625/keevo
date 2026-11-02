@@ -6,7 +6,10 @@ import com.keevo.inventory.api.StockMovementKind;
 import com.keevo.inventory.stock.application.usecase.AdjustStockUseCase;
 import com.keevo.inventory.stock.application.usecase.RecordStockEntryUseCase;
 import com.keevo.inventory.stock.domain.entity.MovementType;
+import com.keevo.inventory.api.StockTrackingChange;
+import com.keevo.inventory.stock.application.usecase.ChangeStockTrackingUseCase;
 import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.service.StockTrackingPolicy;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
@@ -23,10 +26,16 @@ class StockCommandAdapter implements StockCommandPort {
     private final StockOperationService stockOperationService;
     private final AdjustStockUseCase adjustStockUseCase;
     private final RecordStockEntryUseCase recordStockEntryUseCase;
+    private final StockTrackingPolicy trackingPolicy;
+    private final ChangeStockTrackingUseCase changeStockTracking;
 
     StockCommandAdapter(StockOperationService stockOperationService,
                                AdjustStockUseCase adjustStockUseCase,
-                               RecordStockEntryUseCase recordStockEntryUseCase) {
+                               RecordStockEntryUseCase recordStockEntryUseCase,
+                               StockTrackingPolicy trackingPolicy,
+                               ChangeStockTrackingUseCase changeStockTracking) {
+        this.trackingPolicy = trackingPolicy;
+        this.changeStockTracking = changeStockTracking;
         this.stockOperationService = stockOperationService;
         this.adjustStockUseCase = adjustStockUseCase;
         this.recordStockEntryUseCase = recordStockEntryUseCase;
@@ -35,6 +44,12 @@ class StockCommandAdapter implements StockCommandPort {
     @Override
     public void recordMovement(String tenantSchema, StockMovementInput in) {
         TenantContext.requireCurrent(tenantSchema);
+        // Story 17.12: the sale side (sale, pending validation, correction, cancellation, draft initial stock)
+        // never moves the stock of an untracked product (setting off or inventory module not enabled) — no
+        // movement, no stock row, no alert. Never an error: money is never refused because of tracking.
+        if (trackingPolicy.isUntracked(tenantSchema, in.productId())) {
+            return;
+        }
         stockOperationService.recordOperation(
                 in.productId(), in.variantId(), in.storeId(),
                 toMovementType(in.kind()), in.quantityChange(),
@@ -53,6 +68,12 @@ class StockCommandAdapter implements StockCommandPort {
                             UUID actorId, String notes, UUID movementId) {
         TenantContext.requireCurrent(tenantSchema);
         recordStockEntryUseCase.execute(productId, variantId, storeId, quantity, actorId, notes, movementId);
+    }
+
+    @Override
+    public boolean changeTracking(String tenantSchema, StockTrackingChange change) {
+        TenantContext.requireCurrent(tenantSchema);
+        return changeStockTracking.execute(change).initialEntry() != null;
     }
 
     static MovementType toMovementType(StockMovementKind kind) {

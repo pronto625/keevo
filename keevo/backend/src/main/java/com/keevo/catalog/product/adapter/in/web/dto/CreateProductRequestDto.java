@@ -41,5 +41,8 @@ public record CreateProductRequestDto(
         Integer stockQuantity,
 
         /// Optional status — defaults to ACTIVE. Story 4.3: POS can create DRAFT products.
-        String status
+        String status,
+
+        /// Story 17.12 — optional stock tracking; absent → tracked.
+        Boolean trackStock
 ) {}

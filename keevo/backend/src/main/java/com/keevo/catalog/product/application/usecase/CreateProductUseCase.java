@@ -71,12 +71,22 @@ public class CreateProductUseCase {
         String actorRole,  // Story 14.10: "OWNER" or "EMPLOYEE" — for notification dispatch
         String actorName,  // Story 14.10: display name for notifications
         String storeName,  // Story 14.10: employee's assigned store name (nullable for OWNER)
-        UUID clientId  // Offline-first fix: client-generated id (sync push) — null → server generates.
+        UUID clientId,  // Offline-first fix: client-generated id (sync push) — null → server generates.
                        // Without this, a product created offline gets a DIFFERENT id on the server
                        // than the one kept on the device, so any operation created in the same
                        // offline session that references the product by its local id (stock entry,
                        // sale, inventory count) fails with PRODUCT_NOT_FOUND once pushed.
+        Boolean trackStock  // Story 17.12 — null (V1 clients, CSV without the column) → tracked
     ) {
+        /** Without the stock-tracking setting (tracked). */
+        public CreateProductDto(
+                String name, String description, String sku, UUID categoryId,
+                Integer price, Integer buyPrice, Integer transportCost,
+                Integer stockQuantity, UUID actorId, Integer minimumThreshold, String status,
+                String actorRole, String actorName, String storeName, UUID clientId) {
+            this(name, description, sku, categoryId, price, buyPrice, transportCost,
+                 stockQuantity, actorId, minimumThreshold, status, actorRole, actorName, storeName, clientId, null);
+        }
         /** Backward-compatible constructor without minimumThreshold + status. */
         public CreateProductDto(
                 String name, String description, String sku, UUID categoryId,
@@ -122,6 +132,14 @@ public class CreateProductUseCase {
         // Validate input
         validateInput(dto);
 
+        // Story 17.12: creating a product without stock tracking is OWNER-only. The REST path passes the real role;
+        // the sync handler checks the role itself (its input carries none) and the CSV import is OWNER-only.
+        boolean tracked = dto.trackStock() == null || dto.trackStock();
+        if (!tracked && dto.actorRole() != null && !"OWNER".equals(dto.actorRole())) {
+            throw new DomainException(ErrorCode.FORBIDDEN,
+                    "Seul le propriétaire peut créer un produit sans suivi de stock");
+        }
+
         // Name uniqueness check (AC8 — Story 2.4)
         if (productRepository.existsByName(dto.name())) {
             throw new DomainException(ErrorCode.PRODUCT_NAME_ALREADY_EXISTS,
@@ -152,10 +170,11 @@ public class CreateProductUseCase {
             dto.price(),
             dto.buyPrice(),
             dto.transportCost() != null ? dto.transportCost() : 0,
-            dto.stockQuantity(),
+            tracked ? dto.stockQuantity() : null, // 17.12: legacy stock column never set for an untracked product
             false, // archived = false (default)
             "DRAFT".equalsIgnoreCase(dto.status()) ? ProductStatus.DRAFT : ProductStatus.ACTIVE,
             dto.minimumThreshold() != null ? dto.minimumThreshold() : 0,
+            tracked, // Story 17.12 — default tracked
             now, // createdAt
             now  // updatedAt
         );

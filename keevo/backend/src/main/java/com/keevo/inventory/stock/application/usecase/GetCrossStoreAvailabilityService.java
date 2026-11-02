@@ -41,8 +41,10 @@ public class GetCrossStoreAvailabilityService implements GetCrossStoreAvailabili
                 .orElseThrow(() -> new DomainException(
                         ErrorCode.PRODUCT_NOT_FOUND, "Product not found: " + query.productId()));
 
-        List<CrossStoreAvailabilityEntry> entries =
-                multiStoreStockRepository.getProductAvailability(query.productId());
+        // Story 17.12: a product without stock tracking has no availability to show (never its frozen levels)
+        List<CrossStoreAvailabilityEntry> entries = product.trackStock()
+                ? multiStoreStockRepository.getProductAvailability(query.productId())
+                : List.of();
 
         return new Result(product, entries);
     }

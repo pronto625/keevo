@@ -45,6 +45,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
      * threshold, negative included — a product never stocked there is shown at 0 in the store
      * detail but is not an alert (it made the badge « 9+ » for the whole catalogue).
      * {@code product_count} stays the number of products actually stocked in the store.
+     * Story 17.12: products without stock tracking are left out (no count, no value, no alert).
      */
     private static final String SQL_STORE_OVERVIEW_TPL = """
         SELECT
@@ -57,7 +58,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
                         AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)
                        THEN 1 END)                                               AS low_stock_count
         FROM %1$s.stores s
-        LEFT JOIN %1$s.products p      ON p.archived = false
+        LEFT JOIN %1$s.products p      ON p.archived = false AND p.track_stock = true
         LEFT JOIN %1$s.stock_levels sl ON sl.store_id = s.id
                                       AND sl.product_id = p.id
         WHERE s.is_active = true
@@ -76,7 +77,7 @@ public class MultiStoreStockRepositoryAdapter implements MultiStoreStockReposito
         FROM %1$s.products p
         LEFT JOIN %1$s.stock_levels sl ON sl.product_id = p.id
                                       AND sl.store_id = CAST(? AS uuid)
-        WHERE p.archived = false
+        WHERE p.archived = false AND p.track_stock = true
         """;
 
     static final String SQL_STORE_DETAIL_BASE_TPL = """

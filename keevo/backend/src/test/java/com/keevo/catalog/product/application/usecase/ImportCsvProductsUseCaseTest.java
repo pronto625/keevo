@@ -170,6 +170,37 @@ class ImportCsvProductsUseCaseTest {
     }
 
     @Test
+    @DisplayName("17.12 — « suivi_stock = non » row with a quantity: imported untracked, no initial stock, a warning")
+    void untrackedRowWithQuantity_importedWithoutInitialStock_withAWarning() {
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn("kv_test");
+            stubPlan(500, 0);
+            when(defaultStorePort.getDefaultStoreId()).thenReturn(storeId);
+            when(categoryRepository.findAllActive()).thenReturn(List.of());
+
+            var row = Map.of("nom", "Livraison", "prix_vente", "500", "quantite_initiale", "8", "suivi_stock", "non");
+            when(csvParser.parse(any())).thenReturn(List.of(row));
+            var dto = new CreateProductUseCase.CreateProductDto("Livraison", null, null, null, 500, 0, 0, 8, actorId,
+                    0, null, null, null, null, null, false);
+            when(rowFactory.fromRow(eq(row), any(), anyInt(), any(), any())).thenReturn(dto);
+            when(productRepository.existsByName("Livraison")).thenReturn(false);
+            var untracked = new Product(UUID.randomUUID(), "Livraison", null, "KEV-LIVR01", null, 500, 0, 0, null,
+                    false, ProductStatus.ACTIVE, 0, false, Instant.now(), Instant.now());
+            when(createProductUseCase.execute(dto)).thenReturn(untracked);
+
+            ImportResult result = useCase.execute(ownerCommand(1));
+
+            assertEquals(1, result.getImported());
+            assertEquals(0, result.getSkipped());
+            assertTrue(result.getErrors().isEmpty());
+            assertEquals(1, result.getWarnings().size());
+            assertEquals("Quantité initiale", result.getWarnings().get(0).column());
+            assertEquals("Quantité initiale ignorée : produit sans suivi de stock", result.getWarnings().get(0).message());
+            verifyNoInteractions(initialStockPort);
+        }
+    }
+
+    @Test
     @DisplayName("shouldSkipInvalidRowsAndReportErrors")
     void shouldSkipInvalidRowsAndReportErrors() {
         try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {

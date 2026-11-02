@@ -26,13 +26,14 @@ public record ProductThresholdResponseDto(
         ProductState status,
         int minimumThreshold,
         Instant createdAt,
-        Instant updatedAt
+        Instant updatedAt,
+        boolean trackStock      // Story 17.12 — same payload as the catalog product
 ) {
     public static ProductThresholdResponseDto from(ProductView p) {
         return new ProductThresholdResponseDto(
                 p.id(), p.name(), p.description(), p.sku(), p.categoryId(),
                 p.price(), p.buyPrice(), p.transportCost(), p.stockQuantity(),
                 p.archived(), p.status(), p.minimumThreshold(),
-                p.createdAt(), p.updatedAt());
+                p.createdAt(), p.updatedAt(), p.trackStock());
     }
 }

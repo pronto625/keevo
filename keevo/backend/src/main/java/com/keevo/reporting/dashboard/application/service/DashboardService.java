@@ -165,7 +165,7 @@ public class DashboardService implements GetDashboardSummaryUseCase {
     private int countLowStock() {
         Integer result = jdbc.queryForObject(
                 "SELECT COUNT(DISTINCT sl.product_id) FROM stock_levels sl " +
-                "INNER JOIN products p ON p.id = sl.product_id AND p.archived = false " +
+                "INNER JOIN products p ON p.id = sl.product_id AND p.archived = false AND p.track_stock = true " +
                 "WHERE sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)",
                 Integer.class);
         return result != null ? result : 0;

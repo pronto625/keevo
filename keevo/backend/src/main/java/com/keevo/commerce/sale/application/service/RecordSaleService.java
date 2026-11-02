@@ -84,6 +84,8 @@ public class RecordSaleService implements RecordSaleUseCase {
         if (!isPending && !command.allowNegativeStock()) {
             // Stock availability check for each item (only for COMPLETED sales)
             for (var item : command.items()) {
+                // Story 17.12: an untracked product (setting off or inventory module off) is sold without stock
+                if (stockQuery.isUntracked(tenantSchema, item.productId())) continue;
                 int available = getAvailableStock(tenantSchema, item.productId(), item.variantId(), command.storeId());
                 if (available < item.quantity()) {
                     throw new DomainException(ErrorCode.INSUFFICIENT_STOCK,
@@ -100,7 +102,8 @@ public class RecordSaleService implements RecordSaleUseCase {
         saleRepository.save(sale);
 
         if (!isPending) {
-            // Decrement stock for each item (only for COMPLETED sales)
+            // Decrement stock for each item (only for COMPLETED sales). Story 17.12: the inventory skips the
+            // lines of untracked products (no movement, no stock row) — a mixed sale only moves tracked lines.
             // v1s-13-8: the SALE movement id is the (client-generated) sale item id on both
             // sides, so the device's pull upserts its own movement row instead of adding a
             // second one. itemId null → server-generated.

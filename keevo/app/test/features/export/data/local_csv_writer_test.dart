@@ -32,6 +32,7 @@ void main() {
         0,
         null,
         3,
+        null, // trackStock (17.12): empty on the device
         'A; B',
         true,
         DateTime.utc(2026, 10, 12, 23, 30),
@@ -55,11 +56,11 @@ void main() {
     expect(
         lines.first,
         'Référence;Nom;Catégorie;Statut;Prix de vente;'
-        'Prix d\'achat;Frais de transport;Seuil minimum;Stock;Fournisseurs;'
+        'Prix d\'achat;Frais de transport;Seuil minimum;Stock;Suivi du stock;Fournisseurs;'
         'Archivé;Créé le;Modifié le');
     expect(
         lines[1],
-        "p-1;'=SUM(A1);Tissus;Actif;1500;1000;0;;3;\"A; B\";Oui;"
+        "p-1;'=SUM(A1);Tissus;Actif;1500;1000;0;;3;;\"A; B\";Oui;"
         '13/10/2026 00:30:00;13/10/2026 00:30:00');
     expect(lines, hasLength(5)); // header + 3 rows + trailing empty
     expect(lines.last, '');

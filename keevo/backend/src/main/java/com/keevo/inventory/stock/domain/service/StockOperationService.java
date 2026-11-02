@@ -79,6 +79,7 @@ public class StockOperationService {
      * @return the saved StockMovement record
      * @throws DomainException PRODUCT_NOT_FOUND if product does not exist
      * @throws DomainException INSUFFICIENT_STOCK if quantityAfter would be negative
+     * @throws DomainException STOCK_NOT_TRACKED if the product's stock tracking is off (Story 17.12)
      */
     @Transactional
     public StockMovement recordOperation(UUID productId, UUID variantId, UUID storeId,
@@ -131,6 +132,10 @@ public class StockOperationService {
         var product = productQuery.findById(TenantContext.getCurrentTenant(), productId)
                 .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
                         "Product not found: " + productId));
+        // Story 17.12: no movement at all on an untracked product — its levels stay frozen. Sales of such a
+        // product never get here (StockCommandAdapter skips them); entries, adjustments, transfers and
+        // inventory adjustments are refused with a stable code.
+        StockTrackingPolicy.requireTracked(product);
 
         // 2. Load current stock level (creating one at 0 if first operation)
         StockLevel currentLevel;

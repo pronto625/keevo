@@ -109,6 +109,22 @@ class SaleValidationCascadeServiceTest {
                 .allSatisfy(l -> assertThat(l.unitPrice()).isEqualTo(3000));
     }
 
+    // Story 17.12 — an untracked item never blocks the cascade (no stock to wait for, none read)
+    @Test
+    void onProductActivated_untrackedItemWithNoStock_validatesSale() {
+        Sale pending = pendingSaleWith(PRODUCT_A, PRODUCT_B);
+        when(saleRepository.findPendingByProductId(PRODUCT_A)).thenReturn(List.of(pending));
+        when(productStatusPort.getProductStatus(PRODUCT_A)).thenReturn("ACTIVE");
+        when(productStatusPort.getProductStatus(PRODUCT_B)).thenReturn("ACTIVE");
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), PRODUCT_A, null, STORE_ID)).thenReturn(4);
+        lenient().when(stockQuery.isUntracked(TenantContext.getCurrentTenant(), PRODUCT_B)).thenReturn(true);
+
+        service.onProductActivated(PRODUCT_A, ACTOR_ID);
+
+        verify(saleRepository).updateStatusIfCurrent(SALE_ID, SaleStatus.PENDING_VALIDATION, SaleStatus.COMPLETED);
+        verify(stockQuery, never()).availableQuantity(any(), eq(PRODUCT_B), any(), any());
+    }
+
     // 12.2c: the cascade checks the level it decrements — the item's variant — as RecordSaleService.
     private Sale pendingVariantSale(UUID variantId, UUID itemId) {
         var items = List.of(new SaleItem(itemId, SALE_ID, PRODUCT_A, variantId, "Produit A — Rouge", 3000, 3000, 1));

@@ -50,6 +50,7 @@ class ExecuteTransferServiceTest {
     @Mock private StockTransferRepository transferRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private TransactionLockPort transactionLock;
+    @Mock private com.keevo.catalog.api.ProductQueryPort productQuery; // 17.12: unknown product → no tracking check
 
     private TransferValidationStrategy validationStrategy;
     private ExecuteTransferService service;
@@ -78,7 +79,7 @@ class ExecuteTransferServiceTest {
         validationStrategy = new DefaultTransferValidationStrategy();
         service = new ExecuteTransferService(
             StoreApiTestSupport.queryPort(storeRepository), stockLevelRepository, stockOperationService,
-            transferRepository, validationStrategy, eventPublisher, transactionLock
+            transferRepository, validationStrategy, eventPublisher, transactionLock, productQuery
         );
     }
 

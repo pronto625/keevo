@@ -35,4 +35,15 @@ public interface ProductCommandPort {
      * @throws IllegalArgumentException if the threshold is negative
      */
     ProductView changeMinimumThreshold(String tenantSchema, UUID productId, int threshold);
+
+    /**
+     * Story 17.12 — turns the product's stock tracking on or off (all variants, all stores). OWNER only; a real
+     * change is audited (« Suivi du stock activé / désactivé »); the same value is a no-op (conditional update:
+     * of two concurrent identical calls, only one reports {@code changed}). Stock levels are never touched here:
+     * disabling freezes them, re-enabling resumes from them (no level = 0).
+     *
+     * @throws com.keevo.shared.domain.exception.DomainException PRODUCT_NOT_FOUND, FORBIDDEN (not the owner),
+     *         MODULE_NOT_ENTITLED (inventory DISABLED), TRANSFER_IN_TRANSIT (disable with a transfer in transit)
+     */
+    StockTrackingUpdate setStockTracking(String tenantSchema, UUID productId, boolean tracked, UUID actorId, String actorRole);
 }

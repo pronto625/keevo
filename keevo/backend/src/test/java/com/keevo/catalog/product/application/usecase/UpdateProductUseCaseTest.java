@@ -48,11 +48,12 @@ class UpdateProductUseCaseTest {
             new com.keevo.shared.capability.entitlement.PlanView(com.keevo.identity.api.PlanType.FREE, true, null, 1, 500, 2);
 
     private UpdateProductUseCase useCase;
+    @Mock private SetProductStockTrackingUseCase stockTracking; // Story 17.12
 
     @BeforeEach
     void setUp() {
         useCase = new UpdateProductUseCase(productRepository, eventPublisher, objectMapper, productCountPort,
-                tenantPlanQuery, planLimit, transactionLock);
+                tenantPlanQuery, planLimit, transactionLock, stockTracking);
         lenient().when(tenantPlanQuery.findCurrentPlan(any())).thenReturn(Optional.of(free));
     }
 
@@ -117,6 +118,73 @@ class UpdateProductUseCaseTest {
                 3700, null, null, null, UUID.randomUUID(), "OWNER");
         DomainException ex = assertThrows(DomainException.class, () -> useCase.execute(blank));
         assertEquals(ErrorCode.VALIDATION_ERROR, ex.getErrorCode());
+    }
+
+    // Story 17.12 — the setting survives a plain edit; a change goes through the tracking use case
+    @Test
+    void trackStock_keptWhenAbsent() {
+        var productId = UUID.randomUUID();
+        var untracked = new Product(productId, "Livraison", null, "KEV-LIVR01", null,
+                500, 0, 0, 7, false, ProductStatus.ACTIVE, 0, false, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(untracked));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var kept = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                700, null, null, 9, UUID.randomUUID(), "EMPLOYEE"));
+
+        assertFalse(kept.isTrackStock());
+        assertEquals(0, kept.getStockQuantity()); // legacy column never written for an untracked product
+        verifyNoInteractions(stockTracking);
+    }
+
+    @Test
+    void trackStockOnly_goesThroughTheTrackingUseCase_noProductUpdatedEntry() {
+        var productId = UUID.randomUUID();
+        var actor = UUID.randomUUID();
+        var tracked = new Product(productId, "Huile", "Bidon", "KEV-HUIL01", null,
+                500, 0, 0, null, false, ProductStatus.DRAFT, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(tracked));
+
+        useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                null, null, null, null, actor, "OWNER", false));
+
+        verify(stockTracking).execute(productId, false, actor, "OWNER");
+        verify(productRepository, never()).save(any());
+        verifyNoInteractions(eventPublisher); // no « Produit modifié », no draft promotion
+    }
+
+    @Test
+    void trackStockSameValueOnly_isANoOp() {
+        var productId = UUID.randomUUID();
+        var tracked = new Product(productId, "Huile", null, "KEV-HUIL01", null,
+                500, 0, 0, null, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(tracked));
+
+        useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                null, null, null, null, UUID.randomUUID(), "EMPLOYEE", true));
+
+        verifyNoInteractions(stockTracking, eventPublisher);
+        verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    void trackStockWithOtherChanges_trackingFirst_thenOneProductUpdatedEntry() {
+        var productId = UUID.randomUUID();
+        var actor = UUID.randomUUID();
+        var tracked = new Product(productId, "Huile", null, "KEV-HUIL01", null,
+                500, 0, 0, null, false, ProductStatus.ACTIVE, Instant.now(), Instant.now());
+        var untracked = new Product(productId, "Huile", null, "KEV-HUIL01", null,
+                500, 0, 0, null, false, ProductStatus.ACTIVE, 0, false, Instant.now(), Instant.now());
+        when(productRepository.findById(productId)).thenReturn(Optional.of(tracked), Optional.of(untracked));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var saved = useCase.execute(new UpdateProductUseCase.UpdateProductDto(productId, null, null, null, null,
+                900, null, null, null, actor, "OWNER", false));
+
+        verify(stockTracking).execute(productId, false, actor, "OWNER");
+        assertFalse(saved.isTrackStock());
+        assertEquals(900, saved.getPriceValue());
+        verify(eventPublisher).publishEvent(isA(com.keevo.shared.event.catalog.product.ProductUpdatedEvent.class));
     }
 
     @Test

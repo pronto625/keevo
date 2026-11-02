@@ -40,6 +40,7 @@ public class UpdateProductUseCase {
     private final TenantPlanQuery             tenantPlanQuery;
     private final PlanLimitCheck              planLimit;
     private final TransactionLockPort         transactionLock;
+    private final SetProductStockTrackingUseCase stockTracking; // Story 17.12
 
     public UpdateProductUseCase(ProductRepository productRepository,
                                 ApplicationEventPublisher eventPublisher,
@@ -47,7 +48,9 @@ public class UpdateProductUseCase {
                                 ProductCountPort productCountPort,
                                 TenantPlanQuery tenantPlanQuery,
                                 PlanLimitCheck planLimit,
-                                TransactionLockPort transactionLock) {
+                                TransactionLockPort transactionLock,
+                                SetProductStockTrackingUseCase stockTracking) {
+        this.stockTracking     = stockTracking;
         this.productRepository = productRepository;
         this.eventPublisher    = eventPublisher;
         this.objectMapper      = objectMapper;
@@ -75,10 +78,25 @@ public class UpdateProductUseCase {
         Integer transportCost,
         Integer stockQuantity,
         UUID    actorId,
-        String  actorRole     // "OWNER" or "EMPLOYEE" — Story 2.4 draft promotion guard
+        String  actorRole,    // "OWNER" or "EMPLOYEE" — Story 2.4 draft promotion guard
+        Boolean trackStock    // Story 17.12 — null keeps the current setting; a change is OWNER-only + audited
     ) {
         // v1s-12-10: the 10-arg constructor defaulting actorRole to "OWNER" was removed
         // (fail open — any caller skipped the draft guard). Callers pass the real role.
+
+        /** Story 17.12 — the edit carries nothing but the stock-tracking setting. */
+        public boolean onlyTrackStock() {
+            return name == null && description == null && sku == null && categoryId == null && price == null
+                    && buyPrice == null && transportCost == null && stockQuantity == null;
+        }
+
+        /** Without the stock-tracking setting (unchanged). */
+        public UpdateProductDto(UUID id, String name, String description, String sku, UUID categoryId,
+                                Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
+                                UUID actorId, String actorRole) {
+            this(id, name, description, sku, categoryId, price, buyPrice, transportCost, stockQuantity,
+                    actorId, actorRole, null);
+        }
     }
 
     @Transactional
@@ -87,6 +105,19 @@ public class UpdateProductUseCase {
         var existing = productRepository.findById(dto.id())
             .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
                     "Product not found: " + dto.id()));
+
+        // Story 17.12: a tracking change goes through the single tracking path (owner, inventory gate, conditional
+        // update, one « Suivi du stock … » audit). Absent or same value = unchanged (V1 clients never send it).
+        if (dto.trackStock() != null && dto.trackStock() != existing.isTrackStock()) {
+            stockTracking.execute(dto.id(), dto.trackStock(), dto.actorId(), dto.actorRole());
+            if (dto.onlyTrackStock()) {
+                // tracking was the only change: no « Produit modifié » entry, no promotion, nothing else written
+                return productRepository.findById(dto.id()).orElseThrow();
+            }
+            existing = productRepository.findById(dto.id()).orElseThrow();
+        } else if (dto.onlyTrackStock() && dto.trackStock() != null) {
+            return existing; // same value, nothing else: no-op
+        }
 
         // PATCH: an absent name keeps the current one; a blank one is invalid.
         // (Device test: a price-only PATCH answered « Produit introuvable ».)
@@ -131,10 +162,13 @@ public class UpdateProductUseCase {
             dto.price() != null ? dto.price() : existing.getPriceValue(),
             dto.buyPrice() != null ? dto.buyPrice() : existing.getBuyPriceValue(),
             dto.transportCost() != null ? dto.transportCost() : existing.getTransportCostValue(),
-            dto.stockQuantity() != null ? dto.stockQuantity() : existing.getStockQuantity(),
+            // 17.12: the legacy stock column is never written for an untracked product
+            !existing.isTrackStock() ? null
+                    : dto.stockQuantity() != null ? dto.stockQuantity() : existing.getStockQuantity(),
             existing.getArchived(),
             resolvedStatus,
             existing.getMinimumThreshold(),
+            existing.isTrackStock(),
             existing.getCreatedAt(),
             Instant.now() // updatedAt refreshed
         );

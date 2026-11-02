@@ -34,7 +34,7 @@ public class ProductDeltaProvider implements DeltaEntityProvider {
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
-                "id, name, price, buy_price, transport_cost, sku, category_id, description, photo_url, archived, status, stock_quantity, created_at, updated_at, minimum_threshold",
+                "id, name, price, buy_price, transport_cost, sku, category_id, description, photo_url, archived, status, stock_quantity, created_at, updated_at, minimum_threshold, track_stock",
                 "products", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
@@ -58,6 +58,8 @@ public class ProductDeltaProvider implements DeltaEntityProvider {
         // Product-wide low-stock threshold (where the backend stores it) — lets the app
         // apply it offline even in a store where the product has no stock_levels row yet.
         map.put("minimumThreshold", row.length > 14 ? DeltaValues.num(row[14]) : 0);
+        // Story 17.12 — per-product stock tracking (false: sold without stock); a missing value means tracked.
+        map.put("trackStock", row.length > 15 ? !Boolean.FALSE.equals(row[15]) : Boolean.TRUE);
         return map;
     }
 

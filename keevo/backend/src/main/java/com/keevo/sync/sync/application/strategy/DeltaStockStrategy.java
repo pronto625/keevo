@@ -9,6 +9,7 @@ import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.sync.sync.domain.port.in.ConflictResolutionStrategy;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
+import com.keevo.inventory.api.StockQueryPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
@@ -25,10 +26,13 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
 
     private final EntityManager entityManager;
     private final ApplicationEventPublisher eventPublisher;
+    private final StockQueryPort stockQuery; // Story 17.12 — untracked products are never a stock conflict
 
-    public DeltaStockStrategy(EntityManager entityManager, ApplicationEventPublisher eventPublisher) {
+    public DeltaStockStrategy(EntityManager entityManager, ApplicationEventPublisher eventPublisher,
+                              StockQueryPort stockQuery) {
         this.entityManager = entityManager;
         this.eventPublisher = eventPublisher;
+        this.stockQuery = stockQuery;
     }
 
     @Override
@@ -46,6 +50,8 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
         // negative is reported (one conflict per operation).
         ConflictResult negative = null;
         for (StockTouch touch : touches) {
+            // Story 17.12: an untracked product was not moved — its frozen level (even negative) is no conflict
+            if (isUntracked(tenantId, touch.productId())) continue;
             Integer currentStock = queryCurrentStock(tenantId, touch.productId(), touch.variantId(), storeId);
             if (currentStock == null) continue;
 
@@ -77,6 +83,14 @@ public class DeltaStockStrategy implements ConflictResolutionStrategy {
 
         if (negative != null) return negative;
         return new ConflictResult(null, "DELTA_SUM", null);
+    }
+
+    private boolean isUntracked(String tenantId, String productId) {
+        try {
+            return stockQuery.isUntracked(tenantId, UUID.fromString(productId));
+        } catch (IllegalArgumentException e) {
+            return false; // not a UUID: the usual (null-stock) path applies
+        }
     }
 
     /** One (product, variant) stock level touched by the operation, with its summed delta. */

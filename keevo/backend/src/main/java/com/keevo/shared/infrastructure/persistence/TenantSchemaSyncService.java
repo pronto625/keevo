@@ -287,6 +287,8 @@ public class TenantSchemaSyncService {
             // Story v1s-13-5 / v1s-13-12 — movement_type CHECK must accept SALE_CANCELLED on old tenants
             stmt.execute(TenantSchemaProvisioner.DDL_STOCK_MOVEMENTS_MIGRATE_SALE_CANCELLED);
             stmt.execute(TenantSchemaProvisioner.DDL_PRODUCTS_UQ_NAME);
+            // Story 17.12 — products.track_stock (default true: existing products stay tracked)
+            stmt.execute(TenantSchemaProvisioner.DDL_PRODUCTS_MIGRATE_TRACK_STOCK);
             stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PRODUCT);
             stmt.execute(TenantSchemaProvisioner.DDL_DRAFT_NOTIFICATIONS_IDX_PENDING);
             // Story 4.3 — expand CHECK constraint to include PENDING_VALIDATION

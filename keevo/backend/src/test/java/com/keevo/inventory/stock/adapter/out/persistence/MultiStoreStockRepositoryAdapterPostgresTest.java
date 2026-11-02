@@ -54,7 +54,7 @@ class MultiStoreStockRepositoryAdapterPostgresTest {
                 + " type varchar(20) NOT NULL, is_active boolean NOT NULL, created_at timestamptz NOT NULL)");
         jdbc.execute("CREATE TABLE " + SCHEMA + ".products (id uuid PRIMARY KEY, name varchar(200) NOT NULL,"
                 + " price integer NOT NULL, archived boolean NOT NULL,"
-                + " minimum_threshold integer NOT NULL DEFAULT 0)");
+                + " minimum_threshold integer NOT NULL DEFAULT 0, track_stock boolean NOT NULL DEFAULT true)");
         jdbc.execute("CREATE TABLE " + SCHEMA + ".stock_levels (id uuid PRIMARY KEY, product_id uuid NOT NULL,"
                 + " variant_id uuid, store_id uuid NOT NULL, quantity integer NOT NULL,"
                 + " minimum_threshold integer NOT NULL DEFAULT 0, updated_at timestamptz NOT NULL)");
@@ -144,5 +144,23 @@ class MultiStoreStockRepositoryAdapterPostgresTest {
         StoreStockSummary entrepot = overviews.stream().filter(o -> o.storeId().equals(otherStore)).findFirst().orElseThrow();
         assertThat(entrepot.productCount()).isEqualTo(1);
         assertThat(entrepot.lowStockCount()).isZero();        // 7 > default threshold 5; others never stocked
+    }
+
+    @Test
+    // Story 17.12: a product without stock tracking is absent from the store detail, the low-stock count and the value.
+    void untrackedProduct_isAbsentFromDetailOverviewAndValue() {
+        UUID untracked = UUID.randomUUID();
+        jdbc.update("INSERT INTO " + SCHEMA + ".products VALUES (?, 'Livraison', 1000, false, 0, false)", untracked);
+        level(untracked, store, -4); // frozen level of a product whose tracking was turned off
+
+        Page<StoreProductStockEntry> page = adapter.getStoreStockDetail(store, false, false, PageRequest.of(0, 25));
+        assertThat(find(page, untracked)).isNull();
+        assertThat(page.getTotalElements()).isEqualTo(3);
+
+        StoreStockSummary boutique = adapter.getStoreOverviews().stream()
+                .filter(o -> o.storeId().equals(store)).findFirst().orElseThrow();
+        assertThat(boutique.productCount()).isEqualTo(2);
+        assertThat(boutique.lowStockCount()).isEqualTo(1);
+        assertThat(boutique.totalValueXaf()).isEqualTo(10 * 100 + (-1) * 300);
     }
 }

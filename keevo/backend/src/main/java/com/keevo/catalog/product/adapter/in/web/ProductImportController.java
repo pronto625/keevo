@@ -136,7 +136,8 @@ public class ProductImportController {
                 mappingRequest.categoryColumn(),
                 mappingRequest.skuColumn(),
                 mappingRequest.quantityColumn(),
-                mappingRequest.thresholdColumn()
+                mappingRequest.thresholdColumn(),
+                mappingRequest.trackStockColumn()
         );
 
         var command = new ImportCsvProductsUseCase.ImportCsvCommand(

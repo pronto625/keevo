@@ -30,10 +30,12 @@ public class GenerateCsvTemplateUseCase {
     private static byte[] buildTemplate() {
         var baos = new ByteArrayOutputStream();
         try (var pw = new PrintWriter(new OutputStreamWriter(baos, StandardCharsets.UTF_8))) {
-            pw.println("nom,prix_vente,prix_achat,cout_transport,categorie,sku,quantite_initiale,seuil_min");
-            pw.println("Coca-Cola 33cl,150,80,0,Boissons,KEV-COCA01,100,10");
-            pw.println("Pain de mie,200,120,15,Épicerie,,50,5");
-            pw.println("Lait demi-écrémé 1L,350,200,0,Produits laitiers,,0,0");
+            // Story 17.12 — suivi_stock: oui (default when blank) / non (sold without stock)
+            pw.println("nom,prix_vente,prix_achat,cout_transport,categorie,sku,quantite_initiale,seuil_min,suivi_stock");
+            pw.println("Coca-Cola 33cl,150,80,0,Boissons,KEV-COCA01,100,10,oui");
+            pw.println("Pain de mie,200,120,15,Épicerie,,50,5,oui");
+            pw.println("Lait demi-écrémé 1L,350,200,0,Produits laitiers,,0,0,oui");
+            pw.println("Livraison à domicile,500,0,0,,,,,non");
         }
         return baos.toByteArray();
     }

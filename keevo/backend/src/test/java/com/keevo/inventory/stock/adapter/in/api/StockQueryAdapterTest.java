@@ -34,6 +34,7 @@ class StockQueryAdapterTest {
 
     @Mock private StockLevelRepository stockLevelRepository;
     @Mock private com.keevo.inventory.stock.domain.port.out.StockMovementRepository stockMovementRepository;
+    @Mock private com.keevo.inventory.stock.domain.service.StockTrackingPolicy trackingPolicy;
 
     private StockQueryAdapter adapter;
 
@@ -43,7 +44,7 @@ class StockQueryAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new StockQueryAdapter(stockLevelRepository, stockMovementRepository);
+        adapter = new StockQueryAdapter(stockLevelRepository, stockMovementRepository, trackingPolicy);
     }
 
     private static StockLevel level(UUID variantId, int qty) {

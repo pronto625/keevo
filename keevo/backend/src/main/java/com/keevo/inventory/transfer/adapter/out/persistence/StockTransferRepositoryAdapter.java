@@ -65,6 +65,11 @@ public class StockTransferRepositoryAdapter implements StockTransferRepository {
         return springRepository.transitionStatus(transferId, expectedStatus, newStatus) > 0;
     }
 
+    @Override
+    public boolean existsInTransitForProduct(UUID productId) {
+        return springRepository.existsByProductIdAndStatus(productId, TransferStatus.IN_TRANSIT);
+    }
+
     // ── Specification builder ────────────────────────────────────────────────
 
     private Specification<StockTransferJpaEntity> buildSpec(

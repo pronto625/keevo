@@ -40,7 +40,10 @@ public class FullScopeResolver implements InventoryScopeResolver {
     public List<InventoryProductRow> resolveProducts(UUID storeId, List<UUID> categoryIds,
                                                       List<InventoryCount> existingCounts) {
         String tenantSchema = TenantContext.getCurrentTenant();
-        List<ProductView> products = productQuery.findAllActive(tenantSchema);
+        // Story 17.12: products without stock tracking are never counted
+        List<ProductView> products = productQuery.findAllActive(tenantSchema).stream()
+                .filter(ProductView::trackStock)
+                .toList();
         if (products.isEmpty()) return List.of();
 
         List<StockLevel> stockLevels = stockLevelRepository.findAllByStoreId(storeId);

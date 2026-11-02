@@ -64,6 +64,8 @@ const auditActionLabels = <String, String>{
   'STOCK_FORCED_ZERO': 'Stock forcé à zéro',
   'STOCK_THRESHOLD_BREACHED': 'Alerte de stock bas',
   'STOCK_THRESHOLD_UPDATED': 'Seuil d\'alerte modifié',
+  'STOCK_TRACKING_DISABLED': 'Suivi du stock désactivé',
+  'STOCK_TRACKING_ENABLED': 'Suivi du stock activé',
   'STORE_CREATED': 'Boutique créée',
   'STORE_DEACTIVATED': 'Boutique désactivée',
   'STORE_REACTIVATED': 'Boutique réactivée',

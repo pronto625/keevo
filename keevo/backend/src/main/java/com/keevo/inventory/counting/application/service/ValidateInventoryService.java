@@ -2,6 +2,7 @@ package com.keevo.inventory.counting.application.service;
 
 import com.keevo.inventory.stock.domain.entity.MovementType;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
+import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.inventory.stock.domain.service.StockOperationService;
 import com.keevo.shared.event.catalog.counting.InventoryValidatedEvent;
 import com.keevo.inventory.counting.domain.model.InventoryCount;
@@ -42,12 +43,15 @@ public class ValidateInventoryService implements ValidateInventoryUseCase {
     private final StockOperationService stockOperationService;
     private final StockLevelRepository stockLevelRepo;
     private final ApplicationEventPublisher eventPublisher;
+    private final ProductQueryPort productQuery; // Story 17.12 — untracked products are never adjusted
 
     public ValidateInventoryService(InventorySessionRepository sessionRepo,
                                      InventoryCountRepository countRepo,
                                      StockOperationService stockOperationService,
                                      StockLevelRepository stockLevelRepo,
-                                     ApplicationEventPublisher eventPublisher) {
+                                     ApplicationEventPublisher eventPublisher,
+                                     ProductQueryPort productQuery) {
+        this.productQuery = productQuery;
         this.sessionRepo = sessionRepo;
         this.countRepo = countRepo;
         this.stockOperationService = stockOperationService;
@@ -79,6 +83,9 @@ public class ValidateInventoryService implements ValidateInventoryUseCase {
 
             int ecart = count.getEcart(); // physical - theoretical
             if (ecart == 0) continue;      // AC3: skip concordant products
+            // Story 17.12: a product whose tracking was turned off after it was counted keeps its frozen
+            // level — its count is ignored, the rest of the session is validated.
+            if (isUntracked(count.getProductId())) continue;
 
             // Apply the gap measured at count time on top of the current stock: sales and
             // entries recorded between the count and this validation stay counted (an absolute
@@ -123,6 +130,12 @@ public class ValidateInventoryService implements ValidateInventoryUseCase {
                 session.getId(), adjustmentsApplied,
                 session.getStatus(), session.getCompletedAt()
         );
+    }
+
+    private boolean isUntracked(UUID productId) {
+        return productQuery.findById(TenantContext.getCurrentTenant(), productId)
+                .map(p -> !p.trackStock())
+                .orElse(false);
     }
 
     private int loadCurrentStockQuantity(UUID productId, UUID variantId, UUID storeId) {

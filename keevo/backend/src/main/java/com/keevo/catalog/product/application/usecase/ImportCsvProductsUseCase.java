@@ -207,10 +207,16 @@ public class ImportCsvProductsUseCase {
                 // Create product via use case (saves + publishes ProductCreatedEvent)
                 var saved = createProductUseCase.execute(dto);
 
-                // Stock movement if initial quantity > 0
-                InitialStockPort stockPort = dto.stockQuantity() != null && dto.stockQuantity() > 0
-                        ? initialStockPort.getIfAvailable() : null;
-                if (dto.stockQuantity() != null && dto.stockQuantity() > 0 && stockPort == null
+                // Stock movement if initial quantity > 0 — Story 17.12: never for an untracked product
+                // (« suivi_stock » = non): no stock row, the quantity column is ignored.
+                boolean wantsInitialStock = saved.isTrackStock()
+                        && dto.stockQuantity() != null && dto.stockQuantity() > 0;
+                if (!saved.isTrackStock() && dto.stockQuantity() != null && dto.stockQuantity() > 0) {
+                    builder.addWarning(new CsvRowError(lineNumber, "Quantité initiale",
+                            "Quantité initiale ignorée : produit sans suivi de stock"));
+                }
+                InitialStockPort stockPort = wantsInitialStock ? initialStockPort.getIfAvailable() : null;
+                if (wantsInitialStock && stockPort == null
                         && missingStockPortLogged.compareAndSet(false, true)) {
                     log.warn("CSV import: no stock module available — products are imported without initial stock");
                 }

@@ -323,4 +323,21 @@ class StockOperationServiceTest {
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().counterpartStoreName()).isNull();
     }
+
+    // ── Story 17.12: untracked product ─────────────────────────────────────
+
+    @Test
+    void untrackedProduct_anyMovement_isRefused_nothingWritten() {
+        ProductView untracked = new ProductView(PRODUCT_ID, "Livraison", null, "KEV-LIVR01", null, 500, 0, 0, 0,
+                false, com.keevo.catalog.api.ProductState.ACTIVE, 0, Instant.now(), Instant.now(), false);
+        when(productQuery.findById(TenantContext.getCurrentTenant(), PRODUCT_ID)).thenReturn(Optional.of(untracked));
+
+        for (MovementType type : MovementType.values()) {
+            assertThatThrownBy(() -> service.recordOperation(PRODUCT_ID, null, STORE_ID, type, 1, ACTOR_ID, "x"))
+                    .isInstanceOf(DomainException.class)
+                    .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
+                            .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.STOCK_NOT_TRACKED));
+        }
+        verifyNoInteractions(stockLevelRepository, stockMovementRepository, eventPublisher);
+    }
 }

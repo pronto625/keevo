@@ -44,6 +44,8 @@ class StockCommandAdapterTest {
     @Mock private StockOperationService stockOperationService;
     @Mock private AdjustStockUseCase adjustStockUseCase;
     @Mock private RecordStockEntryUseCase recordStockEntryUseCase;
+    @Mock private com.keevo.inventory.stock.domain.service.StockTrackingPolicy trackingPolicy; // 17.12: default tracked
+    @Mock private com.keevo.inventory.stock.application.usecase.ChangeStockTrackingUseCase changeStockTracking;
 
     private StockCommandAdapter adapter;
 
@@ -55,7 +57,8 @@ class StockCommandAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new StockCommandAdapter(stockOperationService, adjustStockUseCase, recordStockEntryUseCase);
+        adapter = new StockCommandAdapter(stockOperationService, adjustStockUseCase, recordStockEntryUseCase,
+                trackingPolicy, changeStockTracking);
     }
 
     @Test
@@ -126,5 +129,28 @@ class StockCommandAdapterTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> adapter.adjustTo(null, java.util.UUID.randomUUID(), null, java.util.UUID.randomUUID(), 3, java.util.UUID.randomUUID(), null, null))
                 .isInstanceOf(IllegalStateException.class);
         org.mockito.Mockito.verifyNoInteractions(stockOperationService, adjustStockUseCase, recordStockEntryUseCase);
+    }
+
+    // Story 17.12 — the sale side never moves the stock of an untracked product, and never fails because of it
+    @ParameterizedTest
+    @EnumSource(StockMovementKind.class)
+    void recordMovement_untrackedProduct_isSkippedSilently(StockMovementKind kind) {
+        when(trackingPolicy.isUntracked(TenantContext.getCurrentTenant(), PRODUCT)).thenReturn(true);
+
+        adapter.recordMovement(TenantContext.getCurrentTenant(), new StockMovementInput(PRODUCT, null, STORE, kind,
+                -2, ACTOR, "Vente 1", MOVEMENT, true));
+
+        verifyNoInteractions(stockOperationService);
+    }
+
+    @Test
+    void changeTracking_delegatesToTheUseCase() {
+        var change = new com.keevo.inventory.api.StockTrackingChange(PRODUCT, true, 12, STORE, MOVEMENT, ACTOR, "OWNER");
+
+        when(changeStockTracking.execute(change)).thenReturn(
+                new com.keevo.inventory.stock.application.usecase.ChangeStockTrackingUseCase.Result(null, null));
+
+        assertThat(adapter.changeTracking(TenantContext.getCurrentTenant(), change)).isFalse(); // no entry recorded
+        verify(changeStockTracking).execute(change);
     }
 }

@@ -26,5 +26,6 @@ public record CsvColumnMappingRequestDto(
         String categoryColumn,
         String skuColumn,
         String quantityColumn,
-        String thresholdColumn
+        String thresholdColumn,
+        String trackStockColumn   // Story 17.12 — optional; null → « suivi_stock » when present
 ) {}

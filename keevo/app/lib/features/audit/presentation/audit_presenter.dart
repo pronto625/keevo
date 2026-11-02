@@ -238,6 +238,18 @@ class AuditPresenter {
         Icons.exposure_zero_rounded,
         AuditCategory.stock,
         fallbackObject: _product),
+    'STOCK_TRACKING_ENABLED': AuditActionInfo(
+        'Suivi du stock activé',
+        'activé le suivi du stock de',
+        Icons.inventory_2_outlined,
+        AuditCategory.stock,
+        fallbackObject: _product),
+    'STOCK_TRACKING_DISABLED': AuditActionInfo(
+        'Suivi du stock désactivé',
+        'désactivé le suivi du stock de',
+        Icons.block_outlined,
+        AuditCategory.stock,
+        fallbackObject: _product),
     // Contacts
     'CLIENT_CREATED': AuditActionInfo('Client créé', 'créé le client',
         Icons.person_add_alt_outlined, AuditCategory.contact),

@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 217 — gated: 106, exempt: 111.
+Handlers: 218 — gated: 107, exempt: 111.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -179,6 +179,7 @@ Handlers: 217 — gated: 106, exempt: 111.
 | POST | `/api/v1/products/{id}/photo` | `catalog` | WRITE | — |  | ProductPhotoController#upload |
 | GET | `/api/v1/products/{id}/pricing` | `catalog` | READ | — |  | ProductController#getProductPricing |
 | GET | `/api/v1/products/{productId}/stock` | `inventory` | READ | — |  | StockController#getCurrentStock |
+| PUT | `/api/v1/products/{productId}/stock-tracking` | `inventory` | WRITE | — |  | StockController#changeStockTracking |
 | POST | `/api/v1/products/{productId}/stock/adjust` | `inventory` | WRITE | — |  | StockController#adjustStock |
 | POST | `/api/v1/products/{productId}/stock/entry` | `inventory` | WRITE | — |  | StockController#recordStockEntry |
 | GET | `/api/v1/products/{productId}/stock/history` | `inventory` | READ | — |  | StockController#getHistory |

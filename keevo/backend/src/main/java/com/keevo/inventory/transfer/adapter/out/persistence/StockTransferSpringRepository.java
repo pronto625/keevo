@@ -43,4 +43,7 @@ public interface StockTransferSpringRepository
     int transitionStatusNative(@Param("id") UUID id,
                                @Param("expectedStatus") String expectedStatus,
                                @Param("newStatus") String newStatus);
+
+    /** Story 17.12 — whether the product has a transfer in the given status (e.g. IN_TRANSIT). */
+    boolean existsByProductIdAndStatus(UUID productId, TransferStatus status);
 }

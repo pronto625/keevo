@@ -1964,6 +1964,8 @@ As a **propriétaire**, I want **choisir pour chaque produit s'il suit un stock 
 - Réservé à l'owner (le manager selon les permissions existantes) ; changement audité avec un libellé français (« Suivi du stock activé / désactivé »).
 - App mobile : case « Suivre le stock » dans le formulaire produit (création et modification) ; colonne Drift + migration locale ; opérations de sync existantes enrichies ; bump de `pubspec.yaml`.
 
+- [x] 2026-11-02 (17-12) : API livrée — colonne `products.track_stock` (V38 + DDL tenant, défaut `true`), champ `trackStock` dans l'API produit, le delta `products`, `CREATE_PRODUCT` / `UPDATE_PRODUCT` et l'import CSV (`suivi_stock`) ; ventes / validation / correction / annulation sans contrôle ni mouvement pour un produit non suivi (ou sans module `inventory`) ; exclu des alertes, transferts (`STOCK_NOT_TRACKED`), inventaires, export et valeur de stock ; activation / désactivation par `PUT /api/v1/products/{id}/stock-tracking` et l'opération `SET_PRODUCT_STOCK_TRACKING` (quantité de départ facultative), auditée « Suivi du stock activé / désactivé » (test `StockTrackingFullContextTest`). Le formulaire et le POS relèvent de l'app React Native → section « Mobile » de `spec-17-12-suivi-stock-par-produit.md`, clé `m17-12-suivi-stock-par-produit`.
+
 **Acceptance Criteria:**
 
 **Given** un produit `track_stock=false` sans aucun stock

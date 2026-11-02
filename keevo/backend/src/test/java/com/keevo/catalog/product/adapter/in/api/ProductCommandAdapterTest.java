@@ -55,7 +55,8 @@ class ProductCommandAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new ProductCommandAdapter(createProduct, updateProduct, archiveProduct,
-                unarchiveProduct, createDraftProduct, productRepository, eventPublisher);
+                unarchiveProduct, createDraftProduct, productRepository, eventPublisher,
+                mock(com.keevo.catalog.product.application.usecase.SetProductStockTrackingUseCase.class));
         // 12.2e: the adapter requires an explicit, current tenant schema
         TenantContext.setCurrentTenant("kv_test");
     }

@@ -29,9 +29,11 @@ public final class ImportResult {
     private final List<CsvRowError> errors;
     private final boolean limitReached;
     private final String limitMessage;  // null unless limitReached
+    private final List<CsvRowError> warnings; // Story 17.12 — imported rows with an ignored value
 
     private ImportResult(int imported, int skipped, List<CsvRowError> errors,
-                         boolean limitReached, String limitMessage) {
+                         boolean limitReached, String limitMessage, List<CsvRowError> warnings) {
+        this.warnings     = Collections.unmodifiableList(new ArrayList<>(warnings));
         this.imported     = imported;
         this.skipped      = skipped;
         this.errors       = Collections.unmodifiableList(new ArrayList<>(errors));
@@ -44,6 +46,7 @@ public final class ImportResult {
     public List<CsvRowError> getErrors() { return errors; }
     public boolean isLimitReached() { return limitReached; }
     public String getLimitMessage() { return limitMessage; }
+    public List<CsvRowError> getWarnings() { return warnings; }
 
     // ── Builder ───────────────────────────────────────────────────────────────
 
@@ -51,12 +54,15 @@ public final class ImportResult {
         private int imported     = 0;
         private int skipped      = 0;
         private final List<CsvRowError> errors = new ArrayList<>();
+        private final List<CsvRowError> warnings = new ArrayList<>();
         private boolean limitReached = false;
         private String  limitMessage = null;
 
         public void incrementImported()          { imported++; }
         public void incrementSkipped()           { skipped++; }
         public void addError(CsvRowError error)  { errors.add(error); skipped++; }
+        /** Story 17.12 — the row was imported, one of its values was ignored (never counted as skipped). */
+        public void addWarning(CsvRowError warning) { warnings.add(warning); }
 
         public void markLimitReached(String message) {
             this.limitReached = true;
@@ -67,7 +73,7 @@ public final class ImportResult {
         public int getSkipped()  { return skipped;  }
 
         public ImportResult build() {
-            return new ImportResult(imported, skipped, errors, limitReached, limitMessage);
+            return new ImportResult(imported, skipped, errors, limitReached, limitMessage, warnings);
         }
     }
 }

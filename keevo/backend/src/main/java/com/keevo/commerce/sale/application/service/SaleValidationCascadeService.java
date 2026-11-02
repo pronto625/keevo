@@ -88,6 +88,8 @@ public class SaleValidationCascadeService {
         // Check stock for ALL products (including the trigger product), on the level that is
         // decremented below — the item's variant, null for a simple product (Story 12.2c).
         for (SaleItem item : sale.getItems()) {
+            // Story 17.12: an untracked product never blocks the validation (no stock to wait for)
+            if (stockQuery.isUntracked(tenantId, item.getProductId())) continue;
             int available = stockQuery.availableQuantity(tenantId, item.getProductId(), item.getVariantId(), sale.getStoreId());
             if (available <= 0) {
                 log.warn("Vente #{} en attente : le produit '{}' n'a pas de stock",

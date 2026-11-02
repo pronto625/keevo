@@ -67,4 +67,45 @@ class ProductCsvRowFactoryTest {
         assertThat(e.getColumnName()).isEqualTo("Nom");
         assertThat(e.getMessage()).startsWith("Nom est requis");
     }
+
+    // ── Story 17.12: optional « suivi_stock » column ────────────────────────────
+
+    private Boolean tracked(Map<String, String> row) {
+        return factory.fromRow(row, mapping, 3, UUID.randomUUID(), Map.of()).trackStock();
+    }
+
+    @Test
+    @DisplayName("suivi_stock absent or blank → tracked; oui / non (any case, accents) read as French yes/no")
+    void trackStockColumn() {
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000"))).isTrue();
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000", "suivi_stock", " "))).isTrue();
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000", "suivi_stock", "Oui"))).isTrue();
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000", "suivi_stock", "NON"))).isFalse();
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000", "suivi_stock", "faux"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("suivi_stock with another value → « Suivi du stock » row error in French")
+    void trackStockColumn_invalid() {
+        CsvValidationException e = rejected(Map.of("nom", "Riz", "prix_vente", "1000", "suivi_stock", "peut-être"));
+
+        assertThat(e.getColumnName()).isEqualTo("Suivi du stock");
+        assertThat(e.getMessage()).isEqualTo("Suivi du stock : répondez « oui » ou « non »");
+    }
+
+    @Test
+    @DisplayName("an explicit mapping column is read instead of « suivi_stock »")
+    void trackStockColumn_mapped() {
+        var mapped = new CsvColumnMapping("nom", "prix_vente", null, null, null, null, null, null, "Stock suivi");
+        var dto = factory.fromRow(Map.of("nom", "Riz", "prix_vente", "1000", "Stock suivi", "non"),
+                mapped, 3, UUID.randomUUID(), Map.of());
+        assertThat(dto.trackStock()).isFalse();
+    }
+
+    @Test
+    @DisplayName("the « suivi_stock » header is matched case-insensitively")
+    void trackStockColumn_headerCaseInsensitive() {
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000", "Suivi_Stock", "non"))).isFalse();
+        assertThat(tracked(Map.of("nom", "Riz", "prix_vente", "1000", " SUIVI_STOCK ", "non"))).isFalse();
+    }
 }

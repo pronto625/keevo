@@ -130,7 +130,7 @@ public class WeeklyReportBuilder {
     private int countLowStock(String storeId) {
         return toInt(entityManager.createNativeQuery(
                 "SELECT COUNT(DISTINCT sl.product_id) FROM stock_levels sl " +
-                "JOIN products p ON sl.product_id = p.id " +
+                "JOIN products p ON sl.product_id = p.id AND p.track_stock = true " + // 17.12: untracked never alert
                 "WHERE sl.store_id = CAST(:sid AS UUID) " +
                 "  AND sl.quantity <= COALESCE(NULLIF(p.minimum_threshold, 0), 5)")
                 .setParameter("sid", storeId)

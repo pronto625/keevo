@@ -44,6 +44,8 @@ public final class AuditLabels {
             entry("STOCK_THRESHOLD_UPDATED", "Seuil d'alerte modifié"),
             entry("STOCK_THRESHOLD_BREACHED", "Alerte de stock bas"),
             entry("STOCK_FORCED_ZERO", "Stock forcé à zéro"),
+            entry("STOCK_TRACKING_ENABLED", "Suivi du stock activé"),   // Story 17.12
+            entry("STOCK_TRACKING_DISABLED", "Suivi du stock désactivé"), // Story 17.12
             // Contacts
             entry("CLIENT_CREATED", "Client créé"),
             entry("CLIENT_ARCHIVED", "Client archivé"),

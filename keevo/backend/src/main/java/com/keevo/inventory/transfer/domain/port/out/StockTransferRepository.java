@@ -44,4 +44,7 @@ public interface StockTransferRepository {
      * Story v1s-13-1 (Option A — idempotent completion via conditional UPDATE).
      */
     boolean transitionStatus(UUID transferId, TransferStatus expectedStatus, TransferStatus newStatus);
+
+    /** Story 17.12 — whether a transfer of this product is still in transit. */
+    boolean existsInTransitForProduct(UUID productId);
 }

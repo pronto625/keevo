@@ -42,7 +42,10 @@ public class PartialScopeResolver implements InventoryScopeResolver {
         String tenantSchema = TenantContext.getCurrentTenant();
         if (categoryIds == null || categoryIds.isEmpty()) return List.of();
 
-        List<ProductView> products = productQuery.findByCategoryIds(tenantSchema, categoryIds);
+        // Story 17.12: products without stock tracking are never counted
+        List<ProductView> products = productQuery.findByCategoryIds(tenantSchema, categoryIds).stream()
+                .filter(ProductView::trackStock)
+                .toList();
         if (products.isEmpty()) return List.of();
 
         List<StockLevel> stockLevels = stockLevelRepository.findAllByStoreId(storeId);

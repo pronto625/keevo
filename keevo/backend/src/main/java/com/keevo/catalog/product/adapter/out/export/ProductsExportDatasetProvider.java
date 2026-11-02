@@ -43,6 +43,7 @@ public class ProductsExportDatasetProvider extends NativeKeysetExportDataset {
             new ExportColumn("transportCost", "Frais de transport", ExportColumnType.AMOUNT_XAF),
             new ExportColumn("minimumThreshold", "Seuil minimum", ExportColumnType.INTEGER),
             new ExportColumn("stockQuantity", "Stock", ExportColumnType.INTEGER),
+            new ExportColumn("trackStock", "Suivi du stock", ExportColumnType.BOOLEAN), // Story 17.12
             new ExportColumn("suppliers", "Fournisseurs", ExportColumnType.TEXT),
             new ExportColumn("archived", "Archivé", ExportColumnType.BOOLEAN),
             new ExportColumn("createdAt", "Créé le", ExportColumnType.DATETIME),
@@ -72,8 +73,10 @@ public class ProductsExportDatasetProvider extends NativeKeysetExportDataset {
         String storeClause = filter.storeId() != null ? " AND sl.store_id = CAST(:stockStoreId AS uuid)" : "";
         return "p.sku, p.name, c.name, p.status, p.price, p.buy_price, p.transport_cost,"
                 + " p.minimum_threshold,"
+                // Story 17.12: no stock for a product without stock tracking (empty cell, never its frozen level)
+                + " CASE WHEN p.track_stock THEN"
                 + " (SELECT COALESCE(SUM(sl.quantity), 0) FROM stock_levels sl WHERE sl.product_id = p.id"
-                + storeClause + "),"
+                + storeClause + ") END, p.track_stock,"
                 + " (SELECT STRING_AGG(sup.name, ', ' ORDER BY sup.name) FROM product_suppliers ps"
                 + " JOIN suppliers sup ON sup.id = ps.supplier_id WHERE ps.product_id = p.id),"
                 + " p.archived, p.created_at, p.updated_at";
@@ -97,7 +100,7 @@ public class ProductsExportDatasetProvider extends NativeKeysetExportDataset {
     @Override
     protected List<Object> mapRow(Object[] r) {
         return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), frLabel(STATUS, r[3]),
-                toLong(r[4]), toLong(r[5]), toLong(r[6]), toLong(r[7]), toLong(r[8]), str(r[9]),
-                toBool(r[10]), toInstant(r[11]), toInstant(r[12]));
+                toLong(r[4]), toLong(r[5]), toLong(r[6]), toLong(r[7]), toLong(r[8]), toBool(r[9]), str(r[10]),
+                toBool(r[11]), toInstant(r[12]), toInstant(r[13]));
     }
 }

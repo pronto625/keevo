@@ -155,6 +155,13 @@ public class TenantSchemaProvisioner {
     static final String DDL_PRODUCTS_MIGRATE_MINIMUM_THRESHOLD =
             "ALTER TABLE products ADD COLUMN IF NOT EXISTS minimum_threshold INTEGER NOT NULL DEFAULT 0";
 
+    /**
+     * Migration DDL: adds track_stock to existing products tables (idempotent — Story 17.12). Default true:
+     * existing products stay tracked, behaviour unchanged.
+     */
+    static final String DDL_PRODUCTS_MIGRATE_TRACK_STOCK =
+            "ALTER TABLE products ADD COLUMN IF NOT EXISTS track_stock BOOLEAN NOT NULL DEFAULT TRUE";
+
     private static final String DDL_PRODUCTS_IDX_SKU =
             "CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)";
 
@@ -1120,6 +1127,7 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_PRODUCTS_IDX_ARCHIVED);
             stmt.execute(DDL_PRODUCTS_MIGRATE_TRANSPORT_COST); // idempotent: adds transport_cost if missing
             stmt.execute(DDL_PRODUCTS_MIGRATE_MINIMUM_THRESHOLD); // idempotent: adds minimum_threshold if missing
+            stmt.execute(DDL_PRODUCTS_MIGRATE_TRACK_STOCK); // Story 17.12 — idempotent: adds track_stock if missing
             stmt.execute(DDL_PRODUCTS_UQ_NAME); // Story 2.4 — case-insensitive unique name index
             stmt.execute(DDL_TENANT_PREFERENCES);
             // Story 7.5 — report preference columns (idempotent: adds columns if missing)

@@ -17,6 +17,7 @@ import java.util.regex.Pattern;
  * - archived default false
  * - status default ACTIVE
  * - minimumThreshold non-negative integer (Story 2.3)
+ * - trackStock default true (Story 17.12): false = sold without stock (no check, no movement)
  */
 public class Product {
     private static final Pattern SKU_PATTERN = Pattern.compile("^KEV-[A-Z0-9]{6}$");
@@ -33,6 +34,7 @@ public class Product {
     private final Boolean archived;
     private final ProductStatus status;
     private final int minimumThreshold; // Story 2.3 — stock alert threshold
+    private final boolean trackStock; // Story 17.12 — per-product stock tracking (default true)
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -48,11 +50,22 @@ public class Product {
     }
 
     /**
-     * Full constructor with minimumThreshold (Story 2.3).
+     * Constructor with minimumThreshold (Story 2.3) — trackStock defaults to true.
      */
     public Product(UUID id, String name, String description, String sku,
                   UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
                   Boolean archived, ProductStatus status, Integer minimumThreshold,
+                  Instant createdAt, Instant updatedAt) {
+        this(id, name, description, sku, categoryId, price, buyPrice, transportCost, stockQuantity,
+             archived, status, minimumThreshold, true, createdAt, updatedAt);
+    }
+
+    /**
+     * Full constructor with trackStock (Story 17.12) — {@code null} means tracked.
+     */
+    public Product(UUID id, String name, String description, String sku,
+                  UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
+                  Boolean archived, ProductStatus status, Integer minimumThreshold, Boolean trackStock,
                   Instant createdAt, Instant updatedAt) {
         // Validate name
         if (name == null || name.trim().isEmpty()) {
@@ -89,6 +102,7 @@ public class Product {
         this.archived = archived != null ? archived : false;
         this.status = status != null ? status : ProductStatus.ACTIVE;
         this.minimumThreshold = minimumThreshold != null ? minimumThreshold : 0;
+        this.trackStock = trackStock == null || trackStock;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -115,6 +129,8 @@ public class Product {
     public Boolean getArchived() { return archived; }
     public ProductStatus getStatus() { return status; }
     public int getMinimumThreshold() { return minimumThreshold; }
+    /** Story 17.12 — whether the product's stock is tracked (false: sold without stock). */
+    public boolean isTrackStock() { return trackStock; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
@@ -125,7 +141,17 @@ public class Product {
     public Product withMinimumThreshold(int newThreshold) {
         return new Product(id, name, description, sku, categoryId,
             getPriceValue(), getBuyPriceValue(), getTransportCostValue(), stockQuantity,
-            archived, status, newThreshold, createdAt, Instant.now());
+            archived, status, newThreshold, trackStock, createdAt, Instant.now());
+    }
+
+    /**
+     * Copy-with: returns a new Product with stock tracking on or off (Story 17.12).
+     * Preserves all other fields; sets updatedAt to now.
+     */
+    public Product withTrackStock(boolean tracked) {
+        return new Product(id, name, description, sku, categoryId,
+            getPriceValue(), getBuyPriceValue(), getTransportCostValue(), stockQuantity,
+            archived, status, minimumThreshold, tracked, createdAt, Instant.now());
     }
 
     @Override

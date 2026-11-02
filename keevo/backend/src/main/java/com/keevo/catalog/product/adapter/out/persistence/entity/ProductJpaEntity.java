@@ -46,6 +46,10 @@ public class ProductJpaEntity {
     @Column(name = "minimum_threshold", nullable = false)
     private Integer minimumThreshold = 0;
 
+    // Story 17.12 — per-product stock tracking (V38, default true)
+    @Column(name = "track_stock", nullable = false)
+    private Boolean trackStock = true;
+
     // Written only by the photo endpoint (ProductSpringRepository.updatePhotoUrl): a product
     // edit (save of a domain Product, which carries no photo) must never wipe it.
     @Column(name = "photo_url", length = 500, updatable = false)
@@ -117,6 +121,9 @@ public class ProductJpaEntity {
 
     public Integer getStockQuantity() { return stockQuantity; }
     public void setStockQuantity(Integer stockQuantity) { this.stockQuantity = stockQuantity; }
+
+    public Boolean getTrackStock() { return trackStock; }
+    public void setTrackStock(Boolean trackStock) { this.trackStock = trackStock; }
 
     public Integer getMinimumThreshold() { return minimumThreshold; }
     public void setMinimumThreshold(Integer minimumThreshold) { this.minimumThreshold = minimumThreshold; }

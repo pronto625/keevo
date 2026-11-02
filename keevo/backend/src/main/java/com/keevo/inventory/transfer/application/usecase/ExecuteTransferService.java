@@ -9,7 +9,9 @@ import com.keevo.inventory.transfer.domain.port.in.TransferStockCommand;
 import com.keevo.inventory.transfer.domain.port.in.TransferStockUseCase;
 import com.keevo.inventory.stock.domain.port.out.StockLevelRepository;
 import com.keevo.inventory.transfer.domain.port.out.StockTransferRepository;
+import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.inventory.stock.domain.service.StockOperationService;
+import com.keevo.inventory.stock.domain.service.StockTrackingPolicy;
 import com.keevo.inventory.transfer.domain.service.TransferValidationStrategy;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
@@ -50,6 +52,7 @@ public class ExecuteTransferService implements TransferStockUseCase {
     private final TransferValidationStrategy validationStrategy;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort transactionLock;
+    private final ProductQueryPort productQuery; // Story 17.12 — untracked products are never transferred
 
     public ExecuteTransferService(
             StoreQueryPort storeQuery,
@@ -58,7 +61,9 @@ public class ExecuteTransferService implements TransferStockUseCase {
             StockTransferRepository transferRepository,
             TransferValidationStrategy validationStrategy,
             ApplicationEventPublisher eventPublisher,
-            TransactionLockPort transactionLock) {
+            TransactionLockPort transactionLock,
+            ProductQueryPort productQuery) {
+        this.productQuery        = productQuery;
         this.storeQuery     = storeQuery;
         this.stockLevelRepository = stockLevelRepository;
         this.stockOperationService = stockOperationService;
@@ -96,6 +101,10 @@ public class ExecuteTransferService implements TransferStockUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
                     "Destination store not found: " + command.destinationStoreId()));
         }
+
+        // 2.5 Story 17.12 — a product without stock tracking has no stock to move: refused before any check
+        productQuery.findById(TenantContext.getCurrentTenant(), command.productId())
+            .ifPresent(StockTrackingPolicy::requireTracked);
 
         // 3. Load current source stock level
         int sourceQty = 0;
