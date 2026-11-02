@@ -55,6 +55,25 @@ class UpdateReportPreferencesServiceTest {
     }
 
     @Test
+    void updatePreferences_keepsLeaderboardVisibility() { // Story 17.2 — not a report field
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(existingPrefs.withLeaderboardVisibleToEmployees(true)));
+        when(tenantPreferencesRepository.update(any())).thenAnswer(inv -> inv.getArgument(0));
+        UpdateReportPreferencesCommand cmd = new UpdateReportPreferencesCommand(
+                false, ReportChannel.IN_APP_ONLY, "22:00:00", true, 5, "19:00:00", ReportChannel.WHATSAPP,
+                false, ReportChannel.IN_APP_ONLY, true, StockAlertChannel.BOTH, null);
+
+        try (MockedStatic<TenantContext> ctx = mockStatic(TenantContext.class)) {
+            ctx.when(TenantContext::getCurrentTenant).thenReturn(TENANT_ID);
+            service.update(cmd);
+        }
+
+        ArgumentCaptor<TenantPreferences> captor = ArgumentCaptor.forClass(TenantPreferences.class);
+        verify(tenantPreferencesRepository).update(captor.capture());
+        assertThat(captor.getValue().leaderboardVisibleToEmployees()).isTrue();
+    }
+
+    @Test
     void updatePreferences_withValidCommand_persistsAllFields() {
         // Given
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(existingPrefs));

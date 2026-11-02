@@ -34,8 +34,32 @@ public record TenantPreferences(
         ReportChannel inventoryReportChannel, // default WHATSAPP
         StockAlertChannel stockAlertChannel,  // default PUSH
         // ── Story 8.1 — Trend notification preference ─────────────────────────
-        boolean trendNotificationEnabled    // default true
+        boolean trendNotificationEnabled,   // default true
+        // ── Story 17.2 — seller leaderboard shared with employees (advanced-reports) ──
+        boolean leaderboardVisibleToEmployees // default false
 ) {
+
+    /**
+     * Pre-17.2 arity — {@code leaderboardVisibleToEmployees = false} (the column default). Production code that
+     * rebuilds an existing row must use the canonical constructor and carry the stored flag.
+     */
+    public TenantPreferences(UUID id, SectorType sectorType, String eodReportTime, boolean stockAlertEnabled,
+                             Instant createdAt, boolean eodReportEnabled, ReportChannel eodReportChannel,
+                             boolean weeklyReportEnabled, int weeklyReportDay, String weeklyReportTime,
+                             ReportChannel weeklyReportChannel, boolean inventoryReportEnabled,
+                             ReportChannel inventoryReportChannel, StockAlertChannel stockAlertChannel,
+                             boolean trendNotificationEnabled) {
+        this(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled, eodReportChannel,
+                weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel, inventoryReportEnabled,
+                inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, false);
+    }
+
+    /** The same preferences with the leaderboard visibility set (Story 17.2). */
+    public TenantPreferences withLeaderboardVisibleToEmployees(boolean visible) {
+        return new TenantPreferences(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled,
+                eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
+                inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, visible);
+    }
 
     /**
      * Factory with Story 8.1 defaults — used by OnboardingService and tests.
@@ -51,7 +75,8 @@ public record TenantPreferences(
             true, 0, "20:00:00", ReportChannel.WHATSAPP,
             true, ReportChannel.WHATSAPP,
             StockAlertChannel.PUSH,
-            true
+            true,
+            false
         );
     }
 }

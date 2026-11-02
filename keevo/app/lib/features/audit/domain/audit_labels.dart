@@ -41,6 +41,8 @@ const auditActionLabels = <String, String>{
   'INVOICE_PAID': 'Facture payée',
   'INVOICE_SENT': 'Facture envoyée',
   'INVOICING_SETTINGS_UPDATED': 'Paramètres de facturation modifiés',
+  'LEADERBOARD_HIDDEN_FROM_EMPLOYEES': 'Classement masqué aux employés',
+  'LEADERBOARD_SHARED_WITH_EMPLOYEES': 'Classement partagé avec les employés',
   'MODULE_ACTIVATED': 'Module activé',
   'MODULE_DEACTIVATED': 'Module désactivé',
   'ONBOARDING_COMPLETED': 'Configuration terminée',

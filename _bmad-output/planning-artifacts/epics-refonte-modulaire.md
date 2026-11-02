@@ -1850,7 +1850,7 @@ So that l'app mobile n'ait pas à deviner ni à porter des textes à la place du
 > | Story | Statut | Preuve / reste |
 > |---|---|---|
 > | 17.1 Annulation/correction | **done** | v1s-13-5 ; `CorrectSaleService`, `JustificationPolicy`, avoir automatique via le pont pos→invoicing (14.7) |
-> | 17.2 Leaderboard | backlog (résidu) | cœur livré par v1s-14-2 (OWNER-only, gaté `advanced-reports` en 15.8) ; reste le réglage « Afficher aux employés » |
+> | 17.2 Leaderboard | **done** (2026-11-02) | cœur livré par v1s-14-2 (gaté `advanced-reports` en 15.8) ; réglage owner `leaderboard_visible_to_employees` (V39, OFF par défaut, `PUT /api/v1/tenant/leaderboard-visibility` gaté `advanced-reports` WRITE, audité) ; employé : 403 tant que OFF, sinon sa boutique seule, classement anonymisé (« Vendeur N », sa ligne `me`) (spec-17-2, `LeaderboardControllerTest`, `LeaderboardEmployeeFullContextTest`) |
 > | 17.3 Activité employés | **done** | v1s-14-6 ; `GetEmployeeActivityUseCase` |
 > | 17.4 Feedback | **done** | v1s-14-5 + boîte « Retours utilisateurs » (8-4) ; module `feedback` |
 > | 17.5 Santé, alertes, push global | **done** | 9-5 ; `PlatformHealthService`, `AdminGlobalNotificationController` |
@@ -1871,7 +1871,7 @@ As a **propriétaire**, I want **annuler ou corriger une vente avec justificatio
 As a **propriétaire**, I want **un classement des vendeurs par performance**, So that **je motive/évalue l'équipe (FR44)**.
 **Acceptance Criteria:** **Given** des ventes par employé **When** OWNER ouvre le leaderboard **Then** classement (CA/nb ventes, période) ; **Premium** (gâté). **Notes:** module `reporting` ; données existantes ; remplace backlog 4-6.
 **Items routés depuis v1s-14-2 (V1 owner-only, `GET /api/v1/reporting/leaderboard` + onglet Rapports > Équipe) :**
-- [ ] Réglage owner « Afficher le leaderboard aux employés » (Story 4.6 / UX16) : OFF par défaut, confirmation à l'activation, classement anonymisé côté employé une fois activé. Exclu de la V1 (UX16 V1 = owner-only, endpoint EMPLOYEE → 403) ; à reprendre ici avec le gating Premium.
+- [x] Réglage owner « Afficher le leaderboard aux employés » (Story 4.6 / UX16) : OFF par défaut, confirmation à l'activation, classement anonymisé côté employé une fois activé. Exclu de la V1 (UX16 V1 = owner-only, endpoint EMPLOYEE → 403) ; à reprendre ici avec le gating Premium. — ✅ 17.2 (2026-11-02, API) : colonne `tenant_preferences.leaderboard_visible_to_employees` (V39 + DDL tenant, défaut false), exposée en lecture dans `GET /api/v1/tenant/preferences` (`leaderboardVisibleToEmployees`, jamais remplacée par les valeurs fixes de 17.8) et modifiable par l'owner via `PUT /api/v1/tenant/leaderboard-visibility` (`advanced-reports` WRITE, audit « Classement partagé avec les employés » / « Classement masqué aux employés ») ; `GET /api/v1/reporting/leaderboard` ouvert à l'EMPLOYEE : 403 `FORBIDDEN` tant que OFF, sinon boutique de l'employé imposée et lignes anonymisées (`sellerId` null, « Vendeur <rang> »), sa propre ligne nommée avec `me: true`. Confirmation à l'activation = app (section Mobile de spec-17-2).
 
 ### Story 17.3 : Suivi d'activité des employés (FR67)
 As a **propriétaire**, I want **voir l'activité de mes employés (dernière connexion, ventes, actions)**, So that **je supervise l'équipe (FR67)**.

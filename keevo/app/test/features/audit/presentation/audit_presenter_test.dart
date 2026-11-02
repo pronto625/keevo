@@ -254,6 +254,9 @@ void main() {
         'SUPPLIER_UPDATED',
         'SUPPLIER_PRODUCTS_UPDATED',
         'REPORT_PREFERENCES_UPDATED',
+        // 17.2
+        'LEADERBOARD_SHARED_WITH_EMPLOYEES',
+        'LEADERBOARD_HIDDEN_FROM_EMPLOYEES',
       ];
       for (final a in actions) {
         expect(AuditPresenter.isKnownAction(a), isTrue, reason: a);
@@ -280,6 +283,14 @@ void main() {
           self('REPORT_PREFERENCES_UPDATED', 'Tenant',
               'Préférences des rapports'),
           'Vous avez modifié les préférences des rapports');
+      expect(
+          self('LEADERBOARD_SHARED_WITH_EMPLOYEES', 'Tenant',
+              'Classement des vendeurs'),
+          'Vous avez partagé le classement des vendeurs avec les employés');
+      expect(
+          self('LEADERBOARD_HIDDEN_FROM_EMPLOYEES', 'Tenant',
+              'Classement des vendeurs'),
+          'Vous avez masqué le classement des vendeurs aux employés');
     });
   });
 

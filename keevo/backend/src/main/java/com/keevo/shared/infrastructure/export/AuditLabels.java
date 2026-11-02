@@ -31,6 +31,8 @@ public final class AuditLabels {
             entry("ACCOUNT_DELETION_REQUESTED", "Suppression du compte demandée"),
             entry("ACCOUNT_DELETION_CANCELLED", "Suppression du compte annulée"),
             entry("REPORT_PREFERENCES_UPDATED", "Préférences des rapports modifiées"),
+            entry("LEADERBOARD_SHARED_WITH_EMPLOYEES", "Classement partagé avec les employés"), // Story 17.2
+            entry("LEADERBOARD_HIDDEN_FROM_EMPLOYEES", "Classement masqué aux employés"),      // Story 17.2
             // Products
             entry("PRODUCT_CREATED", "Produit créé"),
             entry("PRODUCT_UPDATED", "Produit modifié"),

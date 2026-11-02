@@ -26,7 +26,8 @@ public record TenantPreferencesResponseDto(
     String inventoryReportChannel,
     String stockAlertChannel,
     boolean trendNotificationEnabled,
-    boolean reportConfigEditable
+    boolean reportConfigEditable,
+    boolean leaderboardVisibleToEmployees
 ) {
 
     /**
@@ -50,7 +51,8 @@ public record TenantPreferencesResponseDto(
             effective.inventoryReportChannel() != null ? effective.inventoryReportChannel().name() : "WHATSAPP",
             effective.stockAlertChannel() != null ? effective.stockAlertChannel().name() : "PUSH",
             effective.trendNotificationEnabled(),
-            reportConfigEditable
+            reportConfigEditable,
+            stored.leaderboardVisibleToEmployees()
         );
     }
 
@@ -71,7 +73,8 @@ public record TenantPreferencesResponseDto(
             prefs.inventoryReportChannel() != null ? prefs.inventoryReportChannel().name() : "WHATSAPP",
             prefs.stockAlertChannel() != null ? prefs.stockAlertChannel().name() : "PUSH",
             prefs.trendNotificationEnabled(),
-            true
+            true,
+            prefs.leaderboardVisibleToEmployees()
         );
     }
 }

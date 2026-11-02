@@ -136,6 +136,16 @@ class ReportConfigGatingFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
+    @DisplayName("17.2 Free tenant: the leaderboard flag keeps its stored value (not a report-config field)")
+    void free_leaderboardFlagKept() throws Exception {
+        jdbc.update("UPDATE \"" + schema + "\".tenant_preferences SET leaderboard_visible_to_employees = true");
+        freePlan();
+
+        assertThat(portView()).isEqualTo(TenantPreferencesView.fixedDefaults().withLeaderboardVisibleToEmployees(true));
+        assertThat(getPreferences().path("leaderboardVisibleToEmployees").asBoolean()).isTrue();
+    }
+
+    @Test
     @DisplayName("Premium trial: stored values, flag true")
     void trial_storedValues() throws Exception {
         assertThat(portView()).isEqualTo(TRIAL_PREFS);

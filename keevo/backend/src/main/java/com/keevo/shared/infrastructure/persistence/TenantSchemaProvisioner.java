@@ -987,6 +987,10 @@ public class TenantSchemaProvisioner {
     static final String DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION =
             "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS trend_notification_enabled BOOLEAN NOT NULL DEFAULT TRUE";
 
+    // Story 17.2 — leaderboard shared with employees (owner setting, OFF by default: existing tenants unchanged)
+    static final String DDL_TENANT_PREFS_MIGRATE_LEADERBOARD_VISIBILITY =
+            "ALTER TABLE tenant_preferences ADD COLUMN IF NOT EXISTS leaderboard_visible_to_employees BOOLEAN NOT NULL DEFAULT FALSE";
+
     // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
     // Story 16.8: the legacy max_* columns are filled from the PREMIUM_TRIAL plan profile (NULL = unlimited →
@@ -1243,6 +1247,8 @@ public class TenantSchemaProvisioner {
             stmt.execute(DDL_NOTIFICATION_COOLDOWNS_IDX_TYPE_STORE);
             // Story 8.1 — trend notification preference
             stmt.execute(DDL_TENANT_PREFS_MIGRATE_TREND_NOTIFICATION);
+            // Story 17.2 — leaderboard visibility for employees
+            stmt.execute(DDL_TENANT_PREFS_MIGRATE_LEADERBOARD_VISIBILITY);
             // Story v1s-18-1 — background export jobs
             stmt.execute(DDL_EXPORT_JOBS);
             stmt.execute(DDL_EXPORT_JOBS_MIGRATE_CRITERIA); // Story v1s-18-2

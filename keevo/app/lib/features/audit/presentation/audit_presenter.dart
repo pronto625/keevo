@@ -194,6 +194,19 @@ class AuditPresenter {
         Icons.tune_rounded,
         AuditCategory.account,
         takesObject: false),
+    // Story 17.2 — seller leaderboard shared with employees
+    'LEADERBOARD_SHARED_WITH_EMPLOYEES': AuditActionInfo(
+        'Classement partagé avec les employés',
+        'partagé le classement des vendeurs avec les employés',
+        Icons.leaderboard_outlined,
+        AuditCategory.account,
+        takesObject: false),
+    'LEADERBOARD_HIDDEN_FROM_EMPLOYEES': AuditActionInfo(
+        'Classement masqué aux employés',
+        'masqué le classement des vendeurs aux employés',
+        Icons.visibility_off_outlined,
+        AuditCategory.account,
+        takesObject: false),
     // Products
     'PRODUCT_CREATED': AuditActionInfo('Produit créé', 'créé le produit',
         Icons.inventory_2_outlined, AuditCategory.product),

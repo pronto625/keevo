@@ -85,6 +85,7 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
         entity.setStockAlertChannel(prefs.stockAlertChannel() != null
                 ? prefs.stockAlertChannel().name() : "PUSH");
         entity.setTrendNotificationEnabled(prefs.trendNotificationEnabled());
+        entity.setLeaderboardVisibleToEmployees(prefs.leaderboardVisibleToEmployees());
     }
 
     private TenantPreferences toDomain(TenantPreferencesJpaEntity entity) {
@@ -106,7 +107,8 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
             entity.isInventoryReportEnabled(),
             ReportChannel.fromString(entity.getInventoryReportChannel()),
             StockAlertChannel.fromString(entity.getStockAlertChannel()),
-            entity.isTrendNotificationEnabled()
+            entity.isTrendNotificationEnabled(),
+            entity.isLeaderboardVisibleToEmployees()
         );
     }
 }

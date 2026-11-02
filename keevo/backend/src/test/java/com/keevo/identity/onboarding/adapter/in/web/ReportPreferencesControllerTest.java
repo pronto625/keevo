@@ -6,6 +6,8 @@ import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
+import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityCommand;
+import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.identity.onboarding.adapter.in.api.TenantPreferencesQueryAdapter;
@@ -55,6 +57,7 @@ class ReportPreferencesControllerTest {
     @Mock private UpdateReportPreferencesUseCase updateReportPreferencesUseCase;
     @Mock private SendTestReportUseCase sendTestReportUseCase;
     @Mock private EntitlementService entitlementService;
+    @Mock private UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase;
 
     private TenantPreferencesController controller;
 
@@ -68,7 +71,8 @@ class ReportPreferencesControllerTest {
     void setUp() {
         controller = new TenantPreferencesController(tenantPreferencesRepository, jdbcTemplate,
                 updateReportPreferencesUseCase, sendTestReportUseCase,
-                new TenantPreferencesQueryAdapter(tenantPreferencesRepository, entitlementService));
+                new TenantPreferencesQueryAdapter(tenantPreferencesRepository, entitlementService),
+                updateLeaderboardVisibilityUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -163,6 +167,73 @@ class ReportPreferencesControllerTest {
         verifyNoInteractions(entitlementService);
     }
 
+    // ── Story 17.2 — leaderboard visibility ───────────────────────────────────
+
+    @Test
+    void GET_preferences_leaderboardFlag_defaultsFalse() throws Exception {
+        authenticateAs("OWNER");
+        storedTrialPrefs();
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.ENABLED);
+
+        mockMvc.perform(get("/api/v1/tenant/preferences"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.leaderboardVisibleToEmployees").value(false));
+    }
+
+    @Test
+    void GET_preferences_reportConfigDisabled_keepsStoredLeaderboardFlag() throws Exception {
+        authenticateAs("OWNER");
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(trialPrefs().withLeaderboardVisibleToEmployees(true)));
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.DISABLED);
+
+        mockMvc.perform(get("/api/v1/tenant/preferences"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.eodReportTime").value("20:00"))
+                .andExpect(jsonPath("$.data.leaderboardVisibleToEmployees").value(true));
+    }
+
+    @Test
+    void PUT_leaderboardVisibility_owner_returns200_withPreferencesShape() throws Exception {
+        authenticateAs("OWNER");
+        when(updateLeaderboardVisibilityUseCase.update(new UpdateLeaderboardVisibilityCommand(true)))
+                .thenReturn(trialPrefs().withLeaderboardVisibleToEmployees(true));
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.DISABLED);
+
+        mockMvc.perform(put("/api/v1/tenant/leaderboard-visibility")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"visibleToEmployees\": true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.leaderboardVisibleToEmployees").value(true))
+                .andExpect(jsonPath("$.data.eodReportTime").value("20:00"))
+                .andExpect(jsonPath("$.data.reportConfigEditable").value(false));
+    }
+
+    @Test
+    void PUT_leaderboardVisibility_employee_returns403_andWritesNothing() throws Exception {
+        authenticateAs("EMPLOYEE");
+
+        mockMvc.perform(put("/api/v1/tenant/leaderboard-visibility")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"visibleToEmployees\": true}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+        verifyNoInteractions(updateLeaderboardVisibilityUseCase);
+    }
+
+    @Test
+    void PUT_leaderboardVisibility_missingField_returns422_inFrench_andWritesNothing() throws Exception {
+        authenticateAs("OWNER");
+
+        mockMvc.perform(put("/api/v1/tenant/leaderboard-visibility")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error").value("Indiquez si le classement est partagé avec les employés"));
+        verifyNoInteractions(updateLeaderboardVisibilityUseCase);
+    }
+
     // ── PUT /api/v1/tenant/report-preferences ─────────────────────────────────
 
     @Test
@@ -178,6 +249,19 @@ class ReportPreferencesControllerTest {
                 .andExpect(jsonPath("$.data.eodReportTime").value("22:00:00"))
                 .andExpect(jsonPath("$.data.eodReportEnabled").value(true))
                 .andExpect(jsonPath("$.data.reportConfigEditable").value(true));
+    }
+
+    @Test
+    void PUT_reportPreferences_responseCarriesLeaderboardFlag() throws Exception { // Story 17.2
+        authenticateAs("OWNER");
+        when(updateReportPreferencesUseCase.update(any()))
+                .thenReturn(samplePrefs().withLeaderboardVisibleToEmployees(true));
+
+        mockMvc.perform(put("/api/v1/tenant/report-preferences")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPutBody()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.leaderboardVisibleToEmployees").value(true));
     }
 
     @Test

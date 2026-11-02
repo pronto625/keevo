@@ -76,6 +76,24 @@ class TenantPreferencesQueryAdapterTest {
     }
 
     @Test
+    void find_reportConfigDisabled_keepsStoredLeaderboardFlag() { // Story 17.2
+        when(repository.findByCurrentTenant()).thenReturn(Optional.of(stored.withLeaderboardVisibleToEmployees(true)));
+        when(entitlements.state(SCHEMA, "report-config")).thenReturn(ModuleState.DISABLED);
+
+        TenantPreferencesView view = adapter.find(SCHEMA).orElseThrow();
+        assertThat(view.leaderboardVisibleToEmployees()).isTrue();
+        assertThat(view).isEqualTo(TenantPreferencesView.fixedDefaults().withLeaderboardVisibleToEmployees(true));
+    }
+
+    @Test
+    void find_reportConfigEnabled_mapsLeaderboardFlag() { // Story 17.2
+        when(repository.findByCurrentTenant()).thenReturn(Optional.of(stored.withLeaderboardVisibleToEmployees(true)));
+        when(entitlements.state(SCHEMA, "report-config")).thenReturn(ModuleState.ENABLED);
+
+        assertThat(adapter.find(SCHEMA)).contains(storedView.withLeaderboardVisibleToEmployees(true));
+    }
+
+    @Test
     void find_reportConfigReadOnlyGrace_keepsStoredValues() {
         when(repository.findByCurrentTenant()).thenReturn(Optional.of(stored));
         when(entitlements.state(SCHEMA, "report-config")).thenReturn(ModuleState.READ_ONLY);

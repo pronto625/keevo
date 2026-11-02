@@ -73,6 +73,11 @@ public class TenantPreferencesJpaEntity {
     @Column(name = "trend_notification_enabled", nullable = false)
     private boolean trendNotificationEnabled = true;
 
+    // ── Story 17.2 — leaderboard shared with employees ────────────────────────
+
+    @Column(name = "leaderboard_visible_to_employees", nullable = false)
+    private boolean leaderboardVisibleToEmployees = false;
+
     // ── JPA requires no-arg constructor ───────────────────────────────────────
     protected TenantPreferencesJpaEntity() {}
 
@@ -127,6 +132,9 @@ public class TenantPreferencesJpaEntity {
 
     public boolean isTrendNotificationEnabled() { return trendNotificationEnabled; }
     public void setTrendNotificationEnabled(boolean v) { this.trendNotificationEnabled = v; }
+
+    public boolean isLeaderboardVisibleToEmployees() { return leaderboardVisibleToEmployees; }
+    public void setLeaderboardVisibleToEmployees(boolean v) { this.leaderboardVisibleToEmployees = v; }
 
     public void setUpdatedAt(Instant v) { this.updatedAt = v; }
     public void setStockAlertEnabled(boolean v) { this.stockAlertEnabled = v; }

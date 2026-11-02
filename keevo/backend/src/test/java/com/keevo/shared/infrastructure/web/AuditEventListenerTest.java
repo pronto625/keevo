@@ -605,6 +605,34 @@ class AuditEventListenerTest {
         }
 
         @Test
+        @DisplayName("17.2 LeaderboardVisibilityChanged → LEADERBOARD_SHARED / _HIDDEN, French label, no raw value")
+        void leaderboardVisibilityChanged() {
+            UUID prefsId = UUID.randomUUID();
+            listener.on(new com.keevo.shared.event.catalog.onboarding.LeaderboardVisibilityChangedEvent(
+                    prefsId, true, actorId, "kv_abc123", Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("LEADERBOARD_SHARED_WITH_EMPLOYEES");
+            assertThat(e.entityType()).isEqualTo("Tenant");
+            assertThat(e.entityLabel()).isEqualTo("Classement des vendeurs");
+            assertThat(e.valueBefore()).isNull();
+            assertThat(e.valueAfter()).isNull();
+            assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS
+                    .get("LEADERBOARD_SHARED_WITH_EMPLOYEES")).isEqualTo("Classement partagé avec les employés");
+            assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS
+                    .get("LEADERBOARD_HIDDEN_FROM_EMPLOYEES")).isEqualTo("Classement masqué aux employés");
+        }
+
+        @Test
+        @DisplayName("17.2 leaderboard hidden again → LEADERBOARD_HIDDEN_FROM_EMPLOYEES")
+        void leaderboardHidden() {
+            listener.on(new com.keevo.shared.event.catalog.onboarding.LeaderboardVisibilityChangedEvent(
+                    UUID.randomUUID(), false, actorId, "kv_abc123", Instant.now()));
+
+            assertThat(captureEntry().action()).isEqualTo("LEADERBOARD_HIDDEN_FROM_EMPLOYEES");
+        }
+
+        @Test
         @DisplayName("J10 StockThresholdChanged → STOCK_THRESHOLD_UPDATED, before/after threshold")
         void stockThresholdChanged() throws Exception {
             UUID productId = UUID.randomUUID();

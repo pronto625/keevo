@@ -23,6 +23,9 @@ import java.util.Optional;
  * which is kept untouched (it comes back if the tenant returns to Premium). ENABLED and READ_ONLY (grace) keep the
  * stored values; an unreadable module state also keeps them (fail-open, WARN logged).
  *
+ * <p>Story 17.2 — the {@code leaderboardVisibleToEmployees} flag is not a report field: it always comes from the
+ * stored row, including in the DISABLED branch.
+ *
  * <p>{@link #effective} is the identity-internal entry point of {@code GET /tenant/preferences}: one state read
  * gives both the values and {@code reportConfigEditable} (ENABLED only; unreadable state → stored values, not
  * editable).
@@ -66,7 +69,11 @@ public class TenantPreferencesQueryAdapter implements TenantPreferencesQueryPort
                     tenantSchema, e.toString());
             return new Effective(view(stored), false);
         }
-        return new Effective(state == ModuleState.DISABLED ? TenantPreferencesView.fixedDefaults() : view(stored),
+        // Story 17.2: the leaderboard flag belongs to advanced-reports, not report-config — always the stored one.
+        return new Effective(state == ModuleState.DISABLED
+                        ? TenantPreferencesView.fixedDefaults()
+                                .withLeaderboardVisibleToEmployees(stored.leaderboardVisibleToEmployees())
+                        : view(stored),
                 state == ModuleState.ENABLED);
     }
 
@@ -74,6 +81,6 @@ public class TenantPreferencesQueryAdapter implements TenantPreferencesQueryPort
         return new TenantPreferencesView(p.eodReportTime(), p.stockAlertEnabled(), p.eodReportEnabled(),
                 p.eodReportChannel(), p.weeklyReportEnabled(), p.weeklyReportDay(), p.weeklyReportTime(),
                 p.weeklyReportChannel(), p.inventoryReportEnabled(), p.inventoryReportChannel(),
-                p.stockAlertChannel(), p.trendNotificationEnabled());
+                p.stockAlertChannel(), p.trendNotificationEnabled(), p.leaderboardVisibleToEmployees());
     }
 }

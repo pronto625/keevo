@@ -4,6 +4,8 @@ import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
+import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityCommand;
+import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
@@ -38,17 +40,20 @@ public class TenantPreferencesController {
     private final UpdateReportPreferencesUseCase updateReportPreferencesUseCase;
     private final SendTestReportUseCase sendTestReportUseCase;
     private final TenantPreferencesQueryAdapter tenantPreferencesQuery;
+    private final UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase;
 
     public TenantPreferencesController(TenantPreferencesRepository tenantPreferencesRepository,
                                        JdbcTemplate jdbcTemplate,
                                        UpdateReportPreferencesUseCase updateReportPreferencesUseCase,
                                        SendTestReportUseCase sendTestReportUseCase,
-                                       TenantPreferencesQueryAdapter tenantPreferencesQuery) {
+                                       TenantPreferencesQueryAdapter tenantPreferencesQuery,
+                                       UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase) {
         this.tenantPreferencesRepository = tenantPreferencesRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.updateReportPreferencesUseCase = updateReportPreferencesUseCase;
         this.sendTestReportUseCase = sendTestReportUseCase;
         this.tenantPreferencesQuery = tenantPreferencesQuery;
+        this.updateLeaderboardVisibilityUseCase = updateLeaderboardVisibilityUseCase;
     }
 
     /**
@@ -102,6 +107,27 @@ public class TenantPreferencesController {
 
         var updated = updateReportPreferencesUseCase.update(command);
         return ResponseEntity.ok(ApiResponseWrapper.ok(TenantPreferencesResponseDto.fromDomain(updated)));
+    }
+
+    /**
+     * Story 17.2 — « Afficher le classement aux employés ». OWNER only, gated {@code advanced-reports} (WRITE).
+     * PUT /api/v1/tenant/leaderboard-visibility {@code {"visibleToEmployees": true|false}}
+     *
+     * <p>Returns the preferences as the GET does (effective report values, {@code reportConfigEditable}).
+     */
+    @RequiresEntitlement("advanced-reports")
+    @PutMapping("/leaderboard-visibility")
+    public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> updateLeaderboardVisibility(
+            @Valid @RequestBody UpdateLeaderboardVisibilityRequestDto request) {
+
+        requireAuthentication();
+        CurrentActor.requireOwner("OWNER role required");
+
+        var saved = updateLeaderboardVisibilityUseCase.update(
+                new UpdateLeaderboardVisibilityCommand(request.visibleToEmployees()));
+        var effective = tenantPreferencesQuery.effective(TenantContext.getCurrentTenant(), saved);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                TenantPreferencesResponseDto.effective(saved, effective.view(), effective.reportConfigEditable())));
     }
 
     /**

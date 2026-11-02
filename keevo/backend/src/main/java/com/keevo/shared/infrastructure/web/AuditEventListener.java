@@ -52,6 +52,7 @@ import com.keevo.shared.event.catalog.product.ProductPhotoUpdatedEvent;
 import com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierProductsChangedEvent;
+import com.keevo.shared.event.catalog.onboarding.LeaderboardVisibilityChangedEvent;
 import com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent;
 import com.keevo.shared.event.catalog.store.StoreUpdatedEvent;
 import com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent;
@@ -572,6 +573,19 @@ public class AuditEventListener {
                 null, "Préférences des rapports", null, null);
         log.info("AUDIT: report_preferences_updated fields={} tenantId={} actorId={}",
                 event.after().keySet(), event.tenantId(), event.actorId());
+    }
+
+    /** Story 17.2 — « Classement partagé avec les employés / masqué aux employés » (French labels only). */
+    @EventListener
+    public void on(LeaderboardVisibilityChangedEvent event) {
+        write(event.actorId(), event.tenantId(),
+                event.visibleToEmployees() ? "LEADERBOARD_SHARED_WITH_EMPLOYEES" : "LEADERBOARD_HIDDEN_FROM_EMPLOYEES",
+                "Tenant", event.preferencesId(),
+                null, null,
+                null, "Classement des vendeurs", null, null);
+        log.info("AUDIT: leaderboard_{} tenantId={} actorId={}",
+                event.visibleToEmployees() ? "shared_with_employees" : "hidden_from_employees",
+                event.tenantId(), event.actorId());
     }
 
     @EventListener

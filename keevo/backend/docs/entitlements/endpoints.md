@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 218 — gated: 107, exempt: 111.
+Handlers: 219 — gated: 108, exempt: 111.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -221,6 +221,7 @@ Handlers: 218 — gated: 107, exempt: 111.
 | GET | `/api/v1/sync/devices` | `sync` | READ | — |  | SyncController#getDevices |
 | GET | `/api/v1/sync/pull` | — | — | — | synchronisation (contrôle par opération) | SyncController#pull |
 | POST | `/api/v1/sync/push` | — | — | — | synchronisation (contrôle par opération) | SyncController#push |
+| PUT | `/api/v1/tenant/leaderboard-visibility` | `advanced-reports` | WRITE | — |  | TenantPreferencesController#updateLeaderboardVisibility |
 | GET | `/api/v1/tenant/preferences` | — | — | — | core: préférences du commerce | TenantPreferencesController#getPreferences |
 | PUT | `/api/v1/tenant/report-preferences` | `report-config` | WRITE | — |  | TenantPreferencesController#updateReportPreferences |
 | POST | `/api/v1/tenant/report-test` | `report-config` | WRITE | — |  | TenantPreferencesController#sendTestReport |
