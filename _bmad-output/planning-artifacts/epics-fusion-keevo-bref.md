@@ -538,6 +538,13 @@ So that **la réconciliation d'identité ne me force pas à choisir**.
 
 ### Story 19.7 : Profils PRO, TEAM, BUSINESS et bundles associés (ADR-03, 04, 06)
 
+> **Découpage du 03/11/2026 (taille mesurée : `PlanType` dans 80 fichiers de production et 128 de test, 9 points qui cassent sur un code inconnu, contraintes CHECK dans `public` et dans chaque schéma tenant, essai de 6 mois écrit en SQL).** La story est livrée en deux parties, sans changer son périmètre :
+> - **19.7a — Plans en données (`19-7a-plans-en-donnees`)** : catalogue des plans en base (code, libellé, description, ordre, visibilité, archivage, code de compatibilité V1), `plan_profiles` indexé par code de plan, suppression de l'énumération `PlanType` comme liste fermée (valeur métier « code de plan » lue dans le catalogue) et des CHECK sur les codes (`plan_profiles`, `tenant_plan_events`, `subscriptions` des schémas tenant via une migration de module V2), les 9 lectures `valueOf`/`values()` passent par le catalogue, correspondance configurable vers `FREE`/`PREMIUM_TRIAL`/`PREMIUM` pour les apps V1 (`GET /subscription/me`, `PLAN_LIMIT_EXCEEDED.details.plan`), durée d'essai lue en base au lieu du SQL figé. **Comportement identique** avec les trois codes actuels (non-régression complète).
+> - **19.7b — Plans de la fusion (`19-7b-plans-fusion`)** : données de départ FREE, PRO, TEAM, BUSINESS (ADR-05), passage des tenants PREMIUM à TEAM au même prix jusqu'à la fin de la période payée (ADR-06, événement de plan tracé), FREE à 1 employé avec droit acquis (ADR-03), essai d'1 mois du plan le plus complet pour tout nouvel inscrit porté par l'abonnement (statut d'essai) plutôt que par un plan à part, essais PREMIUM_TRIAL en cours menés à terme (ADR-04), libellés français et revenus (`tenant_plan_events`) alignés, correspondance V1 étendue (un plan payant → `PREMIUM`, un essai → `PREMIUM_TRIAL`, FREE → `FREE`).
+> Les critères ci-dessous restent ceux de l'ensemble ; chaque spec dit lesquels elle couvre.
+
+
+
 As a **super-admin**,
 I want **des plans qui sont des données, avec les plans Bref créés au départ**,
 So that **chaque owner migré retrouve exactement ses droits et que la grille soit unique**.
