@@ -1862,7 +1862,7 @@ So that **la documentation reflète le système réel**.
 
 | Jalon | Quand | Critères pour continuer | Si non |
 |---|---|---|---|
-| **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus (la refonte n'a plus à être en prod : décision du 03/11/2026) | on ne démarre pas P1 |
+| **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus (la refonte n'a plus à être en prod : décision du 03/11/2026) — **ouvert le 03/11/2026** (ADR-01 à 09 ; mesures `research/fusion-mesures/rapport-mesures-2026-11-03-fusion.md`, source Bref retenue par l'utilisateur) | on ne démarre pas P1 |
 | **G1** fin P1b | après 20.12, 20.13 et l'epic 21 | **toutes** les fonctionnalités Bref répliquées dans l'API Keevo (parcours Bref vert, API super-admin héritée), suite Flutter verte, charge 19.11 tenue | corriger avant P3 / avant l'outil |
 | **GL** go-live de la refonte | après G1, 22.13, 23.11 et 24.12 | tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12) ; puis 17.9 (régression multi-surface : parcours Keevo et Bref, app Flutter V1 et app RN) | **pas de mise en production de la refonte** (16.7) |
 | **G2** fin bêta P2 | 22.15 palier 10 % | zéro perte de donnée, crash-free ≥ 99,5 %, quarantaine < 0,5 % des opérations | rester à 10 %, corriger |
