@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * except on rows of this test.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, JdbcGlobalNotificationRepository.class,
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, JdbcGlobalNotificationRepository.class,
         JdbcPushAudienceAdapter.class, GlobalTableStrayCopiesReporter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Global push SQL on PostgreSQL (Story 9-5)")
@@ -54,6 +54,7 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
     @Autowired JdbcPushAudienceAdapter audience;
     @Autowired javax.sql.DataSource foundationDataSource;
     @Autowired GlobalTableStrayCopiesReporter strayCopies;
+    @Autowired com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog plans;
 
     private final List<UUID> tenantIds = new ArrayList<>();
     private final List<String> schemas = new ArrayList<>();
@@ -242,6 +243,30 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
                 now.minus(1, ChronoUnit.DAYS)).stream().map(Announcement::id).toList();
         assertThat(forPremium).contains(all, toPremium).doesNotContain(toFree, toFreeTenant, toTrial);
         assertThat(audience.tenantOfSchema("public")).isEmpty();
+    }
+
+    @Test
+    void dataPlanOfKindPaid_isInThePremiumAudience_andSeesPremiumAnnouncements() {
+        // Story 19.7a: a plan created as data, of kind PAID, is reached like PREMIUM
+        plans.save(new com.keevo.shared.capability.entitlement.PlanDefinition(
+                com.keevo.identity.api.PlanType.of("TEST_PUSH_PAID"), "Test payant", null, 99, false,
+                com.keevo.identity.api.PlanKind.PAID, null));
+        try {
+            PushTargetTenant paid = tenant("ACTIVE", "TEST_PUSH_PAID", "OWNER");
+            Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+            UUID toPremium = sent(GlobalNotificationTarget.PREMIUM, null, now);
+            UUID toFree = sent(GlobalNotificationTarget.FREE, null, now);
+
+            assertThat(ids(audience.targetTenants(GlobalNotificationTarget.PREMIUM, null))).contains(paid.id());
+            assertThat(ids(audience.targetTenants(GlobalNotificationTarget.FREE, null))).doesNotContain(paid.id());
+            List<UUID> seen = repository.findSentFor(audience.tenantOfSchema(paid.schemaName()).orElseThrow(),
+                    now.minus(1, ChronoUnit.DAYS)).stream().map(Announcement::id).toList();
+            assertThat(seen).contains(toPremium).doesNotContain(toFree);
+        } finally {
+            tenantIds.forEach(id -> jdbc.update("DELETE FROM public.tenants WHERE id = ?", id));
+            jdbc.update("DELETE FROM public.plans WHERE code = 'TEST_PUSH_PAID'");
+            plans.invalidate();
+        }
     }
 
     @Test

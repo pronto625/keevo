@@ -25,7 +25,7 @@ import java.util.UUID;
 /**
  * ChangeTenantPlanService — schema-qualified JDBC plan change used by the super-admin plan flow
  * (Story 9-2). Same row and limits rule as {@link ActivatePlanService} (first subscription row by
- * {@code created_at}, limits from {@link PlanType}, status back to ACTIVE), but it joins the caller's
+ * {@code created_at}, legacy limit columns from the plan's profile, status back to ACTIVE), but it joins the caller's
  * transaction and keeps {@code public.tenants.plan_type} + {@code tenant_plan_events} in step.
  *
  * <p>Story 16.5: after the history row, the tenant's paid-module rows are realigned on the new plan in the same
@@ -53,12 +53,6 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
     private final PlanModuleRowSync planModuleRows;
     private final PlanProfiles planProfiles;
 
-    /** Without plan profiles: legacy columns from the built-in defaults (tests). */
-    public ChangeTenantPlanService(JdbcTemplate jdbc, PlanChangeRecorder recorder, PlanModuleRowSync planModuleRows) {
-        this(jdbc, recorder, planModuleRows, PlanProfiles.ENUM_DEFAULTS);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
     public ChangeTenantPlanService(JdbcTemplate jdbc, PlanChangeRecorder recorder, PlanModuleRowSync planModuleRows,
                                    PlanProfiles planProfiles) {
         this.jdbc = jdbc;
@@ -101,7 +95,7 @@ public class ChangeTenantPlanService implements ChangeTenantPlanUseCase {
             Timestamp exp = rs.getTimestamp("expires_at");
             return new Row(
                     UUID.fromString(rs.getString("id")),
-                    new CurrentPlan(PlanType.valueOf(rs.getString("plan_type")),
+                    new CurrentPlan(PlanType.of(rs.getString("plan_type")), // 19.7a: stored code, shape only
                             exp != null ? exp.toInstant() : null));
         });
         return rows.stream().findFirst();

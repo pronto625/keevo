@@ -1,6 +1,6 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.api.PlanType;
+import com.keevo.identity.api.PlanKind;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -40,9 +40,9 @@ public final class PlanWhatsAppMessages {
         return EXPIRED;
     }
 
-    /** Expiry text by expired plan: a trial end is not an expired paid subscription. */
-    public static String expired(PlanType previousPlan) {
-        return previousPlan == PlanType.PREMIUM_TRIAL ? TRIAL_EXPIRED : EXPIRED;
+    /** Expiry text by the expired plan's kind: a trial end is not an expired paid subscription. */
+    public static String expired(PlanKind previousKind) {
+        return previousKind == PlanKind.TRIAL ? TRIAL_EXPIRED : EXPIRED;
     }
 
     public static String reminder(LocalDate expiryDate) {

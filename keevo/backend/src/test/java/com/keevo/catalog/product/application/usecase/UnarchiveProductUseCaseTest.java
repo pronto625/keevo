@@ -47,7 +47,7 @@ class UnarchiveProductUseCaseTest {
 
     UnarchiveProductUseCase useCase;
     final UUID id = UUID.randomUUID();
-    final PlanView free = new PlanView(PlanType.FREE, true, null, 1, 500, 2);
+    final PlanView free = new PlanView(PlanType.FREE, com.keevo.identity.api.PlanKind.FREE, true, null, 1, 500, 2);
 
     @BeforeEach
     void setUp() {

@@ -1,6 +1,9 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.identity.api.PlanKind;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
@@ -41,11 +44,20 @@ public class PlanWhatsAppNotificationListener {
 
     private final WhatsAppSender whatsAppSender;
     private final OwnerRecipientResolver ownerRecipientResolver;
+    private final PlanCatalog catalog;
 
+    /** With the seeded plan catalogue (tests). */
     public PlanWhatsAppNotificationListener(WhatsAppSender whatsAppSender,
                                             OwnerRecipientResolver ownerRecipientResolver) {
+        this(whatsAppSender, ownerRecipientResolver, PlanCatalog.SEED);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PlanWhatsAppNotificationListener(WhatsAppSender whatsAppSender,
+                                            OwnerRecipientResolver ownerRecipientResolver, PlanCatalog catalog) {
         this.whatsAppSender = whatsAppSender;
         this.ownerRecipientResolver = ownerRecipientResolver;
+        this.catalog = catalog;
     }
 
     @ApplicationModuleListener
@@ -64,7 +76,8 @@ public class PlanWhatsAppNotificationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @DeliverOnce
     public void onExpired(PlanExpiredEvent event) {
-        send(event.tenantId(), event.schemaName(), "expiry", PlanWhatsAppMessages.expired(event.previousPlan()));
+        send(event.tenantId(), event.schemaName(), "expiry", PlanWhatsAppMessages.expired(
+                catalog.find(event.previousPlan()).map(PlanDefinition::kind).orElse(PlanKind.PAID)));
     }
 
     private void send(UUID tenantId, String schemaName, String kind, String text) {

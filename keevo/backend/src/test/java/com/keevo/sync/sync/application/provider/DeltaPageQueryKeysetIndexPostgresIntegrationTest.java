@@ -43,7 +43,7 @@ import static org.mockito.Mockito.when;
  * <p>Commits a tenant schema, dropped in {@link #dropSchema()}.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import(TenantSchemaProvisioner.class)
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Delta page SQL uses the keyset indexes (Story 11.5)")
 class DeltaPageQueryKeysetIndexPostgresIntegrationTest extends PostgresIntegrationTest {

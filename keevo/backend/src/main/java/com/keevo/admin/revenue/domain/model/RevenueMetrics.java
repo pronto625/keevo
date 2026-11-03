@@ -1,5 +1,7 @@
 package com.keevo.admin.revenue.domain.model;
 
+import com.keevo.identity.api.PlanKind;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -11,6 +13,8 @@ import java.util.*;
 /**
  * Pure revenue arithmetic over the payments and plan events of the non-deleted tenants (Story 9-3).
  * No I/O: the service loads the rows, this class applies the FR79 definitions (XAF integers, WAT calendar).
+ * Story 19.7a: {@code PREMIUM} / {@code FREE} / {@code PREMIUM_TRIAL} below read « a plan of kind PAID / FREE /
+ * TRIAL » (plan catalogue), so a plan created as data counts like the seeded one of its kind.
  *
  * <ul>
  *   <li>Monthly value of a payment = {@code amount × 30 / days(period_start..period_end inclusive)}, rounded
@@ -41,9 +45,10 @@ public final class RevenueMetrics {
     /** Unpaid days tolerated between two payment periods of the same paid streak. */
     static final int MAX_STREAK_GAP_DAYS = 1;
 
-    static final String PREMIUM = "PREMIUM";
-    static final String FREE = "FREE";
-    static final String TRIAL = "PREMIUM_TRIAL";
+    // Story 19.7a: « Premium » / « Free » / « trial » below are plan kinds (PAID / FREE / TRIAL), never plan codes.
+    static final PlanKind PREMIUM = PlanKind.PAID;
+    static final PlanKind FREE = PlanKind.FREE;
+    static final PlanKind TRIAL = PlanKind.TRIAL;
     static final String EXPIRY = "EXPIRY";
     static final Set<String> CHURN_CAUSES = Set.of(EXPIRY, "ADMIN_DOWNGRADE");
     /** Correction of a stale public plan (9-2 realign job): not a plan change, ignored by churn and conversion. */
@@ -91,7 +96,7 @@ public final class RevenueMetrics {
             if (watDate(e.occurredAt()).isAfter(day)) break;
             last = e;
         }
-        return last != null && PREMIUM.equals(last.fromPlan()) && FREE.equals(last.toPlan())
+        return last != null && PREMIUM == last.fromKind() && FREE == last.toKind()
                 && last.occurredAt().isAfter(p.paidAt());
     }
 
@@ -163,7 +168,7 @@ public final class RevenueMetrics {
                 if (!inRange(watDate(e.occurredAt()), from, to)) continue;
                 if (isChurn(e)) {
                     lastChurn = e;
-                } else if (lastChurn != null && PREMIUM.equals(e.toPlan())) {
+                } else if (lastChurn != null && PREMIUM == e.toKind()) {
                     lastChurn = null; // came back to Premium within the range
                 }
             }
@@ -186,7 +191,7 @@ public final class RevenueMetrics {
     }
 
     static boolean isChurn(PlanChange e) {
-        return PREMIUM.equals(e.fromPlan()) && FREE.equals(e.toPlan()) && CHURN_CAUSES.contains(e.cause());
+        return PREMIUM == e.fromKind() && FREE == e.toKind() && CHURN_CAUSES.contains(e.cause());
     }
 
     /** Ratio rounded to 4 decimals, 0 when the denominator is 0. */
@@ -213,11 +218,11 @@ public final class RevenueMetrics {
             for (PlanChange e : events) {
                 if (REALIGNMENT.equals(e.cause())) continue;
                 if (trialStart == null) {
-                    if (TRIAL.equals(e.toPlan())) trialStart = e;
+                    if (TRIAL == e.toKind()) trialStart = e;
                     continue; // nothing before the trial start counts
                 }
-                if (firstActivation == null && PREMIUM.equals(e.toPlan())) firstActivation = e;
-                if (trialEnd == null && (TRIAL.equals(e.fromPlan()) || PREMIUM.equals(e.toPlan()))) trialEnd = e;
+                if (firstActivation == null && PREMIUM == e.toKind()) firstActivation = e;
+                if (trialEnd == null && (TRIAL == e.fromKind() || PREMIUM == e.toKind())) trialEnd = e;
             }
             if (trialEnd == null || !inRange(watDate(trialEnd.occurredAt()), from, to)) continue;
             ended++;

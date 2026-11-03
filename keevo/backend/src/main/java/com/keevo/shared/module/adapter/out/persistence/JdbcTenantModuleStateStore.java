@@ -1,5 +1,7 @@
 package com.keevo.shared.module.adapter.out.persistence;
 
+import com.keevo.identity.api.PlanKind;
+
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.TenantModuleStatus;
 import com.keevo.shared.module.application.port.TenantModuleProvisioningPort;
@@ -50,10 +52,12 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
 
     /**
      * Story 13.10a — the tenant's plan, as {@code TenantPlanQuery} reads it (oldest row; {@code id} breaks a tie on
-     * {@code created_at}). {@code %s} is a schema name validated by {@link TenantSchema}, double-quoted.
+     * {@code created_at}). {@code %s} is a schema name validated by {@link TenantSchema}, double-quoted. Story 19.7a:
+     * the plan's kind is joined from the catalogue ({@code public.plans}; {@code null} for a code it does not know).
      */
-    static final String FIND_PLAN_SQL = "SELECT plan_type, status, expires_at FROM \"%s\".subscriptions "
-            + "ORDER BY created_at ASC, id ASC LIMIT 1";
+    static final String FIND_PLAN_SQL = "SELECT s.plan_type, s.status, s.expires_at, p.kind "
+            + "FROM \"%s\".subscriptions s LEFT JOIN public.plans p ON p.code = s.plan_type "
+            + "ORDER BY s.created_at ASC, s.id ASC LIMIT 1";
 
     /** Story 13.10a — the tenant's latest plan change (an {@code EXPIRY} downgrade anchors the grace). */
     static final String LAST_PLAN_EVENT_SQL = "SELECT cause, occurred_at FROM public.tenant_plan_events "
@@ -171,15 +175,17 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
      */
     static Plan readPlan(Connection connection, String schema, UUID tenantId, boolean forUpdate) throws SQLException {
         Plan plan;
-        String sql = FIND_PLAN_SQL.formatted(TenantSchema.validate(schema)) + (forUpdate ? " FOR UPDATE" : "");
+        String sql = FIND_PLAN_SQL.formatted(TenantSchema.validate(schema)) + (forUpdate ? " FOR UPDATE OF s" : "");
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setQueryTimeout(PLAN_QUERY_TIMEOUT_SECONDS);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return Plan.NONE;
                 }
-                plan = new Plan(rs.getString("plan_type"), rs.getString("status"),
-                        instant(rs.getObject("expires_at", OffsetDateTime.class)));
+                String kind = rs.getString("kind");
+                plan = new Plan(rs.getString("plan_type"), kind != null ? PlanKind.valueOf(kind) : null,
+                        rs.getString("status"), instant(rs.getObject("expires_at", OffsetDateTime.class)), null,
+                        false);
             }
         } catch (SQLException e) {
             if (UNDEFINED_TABLE.equals(e.getSQLState())) {
@@ -197,7 +203,7 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
                 }
             }
         }
-        return new Plan(plan.planType(), plan.status(), plan.expiresAt(), expiryDowngradeAt, false);
+        return new Plan(plan.planType(), plan.kind(), plan.status(), plan.expiresAt(), expiryDowngradeAt, false);
     }
 
     private static Instant instant(OffsetDateTime value) {

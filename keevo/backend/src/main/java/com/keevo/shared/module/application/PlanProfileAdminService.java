@@ -1,6 +1,8 @@
 package com.keevo.shared.module.application;
 
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.shared.domain.exception.DomainException;
@@ -54,10 +56,20 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
     private final PlanModuleRowStore rows;
     private final TransactionTemplate tx;
     private final AdminJobs jobs;
+    private final PlanCatalog plans;
 
+    /** With the seeded plan catalogue (tests). */
     public PlanProfileAdminService(ModuleCatalog catalog, PlanProfiles profiles, PlanProfileStore store,
                                    PlanModuleRowSync rowSync, PlanModuleRowStore rows,
                                    PlatformTransactionManager transactionManager, AdminJobs jobs) {
+        this(catalog, profiles, store, rowSync, rows, transactionManager, jobs, PlanCatalog.SEED);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PlanProfileAdminService(ModuleCatalog catalog, PlanProfiles profiles, PlanProfileStore store,
+                                   PlanModuleRowSync rowSync, PlanModuleRowStore rows,
+                                   PlatformTransactionManager transactionManager, AdminJobs jobs, PlanCatalog plans) {
+        this.plans = plans;
         this.jobs = jobs;
         this.catalog = catalog;
         this.profiles = profiles;
@@ -70,9 +82,9 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
     @Override
     public List<ProfileView> list() {
         List<ProfileView> views = new ArrayList<>();
-        for (PlanType type : PlanType.values()) {
-            views.add(view(profiles.profile(type)));
-        }
+        // Story 19.7a: every plan of the catalogue, in display order, profiles read in one query
+        profiles.profiles(plans.all().stream().map(PlanDefinition::code).toList())
+                .values().forEach(p -> views.add(view(p)));
         return views;
     }
 
@@ -81,6 +93,9 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                                Set<String> modules, UUID actorId) {
         if (planType == null) {
             throw invalid("offre inconnue");
+        }
+        if (plans.find(planType).isEmpty()) { // Story 19.7a: any catalogue plan, nothing else
+            throw new DomainException(ErrorCode.PLAN_PROFILE_NOT_FOUND, "Offre introuvable");
         }
         requireLimit(maxStores, "le nombre de boutiques");
         requireLimit(maxProducts, "le nombre de produits");
@@ -92,7 +107,8 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         // explicit decision for every installed paid module (a module shipped later follows the plan's default)
         Set<String> withheld = new TreeSet<>(paidModules());
         withheld.removeAll(granted);
-        PlanProfile after = PlanProfile.of(planType, maxStores, maxProducts, maxEmployees, granted, withheld);
+        PlanProfile after = PlanProfile.of(planType, plans.kind(planType), maxStores, maxProducts, maxEmployees,
+                granted, withheld);
 
         // Story 16.4: a composition change re-syncs the plan's tenants in a background job. The change is decided
         // from the row read under its lock, and the job slot is reserved before the write: a refusal (409, a re-sync
@@ -104,7 +120,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
             tx.executeWithoutResult(status -> {
                 PlanProfile stored = store.findForUpdate(planType).orElse(null); // row lock: edits serialise
                 before[0] = stored;
-                if (!effective(stored != null ? stored : PlanProfile.fromEnum(planType)).equals(effective(after))) {
+                if (!effective(stored != null ? stored : profiles.profile(planType)).equals(effective(after))) {
                     reserved[0] = jobs.reserve(AdminJobs.Kind.PROFILE_RESYNC, params, actorId);
                 }
                 store.save(after, actorId);
@@ -249,12 +265,9 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                 profile.maxProducts(), profile.maxEmployees(), granted, profile.fallback());
     }
 
-    static String label(PlanType type) {
-        return switch (type) {
-            case FREE -> "Gratuit";
-            case PREMIUM_TRIAL -> "Essai Premium";
-            case PREMIUM -> "Premium";
-        };
+    /** French name of the plan, from the catalogue (Story 19.7a). */
+    String label(PlanType type) {
+        return plans.label(type.code(), type.code());
     }
 
     private static String describe(PlanProfile p) {

@@ -26,12 +26,6 @@ public class TenantRepositoryAdapter implements TenantRepository {
     private final TenantSpringRepository springRepository;
     private final PlanProfiles planProfiles;
 
-    /** Without plan profiles: legacy limit columns from the built-in defaults (tests). */
-    public TenantRepositoryAdapter(TenantSpringRepository springRepository) {
-        this(springRepository, PlanProfiles.ENUM_DEFAULTS);
-    }
-
-    @org.springframework.beans.factory.annotation.Autowired
     public TenantRepositoryAdapter(TenantSpringRepository springRepository, PlanProfiles planProfiles) {
         this.springRepository = springRepository;
         this.planProfiles = planProfiles;
@@ -98,7 +92,7 @@ public class TenantRepositoryAdapter implements TenantRepository {
             e.getId(), e.getCode(), e.getSchemaName(),
             e.getName() != null ? e.getName() : e.getCode(),
             TenantStatus.valueOf(e.getStatus()),
-            PlanType.valueOf(e.getPlanType()),
+            PlanType.of(e.getPlanType()), // 19.7a: stored code, shape only (a stale catalogue never breaks login)
             e.getCreatedAt() != null ? e.getCreatedAt() : Instant.now(),
             e.getDeletionScheduledAt()
         );

@@ -1,5 +1,6 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
@@ -32,6 +33,10 @@ import java.util.Objects;
  *   <li>plan unreadable → no rows can be derived ({@link IllegalArgumentException}): the caller skips the tenant.</li>
  * </ul>
  * Paid modules: installed, not {@code free}, not core, not {@code platform}.
+ *
+ * <p>Story 19.7a — « premium » above means a plan of kind {@code TRIAL} or {@code PAID} ({@code TRIAL} rows for the
+ * trial kind), « free » a plan of kind {@code FREE}, read from the plan catalogue; a code the catalogue does not know
+ * is « anything else ».
  *
  * <p>Story 16.8 — the mapping above applies to the paid modules the plan type's profile grants
  * ({@code public.profile_modules}, {@link PlanProfile#grants}). A paid module granted to {@code FREE} gets
@@ -100,8 +105,8 @@ public final class PlanModuleRows {
         if (plan.unreadable()) {
             throw new IllegalArgumentException("The plan is unreadable: no row can be derived from it");
         }
-        boolean premiumType = "PREMIUM".equals(plan.planType()) || "PREMIUM_TRIAL".equals(plan.planType());
-        boolean free = "FREE".equals(plan.planType());
+        boolean premiumType = plan.kind() != null && plan.kind().expires();
+        boolean free = plan.kind() == PlanKind.FREE;
         if (free && granted) {
             return new Desired(TenantModuleStatus.ACTIVE, TIER_FREE, null, null);
         }
@@ -110,7 +115,7 @@ public final class PlanModuleRows {
         }
         Instant end = plan.expiresAt();
         if (premiumType && "ACTIVE".equals(plan.status()) && (end == null || end.isAfter(now))) {
-            TenantModuleStatus status = "PREMIUM_TRIAL".equals(plan.planType())
+            TenantModuleStatus status = plan.kind() == PlanKind.TRIAL
                     ? TenantModuleStatus.TRIAL : TenantModuleStatus.ACTIVE;
             return new Desired(status, TIER_PREMIUM, end, end != null ? end.plus(ModuleStateRules.PLAN_GRACE) : null);
         }
@@ -137,9 +142,9 @@ public final class PlanModuleRows {
         return profile.planType().name().equals(plan.planType()) && profile.grants(moduleId);
     }
 
-    /** Built-in defaults (the {@code PlanType} fallback): premium types grant every paid module, {@code FREE} none. */
+    /** Built-in defaults (no profile at hand): trial and paid kinds grant every paid module, the free kind none. */
     static boolean grantedByDefault(Plan plan) {
-        return plan != null && ("PREMIUM".equals(plan.planType()) || "PREMIUM_TRIAL".equals(plan.planType()));
+        return plan != null && PlanProfile.grantsByDefault(plan.kind());
     }
 
     /**

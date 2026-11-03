@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * writes one report in {@code public} and deletes it.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class})
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Sync pull carries later changes and summaries (PostgreSQL)")
 class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {

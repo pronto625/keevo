@@ -37,7 +37,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * around the per-company loops): unique schemas / ids, no global count asserted.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, JdbcHealthSampleRepository.class, JdbcPlatformProbeAdapter.class,
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, JdbcHealthSampleRepository.class, JdbcPlatformProbeAdapter.class,
         JdbcAlertSourcesAdapter.class, JdbcAlertAckRepository.class, JdbcSyncSilenceNoticeRepository.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Health & alerts SQL on PostgreSQL (Story 9-5)")

@@ -172,6 +172,47 @@ class AdminCatalogServiceTest {
         assertThat(summary.totalProducts()).isGreaterThanOrEqualTo(0);
     }
 
+    // ── Story 19.7a — plan class by kind ─────────────────────────────────────
+
+    @Test
+    @DisplayName("19.7a: a trial or paid kind is « PAID », the free kind or a code unknown to the catalogue « FREE »")
+    void planClassByKind() {
+        assertThat(AdminCatalogService.planClass("TRIAL")).isEqualTo("PAID");
+        assertThat(AdminCatalogService.planClass("PAID")).isEqualTo("PAID");
+        assertThat(AdminCatalogService.planClass("FREE")).isEqualTo("FREE");
+        assertThat(AdminCatalogService.planClass(null)).isEqualTo("FREE");
+    }
+
+    @Test
+    @DisplayName("19.7a: the PAID filter binds the kinds TRIAL and PAID, the FREE filter the kind FREE (or unknown); "
+            + "a TRIAL-kind tenant row maps to PAID")
+    @SuppressWarnings("unchecked")
+    void planFiltersBindKinds() {
+        List<String> sqls = new java.util.ArrayList<>();
+        List<List<Object>> params = new java.util.ArrayList<>();
+        List<Object> mapped = new java.util.ArrayList<>();
+        doAnswer(inv -> {
+            String sql = (String) inv.getArgument(0);
+            if (sql.contains("FROM public.tenants")) {
+                sqls.add(sql);
+                Object[] args = java.util.Arrays.copyOfRange(inv.getArguments(), 2, inv.getArguments().length);
+                params.add(List.of(args));
+                RowMapper<Object> rm = (RowMapper<Object>) inv.getArgument(1);
+                mapped.add(buildTenantRow(rm, "t1", "Tenant A", "kv_aaaaaa", "PREMIUM_TRIAL"));
+            }
+            return List.of();
+        }).when(jdbc).query(anyString(), any(RowMapper.class), any(Object[].class));
+
+        service.execute(new ListProductsQuery(null, null, null, null, "PAID", 0, 25));
+        service.execute(new ListProductsQuery(null, null, null, null, "FREE", 0, 25));
+
+        assertThat(sqls.get(0)).contains("LEFT JOIN public.plans pl").contains("pl.kind IN (?, ?)");
+        assertThat(params.get(0)).containsExactly("TRIAL", "PAID");
+        assertThat(sqls.get(1)).contains("(pl.kind = ? OR pl.kind IS NULL)");
+        assertThat(params.get(1)).containsExactly("FREE");
+        assertThat(mapped.get(0).toString()).contains("PAID");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -181,7 +222,8 @@ class AdminCatalogServiceTest {
             when(rs.getString("id")).thenReturn(id);
             when(rs.getString("name")).thenReturn(name);
             when(rs.getString("schema_name")).thenReturn(schema);
-            when(rs.getString("plan_type")).thenReturn(planType);
+            // Story 19.7a: the plan class is read from the kind joined from the catalogue
+            when(rs.getString("kind")).thenReturn(com.keevo.identity.api.PlanType.of(planType).seedKind().orElseThrow().name());
             return rm.mapRow(rs, 0);
         } catch (Exception e) {
             throw new RuntimeException(e);

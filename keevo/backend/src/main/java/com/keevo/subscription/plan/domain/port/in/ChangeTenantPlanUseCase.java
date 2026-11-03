@@ -18,7 +18,7 @@ public interface ChangeTenantPlanUseCase {
     Optional<CurrentPlan> currentPlan(String schemaName);
 
     /**
-     * Applies {@code newPlan} (limits from {@link com.keevo.identity.api.PlanType},
+     * Applies {@code newPlan} (legacy limit columns from its profile,
      * status ACTIVE, {@code expiresAt}), syncs {@code public.tenants.plan_type} and appends a plan event.
      *
      * @return the plan before the change

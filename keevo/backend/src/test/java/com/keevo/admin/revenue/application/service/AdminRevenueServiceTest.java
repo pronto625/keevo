@@ -70,9 +70,12 @@ class AdminRevenueServiceTest {
         when(jdbc.queryForList(AdminRevenueService.PLAN_TENANTS_SQL)).thenReturn(rows);
     }
 
+    /** Story 19.7a: the current plan's kind, joined from the catalogue (seeded code → its kind, else the value). */
     private void planOf(String schema, String plan) {
+        String kind = com.keevo.identity.api.PlanType.parse(plan).flatMap(com.keevo.identity.api.PlanType::seedKind)
+                .map(Enum::name).orElse(plan);
         when(jdbc.queryForList(String.format(AdminRevenueService.CURRENT_PLAN_SQL, schema), String.class))
-                .thenReturn(List.of(plan));
+                .thenReturn(List.of(kind));
     }
 
     // ── Summary ───────────────────────────────────────────────────────────────
@@ -189,7 +192,7 @@ class AdminRevenueServiceTest {
     void trend_twelveMonths() {
         payments.add(new RevenuePayment(A, 15_000, Instant.parse("2026-10-01T09:00:00Z"),
                 LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 30)));
-        events.add(new PlanChange(B, "PREMIUM", "FREE", "EXPIRY", Instant.parse("2026-09-12T01:00:00Z")));
+        events.add(new PlanChange(B, "PREMIUM", "FREE", com.keevo.identity.api.PlanKind.PAID, com.keevo.identity.api.PlanKind.FREE, "EXPIRY", Instant.parse("2026-09-12T01:00:00Z")));
 
         List<RevenueTrendPoint> points = service.getTrend();
 
@@ -220,7 +223,7 @@ class AdminRevenueServiceTest {
                 LocalDate.of(2026, 1, 1), LocalDate.of(2026, 9, 11)));
         payments.add(new RevenuePayment(B, 15_000, Instant.parse("2026-08-20T09:00:00Z"),
                 LocalDate.of(2026, 8, 20), LocalDate.of(2026, 9, 30)));
-        events.add(new PlanChange(A, "PREMIUM", "FREE", "EXPIRY", Instant.parse("2026-09-12T01:00:00Z")));
+        events.add(new PlanChange(A, "PREMIUM", "FREE", com.keevo.identity.api.PlanKind.PAID, com.keevo.identity.api.PlanKind.FREE, "EXPIRY", Instant.parse("2026-09-12T01:00:00Z")));
         stubTenantLookup(A, null, "kv_aaaaa1");
         // window = the 30 WAT days ending on the plan end date (11/09): [13/08 00:00, 12/09 00:00) WAT
         when(jdbc.queryForObject(eq(String.format(AdminRevenueService.GMV_SQL, "kv_aaaaa1")), eq(Long.class),
@@ -244,7 +247,7 @@ class AdminRevenueServiceTest {
     @Test
     @DisplayName("churn: unreadable schema → GMV 0, row kept")
     void churn_brokenSchema_gmvZero() throws SQLException {
-        events.add(new PlanChange(A, "PREMIUM", "FREE", "ADMIN_DOWNGRADE", Instant.parse("2026-09-12T10:00:00Z")));
+        events.add(new PlanChange(A, "PREMIUM", "FREE", com.keevo.identity.api.PlanKind.PAID, com.keevo.identity.api.PlanKind.FREE, "ADMIN_DOWNGRADE", Instant.parse("2026-09-12T10:00:00Z")));
         stubTenantLookup(A, "Boutique", "kv_aaaaa1");
         when(jdbc.queryForObject(anyString(), eq(Long.class), any(), any()))
                 .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("no table")));

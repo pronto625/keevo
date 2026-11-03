@@ -6,6 +6,8 @@ import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.admin.tenant.domain.model.*;
 import com.keevo.admin.tenant.domain.port.in.*;
 import com.keevo.identity.api.TenantDeletionPort;
+import com.keevo.identity.api.PlanKind;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -67,8 +69,10 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     private static final String ADMIN_TENANT_ID = "00000000-0000-0000-0000-000000000000";
     private static final int AUDIT_PAGE_SIZE = 50;
 
-    /** Accepted values of the list {@code plan} filter ({@code PAID} = legacy PREMIUM_TRIAL + PREMIUM). */
-    private static final Set<String> PLAN_FILTERS = Set.of("ALL", "FREE", "PREMIUM_TRIAL", "PREMIUM", "PAID");
+    /** List {@code plan} filter: no filter. Any other value is a catalogue plan code or {@link #PLAN_FILTER_PAID}. */
+    private static final String PLAN_FILTER_ALL = "ALL";
+    /** List {@code plan} filter: legacy « paying » = every plan of kind TRIAL or PAID (Story 19.7a: by kind). */
+    private static final String PLAN_FILTER_PAID = "PAID";
 
     /** Trimmed « first last » of an employees row aliased {@code e}; NULL when both are blank. */
     private static final String EMPLOYEE_FULL_NAME =
@@ -76,10 +80,18 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
     private final JdbcTemplate jdbc;
     private final TenantDeletionPort tenantDeletion;
+    private final PlanCatalog catalog;
 
+    /** With the seeded plan catalogue (tests). */
     public AdminTenantService(JdbcTemplate jdbcTemplate, TenantDeletionPort tenantDeletion) {
+        this(jdbcTemplate, tenantDeletion, PlanCatalog.SEED);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminTenantService(JdbcTemplate jdbcTemplate, TenantDeletionPort tenantDeletion, PlanCatalog catalog) {
         this.jdbc = jdbcTemplate;
         this.tenantDeletion = tenantDeletion;
+        this.catalog = catalog;
     }
 
     // ── ListTenantsUseCase ────────────────────────────────────────────────────
@@ -290,8 +302,10 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
 
         String plan = normalizePlanFilter(q.plan());
         if (plan != null) {
-            if ("PAID".equals(plan)) {
-                sb.append(" AND t.plan_type IN ('PREMIUM', 'PREMIUM_TRIAL')");
+            if (PLAN_FILTER_PAID.equals(plan)) { // 19.7a: by kind, joined on the catalogue
+                sb.append(" AND t.plan_type IN (SELECT pl.code FROM public.plans pl WHERE pl.kind IN (?, ?))");
+                params.add(PlanKind.TRIAL.name());
+                params.add(PlanKind.PAID.name());
             } else {
                 sb.append(" AND t.plan_type = ?");
                 params.add(plan);
@@ -347,17 +361,22 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     }
 
     /**
-     * Plan filter: null/blank/ALL → null (no filter); FREE | PREMIUM_TRIAL | PREMIUM | PAID (legacy,
-     * = PREMIUM_TRIAL + PREMIUM) kept; anything else → 422 VALIDATION_ERROR.
+     * Plan filter: null/blank/ALL → null (no filter); a plan code of the catalogue, or PAID (legacy, = every plan of
+     * kind TRIAL or PAID) kept; anything else → 422 VALIDATION_ERROR naming the accepted values (Story 19.7a: the
+     * catalogue's codes, not a fixed list).
      */
-    private static String normalizePlanFilter(String raw) {
+    private String normalizePlanFilter(String raw) {
         if (raw == null || raw.isBlank()) return null;
         String plan = raw.trim().toUpperCase(java.util.Locale.ROOT);
-        if (!PLAN_FILTERS.contains(plan)) {
+        if (!PLAN_FILTER_ALL.equals(plan) && !PLAN_FILTER_PAID.equals(plan) && catalog.find(plan).isEmpty()) {
+            List<String> accepted = new ArrayList<>();
+            accepted.add(PLAN_FILTER_ALL);
+            catalog.all().forEach(p -> accepted.add(p.code().code()));
+            accepted.add(PLAN_FILTER_PAID);
             throw new DomainException(ErrorCode.VALIDATION_ERROR,
-                    "plan must be one of ALL, FREE, PREMIUM_TRIAL, PREMIUM, PAID");
+                    "plan must be one of " + String.join(", ", accepted));
         }
-        return "ALL".equals(plan) ? null : plan;
+        return PLAN_FILTER_ALL.equals(plan) ? null : plan;
     }
 
     /**

@@ -1,6 +1,8 @@
 package com.keevo.subscription.plan.application.service;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.module.application.port.PlanModuleRowSync;
@@ -48,8 +50,9 @@ import java.util.UUID;
  * without managing TenantContext per tenant. Table names are schema-qualified
  * (e.g., {@code "kv_abc123".subscriptions}) to avoid search_path ambiguity.
  *
- * <p><b>M4 fix — single source of truth for FREE limits:</b> FREE plan limit values are read from
- * {@link PlanType#FREE} at runtime via JDBC parameters instead of being hardcoded in the SQL.
+ * <p><b>M4 fix — single source of truth for FREE limits:</b> the free plan's limit values are read from its
+ * profile at runtime via JDBC parameters instead of being hardcoded in the SQL. Story 19.7a: the plans that expire
+ * are those of kind TRIAL / PAID, the target is {@code plan_settings.free_plan_code} — both read from the catalogue.
  */
 @Service
 public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase {
@@ -59,19 +62,22 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     static final String FETCH_TENANTS =
             "SELECT id, schema_name FROM public.tenants WHERE status != 'DELETED'";
 
-    // M4 fix: limit values are JDBC ? params — populated from the FREE plan profile at runtime (Story 16.8).
+    // M4 fix: limit values are JDBC ? params — populated from the free plan's profile at runtime (Story 16.8).
     // Schema name injected via String.format (%s) as it cannot be a JDBC param in PostgreSQL.
     // Story 9-2: RETURNING the plan BEFORE the update (CTE) to publish one event per downgrade.
+    // Story 19.7a: which plans expire is their kind (TRIAL, PAID — joined from public.plans, set-based), the target
+    // is plan_settings.free_plan_code; no plan code in the SQL. Parameters: kinds (2), free plan, limits (3).
     static final String DOWNGRADE_SQL =
             "WITH expired AS ("
-            + " SELECT id, plan_type FROM \"%1$s\".subscriptions"
-            + " WHERE plan_type IN ('PREMIUM_TRIAL', 'PREMIUM')"
-            + " AND status = 'ACTIVE'"
-            + " AND expires_at IS NOT NULL"
-            + " AND expires_at < NOW()"
-            + " FOR UPDATE) "
+            + " SELECT s.id, s.plan_type FROM \"%1$s\".subscriptions s"
+            + " JOIN public.plans p ON p.code = s.plan_type"
+            + " WHERE p.kind IN (?, ?)"
+            + " AND s.status = 'ACTIVE'"
+            + " AND s.expires_at IS NOT NULL"
+            + " AND s.expires_at < NOW()"
+            + " FOR UPDATE OF s) "
             + "UPDATE \"%1$s\".subscriptions s "
-            + "SET plan_type = 'FREE', max_stores = ?, max_products = ?, max_employees = ?, "
+            + "SET plan_type = ?, max_stores = ?, max_products = ?, max_employees = ?, "
             + "expires_at = NULL "
             + "FROM expired WHERE s.id = expired.id "
             + "RETURNING expired.plan_type";
@@ -83,17 +89,7 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     private final Clock clock;
     private final PlanModuleRowSync planModuleRows;
     private final PlanProfiles planProfiles;
-
-    /** Without plan profiles: Free limits from the built-in defaults (tests). */
-    public SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
-                                     PlanChangeRecorder planChangeRecorder,
-                                     ApplicationEventPublisher eventPublisher,
-                                     PlatformTransactionManager transactionManager,
-                                     Clock clock,
-                                     PlanModuleRowSync planModuleRows) {
-        this(jdbcTemplate, planChangeRecorder, eventPublisher, new TransactionTemplate(transactionManager), clock,
-                planModuleRows, PlanProfiles.ENUM_DEFAULTS);
-    }
+    private final PlanCatalog catalog;
 
     @Autowired
     public SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
@@ -102,30 +98,22 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
                                      PlatformTransactionManager transactionManager,
                                      Clock clock,
                                      PlanModuleRowSync planModuleRows,
-                                     PlanProfiles planProfiles) {
+                                     PlanProfiles planProfiles,
+                                     PlanCatalog catalog) {
         this(jdbcTemplate, planChangeRecorder, eventPublisher, new TransactionTemplate(transactionManager), clock,
-                planModuleRows, planProfiles);
+                planModuleRows, planProfiles, catalog);
     }
 
-    /** Test constructor — pre-built transaction template. */
-    SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
-                              PlanChangeRecorder planChangeRecorder,
-                              ApplicationEventPublisher eventPublisher,
-                              TransactionTemplate transactionTemplate,
-                              Clock clock,
-                              PlanModuleRowSync planModuleRows) {
-        this(jdbcTemplate, planChangeRecorder, eventPublisher, transactionTemplate, clock, planModuleRows,
-                PlanProfiles.ENUM_DEFAULTS);
-    }
-
-    /** Test constructor with the plan profiles (Story 16.8). */
+    /** Test constructor — pre-built transaction template (Story 16.8 profiles, Story 19.7a catalogue). */
     SubscriptionExpiryService(JdbcTemplate jdbcTemplate,
                               PlanChangeRecorder planChangeRecorder,
                               ApplicationEventPublisher eventPublisher,
                               TransactionTemplate transactionTemplate,
                               Clock clock,
                               PlanModuleRowSync planModuleRows,
-                              PlanProfiles planProfiles) {
+                              PlanProfiles planProfiles,
+                              PlanCatalog catalog) {
+        this.catalog = catalog;
         this.planProfiles = planProfiles;
         this.jdbcTemplate = jdbcTemplate;
         this.planModuleRows = planModuleRows;
@@ -138,6 +126,9 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     @Override
     public int execute(DowngradeExpiredTrialsCommand command) {
         List<Map<String, Object>> tenants = jdbcTemplate.queryForList(FETCH_TENANTS);
+        // Story 19.7a — read once per run (FUS-NFR11): the target plan and its legacy limit columns
+        PlanType freePlan = catalog.freePlan();
+        PlanProfile free = planProfiles.profile(freePlan); // 16.8: legacy columns from the free plan's profile
 
         int totalDowngraded = 0;
         for (Map<String, Object> tenant : tenants) {
@@ -146,7 +137,7 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
             UUID tenantId = toUuid(tenant.get("id"));
 
             try {
-                Integer updated = transactionTemplate.execute(status -> downgrade(tenantId, schema));
+                Integer updated = transactionTemplate.execute(status -> downgrade(tenantId, schema, freePlan, free));
                 if (updated != null && updated > 0) {
                     log.info("Trial/premium expired — downgraded {} subscription(s) of tenant {} to FREE",
                             updated, tenantId);
@@ -163,24 +154,25 @@ public class SubscriptionExpiryService implements DowngradeExpiredTrialsUseCase 
     }
 
     /** One tenant, inside its own transaction: downgrade + public plan + history + event. */
-    private int downgrade(UUID tenantId, String schema) {
+    private int downgrade(UUID tenantId, String schema, PlanType freePlan, PlanProfile free) {
         if (!TenantSchema.isValid(schema)) { // run loop filters; re-checked at use
             log.warn("Subscription expiry: tenant {} skipped (invalid schema name)", tenantId);
             return 0;
         }
-        PlanProfile free = planProfiles.profile(PlanType.FREE); // 16.8: legacy columns from the Free profile
         @SuppressWarnings("SqlSourceToSinkFlow")
         List<String> previousPlans = jdbcTemplate.queryForList(
                 String.format(DOWNGRADE_SQL, schema), String.class,
+                PlanKind.TRIAL.name(), PlanKind.PAID.name(),
+                freePlan.code(),
                 free.legacyMaxStores(),
                 free.legacyMaxProducts(),
                 free.legacyMaxEmployees());
         if (previousPlans.isEmpty()) return 0;
 
-        PlanType previous = PlanType.valueOf(previousPlans.get(0));
+        PlanType previous = catalog.resolve(previousPlans.get(0)); // joined above: a catalogue plan
         Instant now = clock.instant();
-        planChangeRecorder.syncPublicPlanType(tenantId, PlanType.FREE);
-        planChangeRecorder.recordEvent(tenantId, previous, PlanType.FREE, PlanChangeCause.EXPIRY, null, null);
+        planChangeRecorder.syncPublicPlanType(tenantId, freePlan);
+        planChangeRecorder.recordEvent(tenantId, previous, freePlan, PlanChangeCause.EXPIRY, null, null);
         // Story 16.5 — paid-module rows turn EXPIRED (grace anchored on this downgrade), same transaction
         planModuleRows.sync(tenantId, schema);
         eventPublisher.publishEvent(new PlanExpiredEvent(tenantId, schema, previous, now));

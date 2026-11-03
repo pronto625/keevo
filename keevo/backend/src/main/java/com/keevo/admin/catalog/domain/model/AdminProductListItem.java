@@ -7,7 +7,7 @@ public record AdminProductListItem(
         String name,
         String tenantId,
         String tenantName,
-        String tenantPlan,       // "FREE" | "PAID"
+        String tenantPlan,       // plan class by kind: FREE | PAID (trial or paid plan)
         String schemaName,       // internal use — not serialized to DTO
         String categoryName,     // nullable
         long price,              // in XAF (integer)

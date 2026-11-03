@@ -29,7 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * blank the next company's labels (no transaction around the per-schema loop).
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, AdminFeedbackLabelService.class})
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, AdminFeedbackLabelService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Feedback inbox labels on PostgreSQL (spec 9-1)")
 class AdminFeedbackLabelServicePostgresIntegrationTest extends PostgresIntegrationTest {

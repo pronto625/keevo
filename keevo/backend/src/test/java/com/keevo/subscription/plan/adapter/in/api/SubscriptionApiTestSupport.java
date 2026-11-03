@@ -22,7 +22,7 @@ public final class SubscriptionApiTestSupport {
 
     /** The real query adapter over the given repository. */
     public static TenantPlanQuery queryPort(SubscriptionRepository subscriptionRepository) {
-        return new SubscriptionPlanAdapter(subscriptionRepository, new PlanLimitGuard(PlanProfiles.ENUM_DEFAULTS));
+        return new SubscriptionPlanAdapter(subscriptionRepository, new PlanLimitGuard(com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS));
     }
 
     /** The real limit adapter over the given guard (real or mock). */
@@ -37,11 +37,13 @@ public final class SubscriptionApiTestSupport {
 
     /** Matcher of a {@link PlanView} of the given plan type (16.8: the guard receives the plan view). */
     public static PlanView plan(com.keevo.identity.api.PlanType type) {
-        return org.mockito.ArgumentMatchers.argThat(p -> p != null && p.planType() == type);
+        return org.mockito.ArgumentMatchers.argThat(p -> p != null && type.equals(p.planType()));
     }
 
     /** The published view of a subscription, mapped exactly as the adapter does. */
     public static PlanView view(Subscription subscription) {
-        return SubscriptionPlanAdapter.view(subscription, PlanProfile.fromEnum(subscription.getPlanType()));
+        return SubscriptionPlanAdapter.view(subscription,
+                com.keevo.shared.capability.entitlement.TestPlanProfiles.kind(subscription.getPlanType()),
+                com.keevo.shared.capability.entitlement.TestPlanProfiles.profile(subscription.getPlanType()));
     }
 }

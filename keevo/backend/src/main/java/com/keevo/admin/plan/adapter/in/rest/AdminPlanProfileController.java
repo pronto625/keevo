@@ -1,6 +1,7 @@
 package com.keevo.admin.plan.adapter.in.rest;
 
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -40,9 +41,11 @@ import java.util.Set;
 public class AdminPlanProfileController {
 
     private final PlanProfileAdmin profiles;
+    private final PlanCatalog plans;
 
-    public AdminPlanProfileController(PlanProfileAdmin profiles) {
+    public AdminPlanProfileController(PlanProfileAdmin profiles, PlanCatalog plans) {
         this.profiles = profiles;
+        this.plans = plans;
     }
 
     @Operation(summary = "Plan profiles: limits (null = unlimited) and granted paid modules, per plan type",
@@ -136,9 +139,9 @@ public class AdminPlanProfileController {
         return ids;
     }
 
-    private static PlanType parsePlanType(String value) {
+    private PlanType parsePlanType(String value) {
         try {
-            return PlanType.valueOf(value.trim().toUpperCase(Locale.ROOT));
+            return plans.resolve(value.trim().toUpperCase(Locale.ROOT)); // 19.7a: any plan of the catalogue
         } catch (IllegalArgumentException | NullPointerException e) {
             // Story 16.14 — an unknown plan type is a missing resource, like an unknown pack or job
             throw new DomainException(ErrorCode.PLAN_PROFILE_NOT_FOUND, "Offre introuvable");

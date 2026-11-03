@@ -69,7 +69,7 @@ class ImportCsvProductsUseCaseTest {
     @Mock private ProductCountPort        productCountPort;
     @Mock private SubscriptionRepository  subscriptionRepository;
     @Spy private PlanLimitGuard          planLimitGuard =
-            new PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
+            new PlanLimitGuard(com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
     @Mock private CategoryRepository      categoryRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private org.springframework.transaction.PlatformTransactionManager transactionManager;

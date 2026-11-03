@@ -45,7 +45,7 @@ import static org.mockito.Mockito.mock;
  * <p>Commits a tenant schema, dropped in {@link #dropSchema()}.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import(TenantSchemaProvisioner.class)
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Transfers delta pull is scoped to the employee's store (Story 16.10)")
 class StockTransferStoreScopePostgresIntegrationTest extends PostgresIntegrationTest {

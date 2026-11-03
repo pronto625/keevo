@@ -33,8 +33,12 @@ class SubscriptionRepositoryAdapterTest {
     @Mock
     private SubscriptionSpringRepository springRepository;
 
-    @InjectMocks
     private SubscriptionRepositoryAdapter adapter;
+
+    @org.junit.jupiter.api.BeforeEach
+    void init() {
+        adapter = new SubscriptionRepositoryAdapter(springRepository);
+    }
 
     // ── findActivePlan ────────────────────────────────────────────────────────
 
@@ -60,7 +64,6 @@ class SubscriptionRepositoryAdapterTest {
         assertThat(sub.getPlanType()).isEqualTo(PlanType.PREMIUM_TRIAL);
         assertThat(sub.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
         assertThat(sub.isActive()).isTrue();
-        assertThat(sub.isPremiumTrial()).isTrue();
         assertThat(sub.getExpiresAt()).isEqualTo(expires);
     }
 
@@ -88,7 +91,6 @@ class SubscriptionRepositoryAdapterTest {
         assertThat(result).isPresent();
         assertThat(result.get().getPlanType()).isEqualTo(PlanType.FREE);
         assertThat(result.get().getExpiresAt()).isNull();
-        assertThat(result.get().isFree()).isTrue();
     }
 
     // ── save ─────────────────────────────────────────────────────────────────

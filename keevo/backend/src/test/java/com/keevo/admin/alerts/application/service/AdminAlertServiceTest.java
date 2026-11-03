@@ -390,7 +390,7 @@ class AdminAlertServiceTest {
     @Test
     void labels() {
         assertThat(AdminAlertService.days(1)).isEqualTo("1 jour");
-        assertThat(AdminAlertService.planLabel("PREMIUM")).isEqualTo("Premium");
+        assertThat(service.planLabel("PREMIUM")).isEqualTo("Premium");
         assertThat(AdminAlertService.feedbackTypeLabel("praise")).isEqualTo("Compliment");
         assertThat(AdminAlertService.feedbackTypeLabel("UNKNOWN_CODE")).isEqualTo("Autre");
     }

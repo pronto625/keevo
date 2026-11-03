@@ -2,38 +2,42 @@ package com.keevo.shared.capability.entitlement;
 
 import com.keevo.identity.api.PlanType;
 
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * Story 16.8 — live read of the plan profiles ({@code public.plan_profiles} + {@code public.profile_modules}): the
- * single source of the plan limits and of the paid modules each plan type grants. Every call reads the database (no
- * cache outliving the call), so a super-admin change applies to the next check without a restart.
+ * single source of the plan limits and of the paid modules each plan grants. Every call reads the database, so a
+ * super-admin change applies to the next check without a restart.
  *
- * <p>When a profile cannot be read (row missing, database fault) the {@link PlanType} constants are used instead
- * ({@link PlanProfile#fromEnum}) and an ERROR is logged — never an exception. Implemented by the core
- * ({@code shared.module.adapter.out.persistence.JdbcPlanProfileStore}); joins the caller's transaction.
+ * <p>Story 19.7a — no limit lives in the code: a plan without a stored profile gets the free plan's profile (fail
+ * closed) with an ERROR log; a profile that cannot be read (database fault) answers the last one read, flagged
+ * {@link PlanProfile#fallback()} — never an exception. Implemented by the core
+ * ({@code shared.module.adapter.out.persistence.JdbcPlanProfileStore}).
  */
+@FunctionalInterface
 public interface PlanProfiles {
 
-    /** The profile of the plan type, or the enum fallback. */
+    /** The profile of the plan, or its fallback. */
     PlanProfile profile(PlanType planType);
 
     /**
-     * The profile of a plan type given by name ({@code FREE} | {@code PREMIUM_TRIAL} | {@code PREMIUM}).
-     *
-     * @return {@code null} for a null or unknown plan type
+     * The profiles of several plans, in their order (Story 19.7a: the core reads them in one query, same fallbacks
+     * as {@link #profile(PlanType)}).
      */
-    default PlanProfile profile(String planType) {
-        if (planType == null) {
-            return null;
-        }
-        PlanType type;
-        try {
-            type = PlanType.valueOf(planType);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-        return profile(type);
+    default Map<PlanType, PlanProfile> profiles(Collection<PlanType> planTypes) {
+        Map<PlanType, PlanProfile> result = new LinkedHashMap<>();
+        planTypes.forEach(t -> result.put(t, profile(t)));
+        return result;
     }
 
-    /** No database: every plan type answers its enum fallback (tests, slices without the core adapter). */
-    PlanProfiles ENUM_DEFAULTS = PlanProfile::fromEnum;
+    /**
+     * The profile of a plan given by code.
+     *
+     * @return {@code null} for a null or malformed code
+     */
+    default PlanProfile profile(String planType) {
+        return PlanType.parse(planType).map(this::profile).orElse(null);
+    }
 }

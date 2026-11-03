@@ -9,9 +9,9 @@ import java.util.UUID;
  * <p>Pure Java record — no Spring/JPA dependency.
  * Loaded via JdbcTemplate from the public schema.
  *
- * <p>plan: "FREE" | "PREMIUM_TRIAL" | "PREMIUM" — {@code public.tenants.plan_type}, kept in step with the
+ * <p>plan: a plan code of the catalogue — {@code public.tenants.plan_type}, kept in step with the
  * tenant-schema subscription since Story 9-2 (labelled in French by the dashboard). The list filter
- * takes "FREE" | "PREMIUM_TRIAL" | "PREMIUM" and still the legacy "PAID" (PREMIUM + PREMIUM_TRIAL).
+ * takes any catalogue code and still the legacy "PAID" (every plan of kind TRIAL or PAID, Story 19.7a).
  * <p>status: "ACTIVE" | "DELETION_PENDING" | "SUSPENDED"
  * <p>ownerName: the owner's first + last name when an {@code employees} row exists for them, else
  * « Propriétaire » (spec 9-1 completion). {@code code} stays internal: it is never serialized.

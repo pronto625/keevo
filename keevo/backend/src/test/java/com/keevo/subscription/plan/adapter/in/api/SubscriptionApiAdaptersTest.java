@@ -1,6 +1,7 @@
 package com.keevo.subscription.plan.adapter.in.api;
 
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.TestPlanProfiles;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -43,7 +44,7 @@ class SubscriptionApiAdaptersTest {
     @Mock private ActivatePlanUseCase activatePlanUseCase;
     @Mock private ChangeTenantPlanUseCase changeTenantPlanUseCase;
 
-    private final PlanLimitGuard guard = new PlanLimitGuard(PlanProfiles.ENUM_DEFAULTS);
+    private final PlanLimitGuard guard = new PlanLimitGuard(com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
 
     @BeforeEach
     void setUp() {
@@ -68,10 +69,9 @@ class SubscriptionApiAdaptersTest {
 
         PlanView plan = adapter.findCurrentPlan(TENANT).orElseThrow();
 
-        assertThat(plan).isEqualTo(new PlanView(PlanType.PREMIUM, false, exp));
-        assertThat(plan.isPremium()).isTrue();
-        assertThat(plan.isPremiumTrial()).isFalse();
-        assertThat(plan.isFree()).isFalse();
+        assertThat(plan).isEqualTo(TestPlanProfiles.view(PlanType.PREMIUM, false, exp));
+        assertThat(plan.kind()).isEqualTo(com.keevo.identity.api.PlanKind.PAID);
+        assertThat(plan.v1Plan()).isEqualTo(PlanType.PREMIUM);
     }
 
     @Test
@@ -90,17 +90,17 @@ class SubscriptionApiAdaptersTest {
     @Test
     void freePlanLimits_oneStore_500Products_2EmployeeSlots() {
         var adapter = new SubscriptionPlanAdapter(subscriptionRepository, guard);
-        PlanView free = new PlanView(PlanType.FREE, true, null);
+        PlanView free = TestPlanProfiles.view(PlanType.FREE, true, null);
 
         adapter.checkStoreLimit(free, 0);
         adapter.checkProductLimit(free, () -> 499);
         assertThat(free.maxStores()).isEqualTo(1);
         assertThat(free.maxProducts()).isEqualTo(500);
-        assertThat(free.maxEmployees()).isEqualTo(PlanType.FREE.getMaxEmployees());
+        assertThat(free.maxEmployees()).isEqualTo(TestPlanProfiles.FREE_MAX_EMPLOYEES);
         assertLimitReached(() -> adapter.checkStoreLimit(free, 1));
         assertLimitReached(() -> adapter.checkProductLimit(free, () -> 500));
-        assertLimitReached(() -> adapter.checkEmployeeLimit(free, PlanType.FREE.getMaxEmployees()));
-        adapter.checkProductLimit(new PlanView(PlanType.PREMIUM_TRIAL, true, null), () -> 100_000);
+        assertLimitReached(() -> adapter.checkEmployeeLimit(free, TestPlanProfiles.FREE_MAX_EMPLOYEES));
+        adapter.checkProductLimit(TestPlanProfiles.view(PlanType.PREMIUM_TRIAL, true, null), () -> 100_000);
     }
 
     private static void assertLimitReached(Runnable call) {
@@ -130,7 +130,10 @@ class SubscriptionApiAdaptersTest {
     @Test
     void planView_requiresAPlanType_and_limitChecks_requireAPlan() {
         var adapter = new SubscriptionPlanAdapter(subscriptionRepository, guard);
-        assertThatThrownBy(() -> new PlanView(null, true, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new PlanView(null, com.keevo.identity.api.PlanKind.FREE, true, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new PlanView(PlanType.FREE, null, true, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
         for (Runnable call : new Runnable[] {
                 () -> adapter.checkStoreLimit(null, 0),
                 () -> adapter.checkProductLimit(null, () -> 0),

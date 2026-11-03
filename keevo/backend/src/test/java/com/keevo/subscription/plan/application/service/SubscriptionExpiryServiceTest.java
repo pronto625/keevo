@@ -1,6 +1,8 @@
 package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.TestPlanProfiles;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.subscription.plan.domain.model.event.PlanExpiredEvent;
 import com.keevo.subscription.plan.domain.port.in.DowngradeExpiredTrialsCommand;
@@ -55,7 +57,7 @@ class SubscriptionExpiryServiceTest {
                 .thenAnswer(inv -> ((TransactionCallback<?>) inv.getArgument(0))
                         .doInTransaction(new SimpleTransactionStatus()));
         service = new SubscriptionExpiryService(jdbcTemplate, recorder, publisher, tx,
-                Clock.fixed(NOW, ZoneOffset.UTC), planModuleRows);
+                Clock.fixed(NOW, ZoneOffset.UTC), planModuleRows, TestPlanProfiles.DEFAULTS, PlanCatalog.SEED);
     }
 
     private void tenants(Object... idSchemaPairs) {
@@ -72,22 +74,23 @@ class SubscriptionExpiryServiceTest {
     @DisplayName("downgrades expired subscriptions across tenant schemas (using JDBC params for FREE limits)")
     void execute_downgrades_expiredSubscriptions() {
         tenants(T1, "kv_abc123", T2, "kv_def456");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any()))
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of("PREMIUM"), List.of());
 
         int count = service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
 
         assertThat(count).isEqualTo(1); // only first schema had expired sub
         verify(jdbcTemplate, times(2)).queryForList(anyString(), eq(String.class),
-                eq(PlanType.FREE.getMaxStores()), eq(PlanType.FREE.getMaxProducts()),
-                eq(PlanType.FREE.getMaxEmployees()));
+                eq("TRIAL"), eq("PAID"), eq("FREE"), // 19.7a: kinds that expire, free plan of plan_settings
+                eq(TestPlanProfiles.FREE_MAX_STORES), eq(TestPlanProfiles.FREE_MAX_PRODUCTS),
+                eq(TestPlanProfiles.FREE_MAX_EMPLOYEES));
     }
 
     @Test
     @DisplayName("9-2: a downgrade syncs public plan_type, records EXPIRY and publishes PlanExpiredEvent")
     void execute_publishesPlanExpiredEvent() {
         tenants(T1, "kv_abc123");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any()))
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any()))
                 .thenReturn(List.of("PREMIUM_TRIAL"));
 
         service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
@@ -107,7 +110,7 @@ class SubscriptionExpiryServiceTest {
     @DisplayName("16.5: a tenant with nothing to downgrade gets no row sync")
     void execute_noDowngrade_noSync() {
         tenants(T1, "kv_abc123");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any())).thenReturn(List.of());
 
         service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
 
@@ -118,12 +121,12 @@ class SubscriptionExpiryServiceTest {
     @DisplayName("9-2: downgrade SQL returns the plan before the update, schema-qualified, inside a transaction")
     void execute_sqlShape() {
         tenants(T1, "kv_abc123");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any())).thenReturn(List.of());
 
         service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
 
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbcTemplate).queryForList(sql.capture(), eq(String.class), any(), any(), any());
+        verify(jdbcTemplate).queryForList(sql.capture(), eq(String.class), any(), any(), any(), any(), any(), any());
         assertThat(sql.getValue())
                 .contains("\"kv_abc123\".subscriptions")
                 .contains("RETURNING expired.plan_type")
@@ -136,7 +139,7 @@ class SubscriptionExpiryServiceTest {
     @DisplayName("returns 0 when no subscriptions expired")
     void execute_returnsZero_whenNoExpirations() {
         tenants(T1, "kv_abc123");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any())).thenReturn(List.of());
 
         int count = service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
 
@@ -147,18 +150,18 @@ class SubscriptionExpiryServiceTest {
     @DisplayName("skips schemas that don't match tenant schema pattern (safety guard)")
     void execute_skipsInvalidSchemaNames() {
         tenants(UUID.randomUUID(), "public", UUID.randomUUID(), "information_schema", T1, "kv_abc123");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any())).thenReturn(List.of());
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any())).thenReturn(List.of());
 
         service.execute(new DowngradeExpiredTrialsCommand("scheduler"));
 
-        verify(jdbcTemplate, times(1)).queryForList(anyString(), eq(String.class), any(), any(), any()); // only kv_abc123
+        verify(jdbcTemplate, times(1)).queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any()); // only kv_abc123
     }
 
     @Test
     @DisplayName("continues processing remaining schemas even when one fails")
     void execute_continuesOnError() {
         tenants(T1, "kv_abc123", T2, "kv_def456");
-        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any()))
+        when(jdbcTemplate.queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any()))
                 .thenThrow(new RuntimeException("DB error"))
                 .thenReturn(List.of("PREMIUM"));
 
@@ -177,6 +180,6 @@ class SubscriptionExpiryServiceTest {
         int count = service.execute(new DowngradeExpiredTrialsCommand("test"));
 
         assertThat(count).isEqualTo(0);
-        verify(jdbcTemplate, never()).queryForList(anyString(), eq(String.class), any(), any(), any());
+        verify(jdbcTemplate, never()).queryForList(anyString(), eq(String.class), any(), any(), any(), any(), any(), any());
     }
 }

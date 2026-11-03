@@ -1,7 +1,7 @@
 package com.keevo.admin.tenant.adapter.in.rest;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
-import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.admin.tenant.adapter.in.rest.dto.ActivatePlanRequest;
 import com.keevo.shared.module.EntitlementExempt;
@@ -33,16 +33,18 @@ import java.util.UUID;
 public class AdminSubscriptionController {
 
     private final PlanAdministrationPort planAdministration;
+    private final PlanCatalog catalog;
 
-    public AdminSubscriptionController(PlanAdministrationPort planAdministration) {
+    public AdminSubscriptionController(PlanAdministrationPort planAdministration, PlanCatalog catalog) {
         this.planAdministration = planAdministration;
+        this.catalog = catalog;
     }
 
     @Operation(
         summary = "Activate or upgrade a tenant's plan",
         description = """
-            Super Admin only. Changes tenant plan type (FREE → PREMIUM or downgrades as needed).
-            Setting planType to PREMIUM also reactivates a suspended account.
+            Super Admin only. Changes the tenant's plan to any plan code of the catalogue.
+            Setting a plan also reactivates a suspended account.
             """,
         security = @SecurityRequirement(name = "bearerAuth")
     )
@@ -58,7 +60,7 @@ public class AdminSubscriptionController {
         planAdministration.activatePlan(new ActivatePlanInput(
                 actorId,
                 tenantId, // path variable carries the tenant schema (kv_xxxxxx)
-                PlanType.valueOf(request.planType()),
+                catalog.resolve(request.planType()), // 19.7a: any plan of the catalogue
                 request.expiresAt()
         ));
 

@@ -59,14 +59,16 @@ class PlanExpiryReminderServiceTest {
         for (int i = 0; i < idSchemaPairs.length; i += 2) {
             rows.add(Map.of("id", idSchemaPairs[i], "schema_name", idSchemaPairs[i + 1]));
         }
-        when(jdbc.queryForList(PlanExpiryReminderService.FETCH_TENANTS)).thenReturn(rows);
+        when(jdbc.queryForList(PlanExpiryReminderService.FETCH_TENANTS, "TRIAL", "PAID")).thenReturn(rows);
     }
 
     private void expiring(String schema, String plan, int days) {
         Instant expiry = TODAY.plusDays(days).atTime(LocalTime.of(23, 59, 59))
                 .atZone(com.keevo.shared.domain.time.KeevoZones.WAT).toInstant();
-        when(jdbc.queryForList(contains("\"" + schema + "\"")))
-                .thenReturn(List.of(Map.of("plan_type", plan, "expires_at", Timestamp.from(expiry))));
+        // Story 19.7a: the subscription's kind is joined from the catalogue (seeded codes → their kinds)
+        String kind = com.keevo.identity.api.PlanType.of(plan).seedKind().orElseThrow().name();
+        when(jdbc.queryForList(contains("\"" + schema + "\""), eq("TRIAL"), eq("PAID")))
+                .thenReturn(List.of(Map.of("kind", kind, "expires_at", Timestamp.from(expiry))));
     }
 
     private void claim(UUID tenant, int threshold, int days, int inserted) {
@@ -184,7 +186,7 @@ class PlanExpiryReminderServiceTest {
     @DisplayName("SQL/data error of one tenant (schema or claim) → that tenant skipped, the next one reminded")
     void tenantError_skipped() {
         tenants(T1, S1, T2, S2);
-        when(jdbc.queryForList(contains("\"" + S1 + "\"")))
+        when(jdbc.queryForList(contains("\"" + S1 + "\""), eq("TRIAL"), eq("PAID")))
                 .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("missing")));
         expiring(S2, "PREMIUM", 7);
         when(jdbc.update(PlanExpiryReminderService.CLAIM_SQL, T2, 7, TODAY.plusDays(7)))
@@ -198,18 +200,19 @@ class PlanExpiryReminderServiceTest {
     @DisplayName("connection failure → rethrown, the run stops")
     void connectionFailure_rethrown() {
         tenants(T1, S1);
-        when(jdbc.queryForList(contains("\"" + S1 + "\""))).thenThrow(new CannotGetJdbcConnectionException("down"));
+        when(jdbc.queryForList(contains("\"" + S1 + "\""), eq("TRIAL"), eq("PAID"))).thenThrow(new CannotGetJdbcConnectionException("down"));
 
         assertThatThrownBy(() -> service.execute()).isInstanceOf(CannotGetJdbcConnectionException.class);
     }
 
     @Test
-    @DisplayName("only ACTIVE PREMIUM / PREMIUM_TRIAL rows of live non-FREE tenants are considered")
+    @DisplayName("only ACTIVE rows of a trial or paid plan (kind joined from the catalogue) of live tenants")
     void sqlShape() {
         assertThat(PlanExpiryReminderService.EXPIRY_SQL)
-                .contains("plan_type IN ('PREMIUM', 'PREMIUM_TRIAL')").contains("status = 'ACTIVE'");
+                .contains("JOIN public.plans p ON p.code = s.plan_type").contains("p.kind IN (?, ?)")
+                .contains("s.status = 'ACTIVE'").doesNotContain("PREMIUM");
         assertThat(PlanExpiryReminderService.FETCH_TENANTS).contains("'DELETED'").contains("'DELETION_PENDING'")
-                .contains("plan_type <> 'FREE'");
+                .contains("p.kind IN (?, ?)").doesNotContain("FREE");
         assertThat(PlanExpiryReminderService.CLAIM_SQL).contains("ON CONFLICT");
     }
 }

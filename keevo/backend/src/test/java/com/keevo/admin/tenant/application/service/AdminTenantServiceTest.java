@@ -410,8 +410,10 @@ class AdminTenantServiceTest {
         verify(jdbcTemplate).queryForObject(contains("AND t.plan_type = ?"), eq(Long.class), eq("FREE"));
 
         service.execute(new ListTenantsQuery(null, "PAID", null, null, null, null, null, 0, 25));
-        verify(jdbcTemplate).queryForObject(contains("t.plan_type IN ('PREMIUM', 'PREMIUM_TRIAL')"),
-                eq(Long.class), any(Object[].class));
+        // Story 19.7a: legacy PAID = every plan of kind TRIAL or PAID, by kind from the catalogue
+        verify(jdbcTemplate).queryForObject(
+                contains("t.plan_type IN (SELECT pl.code FROM public.plans pl WHERE pl.kind IN (?, ?))"),
+                eq(Long.class), eq("TRIAL"), eq("PAID"));
 
         service.execute(new ListTenantsQuery(null, "ALL", null, null, null, null, null, 0, 25));
         verify(jdbcTemplate, times(3)).queryForObject(contains("plan_type"), eq(Long.class), any(Object[].class));

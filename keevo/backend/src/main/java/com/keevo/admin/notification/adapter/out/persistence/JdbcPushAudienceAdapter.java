@@ -55,8 +55,10 @@ public class JdbcPushAudienceAdapter implements PushAudiencePort {
         List<PushTargetTenant> rows = switch (target) {
             case ALL -> jdbc.query("SELECT id, schema_name FROM public.tenants WHERE " + REACHABLE
                     + " ORDER BY created_at, id", TENANT);
+            // Story 19.7a: every plan of the target's kind (joined on the catalogue)
             case PREMIUM, TRIAL, FREE -> jdbc.query("SELECT id, schema_name FROM public.tenants WHERE " + REACHABLE
-                    + " AND plan_type = ? ORDER BY created_at, id", TENANT, target.planType());
+                    + " AND plan_type IN (SELECT code FROM public.plans WHERE kind = ?) ORDER BY created_at, id",
+                    TENANT, target.planKind().name());
             case TENANT -> tenantId == null ? List.of() : jdbc.query(
                     "SELECT id, schema_name FROM public.tenants WHERE " + REACHABLE + " AND id = ?", TENANT, tenantId);
         };

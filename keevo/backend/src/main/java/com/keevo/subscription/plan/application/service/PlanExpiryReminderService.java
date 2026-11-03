@@ -1,6 +1,6 @@
 package com.keevo.subscription.plan.application.service;
 
-import com.keevo.identity.api.PlanType;
+import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
@@ -43,15 +43,17 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
 
     private static final Logger log = LoggerFactory.getLogger(PlanExpiryReminderService.class);
 
+    /** Story 19.7a: tenants on a plan that expires (kind TRIAL or PAID, joined); parameters: the two kinds. */
     static final String FETCH_TENANTS =
-            "SELECT id, schema_name FROM public.tenants "
-            + "WHERE status NOT IN ('DELETED', 'DELETION_PENDING') AND plan_type <> 'FREE' "
-            + "AND id <> '00000000-0000-0000-0000-000000000000'::uuid";
+            "SELECT t.id, t.schema_name FROM public.tenants t JOIN public.plans p ON p.code = t.plan_type "
+            + "WHERE t.status NOT IN ('DELETED', 'DELETION_PENDING') AND p.kind IN (?, ?) "
+            + "AND t.id <> '00000000-0000-0000-0000-000000000000'::uuid";
 
+    /** Story 19.7a: the subscription of a plan that expires, with its kind; parameters: the two kinds. */
     static final String EXPIRY_SQL =
-            "SELECT plan_type, expires_at FROM \"%s\".subscriptions "
-            + "WHERE plan_type IN ('PREMIUM', 'PREMIUM_TRIAL') AND status = 'ACTIVE' AND expires_at IS NOT NULL "
-            + "ORDER BY created_at ASC LIMIT 1";
+            "SELECT p.kind, s.expires_at FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
+            + "WHERE p.kind IN (?, ?) AND s.status = 'ACTIVE' AND s.expires_at IS NOT NULL "
+            + "ORDER BY s.created_at ASC LIMIT 1";
 
     static final String CLAIM_SQL =
             "INSERT INTO public.plan_expiry_reminders (tenant_id, threshold_days, expiry_date) "
@@ -61,7 +63,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
             "DELETE FROM public.plan_expiry_reminders "
             + "WHERE tenant_id = ? AND threshold_days = ? AND expiry_date = ?";
 
-    private record Expiry(PlanType plan, LocalDate date) {}
+    private record Expiry(PlanKind kind, LocalDate date) {}
 
     private final JdbcTemplate jdbc;
     private final WhatsAppSender whatsAppSender;
@@ -87,7 +89,8 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
     public int execute() {
         LocalDate today = LocalDate.now(clock.withZone(KeevoZones.WAT));
         int sent = 0;
-        for (Map<String, Object> tenant : jdbc.queryForList(FETCH_TENANTS)) {
+        for (Map<String, Object> tenant : jdbc.queryForList(FETCH_TENANTS, PlanKind.TRIAL.name(),
+                PlanKind.PAID.name())) {
             String schema = (String) tenant.get("schema_name");
             if (!TenantSchema.isValid(schema)) continue;
             UUID tenantId = tenant.get("id") instanceof UUID u ? u : UUID.fromString(String.valueOf(tenant.get("id")));
@@ -124,13 +127,14 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
     }
 
     private Optional<Expiry> expiry(String schema) {
-        List<Map<String, Object>> rows = jdbc.queryForList(String.format(EXPIRY_SQL, schema));
+        List<Map<String, Object>> rows = jdbc.queryForList(String.format(EXPIRY_SQL, schema),
+                PlanKind.TRIAL.name(), PlanKind.PAID.name());
         if (rows.isEmpty() || rows.get(0).get("expires_at") == null) return Optional.empty();
         Map<String, Object> row = rows.get(0);
         Object exp = row.get("expires_at");
         java.time.Instant instant = exp instanceof Timestamp ts ? ts.toInstant()
                 : exp instanceof java.time.OffsetDateTime odt ? odt.toInstant() : (java.time.Instant) exp;
-        return Optional.of(new Expiry(PlanType.valueOf((String) row.get("plan_type")),
+        return Optional.of(new Expiry(PlanKind.valueOf((String) row.get("kind")),
                 instant.atZone(KeevoZones.WAT).toLocalDate()));
     }
 
@@ -143,7 +147,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
                         threshold, tenantId);
                 return false;
             }
-            String text = expiry.plan() == PlanType.PREMIUM_TRIAL
+            String text = expiry.kind() == PlanKind.TRIAL
                     ? PlanWhatsAppMessages.trialReminder(expiry.date())
                     : PlanWhatsAppMessages.reminder(expiry.date());
             whatsAppSender.sendReport(phone.get(), text);

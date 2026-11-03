@@ -38,7 +38,7 @@ class GetSubscriptionServiceTest {
     @Mock UserCountPort userCountPort;
 
     /** Story 16.8 — the limits come from the plan profiles (mutable here: a change shows on the next call). */
-    private final java.util.Map<PlanType, PlanProfile> profiles = new java.util.EnumMap<>(PlanType.class);
+    private final java.util.Map<PlanType, PlanProfile> profiles = new java.util.HashMap<>();
     GetSubscriptionService service;
 
     @org.junit.jupiter.api.BeforeEach

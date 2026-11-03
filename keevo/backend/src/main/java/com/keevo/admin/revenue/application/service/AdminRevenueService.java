@@ -1,5 +1,6 @@
 package com.keevo.admin.revenue.application.service;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.admin.revenue.domain.model.*;
 import com.keevo.admin.revenue.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -60,17 +61,23 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             + "FROM public.tenant_payments p JOIN public.tenants t ON t.id = p.tenant_id WHERE " + IN_SCOPE
             + " AND p.voided_at IS NULL"; // a voided payment (9-2 correction) never counts
 
+    /** Story 19.7a: the plan kinds are joined from the catalogue (set-based, no per-row lookup). */
     static final String EVENTS_SQL =
-            "SELECT e.tenant_id, e.from_plan, e.to_plan, e.cause, e.occurred_at "
-            + "FROM public.tenant_plan_events e JOIN public.tenants t ON t.id = e.tenant_id WHERE " + IN_SCOPE
+            "SELECT e.tenant_id, e.from_plan, e.to_plan, fp.kind AS from_kind, tp.kind AS to_kind, e.cause, "
+            + "e.occurred_at "
+            + "FROM public.tenant_plan_events e JOIN public.tenants t ON t.id = e.tenant_id "
+            + "LEFT JOIN public.plans fp ON fp.code = e.from_plan LEFT JOIN public.plans tp ON tp.code = e.to_plan "
+            + "WHERE " + IN_SCOPE
             + " ORDER BY e.occurred_at";
 
     static final String PLAN_TENANTS_SQL =
             "SELECT id, schema_name FROM public.tenants "
             + "WHERE status IN ('ACTIVE', 'SUSPENDED', 'DELETION_PENDING') AND id <> '" + SYSTEM_TENANT_ID + "'::uuid";
 
+    /** Story 19.7a: the kind of the current plan (null for a code the catalogue does not know: not counted). */
     static final String CURRENT_PLAN_SQL =
-            "SELECT plan_type FROM \"%s\".subscriptions ORDER BY created_at DESC LIMIT 1";
+            "SELECT p.kind FROM \"%s\".subscriptions s LEFT JOIN public.plans p ON p.code = s.plan_type "
+            + "ORDER BY s.created_at DESC LIMIT 1";
 
     static final String GMV_SQL =
             "SELECT COALESCE(SUM(total_amount), 0) FROM \"%s\".sales WHERE status = 'COMPLETED' "
@@ -244,9 +251,15 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                 UUID.fromString(rs.getString("tenant_id")),
                 rs.getString("from_plan"),
                 rs.getString("to_plan"),
+                kind(rs.getString("from_kind")),
+                kind(rs.getString("to_kind")),
                 rs.getString("cause"),
                 rs.getTimestamp("occurred_at").toInstant()));
         return new RevenueMetrics(payments, events);
+    }
+
+    private static PlanKind kind(String kind) {
+        return kind != null ? PlanKind.valueOf(kind) : null;
     }
 
     private record TenantRef(UUID id, String name, String schemaName) {}
@@ -282,10 +295,10 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             List<String> plans = safeQuery(id, () ->
                     jdbc.queryForList(String.format(CURRENT_PLAN_SQL, schema), String.class));
             if (plans == null || plans.isEmpty()) continue;
-            String plan = plans.get(0);
-            if ("FREE".equals(plan)) free++;
-            else if ("PREMIUM_TRIAL".equals(plan)) trial++;
-            else if ("PREMIUM".equals(plan)) premium.add(UUID.fromString(id));
+            PlanKind kind = kind(plans.get(0)); // 19.7a: by kind
+            if (kind == PlanKind.FREE) free++;
+            else if (kind == PlanKind.TRIAL) trial++;
+            else if (kind == PlanKind.PAID) premium.add(UUID.fromString(id));
         }
         return new PlanCounts(free, trial, premium);
     }

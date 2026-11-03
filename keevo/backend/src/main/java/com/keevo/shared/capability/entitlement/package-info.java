@@ -21,8 +21,10 @@
  * {@link com.keevo.shared.capability.entitlement.PlanChangeRecorder} carry {@code identity.api.PlanType} as the plan
  * identifier — the {@code shared → identity :: api} edge stays accepted. Since Story 16.8 the limits and the paid
  * modules each plan grants come from the plan profiles ({@link com.keevo.shared.capability.entitlement.PlanProfiles},
- * {@code public.plan_profiles} + {@code public.profile_modules}, implemented by the core); the enum constants are
- * only their fallback.
+ * {@code public.plan_profiles} + {@code public.profile_modules}, implemented by the core). Since Story 19.7a plans are
+ * data: {@code PlanType} is a code of the plan catalogue ({@link com.keevo.shared.capability.entitlement.PlanCatalog},
+ * {@code public.plans} + {@code public.plan_settings}) and every plan-dependent behaviour reads the plan's kind there;
+ * no limit lives in the code.
  *
  * <p><b>Tenant convention:</b> every tenant-scoped method takes the tenant schema explicitly as its first
  * {@code String tenantSchema} parameter.

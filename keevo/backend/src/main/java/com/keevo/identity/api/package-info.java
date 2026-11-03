@@ -12,8 +12,9 @@
  * delegate to tenant-bound JPA repositories require it to be the schema of the current tenant
  * context ({@code TenantContext.requireCurrent}): null, blank or another schema fails fast.
  *
- * <p>{@link com.keevo.identity.api.PlanType} stays a tenant attribute published here until 16.8
- * replaces it with configurable plan profiles.
+ * <p>{@link com.keevo.identity.api.PlanType} (a plan code) and {@link com.keevo.identity.api.PlanKind} (what a plan
+ * is) stay tenant attributes published here; since Story 19.7a plans are data ({@code public.plans}), resolved through
+ * {@code shared.capability.entitlement.PlanCatalog}.
  */
 @org.springframework.modulith.NamedInterface("api")
 package com.keevo.identity.api;

@@ -1,5 +1,7 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.identity.api.PlanKind;
+
 import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleState;
@@ -86,7 +88,8 @@ final class ModuleStateRules {
      *       {@code expires_at}) → READ_ONLY until that downgrade + 7 days, then DISABLED;</li>
      *   <li>anything else ({@code FREE}, no subscription, {@code SUSPENDED}) → DISABLED.</li>
      * </ul>
-     * Boundaries are exclusive, like module rows.
+     * Boundaries are exclusive, like module rows. Story 19.7a: {@code PREMIUM} / {@code PREMIUM_TRIAL} read « a plan of
+     * kind TRIAL or PAID », {@code FREE} « a plan of kind FREE » (plan catalogue).
      */
     static ModuleState planState(Plan plan, Instant now) {
         return planState(plan, PlanModuleRows.grantedByDefault(plan), now);
@@ -104,8 +107,9 @@ final class ModuleStateRules {
         if (plan.unreadable()) {
             return ModuleState.ENABLED;
         }
-        boolean premiumType = "PREMIUM".equals(plan.planType()) || "PREMIUM_TRIAL".equals(plan.planType());
-        if ("FREE".equals(plan.planType()) && granted) {
+        boolean premiumType = plan.kind() != null && plan.kind().expires();
+        boolean free = plan.kind() == PlanKind.FREE;
+        if (free && granted) {
             return ModuleState.ENABLED;
         }
         if (premiumType && !granted) {
@@ -119,7 +123,7 @@ final class ModuleStateRules {
                 && plan.expiresAt() != null) {
             return now.isBefore(plan.expiresAt().plus(PLAN_GRACE)) ? ModuleState.READ_ONLY : ModuleState.DISABLED;
         }
-        if ("FREE".equals(plan.planType()) && plan.expiryDowngradeAt() != null
+        if (free && plan.expiryDowngradeAt() != null
                 && now.isBefore(plan.expiryDowngradeAt().plus(PLAN_GRACE))) {
             return ModuleState.READ_ONLY;
         }

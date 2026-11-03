@@ -19,6 +19,7 @@ import com.keevo.admin.subscription.domain.port.in.SuspendTenantCommand;
 import com.keevo.admin.subscription.domain.port.in.SuspendTenantUseCase;
 import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand;
 import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentUseCase;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.domain.time.KeevoZones;
@@ -67,6 +68,7 @@ public class AdminTenantPlanController {
     private final ListTenantPaymentsUseCase listTenantPaymentsUseCase;
     private final ListPlanAlertsUseCase listPlanAlertsUseCase;
     private final VoidTenantPaymentUseCase voidTenantPaymentUseCase;
+    private final PlanCatalog catalog;
 
     public AdminTenantPlanController(ActivatePremiumUseCase activatePremiumUseCase,
                                      DowngradeToFreeUseCase downgradeToFreeUseCase,
@@ -74,7 +76,9 @@ public class AdminTenantPlanController {
                                      ReactivateTenantUseCase reactivateTenantUseCase,
                                      ListTenantPaymentsUseCase listTenantPaymentsUseCase,
                                      ListPlanAlertsUseCase listPlanAlertsUseCase,
-                                     VoidTenantPaymentUseCase voidTenantPaymentUseCase) {
+                                     VoidTenantPaymentUseCase voidTenantPaymentUseCase,
+                                     PlanCatalog catalog) {
+        this.catalog = catalog;
         this.activatePremiumUseCase = activatePremiumUseCase;
         this.downgradeToFreeUseCase = downgradeToFreeUseCase;
         this.suspendTenantUseCase = suspendTenantUseCase;
@@ -110,7 +114,8 @@ public class AdminTenantPlanController {
         CurrentActor.requireSuperAdmin();
         downgradeToFreeUseCase.downgradeToFree(new DowngradeToFreeCommand(
                 CurrentActor.actorId(), tenantId, request != null ? request.reason() : null));
-        return ResponseEntity.ok(ApiResponseWrapper.ok(new PlanStateDto("FREE", null)));
+        // Story 19.7a: the plan a tenant falls back to is data (plan_settings.free_plan_code)
+        return ResponseEntity.ok(ApiResponseWrapper.ok(new PlanStateDto(catalog.freePlan().name(), null)));
     }
 
     @Operation(summary = "Suspend a tenant (read-only)", security = @SecurityRequirement(name = "bearerAuth"))

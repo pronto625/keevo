@@ -12,7 +12,10 @@ import com.keevo.admin.subscription.domain.port.in.ListTenantPaymentsUseCase;
 import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentCommand;
 import com.keevo.admin.subscription.domain.port.in.VoidTenantPaymentUseCase;
 import com.keevo.admin.subscription.domain.port.out.TenantPaymentRepository;
+import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
@@ -82,17 +85,21 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     static final Duration PAID_AT_MAX_AGE = Duration.ofDays(366);
     private static final DateTimeFormatter FR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    /** Only non-FREE tenants (public plan_type is kept in step with the schema since 9-2). */
+    /**
+     * Only tenants on a plan that expires (public plan_type is kept in step with the schema since 9-2). Story 19.7a:
+     * by kind (TRIAL, PAID — joined from the catalogue); parameters: the two kinds.
+     */
     static final String ALERT_TENANTS_SQL =
-            "SELECT id, name, schema_name FROM public.tenants "
-            + "WHERE status NOT IN ('DELETED', 'DELETION_PENDING') AND plan_type <> 'FREE' "
-            + "AND id <> '00000000-0000-0000-0000-000000000000'::uuid";
+            "SELECT t.id, t.name, t.schema_name FROM public.tenants t JOIN public.plans p ON p.code = t.plan_type "
+            + "WHERE t.status NOT IN ('DELETED', 'DELETION_PENDING') AND p.kind IN (?, ?) "
+            + "AND t.id <> '00000000-0000-0000-0000-000000000000'::uuid";
 
+    /** Story 19.7a: parameters: the two kinds that expire, then the window bounds. */
     static final String EXPIRING_SQL =
-            "SELECT plan_type, expires_at FROM \"%s\".subscriptions "
-            + "WHERE plan_type IN ('PREMIUM', 'PREMIUM_TRIAL') AND status = 'ACTIVE' "
-            + "AND expires_at IS NOT NULL AND expires_at >= ? AND expires_at < ? "
-            + "ORDER BY created_at ASC LIMIT 1";
+            "SELECT s.plan_type, s.expires_at FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
+            + "WHERE p.kind IN (?, ?) AND s.status = 'ACTIVE' "
+            + "AND s.expires_at IS NOT NULL AND s.expires_at >= ? AND s.expires_at < ? "
+            + "ORDER BY s.created_at ASC LIMIT 1";
 
     static final String EXPIRED_SQL =
             "SELECT e.tenant_id, t.name, e.from_plan, e.occurred_at "
@@ -109,13 +116,27 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     private final ApplicationEventPublisher eventPublisher;
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final PlanCatalog catalog;
 
+    /** With the seeded plan catalogue (tests). */
     public AdminPlanService(TargetTenantLookup tenantLookup,
                             PlanAdministrationPort changeTenantPlan,
                             TenantPaymentRepository paymentRepository,
                             ApplicationEventPublisher eventPublisher,
                             JdbcTemplate jdbc,
                             Clock clock) {
+        this(tenantLookup, changeTenantPlan, paymentRepository, eventPublisher, jdbc, clock, PlanCatalog.SEED);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminPlanService(TargetTenantLookup tenantLookup,
+                            PlanAdministrationPort changeTenantPlan,
+                            TenantPaymentRepository paymentRepository,
+                            ApplicationEventPublisher eventPublisher,
+                            JdbcTemplate jdbc,
+                            Clock clock,
+                            PlanCatalog catalog) {
+        this.catalog = catalog;
         this.tenantLookup = tenantLookup;
         this.changeTenantPlan = changeTenantPlan;
         this.paymentRepository = paymentRepository;
@@ -144,7 +165,10 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         // (the last covered day is never paid twice); the new expiry must be strictly later.
         // An expiry granted by a since-voided payment does not count (typo correction).
         LocalDate periodStart = today;
-        if (current.planType() == PlanType.PREMIUM && current.expiresAt() != null) {
+        // Story 19.7a: « Premium » = the seeded paid plan this legacy action grants; a running plan of kind PAID is
+        // renewed from its end (19.7b/21.10 make the granted plan a parameter).
+        PlanType premium = PlanType.PREMIUM;
+        if (kindOf(current.planType()) == PlanKind.PAID && current.expiresAt() != null) {
             LocalDate currentEnd = effectiveCurrentEnd(tenant.id(), LocalDate.ofInstant(current.expiresAt(), WAT));
             if (currentEnd != null && !currentEnd.isBefore(today)) {
                 if (!cmd.expiresAt().isAfter(currentEnd)) {
@@ -162,14 +186,14 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                 periodStart, cmd.expiresAt(), blankToNull(cmd.note()), cmd.actorId()));
 
         CurrentPlan previous = changeTenantPlan.changePlan(new ChangePlanInput(
-                tenant.id(), tenant.schemaName(), PlanType.PREMIUM, expiresAt,
+                tenant.id(), tenant.schemaName(), premium, expiresAt,
                 PlanChangeCause.ADMIN_ACTIVATION, cmd.actorId(), blankToNull(cmd.note())));
 
         log.info("[ADMIN AUDIT] Premium activated: actor={} tenant={} until={} amountXaf={} method={} previousPlan={}",
                 cmd.actorId(), tenant.id(), cmd.expiresAt(), cmd.amountXaf(), cmd.method(), previous.planType());
         eventPublisher.publishEvent(new PlanActivatedEvent(cmd.actorId(), tenant.id(), tenant.schemaName(),
                 previous.planType(), expiresAt, cmd.amountXaf(), now));
-        return new CurrentPlan(PlanType.PREMIUM, expiresAt);
+        return new CurrentPlan(premium, expiresAt);
     }
 
     // ── Downgrade to FREE ─────────────────────────────────────────────────────
@@ -187,12 +211,13 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         CurrentPlan current = changeTenantPlan.currentPlan(tenant.schemaName())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "No subscription for tenant " + tenant.id()));
-        if (current.planType() == PlanType.FREE) {
+        PlanType freePlan = catalog.freePlan(); // 19.7a: plan_settings.free_plan_code
+        if (kindOf(current.planType()) == PlanKind.FREE) {
             throw new DomainException(ErrorCode.INVALID_STATE, "Tenant already on FREE: " + tenant.id());
         }
 
         changeTenantPlan.changePlan(new ChangePlanInput(
-                tenant.id(), tenant.schemaName(), PlanType.FREE, null,
+                tenant.id(), tenant.schemaName(), freePlan, null,
                 PlanChangeCause.ADMIN_DOWNGRADE, cmd.actorId(), reason));
 
         Instant now = clock.instant();
@@ -258,7 +283,8 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         Timestamp horizon = Timestamp.from(today.plusDays(ALERT_WINDOW_DAYS + 1L).atStartOfDay(WAT).toInstant());
 
         List<PlanAlert> expiring = new ArrayList<>();
-        for (Map<String, Object> t : jdbc.queryForList(ALERT_TENANTS_SQL)) {
+        for (Map<String, Object> t : jdbc.queryForList(ALERT_TENANTS_SQL, PlanKind.TRIAL.name(),
+                PlanKind.PAID.name())) {
             String schema = (String) t.get("schema_name");
             if (!TenantSchema.isValid(schema)) continue;
             UUID id = toUuid(t.get("id"));
@@ -286,6 +312,11 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /** The plan's kind (catalogue); a code it does not know counts as free (no renewal, already downgraded). */
+    private PlanKind kindOf(PlanType plan) {
+        return catalog.find(plan).map(PlanDefinition::kind).orElse(PlanKind.FREE);
+    }
 
     /** Last second of {@code day} in WAT (stored precision is microseconds: never round to the next day). */
     public static Instant endOfDayWat(LocalDate day) {
@@ -335,7 +366,8 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
             return null;
         }
         try {
-            List<Map<String, Object>> rows = jdbc.queryForList(String.format(EXPIRING_SQL, schema), now, horizon);
+            List<Map<String, Object>> rows = jdbc.queryForList(String.format(EXPIRING_SQL, schema),
+                    PlanKind.TRIAL.name(), PlanKind.PAID.name(), now, horizon);
             return rows.isEmpty() ? null : rows.get(0);
         } catch (DataAccessResourceFailureException | TransientDataAccessException
                  | RecoverableDataAccessException e) {

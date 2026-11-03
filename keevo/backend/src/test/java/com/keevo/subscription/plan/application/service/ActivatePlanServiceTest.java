@@ -79,7 +79,7 @@ class ActivatePlanServiceTest {
         // Use the package-private test constructor
         service = new ActivatePlanService(subscriptionRepository,
                 IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), requiresNewTemplate,
-                planChangeRecorder, planModuleRows);
+                planChangeRecorder, planModuleRows, com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
     }
 
     @Test

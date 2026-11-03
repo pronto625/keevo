@@ -46,7 +46,8 @@ class UpdateProductUseCaseTest {
     @Mock private com.keevo.shared.application.port.TransactionLockPort transactionLock;
 
     private final com.keevo.shared.capability.entitlement.PlanView free =
-            new com.keevo.shared.capability.entitlement.PlanView(com.keevo.identity.api.PlanType.FREE, true, null, 1, 500, 2);
+            new com.keevo.shared.capability.entitlement.PlanView(com.keevo.identity.api.PlanType.FREE,
+                    com.keevo.identity.api.PlanKind.FREE, true, null, 1, 500, 2);
 
     private UpdateProductUseCase useCase;
     @Mock private SetProductStockTrackingUseCase stockTracking; // Story 17.12

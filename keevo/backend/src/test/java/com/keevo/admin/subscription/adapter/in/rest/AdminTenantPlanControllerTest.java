@@ -49,7 +49,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AdminTenantPlanController.class)
-@Import(com.keevo.shared.infrastructure.security.SecurityConfig.class)
+@Import({com.keevo.shared.infrastructure.security.SecurityConfig.class,
+        com.keevo.shared.capability.entitlement.SeedPlanCatalogTestConfig.class})
 @DisplayName("AdminTenantPlanController (Story 9-2)")
 class AdminTenantPlanControllerTest {
 

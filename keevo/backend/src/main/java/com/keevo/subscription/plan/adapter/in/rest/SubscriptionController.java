@@ -43,7 +43,8 @@ public class SubscriptionController {
         description = """
             Returns the current tenant's subscription plan, status, expiry date,
             plan limits and current usage counts for stores, products and employees.
-            Returns null for limits on PREMIUM_TRIAL and PREMIUM plans (= unlimited).
+            A null limit means unlimited. planType is the V1 code of the plan's kind
+            (FREE, PREMIUM_TRIAL or PREMIUM), whatever the plan's own code.
             Requires OWNER or EMPLOYEE role — SUPER_ADMIN is not a tenant and cannot
             call this endpoint.
             """,

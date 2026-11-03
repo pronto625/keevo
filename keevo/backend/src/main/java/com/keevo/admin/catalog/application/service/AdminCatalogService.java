@@ -1,5 +1,6 @@
 package com.keevo.admin.catalog.application.service;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.admin.catalog.domain.model.AdminCatalogSummary;
 import com.keevo.admin.catalog.domain.model.AdminProductListItem;
 import com.keevo.admin.catalog.domain.port.in.GetCatalogSummaryUseCase;
@@ -107,10 +108,22 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
+    /** Plan class of the product list ({@code tenantPlan} and its filter): the free kind, else paying. */
+    static final String PLAN_FREE = PlanKind.FREE.name();
+    static final String PLAN_PAID = "PAID";
+
+    /**
+     * Story 19.7a: the class of a plan from its kind (catalogue) — PAID for a trial or paid plan, FREE otherwise
+     * (including a code the catalogue does not know, {@code null}: shown as before, never dropped).
+     */
+    static String planClass(String kind) {
+        return kind == null || PLAN_FREE.equals(kind) ? PLAN_FREE : PLAN_PAID;
+    }
+
     private List<TenantSchema> loadMatchingTenantSchemas(ListProductsQuery q) {
         StringBuilder sql = new StringBuilder(
-                "SELECT t.id::text, t.name, t.schema_name, t.plan_type "
-                + "FROM public.tenants t "
+                "SELECT t.id::text, t.name, t.schema_name, pl.kind "
+                + "FROM public.tenants t LEFT JOIN public.plans pl ON pl.code = t.plan_type "
                 + "WHERE t.id <> '").append(ADMIN_TENANT_ID).append("'::uuid "
                 + "AND t.status = 'ACTIVE'");
 
@@ -121,17 +134,20 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
             params.add(q.tenantId());
         }
 
-        if ("PAID".equals(q.plan())) {
-            sql.append(" AND t.plan_type IN ('PREMIUM', 'PREMIUM_TRIAL')");
-        } else if ("FREE".equals(q.plan())) {
-            sql.append(" AND t.plan_type = 'FREE'");
+        // Story 19.7a: FREE / PAID are plan kinds (PAID = kinds TRIAL and PAID), joined on the catalogue
+        if (PLAN_PAID.equals(q.plan())) {
+            sql.append(" AND pl.kind IN (?, ?)");
+            params.add(PlanKind.TRIAL.name());
+            params.add(PlanKind.PAID.name());
+        } else if (PLAN_FREE.equals(q.plan())) {
+            sql.append(" AND (pl.kind = ? OR pl.kind IS NULL)"); // a code the catalogue does not know: free
+            params.add(PlanKind.FREE.name());
         }
 
         sql.append(" ORDER BY t.name");
 
         return onlyValidSchemas(jdbc.query(sql.toString(), (rs, rowNum) -> {
-            String planType = rs.getString("plan_type");
-            String plan = ("PREMIUM".equals(planType) || "PREMIUM_TRIAL".equals(planType)) ? "PAID" : "FREE";
+            String plan = planClass(rs.getString("kind"));
             return new TenantSchema(
                     rs.getString("id"),
                     rs.getString("name"),
@@ -142,14 +158,13 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
 
     private List<TenantSchema> loadAllActiveSchemas() {
         return onlyValidSchemas(jdbc.query(
-                "SELECT t.id::text, t.name, t.schema_name, t.plan_type "
-                + "FROM public.tenants t "
+                "SELECT t.id::text, t.name, t.schema_name, pl.kind "
+                + "FROM public.tenants t LEFT JOIN public.plans pl ON pl.code = t.plan_type "
                 + "WHERE t.id <> '" + ADMIN_TENANT_ID + "'::uuid "
                 + "AND t.status = 'ACTIVE' "
                 + "ORDER BY t.name",
                 (rs, rowNum) -> {
-                    String planType = rs.getString("plan_type");
-                    String plan = ("PREMIUM".equals(planType) || "PREMIUM_TRIAL".equals(planType)) ? "PAID" : "FREE";
+                    String plan = planClass(rs.getString("kind"));
                     return new TenantSchema(
                             rs.getString("id"),
                             rs.getString("name"),

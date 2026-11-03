@@ -1,5 +1,6 @@
 package com.keevo.admin.alerts.application.service;
 
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.admin.alerts.domain.model.AdminAlert;
 import com.keevo.admin.alerts.domain.model.AlertSeverity;
 import com.keevo.admin.alerts.domain.model.AlertSourceRows.DeletionPending;
@@ -108,9 +109,20 @@ public class AdminAlertService implements ListAdminAlertsUseCase, HandleAdminAle
     private record CachedFeed(Instant computedAt, List<AdminAlert> alerts) {}
     private volatile CachedFeed cached;
 
+    private final PlanCatalog catalog;
+
+    /** With the seeded plan catalogue (tests). */
     public AdminAlertService(AlertSourcesPort sources, AlertAckRepository acks,
                              ListPlanAlertsUseCase planAlerts, GetSystemHealthUseCase health,
                              FeedbackInboxPort feedbackInbox, Clock clock) {
+        this(sources, acks, planAlerts, health, feedbackInbox, clock, PlanCatalog.SEED);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminAlertService(AlertSourcesPort sources, AlertAckRepository acks,
+                             ListPlanAlertsUseCase planAlerts, GetSystemHealthUseCase health,
+                             FeedbackInboxPort feedbackInbox, Clock clock, PlanCatalog catalog) {
+        this.catalog = catalog;
         this.sources = sources;
         this.acks = acks;
         this.planAlerts = planAlerts;
@@ -359,14 +371,9 @@ public class AdminAlertService implements ListAdminAlertsUseCase, HandleAdminAle
         };
     }
 
-    static String planLabel(String plan) {
-        if (plan == null) return "payant";
-        return switch (plan) {
-            case "PREMIUM" -> "Premium";
-            case "PREMIUM_TRIAL" -> "Essai Premium";
-            case "FREE" -> "Gratuit";
-            default -> "payant";
-        };
+    /** French name of the plan from the catalogue (Story 19.7a), « payant » when unknown. */
+    String planLabel(String plan) {
+        return catalog.label(plan, "payant");
     }
 
     static String days(long n) {

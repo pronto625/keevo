@@ -240,6 +240,54 @@ class FoundationMigrationsPostgresIntegrationTest {
     }
 
     @Test
+    @DisplayName("19.7a core V2: a new tenant has no CHECK on subscriptions.plan_type (VARCHAR(30)); an existing tenant "
+            + "built on core V1 (CHECK under any name, VARCHAR(20)) loses it at its foundation upgrade, default and row kept")
+    void coreV2DropsThePlanCodeCheck() {
+        String fresh = register("kv_fmpl1n", "KV-FMPL1N");
+        assertThat(planTypeChecks(fresh)).isEmpty();
+        assertThat(planTypeLength(fresh)).isEqualTo(30);
+        jdbc.update("UPDATE \"" + fresh + "\".subscriptions SET plan_type = 'TEST_PAID_PLAN'"); // any code now
+
+        // an existing tenant: built by the core V1 script only (the CHECK of V1), plus a legacy-named copy of it
+        String schema = "kv_fmpl1o";
+        registerTenantRow(schema, "KV-FMPL1O");
+        List<FoundationScripts.Script> v1Only = FoundationScripts.fromClasspath().scripts().stream()
+                .filter(sc -> !("core".equals(sc.moduleId()) && !"1".equals(sc.version()))).toList();
+        new TenantSchemaProvisioner(dataSource, new FoundationScripts(v1Only))
+                .provision(UUID.randomUUID().toString(), schema);
+        jdbc.execute("ALTER TABLE \"" + schema + "\".subscriptions ADD CONSTRAINT legacy_plan_check "
+                + "CHECK (plan_type IN ('FREE', 'PREMIUM_TRIAL', 'PREMIUM'))");
+        assertThat(planTypeChecks(schema)).hasSize(2);
+        assertThat(planTypeLength(schema)).isEqualTo(20);
+        String before = jdbc.queryForObject("SELECT plan_type || '/' || expires_at FROM \"" + schema
+                + "\".subscriptions", String.class);
+
+        modules.ensureFoundation(schema); // boot upgrade / first request of an existing tenant
+
+        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("2");
+        assertThat(planTypeChecks(schema)).isEmpty();
+        assertThat(planTypeLength(schema)).isEqualTo(30);
+        assertThat(jdbc.queryForObject("SELECT plan_type || '/' || expires_at FROM \"" + schema
+                + "\".subscriptions", String.class)).isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT column_default FROM information_schema.columns WHERE table_schema = ? "
+                + "AND table_name = 'subscriptions' AND column_name = 'plan_type'", String.class, schema))
+                .contains("PREMIUM_TRIAL");
+        assertThat(jdbc.queryForList("SELECT conname FROM pg_constraint WHERE conrelid = ?::regclass AND contype = 'c'",
+                String.class, "\"" + schema + "\".subscriptions")).containsExactly("subscriptions_status_check");
+    }
+
+    private List<String> planTypeChecks(String schema) {
+        return jdbc.queryForList("SELECT conname FROM pg_constraint WHERE conrelid = ?::regclass AND contype = 'c' "
+                + "AND pg_get_constraintdef(oid) LIKE '%plan_type%'", String.class, "\"" + schema + "\".subscriptions");
+    }
+
+    private Integer planTypeLength(String schema) {
+        return jdbc.queryForObject("SELECT character_maximum_length FROM information_schema.columns "
+                + "WHERE table_schema = ? AND table_name = 'subscriptions' AND column_name = 'plan_type'",
+                Integer.class, schema);
+    }
+
+    @Test
     @DisplayName("ensureFoundation on an up-to-date tenant: no Flyway run (history unchanged)")
     void ensureFoundationUpToDate() {
         String schema = register("kv_fmupd1", "KV-FMUPD1");

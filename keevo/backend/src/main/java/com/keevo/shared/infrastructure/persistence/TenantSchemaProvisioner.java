@@ -1,5 +1,8 @@
 package com.keevo.shared.infrastructure.persistence;
 
+import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.PlanSettings;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.FoundationScripts;
@@ -10,6 +13,7 @@ import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Savepoint;
@@ -45,26 +49,27 @@ public class TenantSchemaProvisioner {
                 ('EMPLOYEE', '{"pos": true, "inventory_view": true, "stock_view": true}'::jsonb)
             ON CONFLICT (name) DO NOTHING""";
 
-    // SPEC CHANGE 2026-03-06: new tenants start on 6-month PREMIUM_TRIAL
+    // SPEC CHANGE 2026-03-06: new tenants start on a trial. Story 19.7a: the trial plan and its length are data
+    // (public.plan_settings, read through the PlanCatalog) and bound as parameters: code, then length in months.
     // WHERE NOT EXISTS ensures idempotency — provision() can be called multiple times safely.
-    // Story 16.8: the legacy max_* columns are filled from the PREMIUM_TRIAL plan profile (NULL = unlimited →
-    // 2147483647; no profile row → unlimited, the built-in default). They are no longer read for decisions.
-    // Without public.plan_profiles (database not migrated to V33) the built-in default is seeded instead.
+    // Story 16.8: the legacy max_* columns are filled from the trial plan's profile (NULL = unlimited →
+    // 2147483647; no profile row → unlimited). They are no longer read for decisions.
+    // Without public.plan_profiles (database not migrated to V33) unlimited columns are seeded instead.
     private static final String SEED_SUBSCRIPTION_DEFAULTS = """
             INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status, expires_at)
-            SELECT 'PREMIUM_TRIAL', 2147483647, 2147483647, 2147483647, 'ACTIVE',
-                   NOW() + INTERVAL '6 months'
+            SELECT ?, 2147483647, 2147483647, 2147483647, 'ACTIVE', NOW() + make_interval(months => ?)
             WHERE NOT EXISTS (SELECT 1 FROM subscriptions)""";
 
     private static final String PLAN_PROFILES_PRESENT = "SELECT to_regclass('public.plan_profiles') IS NOT NULL";
 
+    /** Parameters: trial plan code (×4), trial length in months. */
     private static final String SEED_SUBSCRIPTION = """
             INSERT INTO subscriptions (plan_type, max_stores, max_products, max_employees, status, expires_at)
-            SELECT 'PREMIUM_TRIAL',
-                   COALESCE((SELECT p.max_stores FROM public.plan_profiles p WHERE p.plan_type = 'PREMIUM_TRIAL'), 2147483647),
-                   COALESCE((SELECT p.max_products FROM public.plan_profiles p WHERE p.plan_type = 'PREMIUM_TRIAL'), 2147483647),
-                   COALESCE((SELECT p.max_employees FROM public.plan_profiles p WHERE p.plan_type = 'PREMIUM_TRIAL'), 2147483647),
-                   'ACTIVE', NOW() + INTERVAL '6 months'
+            SELECT ?,
+                   COALESCE((SELECT p.max_stores FROM public.plan_profiles p WHERE p.plan_type = ?), 2147483647),
+                   COALESCE((SELECT p.max_products FROM public.plan_profiles p WHERE p.plan_type = ?), 2147483647),
+                   COALESCE((SELECT p.max_employees FROM public.plan_profiles p WHERE p.plan_type = ?), 2147483647),
+                   'ACTIVE', NOW() + make_interval(months => ?)
             WHERE NOT EXISTS (SELECT 1 FROM subscriptions)""";
 
     private static final String SEED_STORE = """
@@ -75,17 +80,28 @@ public class TenantSchemaProvisioner {
 
     private final DataSource dataSource;
     private final FoundationScripts foundation;
+    private final PlanCatalog catalog;
 
-    /** The foundation scripts of this build ({@link FoundationScripts#fromClasspath()}). */
+    /** The foundation scripts of this build ({@link FoundationScripts#fromClasspath()}), the plan catalogue. */
     @Autowired
-    public TenantSchemaProvisioner(DataSource dataSource) {
-        this(dataSource, FoundationScripts.fromClasspath());
+    public TenantSchemaProvisioner(DataSource dataSource, PlanCatalog catalog) {
+        this(dataSource, FoundationScripts.fromClasspath(), catalog);
     }
 
-    /** Test seam: other foundation scripts (e.g. one that fails). */
+    /** Seeded plan catalogue — tests on a database without the public migrations. */
+    public TenantSchemaProvisioner(DataSource dataSource) {
+        this(dataSource, FoundationScripts.fromClasspath(), PlanCatalog.SEED);
+    }
+
+    /** Test seam: other foundation scripts (e.g. one that fails), seeded plan catalogue. */
     public TenantSchemaProvisioner(DataSource dataSource, FoundationScripts foundation) {
+        this(dataSource, foundation, PlanCatalog.SEED);
+    }
+
+    public TenantSchemaProvisioner(DataSource dataSource, FoundationScripts foundation, PlanCatalog catalog) {
         this.dataSource = dataSource;
         this.foundation = foundation;
+        this.catalog = catalog;
     }
 
     /**
@@ -96,6 +112,15 @@ public class TenantSchemaProvisioner {
      * @throws DomainException TENANT_PROVISION_FAILED on any SQL error (nothing committed)
      */
     public void provision(String tenantId, String schemaName) {
+        PlanSettings settings = catalog.settings();
+        provision(tenantId, schemaName, settings.trialPlan(), settings.trialMonths());
+    }
+
+    /**
+     * Same, the subscription seeded on {@code trialPlan} for {@code trialMonths} months (Story 19.7a: the caller read
+     * them once from {@code public.plan_settings}, so the tenant row and the subscription agree).
+     */
+    public void provision(String tenantId, String schemaName, PlanType trialPlan, int trialMonths) {
         try {
             TenantSchema.validate(schemaName);
         } catch (IllegalArgumentException e) {
@@ -109,7 +134,7 @@ public class TenantSchemaProvisioner {
             try {
                 createSchema(conn, schemaName);
                 createTables(conn, schemaName);
-                seedData(conn, schemaName);
+                seedData(conn, schemaName, trialPlan, trialMonths);
                 conn.commit();
             } catch (SQLException | RuntimeException e) {
                 try {
@@ -236,12 +261,25 @@ public class TenantSchemaProvisioner {
         }
     }
 
-    private void seedData(Connection conn, String schemaName) throws SQLException {
+    private void seedData(Connection conn, String schemaName, PlanType trialPlan, int trialMonths)
+            throws SQLException {
         TenantSchema.validate(schemaName); // provision() already validated it; re-checked at use
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + schemaName + "\"");
             stmt.execute(SEED_ROLES);
-            stmt.execute(planProfilesPresent(stmt) ? SEED_SUBSCRIPTION : SEED_SUBSCRIPTION_DEFAULTS);
+            boolean profiles = planProfilesPresent(stmt);
+            try (PreparedStatement seed = conn.prepareStatement(profiles ? SEED_SUBSCRIPTION
+                    : SEED_SUBSCRIPTION_DEFAULTS)) {
+                int i = 1;
+                seed.setString(i++, trialPlan.code());
+                if (profiles) {
+                    for (int k = 0; k < 3; k++) {
+                        seed.setString(i++, trialPlan.code());
+                    }
+                }
+                seed.setInt(i, trialMonths);
+                seed.execute();
+            }
             stmt.execute(SEED_STORE);
         }
     }

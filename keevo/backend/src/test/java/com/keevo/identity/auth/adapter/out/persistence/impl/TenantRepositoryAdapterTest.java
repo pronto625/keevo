@@ -37,7 +37,7 @@ class TenantRepositoryAdapterTest {
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
         adapter = new TenantRepositoryAdapter(springRepository,
-                com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
+                com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
     }
 
     // ── deletionScheduledAt round-trip ─────────────────────────────────────

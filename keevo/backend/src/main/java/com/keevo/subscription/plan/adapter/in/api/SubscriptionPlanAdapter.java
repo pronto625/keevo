@@ -1,5 +1,6 @@
 package com.keevo.subscription.plan.adapter.in.api;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -35,7 +36,7 @@ class SubscriptionPlanAdapter implements TenantPlanQuery, PlanLimitCheck {
     public Optional<PlanView> findCurrentPlan(String tenantSchema) {
         TenantContext.requireCurrent(tenantSchema);
         return subscriptionRepository.findActivePlan()
-                .map(s -> view(s, planLimitGuard.profile(s.getPlanType())));
+                .map(s -> view(s, planLimitGuard.kind(s.getPlanType()), planLimitGuard.profile(s.getPlanType())));
     }
 
     @Override
@@ -65,7 +66,7 @@ class SubscriptionPlanAdapter implements TenantPlanQuery, PlanLimitCheck {
         return plan;
     }
 
-    static PlanView view(Subscription s, PlanProfile profile) {
-        return new PlanView(s.getPlanType(), s.isActive(), s.getExpiresAt(), profile);
+    static PlanView view(Subscription s, PlanKind kind, PlanProfile profile) {
+        return new PlanView(s.getPlanType(), kind, s.isActive(), s.getExpiresAt(), profile);
     }
 }

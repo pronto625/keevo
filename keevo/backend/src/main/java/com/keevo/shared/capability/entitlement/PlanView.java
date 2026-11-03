@@ -1,48 +1,42 @@
 package com.keevo.shared.capability.entitlement;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.PlanType;
 
 import java.time.Instant;
 
 /**
  * The tenant's current subscription plan as seen by other modules (Story 12.2d). Since Story 16.8 the limits come
- * from the plan profile ({@link PlanProfiles}) read when the view is built; {@code null} = unlimited.
+ * from the plan profile ({@link PlanProfiles}) read when the view is built; {@code null} = unlimited. Since Story
+ * 19.7a the view carries the plan's kind (catalogue), which gives the V1 code of a refusal.
  *
+ * @param kind         the plan's kind ({@link PlanCatalog})
  * @param active       true when the subscription status is ACTIVE
- * @param expiresAt    null for FREE
+ * @param expiresAt    null for a free plan
  * @param maxStores    store limit, {@code null} = unlimited
  * @param maxProducts  active-product limit, {@code null} = unlimited
  * @param maxEmployees employee limit, {@code null} = unlimited
  */
-public record PlanView(PlanType planType, boolean active, Instant expiresAt, Integer maxStores, Integer maxProducts,
-                       Integer maxEmployees) {
+public record PlanView(PlanType planType, PlanKind kind, boolean active, Instant expiresAt, Integer maxStores,
+                       Integer maxProducts, Integer maxEmployees) {
 
     public PlanView {
         if (planType == null) { // subscriptions.plan_type is NOT NULL: a null here is a programming error
             throw new IllegalArgumentException("planType is required");
         }
-    }
-
-    /** A view whose limits are the built-in {@link PlanType} defaults (tests, no profile at hand). */
-    public PlanView(PlanType planType, boolean active, Instant expiresAt) {
-        this(planType, active, expiresAt, planType != null ? PlanProfile.fromEnum(planType) : null);
+        if (kind == null) {
+            throw new IllegalArgumentException("kind is required");
+        }
     }
 
     /** A view whose limits are those of the given profile ({@code null}: unlimited). */
-    public PlanView(PlanType planType, boolean active, Instant expiresAt, PlanProfile profile) {
-        this(planType, active, expiresAt, profile != null ? profile.maxStores() : null,
+    public PlanView(PlanType planType, PlanKind kind, boolean active, Instant expiresAt, PlanProfile profile) {
+        this(planType, kind, active, expiresAt, profile != null ? profile.maxStores() : null,
                 profile != null ? profile.maxProducts() : null, profile != null ? profile.maxEmployees() : null);
     }
 
-    public boolean isPremium() {
-        return planType == PlanType.PREMIUM;
-    }
-
-    public boolean isPremiumTrial() {
-        return planType == PlanType.PREMIUM_TRIAL;
-    }
-
-    public boolean isFree() {
-        return planType == PlanType.FREE;
+    /** The plan code a V1 client understands ({@link PlanKind#v1Plan()}). */
+    public PlanType v1Plan() {
+        return kind.v1Plan();
     }
 }

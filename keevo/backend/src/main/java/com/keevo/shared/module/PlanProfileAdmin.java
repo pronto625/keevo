@@ -16,7 +16,7 @@ import java.util.UUID;
  */
 public interface PlanProfileAdmin {
 
-    /** Every plan profile, in plan order ({@code FREE}, {@code PREMIUM_TRIAL}, {@code PREMIUM}). */
+    /** The profile of every plan of the catalogue, in its display order (Story 19.7a). */
     List<ProfileView> list();
 
     /**
@@ -42,13 +42,14 @@ public interface PlanProfileAdmin {
     ModuleBackfill.BackfillReport resync(PlanType planType, com.keevo.shared.job.ProgressListener progress);
 
     /**
-     * @param planType     {@code FREE} | {@code PREMIUM_TRIAL} | {@code PREMIUM}
+     * @param planType     a plan code of the catalogue ({@code public.plans})
      * @param label        French name of the plan
      * @param maxStores    {@code null} = unlimited
      * @param maxProducts  {@code null} = unlimited
      * @param maxEmployees {@code null} = unlimited
      * @param modules      the paid modules granted (explicitly, or by the plan type's default), by display name order
-     * @param fallback     the stored profile is missing or unreadable: these are the built-in defaults
+     * @param fallback     the stored profile is missing or unreadable: these values come from the free plan's
+     *                     profile or the last one read (Story 19.7a)
      */
     record ProfileView(String planType, String label, Integer maxStores, Integer maxProducts, Integer maxEmployees,
                        List<ModuleRef> modules, boolean fallback) {

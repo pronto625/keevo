@@ -50,7 +50,7 @@ class QuickAddProductIntegrationTest {
     @Mock private com.keevo.subscription.api.ProductCountPort productCountPort;
     @Mock private com.keevo.subscription.plan.domain.port.out.SubscriptionRepository subscriptionRepository;
     @Spy private com.keevo.subscription.plan.application.service.PlanLimitGuard planLimitGuard =
-            new com.keevo.subscription.plan.application.service.PlanLimitGuard(com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
+            new com.keevo.subscription.plan.application.service.PlanLimitGuard(com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
     @Mock private com.keevo.shared.application.port.TransactionLockPort transactionLock;
     @Mock private com.keevo.subscription.plan.domain.model.Subscription freeSubscription;
 

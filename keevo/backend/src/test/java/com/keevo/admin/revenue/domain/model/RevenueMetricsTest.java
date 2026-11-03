@@ -24,7 +24,14 @@ class RevenueMetricsTest {
     }
 
     private static PlanChange event(UUID tenant, String from, String to, String cause, String at) {
-        return new PlanChange(tenant, from, to, cause, Instant.parse(at));
+        return new PlanChange(tenant, from, to, kind(from), kind(to), cause, Instant.parse(at));
+    }
+
+    /** Story 19.7a: the kind joined from the catalogue — the seeded codes' kinds, TEST_PAID a plan of kind PAID. */
+    static com.keevo.identity.api.PlanKind kind(String code) {
+        if (code == null) return null;
+        if (code.equals("TEST_PAID")) return com.keevo.identity.api.PlanKind.PAID;
+        return com.keevo.identity.api.PlanType.of(code).seedKind().orElseThrow();
     }
 
     // ── Monthly value / MRR ───────────────────────────────────────────────────
@@ -135,6 +142,24 @@ class RevenueMetricsTest {
         assertThat(churned).containsOnlyKeys(A);
         assertThat(m.churnBase(first, last)).isEqualTo(4);
         assertThat(RevenueMetrics.rate(churned.size(), m.churnBase(first, last))).isEqualTo(0.25);
+    }
+
+    @Test
+    @DisplayName("19.7a: a plan of kind PAID created as data counts like PREMIUM — churn, return, conversion, downgrade")
+    void planKindNotCode() {
+        LocalDate s = LocalDate.of(2026, 8, 15);
+        var m = new RevenueMetrics(List.of(
+                pay(A, 15_000, "2026-08-15T09:00:00Z", s, LocalDate.of(2026, 9, 30)),
+                pay(B, 15_000, "2026-08-15T09:00:00Z", s, LocalDate.of(2026, 9, 30))),
+                List.of(event(A, "TEST_PAID", "FREE", "ADMIN_DOWNGRADE", "2026-09-12T10:00:00Z"),
+                        event(B, null, "PREMIUM_TRIAL", "REGISTRATION", "2026-08-01T10:00:00Z"),
+                        event(B, "PREMIUM_TRIAL", "TEST_PAID", "ADMIN_ACTIVATION", "2026-09-05T10:00:00Z")));
+        LocalDate first = LocalDate.of(2026, 9, 1);
+        LocalDate last = LocalDate.of(2026, 9, 30);
+
+        assertThat(m.churned(first, last)).containsOnlyKeys(A);
+        assertThat(m.payingAt(LocalDate.of(2026, 9, 13))).as("downgraded payment stops counting").isEqualTo(1);
+        assertThat(m.conversion(first, last)).isEqualTo(new RevenueMetrics.Conversion(1, 1));
     }
 
     @Test

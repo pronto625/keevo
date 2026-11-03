@@ -58,7 +58,7 @@ import static org.mockito.Mockito.*;
  * <p>Commits tenant rows and schemas, removed in {@link #cleanUp()}.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import(TenantSchemaProvisioner.class)
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Plan management on PostgreSQL (Story 9-2)")
 class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTest {
@@ -183,7 +183,9 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         UUID t = tenant("kv_pm9204", "KV-PM9204", "PREMIUM");
         jdbc.update("UPDATE \"kv_pm9204\".subscriptions SET plan_type = 'PREMIUM', expires_at = now() - interval '1 hour'");
         SubscriptionExpiryService service = new SubscriptionExpiryService(jdbc, new JdbcPlanChangeRecorder(jdbc),
-                publisher, transactionManager, clock, planModuleRows());
+                publisher, transactionManager, clock, planModuleRows(),
+                com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS,
+                com.keevo.shared.capability.entitlement.PlanCatalog.SEED);
 
         service.execute(new DowngradeExpiredTrialsCommand("test"));
 
@@ -418,7 +420,8 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
 
     private AdminPlanService planService() {
         JdbcPlanChangeRecorder recorder = new JdbcPlanChangeRecorder(jdbc);
-        return new AdminPlanService(new TargetTenantLookup(jdbc), SubscriptionApiTestSupport.administrationPort(null, new ChangeTenantPlanService(jdbc, recorder, planModuleRows())),
+        return new AdminPlanService(new TargetTenantLookup(jdbc), SubscriptionApiTestSupport.administrationPort(null, new ChangeTenantPlanService(jdbc, recorder, planModuleRows(),
+                com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS)),
                 new JdbcTenantPaymentRepository(jdbc), publisher, jdbc, clock);
     }
 

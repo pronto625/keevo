@@ -8,7 +8,7 @@ import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
 
-import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -22,8 +22,8 @@ import static org.assertj.core.api.Assertions.*;
 class PlanLimitGuardTest {
 
     /** Mutable in-memory profiles: a change applies to the next plan read. */
-    private final Map<PlanType, PlanProfile> stored = new EnumMap<>(PlanType.class);
-    private final PlanProfiles profiles = type -> stored.getOrDefault(type, PlanProfile.fromEnum(type));
+    private final Map<PlanType, PlanProfile> stored = new java.util.HashMap<>();
+    private final PlanProfiles profiles = type -> stored.getOrDefault(type, com.keevo.shared.capability.entitlement.TestPlanProfiles.profile(type));
     private final PlanLimitGuard guard = new PlanLimitGuard(profiles);
 
     {
@@ -34,7 +34,7 @@ class PlanLimitGuardTest {
 
     /** The plan as read for one request: limits from the current profile. */
     private PlanView view(PlanType type) {
-        return new PlanView(type, true, null, guard.profile(type));
+        return new PlanView(type, guard.kind(type), true, null, guard.profile(type));
     }
 
     @Test
@@ -135,15 +135,25 @@ class PlanLimitGuardTest {
     }
 
     @Test
-    void enumFallback_freeIsOneStore500Products2Employees() {
-        PlanProfile free = PlanProfile.fromEnum(PlanType.FREE);
-        assertThat(free.maxStores()).isEqualTo(1);
-        assertThat(free.maxProducts()).isEqualTo(500);
-        assertThat(free.maxEmployees()).isEqualTo(2);
-        assertThat(free.fallback()).isTrue();
-        assertThat(PlanProfile.fromEnum(PlanType.PREMIUM).maxStores()).isNull();
-        assertThat(PlanProfile.fromEnum(PlanType.PREMIUM).grants("invoicing")).isTrue();
-        assertThat(free.grants("invoicing")).isFalse();
+    void dataPlan_refusalCarriesTheV1Code_missingProfileFallsBackOnTheFreeOne() {
+        // Story 19.7a — a 4th plan created as data (kind PAID): a refusal names it as a V1 app knows it
+        PlanType testPaid = PlanType.of("TEST_PAID");
+        PlanView capped = new PlanView(testPaid, com.keevo.identity.api.PlanKind.PAID, true, null, 1, null, null);
+        assertThatThrownBy(() -> guard.checkStoreLimit(capped, 1)).isInstanceOfSatisfying(DomainException.class,
+                e -> assertThat(e.getDetails()).containsEntry("plan", "PREMIUM").containsEntry("limit", 1));
+        // no profile of its own → the free plan's limits and modules, fail closed, flagged
+        PlanProfile fallback = PlanProfile.fallbackFrom(testPaid, stored.get(PlanType.FREE));
+        assertThat(List.of(fallback.maxStores(), fallback.maxProducts(), fallback.maxEmployees()))
+                .containsExactly(1, 500, 2);
+        assertThat(fallback.fallback()).isTrue();
+        assertThat(fallback.grants("invoicing")).isFalse();
+        // nothing ever read: no limit, undecided paid modules follow the kind
+        PlanProfile unavailable = PlanProfile.unavailable(testPaid, com.keevo.identity.api.PlanKind.PAID);
+        assertThat(unavailable.maxStores()).isNull();
+        assertThat(unavailable.grants("invoicing")).isTrue();
+        // the seeded catalogue knows the 3 plans only: an unknown code is treated as free
+        assertThat(guard.kind(testPaid)).isEqualTo(com.keevo.identity.api.PlanKind.FREE);
+        assertThat(guard.kind(PlanType.PREMIUM_TRIAL)).isEqualTo(com.keevo.identity.api.PlanKind.TRIAL);
     }
 
     @Test

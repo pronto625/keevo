@@ -2,14 +2,28 @@
 title: '19-7a Plans are data — plan catalogue in the database, behaviour driven by the plan kind, no closed list of plan codes in code or constraints; identical behaviour with the three current plans'
 type: 'refactor'
 created: '2026-11-03'
-status: 'in-progress'
+status: done
 baseline_revision: '45550e84e1fd9a1303a9201f0507644f39c0578d'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Plan kind change and archived/visible enforcement, per-plan revenue prices
+    evidence: |-
+      Routed to 21-10 (epics-fusion-keevo-bref.md, story 21.10, Deferred items 2026-11-04).
+    location: >-
+      JdbcPlanCatalog.save, AdminSubscriptionController, RevenueMetrics
+    severity: medium
+  - summary: >-
+      activatePremium hard-codes PREMIUM; activation does not tie expiresAt to the plan kind (pre-existing)
+    evidence: |-
+      Routed to 19-7b (epics-fusion-keevo-bref.md, story 19.7 note, Deferred items 2026-11-04).
+    location: >-
+      AdminPlanService.java:170, AdminSubscriptionController.java:63
+    severity: medium
 ---
 
 <intent-contract>
@@ -82,8 +96,100 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 50 findings — high 0, medium 22, low 20, false 6, maybe-false 2
+- findings:
+  - Intent-alignment:
+    - `[low]` `[defer]` AdminPlanService.activatePremium still grants the PREMIUM constant (allow-listed in the gate) — routed to 19-7b (plan becomes a parameter).
+    - `[false]` `[reject]` Gate allow-list includes module-tier files (PlanModuleRows, ModuleLifecycleService, TenantModuleStatePort, JdbcTenantModuleStateStore) — their "FREE"/"PREMIUM" are module tiers (V29), not plan codes.
+    - `[low]` `[reject]` Never-read profile store returns no limits (fail-open tail) — only reachable with the database down since boot, where every tenant read fails anyway; a restrictive default would put limits back in code (forbidden by the intent).
+    - `[false]` `[reject]` Admin `plan=` filter / activation accept any catalogue code — that is the intent (a plan created as data works everywhere); response shape unchanged.
+    - `[low]` `[reject]` Cache TTL + miss reload beyond explicit invalidation — needed for multi-instance freshness; invalidation on write through the port holds (patched race below).
+    - `[false]` `[reject]` Live check not visible in the diff — performed and recorded under Verification (keevo_dev V42 + core V2 on 344 schemas, API registration, Redmi).
+  - Blind hunter:
+    - `[medium]` `[patch]` TenantRepositoryAdapter/SubscriptionRepositoryAdapter strict resolve throws for codes unknown to a degraded catalogue — stored rows now mapped shape-only with PlanType.of.
+    - `[medium]` `[patch]` invalidate() nulls the snapshot so a failed reload falls to SEED — invalidate now marks stale and keeps the last catalogue.
+    - `[medium]` `[patch]` plan_settings targets not checked against kind — saveSettings validates free=FREE, trial=TRIAL, not archived.
+    - `[medium]` `[defer]` Changing the kind of a plan in use does not resync module rows — the intent allows kind edits through the port; guard/resync belongs to the CRUD → 21-10.
+    - `[medium]` `[defer]` archived_at/visible not enforced on assignment — no archived plan exists yet; enforcement with the CRUD → 21-10.
+    - `[medium]` `[defer]` Activation accepts a TRIAL/PAID plan with expiresAt null — pre-existing (old controller passed expiresAt unchecked for PREMIUM too) → 19-7b.
+    - `[low]` `[defer]` activatePremium hard-codes PREMIUM — same root as intent row 1 → 19-7b.
+    - `[false]` `[reject]` core V2 width guard narrows TEXT columns — subscriptions.plan_type is VARCHAR(20) in core V1 baseline (atttypmod > 0); V42 public columns are all VARCHAR(20), widening only.
+    - `[false]` `[reject]` profile_modules.plan_type lacks FK — it references plan_profiles(plan_type) (V33:27), which now references plans.
+    - `[low]` `[patch]` Unknown-code handling inconsistent; AdminCatalogService INNER JOIN drops tenants outside the catalogue — LEFT JOIN, null kind → FREE (previous behaviour). Listener orElse(PAID) kept: an expired previous plan is trial or paid by construction.
+    - `[low]` `[patch]` warm() failure skips the per-plan read — warm isolated in its own try.
+    - `[low]` `[reject]` lastRead keeps profiles of deleted plans — plan codes are never deleted (archive only); fallback use only.
+    - `[low]` `[reject]` normalizePlanFilter English message lists codes — pre-existing message style on an admin-only 422; dashboard maps codes.
+    - `[medium]` `[defer]` Revenue has no per-plan price — prices are 21-10 scope → 21-10.
+    - `[low]` `[reject]` Grep gate does not scan .sql/make_interval — gate scoped to src/main/java by the intent; settings drive the interval.
+    - `[false]` `[reject]` No end-to-end test on a non-seed plan — PlansAreDataFullContextTest covers TEST_PAID/TEST_TRIAL end to end.
+  - Patterns/complexity:
+    - `[medium]` `[patch]` Invalidation race in reload caches pre-write rows for the TTL — generation counter.
+    - `[medium]` `[patch]` Every reader blocks on reload (second pool connection) — tryLock, readers keep the stale snapshot while one thread reloads.
+    - `[medium]` `[patch]` Profile store calls the catalogue while holding a connection — kinds/free plan resolved before getConnection.
+    - `[medium]` `[patch]` PlanProfileAdminService.list one query per plan — batch read of all profiles in one query.
+    - `[low]` `[reject]` Expiry job scans every tenant schema — pre-existing; the tenant schema subscription is the source of truth and public.tenants.plan_type may lag, so narrowing on it could miss an expiry.
+    - `[low]` `[reject]` countCurrentPlans per tenant schema — pre-existing; same source-of-truth reason.
+    - `[low]` `[reject]` TenantSchemaProvisioner three scalar subqueries — once per registration, PK lookups.
+    - `[maybe-false]` `[reject]` AdminCatalogService INNER JOIN — same root as blind row, patched there.
+    - `[low]` `[reject]` V42 without lock_timeout — prod tables tiny; a lock timeout would fail the deploy, worse than a short wait.
+  - Edge-case hunter:
+    - `[medium]` `[patch]` SubscriptionRepositoryAdapter strict resolve — grouped with blind row 1.
+    - `[medium]` `[patch]` ChangeTenantPlanService.currentPlan strict resolve blocks moving a tenant off a bad code — PlanType.of.
+    - `[medium]` `[patch]` invalidate then failing reload → SEED — grouped, patched.
+    - `[medium]` `[patch]` reload race — grouped, patched.
+    - `[low]` `[patch]` miss reload unthrottled during an outage (loadedAt backdated) — throttled on last attempt time.
+    - `[low]` `[reject]` Free plan without profile row → no limits — FREE profile is seeded by V33 and profiles are never deleted; unreachable in normal operation.
+    - `[medium]` `[patch]` plan_settings kinds — grouped, patched.
+    - `[medium]` `[defer]` archived/expiresAt on activation — grouped with blind rows → 21-10 / 19-7b.
+    - `[low]` `[patch]` Codes PAID/ALL collide with admin filter keywords — CHECK code NOT IN ('ALL','PAID') in V42.
+    - `[medium]` `[defer]` kind change via save — grouped → 21-10.
+    - `[maybe-false]` `[patch]` AdminCatalogService INNER JOIN — grouped, patched.
+    - `[low]` `[reject]` PlanProfiles.profile(String) returns fallback for unknown codes — callers pass codes from profile_modules/catalogue; ERROR log is the intended signal.
+  - Verification gap (pre-verified):
+    - `[medium]` `[patch]` Profile store fault fallback untested — test added on failing DataSource.
+    - `[medium]` `[patch]` free_plan_code never a non-seed plan in tests — TEST_FREE expiry/downgrade test.
+    - `[medium]` `[patch]` AdminPlanService renewal/already-free on data plans untested — TEST_PAID/TEST_FREE cases.
+    - `[low]` `[patch]` AdminCatalogService plan class/filter untested — cases added.
+    - `[low]` `[patch]` Push audience/announcements on data plans untested — data-plan tenant added.
+    - `[medium]` `[patch]` PlanType JSON form not pinned — legacy payload test.
+    - `[low]` `[patch]` Other: fail-open free limits — see intent row 3 (reject); warm blocking — patched; inner joins — patched.
+
 ## Design Notes
 
 - Why a **kind** column: behaviours (free limits, paid modules, trial expiry, V1 value, revenue) depend on « is it free / trial / paid », not on the plan's name; three kinds are a business concept, plans are offer content (ADR-05). 19.7b then moves the trial onto the subscription; the TRIAL kind stays for the V1 mapping of running PREMIUM_TRIAL subscriptions.
 - `PlanType` kept as a value type name to limit churn across ~100 files; constants remain for seeds/tests only.
 - Pattern: catalogue as a cached repository behind a port (read-mostly, tiny), Strategy-free kind switch; SQL joins keep jobs set-based.
+
+- Decision table — what each behaviour reads (kind from `public.plans`, never a code):
+
+  | Behaviour | Before | Now |
+  |---|---|---|
+  | Undecided paid module in a profile | `planType != FREE` | kind ≠ FREE (`PlanProfile.grantsByDefault`) |
+  | Plan-derived module rows / transition rule | code ∈ {PREMIUM, PREMIUM_TRIAL} / = FREE / = PREMIUM_TRIAL | kind ∈ {TRIAL, PAID} / FREE / TRIAL (SQL `LEFT JOIN public.plans`) |
+  | Nightly expiry | `plan_type IN ('PREMIUM_TRIAL','PREMIUM')` → `'FREE'` | `kind IN (TRIAL, PAID)` (join) → `plan_settings.free_plan_code`; free profile + target read once per run |
+  | Registration | `PREMIUM_TRIAL`, `INTERVAL '6 months'` ×2 | `plan_settings` trial plan + `make_interval(months => trial_months)`, read once by `TenantFactory` and handed to the seed |
+  | Limits | `plan_profiles`, enum fallback | `plan_profiles`; no row → free plan's profile (ERROR); read fault → last profile read; never read → no limit (ERROR) |
+  | `/subscription/me` `planType`, `PLAN_LIMIT_EXCEEDED.details.plan` | code | V1 code of the kind (FREE→FREE, TRIAL→PREMIUM_TRIAL, PAID→PREMIUM) |
+  | Reminders / admin alerts / « expired not free » alert | code lists | kind ∈ {TRIAL, PAID} (join); trial text when kind TRIAL |
+  | Admin tenant list `plan` filter | closed list + `PAID` alias | any catalogue code, `PAID` = kinds TRIAL+PAID (sub-select on `public.plans`), error lists the catalogue |
+  | Admin catalogue `tenantPlan` / filter | code ∈ {PREMIUM, PREMIUM_TRIAL} → PAID | kind FREE → FREE, else PAID (join) |
+  | Revenue (MRR stop, churn, conversion, current counts) | codes PREMIUM / FREE / PREMIUM_TRIAL | kinds PAID / FREE / TRIAL (events and subscriptions joined) |
+  | Global push targets PREMIUM / TRIAL / FREE | `plan_type = code` | plan kind PAID / TRIAL / FREE (sub-select); stored target names unchanged |
+  | Admin downgrade, `ADMIN_DOWNGRADE` cause | `PlanType.FREE` | `plan_settings.free_plan_code`; cause by target kind FREE |
+  | Admin « activate Premium » | `PlanType.PREMIUM` | unchanged target (the seeded Premium — legacy action, 19.7b makes the plan a parameter); renewal when current kind is PAID |
+  | Labels (profiles admin, alerts) | Java switch | `plans.label` |
+
+- Cache: `JdbcPlanCatalog` loads the whole catalogue (2 queries) into an immutable snapshot; dropped on every write through `PlanCatalogStore` (and after commit), TTL 60 s (other instances), reload once on a miss older than 1 s; load fault → last snapshot kept, else the V42 seed (`PlanCatalog.SEED`, ERROR). Hot paths do one map lookup.
+- `PlanType` keeps its JSON form (plain code string) through `PlanTypeJacksonConfig`: durable events (Modulith publication registry) carrying a plan serialise and replay as before, including publications written before the change.
+- Unknown code paths: admin profile endpoints → 404 `PLAN_PROFILE_NOT_FOUND` (unchanged); admin tenant list filter → 422 `VALIDATION_ERROR` (unchanged); `POST /admin/subscriptions/{schema}/activate` → `UnknownPlanException` (an `IllegalArgumentException`, as `valueOf` was — unchanged); module rules → « unknown plan » = DISABLED (unchanged).
+- Mobile / Dashboard: no response shape or value changes for the three seeded plans — no « Mobile (React Native) » or « Dashboard super-admin » section, no `m19-7a` / `d19-7a` key. (A plan code created as data would appear raw in admin lists until the dashboard reads labels — 21.10 territory.)
+
+## Auto Run Result
+
+- **Summary:** plans are data. Public catalogue `plans` (kind FREE/TRIAL/PAID) + `plan_settings` (free plan, trial plan, trial months) in V42, CHECKs replaced by FKs, reserved codes ALL/PAID refused; tenant `subscriptions.plan_type` CHECK dropped by core V2 through the foundation upgrade. `PlanType` is a value type; every behaviour depends on the plan's kind (SQL joins `public.plans`); V1 value derived from the kind; trial and downgrade target read from `plan_settings`; no limit left in code.
+- **Files:** V42__plan_catalogue.sql, db/modules/core/V2__subscriptions_plan_code.sql; shared/module (PlanCatalog, PlanCatalogStore, JdbcPlanCatalog, JdbcPlanProfileStore, PlanProfileAdminService), shared/capability/entitlement (PlanType, PlanKind, PlanDefinition, PlanSettings, PlanProfile(s)), PlanTypeJacksonConfig, TenantSchemaProvisioner; subscription (expiry, reminders, plan change, limit guard, WhatsApp messages, repository adapter); identity TenantRepositoryAdapter; admin (plan, subscription, tenant list filter, catalog, revenue, alerts, notifications/push audience); tests incl. PlansAreDataFullContextTest, JdbcPlanCatalogPostgresIntegrationTest, PlanCodeLiteralGateTest.
+- **Review:** 50 findings — patched 25 rows (medium 15, low 10) in 10 fix groups (catalogue cache: stale-not-null invalidation, generation counter, tryLock readers, miss-reload throttle; settings kind validation; reserved codes; shape-only mapping of stored codes; profile store connection/warm isolation; batch profile read; LEFT JOIN in admin catalog; 6 verification-gap tests). Deferred 8 rows → 21-10 (kind change resync, archived/visible enforcement, per-plan revenue prices) and 19-7b (activatePremium constant, expiresAt vs kind — pre-existing). Rejected 17 rows (false 6, maybe-false 2 grouped, low 9) with reasons in the triage log.
+- **Follow-up review recommended: true** — first pass patched 15 medium entries; the catalogue cache concurrency (ReentrantLock tryLock + generation counter + stale marking) was rewritten after review and has not been re-reviewed.
+- **Verification:** full suite by package green — 5,058 tests, 0 failure, 0 error (acceptance 4, admin 572, architecture 34, catalog 306, commerce 263, crm 158, feedback 52, identity 523, inventory 410, invoicing 170, messaging 192, reporting 421, shared 1170, store 60, subscription 87, sync 635). Live: local backend (WhatsApp noop, FCM off) booted, V42 re-applied on keevo_dev (reserved-code CHECK and `fk_tenants_plan` validated, plans FREE/TRIAL/PAID seeded), core V2 on all tenant schemas; API registration KV-NCO30Y → PREMIUM_TRIAL expiring +6 months; KV-EW02A2 `/subscription/me` → PREMIUM_TRIAL, 2027-05-01, unlimited (same as before); Redmi test client logged in and loads the dashboard (subscription screen check cut short: the phone was handed back to another session's run).
+- **Residual risks:** two orphan tenant schemas (no tenant row) keep the old CHECK; a plan created as data shows its raw code in the dashboard until 21.10; if plan profiles were never readable since boot, no limit applies (ERROR log).

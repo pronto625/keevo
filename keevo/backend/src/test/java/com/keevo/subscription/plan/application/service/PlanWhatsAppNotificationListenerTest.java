@@ -32,7 +32,13 @@ class PlanWhatsAppNotificationListenerTest {
 
     @Mock WhatsAppSender whatsApp;
     @Mock OwnerRecipientResolver resolver;
-    @InjectMocks PlanWhatsAppNotificationListener listener;
+    PlanWhatsAppNotificationListener listener;
+
+    @org.junit.jupiter.api.BeforeEach
+    void init() {
+        listener = new PlanWhatsAppNotificationListener(whatsApp, resolver,
+                com.keevo.shared.capability.entitlement.PlanCatalog.SEED);
+    }
 
     @Test
     @DisplayName("activation → « 🎉 … activé jusqu'au dd/MM/yyyy … » (WAT date)")

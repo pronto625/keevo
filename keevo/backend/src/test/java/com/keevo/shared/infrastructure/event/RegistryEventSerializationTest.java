@@ -76,6 +76,8 @@ class RegistryEventSerializationTest {
         AtomicReference<ObjectMapper> ref = new AtomicReference<>();
         new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(JacksonAutoConfiguration.class))
+                // Story 19.7a: the application's PlanType module (a plan code serialises as its string, as the enum did)
+                .withUserConfiguration(com.keevo.shared.infrastructure.config.PlanTypeJacksonConfig.class)
                 .run(ctx -> ref.set(ctx.getBean(ObjectMapper.class)));
         mapper = ref.get();
     }
@@ -146,6 +148,21 @@ class RegistryEventSerializationTest {
                 assertThat(back).as("deserialized %s", e.getKey().getSimpleName()).isEqualTo(event);
             }
         }
+    }
+
+    @Test
+    @DisplayName("19.7a: a plan serialises as its plain code string, and a payload stored when PlanType was an enum "
+            + "still deserialises (to the same constant)")
+    void planTypeAsPlainString() throws Exception {
+        String json = mapper.writeValueAsString(new PlanExpiredEvent(B, TENANT, PlanType.PREMIUM_TRIAL, T0));
+        assertThat(json).contains("\"previousPlan\":\"PREMIUM_TRIAL\"");
+
+        String legacy = "{\"tenantId\":\"22222222-2222-2222-2222-222222222222\",\"schemaName\":\"kv_abc123\","
+                + "\"previousPlan\":\"PREMIUM\",\"occurredAt\":\"2026-10-29T10:15:30Z\"}";
+        PlanExpiredEvent back = mapper.readValue(legacy, PlanExpiredEvent.class);
+        assertThat(back.previousPlan()).isSameAs(PlanType.PREMIUM);
+        assertThat(mapper.readValue(json.replace("PREMIUM_TRIAL", "TEST_PAID"), PlanExpiredEvent.class)
+                .previousPlan()).isEqualTo(PlanType.of("TEST_PAID"));
     }
 
     @Test

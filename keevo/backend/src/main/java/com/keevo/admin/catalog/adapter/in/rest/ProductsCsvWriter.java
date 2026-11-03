@@ -3,6 +3,7 @@ package com.keevo.admin.catalog.adapter.in.rest;
 import com.keevo.admin.AdminLabels;
 import com.keevo.admin.catalog.domain.model.AdminProductListItem;
 
+import com.keevo.identity.api.PlanKind;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -23,11 +24,10 @@ final class ProductsCsvWriter {
     private static final String BOM = "﻿";
     private static final DateTimeFormatter FR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(WAT);
 
+    /** Plan class of the product list (Story 19.7a: by kind — free, or paying = trial and paid plans). */
     private static final Map<String, String> PLAN_LABELS = Map.of(
-            "FREE", "Gratuit",
-            "PAID", "Premium et essai",
-            "PREMIUM_TRIAL", "Essai Premium",
-            "PREMIUM", "Premium");
+            PlanKind.FREE.name(), "Gratuit",
+            "PAID", "Premium et essai");
     private static final Map<String, String> STATUS_LABELS = Map.of(
             "ACTIVE", "Actif",
             "DRAFT", "Brouillon",

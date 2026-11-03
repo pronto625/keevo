@@ -42,7 +42,7 @@ import static org.mockito.Mockito.*;
 class StoreApiAdapterTest {
 
     private static final String TENANT = "kv_abc123";
-    private static final PlanView FREE = new PlanView(PlanType.FREE, true, null);
+    private static final PlanView FREE = com.keevo.shared.capability.entitlement.TestPlanProfiles.view(PlanType.FREE, true, null);
 
     @Mock private StoreRepository storeRepository;
     @Mock private UpdateStoreUseCase updateStoreUseCase;

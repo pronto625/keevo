@@ -230,7 +230,7 @@ class PlanModuleRowsTest {
         if (plan.planType() == null) {
             return null;
         }
-        PlanType type = PlanType.valueOf(plan.planType());
+        PlanType type = PlanType.of(plan.planType());
         return PlanProfile.of(type, null, null, null, granted ? Set.of(moduleId) : Set.of(),
                 granted ? Set.of() : Set.of(moduleId));
     }

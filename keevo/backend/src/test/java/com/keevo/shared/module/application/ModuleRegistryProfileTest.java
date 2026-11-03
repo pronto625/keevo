@@ -30,8 +30,8 @@ class ModuleRegistryProfileTest {
     private static final Instant NOW = Instant.parse("2026-11-01T10:00:00Z");
     private static final String SCHEMA = "kv_prof01";
 
-    private final Map<PlanType, PlanProfile> stored = new EnumMap<>(PlanType.class);
-    private final PlanProfiles profiles = type -> stored.getOrDefault(type, PlanProfile.fromEnum(type));
+    private final Map<PlanType, PlanProfile> stored = new java.util.HashMap<>();
+    private final PlanProfiles profiles = type -> stored.getOrDefault(type, com.keevo.shared.capability.entitlement.TestPlanProfiles.profile(type));
     private final AtomicReference<TenantModuleStatePort.Plan> plan = new AtomicReference<>();
 
     /** A tenant without any {@code tenant_modules} row, on the plan held by {@link #plan}. */

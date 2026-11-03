@@ -1,40 +1,52 @@
 package com.keevo.identity.auth.domain.model;
 
+import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.PlanType;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * PlanTypeTest — the built-in FREE limits (1 store, 500 products, 2 employees — journal I14). Since Story 16.8 they
- * are only the fallback of an unreadable {@code public.plan_profiles} row.
+ * PlanTypeTest — Story 19.7a: a plan is a code of the catalogue (value type), not a closed enum; no limit lives in
+ * it any more (the profiles are data). The seeded codes keep their constants; the kind gives the V1 code.
  */
-@DisplayName("PlanType")
+@DisplayName("PlanType (Story 19.7a — plans are data)")
 class PlanTypeTest {
 
     @Test
-    @DisplayName("FREE plan should allow up to 1 store (FR16 — Story 14.13)")
-    void freePlan_shouldAllowUpTo1Store() {
-        assertThat(PlanType.FREE.getMaxStores()).isEqualTo(1);
+    @DisplayName("any well-formed code is a plan type; the seeded codes return their constant")
+    void anyCode() {
+        PlanType pro = PlanType.of("TEST_PAID");
+        assertThat(pro.name()).isEqualTo("TEST_PAID");
+        assertThat(pro).isEqualTo(PlanType.of("TEST_PAID")).hasSameHashCodeAs(PlanType.of("TEST_PAID"));
+        assertThat(pro.seedKind()).isEmpty();
+        assertThat(PlanType.of("PREMIUM")).isSameAs(PlanType.PREMIUM);
+        assertThat(PlanType.PREMIUM_TRIAL.seedKind()).contains(PlanKind.TRIAL);
+        assertThat(PlanType.FREE.toString()).isEqualTo("FREE");
     }
 
     @Test
-    @DisplayName("PREMIUM_TRIAL plan should allow unlimited stores")
-    void premiumTrialPlan_shouldAllowUnlimitedStores() {
-        assertThat(PlanType.PREMIUM_TRIAL.getMaxStores()).isEqualTo(Integer.MAX_VALUE);
+    @DisplayName("a malformed code is refused without echoing it")
+    void malformed() {
+        for (String bad : new String[] {null, "", "free", "X", "1ABC", "A".repeat(31), "PRO-1"}) {
+            assertThatThrownBy(() -> PlanType.of(bad)).isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("Invalid plan code");
+            assertThat(PlanType.parse(bad)).isEmpty();
+        }
+        assertThat(PlanType.parse("A".repeat(30))).isPresent();
     }
 
     @Test
-    @DisplayName("FREE plan should allow up to 500 products")
-    void freePlan_shouldAllowUpTo500Products() {
-        assertThat(PlanType.FREE.getMaxProducts()).isEqualTo(500);
-    }
-
-    @Test
-    @DisplayName("FREE plan fallback allows up to 2 employees (validated value, 16.8)")
-    void freePlan_shouldAllowUpTo2Employees() {
-        assertThat(PlanType.FREE.getMaxEmployees()).isEqualTo(2);
+    @DisplayName("V1 compatibility: FREE → FREE, TRIAL → PREMIUM_TRIAL, PAID → PREMIUM; trial and paid expire")
+    void v1Mapping() {
+        assertThat(PlanKind.FREE.v1Plan()).isEqualTo(PlanType.FREE);
+        assertThat(PlanKind.TRIAL.v1Plan()).isEqualTo(PlanType.PREMIUM_TRIAL);
+        assertThat(PlanKind.PAID.v1Plan()).isEqualTo(PlanType.PREMIUM);
+        assertThat(PlanKind.FREE.expires()).isFalse();
+        assertThat(PlanKind.TRIAL.expires()).isTrue();
+        assertThat(PlanKind.PAID.expires()).isTrue();
     }
 }

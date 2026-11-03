@@ -35,7 +35,7 @@ import static org.mockito.Mockito.mock;
  * on the other tenants of the shared test database.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import(TenantSchemaProvisioner.class)
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Keyset pull indexes: provisioning + background job (Story 11.5)")
 class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest {

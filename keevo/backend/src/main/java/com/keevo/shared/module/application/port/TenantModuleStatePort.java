@@ -1,5 +1,8 @@
 package com.keevo.shared.module.application.port;
 
+import com.keevo.identity.api.PlanKind;
+import com.keevo.identity.api.PlanType;
+
 import com.keevo.shared.module.TenantModuleStatus;
 
 import java.time.Instant;
@@ -53,24 +56,35 @@ public interface TenantModuleStatePort {
      * The tenant's subscription as {@code TenantPlanQuery} sees it (the oldest row of its {@code subscriptions}
      * table, Story 12.2d) — read only for the transition rule of paid modules without a row (Story 13.10a).
      *
-     * @param planType          {@code FREE} | {@code PREMIUM_TRIAL} | {@code PREMIUM}; {@code null} = no subscription
+     * @param planType          the plan code; {@code null} = no subscription
+     * @param kind              the plan's kind from the catalogue ({@code public.plans}, Story 19.7a); {@code null} =
+     *                          no subscription or a code the catalogue does not know (never premium)
      * @param status            {@code ACTIVE} | {@code SUSPENDED} | {@code EXPIRED}; {@code null} = no subscription
      * @param expiresAt         end of the plan; {@code null} = no end
-     * @param expiryDowngradeAt when the nightly job downgraded an expired plan to FREE, if that is the tenant's latest
-     *                          plan change ({@code public.tenant_plan_events}, cause {@code EXPIRY}); {@code null}
-     *                          otherwise — anchors the read-only grace once the plan's own end date is erased
+     * @param expiryDowngradeAt when the nightly job downgraded an expired plan to the free plan, if that is the
+     *                          tenant's latest plan change ({@code public.tenant_plan_events}, cause {@code EXPIRY});
+     *                          {@code null} otherwise — anchors the read-only grace once the plan's own end date is
+     *                          erased
      * @param unreadable        the plan could not be read (database fault): paid modules are granted for the
      *                          request — a commercial gate never blocks a paying customer on a hiccup
      */
-    record Plan(String planType, String status, Instant expiresAt, Instant expiryDowngradeAt, boolean unreadable) {
+    record Plan(String planType, PlanKind kind, String status, Instant expiresAt, Instant expiryDowngradeAt,
+                boolean unreadable) {
 
         /** No subscription row: never premium. */
-        public static final Plan NONE = new Plan(null, null, null);
+        public static final Plan NONE = new Plan(null, null, null, null, null, false);
         /** The plan read failed (Story 13.10a review): paid modules granted, free modules unaffected. */
-        public static final Plan UNREADABLE = new Plan(null, null, null, null, true);
+        public static final Plan UNREADABLE = new Plan(null, null, null, null, null, true);
 
+        /** A plan of a well-known seeded code, kind from the V42 seed ({@link PlanType#seedKind()}) — tests. */
         public Plan(String planType, String status, Instant expiresAt) {
             this(planType, status, expiresAt, null, false);
+        }
+
+        /** Same, with the expiry downgrade anchor — tests. */
+        public Plan(String planType, String status, Instant expiresAt, Instant expiryDowngradeAt, boolean unreadable) {
+            this(planType, PlanType.parse(planType).flatMap(PlanType::seedKind).orElse(null), status, expiresAt,
+                    expiryDowngradeAt, unreadable);
         }
     }
 

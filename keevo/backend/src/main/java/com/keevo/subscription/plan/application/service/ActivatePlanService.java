@@ -7,9 +7,10 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.subscription.plan.domain.model.Subscription;
-import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanProfile;
+import com.keevo.identity.api.PlanKind;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
@@ -47,7 +48,7 @@ import java.util.UUID;
  * OEMIV session and opens a fresh Hibernate session that reads the updated TenantContext.
  *
  * <p><b>Story 9-2:</b> inside the same REQUIRES_NEW transaction, {@code public.tenants.plan_type}
- * is synced and a {@code tenant_plan_events} row is written (cause ADMIN_DOWNGRADE for FREE,
+ * is synced and a {@code tenant_plan_events} row is written (cause ADMIN_DOWNGRADE for a plan of kind FREE,
  * ADMIN_ACTIVATION otherwise). The endpoint contract is unchanged.
  *
  * <p><b>Story 16.5:</b> on every call (an expiry-only update included), still inside the same transaction and after
@@ -65,6 +66,7 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     private final PlanChangeRecorder planChangeRecorder;
     private final PlanModuleRowSync planModuleRows;
     private final PlanProfiles planProfiles;
+    private final PlanCatalog catalog;
 
     /** Production constructor — Spring injects the {@link PlatformTransactionManager}. */
     @org.springframework.beans.factory.annotation.Autowired
@@ -73,31 +75,36 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                                PlatformTransactionManager transactionManager,
                                PlanChangeRecorder planChangeRecorder,
                                PlanModuleRowSync planModuleRows,
-                               PlanProfiles planProfiles) {
+                               PlanProfiles planProfiles,
+                               PlanCatalog catalog) {
         this(subscriptionRepository, tenantQuery, buildTemplate(transactionManager), planChangeRecorder,
-                planModuleRows, planProfiles);
+                planModuleRows, planProfiles, catalog);
     }
 
     /**
-     * Testing constructor — accepts a pre-configured {@link TransactionTemplate}.
-     * Allows unit tests to mock the template without a real transaction manager.
+     * Testing constructor — accepts a pre-configured {@link TransactionTemplate} (Story 16.8 — legacy limit columns
+     * filled from the profile), seeded plan catalogue. Allows unit tests to mock the template without a real
+     * transaction manager.
      */
-    ActivatePlanService(SubscriptionRepository subscriptionRepository,
-                        TenantQueryPort tenantQuery,
-                        TransactionTemplate requiresNewTemplate,
-                        PlanChangeRecorder planChangeRecorder,
-                        PlanModuleRowSync planModuleRows) {
-        this(subscriptionRepository, tenantQuery, requiresNewTemplate, planChangeRecorder, planModuleRows,
-                PlanProfiles.ENUM_DEFAULTS);
-    }
-
-    /** Testing constructor with the plan profiles (Story 16.8 — legacy limit columns filled from the profile). */
     ActivatePlanService(SubscriptionRepository subscriptionRepository,
                         TenantQueryPort tenantQuery,
                         TransactionTemplate requiresNewTemplate,
                         PlanChangeRecorder planChangeRecorder,
                         PlanModuleRowSync planModuleRows,
                         PlanProfiles planProfiles) {
+        this(subscriptionRepository, tenantQuery, requiresNewTemplate, planChangeRecorder, planModuleRows,
+                planProfiles, PlanCatalog.SEED);
+    }
+
+    /** Testing constructor with the plan catalogue (Story 19.7a). */
+    ActivatePlanService(SubscriptionRepository subscriptionRepository,
+                        TenantQueryPort tenantQuery,
+                        TransactionTemplate requiresNewTemplate,
+                        PlanChangeRecorder planChangeRecorder,
+                        PlanModuleRowSync planModuleRows,
+                        PlanProfiles planProfiles,
+                        PlanCatalog catalog) {
+        this.catalog = catalog;
         this.planProfiles = planProfiles;
         this.subscriptionRepository = subscriptionRepository;
         this.tenantQuery = tenantQuery;
@@ -150,10 +157,10 @@ public class ActivatePlanService implements ActivatePlanUseCase {
 
                 // Story 9-2 — global plan view + history in the same transaction, only for a real
                 // plan change (an expiry-only update writes no history row).
-                if (current.getPlanType() != command.newPlan()) {
+                if (!current.getPlanType().equals(command.newPlan())) {
                     planChangeRecorder.syncPublicPlanType(tenant.id(), command.newPlan());
                     planChangeRecorder.recordEvent(tenant.id(), current.getPlanType(), command.newPlan(),
-                            command.newPlan() == PlanType.FREE
+                            catalog.kind(command.newPlan()) == PlanKind.FREE // 19.7a: by kind
                                     ? PlanChangeCause.ADMIN_DOWNGRADE : PlanChangeCause.ADMIN_ACTIVATION,
                             parseActor(command.actorId()), null);
                 }

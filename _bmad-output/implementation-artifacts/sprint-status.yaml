@@ -408,7 +408,7 @@ development_status:
   19-4-login-username-membres: backlog
   19-5-roles-manager-viewer-permissions: backlog
   19-6-multi-roles-multi-entreprises: backlog
-  19-7a-plans-en-donnees: in-progress  # 2026-11-03 build-auto (spec-19-7a-plans-en-donnees.md) | 2026-11-03 découpage de 19.7 : catalogue des plans en base, plus d'énumération ni de CHECK sur les codes, compatibilité V1 ; comportement identique
+  19-7a-plans-en-donnees: done  # 2026-11-04 revue 5 couches (50 constats, 25 corrigés, 8 reportés → 19-7b/21-10), 5 058 tests verts, live keevo_dev OK ; revue de suivi recommandée (cache du catalogue) | 2026-11-03 build-auto (spec-19-7a-plans-en-donnees.md) | 2026-11-03 découpage de 19.7 : catalogue des plans en base, plus d'énumération ni de CHECK sur les codes, compatibilité V1 ; comportement identique
   19-7b-plans-fusion: backlog  # 2026-11-03 découpage de 19.7 : FREE/PRO/TEAM/BUSINESS, PREMIUM→TEAM, FREE 1 employé, essai 1 mois porté par l'abonnement
   19-8-compteurs-usage-quotas: backlog
   19-9-sms-email-notifications-persistantes: backlog

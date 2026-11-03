@@ -62,7 +62,7 @@ public class GetSubscriptionService implements GetSubscriptionUseCase {
         PlanProfile profile = planLimitGuard.profile(sub.getPlanType());
 
         return new SubscriptionResponse(
-                sub.getPlanType().name(),
+                planLimitGuard.kind(sub.getPlanType()).v1Plan().name(), // 19.7a: V1 code, derived from the kind
                 sub.getStatus().name(),
                 sub.getExpiresAt() != null ? sub.getExpiresAt().toString() : null,
                 profile.maxStores(),

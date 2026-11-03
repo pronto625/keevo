@@ -293,6 +293,56 @@ class AdminPlanServiceTest {
         verifyNoInteractions(publisher);
     }
 
+    // ── Story 19.7a — by kind, plans created as data ─────────────────────────
+
+    private static final PlanType TEST_PAID = PlanType.of("TEST_PAID");
+    private static final PlanType TEST_FREE = PlanType.of("TEST_FREE");
+
+    /** The seed plus TEST_PAID (kind PAID) and TEST_FREE (kind FREE, the free plan of the settings). */
+    private AdminPlanService dataPlanService() {
+        java.util.List<com.keevo.shared.capability.entitlement.PlanDefinition> plans =
+                new java.util.ArrayList<>(com.keevo.shared.capability.entitlement.PlanCatalog.SEED.all());
+        plans.add(new com.keevo.shared.capability.entitlement.PlanDefinition(TEST_PAID, "Test payant", null, 9, true,
+                com.keevo.identity.api.PlanKind.PAID, null));
+        plans.add(new com.keevo.shared.capability.entitlement.PlanDefinition(TEST_FREE, "Test gratuit", null, 10,
+                true, com.keevo.identity.api.PlanKind.FREE, null));
+        com.keevo.shared.capability.entitlement.PlanCatalog catalog = com.keevo.shared.capability.entitlement
+                .PlanCatalog.of(plans, new com.keevo.shared.capability.entitlement.PlanSettings(TEST_FREE,
+                        PlanType.PREMIUM_TRIAL, 6));
+        return new AdminPlanService(lookup, SubscriptionApiTestSupport.administrationPort(null, changePlan), payments,
+                publisher, jdbc, Clock.fixed(NOW, ZoneOffset.UTC), catalog);
+    }
+
+    @Test
+    @DisplayName("19.7a: a running plan of kind PAID (data) is renewed from its end; a non-later expiry is refused")
+    void activate_renewalOfADataPaidPlan() {
+        AdminPlanService dataService = dataPlanService();
+        tenant("ACTIVE");
+        Instant currentExpiry = AdminPlanService.endOfDayWat(TODAY.plusDays(5));
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(TEST_PAID, currentExpiry)));
+        when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(TEST_PAID, currentExpiry));
+
+        assertValidationError(() -> dataService.activatePremium(activation(TODAY.plusDays(5), 10_000,
+                PaymentMethod.CASH)), "expiresAt");
+        dataService.activatePremium(activation(TODAY.plusDays(35), 10_000, PaymentMethod.CASH));
+
+        ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
+        verify(payments).insert(payment.capture());
+        assertThat(payment.getValue().periodStart()).isEqualTo(TODAY.plusDays(6));
+    }
+
+    @Test
+    @DisplayName("19.7a: downgrading a tenant already on a plan of kind FREE (data) → INVALID_STATE, nothing written")
+    void downgrade_alreadyOnADataFreePlan() {
+        AdminPlanService dataService = dataPlanService();
+        tenant("ACTIVE");
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(TEST_FREE, null)));
+
+        assertThatThrownBy(() -> dataService.downgradeToFree(new DowngradeToFreeCommand(ACTOR, TENANT, null)))
+                .extracting(e -> ((DomainException) e).getDomainCode()).isEqualTo("INVALID_STATE");
+        verify(changePlan, never()).changePlan(any());
+    }
+
     // ── Payments ──────────────────────────────────────────────────────────────
 
     @Test
@@ -357,14 +407,16 @@ class AdminPlanServiceTest {
     void alerts() {
         UUID a = UUID.randomUUID();
         UUID b = UUID.randomUUID();
-        when(jdbc.queryForList(AdminPlanService.ALERT_TENANTS_SQL)).thenReturn(List.of(
+        when(jdbc.queryForList(AdminPlanService.ALERT_TENANTS_SQL, "TRIAL", "PAID")).thenReturn(List.of(
                 Map.of("id", a, "name", "Boutique A", "schema_name", "kv_aaaaa1"),
                 Map.of("id", b, "name", "Boutique B", "schema_name", "kv_bbbbb2"),
                 Map.of("id", UUID.randomUUID(), "name", "Bad", "schema_name", "public")));
         Instant aExpiry = AdminPlanService.endOfDayWat(TODAY.plusDays(3));
-        when(jdbc.queryForList(contains("\"kv_aaaaa1\""), any(Timestamp.class), any(Timestamp.class)))
+        when(jdbc.queryForList(contains("\"kv_aaaaa1\""), eq("TRIAL"), eq("PAID"), any(Timestamp.class),
+                any(Timestamp.class)))
                 .thenReturn(List.of(Map.of("plan_type", "PREMIUM", "expires_at", Timestamp.from(aExpiry))));
-        when(jdbc.queryForList(contains("\"kv_bbbbb2\""), any(Timestamp.class), any(Timestamp.class)))
+        when(jdbc.queryForList(contains("\"kv_bbbbb2\""), eq("TRIAL"), eq("PAID"), any(Timestamp.class),
+                any(Timestamp.class)))
                 .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("no table")));
         PlanAlert expired = new PlanAlert(UUID.randomUUID(), "Boutique C", PlanAlert.Kind.EXPIRED, "PREMIUM",
                 null, null, NOW.minusSeconds(3600));
@@ -378,13 +430,17 @@ class AdminPlanServiceTest {
                 3, aExpiry, null));
         assertThat(alerts.get(1)).isEqualTo(expired);
         // lower bound bound from the app clock, not the DB NOW()
-        verify(jdbc).queryForList(contains("\"kv_aaaaa1\""), eq(Timestamp.from(NOW)), any(Timestamp.class));
+        verify(jdbc).queryForList(contains("\"kv_aaaaa1\""), eq("TRIAL"), eq("PAID"), eq(Timestamp.from(NOW)),
+                any(Timestamp.class));
     }
 
     @Test
     @DisplayName("alerts SQL: non-FREE live tenants only; EXPIRED excludes deletion states and later plan changes")
     void alerts_sqlShape() {
-        assertThat(AdminPlanService.ALERT_TENANTS_SQL).contains("plan_type <> 'FREE'").contains("'DELETION_PENDING'");
+        // Story 19.7a: plans that expire by kind (TRIAL, PAID — joined from the catalogue), no plan code
+        assertThat(AdminPlanService.ALERT_TENANTS_SQL).contains("p.kind IN (?, ?)").contains("'DELETION_PENDING'")
+                .doesNotContain("FREE");
+        assertThat(AdminPlanService.EXPIRING_SQL).contains("JOIN public.plans p").doesNotContain("PREMIUM");
         assertThat(AdminPlanService.EXPIRING_SQL).doesNotContain("NOW()");
         assertThat(AdminPlanService.EXPIRED_SQL).contains("'DELETION_PENDING'").contains("NOT EXISTS")
                 .contains("later.occurred_at > e.occurred_at");
@@ -393,9 +449,9 @@ class AdminPlanServiceTest {
     @Test
     @DisplayName("alerts: a connection failure is rethrown, never answered as an empty list")
     void alerts_connectionFailureRethrown() {
-        when(jdbc.queryForList(AdminPlanService.ALERT_TENANTS_SQL)).thenReturn(List.of(
+        when(jdbc.queryForList(AdminPlanService.ALERT_TENANTS_SQL, "TRIAL", "PAID")).thenReturn(List.of(
                 Map.of("id", UUID.randomUUID(), "name", "A", "schema_name", "kv_aaaaa1")));
-        when(jdbc.queryForList(anyString(), any(Timestamp.class), any(Timestamp.class)))
+        when(jdbc.queryForList(anyString(), eq("TRIAL"), eq("PAID"), any(Timestamp.class), any(Timestamp.class)))
                 .thenThrow(new CannotGetJdbcConnectionException("down"));
 
         assertThatThrownBy(() -> service.listAlerts()).isInstanceOf(CannotGetJdbcConnectionException.class);

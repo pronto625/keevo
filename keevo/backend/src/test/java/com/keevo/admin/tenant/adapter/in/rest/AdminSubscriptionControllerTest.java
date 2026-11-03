@@ -32,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * AdminSubscriptionControllerTest — @WebMvcTest tests for admin subscription endpoint.
  */
 @WebMvcTest(AdminSubscriptionController.class)
-@Import(com.keevo.shared.infrastructure.security.SecurityConfig.class)
+@Import({com.keevo.shared.infrastructure.security.SecurityConfig.class,
+        com.keevo.shared.capability.entitlement.SeedPlanCatalogTestConfig.class})
 @DisplayName("AdminSubscriptionController")
 class AdminSubscriptionControllerTest {
 

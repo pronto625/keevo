@@ -60,7 +60,8 @@ public class AdminAccountInitializer implements ApplicationRunner {
     private static final String ADMIN_TENANT_CODE   = "KV-ADMIN";
     private static final String ADMIN_SCHEMA        = "public";
     private static final String ADMIN_STATUS        = "ACTIVE";
-    private static final String ADMIN_PLAN_TYPE     = "PREMIUM";
+    /** The system tenant is never billed: the seeded paid plan (V42) for legacy screens only. */
+    private static final String ADMIN_PLAN_TYPE     = com.keevo.identity.api.PlanType.PREMIUM.name();
 
     private final TenantSpringRepository              tenantSpringRepository;
     private final UserSpringRepository                userSpringRepository;

@@ -1,6 +1,7 @@
 package com.keevo.admin.alerts.adapter.out.persistence;
 
 import com.keevo.admin.AdminLabels;
+import com.keevo.identity.api.PlanKind;
 import com.keevo.admin.alerts.domain.model.AlertSourceRows.DeletionPending;
 import com.keevo.admin.alerts.domain.model.AlertSourceRows.ExpiredPlan;
 import com.keevo.admin.alerts.domain.model.AlertSourceRows.HighFeedback;
@@ -60,10 +61,11 @@ public class JdbcAlertSourcesAdapter implements AlertSourcesPort {
             + "WHERE status NOT IN ('DELETED', 'DELETION_PENDING') AND id <> '" + SYSTEM_TENANT + "'::uuid "
             + "ORDER BY name";
 
+    /** Story 19.7a: « not free » = a plan of kind TRIAL or PAID (joined); parameters: the two kinds, the instant. */
     static final String EXPIRED_NOT_FREE_SQL =
-            "SELECT plan_type, expires_at FROM \"%s\".subscriptions "
-            + "WHERE plan_type <> 'FREE' AND status = 'ACTIVE' AND expires_at IS NOT NULL AND expires_at < ? "
-            + "ORDER BY created_at ASC LIMIT 1";
+            "SELECT s.plan_type, s.expires_at FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
+            + "WHERE p.kind IN (?, ?) AND s.status = 'ACTIVE' AND s.expires_at IS NOT NULL AND s.expires_at < ? "
+            + "ORDER BY s.created_at ASC LIMIT 1";
 
     static final String REPORT_FAILURES_SQL =
             "SELECT COUNT(*) AS failures, MAX(COALESCE(last_attempt_at, created_at)) AS latest "
@@ -115,7 +117,8 @@ public class JdbcAlertSourcesAdapter implements AlertSourcesPort {
                 continue;
             }
             List<Map<String, Object>> rows = perCompany(t, () ->
-                    jdbc.queryForList(String.format(EXPIRED_NOT_FREE_SQL, t.schema()), at));
+                    jdbc.queryForList(String.format(EXPIRED_NOT_FREE_SQL, t.schema()),
+                            PlanKind.TRIAL.name(), PlanKind.PAID.name(), at));
             if (rows == null || rows.isEmpty()) continue;
             Map<String, Object> row = rows.get(0);
             out.add(new ExpiredPlan(t.id(), t.name(), (String) row.get("plan_type"), toInstant(row.get("expires_at"))));

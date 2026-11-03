@@ -100,7 +100,7 @@ class TenantFactoryTest {
         factory.create(); // no transaction synchronization: the provisioning runs right away
 
         InOrder order = inOrder(schemaProvisioner, planChangeRecorder, planModuleRows, moduleProvisioner);
-        order.verify(schemaProvisioner).provision(anyString(), eq(schema));
+        order.verify(schemaProvisioner).provision(anyString(), eq(schema), eq(PlanType.PREMIUM_TRIAL), eq(6));
         order.verify(planChangeRecorder).recordEvent(any(), any(), any(), any(), any(), any());
         order.verify(planModuleRows).sync(id, schema);
         order.verify(moduleProvisioner).provisionActiveModules(schema);
@@ -162,7 +162,7 @@ class TenantFactoryTest {
 
         // assert
         verify(schemaProvisioner, times(1))
-                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)));
+                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(PlanType.PREMIUM_TRIAL), eq(6));
     }
 
     @Test
@@ -176,7 +176,7 @@ class TenantFactoryTest {
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         doThrow(new DomainException(ErrorCode.TENANT_PROVISION_FAILED))
-                .when(schemaProvisioner).provision(anyString(), anyString());
+                .when(schemaProvisioner).provision(anyString(), anyString(), any(), anyInt());
 
         // act + assert
         DomainException ex = catchThrowableOfType(tenantFactory::create, DomainException.class);
@@ -195,7 +195,7 @@ class TenantFactoryTest {
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         doThrow(new DomainException(ErrorCode.TENANT_PROVISION_FAILED))
-                .when(schemaProvisioner).provision(anyString(), anyString());
+                .when(schemaProvisioner).provision(anyString(), anyString(), any(), anyInt());
 
         catchThrowableOfType(tenantFactory::create, DomainException.class);
 
@@ -209,8 +209,8 @@ class TenantFactoryTest {
         // ── RED first: verifies SPEC CHANGE 2026-03-06 ──
         // New tenants must start on a 6-month PREMIUM_TRIAL, NOT FREE.
         // The domain Tenant object carried through to tenantRepository.save() must use PREMIUM_TRIAL.
-        // The SQL seed (TenantSchemaProvisioner.SEED_SUBSCRIPTION) inserts PREMIUM_TRIAL +
-        //   expires_at = NOW() + INTERVAL '6 months'; verified by TenantMigrationIntegrationTest.
+        // Story 19.7a: the trial plan and its length come from plan_settings (the seeded catalogue here:
+        //   PREMIUM_TRIAL, 6 months), handed to the SQL seed; verified by TenantMigrationIntegrationTest.
         String code = "KV-TRIAL1";
         ArgumentCaptor<Tenant> tenantCaptor = ArgumentCaptor.forClass(Tenant.class);
         when(codeGenerator.generate()).thenReturn(code);

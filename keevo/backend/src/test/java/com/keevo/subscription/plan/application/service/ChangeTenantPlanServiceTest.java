@@ -42,7 +42,7 @@ class ChangeTenantPlanServiceTest {
     @org.junit.jupiter.api.BeforeEach
     void init() {
         service = new ChangeTenantPlanService(jdbc, recorder, planModuleRows,
-                com.keevo.shared.capability.entitlement.PlanProfiles.ENUM_DEFAULTS);
+                com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
     }
 
     @SuppressWarnings("unchecked")
@@ -100,7 +100,7 @@ class ChangeTenantPlanServiceTest {
         currentRow(rowId, PlanType.PREMIUM);
         service = new ChangeTenantPlanService(jdbc, recorder, planModuleRows, type -> type == PlanType.FREE
                 ? com.keevo.shared.capability.entitlement.PlanProfile.of(type, 2, 800, null, java.util.Set.of())
-                : com.keevo.shared.capability.entitlement.PlanProfile.fromEnum(type));
+                : com.keevo.shared.capability.entitlement.TestPlanProfiles.profile(type));
 
         service.changePlan(new ChangeTenantPlanCommand(TENANT, SCHEMA, PlanType.FREE, null,
                 PlanChangeCause.ADMIN_DOWNGRADE, ACTOR, null));

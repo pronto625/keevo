@@ -45,7 +45,7 @@ public class SubscriptionRepositoryAdapter implements SubscriptionRepository {
     private Subscription toDomain(SubscriptionJpaEntity e) {
         return new Subscription(
                 e.getId(),
-                PlanType.valueOf(e.getPlanType()),
+                PlanType.of(e.getPlanType()), // 19.7a: stored code, shape only (no FK: a stale catalogue never breaks reads)
                 SubscriptionStatus.valueOf(e.getStatus()),
                 e.getMaxStores(),
                 e.getMaxProducts(),

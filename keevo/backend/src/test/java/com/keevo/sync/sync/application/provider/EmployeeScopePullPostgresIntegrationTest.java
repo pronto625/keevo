@@ -55,7 +55,7 @@ import static org.mockito.Mockito.mock;
  * <p>Commits a tenant schema and {@code public.user_sync_state} rows, removed in {@link #cleanUp()}.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, UserSyncStateRepositoryAdapter.class})
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, UserSyncStateRepositoryAdapter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Employee sync pull is scoped to its store, re-seeded on reassignment (Story 16.13)")
 class EmployeeScopePullPostgresIntegrationTest extends PostgresIntegrationTest {

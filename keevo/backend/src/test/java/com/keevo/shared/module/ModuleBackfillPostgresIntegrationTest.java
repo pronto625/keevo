@@ -402,7 +402,7 @@ class ModuleBackfillPostgresIntegrationTest {
         Map<String, String> freeRows = rows(FREE);
         ModuleRegistryService registry = registry(T0);
         ChangeTenantPlanService plans = new ChangeTenantPlanService(jdbc, new JdbcPlanChangeRecorder(jdbc),
-                rowSync(registry));
+                rowSync(registry), com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
         Instant until = Instant.parse("2027-06-01T22:59:59Z");
 
@@ -502,7 +502,7 @@ class ModuleBackfillPostgresIntegrationTest {
         ModuleLifecycle lifecycle = lifecycle();
         ModuleLifecycle.Actor admin = new ModuleLifecycle.Actor(UUID.randomUUID(), true);
         ChangeTenantPlanService plans = new ChangeTenantPlanService(jdbc, new JdbcPlanChangeRecorder(jdbc),
-                rowSync(registry(T0)));
+                rowSync(registry(T0)), com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
         TransactionTemplate tx = new TransactionTemplate(transactionManager);
 
         // activate a paid module on a Free tenant (its row was PLAN / DISABLED)

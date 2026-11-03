@@ -10,10 +10,10 @@ import java.util.UUID;
  *
  * <p>Pure Java — no framework imports. One row per tenant (single subscription
  * at any given time). Created by {@code TenantSchemaProvisioner} during registration
- * with {@code planType=PREMIUM_TRIAL}.
+ * on the trial plan of {@code public.plan_settings} (Story 19.7a).
  *
- * <p>GoF Pattern: <b>State</b> — subscription lifecycle:
- * PREMIUM_TRIAL → FREE (on expiry), FREE → PREMIUM (on payment), PREMIUM → FREE (on non-renewal).
+ * <p>GoF Pattern: <b>State</b> — subscription lifecycle by plan kind:
+ * trial → free plan (on expiry), free → paid (on payment), paid → free plan (on non-renewal).
  */
 public final class Subscription {
 
@@ -59,7 +59,6 @@ public final class Subscription {
 
     public boolean isSuspended() { return status == SubscriptionStatus.SUSPENDED; }
     public boolean isActive()    { return status == SubscriptionStatus.ACTIVE; }
-    public boolean isPremiumTrial() { return planType == PlanType.PREMIUM_TRIAL; }
-    public boolean isPremium()   { return planType == PlanType.PREMIUM; }
-    public boolean isFree()      { return planType == PlanType.FREE; }
+    // Story 19.7a: no predicate on plan codes — what a plan is (free / trial / paid) is its kind, read from the plan
+    // catalogue (PlanCatalog), never from its code.
 }

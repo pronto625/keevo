@@ -1,5 +1,6 @@
 package com.keevo.admin.notification.adapter.out.persistence;
 
+import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.admin.notification.domain.model.Announcement;
 import com.keevo.admin.notification.domain.model.GlobalNotification;
 import com.keevo.admin.notification.domain.model.GlobalNotificationFailureReason;
@@ -40,9 +41,11 @@ public class JdbcGlobalNotificationRepository implements GlobalNotificationRepos
             + "RETURNING " + COLUMNS + ", NULL AS tenant_name";
 
     private final JdbcTemplate jdbc;
+    private final PlanCatalog catalog;
 
-    public JdbcGlobalNotificationRepository(JdbcTemplate jdbc) {
+    public JdbcGlobalNotificationRepository(JdbcTemplate jdbc, PlanCatalog catalog) {
         this.jdbc = jdbc;
+        this.catalog = catalog;
     }
 
     @Override
@@ -102,16 +105,19 @@ public class JdbcGlobalNotificationRepository implements GlobalNotificationRepos
 
     @Override
     public List<Announcement> findSentFor(PushTenantRef tenant, Instant since) {
+        // Story 19.7a: the plan target matching the company is the one of its plan's kind (catalogue)
+        String planTarget = catalog.find(tenant.planType())
+                .flatMap(p -> GlobalNotificationTarget.forKind(p.kind()))
+                .map(Enum::name)
+                .orElse(null);
         return jdbc.query("SELECT id, title, body, sent_at FROM public.global_notifications "
                         + "WHERE status = 'SENT' AND sent_at >= ? AND (target = 'ALL' "
-                        + "OR (target = 'PREMIUM' AND ? = 'PREMIUM') "
-                        + "OR (target = 'TRIAL' AND ? = 'PREMIUM_TRIAL') "
-                        + "OR (target = 'FREE' AND ? = 'FREE') "
+                        + "OR target = ? "
                         + "OR (target = 'TENANT' AND target_tenant_id = ?)) "
                         + "ORDER BY sent_at, id",
                 (rs, i) -> new Announcement(rs.getObject("id", UUID.class), rs.getString("title"),
                         rs.getString("body"), rs.getTimestamp("sent_at").toInstant()),
-                Timestamp.from(since), tenant.planType(), tenant.planType(), tenant.planType(), tenant.id());
+                Timestamp.from(since), planTarget, tenant.id());
     }
 
     private static final RowMapper<GlobalNotification> MAPPER = (rs, i) -> new GlobalNotification(
