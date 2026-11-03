@@ -170,8 +170,8 @@ Les epics 16 et 17 restent liés à la fusion :
 - **FUS-UX3 :** États de synchronisation visibles et compréhensibles : indicateur de connexion, bannières J5/J6/J7, écran « opérations bloquées », journal de synchronisation.
 - **FUS-UX4 :** Écrans de migration : bannière d'annonce, refus motivé (mutations en attente), « migration en cours », « compte migré, mettez à jour ».
 - **FUS-UX5 :** Écran « Mon plan » unique : plan, échéance, quotas consommés, crédit, souscription en libre-service.
-- **FUS-UX6 (03/11/2026) — mêmes repères :** chaque utilisateur existant garde ses repères, pas une navigation identique au pixel près : même écran d'accueil, mêmes onglets principaux dans le même ordre, mêmes libellés pour les mêmes fonctions, actions fréquentes au même endroit. Deux préréglages de navigation, « Caisse » (repères Keevo) et « Document » (repères Bref), calculés à partir du profil d'interface et des modules actifs (une seule app, pas deux navigations codées). Seul l'habillage change.
-- **FUS-UX7 (03/11/2026) — n'afficher que ce qui le concerne :** un utilisateur existant ne voit que les fonctions qu'il avait dans son ancienne app. Toute fonction nouvelle pour lui (stock et caisse pour un ex-Bref ; devis, dépenses, assistant pour un ex-Keevo ; tout module ajouté plus tard) est masquée par défaut, même si son plan l'inclut, jusqu'à ce que l'owner choisisse de l'afficher dans « Mes modules » (« Découvrir »). Pas de bannière ni d'écran promotionnel sur les écrans habituels. Un employé ne voit en plus que ce que son rôle permet.
+- **FUS-UX6 (03/11/2026) — mêmes repères :** chaque utilisateur existant garde ses repères, pas une navigation identique au pixel près : même écran d'accueil, mêmes onglets principaux dans le même ordre, mêmes libellés pour les mêmes fonctions, actions fréquentes au même endroit. Deux préréglages de navigation, « Caisse » (repères Keevo) et « Document » (repères Bref), calculés à partir du profil d'interface et des modules activés (une seule app, pas deux navigations codées). Seul l'habillage change.
+- **FUS-UX7 (03/11/2026) — n'afficher que ce qui le concerne :** un utilisateur existant ne voit que les fonctions qu'il avait dans son ancienne app. Toute fonction nouvelle pour lui (stock et caisse pour un ex-Bref ; devis, dépenses, assistant pour un ex-Keevo ; tout module ajouté plus tard) est **désactivée** par défaut, même si son plan l'inclut : elle n'apparaît nulle part et n'agit pas (aucun écran, aucune tâche planifiée, aucune notification). L'owner peut l'**activer dans Paramètres › Mes modules**, et la désactiver à nouveau. Pas de bannière ni d'écran promotionnel sur les écrans habituels. Un employé ne voit en plus que ce que son rôle permet.
 - **FUS-UX8 (03/11/2026) — accueil au passage :** au premier lancement de Bref Point, un ex-Keevo voit un écran court « Keevo devient Bref Point : vos données, vos boutiques et vos ventes sont là » ; un ex-Bref migré voit « Votre application a été mise à jour, vos factures sont là ». Une seule fois, sans étape obligatoire.
 
 ### Exigences additionnelles (architecture)
@@ -653,7 +653,7 @@ So that **un ex-Bref arrive sur ses documents et un ex-Keevo sur sa caisse (FUS-
 **Then** il passe par le port de stockage de fichiers (disque aujourd'hui, S3 optionnel), taille et type contrôlés
 
 
-### Story 19.13 : Profil d'interface — n'afficher que ce qui concerne chaque utilisateur (FUS-UX6, UX7)
+### Story 19.13 : Profil d'interface — modules nouveaux désactivés, activables dans les paramètres (FUS-UX6, UX7)
 
 As a **utilisateur existant (Keevo ou Bref)**,
 I want **que l'app ne me montre que ce que j'utilisais déjà, avec mes repères**,
@@ -663,26 +663,26 @@ So that **je ne sois pas perdu par des écrans que je ne connais pas**.
 
 **Given** un tenant
 **When** l'API renvoie ses modules (`GET /tenants/me/modules`, 16-3) et ses préférences
-**Then** elle renvoie aussi son profil d'interface : préréglage de navigation (`CAISSE` ou `DOCUMENT`, issu de `default_sale_flow`, 19.12) et, pour chaque module actif, `visible` (vrai ou faux) ; un module actif mais non visible n'apparaît dans aucun menu, onglet, accueil ni raccourci
+**Then** elle renvoie aussi son profil d'interface : préréglage de navigation (`CAISSE` ou `DOCUMENT`, issu de `default_sale_flow`, 19.12) et, pour chaque module compris dans le plan, s'il est **activé** ou **désactivé par l'owner** ; un module désactivé n'apparaît dans aucun menu, onglet, accueil ni raccourci, et n'exécute rien (pas de tâche planifiée, pas de notification, écritures refusées comme pour un module inactif)
 
 **Given** un tenant Keevo existant au go-live
 **When** son profil d'interface est initialisé (migration Flyway idempotente)
-**Then** seuls les modules qu'il avait actifs dans la V1 sont visibles ; tout module nouveau pour lui (documents enrichis, dépenses, finance, assistant, WhatsApp Business, campagnes…) est actif selon son plan mais **non visible**
+**Then** seuls les modules qu'il avait actifs dans la V1 sont activés ; tout module nouveau pour lui (documents enrichis, dépenses, finance, assistant, WhatsApp Business, campagnes…) est compris dans son plan s'il y a droit, mais **désactivé**
 
 **Given** un owner Bref importé (24.2)
 **When** son profil d'interface est créé
-**Then** seules les fonctions équivalentes à celles qu'il avait dans Bref (selon son plan Bref à la migration) sont visibles ; caisse, stock, transferts, inventaire, fournisseurs sont **non visibles**
+**Then** seules les fonctions équivalentes à celles qu'il avait dans Bref (selon son plan Bref à la migration) sont activées ; caisse, stock, transferts, inventaire, fournisseurs sont **désactivés**
 
-**Given** un module non visible
-**When** l'owner l'affiche depuis « Mes modules » (« Découvrir »), ou le masque à nouveau
-**Then** la visibilité change pour tout le tenant, est synchronisée vers les appareils, et tracée ; masquer ne supprime aucune donnée ; un employé ne voit en plus que ce que son rôle permet
+**Given** un module compris dans le plan et désactivé
+**When** l'owner l'active dans Paramètres › Mes modules, ou le désactive à nouveau
+**Then** l'état change pour tout le tenant, est synchronisé vers les appareils et tracé ; désactiver ne supprime aucune donnée (réactiver les retrouve) ; un module non compris dans le plan n'est pas activable ici (il relève de « Mon plan ») ; un employé ne voit en plus que ce que son rôle permet
 
 **Given** un nouveau tenant créé après la fusion
 **When** il choisit son activité et son parcours à l'inscription
-**Then** la visibilité initiale suit ce choix (règles en base, modifiables depuis le dashboard super-admin, ADR-05 : rien de figé dans le code)
+**Then** les modules activés au départ suivent ce choix (règles en base, modifiables depuis le dashboard super-admin, ADR-05 : rien de figé dans le code)
 
 **Implementation Notes:**
-- La visibilité est un réglage d'affichage, distinct de l'activation (droit d'usage, 16-1/16-3) : un module visible est forcément actif ; un module actif peut être masqué.
+- Deux notions distinctes : le **droit** (le plan comprend le module, 16-1/16-3/19.7) et l'**activation par l'owner** (19.13). Un module est utilisable seulement s'il est à la fois compris dans le plan et activé. La désactivation par l'owner réutilise l'état DISABLED du cycle de vie des modules avec une origine « owner », sans purge (comme 16-6 l'exige pour tout module DISABLED).
 - Champs additifs uniquement sur les réponses existantes (apps V1 2.0.1 inchangées).
 
 ---
@@ -1232,7 +1232,7 @@ So that **le changement d'app est transparent (FUS-UX1, UX2)**.
 
 **Given** l'inventaire des écrans Flutter (§5.2 de l'analyse, colonne Keevo)
 **When** les écrans du module `core` sont livrés dans le design system Bref
-**Then** chaque écran Keevo du périmètre a son équivalent, avec les mêmes règles (employé confiné à sa boutique, changement de mot de passe, déconnexion, multi-entreprise), et l'accueil d'un tenant POS est la caisse ; la navigation suit le préréglage « Caisse » (FUS-UX6 : onglets, ordre et libellés de l'app Keevo) et n'affiche que les modules visibles du profil d'interface (19.13, FUS-UX7)
+**Then** chaque écran Keevo du périmètre a son équivalent, avec les mêmes règles (employé confiné à sa boutique, changement de mot de passe, déconnexion, multi-entreprise), et l'accueil d'un tenant POS est la caisse ; la navigation suit le préréglage « Caisse » (FUS-UX6 : onglets, ordre et libellés de l'app Keevo) et n'affiche que les modules activés du profil d'interface (19.13, FUS-UX7)
 
 ### Story 22.10 : Catalogue, stock, transferts, inventaire
 
@@ -1496,11 +1496,11 @@ So that **chaque type de commerce a l'accueil qui lui convient (FUS-FR17)**.
 
 **Given** `default_sale_flow` (19.12)
 **When** l'owner le change dans les paramètres
-**Then** l'accueil, le bouton d'action principal et l'ordre des onglets changent ; les deux parcours restent accessibles selon les modules actifs **et visibles** (19.13)
+**Then** l'accueil, le bouton d'action principal et l'ordre des onglets changent ; les deux parcours restent accessibles selon les modules compris dans le plan **et activés** (19.13)
 
 **Given** un ex-Bref en préréglage « Document »
 **When** il ouvre l'app
-**Then** il retrouve les onglets, l'ordre et les libellés de l'app Bref (FUS-UX6), sans caisse ni stock tant qu'il ne les a pas affichés (FUS-UX7)
+**Then** il retrouve les onglets, l'ordre et les libellés de l'app Bref (FUS-UX6), sans caisse ni stock tant qu'il ne les a pas activés dans les paramètres (FUS-UX7)
 
 ### Story 23.11 : Routage double backend et mode legacy (ADR-09)
 

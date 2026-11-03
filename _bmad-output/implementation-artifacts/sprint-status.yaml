@@ -412,7 +412,7 @@ development_status:
   19-10-versions-minimales-app: backlog
   19-11-charge-nombre-tenants: backlog
   19-12-boutiques-etendues-parcours-vente: backlog
-  19-13-profil-interface-visibilite: backlog  # 2026-11-03 FUS-UX6/UX7 : préréglage de navigation + n'afficher que ce que l'utilisateur avait (modules actifs mais masqués), opt-in owner
+  19-13-profil-interface-visibilite: backlog  # 2026-11-03 FUS-UX6/UX7 : préréglage de navigation + modules nouveaux pour l'utilisateur désactivés par défaut, activables par l'owner dans Paramètres › Mes modules
   epic-19-retrospective: optional
 
   epic-20: backlog  # P1b Modules métier Bref
