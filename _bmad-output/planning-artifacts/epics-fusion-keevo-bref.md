@@ -44,7 +44,7 @@ Ce document est le **plan d'exécution BMAD** de la fusion décidée dans `fusio
 
 Il **complète** les epics 1–17 sans les remplacer.
 
-> **Décision du 03/11/2026 (owner produit) — ordre inversé : pas de go-live de la refonte tant que toutes les fonctionnalités de Bref ne sont pas répliquées dans Keevo.** La mise en production de la refonte (17.9 gate, 16.7 canary) attend désormais le jalon **G1** (fin des epics 19, 20 et 21 : parcours Bref vert sur l'API Keevo, API super-admin héritée comprise). La refonte n'est donc plus un préalable de la fusion : P1 démarre sur la branche dès G0 (chiffres et décisions), et la refonte part en prod avec la parité Bref. La migration des owners Bref (epic 24, vagues) reste **après** ce go-live.
+> **Décision du 03/11/2026 (owner produit) — la mise à jour de la refonte attend tout le merge Keevo × Bref.** La mise en production de la refonte (17.9 gate, 16.7 canary) n'a lieu qu'au jalon **GL** : tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12). La refonte n'est donc plus un préalable de la fusion : tout se construit sur la branche et sur staging dès G0. Ne viennent **après** le go-live que les étapes qui exigent la prod : dernière release Flutter, bêta et publications store (22.14–22.16, 23.12), pré-migrateur OTA (24.11), runbook, pilotes et vagues (24.13–24.16), puis l'epic 25.
 
 Les epics 16 et 17 restent liés à la fusion :
 
@@ -60,7 +60,7 @@ Les epics 16 et 17 restent liés à la fusion :
 
 | Phase (§9.2) | Epic(s) | Durée | Sortie (jalon) |
 |---|---|---|---|
-| Socle | **16** (refonte, sur la branche) | livré sauf 16-7/16-12/16-9 | socle modulaire prêt ; **go-live 16-7 après G1** (décision du 03/11/2026) |
+| Socle | **16** (refonte, sur la branche) | livré sauf 16-7/16-12/16-9 | socle modulaire prêt ; **go-live 16-7 au jalon GL** (tout le merge, décision du 03/11/2026) |
 | **P0** Cadrage | **18** | 2 sem | chiffres connus, décisions écrites, évolutions de Bref suivies (pas de gel, 03/11) |
 | **P1a** Socle d'accueil | **19** | 6 sem | login OTP/social/username sur Keevo, rôles, quotas, plans ; app Flutter intacte |
 | **P1b** Modules Bref | **20**, **21** | 8 sem | API complète pour l'app unifiée ; parcours Bref vert sur Keevo |
@@ -313,7 +313,7 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 ### Ordonnancement
 
 ```
-Epic 16 (socle, branche) ─────┐                        G1 ──► 17.9 + 16.7 GO-LIVE refonte + parité Bref
+Epic 16 (socle, branche) ─────┐   GL = 19–21 + app RN à parité (22.1–22.13, 23.1–23.11) + outil 24.1–24.10/24.12 ──► 17.9 + 16.7 GO-LIVE ──► 22.14–22.16, 23.12, 24.11, vagues 24.13–24.16
 Epic 18 (P0) ─────────────────┼──► Epic 19 (P1a) ──► Epic 20 + 21 (P1b) ──► Epic 24.1–24.10 (outil, dry-run)
                               │          │                                          │
                               │          └─(+4 sem)──► Epic 22 (P2, app RN Keevo) ──┤
@@ -1730,7 +1730,8 @@ So that **la documentation reflète le système réel**.
 | Jalon | Quand | Critères pour continuer | Si non |
 |---|---|---|---|
 | **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus (la refonte n'a plus à être en prod : décision du 03/11/2026) | on ne démarre pas P1 |
-| **G1** fin P1b | après 20.12, 20.13 et l'epic 21 | **toutes** les fonctionnalités Bref répliquées dans l'API Keevo (parcours Bref vert, API super-admin héritée), suite Flutter verte, charge 19.11 tenue | **pas de go-live de la refonte** (17.9, 16.7), corriger avant P3 / avant l'outil |
+| **G1** fin P1b | après 20.12, 20.13 et l'epic 21 | **toutes** les fonctionnalités Bref répliquées dans l'API Keevo (parcours Bref vert, API super-admin héritée), suite Flutter verte, charge 19.11 tenue | corriger avant P3 / avant l'outil |
+| **GL** go-live de la refonte | après G1, 22.13, 23.11 et 24.12 | tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12) ; puis 17.9 (régression multi-surface : parcours Keevo et Bref, app Flutter V1 et app RN) | **pas de mise en production de la refonte** (16.7) |
 | **G2** fin bêta P2 | 22.15 palier 10 % | zéro perte de donnée, crash-free ≥ 99,5 %, quarantaine < 0,5 % des opérations | rester à 10 %, corriger |
 | **G3** avant vagues | après 24.12 et 23.12 | dry-run 100 % réconcilié, app Bref unifiée publiée, runbook relu | pas de vague |
 | **G4** après pilotes | 24.14 | aucun écart à J+7, retours pilotes traités | pas de vague de masse |
@@ -1760,7 +1761,7 @@ So that **la documentation reflète le système réel**.
 ```yaml
   # ─────────────────────────────────────────────────────────
   # FUSION KEEVO × BREF POINT — epics-fusion-keevo-bref.md
-  # Ordre (03/11/2026) : P0 → P1 (19, 20, 21) sur la branche → G1 → go-live refonte (17-9, 16-7) → vagues (24)
+  # Ordre (03/11/2026) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.1–24.10, 24.12) = GL → go-live refonte (17-9, 16-7) → stores, OTA, vagues (22.14–22.16, 23.12, 24.11, 24.13–24.16) → 25
   # ─────────────────────────────────────────────────────────
   epic-18: backlog  # P0 Cadrage
   18-1-mesures-bases-bref-keevo: backlog
@@ -1879,4 +1880,4 @@ So that **la documentation reflète le système réel**.
 1. Exécuter **18.1** (mesures) et **18.2** (décisions) : ce sont les seules stories démarrables aujourd'hui.
 2. `bmad-product-brief` → `bmad-prd` → `bmad-architecture` (story 18.5) pour aligner PRD et architecture sur ce plan.
 3. `bmad-sprint-planning` : vérifier la complétude (readiness) après G0 ; le bloc de l'Annexe A est déjà dans `sprint-status.yaml`.
-4. **Go-live de la refonte (17.9 puis 16.7) après G1** seulement : toutes les fonctionnalités Bref doivent d'abord exister dans Keevo (décision du 03/11/2026).
+4. **Go-live de la refonte (17.9 puis 16.7) au jalon GL** seulement : tout le merge Keevo × Bref (backend, app RN, outil de migration validé) doit d'abord être prêt (décision du 03/11/2026).

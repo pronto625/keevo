@@ -4,7 +4,7 @@
 
 ## Goal
 
-Decide the Keevo × Bref Point merger on facts rather than assumptions. This epic ships no product code: it measures both production databases, writes down every open product decision as an ADR, tracks every change shipped on Bref (Bref is NOT frozen: decided 2026-11-03, it is in production and keeps receiving minor fixes), secures the app-store identities under which each user base will receive the unified app, and produces the fusion brief/PRD. Its output is the G0 gate: no P1 story (epics 19–25) starts until the numbers are known and the decisions are written. Order changed on 2026-11-03 (user): the refonte does NOT go live first — P1 (epics 19–21) runs on the branch, and the refonte go-live (17.9, 16.7) happens only after G1, once every Bref feature is replicated in the Keevo API; Bref owner migration (epic 24) follows the go-live. Duration target: two weeks.
+Decide the Keevo × Bref Point merger on facts rather than assumptions. This epic ships no product code: it measures both production databases, writes down every open product decision as an ADR, tracks every change shipped on Bref (Bref is NOT frozen: decided 2026-11-03, it is in production and keeps receiving minor fixes), secures the app-store identities under which each user base will receive the unified app, and produces the fusion brief/PRD. Its output is the G0 gate: no P1 story (epics 19–25) starts until the numbers are known and the decisions are written. Order changed on 2026-11-03 (user): the refonte does NOT go live first — P1 (epics 19–21) runs on the branch, and the refonte go-live (17.9, 16.7) happens only at milestone GL, after the whole merge is ready on the branch/staging (epics 19–21, React Native app 22.1–22.13 and 23.1–23.11, migration tool 24.1–24.10 with dry-run 24.12); store releases, OTA pre-migrator and migration waves follow the go-live. Duration target: two weeks.
 
 ## Stories
 
@@ -40,4 +40,4 @@ Decide the Keevo × Bref Point merger on facts rather than assumptions. This epi
 - 18.1 feeds 18.2 (decisions rest on the numbers) and 18.4 (Q9 identity facts); 18.2 feeds 18.5 (ADRs are PRD inputs) and unblocks epic 19 (Q10/Q12) and epic 24 (Q1–Q8 sizing, wave order, collision wave).
 - 18.3 opens the journal before any epic 20/21 story starts; since Bref keeps moving, each later story starts with a journal review (R12 solo load grows with Bref's change rate).
 - Risks owned here: R1 tenant volume, R2 identity collisions, R3 inconsistent invoices (via Q7/Q13), R11 Keevo app identity (18.4), R12 via change tracking.
-- G0 no longer requires the refonte in production (user decision 2026-11-03): go-live waits for G1 (Bref parity); 17.12 (`products.track_stock`) is already delivered and no longer an open question.
+- G0 no longer requires the refonte in production (user decision 2026-11-03): go-live waits for GL (whole merge); 17.12 (`products.track_stock`) is already delivered and no longer an open question.
