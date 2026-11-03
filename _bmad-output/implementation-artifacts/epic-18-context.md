@@ -4,13 +4,13 @@
 
 ## Goal
 
-Decide the Keevo × Bref Point merger on facts rather than assumptions. This epic ships no product code: it measures both production databases, writes down every open product decision as an ADR, freezes the functional scope of Bref, secures the app-store identities under which each user base will receive the unified app, and produces the fusion brief/PRD. Its output is the G0 gate: no P1 story (epics 19–25) starts until the numbers are known, the decisions are written, and the Keevo refonte (epic 16) is in production or dated. Duration target: two weeks.
+Decide the Keevo × Bref Point merger on facts rather than assumptions. This epic ships no product code: it measures both production databases, writes down every open product decision as an ADR, tracks every change shipped on Bref (Bref is NOT frozen: decided 2026-11-03, it is in production and keeps receiving minor fixes), secures the app-store identities under which each user base will receive the unified app, and produces the fusion brief/PRD. Its output is the G0 gate: no P1 story (epics 19–25) starts until the numbers are known and the decisions are written. Order changed on 2026-11-03 (user): the refonte does NOT go live first — P1 (epics 19–21) runs on the branch, and the refonte go-live (17.9, 16.7) happens only after G1, once every Bref feature is replicated in the Keevo API; Bref owner migration (epic 24) follows the go-live. Duration target: two weeks.
 
 ## Stories
 
 - Story 18.1: Measure the Bref and Keevo databases (Q1–Q9, Q13)
 - Story 18.2: Settle the open product decisions (gate P0)
-- Story 18.3: Freeze the functional scope of Bref
+- Story 18.3: Track Bref changes during the fusion (no freeze)
 - Story 18.4: Secure app identities and store accounts
 - Story 18.5: Fusion product brief and PRD
 
@@ -19,7 +19,7 @@ Decide the Keevo × Bref Point merger on facts rather than assumptions. This epi
 - **Measurement report (18.1)** must be dated and contain aggregates only: owners total / active < 90 days / paying by plan and payment method (Apple, MyCoolPay, admin); row volumes per table (shops, invoices by type, items, payments, customers, products, expenses, members); owners and members without a phone; intersection of E.164-normalised phones between Bref and Keevo; shops outside CM, VAT ≠ 19.25 %, non-integer amounts; remaining account credits and SMS packs; invoices whose stored total differs from a recalculation; owners with `plan ≠ free` but no subscription in force; the date `develop` reached production on api-bref (`develop` reached `main` on 2026-10-26, a3faeb2; the server-side status rules of b957867 are among the later `develop` commits and are not yet deployed; Q7 concerns documents created before that date); the real published Keevo `applicationId`, signing key and available Google/Apple developer accounts.
 - **Privacy and safety**: scripts are read-only, run against a replica or locally restored dump, never against prod directly; no personal data (phones, names, emails) in the report, only counts and sums.
 - **Decisions (18.2)**: one ADR per open question — unified FREE plan (employee count, documents/month, keep 6-month trial?) and single price grid; final brand (one store listing or two durable brands); country scope (CM-XAF only or CM/GA/TD/CD/SN with their VAT, currency, time zone implications); recently expired Mobile Money subscriptions (30-day grace recommended vs immediate FREE); clients at tenant level with optional store (recommended); early publication of the unified app under `com.brefpoint.app` with legacy mode (recommended). ADRs are appended to the fusion epics document; its frontmatter `status` flips to `ready`. A decision that contradicts a recommendation must list and update the ⚠️-tagged stories before they become ready-for-dev.
-- **Freeze (18.3)**: tag `develop` of `AI/bref` and `AI/api-bref` as `pre-fusion-freeze`; only security fixes, blocking fixes and epic-24 migration enablers are allowed; exceptions are logged; any business-rule change shipped on Bref gets a mirror story in epic 20 or 21.
+- **Change tracking (18.3)**: no freeze, no tag or rule imposed on the Bref repos (user decision 2026-11-03). Record the reference `main` commit of each Bref repo, keep a « Évolutions Bref » journal in the fusion epics document, classify each commit merged to `main` (no impact / business rule / schema / API-app) at the start of each epic 20/21/23/24 story and before each migration wave; business-rule and API changes get a mirror story (20/21 backend, 23 app); schema changes update the importer, the 18.1 kit guards and the reconciliation. The per-owner freeze during migration (24.1) is unaffected.
 - **Identities (18.4)**: document the Play Store identity and make the upload key available for EAS; if the published app really is `com.example.keevo`, record the keep-or-republish decision and its impact (new listing = reinstall). For iOS, create the Keevo App ID/bundle/certificates on Bref's Apple team or record the decision not to ship Keevo on iOS in P2.
 - **Brief/PRD (18.5)**: `prd-fusion-keevo-bref.md` must restate the FUS-FR/MIG/NFR/UX requirements without contradiction, and `architecture.md` gains a "Fusion Bref" section.
 - **Golden rule to carry into every ADR**: no user reinstalls, loses data, changes password or pays twice.
@@ -38,6 +38,6 @@ Decide the Keevo × Bref Point merger on facts rather than assumptions. This epi
 ## Cross-Story Dependencies
 
 - 18.1 feeds 18.2 (decisions rest on the numbers) and 18.4 (Q9 identity facts); 18.2 feeds 18.5 (ADRs are PRD inputs) and unblocks epic 19 (Q10/Q12) and epic 24 (Q1–Q8 sizing, wave order, collision wave).
-- 18.3 must be pronounced before any epic 20/21 story starts, otherwise the target keeps moving; it also conditions R12 (solo load).
-- Risks owned here: R1 tenant volume, R2 identity collisions, R3 inconsistent invoices (via Q7/Q13), R11 Keevo app identity (18.4), R12 via the freeze.
-- External prerequisite for G0: epic 16 (refonte in production) done or dated; 17.12 (`products.track_stock`) is already delivered and no longer an open question.
+- 18.3 opens the journal before any epic 20/21 story starts; since Bref keeps moving, each later story starts with a journal review (R12 solo load grows with Bref's change rate).
+- Risks owned here: R1 tenant volume, R2 identity collisions, R3 inconsistent invoices (via Q7/Q13), R11 Keevo app identity (18.4), R12 via change tracking.
+- G0 no longer requires the refonte in production (user decision 2026-11-03): go-live waits for G1 (Bref parity); 17.12 (`products.track_stock`) is already delivered and no longer an open question.

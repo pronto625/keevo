@@ -42,9 +42,13 @@ decisionsPending:  # gate P0 — à trancher dans la story 18.2 ; les stories im
 
 Ce document est le **plan d'exécution BMAD** de la fusion décidée dans `fusion-keevo-bref-analyse-2026-10-31.md` (désigné ci-après « l'analyse », sections citées en `§n`). Il transforme les décisions D1–D7 en **exigences numérotées**, en **8 epics (18 à 25)** et en **stories implémentables** avec critères d'acceptation, dans l'ordre où elles doivent être livrées.
 
-Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des **préalables** :
+Il **complète** les epics 1–17 sans les remplacer.
 
-- **Epic 16 (Licences, Migration & Go-Live)** : la production Keevo tourne encore sur la V1 (`deploy` = `34949fec`, 47 commits derrière `refonte/modulaire`). Rien de la fusion ne part en production tant que la refonte modulaire n'y est pas (16-2 bundles, 16-3 modules actifs côté app (sans claim dans le jeton), 16-11 sessions longues et sûres, 16-4 console, 16-5 backfill, 16-7 canary, 16-8 profils configurables).
+> **Décision du 03/11/2026 (owner produit) — ordre inversé : pas de go-live de la refonte tant que toutes les fonctionnalités de Bref ne sont pas répliquées dans Keevo.** La mise en production de la refonte (17.9 gate, 16.7 canary) attend désormais le jalon **G1** (fin des epics 19, 20 et 21 : parcours Bref vert sur l'API Keevo, API super-admin héritée comprise). La refonte n'est donc plus un préalable de la fusion : P1 démarre sur la branche dès G0 (chiffres et décisions), et la refonte part en prod avec la parité Bref. La migration des owners Bref (epic 24, vagues) reste **après** ce go-live.
+
+Les epics 16 et 17 restent liés à la fusion :
+
+- **Epic 16 (Licences, Migration & Go-Live)** : la production Keevo tourne encore sur la V1 (`deploy` = `34949fec`, 47 commits derrière `refonte/modulaire`). Depuis le 03/11/2026, la refonte et les modules Bref partent en production **ensemble**, après G1 (16-2 bundles, 16-3 modules actifs côté app (sans claim dans le jeton), 16-11 sessions longues et sûres, 16-4 console, 16-5 backfill, 16-7 canary, 16-8 profils configurables).
 - **Epic 17 (Complétion fonctionnelle)** : rapprochement du 2026-11-01 — 17.1, 17.3, 17.4, 17.5 livrés (V1 puis portés), 17.6 remplacée ; **17.9 (régression E2E) est le gate du go-live** de la refonte ; 17.2, 17.7, 17.8, 17.10, 17.11, 17.12 sont fonctionnelles et indépendantes de la fusion. **17.12 (suivi de stock par produit) livre `products.track_stock`, dont la fusion dépend (FUS-FR13, story 20.1).**
 - **10-8** (exécution serveur des runbooks) et **16.10** (scope employé des transferts) font aussi partie du go-live de la refonte. Le chemin complet est dans `epics-refonte-modulaire.md`, section « État de la refonte au 1er novembre 2026 ».
 
@@ -56,8 +60,8 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 
 | Phase (§9.2) | Epic(s) | Durée | Sortie (jalon) |
 |---|---|---|---|
-| Préalable | **16** (refonte en prod) | selon backlog 16 | prod Keevo = socle modulaire |
-| **P0** Cadrage | **18** | 2 sem | chiffres connus, décisions écrites, périmètre Bref gelé |
+| Socle | **16** (refonte, sur la branche) | livré sauf 16-7/16-12/16-9 | socle modulaire prêt ; **go-live 16-7 après G1** (décision du 03/11/2026) |
+| **P0** Cadrage | **18** | 2 sem | chiffres connus, décisions écrites, évolutions de Bref suivies (pas de gel, 03/11) |
 | **P1a** Socle d'accueil | **19** | 6 sem | login OTP/social/username sur Keevo, rôles, quotas, plans ; app Flutter intacte |
 | **P1b** Modules Bref | **20**, **21** | 8 sem | API complète pour l'app unifiée ; parcours Bref vert sur Keevo |
 | **P1c** Outil de migration | **24** (24.1 → 24.10) | 3 sem (recouvrement P1b) | 100 % d'une copie de prod Bref importée sans écart |
@@ -206,14 +210,14 @@ Il **complète** les epics 1–17 sans les remplacer. Deux d'entre eux sont des 
 ## Epic List
 
 ### Epic 18 : Cadrage de la fusion (P0)
-**Valeur :** décider sur des chiffres, pas sur des suppositions. Mesurer les bases, trancher les décisions ouvertes, geler le périmètre de Bref, sécuriser les identités d'app.
+**Valeur :** décider sur des chiffres, pas sur des suppositions. Mesurer les bases, trancher les décisions ouvertes, suivre les évolutions de Bref (sans gel), sécuriser les identités d'app.
 **Exigences :** prépare toutes les autres ; aucune FR livrée.
 **Dépend de :** rien. **Bloque :** 19 (décisions Q10/Q12), 24 (mesures Q1–Q8).
 
 ### Epic 19 : Socle d'accueil — identité, rôles, plans, quotas (P1a)
 **Valeur :** le backend Keevo sait accueillir un utilisateur Bref tel qu'il est : sans téléphone, connecté par OTP ou Google/Apple, avec ses rôles et son plan.
 **Exigences :** FUS-FR1–FR8, FR11, FR12, FR17 (préférence), FUS-NFR1, FUS-NFR3.
-**Dépend de :** Epic 16 (16-2, 16-3, 16-5, 16-8), story 18.2.
+**Dépend de :** Epic 16 (16-2, 16-3, 16-5, 16-8 — livrées sur la branche, pas besoin qu'elles soient en prod), story 18.2.
 
 ### Epic 20 : Modules métier Bref dans Keevo — documents, catalogue, clients, dépenses, finance (P1b)
 **Valeur :** tout ce qu'un commerçant Bref fait au quotidien existe dans Keevo, sans casser ce qu'un commerçant Keevo fait déjà.
@@ -309,7 +313,7 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 ### Ordonnancement
 
 ```
-Epic 16 (prod refonte) ───────┐
+Epic 16 (socle, branche) ─────┐                        G1 ──► 17.9 + 16.7 GO-LIVE refonte + parité Bref
 Epic 18 (P0) ─────────────────┼──► Epic 19 (P1a) ──► Epic 20 + 21 (P1b) ──► Epic 24.1–24.10 (outil, dry-run)
                               │          │                                          │
                               │          └─(+4 sem)──► Epic 22 (P2, app RN Keevo) ──┤
@@ -325,7 +329,7 @@ Epic 18 (P0) ─────────────────┼──► Epi
 
 ## Epic 18 : Cadrage de la fusion (P0)
 
-> Aucune ligne de code produit. Sortie : un dossier de mesures, des décisions écrites, un périmètre Bref gelé. Durée : 2 semaines.
+> Aucune ligne de code produit. Sortie : un dossier de mesures, des décisions écrites, un journal des évolutions de Bref (Bref n'est pas gelé : décision du 03/11/2026). Durée : 2 semaines.
 
 ### Story 18.1 : Mesurer les bases Bref et Keevo (Q1–Q9, Q13)
 
@@ -363,49 +367,35 @@ So that **aucune story ne démarre sur une hypothèse non validée**.
 **When** l'ADR est rédigé
 **Then** les stories impactées (tag ⚠️) sont listées et mises à jour dans ce document avant leur passage en `ready-for-dev`
 
-### Story 18.3 : Geler le périmètre fonctionnel de Bref
+### Story 18.3 : Suivre les évolutions de Bref pendant la fusion
+
+> **Décision du 03/11/2026 (owner produit) : pas de gel de Bref.** Bref est en production et reçoit de temps en temps des correctifs mineurs ; il continue d'évoluer pendant toute la fusion. La cible bouge donc : on la **suit** au lieu de la figer.
 
 As a **responsable de la fusion**,
-I want **qu'aucune nouvelle fonctionnalité ne soit ajoutée à Bref pendant la fusion**,
-So that **la cible ne bouge pas pendant qu'on la reproduit**.
+I want **voir chaque évolution livrée sur Bref et savoir ce qu'elle change pour la fusion**,
+So that **ce que Keevo reproduit et ce que l'importeur lit restent alignés avec le Bref réellement en production**.
 
 **Acceptance Criteria:**
 
 **Given** les dépôts `AI/bref` et `AI/api-bref`
-**When** le gel est prononcé
-**Then** les branches `develop` sont étiquetées `pre-fusion-freeze` (tag git), une règle écrite autorise uniquement correctifs de sécurité, correctifs bloquants et évolutions demandées par l'Epic 24 (statut de migration, gel, export, pré-migrateur), et toute exception est consignée dans ce document
+**When** la story démarre
+**Then** le commit de référence de `main` (ce qui tourne en prod) de chaque dépôt est noté dans ce document avec sa date (aucun tag ni règle imposés aux dépôts Bref), et un journal « Évolutions Bref » est ouvert en annexe de ce document
 
-**Given** un correctif livré sur Bref pendant la fusion
-**When** il change une règle métier (calcul, statut, quota)
-**Then** une story miroir est ajoutée à l'Epic 20 ou 21
+**Given** un merge sur `main` d'un dépôt Bref (déployé en prod) depuis le dernier commit journalisé
+**When** la revue périodique est faite (au moins à chaque début de story des epics 20, 21, 23 et 24, et avant chaque vague de migration)
+**Then** chaque commit est classé dans le journal : *sans impact* (texte, style, correctif local), *règle métier* (calcul, statut, quota, plan, TVA, numérotation), *schéma* (table, colonne, type, contrainte), *API/app* (contrat, écran, parcours)
 
-### Story 18.4 : Sécuriser les identités d'app et les comptes stores
+**Given** un commit classé *règle métier* ou *API/app*
+**When** il est journalisé
+**Then** une story miroir est ajoutée (Epic 20/21 pour le backend, 23 pour l'app RN) ou la story existante concernée est mise à jour, et son identifiant est noté dans le journal
 
-As a **responsable de la fusion**,
-I want **savoir sous quelles identités chaque base d'utilisateurs recevra la nouvelle app**,
-So that **la mise à jour remplace l'app installée au lieu d'en créer une seconde**.
+**Given** un commit classé *schéma*
+**When** il est journalisé
+**Then** l'importeur (Epic 24), le kit de mesures 18.1 (`research/fusion-mesures/`, gardes « objet absent ») et la réconciliation sont mis à jour ou une story Epic 24 est ouverte
 
-**Acceptance Criteria:**
-
-**Given** la fiche Play Store Keevo en production
-**When** on vérifie l'`applicationId` et la clé de signature (Play App Signing)
-**Then** l'identité est documentée et la clé d'upload est disponible pour EAS ; si l'app publiée est `com.example.keevo`, la décision (conserver cet identifiant ou republier) est actée avec son impact (une nouvelle fiche = réinstallation)
-
-**Given** le compte Apple de Bref (Team `N9534K29PS`) et le projet EAS `bb0b6dbe-…`
-**When** on prépare la publication iOS de l'identité Keevo
-**Then** l'App ID, le bundle et les certificats Keevo sont créés (ou la décision de ne pas publier Keevo sur iOS en P2 est actée)
-
-### Story 18.5 : Product brief et PRD de fusion
-
-As a **owner produit**,
-I want **un brief et un PRD de fusion issus de l'analyse et des décisions 18.2**,
-So that **les FR ci-dessus ont une source produit tracée et que la validation d'implémentation (`bmad-sprint-planning`) puisse s'appuyer dessus**.
-
-**Acceptance Criteria:**
-
-**Given** l'analyse et les ADR 18.2
-**When** `bmad-product-brief` puis `bmad-prd` sont exécutés
-**Then** `prd-fusion-keevo-bref.md` reprend les FUS-FR/MIG/NFR/UX de ce document, sans contradiction, et `architecture.md` reçoit une section « Fusion Bref » (identité étendue, invoicing étendu, reporting multi-source, app RN, migration) via `bmad-architecture`
+**Implementation Notes:**
+- Le gel **par owner** pendant sa migration (24.1, 423 `ACCOUNT_MIGRATING`, < 15 min, FUS-NFR7) n'est pas concerné : il ne touche que l'owner en cours de migration.
+- La seule demande faite à l'équipe Bref reste l'ajout des endpoints de l'Epic 24 (statut de migration, gel d'un owner, export, pré-migrateur) ; elle ne limite pas leurs autres correctifs.
 
 ---
 
@@ -1423,7 +1413,7 @@ So that **les owners migrés la reçoivent comme une mise à jour**.
 
 ## Epic 24 : Migration Bref par vagues (P1c + P4)
 
-> Stories 24.1 à 24.10 = **outil** (P1c, en recouvrement de P1b, validé par dry-run). Stories 24.11 à 24.16 = **exécution** (P4). Ordre d'import et contrôles : §10 de l'analyse. Seules évolutions autorisées dans api-bref : 24.1 et 24.11 (règle 18.3).
+> Stories 24.1 à 24.10 = **outil** (P1c, en recouvrement de P1b, validé par dry-run). Stories 24.11 à 24.16 = **exécution** (P4). Ordre d'import et contrôles : §10 de l'analyse. Évolutions demandées à api-bref par la fusion : 24.1 et 24.11 ; les autres correctifs Bref continuent et sont suivis par 18.3.
 
 ### Story 24.1 : api-bref — statut de migration, gel et export d'un owner
 
@@ -1739,8 +1729,8 @@ So that **la documentation reflète le système réel**.
 
 | Jalon | Quand | Critères pour continuer | Si non |
 |---|---|---|---|
-| **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus, Epic 16 en prod ou daté | on ne démarre pas P1 |
-| **G1** fin P1b | après 20.12 | parcours Bref vert sur Keevo, suite Flutter verte, charge 19.11 tenue | corriger avant P3 / avant l'outil |
+| **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus (la refonte n'a plus à être en prod : décision du 03/11/2026) | on ne démarre pas P1 |
+| **G1** fin P1b | après 20.12, 20.13 et l'epic 21 | **toutes** les fonctionnalités Bref répliquées dans l'API Keevo (parcours Bref vert, API super-admin héritée), suite Flutter verte, charge 19.11 tenue | **pas de go-live de la refonte** (17.9, 16.7), corriger avant P3 / avant l'outil |
 | **G2** fin bêta P2 | 22.15 palier 10 % | zéro perte de donnée, crash-free ≥ 99,5 %, quarantaine < 0,5 % des opérations | rester à 10 %, corriger |
 | **G3** avant vagues | après 24.12 et 23.12 | dry-run 100 % réconcilié, app Bref unifiée publiée, runbook relu | pas de vague |
 | **G4** après pilotes | 24.14 | aucun écart à J+7, retours pilotes traités | pas de vague de masse |
@@ -1761,7 +1751,7 @@ So that **la documentation reflète le système réel**.
 | R9 crédits et packs | 21.3, 24.5, 24.8 |
 | R10 secrets | 19.9, 21.5, 24.6 |
 | R11 identité de l'app Keevo | 18.4 |
-| R12 charge solo | 18.3 (gel Bref), ordonnancement, jalons G0–G5 |
+| R12 charge solo | ordonnancement, jalons G0–G5 ; 18.3 (suivi des évolutions Bref, sans gel) |
 
 ## Annexe A — Bloc de suivi dans `sprint-status.yaml`
 
@@ -1770,12 +1760,12 @@ So that **la documentation reflète le système réel**.
 ```yaml
   # ─────────────────────────────────────────────────────────
   # FUSION KEEVO × BREF POINT — epics-fusion-keevo-bref.md
-  # Préalable : epic-16 en production
+  # Ordre (03/11/2026) : P0 → P1 (19, 20, 21) sur la branche → G1 → go-live refonte (17-9, 16-7) → vagues (24)
   # ─────────────────────────────────────────────────────────
   epic-18: backlog  # P0 Cadrage
   18-1-mesures-bases-bref-keevo: backlog
   18-2-decisions-produit-gate-p0: backlog
-  18-3-gel-perimetre-bref: backlog
+  18-3-suivi-evolutions-bref: backlog
   18-4-identites-app-comptes-stores: backlog
   18-5-brief-prd-architecture-fusion: backlog
   epic-18-retrospective: optional
@@ -1889,4 +1879,4 @@ So that **la documentation reflète le système réel**.
 1. Exécuter **18.1** (mesures) et **18.2** (décisions) : ce sont les seules stories démarrables aujourd'hui.
 2. `bmad-product-brief` → `bmad-prd` → `bmad-architecture` (story 18.5) pour aligner PRD et architecture sur ce plan.
 3. `bmad-sprint-planning` : vérifier la complétude (readiness) après G0 ; le bloc de l'Annexe A est déjà dans `sprint-status.yaml`.
-4. En parallèle, terminer **Epic 16** et mettre la refonte modulaire en production : c'est le préalable de tout le reste.
+4. **Go-live de la refonte (17.9 puis 16.7) après G1** seulement : toutes les fonctionnalités Bref doivent d'abord exister dans Keevo (décision du 03/11/2026).

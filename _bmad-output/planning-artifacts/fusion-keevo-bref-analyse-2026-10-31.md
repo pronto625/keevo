@@ -637,7 +637,7 @@ Le dashboard Next.js reste le back-office super-admin, étendu : console modules
 
 | Phase | Objectif | Durée indicative | Utilisateurs impactés |
 |---|---|---|---|
-| **P0 — Cadrage & mesures** | chiffrer les bases (owners, boutiques, factures, membres sans téléphone, collisions de téléphone, pays), valider les décisions ⚠️ du §7, geler le périmètre fonctionnel de Bref | 2 sem | aucun |
+| **P0 — Cadrage & mesures** | chiffrer les bases (owners, boutiques, factures, membres sans téléphone, collisions de téléphone, pays), valider les décisions ⚠️ du §7, suivre les évolutions de Bref (pas de gel : décision du 03/11/2026) | 2 sem | aucun |
 | **P1 — Socle d'accueil backend** | **d'abord mise en production de la refonte modulaire** (epic 16 : backfill `tenant_modules`, claim `modules`, console, canary — la prod est encore en V1, voir §2.1), puis extensions identité (OTP, social, username, rôles), `users` nullable, quotas/profils/bundles, `track_stock`, extensions invoicing (devis, paiements, remise, livraison), modules `expenses`/`finance`, providers SMS/email, outil d'import + table de correspondance, dry-run sur copie de prod Bref | 8–10 sem (+ epic 16) | aucun (API `/api/v1` reste compatible avec l'app Flutter) |
 | **P2 — App RN v1 « parité Keevo »** | shell Bref + couche données Keevo + modules core/catalog/pos/inventory/crm/store/reporting/invoicing ; tests ; bêta fermée sur Keevo ; publication sous l'identité Keevo | 10–12 sem (en parallèle de P1 après ses 4 premières semaines) | utilisateurs Keevo (mise à jour) |
 | **P3 — App RN v2 « parité Bref »** | parcours Document (5 étapes), devis, échéancier, templates/impression, dépenses, finance, assistant IA, WhatsApp Cloud, portail client, paiement en libre-service, PIN/biométrie, 7 langues ; publication sous l'identité Bref **mais pas encore activée pour les comptes Bref** (login Bref → « migration à venir ») | 8–10 sem | aucun côté Bref (l'app Bref actuelle reste servie par api-bref) |
@@ -775,7 +775,7 @@ Tout écart hors tolérance bloque l'activation (étape 7 du §9.4) et produit u
 | R9 | Crédits de compte et packs SMS (argent) mal reportés | faible / élevé | contrôle de réconciliation dédié ; affichage dans l'app ; relevé envoyé à l'owner |
 | R10 | Secrets Bref (WhatsApp tokens, clés MyCoolPay, RevenueCat) réutilisés hors cadre | faible / élevé | chiffrement au repos des tokens WABA ; secrets via le mécanisme fail-fast Keevo (10-3) |
 | R11 | `applicationId` Keevo = `com.example.keevo` dans le dépôt | à vérifier / élevé | confirmer l'identité réelle publiée (flavors, fiche Play) avant de configurer le profil EAS `production-keevo` |
-| R12 | Charge solo : backend + app + migration en parallèle | élevée / élevé | ordonnancement P1→P2 avec recouvrement limité ; BMAD `bmad-build-auto` par story comme pour la refonte ; périmètre Bref **gelé** dès P0 |
+| R12 | Charge solo : backend + app + migration en parallèle | élevée / élevé | ordonnancement P1→P2 avec recouvrement limité ; BMAD `bmad-build-auto` par story comme pour la refonte ; Bref **non gelé** (décision du 03/11/2026 : en prod, correctifs mineurs continus) → journal des évolutions Bref et stories miroirs (18.3) |
 
 ---
 
@@ -805,7 +805,7 @@ Hypothèse : un développeur plein temps assisté (même mode que la refonte mod
 
 | Phase | Contenu principal | Semaines | Jalon de sortie |
 |---|---|---|---|
-| **P0** Cadrage | mesures Q1–Q9, décisions Q10–Q12 et ⚠️ §7, product brief + PRD de fusion (BMAD), gel du périmètre Bref, endpoint d'export api-bref | 2 | décisions écrites, chiffres connus |
+| **P0** Cadrage | mesures Q1–Q9, décisions Q10–Q12 et ⚠️ §7, product brief + PRD de fusion (BMAD), suivi des évolutions de Bref (sans gel), endpoint d'export api-bref | 2 | décisions écrites, chiffres connus |
 | **P1a** Socle d'accueil | epic 16 restant (16-2 bundles, 16-3 claim modules, 16-4 console, 16-5 backfill + DDL tenant en Flyway, 16-8 profils), `users` étendu + authenticators OTP/Google/Apple/username, rôles MANAGER/VIEWER, quotas, SMS/email providers | 6 | app Flutter inchangée fonctionne ; login OTP/social possible |
 | **P1b** Modules métier Bref | invoicing étendu (devis, paiements, remise, livraison, templates, signature, dérivation), `track_stock`, catalog/crm/store étendus, `expenses`, `finance`, reporting multi-source, `payments` (MyCoolPay + StoreKit/RevenueCat), `ai-assistant`, `whatsapp-cloud`, `client-portal`, `app-version` | 8 | API complète pour l'app unifiée ; tests d'acceptation « parcours Bref » sur Keevo |
 | **P1c** Outil de migration | module `migration`, importeur, réconciliation, dry-run sur copie de prod Bref, redirections de liens, routeur de webhooks, bridge d'identité | 3 (recouvrement avec P1b) | 100 % des owners d'une copie de prod importés sans écart |
