@@ -69,7 +69,7 @@ Les epics 16 et 17 restent liés à la fusion :
 | **P1b** Modules Bref | **20**, **21** | 8 sem | API complète pour l'app unifiée ; parcours Bref vert sur Keevo |
 | **P1c** Outil de migration | **24** (24.1 → 24.10) | 3 sem (recouvrement P1b) | 100 % d'une copie de prod Bref importée sans écart |
 | **P2** App RN parité Keevo | **22** | 10–12 sem (démarre à P1a + 4 sem) | tous les utilisateurs Keevo sur RN, Flutter retiré |
-| **P3** App RN parité Bref | **23** | 8–10 sem | app publiée sous les deux identités |
+| **P3** App RN parité Bref | **23** | 8–10 sem | app unifiée prête pour la fiche Bref Point (ADR-02) |
 | **P4** Vagues Bref | **24** (24.11 → 24.16) | 4–8 sem | plus aucun owner actif sur api-bref |
 | **P5** Convergence | **25** | 2–4 sem | une app, un backend |
 
@@ -159,9 +159,10 @@ Les epics 16 et 17 restent liés à la fusion :
 - **FUS-NFR5 :** L'app RN a une couverture de tests au moins équivalente à la spécification Flutter sur la couche données (mergers, politique de rejet, gate, calculs de montants) et des parcours Maestro hors ligne.
 - **FUS-NFR6 :** Contrats JSON partagés (`keevo/contracts/`) vérifiés à la fois par le backend et l'app (routes de modules, payloads de sync, datasets d'export).
 - **FUS-NFR7 :** Gel d'un owner < 15 min de bout en bout (gel → activation) pour un owner moyen ; aucune indisponibilité globale planifiée.
-- **FUS-NFR8 :** Montants en entiers XAF ; calcul des totaux identique dans l'app et le serveur (même jeu de cas de test partagé).
-- **FUS-NFR9 :** Journées métier en Africa/Douala (WAT) ; dates civiles importées telles quelles.
+- **FUS-NFR8 (révisée 03/11, ADR-01) :** Montants dans la devise de la boutique, avec l'arrondi que Bref applique pour ce pays (entiers pour XAF et XOF ; règle Bref reprise telle quelle pour la RDC) ; calcul des totaux identique dans l'app et le serveur (même jeu de cas de test partagé). Keevo V1 reste en XAF entiers.
+- **FUS-NFR9 (révisée 03/11, ADR-01) :** Journées métier au fuseau du pays de la boutique (Africa/Douala par défaut ; Dakar, Kinshasa, Lubumbashi… selon le pays) ; dates civiles importées telles quelles. Le fuseau aujourd'hui figé dans le code (`KeevoZones.WAT`, exports, planificateurs) devient une donnée par boutique.
 - **FUS-NFR10 :** Observabilité de la migration : métriques par vague (durée, échecs, écarts), logs corrélés `tenantId`/`migrationBatchId`.
+- **FUS-NFR11 (03/11/2026) :** Chaque implémentation applique le design pattern adapté à la situation et une complexité algorithmique optimale (pas de N+1, SQL ensembliste, pagination keyset, index adaptés, traitements par lots) ; vérifié dans chaque spec et à chaque revue, une violation est un constat bloquant.
 
 ### Exigences UX (`FUS-UX`)
 
@@ -198,19 +199,26 @@ Les epics 16 et 17 restent liés à la fusion :
 | FUS-FR24 | **20** | reporting multi-source |
 | FUS-FR25, FR26 | **20** / **23** | expenses, finance |
 | FUS-FR27–FR32 | **21** / **23** | IA, WhatsApp Cloud, portail, notifications, versions, campagnes |
+| FUS-FR38 | **20** (20.13) | API super-admin héritée de Bref |
 | FUS-FR39 | **21** (21.8, 21.4, 21.9) / **23** (23.6) | couche d'outils IA, assistant par outils, serveur MCP |
-| FUS-FR33–FR36 | **22** | app RN, identités, offline, modules |
+| FUS-FR40 | **19** (19.7) / **21** (21.10) | offre commerciale entièrement configurable (ADR-05) |
+| FUS-FR33–FR36 | **22** | app RN (identité unique Bref Point), offline, modules |
 | FUS-FR37 | **23** | mode legacy |
 | FUS-MIG1–MIG5, MIG8–MIG10 | **24** | outil de migration et vagues |
 | FUS-MIG6 | **24** (pré-migrateur OTA) | |
 | FUS-MIG7 | **22** (dernière release Flutter) | |
 | FUS-NFR1 | **transverse**, contrôlé à chaque story 19–21 | |
+| FUS-NFR2, NFR4 | **transverse** (19–21, 24) | voir leur énoncé |
 | FUS-NFR3 | **19** (story 19.11) | |
-| FUS-NFR5, NFR6, NFR8 | **22** | |
+| FUS-NFR5, NFR6, NFR8 | **22** (NFR8 aussi 20.5) | |
+| FUS-NFR9 | **20** (20.5, reporting) / **22** | fuseau par pays (ADR-01) |
+| FUS-NFR11 | **transverse** | patterns et complexité, chaque spec et revue |
 | FUS-NFR7, NFR10 | **24** | |
 | FUS-UX1–UX3 | **22** | |
 | FUS-UX4 | **23** / **24** | |
-| FUS-UX5 | **23** | |
+| FUS-UX5 | **23** |
+| FUS-UX6, UX7 | **19** (19.13) / **22** (22.9) / **23** (23.10) | mêmes repères, modules nouveaux désactivés |
+| FUS-UX8 | **22** (22.14) / **23** (23.11) | accueil au passage | |
 
 ---
 
@@ -301,7 +309,7 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 ## Epic 22 : App React Native — fondations et parité Keevo (P2)
 **Valeur :** les utilisateurs Keevo passent sur la nouvelle app par une simple mise à jour, sans perte, avec un hors-ligne au moins aussi fiable qu'en Flutter.
 **Exigences :** FUS-FR33–FR36, FUS-MIG7, FUS-NFR5, NFR6, NFR8, FUS-UX1–UX3.
-**Dépend de :** 18.4 (identité Keevo), 19.2 (login), contrats `keevo/contracts/`.
+**Dépend de :** 18.4 (accès aux comptes stores Bref Point, ADR-02), 19.2 (login), contrats `keevo/contracts/`.
 
 ### Epic 23 : App React Native — parité Bref (P3)
 **Valeur :** un owner Bref retrouve dans l'app unifiée tous ses parcours, et l'app peut être publiée sous `com.brefpoint.app`.
@@ -1484,7 +1492,7 @@ So that **je retrouve le confort de Bref (FUS-FR30, FR36)**.
 
 **Given** PIN et biométrie (`lib/app-lock` Bref), i18n (fr, en ; 5 autres langues prêtes), notifications in-app (19.9)
 **When** chaque fonction est utilisée
-**Then** elle fonctionne dans les deux identités d'app ; tous les écrans Keevo portés en 22.x ont leurs clés fr et en
+**Then** elle fonctionne pour les ex-Keevo comme pour les ex-Bref ; tous les écrans Keevo portés en 22.x ont leurs clés fr et en
 
 ### Story 23.10 : Bascule Caisse / Document
 
@@ -1517,6 +1525,10 @@ So that **la mise à jour ne me bloque pas (FUS-FR37, FUS-UX4)**.
 **Given** l'owner migré entre-temps
 **When** il relance l'app
 **Then** le login Keevo réussit et un full pull charge ses données
+
+**Given** un owner Bref dont la migration est activée (ou l'un de ses membres)
+**When** il ouvre l'app unifiée pour la première fois après la migration
+**Then** l'écran « Votre application a été mise à jour, vos factures sont là » s'affiche une fois, sans étape obligatoire (FUS-UX8)
 
 ### Story 23.12 : Publication sous l'identité Bref Point
 
@@ -1576,7 +1588,7 @@ So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
 **When** il s'exécute
 **Then** il est sans effet (`ON CONFLICT (id) DO NOTHING`) ou complète les lignes manquantes
 
-### Story 24.3 : Import des produits et des clients (avec fusions)
+### Story 24.3 : Import des produits (fusion par clé) et des clients (par établissement)
 
 As a **outil de migration**,
 I want **importer catalogue et clients (produits fusionnés par clé, clients gardés par établissement)**,

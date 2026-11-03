@@ -345,6 +345,7 @@ lib/
 | Password hash | bcrypt ≥12 | — |
 | Token storage | flutter_secure_storage | — |
 | WhatsApp | Abstraction `WhatsAppPort` — provider TBD | — |
+| Keevo × Bref fusion (2026-11-03) | Keevo backend absorbs api-bref as modules; single RN app `com.brefpoint.app`; per-owner migration; offer as data; AI via tools/MCP — see [Fusion Bref](#fusion-bref) | — |
 
 ### Decision Impact: Implementation Sequence
 
@@ -1222,6 +1223,98 @@ public class ProductMcpTools {
 - **Protocol**: MCP over stdio or SSE (configurable)
 - **Auth**: MCP has its own authorization layer — `ActorId` resolved from MCP session context instead of JWT
 - **No timeline constraint**: This is a V2 concern. The placeholder folders and port purity rules are the only MVP obligations.
+
+---
+
+## Fusion Bref
+
+> Added 2026-11-03 for story 18.5. Sources: `fusion-keevo-bref-analyse-2026-10-31.md` (§0 D1–D8, §6–§11) and `epics-fusion-keevo-bref.md` (epics 18–25, **Annexe C — ADR-01 to ADR-09, 03/11/2026**). Where the analysis and Annexe C differ, **Annexe C wins**; this section already applies it. Code names below exist in `keevo/backend` as of commit `e80faf8c` unless marked *(new)*.
+
+### Scope and Framing Decisions
+
+| # | Decision | Consequence |
+|---|---|---|
+| D1 | Keevo Spring Boot is the single backend; api-bref (NestJS) is absorbed capability by capability as Keevo modules, then decommissioned (epic 25) | Every Bref capability = a module (manifest, `db/modules/<id>/`, permissions, `DeltaEntityProvider`, app routes) under the existing registry (`ModuleRegistry`, `KeevoModule`, `public.tenant_modules`) |
+| D3 | One Bref owner = one Keevo tenant (`kv_xxxxxx`); shops → `stores`, members → `employees` + `user_tenant_memberships` | Schema-per-tenant (principle 5) unchanged; new global tables stay in `public` |
+| — | Bref is **not frozen** during the merge (user, 03/11/2026) | Bref changes are tracked in the change journal (story 18.3) and mirrored into the owning fusion story |
+| — | **Refonte go-live only at milestone GL**, after the whole merge (epics 19–21 API parity, RN app parity on staging, migration dry-run 100 % reconciled, then 17.9) | No intermediate production release of the refonte; `/api/v1` stays backward compatible for Flutter V1 2.0.x until its retirement (FUS-NFR1) |
+| ADR-01 | **Multi-country from day one: CM, GA, TD, CD, SN** | VAT rate table per country, currency and rounding reproduced exactly as Bref per country, dialling codes, **business day computed in the country's time zone** (replaces the single `KeevoZones.WAT` assumption for day boundaries, numbering, closures, KPIs) |
+| ADR-02 | Single store identity **`com.brefpoint.app`** (brand Bref Point) | No second store identity; see *React Native App* |
+| ADR-05 | **The offer is data** — nothing commercial is hard-coded | See *Plans, Quotas and Entitlements* |
+| D8 | AI goes through a **tool layer on Keevo use cases**, exposed as MCP; **no generated SQL** (Bref `ai-query-builder` is not ported) | See *AI Tool Layer* |
+
+### Extended Identity (epic 19)
+
+- **`public.users` becomes multi-identifier** (19.1): `phone_number` and `password_hash` nullable; new `email` and `username` (UNIQUE, nullable, case-insensitive), `first_name`, `last_name`, `email_verified_at`, `phone_verified_at`; CHECK "at least one identifier". Existing rows untouched; DTOs never return `null` where Flutter V1 expects a value.
+- **Authenticators** *(new)*: password (bcrypt `$2a/$2b` hashes copied from Bref as-is — no forced reset), OTP over SMS/WhatsApp/email (19.2), Google and Apple (19.3), username + password for members (19.4). Social linking is refused on an unverified email (Bref rule kept).
+- **Phone normalization**: every phone goes through `PhoneNumbers.normalize` (E.164); default country = the establishment's `country` (ADR-01). Account reconciliation at import: phone first, then email (bridge 24.7).
+- **Roles** (19.5): membership roles OWNER, **MANAGER**, EMPLOYEE, **VIEWER**; each module declares its permissions per role in its manifest (generalisation of the current invoicing-only permissions). VIEWER has no write permission.
+- **One person, many companies** (19.6): the `USER_ALREADY_EXISTS` restriction in `CreateEmployeeService` is lifted — an existing user gets an extra membership; the two-step login + tenant picker already handles N memberships.
+- **Establishments** (19.12): `stores` gains `category`, `description`, `logo_path`, `niu`, `rccm`, `country` (default CM); `tenant_preferences.default_sale_flow ∈ {POS, DOCUMENT}` (POS for existing tenants, DOCUMENT for imported Bref owners).
+
+### Plans, Quotas and Entitlements (19.7, 19.8, 21.10)
+
+- **Plans are data** (ADR-05). Today `public.plan_profiles` / `public.profile_modules` (16-8, V33) are keyed by `plan_type` with a CHECK limited to the `PlanType` enum (FREE, PREMIUM_TRIAL, PREMIUM). 19.7 replaces this closed list with a plan **code** in the database; plans, modules, limits, monthly quotas, billing cycles, prices, trials, discounts and promotions are created, edited and archived through the **super-admin API** with no redeploy (21.10). Bref's grid is seed data only. Review guard: no plan code, label, price, limit, quota or trial length in code (outside Flyway seeds and a logged safe fallback).
+- Seed values (editable): FREE = 1 employee (ADR-03, acquired rights kept, no new hire above the limit), 1-month trial of the richest plan for every new sign-up (ADR-04; running 6-month trials honoured), Keevo PREMIUM → TEAM at unchanged price until the end of the paid period (ADR-06). Flutter V1 keeps seeing FREE / PREMIUM_TRIAL / PREMIUM through a configurable mapping.
+- **Usage quotas** *(new)* (19.8): `public.usage_counters(tenant_id, metric, period, used)`; increment is a single atomic `UPDATE … SET used = used + n WHERE used + n <= limit RETURNING used` (no read-then-write). Core writes (POS sale, payment) are never quota-blocked; only documents above the plan ceiling, SMS, email and AI are (`QUOTA_EXCEEDED`). Replayed sync operations (`DUPLICATE`) are not counted twice. Purchased SMS packs are consumed after the monthly quota.
+- **Two distinct notions** (19.13): *entitlement* (the plan includes the module: `EntitlementService`, `@RequiresEntitlement`, plan-derived `tenant_modules` rows with origin `PLAN`) and *owner activation*. A module is usable only if entitled **and** activated. Owner deactivation reuses `ModuleState.DISABLED` with a new **owner origin** (today `tenant_modules.origin ∈ {SYSTEM, PLAN, ADMIN}`); DISABLED never purges data.
+
+### Interface Profile (19.13)
+
+- `GET /api/v1/tenants/me/modules` (`TenantModulesController`) additionally returns the **interface profile**: navigation preset **`CAISSE` or `DOCUMENT`** (from `default_sale_flow`) and, per module included in the plan, *activated* or *disabled by owner*. A disabled module appears in no menu/tab/shortcut, runs no scheduled job or notification, and its writes are refused like an inactive module.
+- **New modules are disabled by default**: an existing Keevo tenant gets only its V1 modules activated; an imported Bref owner gets only the Bref-equivalent functions (POS, stock, transfers, inventory, suppliers disabled). Owner toggles in *Settings › My modules* are tenant-wide, synced and audited; modules outside the plan belong to *My plan*. Initial activation rules for new tenants are data (ADR-05).
+
+### Extended Invoicing — Two Sale Paths (epic 20)
+
+- **Caisse** (module `pos`): `sales` + stock movements + automatic invoice (current Keevo bridge, `source_sale_id`). **Document** (module `invoicing`): `invoices` with **no** `sales` row and no stock movement; optional derivation of catalogue and CRM entries through capability ports (`ClientLookupPort` exists; the product-side lookup port is *(new)*). Imported Bref invoices are documents.
+- **Invoicing extensions** (20.3–20.8), all additive in `db/modules/invoicing/`: `kind ∈ {INVOICE, QUOTE}` with quote → invoice conversion; `invoice_payments` (deposit, partial payments, schedule) and a derived `payment_state ∈ {UNPAID, PARTIAL, PAID, OVERDUE}` recomputed daily (the legal status machine ISSUED/PAID/CANCELLED is kept); `discount_amount`, `delivery_fee` (delivery outside the VAT base); per-invoice `vat_rate` and "no VAT" toggle with the country default (ADR-01); `due_date`, `notes`, `client_email`, `client_rccm`; nullable `product_id` + `reference` on lines; receipt templates, ticket width, persisted signatures; SMS/email sending under quotas; configurable public-link lifetime + `legacy_public_token`.
+- Kept invariants: issued invoices are immutable (DGI, 16-9) — corrections go through credit note + new invoice; numbering `FAC-yyyy-nnnnnn` for new documents, `BRF-<8 chars>` + `legacy_reference` for imported ones (the counter is not consumed by import); `NUMERIC(12,3)` quantities with HALF_UP line rounding.
+- **Catalogue / CRM**: `products.track_stock` already exists (V38, 17.12) — imported Bref products arrive with `track_stock = false`; new `product_key`, `barcode`, `price_manual`. **Clients are per establishment** (ADR-08, 20.2): `clients.store_id` mandatory on new records, list filtered on the current establishment, employee limited to theirs, owner "all my establishments" view, **optional per-establishment sharing** set by the owner; `DUPLICATE_PHONE` is a warning within the same establishment only; **no automatic merge** (import included); derivation from a document looks up the client by phone in the current establishment.
+- New modules: `expenses` (20.10), `finance` (20.11, requires `expenses` and `reporting`), `payments` (MyCoolPay, StoreKit/RevenueCat, account credit, SMS packs), `whatsapp-cloud`, `client-portal`, `ai-assistant`, `migration` (temporary).
+
+### Multi-source Reporting (20.9, risk R4)
+
+- **Revenue = `sales` COMPLETED ∪ `invoices` ISSUED/PAID with `source_sale_id IS NULL`** (quotes and cancelled excluded, credit notes deducted). Bridged invoices are never counted twice.
+- Owner dashboard, daily/weekly reports, profitability, seller ranking and exports read **one source** *(new: a revenue query port or SQL view)* — no consumer re-implements the union.
+- Dates: KPIs use the document's **civil date** (`issue_date`), never `created_at`; day boundaries in the establishment country's time zone (ADR-01). Lines without a product count in revenue but not in per-product margin (shown as unknown).
+
+### AI Tool Layer and MCP (D8, 21.8, 21.4, 21.9)
+
+- Read tools are defined **once** on existing use cases as `{Module}McpTools` beans in `adapter/in/mcp/` (Spring AI `@Tool`), parameters = existing `…Query` records. This realises the *MCP Migration Path* above and replaces `AuditMcpPlaceholder`.
+- Actor and tenant come from the session, never from tool parameters; entitlement (`@RequiresEntitlement` READ), role and employee scope apply; every call is audited (tool, actor, duration, no personal content); an architecture test (sibling of `EndpointEntitlementCoverageTest`) fails if a tool has no module or exposes an actor/tenant parameter. Write tools later require explicit user confirmation.
+- Consumers: the in-app assistant (`ai-assistant`, tool calling, quotas via `usage_counters`) and an external MCP server (21.9, revocable personal tokens, paid module).
+
+### React Native App (epics 22–23)
+
+- **Expo / React Native app built from the Bref shell** (Expo Router, design system, i18n, EAS, RevenueCat, mobile money) with the **data layer rewritten on the Keevo sync protocol** — Bref's offline layer (full 500-row pull, TanStack mutations without rollback) is not reused.
+- Data layer: encrypted local SQLite (SQLCipher); `sync_queue` operation log pushed in batches to `POST /api/v1/sync/push` (single-flight, idempotent operation ids); keyset delta pull `GET /api/v1/sync/pull` (`SyncController`) with per-entity mergers; error policy transient / held (inactive module) / terminal → quarantine or rollback; 7-day offline gate (`SYNC_REQUIRED`, HTTP 423). TanStack Query only for server-first reads, **never for business writes**.
+- Modules UI: pnpm monorepo with one package per module, client `ModuleRegistry`, route guards from the entitlement snapshot + interface profile, feature→module table tested against `keevo/contracts/module-routes.json`; extension slots from `/api/v1/tenants/me/extensions/{pointId}`. Shared JSON contracts in `keevo/contracts/` are checked by both backend and app (FUS-NFR6).
+- **Store identity (ADR-02)**: one app, `com.brefpoint.app`. Keevo is an off-store APK (`com.example.keevo`), so Keevo users **reinstall once** (Bref Point from the store, same credentials, full pull), allowed by the last Flutter release only when its `sync_queue` is empty and nothing is quarantined (22.14). Early publication with a **legacy mode** (ADR-09, 23.11): an account unknown to Keevo is routed to `api-bref /v1/auth/me/migration` ("migration planned") or a read-only view of its Bref invoices.
+
+### Migration (epic 24)
+
+- **Strangler fig, per owner**: api-bref keeps serving non-migrated owners; each owner goes **freeze → export → idempotent import → blocking reconciliation → activation/redirect** (target < 15 min, FUS-NFR7). Freeze = api-bref returns 423 `ACCOUNT_MIGRATING` on every write of the owner and members; export = `GET /v1/admin/migration/owners/:id/export` (streaming JSON + checksum, frozen owners only). Rollback window = until activation.
+- **Module `migration`** *(new, platform, SUPER_ADMIN)* reuses `TenantFactory`, `TenantSchemaProvisioner`, `ModuleProvisioner`, `PlanChangeRecorder`, `ModuleLifecycleService` and module ports; documents are inserted through a dedicated invoicing import port, **not** `InvoiceLifecycleUseCase` (no counter consumption, no bridge events). Order: identity/tenant (`seedDefaultStore=false`) → stores → members → categories → products → clients → documents (+items, payments) → expenses → monetisation → annex modules → portal index → module provisioning + audit `TENANT_IMPORTED`.
+- **Traceability**: Bref UUIDs kept; `INSERT … ON CONFLICT (id) DO NOTHING` everywhere (re-run = no-op or completion); `public.migration_batches` and `public.migration_records(source_table, source_id, target_table, target_id, checksum, note)` *(new)*; original `created_at`/`updated_at` kept; Bref anomalies are never corrected silently (value kept in `note`). Imported devices always full-pull, so original timestamps do not hide rows from delta sync.
+- **Reconciliation blocks activation**: counts per table (explained merges only), Σ non-cancelled sales per establishment and civil month, Σ collected, Σ expenses, outstanding, 20-document field-by-field sample, plan / end date / credit, 5 public tokens (302 → 200). Tolerance ±1 currency unit per document for rounding.
+- **Monetisation** (ADR-07): the effective plan is computed with Bref's `SUBSCRIPTION_IN_FORCE` rule at migration date (Apple grace included), never `user.plan`; an owner without a subscription in force arrives in **FREE, no extra grace**. Account credit and SMS packs carried to the unit; `external_subscriptions`, `tenant_payments`, `tenant_plan_events` cause `MIGRATION_BREF`.
+- **External continuity**: webhooks (RevenueCat, MyCoolPay, Meta) through a dual-delivery router until api-bref stops, with `revenuecat_webhook_event` imported to avoid replays; Bref public links redirected to Keevo signed links via `legacy_public_token` (expiry and cancellation respected); Expo push tokens are not migrated (devices register an FCM token on first launch).
+- Waves: pilots → inactive FREE → active FREE → MyCoolPay payers → Apple payers → identity collisions → stragglers (global freeze), gated by G3/G4; dry-run on a production copy (24.12) is a GL prerequisite.
+
+### Implementation Rule — Patterns and Complexity (mandatory)
+
+Every fusion implementation **picks the design pattern that fits the problem** (GoF analysis above) **and the optimal algorithmic complexity**. Concretely: no N+1 (batch fetch / joins / `IN` lists), set-based SQL rather than row-by-row loops, **keyset pagination** (never `OFFSET` on growing tables), indexes matching every new filter, join and sort (e.g. `clients(store_id, phone_normalized)`, `usage_counters(tenant_id, metric, period)`, `migration_records(source_table, source_id)`), batch operations for imports and fan-out (JDBC batches, one transaction per step), atomic single-statement updates for counters. Each spec states the chosen pattern and the complexity of its hot paths; each review checks it, and a violation is a blocking finding.
+
+### Fusion Risks to Keep in View
+
+| Risk | Architectural answer |
+|---|---|
+| R1 tenant volume (boot, Flyway per module × N schemas) | 19.11: core tenant DDL under Flyway per module, `TenantSchemaSyncService` off the boot path, load test at measured × 2; decision before epic 24 if targets are missed |
+| R2 identity collisions | phone → email bridge, second membership instead of merge, dedicated wave |
+| R4 double-counted revenue | single revenue source (20.9) with acceptance tests |
+| R5 RN data-layer quality | Flutter tests ported as the spec, shared contracts, Maestro offline journeys, staged rollout (G2) |
+| R9 money (credit, packs) | dedicated reconciliation control, shown in the app |
+| R10 secrets | WABA tokens encrypted at rest, fail-fast secrets (10-3) |
 
 ---
 
