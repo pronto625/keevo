@@ -301,6 +301,10 @@ class DayClosureAutoSchedulerTest {
         when(tenantRepository.findAll()).thenReturn(List.of(createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE)));
         when(tenantPreferencesRepository.findByCurrentTenant())
                 .thenReturn(Optional.of(defaultEodPrefs("18:00:00", true)));
+        // an open store, not yet closed: only the fixed 20:00 rule stands between it and a closure (lenient: unused
+        // when the rule holds)
+        lenient().when(storeRepository.findAllActive()).thenReturn(List.of(createStore(STORE_ID, "Boutique Test")));
+        lenient().when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), eq(MONDAY_DATE))).thenReturn(false);
 
         scheduler.runAutoClosure();
 

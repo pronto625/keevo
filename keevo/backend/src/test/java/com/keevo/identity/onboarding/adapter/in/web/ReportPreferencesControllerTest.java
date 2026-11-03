@@ -10,7 +10,7 @@ import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityC
 import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
-import com.keevo.identity.onboarding.adapter.in.api.TenantPreferencesQueryAdapter;
+import com.keevo.identity.onboarding.application.service.EffectiveTenantPreferencesService;
 import com.keevo.shared.module.EntitlementService;
 import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.domain.exception.DomainException;
@@ -71,7 +71,7 @@ class ReportPreferencesControllerTest {
     void setUp() {
         controller = new TenantPreferencesController(tenantPreferencesRepository, jdbcTemplate,
                 updateReportPreferencesUseCase, sendTestReportUseCase,
-                new TenantPreferencesQueryAdapter(tenantPreferencesRepository, entitlementService),
+                new EffectiveTenantPreferencesService(entitlementService),
                 updateLeaderboardVisibilityUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
@@ -79,6 +79,7 @@ class ReportPreferencesControllerTest {
         objectMapper = new ObjectMapper();
         tenantContextMock = mockStatic(TenantContext.class);
         tenantContextMock.when(TenantContext::getCurrentTenant).thenReturn(TENANT_ID);
+        tenantContextMock.when(TenantContext::requireCurrent).thenReturn(TENANT_ID);
     }
 
     @AfterEach

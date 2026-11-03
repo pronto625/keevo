@@ -19,6 +19,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -29,6 +30,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -202,5 +205,63 @@ class ReportConfigGatingFullContextTest extends FullContextIntegrationTest {
         jdbc.update("UPDATE public.tenants SET plan_type = 'PREMIUM' WHERE id = ?", tenantId);
         moduleRegistry.evict(schema); // the test thread is a (mock) request: drop its cached module rows / plan
         assertThat(portView()).isEqualTo(TRIAL_PREFS);
+    }
+
+    @Test
+    @DisplayName("fixedDefaults() = the tenant_preferences column defaults (db/modules/core/V1)")
+    void fixedDefaults_matchColumnDefaults() {
+        jdbc.update("DELETE FROM \"" + schema + "\".tenant_preferences");
+        jdbc.update("INSERT INTO \"" + schema + "\".tenant_preferences DEFAULT VALUES");
+
+        assertThat(portView()).isEqualTo(TenantPreferencesView.fixedDefaults()); // trial: the stored row as is
+    }
+
+    private MvcResult putReportPreferences() throws Exception {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("eodReportEnabled", true);
+        body.put("eodReportChannel", "WHATSAPP");
+        body.put("eodReportTime", "21:00:00");
+        body.put("weeklyReportEnabled", true);
+        body.put("weeklyReportDay", 0);
+        body.put("weeklyReportTime", "20:00:00");
+        body.put("weeklyReportChannel", "WHATSAPP");
+        body.put("inventoryReportEnabled", false);
+        body.put("inventoryReportChannel", "WHATSAPP");
+        body.put("stockAlertEnabled", false);
+        body.put("stockAlertChannel", "PUSH");
+        return mockMvc.perform(MockMvcRequestBuilders.put("/api/v1/tenant/report-preferences")
+                .header("Authorization", "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body))).andReturn();
+    }
+
+    private MvcResult postReportTest() throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/tenant/report-test")
+                .header("Authorization", "Bearer " + token)).andReturn();
+    }
+
+    private static void assertRefused(MvcResult r, String domainCode) throws Exception {
+        String body = r.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertThat(r.getResponse().getStatus()).as(body).isEqualTo(403);
+        assertThat(body).contains("\"domainCode\":\"" + domainCode + "\"");
+    }
+
+    @Test
+    @DisplayName("Free tenant: PUT /report-preferences and POST /report-test refused (403 MODULE_NOT_ENTITLED), row untouched")
+    void free_writesRefused() throws Exception {
+        freePlan();
+
+        assertRefused(putReportPreferences(), "MODULE_NOT_ENTITLED");
+        assertRefused(postReportTest(), "MODULE_NOT_ENTITLED");
+        assertThat(storedEodTime()).isEqualTo("23:00:00");
+    }
+
+    @Test
+    @DisplayName("Grace (READ_ONLY): PUT /report-preferences and POST /report-test refused (403 MODULE_READ_ONLY)")
+    void grace_writesReadOnly() throws Exception {
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET expires_at = now() - interval '1 minute'");
+
+        assertRefused(putReportPreferences(), "MODULE_READ_ONLY");
+        assertRefused(postReportTest(), "MODULE_READ_ONLY");
+        assertThat(storedEodTime()).isEqualTo("23:00:00");
     }
 }

@@ -4,6 +4,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ModuleScoped;
 import com.keevo.shared.module.ModuleState;
+import com.keevo.shared.module.ModuleStateScope;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.slf4j.Logger;
@@ -37,6 +38,9 @@ import java.util.function.Supplier;
  * <p>Order {@value #ORDER_OFFSET} after {@link Ordered#HIGHEST_PRECEDENCE}: after the {@code @Async} interceptor and
  * Spring Modulith's completion interceptor ({@code HIGHEST_PRECEDENCE + 10}), before the tenant binding / receipts
  * interceptor ({@link ModuleListenerInterceptor#ORDER}) — a skipped delivery takes no receipt.
+ *
+ * <p>Story 17.8 follow-up — the state read and the listener run inside one {@link ModuleStateScope}, so the module
+ * states the listener reads for the event's tenant come from the gate's lookup.
  */
 public class ModuleScopedListenerInterceptor implements MethodInterceptor, Ordered {
 
@@ -102,6 +106,16 @@ public class ModuleScopedListenerInterceptor implements MethodInterceptor, Order
         if (module == null || tenant == null || !TenantSchema.isValid(tenant)) {
             return invocation.proceed();
         }
+        // Story 17.8 follow-up: the gate and the listener (e.g. the EOD report's preferences port) share one
+        // module-state lookup — joins the scheduler's scope on the automatic-closure path; the request cache wins
+        // on an HTTP thread.
+        try (var moduleStates = ModuleStateScope.open()) {
+            return gated(invocation, module, tenant, method, event);
+        }
+    }
+
+    private Object gated(MethodInvocation invocation, String module, String tenant, Method method, Object event)
+            throws Throwable {
         ModuleState state;
         try {
             state = registry.get().moduleState(tenant, module);

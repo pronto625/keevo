@@ -11,6 +11,7 @@ import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.ModuleStateScope;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.api.StoreQueryPort;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -101,7 +102,8 @@ public class DayClosureAutoScheduler {
             }
             tenantCount[0]++;
             TenantContext.setCurrentTenant(tenant.schemaName());
-            try {
+            // one module-state lookup per tenant: the preferences port and the EOD report listener's gate share it
+            try (var moduleStates = ModuleStateScope.open()) {
                 processTenant(tenant, todayWAT, nowWAT);
             } catch (Exception e) {
                 log.error("DayClosureAutoScheduler error for tenant={}: {}", tenant.schemaName(), e.getMessage(), e);

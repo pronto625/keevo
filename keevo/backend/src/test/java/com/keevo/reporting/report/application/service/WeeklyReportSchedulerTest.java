@@ -483,6 +483,44 @@ class WeeklyReportSchedulerTest {
     }
 
     /** A registry mock where every module id is installed (13.10a review: the gate ignores uninstalled ids). */
+    /**
+     * Story 17.8 follow-up — the module gate and the preferences port ({@code report-config}) share one module-state
+     * lookup per tenant per tick (real registry and entitlements over a counting state port).
+     */
+    @Test
+    void oneModuleStateLookupPerTenantPerTick() {
+        java.util.Map<String, Integer> lookups = new java.util.HashMap<>();
+        com.keevo.shared.module.application.port.TenantModuleStatePort port = schema -> {
+            lookups.merge(schema, 1, Integer::sum);
+            return Optional.of(java.util.Map.of());
+        };
+        var catalog = new com.keevo.shared.module.application.ModuleCatalog(java.util.stream.Stream.of(
+                        "core", "reporting", "advanced-reports", "report-config")
+                .map(id -> com.keevo.shared.module.TestModuleCatalogs.loaded(id, id.equals("core")
+                        ? com.keevo.shared.module.ModuleCategory.CORE
+                        : com.keevo.shared.module.ModuleCategory.BUSINESS, true))
+                .toList());
+        var registry = new com.keevo.shared.module.application.ModuleRegistryService(catalog, port,
+                new com.keevo.shared.module.infrastructure.RequestScopedActiveModulesCache(), Clock.systemUTC());
+        scheduler = new WeeklyReportScheduler(IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository),
+                StoreApiTestSupport.queryPort(storeRepository), reportRepository, weeklyReportGenerator,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository,
+                        new com.keevo.shared.module.application.ModuleEntitlementService(registry)),
+                new WeeklyReportWindowResolver(reportRepository), fixedClockAt(SUNDAY_DATE, "20:05:00", WAT),
+                registry);
+        Tenant second = new Tenant(UUID.randomUUID(), "KV-TEST02", "kv_test02", "Second Tenant",
+                TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now());
+        when(tenantRepository.findAll()).thenReturn(List.of(activeTenant(), second));
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(prefs(0, "20:00:00", true)));
+
+        scheduler.runWeeklyReport();
+        assertThat(lookups).containsExactlyInAnyOrderEntriesOf(java.util.Map.of(TENANT_SCHEMA, 1, "kv_test02", 1));
+
+        scheduler.runWeeklyReport(); // nothing kept between ticks
+        assertThat(lookups).containsExactlyInAnyOrderEntriesOf(java.util.Map.of(TENANT_SCHEMA, 2, "kv_test02", 2));
+        assertThat(com.keevo.shared.module.ModuleStateScope.entries()).isEmpty();
+    }
+
     static com.keevo.shared.module.ModuleRegistry installedRegistry() {
         com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
         org.mockito.Mockito.lenient().when(modules.definition(org.mockito.ArgumentMatchers.anyString()))

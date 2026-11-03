@@ -2,6 +2,7 @@ package com.keevo.identity.onboarding.adapter.in.api;
 
 import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.identity.api.TenantPreferencesView;
+import com.keevo.identity.onboarding.application.service.EffectiveTenantPreferencesService;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.shared.module.EntitlementService;
@@ -10,8 +11,9 @@ import com.keevo.shared.module.ModuleState;
 import java.util.Set;
 
 /**
- * Test-only access to the package-private preferences adapter of {@code identity :: api}
- * (Story 12.2d), for tests of other packages that drive it over a mocked repository.
+ * Test-only access to the package-private preferences adapter of {@code identity :: api} (Story 12.2d), for tests of
+ * other packages that drive it over a mocked repository; the Story 17.8 effective-preferences rule is the real
+ * {@link EffectiveTenantPreferencesService} over a fixed {@code report-config} state.
  */
 public final class IdentityOnboardingApiTestSupport {
 
@@ -25,11 +27,17 @@ public final class IdentityOnboardingApiTestSupport {
     /** The adapter with {@code report-config} in the given state (Story 17.8: DISABLED → fixed defaults). */
     public static TenantPreferencesQueryPort preferencesQueryPort(TenantPreferencesRepository repository,
                                                                   ModuleState reportConfig) {
-        return new TenantPreferencesQueryAdapter(repository, fixedState(reportConfig));
+        return preferencesQueryPort(repository, fixedState(reportConfig));
+    }
+
+    /** The adapter over the given entitlements (e.g. the real service over a real registry). */
+    public static TenantPreferencesQueryPort preferencesQueryPort(TenantPreferencesRepository repository,
+                                                                  EntitlementService entitlements) {
+        return new TenantPreferencesQueryAdapter(repository, new EffectiveTenantPreferencesService(entitlements));
     }
 
     public static TenantPreferencesView view(TenantPreferences preferences) {
-        return TenantPreferencesQueryAdapter.view(preferences);
+        return preferences.toView();
     }
 
     private static EntitlementService fixedState(ModuleState state) {

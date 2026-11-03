@@ -1,5 +1,6 @@
 package com.keevo.shared.module.infrastructure;
 
+import com.keevo.shared.module.ModuleStateScope;
 import com.keevo.shared.module.application.port.ActiveModulesCache;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
@@ -14,6 +15,9 @@ import java.util.Optional;
  * cached and every lookup misses — no stale state, and unlike a {@code @RequestScope} proxy it never fails
  * outside a request. Attributes of a completed request still bound to the thread ({@code IllegalStateException})
  * are treated as a miss too.
+ *
+ * <p>Story 17.8 follow-up — with no request bound, an open {@link ModuleStateScope} (one tenant's work in a scheduler
+ * or an event listener) is used instead, so its gate and ports share one lookup; still nothing cached without one.
  */
 @Component
 public class RequestScopedActiveModulesCache implements ActiveModulesCache {
@@ -24,7 +28,8 @@ public class RequestScopedActiveModulesCache implements ActiveModulesCache {
     public Optional<Entry> get(String tenantSchema) {
         RequestAttributes request = RequestContextHolder.getRequestAttributes();
         if (request == null) {
-            return Optional.empty();
+            return ModuleStateScope.entries()
+                    .map(entries -> entries.get(tenantSchema) instanceof Entry entry ? entry : null);
         }
         try {
             Object cached = request.getAttribute(ATTRIBUTE_PREFIX + tenantSchema, RequestAttributes.SCOPE_REQUEST);
@@ -38,6 +43,7 @@ public class RequestScopedActiveModulesCache implements ActiveModulesCache {
     public void put(String tenantSchema, Entry entry) {
         RequestAttributes request = RequestContextHolder.getRequestAttributes();
         if (request == null) {
+            ModuleStateScope.entries().ifPresent(entries -> entries.put(tenantSchema, entry));
             return;
         }
         try {
@@ -51,6 +57,7 @@ public class RequestScopedActiveModulesCache implements ActiveModulesCache {
     public void evict(String tenantSchema) {
         RequestAttributes request = RequestContextHolder.getRequestAttributes();
         if (request == null) {
+            ModuleStateScope.entries().ifPresent(entries -> entries.remove(tenantSchema));
             return;
         }
         try {

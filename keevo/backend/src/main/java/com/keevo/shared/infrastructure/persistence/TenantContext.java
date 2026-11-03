@@ -27,6 +27,19 @@ public final class TenantContext {
     }
 
     /**
+     * The current tenant schema, required (Story 17.8 follow-up: a web entry point never reads a null schema).
+     *
+     * @throws IllegalStateException if no tenant is bound to the thread
+     */
+    public static String requireCurrent() {
+        String tenantSchema = CURRENT_TENANT.get();
+        if (tenantSchema == null || tenantSchema.isBlank()) {
+            throw new IllegalStateException("no current tenant");
+        }
+        return tenantSchema;
+    }
+
+    /**
      * Tenant convention of the published module APIs (Story 12.2d): a tenant-scoped port method
      * receives the tenant schema explicitly, while the tenant-bound JPA repositories behind it read
      * this context. Both must agree — anything else would silently read another (or no) tenant.

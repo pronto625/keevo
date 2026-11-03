@@ -3,13 +3,13 @@ package com.keevo.identity.onboarding.adapter.in.web;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.api.StockAlertChannel;
+import com.keevo.identity.onboarding.domain.port.in.GetEffectiveTenantPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
-import com.keevo.identity.onboarding.adapter.in.api.TenantPreferencesQueryAdapter;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -39,20 +39,20 @@ public class TenantPreferencesController {
     private final JdbcTemplate jdbcTemplate;
     private final UpdateReportPreferencesUseCase updateReportPreferencesUseCase;
     private final SendTestReportUseCase sendTestReportUseCase;
-    private final TenantPreferencesQueryAdapter tenantPreferencesQuery;
+    private final GetEffectiveTenantPreferencesUseCase effectivePreferences;
     private final UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase;
 
     public TenantPreferencesController(TenantPreferencesRepository tenantPreferencesRepository,
                                        JdbcTemplate jdbcTemplate,
                                        UpdateReportPreferencesUseCase updateReportPreferencesUseCase,
                                        SendTestReportUseCase sendTestReportUseCase,
-                                       TenantPreferencesQueryAdapter tenantPreferencesQuery,
+                                       GetEffectiveTenantPreferencesUseCase effectivePreferences,
                                        UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase) {
         this.tenantPreferencesRepository = tenantPreferencesRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.updateReportPreferencesUseCase = updateReportPreferencesUseCase;
         this.sendTestReportUseCase = sendTestReportUseCase;
-        this.tenantPreferencesQuery = tenantPreferencesQuery;
+        this.effectivePreferences = effectivePreferences;
         this.updateLeaderboardVisibilityUseCase = updateLeaderboardVisibilityUseCase;
     }
 
@@ -67,10 +67,10 @@ public class TenantPreferencesController {
     @EntitlementExempt("core: préférences du commerce")
     @GetMapping("/preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> getPreferences() {
-        String schema = TenantContext.getCurrentTenant();
+        String schema = TenantContext.requireCurrent();
         return tenantPreferencesRepository.findByCurrentTenant()
             .map(prefs -> {
-                var effective = tenantPreferencesQuery.effective(schema, prefs);
+                var effective = effectivePreferences.effective(schema, prefs);
                 TenantPreferencesResponseDto dto = TenantPreferencesResponseDto.effective(prefs, effective.view(),
                         effective.reportConfigEditable());
                 return ResponseEntity.ok(ApiResponseWrapper.ok(dto));
@@ -82,7 +82,7 @@ public class TenantPreferencesController {
      * Update report preferences for the current tenant. OWNER only.
      * PUT /api/v1/tenant/report-preferences
      */
-    @RequiresEntitlement("report-config")
+    @RequiresEntitlement(GetEffectiveTenantPreferencesUseCase.REPORT_CONFIG)
     @PutMapping("/report-preferences")
     public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> updateReportPreferences(
             @Valid @RequestBody UpdateReportPreferencesRequestDto request) {
@@ -125,7 +125,7 @@ public class TenantPreferencesController {
 
         var saved = updateLeaderboardVisibilityUseCase.update(
                 new UpdateLeaderboardVisibilityCommand(request.visibleToEmployees()));
-        var effective = tenantPreferencesQuery.effective(TenantContext.getCurrentTenant(), saved);
+        var effective = effectivePreferences.effective(TenantContext.requireCurrent(), saved);
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 TenantPreferencesResponseDto.effective(saved, effective.view(), effective.reportConfigEditable())));
     }
@@ -134,7 +134,7 @@ public class TenantPreferencesController {
      * Send a test WhatsApp report to the OWNER. OWNER only.
      * POST /api/v1/tenant/report-test
      */
-    @RequiresEntitlement("report-config")
+    @RequiresEntitlement(GetEffectiveTenantPreferencesUseCase.REPORT_CONFIG)
     @PostMapping("/report-test")
     public ResponseEntity<ApiResponseWrapper<SendTestReportUseCase.TestReportResult>> sendTestReport() {
         requireAuthentication();

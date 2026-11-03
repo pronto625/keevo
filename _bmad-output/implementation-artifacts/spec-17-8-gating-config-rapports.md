@@ -5,7 +5,7 @@ created: '2026-11-02'
 status: 'done'
 baseline_revision: 'a1f460c853e9387a1840bafde5da50ffc311d12a'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-17-context.md'
 warnings: ['oversized']
@@ -121,6 +121,37 @@ Run from `keevo/backend`, ONE package at a time (never the full suite at once; h
   - (intent) `[false]` `[reject]` `public` schema untested — duplicate of the blind row.
   - (intent) `[false]` `[reject]` à-la-carte `advanced-reports` with `report-config` DISABLED resets weekly prefs — the intent's default list covers all 12 fields (reading a), so this is the intended behaviour.
 
+### 2026-11-03 — Review pass (follow-up, 5 layers incl. patterns/complexity)
+- verdicts: 27 findings — high 0, medium 2, low 15, false 4, maybe-false 0 (6 carried rows counted in their verdict)
+- findings:
+  - (blind, gap) `[medium]` `[patch]` `reportConfigDisabled_ignoresStoredEarlierTime_noClosureBeforeFixedTime` cannot fail: no active store stubbed, so `verifyNoInteractions(closeDayUseCase)` passes whatever time applies — stub an active store and `existsByStoreIdAndDate=false` like the sibling test.
+  - (patterns 1) `[medium]` `[patch]` each `find()` in a scheduler/listener costs the full module-state lookup (rows + plan read on a second connection), with no cache outside HTTP requests, and the weekly/trend schedulers read it twice per tenant (gate + port) — the first-pass row « one indexed module-row read » understated it (code read again) → per-tenant unit-of-work scope for the module-state cache in the scheduler loops and the EOD listener, so gate and port share one read per tenant per tick.
+  - (blind, patterns 2) `[low]` `[patch]` web controller depends on the concrete `adapter.in.api` adapter made public; the « effective preferences » rule belongs to the application layer → move it to an application service behind an in-port used by both; adapter back to package-private; stale `IdentityOnboardingApiTestSupport` Javadoc fixed.
+  - (edge) `[low]` `[patch]` `state == null` treated silently as « not DISABLED » → explicit WARN + stored values, editable=false.
+  - (blind) `[low]` `[patch]` GET passes `TenantContext.getCurrentTenant()` unchecked (possible null schema) → `TenantContext.requireCurrent()` as on the port path.
+  - (blind) `[low]` `[patch]` `"report-config"` literal still in `@RequiresEntitlement` on PUT/report-test → the shared constant.
+  - (blind) `[low]` `[patch]` no test pins `fixedDefaults()` to the column defaults → full-context test comparing it with a freshly inserted default row (`db/modules/core/V1`).
+  - (blind) `[low]` `[patch]` full-context test never checks the write side → Free and grace: PUT `/report-preferences` and POST `/report-test` refused (403 / `MODULE_READ_ONLY`).
+  - (blind) `[low]` `[patch]` DTO builds the same 15-field record twice → `fromDomain(p)` delegates to `effective(p, view(p), true)`.
+  - (intent) `[low]` `[patch]` `TenantPreferencesView` Javadoc says times are « HH:mm:ss » → « HH:mm » (repository format).
+  - (blind) `[false]` `[reject]` an upgraded tenant keeps defaults until the registry cache expires → the cache is request-scoped (`ActiveModulesCache`, one HTTP request); the upgrade and the next read are different requests; the test's manual `evict` only clears its own thread-bound entry.
+  - (gap other) `[false]` `[reject]` inventory-report defaults have no effect → the intent lists all report fields in the fixed defaults; no consumer reads them today, which is not a defect of this story.
+  - (blind) `[low]` `[reject]` fail-open WARN can flood the logs during an outage → only during a registry/database outage, where other errors dominate; throttling adds state for no user benefit.
+  - (blind) `[low]` `[reject]` full-context test leaves one tenant per test → the shared Testcontainers database lives for one run only; the other full-context tests do the same.
+  - (intent) `[low]` `[reject]` time format « 20:00 » vs the matrix « 20:00:00 » → carried: deliberate (repository format, first pass), schedulers parse both.
+  - carried `[low]` `[reject]` (blind, intent) per-consumer DISABLED tests for weekly/stock-alert/trend/draft → carried from 2026-11-02, port rule pinned by unit + full-context tests.
+  - carried `[low]` `[reject]` (gap) `AdminAnalyticsService:428` reads the stored `stock_alert_enabled` → carried: a Free tenant has no `alerts` module, `StockAlertNotificationListener` is module-scoped and sends nothing, so the metric is right.
+  - carried `[low]` `[reject]` (blind) `fromDomain` hard-codes editable=true → carried (only caller is the gated PUT).
+  - carried `[low]` `[reject]` (blind) `"WHATSAPP"`/`"PUSH"` fallbacks repeated → carried (guard legacy rows only).
+  - carried `[false]` `[reject]` (intent) `public` schema untested → carried (behaviour entirely from `EntitlementService`).
+  - carried `[false]` `[reject]` (intent) paths bypassing the port (`SessionTokenIssuer`, admin analytics) → carried: not report/alert jobs.
+  - (intent) `[low]` `[reject]` READ_ONLY PUT 403 only backed by unchanged gating → covered by the write-side test patched above.
+  - (intent) `[low]` `[reject]` unreadable state tested only with mocks → the unreadable path is a catch around one call; the full-context test cannot make the real registry throw without a fake.
+  - (intent) `[low]` `[reject]` V1 2.0.1 field set not pinned → additive field only, existing controller tests assert the existing fields.
+  - (gap) `[low]` `[reject]` admin metric test with stored false + DISABLED → same as the carried AdminAnalytics row.
+  - (patterns 3) `[low]` `[reject]` row read wasted on the defaults path → one primary-key read; the leaderboard flag (17-2) still needs it.
+  - (edge) `[false]` `[reject]` all other branches traced → reported as sound, no action.
+
 ## Design Notes
 
 The port is the right seam: identity owns the preferences and already depends on `shared.module`; putting the rule in each consumer would duplicate it six times and miss future consumers. READ_ONLY keeps the stored values because a grace period must not change behaviour silently; the change happens when the module becomes DISABLED.
@@ -204,3 +235,17 @@ curl -s $BASE/api/v1/tenant/preferences -H "Authorization: Bearer $AT" | jq '.da
 3. Given l'écran ouvert en modifiable, When le module est retiré puis l'owner enregistre, Then message « Votre abonnement ne permet plus de modifier ces réglages. » et passage en lecture seule.
 4. Given le commerce repassé en essai/Premium, When l'owner rouvre « Rapports », Then ses anciens réglages (23:00) réapparaissent et sont modifiables.
 5. Given un employé, When il ouvre l'app, Then aucun écran de réglage des rapports (owner seulement, inchangé).
+
+### Auto Run Result — follow-up review pass (2026-11-03)
+
+Status: done.
+
+**Implemented (patches of the follow-up pass):** the « no closure before 20:00 » test now stubs an active store and fails without the rule; per-tenant `ModuleStateScope` (ThreadLocal unit of work) shares one module-state lookup per tenant per tick between module gates and the preferences port in `DayClosureAutoScheduler`, `WeeklyReportScheduler`, `SalesTrendDetectionScheduler` and every `@ModuleScoped` listener (HTTP request cache unchanged); the effective-preferences rule moved to `EffectiveTenantPreferencesService` behind the in-port `GetEffectiveTenantPreferencesUseCase` (adapter back to package-private, controller on the in-port); null module state → WARN + stored values, not editable; `TenantContext.requireCurrent()` on GET/PUT; one `REPORT_CONFIG` constant for read and write gating; full-context tests pinning `fixedDefaults()` to the column defaults and refusing writes for Free (403 `MODULE_NOT_ENTITLED`) and grace (403 `MODULE_READ_ONLY`); DTO built once; Javadoc time format « HH:mm ».
+
+**Review findings (follow-up pass):** 27 findings — patched 10 (medium 2, low 8), rejected 17 (9 newly with reasons, 8 carried from 2026-11-02). Deferred: none.
+
+**Follow-up review recommendation:** false — this follow-up pass patched no high finding (patched: high 0, medium 2, low 8); the work has converged.
+
+**Verification performed:** full backend suite by package (16 packages, 4 997 tests, 0 failures, 0 errors).
+
+**Residual risks:** none new; the module-state scope is opened in scheduler loops and module-scoped listeners only (HTTP keeps the request cache).

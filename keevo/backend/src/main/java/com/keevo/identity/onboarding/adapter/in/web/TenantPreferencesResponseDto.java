@@ -58,23 +58,6 @@ public record TenantPreferencesResponseDto(
 
     /** The stored row as is — the PUT response (only reachable with {@code report-config} ENABLED → editable). */
     public static TenantPreferencesResponseDto fromDomain(TenantPreferences prefs) {
-        return new TenantPreferencesResponseDto(
-            prefs.sectorType() != null ? prefs.sectorType().name() : null,
-            prefs.eodReportTime(),
-            prefs.stockAlertEnabled(),
-            prefs.createdAt(),
-            prefs.eodReportEnabled(),
-            prefs.eodReportChannel() != null ? prefs.eodReportChannel().name() : "WHATSAPP",
-            prefs.weeklyReportEnabled(),
-            prefs.weeklyReportDay(),
-            prefs.weeklyReportTime(),
-            prefs.weeklyReportChannel() != null ? prefs.weeklyReportChannel().name() : "WHATSAPP",
-            prefs.inventoryReportEnabled(),
-            prefs.inventoryReportChannel() != null ? prefs.inventoryReportChannel().name() : "WHATSAPP",
-            prefs.stockAlertChannel() != null ? prefs.stockAlertChannel().name() : "PUSH",
-            prefs.trendNotificationEnabled(),
-            true,
-            prefs.leaderboardVisibleToEmployees()
-        );
+        return effective(prefs, prefs.toView(), true);
     }
 }

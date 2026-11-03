@@ -3,6 +3,7 @@ package com.keevo.identity.onboarding.domain.model;
 import com.keevo.identity.api.StockAlertChannel;
 
 import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.TenantPreferencesView;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -59,6 +60,14 @@ public record TenantPreferences(
         return new TenantPreferences(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled,
                 eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
                 inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, visible);
+    }
+
+    /** The stored values as the published view (no Story 17.8 rule applied: see the effective-preferences use case). */
+    public TenantPreferencesView toView() {
+        return new TenantPreferencesView(eodReportTime, stockAlertEnabled, eodReportEnabled,
+                eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
+                inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled,
+                leaderboardVisibleToEmployees);
     }
 
     /**

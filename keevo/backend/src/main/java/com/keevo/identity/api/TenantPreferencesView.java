@@ -2,7 +2,7 @@ package com.keevo.identity.api;
 
 /**
  * A tenant's report / alert preferences (Stories 7.5, 8.1) as seen by other modules (Story 12.2d).
- * Same values as the onboarding preferences row; times are {@code "HH:mm:ss"} strings.
+ * Same values as the onboarding preferences row; times are {@code "HH:mm"} strings (the repository's read format, {@code LocalTime#toString}).
  *
  * @param weeklyReportDay 0 = Sunday … 6 = Saturday
  * @param leaderboardVisibleToEmployees Story 17.2 — the owner shares the seller leaderboard (anonymised, own store)

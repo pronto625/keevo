@@ -9,6 +9,7 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.module.ModuleRegistry;
 import com.keevo.shared.module.ModuleState;
+import com.keevo.shared.module.ModuleStateScope;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -94,8 +95,9 @@ public class SalesTrendDetectionScheduler {
 
         for (String schema : schemas) {
             if (!TenantSchema.isValid(schema)) continue;
-            if (advancedReportsDisabled(schema)) continue;
-            try {
+            // one module-state lookup per tenant, shared by the module gate and the preferences port
+            try (var moduleStates = ModuleStateScope.open()) {
+                if (advancedReportsDisabled(schema)) continue;
                 TenantContext.setCurrentTenant(schema);
                 processTenant(schema);
             } catch (Exception e) {

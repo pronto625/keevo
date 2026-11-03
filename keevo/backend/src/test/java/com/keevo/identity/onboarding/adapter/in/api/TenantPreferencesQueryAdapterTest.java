@@ -3,6 +3,7 @@ package com.keevo.identity.onboarding.adapter.in.api;
 import com.keevo.identity.api.ReportChannel;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.api.TenantPreferencesView;
+import com.keevo.identity.onboarding.application.service.EffectiveTenantPreferencesService;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
@@ -47,7 +48,7 @@ class TenantPreferencesQueryAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new TenantPreferencesQueryAdapter(repository, entitlements);
+        adapter = new TenantPreferencesQueryAdapter(repository, new EffectiveTenantPreferencesService(entitlements));
         TenantContext.setCurrentTenant(SCHEMA);
     }
 
@@ -107,21 +108,6 @@ class TenantPreferencesQueryAdapterTest {
         when(entitlements.state(SCHEMA, "report-config")).thenThrow(new IllegalStateException("db down"));
 
         assertThat(adapter.find(SCHEMA)).contains(storedView);
-    }
-
-    @Test
-    void effective_flagFollowsTheSameStateRead() {
-        when(entitlements.state(SCHEMA, "report-config")).thenReturn(ModuleState.ENABLED, ModuleState.READ_ONLY,
-                ModuleState.DISABLED).thenThrow(new IllegalStateException("db down"));
-
-        assertThat(adapter.effective(SCHEMA, stored))
-                .isEqualTo(new TenantPreferencesQueryAdapter.Effective(storedView, true));
-        assertThat(adapter.effective(SCHEMA, stored))
-                .isEqualTo(new TenantPreferencesQueryAdapter.Effective(storedView, false));
-        assertThat(adapter.effective(SCHEMA, stored))
-                .isEqualTo(new TenantPreferencesQueryAdapter.Effective(TenantPreferencesView.fixedDefaults(), false));
-        assertThat(adapter.effective(SCHEMA, stored))
-                .isEqualTo(new TenantPreferencesQueryAdapter.Effective(storedView, false));
     }
 
     @Test

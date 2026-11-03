@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import com.keevo.reporting.module.ReportingModule;
 import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleStateScope;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -101,17 +102,20 @@ public class WeeklyReportScheduler {
             if (tenant.status() != TenantStatus.ACTIVE) {
                 return;
             }
-            if (ReportingModuleGate.disabled(modules, tenant.schemaName(), "WeeklyReportScheduler",
-                    ReportingModule.ID, ReportingModuleGate.ADVANCED_REPORTS)) {
-                return;
-            }
-            TenantContext.setCurrentTenant(tenant.schemaName());
-            try {
-                processTenant(tenant.schemaName(), todayWAT, nowWAT);
-            } catch (Exception e) {
-                log.error("WeeklyReportScheduler error for tenant={}: {}", tenant.schemaName(), e.getMessage(), e);
-            } finally {
-                TenantContext.clear();
+            // one module-state lookup per tenant, shared by the module gate and the preferences port
+            try (var moduleStates = ModuleStateScope.open()) {
+                if (ReportingModuleGate.disabled(modules, tenant.schemaName(), "WeeklyReportScheduler",
+                        ReportingModule.ID, ReportingModuleGate.ADVANCED_REPORTS)) {
+                    return;
+                }
+                TenantContext.setCurrentTenant(tenant.schemaName());
+                try {
+                    processTenant(tenant.schemaName(), todayWAT, nowWAT);
+                } catch (Exception e) {
+                    log.error("WeeklyReportScheduler error for tenant={}: {}", tenant.schemaName(), e.getMessage(), e);
+                } finally {
+                    TenantContext.clear();
+                }
             }
         });
     }

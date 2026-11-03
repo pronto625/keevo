@@ -8,7 +8,8 @@ import java.util.Optional;
 /**
  * Short-lived cache of a tenant's module rows (spec-socle §5.1: cached per request). Implemented by
  * {@code shared.module.infrastructure.RequestScopedActiveModulesCache}: the current HTTP request's attributes when
- * a request is bound, nothing otherwise (no stale state outside a request).
+ * a request is bound, else the open {@link com.keevo.shared.module.ModuleStateScope} (one tenant's work in a
+ * scheduler or listener), nothing otherwise (no stale state).
  *
  * <p>Since Story 13.5 the cache holds the raw rows, not a computed state: the effective state depends on the time
  * ({@code expires_at}, {@code grace_until}) and is recomputed from the rows at every call.

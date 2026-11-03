@@ -79,7 +79,28 @@ class ModuleScopedListenerInterceptorTest {
     public static class ReScoped extends BaseScoped {
     }
 
+    /** Records whether a module-state scope is open while it runs (Story 17.8 follow-up). */
+    @ModuleScoped("reporting")
+    public static class ScopeProbe {
+        final List<Boolean> scopeOpen = new ArrayList<>();
+
+        @TransactionalEventListener
+        public void on(Event event) {
+            scopeOpen.add(com.keevo.shared.module.ModuleStateScope.entries().isPresent());
+        }
+    }
+
     private final ModuleRegistry registry = mock(ModuleRegistry.class);
+
+    @Test
+    @DisplayName("17.8 follow-up: gate and listener run in one module-state scope, cleared afterwards")
+    void listenerRunsInsideScope() {
+        when(registry.moduleState("kv_on0001", "reporting")).thenReturn(ModuleState.ENABLED);
+        ScopeProbe target = new ScopeProbe();
+        proxy(target).on(new Event("kv_on0001"));
+        assertThat(target.scopeOpen).containsExactly(true);
+        assertThat(com.keevo.shared.module.ModuleStateScope.entries()).isEmpty();
+    }
 
     @SuppressWarnings("unchecked")
     private <T> T proxy(T target) {
