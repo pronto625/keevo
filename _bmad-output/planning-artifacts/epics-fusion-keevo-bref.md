@@ -47,7 +47,7 @@ Ce document est le **plan d'exécution BMAD** de la fusion décidée dans `fusio
 
 Il **complète** les epics 1–17 sans les remplacer.
 
-> **Décision du 03/11/2026 (owner produit) — la mise à jour de la refonte attend tout le merge Keevo × Bref.** La mise en production de la refonte (17.9 gate, 16.7 canary) n'a lieu qu'au jalon **GL** : tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12). La refonte n'est donc plus un préalable de la fusion : tout se construit sur la branche et sur staging dès G0. Ne viennent **après** le go-live que les étapes qui exigent la prod : dernière release Flutter, bêta et publications store (22.14–22.16, 23.12), pré-migrateur OTA (24.11), runbook, pilotes et vagues (24.13–24.16), puis l'epic 25.
+> **Décision du 03/11/2026 (owner produit) — la mise à jour de la refonte attend tout le merge Keevo × Bref.** La mise en production de la refonte (17.9 gate, 16.7 canary) n'a lieu qu'au jalon **GL** : tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) : **inventaire de parité fonction par fonction** (22.17) entièrement coché « présente, même comportement », et **tests avec de vrais utilisateurs** (22.18) concluants ; (3) outil de migration prêt et dry-run 100 % réconcilié sur copie de prod (24.1–24.10, 24.12). La refonte n'est donc plus un préalable de la fusion : tout se construit sur la branche et sur staging dès G0. Ne viennent **après** le go-live que les étapes qui exigent la prod : dernière release Flutter, bêta et publications store (22.14–22.16, 23.12), pré-migrateur OTA (24.11), runbook, pilotes et vagues (24.13–24.16), puis l'epic 25.
 
 Les epics 16 et 17 restent liés à la fusion :
 
@@ -170,6 +170,9 @@ Les epics 16 et 17 restent liés à la fusion :
 - **FUS-UX3 :** États de synchronisation visibles et compréhensibles : indicateur de connexion, bannières J5/J6/J7, écran « opérations bloquées », journal de synchronisation.
 - **FUS-UX4 :** Écrans de migration : bannière d'annonce, refus motivé (mutations en attente), « migration en cours », « compte migré, mettez à jour ».
 - **FUS-UX5 :** Écran « Mon plan » unique : plan, échéance, quotas consommés, crédit, souscription en libre-service.
+- **FUS-UX6 (03/11/2026) — mêmes repères :** chaque utilisateur existant garde ses repères, pas une navigation identique au pixel près : même écran d'accueil, mêmes onglets principaux dans le même ordre, mêmes libellés pour les mêmes fonctions, actions fréquentes au même endroit. Deux préréglages de navigation, « Caisse » (repères Keevo) et « Document » (repères Bref), calculés à partir du profil d'interface et des modules actifs (une seule app, pas deux navigations codées). Seul l'habillage change.
+- **FUS-UX7 (03/11/2026) — n'afficher que ce qui le concerne :** un utilisateur existant ne voit que les fonctions qu'il avait dans son ancienne app. Toute fonction nouvelle pour lui (stock et caisse pour un ex-Bref ; devis, dépenses, assistant pour un ex-Keevo ; tout module ajouté plus tard) est masquée par défaut, même si son plan l'inclut, jusqu'à ce que l'owner choisisse de l'afficher dans « Mes modules » (« Découvrir »). Pas de bannière ni d'écran promotionnel sur les écrans habituels. Un employé ne voit en plus que ce que son rôle permet.
+- **FUS-UX8 (03/11/2026) — accueil au passage :** au premier lancement de Bref Point, un ex-Keevo voit un écran court « Keevo devient Bref Point : vos données, vos boutiques et vos ventes sont là » ; un ex-Bref migré voit « Votre application a été mise à jour, vos factures sont là ». Une seule fois, sans étape obligatoire.
 
 ### Exigences additionnelles (architecture)
 
@@ -648,6 +651,39 @@ So that **un ex-Bref arrive sur ses documents et un ex-Keevo sur sa caisse (FUS-
 **Given** un logo envoyé
 **When** il est stocké
 **Then** il passe par le port de stockage de fichiers (disque aujourd'hui, S3 optionnel), taille et type contrôlés
+
+
+### Story 19.13 : Profil d'interface — n'afficher que ce qui concerne chaque utilisateur (FUS-UX6, UX7)
+
+As a **utilisateur existant (Keevo ou Bref)**,
+I want **que l'app ne me montre que ce que j'utilisais déjà, avec mes repères**,
+So that **je ne sois pas perdu par des écrans que je ne connais pas**.
+
+**Acceptance Criteria:**
+
+**Given** un tenant
+**When** l'API renvoie ses modules (`GET /tenants/me/modules`, 16-3) et ses préférences
+**Then** elle renvoie aussi son profil d'interface : préréglage de navigation (`CAISSE` ou `DOCUMENT`, issu de `default_sale_flow`, 19.12) et, pour chaque module actif, `visible` (vrai ou faux) ; un module actif mais non visible n'apparaît dans aucun menu, onglet, accueil ni raccourci
+
+**Given** un tenant Keevo existant au go-live
+**When** son profil d'interface est initialisé (migration Flyway idempotente)
+**Then** seuls les modules qu'il avait actifs dans la V1 sont visibles ; tout module nouveau pour lui (documents enrichis, dépenses, finance, assistant, WhatsApp Business, campagnes…) est actif selon son plan mais **non visible**
+
+**Given** un owner Bref importé (24.2)
+**When** son profil d'interface est créé
+**Then** seules les fonctions équivalentes à celles qu'il avait dans Bref (selon son plan Bref à la migration) sont visibles ; caisse, stock, transferts, inventaire, fournisseurs sont **non visibles**
+
+**Given** un module non visible
+**When** l'owner l'affiche depuis « Mes modules » (« Découvrir »), ou le masque à nouveau
+**Then** la visibilité change pour tout le tenant, est synchronisée vers les appareils, et tracée ; masquer ne supprime aucune donnée ; un employé ne voit en plus que ce que son rôle permet
+
+**Given** un nouveau tenant créé après la fusion
+**When** il choisit son activité et son parcours à l'inscription
+**Then** la visibilité initiale suit ce choix (règles en base, modifiables depuis le dashboard super-admin, ADR-05 : rien de figé dans le code)
+
+**Implementation Notes:**
+- La visibilité est un réglage d'affichage, distinct de l'activation (droit d'usage, 16-1/16-3) : un module visible est forcément actif ; un module actif peut être masqué.
+- Champs additifs uniquement sur les réponses existantes (apps V1 2.0.1 inchangées).
 
 ---
 
@@ -1196,7 +1232,7 @@ So that **le changement d'app est transparent (FUS-UX1, UX2)**.
 
 **Given** l'inventaire des écrans Flutter (§5.2 de l'analyse, colonne Keevo)
 **When** les écrans du module `core` sont livrés dans le design system Bref
-**Then** chaque écran Keevo du périmètre a son équivalent, avec les mêmes règles (employé confiné à sa boutique, changement de mot de passe, déconnexion, multi-entreprise), et l'accueil d'un tenant POS est la caisse
+**Then** chaque écran Keevo du périmètre a son équivalent, avec les mêmes règles (employé confiné à sa boutique, changement de mot de passe, déconnexion, multi-entreprise), et l'accueil d'un tenant POS est la caisse ; la navigation suit le préréglage « Caisse » (FUS-UX6 : onglets, ordre et libellés de l'app Keevo) et n'affiche que les modules visibles du profil d'interface (19.13, FUS-UX7)
 
 ### Story 22.10 : Catalogue, stock, transferts, inventaire
 
@@ -1268,7 +1304,7 @@ So that **rien ne se perd au changement d'app (FUS-MIG7)**.
 
 **Given** la release Flutter N+1 (dernière)
 **When** la nouvelle version minimale approche
-**Then** l'app force une synchronisation, affiche « Passez à Bref Point » (lien Play Store `com.brefpoint.app`, mêmes identifiants) uniquement si `sync_queue` est vide et sans quarantaine, sinon liste les opérations à traiter, et propose l'export CSV local comme filet ; l'APK Keevo (`com.example.keevo`, hors store) ne peut pas être mis à jour vers la fiche Play : une installation de Bref Point est nécessaire, sans perte de données ni de mot de passe (ADR-02)
+**Then** l'app force une synchronisation, affiche « Passez à Bref Point » (lien Play Store `com.brefpoint.app`, mêmes identifiants) uniquement si `sync_queue` est vide et sans quarantaine, sinon liste les opérations à traiter, et propose l'export CSV local comme filet ; l'APK Keevo (`com.example.keevo`, hors store) ne peut pas être mis à jour vers la fiche Play : une installation de Bref Point est nécessaire, sans perte de données ni de mot de passe (ADR-02) ; au premier lancement de Bref Point, l'écran « Keevo devient Bref Point » s'affiche une fois (FUS-UX8)
 
 **Given** la page `/monitoring/sync` du dashboard
 **When** on la consulte
@@ -1301,6 +1337,36 @@ So that **l'effort se concentre sur l'app unifiée**.
 **Given** 100 % du parc sur RN depuis 4 semaines et moins de 2 % d'appareils Flutter actifs
 **When** la version minimale de l'APK Keevo est relevée (19.10)
 **Then** les appareils Flutter restants voient l'écran de mise à jour obligatoire, `keevo/app` passe en lecture seule (tag `flutter-final`), et la CI Flutter est retirée
+
+---
+
+### Story 22.17 : Inventaire de parité fonction par fonction (critère GL)
+
+As a **responsable de la fusion**,
+I want **une liste vivante de toutes les fonctions de Keevo et de Bref, cochée une à une dans l'app unifiée**,
+So that **aucun utilisateur existant ne perd une fonction qu'il utilise**.
+
+**Acceptance Criteria:**
+
+**Given** les fonctions de l'app Flutter Keevo (écrans, actions, règles, y compris tout ce qui est livré depuis le 31/10 : classement des vendeurs, notification de changement de prix, réglages des rapports, appareils connectés, bandeau lecture seule, suivi de stock par produit, restauration d'un produit archivé — clés `m16-*`/`m17-*`) et celles de l'app Bref en production (complétées à chaque entrée du journal 18.3)
+**When** l'inventaire est tenu dans `_bmad-output/planning-artifacts/parite-fonctions-keevo-bref.md`
+**Then** chaque ligne indique la fonction, l'app d'origine, l'écran et le module cible, le préréglage de navigation concerné, la story qui la livre, et l'état « présente, même comportement » vérifié sur staging (scénario ou test cité)
+
+**Given** le jalon GL
+**When** on l'évalue
+**Then** aucune ligne n'est ouverte, sauf abandon écrit par l'owner produit
+
+### Story 22.18 : Tests avec de vrais utilisateurs avant le go-live
+
+As a **owner produit**,
+I want **voir des utilisateurs Keevo et Bref se servir de l'app unifiée avant sa mise en prod**,
+So that **on vérifie qu'ils retrouvent leurs repères (FUS-UX6, UX7)**.
+
+**Acceptance Criteria:**
+
+**Given** l'app sur staging avec des copies de leurs données (anonymisées si besoin)
+**When** 3 à 5 commerçants Keevo (caisse) et 3 à 5 utilisateurs Bref (documents) font leurs tâches habituelles sans aide (vendre, clôturer, ajouter un produit ; créer une facture, encaisser, relancer un impayé)
+**Then** chaque tâche est réussie sans hésitation bloquante, les points de confusion sont notés et corrigés avant GL, et le compte rendu est joint à l'inventaire 22.17
 
 ---
 
@@ -1430,7 +1496,11 @@ So that **chaque type de commerce a l'accueil qui lui convient (FUS-FR17)**.
 
 **Given** `default_sale_flow` (19.12)
 **When** l'owner le change dans les paramètres
-**Then** l'accueil, le bouton d'action principal et l'ordre des onglets changent ; les deux parcours restent accessibles selon les modules actifs
+**Then** l'accueil, le bouton d'action principal et l'ordre des onglets changent ; les deux parcours restent accessibles selon les modules actifs **et visibles** (19.13)
+
+**Given** un ex-Bref en préréglage « Document »
+**When** il ouvre l'app
+**Then** il retrouve les onglets, l'ordre et les libellés de l'app Bref (FUS-UX6), sans caisse ni stock tant qu'il ne les a pas affichés (FUS-UX7)
 
 ### Story 23.11 : Routage double backend et mode legacy (ADR-09)
 

@@ -412,6 +412,7 @@ development_status:
   19-10-versions-minimales-app: backlog
   19-11-charge-nombre-tenants: backlog
   19-12-boutiques-etendues-parcours-vente: backlog
+  19-13-profil-interface-visibilite: backlog  # 2026-11-03 FUS-UX6/UX7 : préréglage de navigation + n'afficher que ce que l'utilisateur avait (modules actifs mais masqués), opt-in owner
   epic-19-retrospective: optional
 
   epic-20: backlog  # P1b Modules métier Bref
@@ -460,6 +461,8 @@ development_status:
   22-14-derniere-release-flutter: backlog
   22-15-beta-deploiement-ios: backlog
   22-16-retrait-flutter: backlog
+  22-17-inventaire-parite-fonctions: backlog  # 2026-11-03 critère GL : chaque fonction Keevo et Bref cochée « présente, même comportement »
+  22-18-tests-utilisateurs-avant-go-live: backlog  # 2026-11-03 critère GL : 3–5 utilisateurs Keevo + 3–5 Bref sur staging
   epic-22-retrospective: optional
 
   epic-23: backlog  # P3 App RN parité Bref
