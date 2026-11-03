@@ -41,3 +41,7 @@ Decide the Keevo × Bref Point merger on facts rather than assumptions. This epi
 - 18.3 opens the journal before any epic 20/21 story starts; since Bref keeps moving, each later story starts with a journal review (R12 solo load grows with Bref's change rate).
 - Risks owned here: R1 tenant volume, R2 identity collisions, R3 inconsistent invoices (via Q7/Q13), R11 Keevo app identity (18.4), R12 via change tracking.
 - G0 no longer requires the refonte in production (user decision 2026-11-03): go-live waits for GL (whole merge); 17.12 (`products.track_stock`) is already delivered and no longer an open question.
+
+## Decisions Taken (18.2, 2026-11-03)
+
+ADR-01 multi-country (CM, GA, TD, CD, SN; VAT/currency/rounding as Bref does). ADR-02 final brand Bref Point, single store identity `com.brefpoint.app` (Keevo is not on any store: GitHub APK `com.example.keevo`). ADR-03 FREE = 1 employee, existing Keevo FREE tenants keep theirs. ADR-04 1-month trial. ADR-05 nothing of the commercial offer is hard-coded: plans, modules, limits, quotas, cycles, prices, trials, discounts and promotions are created/edited/archived from the super-admin dashboard (new FUS-FR40, story 21.10; plans become data in 19.7). ADR-06 Keevo PREMIUM → TEAM at unchanged price until period end. ADR-07 expired Bref owners → FREE (no grace). ADR-08 clients per establishment, owner « all establishments » view, optional sharing, no automatic merge. ADR-09 early publication under `com.brefpoint.app` with legacy mode. Full table: Annexe C of the fusion epics document.

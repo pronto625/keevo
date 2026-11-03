@@ -781,6 +781,8 @@ Tout écart hors tolérance bloque l'activation (étape 7 du §9.4) et produit u
 
 ## 12. Questions ouvertes et mesures à collecter (P0)
 
+> **Mise à jour du 03/11/2026 :** Q10, Q11, Q12, §7.5, §7.10 et §9.5 sont tranchées (ADR-01 à ADR-09, Annexe C de `epics-fusion-keevo-bref.md`). Q9 : Keevo n'est sur aucun store (APK GitHub Releases), la marque finale est Bref Point. Plusieurs décisions s'écartent des recommandations de ce document (marque, FREE à 1 employé, expirés en FREE, clients par établissement, offre entièrement configurable) : l'annexe C fait foi.
+
 | # | Question | Pourquoi | Où mesurer |
 |---|---|---|---|
 | Q1 | Nombre d'owners Bref actifs (connexion < 90 j), total, payants par plan, par méthode de paiement (Apple / MyCoolPay / admin) | dimensionne R1, l'ordre des vagues, le modèle de plans | base api-bref : `user WHERE role='owner'`, `subscription` |

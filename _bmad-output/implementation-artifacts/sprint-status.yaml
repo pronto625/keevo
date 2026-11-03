@@ -388,14 +388,14 @@ development_status:
   # Ordre (2026-11-03, décision user) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.1–24.10, 24.12) = jalon GL → go-live refonte (17-9, 16-7) → stores, OTA, vagues 24. Pas de gel de Bref : 18-3 = suivi des évolutions.
   # Ordre   : 18 → 19 → {20, 21} → 24-1..24-10 ; 22 démarre à 19 + 4 sem ; 23 après 22 ; 24-11..24-16 après 23-12 ; 25 en dernier
   # Jalons  : G0 après 18-2 | G1 après 20-12 | G2 bêta 22-15 | G3 après 24-12 + 23-12 | G4 après 24-14 | G5 avant 25-1
-  # Statut du plan : draft jusqu'à 18-2 (décisions Q10/Q11/Q12 et ⚠️) — ne pas créer de story 19+ avant G0
+  # Statut du plan : ready depuis le 2026-11-03 (18-2 : ADR-01 à 09, Annexe C) — G0 attend les chiffres prod de 18-1 ; ne pas créer de story 19+ avant G0
   # Note : `epic-18` (fusion) ≠ `v1s-epic-18-export-audit` (piste V1, close)
   # ═══════════════════════════════════════════════════════════════════════
-  epic-18: in-progress  # P0 Cadrage — 2026-11-03 : 18-1 kit livré (reste la run prod par l'utilisateur), 18-2 à 18-5 à faire
+  epic-18: in-progress  # P0 Cadrage — 2026-11-03 : 18-1 kit livré (reste la run prod par l'utilisateur), 18-2 done (ADR-01 à 09), 18-3 à 18-5 à faire
   18-1-mesures-bases-bref-keevo: in-progress  # 2026-11-03 kit livré (spec-18-1-mesures-bases-bref-keevo.md) ; reste : run sur réplica prod par l'utilisateur + checklist GHCR/Play Console
-  18-2-decisions-produit-gate-p0: backlog
+  18-2-decisions-produit-gate-p0: done  # 2026-11-03 session de décisions avec l'utilisateur — ADR-01 à ADR-09 (Annexe C de epics-fusion-keevo-bref.md), stories impactées mises à jour, plan de fusion status ready ; G0 attend encore les chiffres prod de 18-1
   18-3-suivi-evolutions-bref: backlog  # 2026-11-03 décision user : pas de gel de Bref (en prod, correctifs mineurs continus) → suivi des évolutions + stories miroirs
-  18-4-identites-app-comptes-stores: backlog
+  18-4-identites-app-comptes-stores: backlog  # 2026-11-03 ADR-02 : une seule identité com.brefpoint.app (Keevo hors store) → reste : accès Play Console et App Store Connect Bref Point, clés, EAS
   18-5-brief-prd-architecture-fusion: backlog
   epic-18-retrospective: optional
 
@@ -440,6 +440,7 @@ development_status:
   21-7-client-portal: backlog
   21-8-couche-outils-ia-mcp: backlog  # 2026-11-02 décision utilisateur : IA par outils MCP directement (FUS-FR39) — avant 21-4
   21-9-serveur-mcp-externe: backlog  # 2026-11-02 FUS-FR39 — après 21-4
+  21-10-catalogue-offres-configurable: backlog  # 2026-11-03 ADR-05 : rien de l'offre figé dans le code (plans, modules, plafonds, quotas, cycles, prix, essais, remises) — dashboard super-admin, FUS-FR40
   epic-21-retrospective: optional
 
   epic-22: backlog  # P2 App RN parité Keevo

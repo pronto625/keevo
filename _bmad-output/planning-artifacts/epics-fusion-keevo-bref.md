@@ -1,6 +1,6 @@
 ---
 stepsCompleted: [step-01-validate-prerequisites, step-02-design-epics, step-03-create-stories]
-status: draft  # passe à "ready" quand le gate P0 (Epic 18, story 18.2) a tranché les décisions ouvertes
+status: ready  # 2026-11-03 : décisions 18.2 prises (Annexe C) ; le gate G0 attend encore les chiffres de prod 18.1
 date: 2026-11-01
 author: Dalois-30 (avec Claude)
 inputDocuments:
@@ -23,17 +23,20 @@ decisionsLocked:
   - "D4 Identité étendue (email, username, OTP, Google, Apple) ; réconciliation téléphone E.164 puis email ; hash bcrypt Bref réutilisés tels quels"
   - "D5 Plans Bref → profils/bundles Keevo ; quotas d'usage ; module payments (MyCoolPay, StoreKit/RevenueCat) = auto-service"
   - "D6 Strangler à double piste : Keevo sans migration de données ; Bref owner par owner (gel → export → import idempotent → réconciliation bloquante → activation), api-bref maintenu pour les non-migrés"
-  - "D7 Deux identités d'app store (Keevo, com.brefpoint.app) construites depuis le même code"
+  - "D7 (révisée 03/11, ADR-02) Une seule identité store : com.brefpoint.app (Bref Point) ; Keevo, distribué en APK hors store, rejoint cette fiche"
   - "Deux parcours de vente : Caisse (pos → sales + stock) et Document (invoicing, sans stock) ; reporting = union sans double comptage"
   - "Factures émises non modifiables (conformité DGI) ; devis éditables ; correction = avoir + nouvelle facture"
-decisionsPending:  # gate P0 — à trancher dans la story 18.2 ; les stories impactées portent le tag ⚠️Qn
-  - "Q10 plan FREE unifié (employés, documents/mois, trial 6 mois conservé ?) et grille tarifaire unique"
-  - "Q11 marque finale (une fiche store, laquelle ; ou deux marques durables)"
-  - "Q12 périmètre pays (CM-XAF seul ou CM/GA/TD/CD/SN) : TVA, devise, fuseau des journées"
-  - "§7.10 owners Bref à abonnement expiré depuis peu : grâce 30 j (recommandé) ou FREE immédiat"
-  - "§7.5 clients au niveau tenant avec store_id optionnel (recommandé)"
-  - "§7.3 TRANCHÉ le 2026-11-01 : suivi de stock réglé par produit (track_stock), livré dans la refonte par la story 17.12 ; les produits importés de Bref arrivent track_stock=false ; le secteur ne fixe pas le réglage"
-  - "§9.5 publication précoce de l'app unifiée sous com.brefpoint.app avec mode legacy (recommandé) ou après la dernière vague"
+decisionsTaken:  # 2026-11-03, story 18.2 — détail et stories impactées : Annexe C
+  - "ADR-01 Q12 multi-pays dès la fusion (CM, GA, TD, CD, SN) : TVA par pays, indicatifs, journées au fuseau du pays"
+  - "ADR-02 Q11 marque finale = Bref Point ; une seule identité store (com.brefpoint.app) — Keevo n'est sur aucun store (APK GitHub, com.example.keevo)"
+  - "ADR-03 Q10 FREE = 1 employé ; tenants Keevo FREE au-delà gardent leurs employés (droit acquis, pas d'ajout)"
+  - "ADR-04 Q10 essai du plan le plus complet réduit à 1 mois pour tout nouvel inscrit ; essais en cours honorés"
+  - "ADR-05 Q10 rien n'est figé dans le code : plans, modules par plan, plafonds, quotas, cycles, prix, essai, remises et promotions se créent, se modifient et s'archivent depuis le dashboard super-admin, sans redéploiement ; la grille Bref et les valeurs des ADR-03/04/06 ne sont que les données de départ"
+  - "ADR-06 Keevo PREMIUM → TEAM, prix inchangé jusqu'à la fin de la période payée"
+  - "ADR-07 §7.10 owner Bref expiré → FREE à la migration (règle SUBSCRIPTION_IN_FORCE, pas de grâce) : il ne doit pas sentir la migration"
+  - "ADR-08 §7.5 clients par établissement (boutique, restaurant…), vue « tous mes établissements » pour l'owner, partage optionnel par établissement, pas de fusion automatique"
+  - "ADR-09 §9.5 publication précoce de l'app unifiée sous com.brefpoint.app avec mode legacy"
+  - "§7.3 TRANCHÉ le 2026-11-01 : suivi de stock réglé par produit (track_stock), livré par 17.12"
 ---
 
 # Keevo × Bref Point — Plan de fusion : epics et stories
@@ -87,10 +90,11 @@ Les epics 16 et 17 restent liés à la fusion :
 
 **Plans, quotas, paiement**
 
-- **FUS-FR7 :** Les plans FREE, PRO, TEAM, BUSINESS existent comme profils configurables (bundles de modules + plafonds) ; PREMIUM Keevo est servi par TEAM ⚠️Q10.
+- **FUS-FR7 :** Les plans sont des **données** (catalogue en base, plus d'énumération de plans dans le code) ; FREE, PRO, TEAM, BUSINESS sont créés au départ comme profils configurables (bundles de modules + plafonds) ; PREMIUM Keevo est servi par TEAM (ADR-06) ; FREE = 1 employé, droit acquis pour les tenants Keevo existants (ADR-03) ; essai d'1 mois (ADR-04).
 - **FUS-FR8 :** Les quotas mensuels (documents, SMS, emails, requêtes IA) sont décomptés de façon atomique par tenant et période ; un dépassement renvoie une erreur explicite sans bloquer le cœur.
 - **FUS-FR9 :** Un owner peut souscrire ou renouveler un plan en libre-service par Mobile Money (MyCoolPay) sur Android et par achat intégré (StoreKit via RevenueCat) sur iOS ; le paiement confirmé active le bundle sans intervention du super-admin.
 - **FUS-FR10 :** Le crédit de compte et les packs SMS achetés sont conservés, affichés et consommables.
+- **FUS-FR40 :** **Rien de l'offre commerciale n'est figé dans le code** (ADR-05). Depuis le dashboard super-admin, on crée, modifie, ordonne, masque et archive : les plans eux-mêmes (code, libellé, description, visibilité, plan gratuit par défaut), leurs modules, plafonds (boutiques, produits, employés…) et quotas mensuels (documents, SMS, emails, crédits IA…), les cycles de facturation et leurs prix, la politique d'essai (plan, durée, bénéficiaires), les remises et promotions (pourcentage ou montant, période, plans et cycles visés, tenant ciblé, code promo). Tout changement s'applique sans redéploiement de l'API ni de l'app ; les valeurs des ADR-03, 04 et 06 et la grille Bref ne sont que des données de départ.
 - **FUS-FR11 :** Le super-admin peut toujours accorder un plan manuellement (`admin_grant`), avec trace dans `tenant_plan_events`.
 
 **Boutiques, catalogue, clients**
@@ -125,11 +129,11 @@ Les epics 16 et 17 restent liés à la fusion :
 
 **Application mobile unifiée**
 
-- **FUS-FR33 :** Une seule base de code React Native produit deux applications (identité Keevo, identité Bref Point) différenciées par la marque, le bundle et le thème.
+- **FUS-FR33 :** Une seule base de code React Native produit une seule application, publiée sous l'identité Bref Point (`com.brefpoint.app`) ; les utilisateurs Keevo (APK hors store) y passent avec leurs identifiants (ADR-02).
 - **FUS-FR34 :** L'app fonctionne hors ligne pour toutes les écritures métier (ventes, documents, paiements, stock, catalogue, clients, dépenses) via la file d'opérations du protocole Keevo.
 - **FUS-FR35 :** L'app n'affiche que les modules actifs du tenant et les permissions du rôle ; une route d'un module inactif n'est jamais atteignable.
 - **FUS-FR36 :** L'app propose verrouillage par PIN et biométrie, 7 langues (fr et en exposées d'abord), thème clair/sombre.
-- **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy) ⚠️§9.5.
+- **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy, ADR-09).
 - **FUS-FR38 :** L'API Keevo absorbe **toute** l'API Bref, y compris sa partie super-admin (dashboard Bref) : vue plateforme (`/v1/dashboard` overview, growth, top-shops, activity, owner-summary), listes inter-comptes (clients, produits, dépenses `*-admin`), gestion des utilisateurs (liste, stats, appareils, statut, plan, suppression), versions d'app, offres, campagnes plateforme. Après la convergence, aucun client (app ou dashboard) n'appelle plus api-bref. *(Décision utilisateur du 01/11/2026.)*
 - **FUS-FR39 :** Une **couche d'outils IA** unique, construite sur les use cases Keevo (ports `in/` purs, commandes/requêtes `{Action}{Entity}Command/Query`), sert deux consommateurs : l'assistant intégré (`ai-assistant`, appel d'outils par le fournisseur de modèle) et un **serveur MCP** (Spring AI MCP Server, `adapter/in/mcp/` de chaque module) pour les clients IA externes. Chaque outil applique les mêmes contrôles que le REST (tenant, module `@RequiresEntitlement`, rôle, périmètre employé, quota) ; l'acteur et le tenant viennent toujours de la session, jamais du modèle ; outils en lecture d'abord, écriture seulement avec confirmation explicite ; chaque appel est audité. *(Décision utilisateur du 02/11/2026 : approche par outils MCP directement, sans porter le constructeur SQL de Bref.)*
 
@@ -521,17 +525,29 @@ So that **la réconciliation d'identité ne me force pas à choisir**.
 **When** il se connecte
 **Then** le tenant-picker liste les deux entreprises avec leur rôle
 
-### Story 19.7 : Profils PRO, TEAM, BUSINESS et bundles associés ⚠️Q10
+### Story 19.7 : Profils PRO, TEAM, BUSINESS et bundles associés (ADR-03, 04, 06)
 
 As a **super-admin**,
-I want **les plans Bref comme profils Keevo configurables**,
+I want **des plans qui sont des données, avec les plans Bref créés au départ**,
 So that **chaque owner migré retrouve exactement ses droits et que la grille soit unique**.
 
 **Acceptance Criteria:**
 
-**Given** `plan_profiles`/`profile_modules` (16-8) et les bundles (16-2)
-**When** le seed de fusion s'applique
-**Then** les profils FREE, PRO, TEAM, BUSINESS existent avec modules et plafonds issus de l'ADR Q10 (base : free = 1 boutique / 1 membre / 300 documents par mois / 5 SMS / 100 emails ; PRO + dépenses, finance ; BUSINESS + campagnes, modèles, boîte WhatsApp) et les tenants PREMIUM existants sont rattachés à TEAM sans perte de module
+**Given** `plan_profiles`/`profile_modules` (16-8), aujourd'hui limités aux trois valeurs de l'énumération `PlanType`
+**When** la story est livrée
+**Then** un plan est identifié par un code en base (plus de liste fermée de plans dans le code ni de contrainte CHECK sur les codes) ; un plan créé depuis l'API super-admin est utilisable tout de suite par l'inscription, les paiements, les gardes de plafonds et les modules ; les apps V1 2.0.1 continuent de recevoir FREE / PREMIUM_TRIAL / PREMIUM via une correspondance configurable (compatibilité)
+
+**Given** le catalogue vide de plans de fusion
+**When** les données de départ s'appliquent
+**Then** les profils FREE, PRO, TEAM, BUSINESS existent avec modules et plafonds issus de l'ADR Q10 (base : free = 1 boutique / 1 membre / 300 documents par mois / 5 SMS / 100 emails ; PRO + dépenses, finance ; BUSINESS + campagnes, modèles, boîte WhatsApp) et les tenants PREMIUM existants sont rattachés à TEAM sans perte de module ni changement de prix avant la fin de leur période payée (ADR-06)
+
+**Given** un tenant Keevo FREE qui a déjà plus d'1 employé actif (ADR-03)
+**When** le profil FREE à 1 employé s'applique
+**Then** aucun employé n'est désactivé ; l'ajout d'un employé est refusé (`PLAN_LIMIT_EXCEEDED`) tant que le tenant reste au-dessus de la limite
+
+**Given** un nouvel inscrit (Keevo ou Bref) (ADR-04)
+**When** son compte est créé
+**Then** il reçoit 1 mois d'essai du plan le plus complet puis FREE ; les essais PREMIUM_TRIAL en cours vont à leur terme
 
 **Given** les limites membres de Bref (par boutique)
 **When** un owner ajoute un membre au-delà de la limite de son profil
@@ -665,7 +681,7 @@ So that **mes articles Bref fonctionnent dans Keevo sans fausses ruptures (FUS-F
 **When** `GET /products/lookup?barcode=` est appelé
 **Then** le produit (ou sa cible de fusion) est renvoyé
 
-### Story 20.2 : CRM étendu ⚠️§7.5
+### Story 20.2 : CRM étendu, clients par établissement (ADR-08)
 
 As a **commerçant**,
 I want **des fiches clients complètes et un consentement marketing tracé**,
@@ -675,11 +691,15 @@ So that **mes clients Bref et mes campagnes sont conformes (FUS-FR15)**.
 
 **Given** la table `clients`
 **When** la migration Flyway du module `crm` s'applique
-**Then** `client_type`, `niu`, `rccm`, `address`, `contact_name`, `website`, `birth_date`, `store_id` (nullable), `phone_normalized`, `marketing_consent_at`, `marketing_opt_out_at`, `marketing_consent_by` sont ajoutés et synchronisés
+**Then** `client_type`, `niu`, `rccm`, `address`, `contact_name`, `website`, `birth_date`, `store_id` (établissement d'origine, obligatoire pour les nouvelles fiches), `phone_normalized`, `marketing_consent_at`, `marketing_opt_out_at`, `marketing_consent_by` sont ajoutés et synchronisés
 
-**Given** la création d'un client dont le téléphone normalisé existe déjà dans le tenant
-**When** l'owner valide
-**Then** le serveur renvoie un avertissement `DUPLICATE_PHONE` avec la fiche existante, sans contrainte d'unicité en base
+**Given** la liste des clients
+**When** un employé ou l'owner l'ouvre
+**Then** elle est filtrée sur l'établissement courant ; l'employé ne voit que son établissement ; l'owner peut afficher « tous mes établissements » ; un établissement dont l'owner a activé « partager mes clients » voit aussi les fiches des autres établissements partageurs
+
+**Given** la création d'un client dont le téléphone normalisé existe déjà dans le même établissement
+**When** l'owner ou l'employé valide
+**Then** le serveur renvoie un avertissement `DUPLICATE_PHONE` avec la fiche existante, sans contrainte d'unicité en base ; le même numéro dans un autre établissement n'est pas un doublon (pas de fusion automatique)
 
 **Given** un retrait de consentement
 **When** il est enregistré
@@ -741,9 +761,9 @@ So that **mes factures Bref sont reproduites à l'identique (FUS-FR19)**.
 **When** une facture est calculée
 **Then** remise appliquée avant TVA, livraison hors assiette TVA, arrondi HALF_UP par ligne puis total, et le résultat est identique au calcul Bref sur 50 factures de référence extraites de la copie de prod (montants entiers XAF)
 
-**Given** le pays de la boutique (ADR Q12)
+**Given** le pays de la boutique (ADR-01 : multi-pays)
 **When** aucun taux n'est donné
-**Then** le taux par défaut du pays s'applique (CM 19,25 %)
+**Then** le taux par défaut du pays s'applique (table Bref : CM 19,25 %, SN/GA… 18 %, CD 16 %…) ; la devise affichée et l'arrondi reproduisent le comportement actuel de Bref pour chaque pays (à vérifier dans le code Bref au démarrage de la story, puis décrit dans la spec)
 
 ### Story 20.6 : Dérivation catalogue et CRM depuis un document
 
@@ -1003,21 +1023,52 @@ So that **le portail Bref « retrouver mes factures » continue (FUS-FR29)**.
 
 ---
 
+### Story 21.10 : Catalogue d'offres entièrement configurable — plans, prix, essais, remises (ADR-05)
+
+As a **super-admin**,
+I want **créer, modifier et archiver toute l'offre commerciale depuis le dashboard**,
+So that **rien ne soit figé dans le code et que l'offre évolue sans redéploiement de l'API ni de l'app (FUS-FR40)**.
+
+**Acceptance Criteria:**
+
+**Given** les profils FREE, PRO, TEAM, BUSINESS (19.7)
+**When** la migration du module `payments` s'applique
+**Then** les prix par plan et par cycle (mensuel, trimestriel, annuel, en XAF) sont stockés en base avec les valeurs initiales de la grille Bref (PRO 3 500 / 9 500 / 32 760 ; TEAM 5 500 / 15 000 / 51 480 ; BUSINESS 8 500 / 23 000 / 79 560), et l'historique des changements est tracé (auteur, date, ancien et nouveau prix)
+
+**Given** l'API super-admin du catalogue d'offres
+**When** le super-admin crée, modifie, réordonne, masque ou archive un plan (libellé, description, modules, plafonds, quotas mensuels), un cycle de facturation et son prix, la politique d'essai (plan, durée, bénéficiaires), ou une remise (pourcentage ou montant ; promotion datée sur des plans et cycles ; remise d'un tenant ; code promo)
+**Then** le changement est validé (messages français), tracé, et visible tout de suite par l'app et le dashboard ; archiver un plan ne touche pas les tenants qui l'ont (ils le gardent jusqu'à leur changement de plan)
+
+**Given** un prix ou une remise modifiés
+**When** un nouveau paiement est initié
+**Then** il utilise le prix remisé en vigueur (21.1, 21.2), sans redéploiement ; un paiement déjà initié garde le prix affiché au moment de l'initiation
+
+**Given** l'app et l'endpoint public des offres
+**When** l'owner ouvre « Mon plan »
+**Then** il voit les prix en vigueur et la remise applicable (prix barré, fin de la promotion), lus depuis l'API
+
+**Implementation Notes:**
+- Les prix Apple (StoreKit) se règlent dans App Store Connect : la grille configurable s'applique au Mobile Money et aux plans accordés ; l'écart éventuel est affiché au super-admin.
+- Section « Dashboard super-admin (autre dépôt) » obligatoire dans la spec : le dashboard doit pouvoir tout créer, modifier et archiver (aucun écran en lecture seule sur l'offre).
+- Garde-fou de revue : aucun libellé, prix, plafond, quota, durée d'essai ou code de plan en dur dans le code (hors données de départ Flyway et repli de sécurité journalisé).
+
+---
+
 ## Epic 22 : App React Native — fondations et parité Keevo (P2)
 
 > Base : fork du shell Bref (`app/`, `components/ds`, `lib/i18n`, `lib/theme`, `lib/app-lock`, `eas.json`, EAS Update). **À ne pas reprendre** : `lib/database/sync.ts`, `local-mutations.ts`, `mutation-defaults.ts`, schéma WatermelonDB. **Spécification de la couche données** : le code Flutter et ses 388 fichiers de test (`rest_sync_service.dart`, `sync_rejection_policy.dart`, `sync_quarantine_service.dart`, `sync_gate_state.dart`, `entitlements_provider.dart`, `feature_modules.dart`). Emplacement proposé : `keevo/mobile/` dans le monorepo Keevo (à côté de `app/` Flutter jusqu'à son retrait).
 
-### Story 22.1 : Monorepo, shell et deux identités d'app
+### Story 22.1 : Monorepo, shell et identité Bref Point (ADR-02)
 
 As a **développeur**,
 I want **un monorepo RN avec le shell Bref et deux profils de build**,
-So that **un même code produise l'app Keevo et l'app Bref Point (FUS-FR33)**.
+So that **un même code produise l'app unifiée Bref Point (FUS-FR33)**.
 
 **Acceptance Criteria:**
 
 **Given** `keevo/mobile` (pnpm workspaces : `apps/merchant`, `packages/{core,data,ui,i18n,…}`)
-**When** `eas build --profile production-keevo` puis `--profile production-bref` sont lancés
-**Then** deux binaires sont produits avec bundle, nom, icônes, thème et `EXPO_PUBLIC_BRAND` distincts (identité Keevo de 18.4 ; `com.brefpoint.app`), et les canaux EAS Update sont séparés par identité
+**When** `eas build --profile production` est lancé
+**Then** un binaire `com.brefpoint.app` (nom, icônes et thème Bref Point) est produit ; un canal EAS Update distinct reste réservé à l'ancienne app Bref (pré-migrateur 24.11)
 
 **Given** la CI
 **When** une PR est ouverte
@@ -1217,13 +1268,13 @@ So that **rien ne se perd au changement d'app (FUS-MIG7)**.
 
 **Given** la release Flutter N+1 (dernière)
 **When** la nouvelle version minimale approche
-**Then** l'app force une synchronisation, affiche « Mise à jour disponible » uniquement si `sync_queue` est vide et sans quarantaine, sinon liste les opérations à traiter, et propose l'export CSV local comme filet
+**Then** l'app force une synchronisation, affiche « Passez à Bref Point » (lien Play Store `com.brefpoint.app`, mêmes identifiants) uniquement si `sync_queue` est vide et sans quarantaine, sinon liste les opérations à traiter, et propose l'export CSV local comme filet ; l'APK Keevo (`com.example.keevo`, hors store) ne peut pas être mis à jour vers la fiche Play : une installation de Bref Point est nécessaire, sans perte de données ni de mot de passe (ADR-02)
 
 **Given** la page `/monitoring/sync` du dashboard
 **When** on la consulte
 **Then** elle liste les appareils Flutter avec des opérations non poussées depuis plus de 24 h
 
-### Story 22.15 : Bêta, déploiement progressif et publication iOS (identité Keevo)
+### Story 22.15 : Bêta et déploiement progressif sur la fiche Bref Point (ADR-02)
 
 As a **responsable de la fusion**,
 I want **déployer l'app RN aux utilisateurs Keevo par paliers**,
@@ -1231,13 +1282,13 @@ So that **un défaut touche peu de monde et peut être corrigé avant la génér
 
 **Acceptance Criteria:**
 
-**Given** la piste de test fermée Play
+**Given** la piste de test fermée de la fiche Play `com.brefpoint.app`
 **When** 2 semaines de bêta passent sans anomalie bloquante (aucune perte de donnée, crash-free ≥ 99,5 %)
 **Then** le déploiement passe à 10 %, 50 %, 100 % avec une semaine d'observation par palier ; l'app Flutter reste téléchargeable 4 semaines
 
-**Given** l'App ID Keevo (18.4)
+**Given** l'app iOS Bref Point existante (équipe `N9534K29PS`)
 **When** la build iOS est prête
-**Then** elle est soumise à l'App Store (première publication iOS de Keevo)
+**Then** elle est publiée comme mise à jour de Bref Point (pas d'App ID Keevo à créer)
 
 ### Story 22.16 : Retrait de l'app Flutter
 
@@ -1248,7 +1299,7 @@ So that **l'effort se concentre sur l'app unifiée**.
 **Acceptance Criteria:**
 
 **Given** 100 % du parc sur RN depuis 4 semaines et moins de 2 % d'appareils Flutter actifs
-**When** la version minimale de l'identité Keevo est relevée (19.10)
+**When** la version minimale de l'APK Keevo est relevée (19.10)
 **Then** les appareils Flutter restants voient l'écran de mise à jour obligatoire, `keevo/app` passe en lecture seule (tag `flutter-final`), et la CI Flutter est retirée
 
 ---
@@ -1381,7 +1432,7 @@ So that **chaque type de commerce a l'accueil qui lui convient (FUS-FR17)**.
 **When** l'owner le change dans les paramètres
 **Then** l'accueil, le bouton d'action principal et l'ordre des onglets changent ; les deux parcours restent accessibles selon les modules actifs
 
-### Story 23.11 : Routage double backend et mode legacy ⚠️§9.5
+### Story 23.11 : Routage double backend et mode legacy (ADR-09)
 
 As a **owner Bref pas encore migré qui a reçu la mise à jour**,
 I want **comprendre ce qui se passe et consulter mes factures**,
@@ -1405,8 +1456,8 @@ So that **les owners migrés la reçoivent comme une mise à jour**.
 
 **Acceptance Criteria:**
 
-**Given** l'ADR §9.5 (publication précoce ou après les vagues)
-**When** la build `production-bref` est publiée (Play et App Store)
+**Given** l'ADR-09 (publication précoce, mode legacy)
+**When** la build `production` est publiée (Play et App Store) dès le début des vagues
 **Then** elle passe la revue Apple (achats intégrés RevenueCat inchangés, connexion Apple présente), la version minimale de l'ancienne app n'est pas encore relevée, et le canal EAS Update de l'ancienne app reste dédié au pré-migrateur (24.11)
 
 ---
@@ -1458,7 +1509,7 @@ So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
 ### Story 24.3 : Import des produits et des clients (avec fusions)
 
 As a **outil de migration**,
-I want **importer catalogue et clients en fusionnant les doublons inter-boutiques**,
+I want **importer catalogue et clients (produits fusionnés par clé, clients gardés par établissement)**,
 So that **le tenant respecte les règles d'unicité Keevo sans perdre d'historique**.
 
 **Acceptance Criteria:**
@@ -1467,9 +1518,9 @@ So that **le tenant respecte les règles d'unicité Keevo sans perdre d'historiq
 **When** ils sont importés
 **Then** un seul produit tenant (`track_stock=false`) est créé, les autres ids source pointent vers lui dans `migration_records`, et les produits `mergedIntoId` sont importés archivés et redirigés
 
-**Given** des clients de même téléphone normalisé dans plusieurs boutiques
-**When** ils sont importés
-**Then** une seule fiche est créée (boutique d'origine = la plus ancienne), les autres champs non vides sont conservés dans `note` de `migration_records`, et le consentement le plus restrictif s'applique
+**Given** des clients Bref (une fiche par boutique et téléphone)
+**When** ils sont importés (ADR-08)
+**Then** chaque fiche est importée dans l'établissement issu de sa boutique, sans fusion entre établissements ; le partage entre établissements est désactivé par défaut
 
 ### Story 24.4 : Import des documents, paiements et dépenses
 
@@ -1487,7 +1538,7 @@ So that **l'historique commercial et les impayés sont intacts**.
 **When** il est importé
 **Then** la valeur Bref est conservée telle quelle, l'anomalie est inscrite dans `migration_records.note` et dans le rapport, sans correction silencieuse (R3)
 
-### Story 24.5 : Import de la monétisation ⚠️§7.10
+### Story 24.5 : Import de la monétisation (ADR-07)
 
 As a **outil de migration**,
 I want **reporter plans, abonnements, crédits et compteurs**,
@@ -1497,7 +1548,7 @@ So that **personne ne perd ce qu'il a payé (FUS-MIG8)**.
 
 **Given** les abonnements, demandes de paiement, transactions Apple, crédit, packs SMS et compteurs du mois
 **When** ils sont importés
-**Then** le profil du tenant est celui que donne `SUBSCRIPTION_IN_FORCE` à la date de migration (grâce Apple incluse, règle de l'ADR §7.10 pour les expirés récents), `expires_at` = fin de la période payée, `external_subscriptions` et `tenant_payments` sont alimentés, crédit et packs reportés au franc près, et `tenant_plan_events` reçoit `MIGRATION_BREF`
+**Then** le profil du tenant est celui que donne `SUBSCRIPTION_IN_FORCE` à la date de migration (grâce Apple incluse ; un owner sans abonnement en vigueur arrive en FREE, sans grâce supplémentaire : ADR-07), `expires_at` = fin de la période payée, `external_subscriptions` et `tenant_payments` sont alimentés, crédit et packs reportés au franc près, et `tenant_plan_events` reçoit `MIGRATION_BREF`
 
 ### Story 24.6 : Import des données annexes et index du portail
 
@@ -1699,7 +1750,7 @@ So that **le code reste simple**.
 **When** ils sont retirés
 **Then** `migration_records` est archivé hors base chaude (export daté), le module est désinscrit, les tests restent verts, et les ArchUnit/contrats sont mis à jour
 
-### Story 25.4 : Décision de marque et fiche store finale ⚠️Q11
+### Story 25.4 : Fin de la distribution Keevo hors store (ADR-02)
 
 As a **owner produit**,
 I want **appliquer la décision de marque**,
@@ -1707,9 +1758,9 @@ So that **les utilisateurs voient un produit cohérent**.
 
 **Acceptance Criteria:**
 
-**Given** l'ADR Q11
-**When** la décision est « une seule marque »
-**Then** la fiche conservée reçoit la marque finale par mise à jour, l'autre fiche publie une dernière version qui invite à installer l'app conservée (avec reconnexion simple : mêmes identifiants), puis est dépubliée ; **sinon** les deux identités restent construites depuis le même code
+**Given** l'ADR-02 (marque finale Bref Point, une seule fiche)
+**When** moins de 2 % des appareils actifs utilisent encore l'APK Keevo
+**Then** les releases GitHub de l'APK sont retirées, les liens de téléchargement Keevo pointent vers la fiche Play Bref Point et la page d'accueil Keevo annonce le passage à Bref Point
 
 ### Story 25.5 : Rétrospective et mise à jour de l'architecture
 
@@ -1753,6 +1804,28 @@ So that **la documentation reflète le système réel**.
 | R10 secrets | 19.9, 21.5, 24.6 |
 | R11 identité de l'app Keevo | 18.4 |
 | R12 charge solo | ordonnancement, jalons G0–G5 ; 18.3 (suivi des évolutions Bref, sans gel) |
+
+## Annexe C — Décisions du gate P0 (story 18.2, session du 03/11/2026)
+
+> Décisions prises par l'owner produit le 03/11/2026, avant les chiffres de production de 18.1 (kit livré, run sur réplica en attente). Les ADR marqués « à revoir avec 18.1 » peuvent être rouverts si les chiffres le justifient. Deux décisions de cadrage du même jour complètent ce gate : **pas de gel de Bref** (18.3 = suivi des évolutions) et **go-live de la refonte au jalon GL**, après tout le merge.
+
+| ADR | Question | Décision | Recommandation de l'analyse | Stories impactées (mises à jour) |
+|---|---|---|---|---|
+| ADR-01 | Q12 pays | **Multi-pays dès la fusion** : CM, GA, TD, CD, SN ; TVA par pays (table Bref), indicatifs, journées au fuseau du pays ; devise et arrondi reproduits à l'identique de Bref, pays par pays | suivie | 20.5 (taux et devise par pays), 19.1 (indicatifs), reporting (fuseau des journées) |
+| ADR-02 | Q11 marque | **Marque finale Bref Point, une seule identité store `com.brefpoint.app`.** Fait établi : Keevo n'est sur aucun store (APK GitHub Releases, `com.example.keevo`, préfixe refusé par Google Play) | contraire (recommandait deux marques, décision plus tard) | D7 révisée, FUS-FR33, 18.4 (plus d'identité Keevo à sécuriser), 22.1, 22.14 (passage APK → Play Bref Point : installation unique, mêmes identifiants, aucune perte), 22.15, 22.16, 25.4 |
+| ADR-03 | Q10 FREE | **1 employé** dans FREE (valeur de départ, modifiable) ; les tenants Keevo FREE au-delà gardent leurs employés (droit acquis), sans nouvel ajout | contraire sur le nombre (recommandait 3) ; droit acquis suivi | 19.7 |
+| ADR-04 | Q10 essai | **Essai d'1 mois** du plan le plus complet pour tout nouvel inscrit (valeur de départ, modifiable) ; essais de 6 mois en cours honorés | suivie | 19.7, 21.10 |
+| ADR-05 | Q10 grille | **Rien n'est figé dans le code** : plans, modules, plafonds, quotas, cycles, prix, essais, remises, promotions créés, modifiés et archivés depuis le dashboard super-admin, sans redéploiement ; grille Bref = données de départ | étendue (l'analyse fixait une grille) | FUS-FR7, FUS-FR40 (nouvelle), 19.7 (plans = données), 21.10 (nouvelle), 21.1, 21.2, 23.7 |
+| ADR-06 | PREMIUM Keevo | **TEAM, prix inchangé** jusqu'à la fin de la période payée | suivie | 19.7 |
+| ADR-07 | §7.10 expirés | **FREE à la migration**, sans grâce : on applique `SUBSCRIPTION_IN_FORCE` comme Bref le fait déjà, l'owner ne doit pas sentir la migration | contraire (recommandait 30 j de grâce) | 24.5 |
+| ADR-08 | §7.5 clients | **Clients par établissement** (boutique, restaurant…) : liste filtrée sur l'établissement courant, employé limité au sien, owner « tous mes établissements », **partage optionnel** réglé par l'owner pour chaque établissement, pas de fusion automatique, doublon signalé seulement dans le même établissement | contraire (recommandait des clients au niveau tenant avec fusion) | FUS-FR15, 20.2, 20.6 (dérivation dans l'établissement courant), 24.3, 21.6 (cibles de campagne par établissement) |
+| ADR-09 | §9.5 publication | **Publication précoce** de l'app unifiée sous `com.brefpoint.app` avec mode legacy | suivie | 23.11, 23.12 |
+
+**Points à reprendre dans les specs (pas de nouvelle décision nécessaire) :**
+- ADR-01 : la devise de chaque pays (XAF pour CM/GA/TD, XOF pour SN, CDF ou USD pour CD) doit reproduire Bref ; 20.5 le vérifie dans le code Bref avant d'écrire sa spec.
+- ADR-02 : Bref Point devient l'app de tous ; les écrans Keevo (caisse, stock, inventaire…) y arrivent par les modules (epic 22), sous la marque Bref Point.
+- ADR-08 : 20.6 (dérivation depuis un document) cherche le client par téléphone **dans l'établissement courant**.
+
 
 ## Annexe A — Bloc de suivi dans `sprint-status.yaml`
 
