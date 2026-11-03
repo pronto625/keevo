@@ -400,7 +400,7 @@ development_status:
   epic-18-retrospective: optional
 
   epic-19: backlog  # P1a Socle d'accueil
-  19-1-users-identifiants-multiples: backlog
+  19-1-users-identifiants-multiples: in-progress  # 2026-11-03 build-auto (spec-19-1-users-identifiants-multiples.md)
   19-2-authenticator-otp: backlog
   19-3-authenticators-google-apple: backlog
   19-4-login-username-membres: backlog
