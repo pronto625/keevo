@@ -219,6 +219,34 @@ class AuthenticationServiceTest {
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
+    // ── Story 19.1 — nullable phone / password ─────────────────────────────
+
+    @Test
+    @DisplayName("19.1 — account without password: INVALID_CREDENTIALS, not counted (no lockout by strangers)")
+    void passwordlessAccount_invalidCredentials_notCounted() {
+        User noHash = buildUser(UUID.randomUUID(), "+22670000009", null, 4, null);
+        when(userRepository.findByPhoneNumber("+22670000009")).thenReturn(Optional.of(noHash));
+
+        for (int i = 0; i < 6; i++) {
+            assertThatThrownBy(() -> authService.authenticate(
+                    new AuthenticateUserCommand("+22670000009", "AnyPass1", null)))
+                    .isInstanceOf(DomainException.class)
+                    .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
+                            .isEqualTo(ErrorCode.INVALID_CREDENTIALS));
+        }
+
+        verify(passwordEncoder, never()).matches(any(), any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("19.1 — lockout log tail never dereferences a null or short phone")
+    void phoneTail_nullSafe() {
+        assertThat(AuthenticationService.phoneTail(null)).isEqualTo("***");
+        assertThat(AuthenticationService.phoneTail("+23")).isEqualTo("***");
+        assertThat(AuthenticationService.phoneTail("+237690001234")).isEqualTo("1234");
+    }
+
     private User buildUser(UUID id, String phone, String pwdHash,
                             int failedAttempts, Instant lockedUntil) {
         return new User(id, phone, pwdHash, Role.OWNER, true, Instant.now(),

@@ -116,4 +116,52 @@ class AuthControllerChangePasswordTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"));
     }
+
+    @Test
+    @DisplayName("19.1 — account without password hash: same status and French message as a wrong current password")
+    void changePassword_noHash_sameAnswerAsWrongPassword() throws Exception {
+        com.keevo.identity.auth.domain.port.out.UserRepository users =
+                org.mockito.Mockito.mock(com.keevo.identity.auth.domain.port.out.UserRepository.class);
+        org.springframework.security.crypto.password.PasswordEncoder encoder =
+                new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(4);
+        com.keevo.identity.employee.application.service.ChangePasswordService service =
+                new com.keevo.identity.employee.application.service.ChangePasswordService(users,
+                        org.mockito.Mockito.mock(com.keevo.identity.employee.domain.port.out.EmployeeRepository.class),
+                        org.mockito.Mockito.mock(com.keevo.identity.auth.domain.port.out.RefreshTokenRepository.class),
+                        org.mockito.Mockito.mock(com.keevo.identity.api.TokenRevocationPort.class),
+                        encoder,
+                        org.mockito.Mockito.mock(com.keevo.identity.auth.application.service.SessionTokenIssuer.class),
+                        org.mockito.Mockito.mock(com.keevo.identity.auth.domain.port.out.TenantRepository.class),
+                        org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                        new AuthController(null, null, null, null, service, null, null, null, null))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
+        String body = """
+                {"currentPassword":"TmpPass12345","newPassword":"SecureNew1!"}
+                """;
+
+        when(users.findById(actorId)).thenReturn(java.util.Optional.of(new com.keevo.identity.auth.domain.model.User(
+                actorId, "+237690000001", encoder.encode("OtherPass123"), com.keevo.identity.api.Role.OWNER, true,
+                java.time.Instant.now())));
+        String wrongPassword = mvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.domainCode").value("INVALID_CREDENTIALS"))
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        when(users.findById(actorId)).thenReturn(java.util.Optional.of(new com.keevo.identity.auth.domain.model.User(
+                actorId, null, null, com.keevo.identity.api.Role.OWNER, true, java.time.Instant.now(), 0, null,
+                "awa@example.cm", null, null, null, null, null)));
+        String noHash = mvc.perform(post("/api/v1/auth/change-password")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.domainCode").value("INVALID_CREDENTIALS"))
+                .andReturn().getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+
+        com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+        String expected = om.readTree(wrongPassword).get("error").asText();
+        assertThat(expected).isNotBlank();
+        assertThat(om.readTree(noHash).get("error").asText()).isEqualTo(expected);
+    }
 }

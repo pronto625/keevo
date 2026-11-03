@@ -99,6 +99,44 @@ class UserProfileServiceTest {
     }
 
     @Test
+    @DisplayName("19.1 — phone-less (email-only) OWNER: phoneNumber is \"\" (never null for V1), names from public.users")
+    void phonelessOwner_emptyPhone_namesFromUser() {
+        User emailOnly = new User(userId, null, null, Role.OWNER, true, Instant.now(), 0, null,
+                "awa@example.cm", null, "Awa", "Ndiaye", Instant.now(), null);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(emailOnly));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+
+        UserProfileData result = sut.execute(userId, tenantId);
+
+        assertThat(result.phoneNumber()).isEqualTo("");
+        assertThat(result.role()).isEqualTo("OWNER");
+        assertThat(result.firstName()).isEqualTo("Awa");
+        assertThat(result.lastName()).isEqualTo("Ndiaye");
+        assertThat(result.storeId()).isNull();
+    }
+
+    @Test
+    @DisplayName("19.1 — phone-less EMPLOYEE: phoneNumber is \"\", names still from the employee record")
+    void phonelessEmployee_emptyPhone() {
+        User usernameOnly = new User(userId, null, "hash", Role.EMPLOYEE, true, Instant.now(), 0, null,
+                null, "awa.n", "Ignored", "Ignored", null, null);
+        Employee employee = new Employee(
+                UUID.randomUUID(), userId, storeId,
+                "Jean", "Dupont", EmployeeStatus.ACTIVE, false, Instant.now());
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(usernameOnly));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+
+        UserProfileData result = sut.execute(userId, tenantId);
+
+        assertThat(result.phoneNumber()).isEqualTo("");
+        assertThat(result.firstName()).isEqualTo("Jean");
+        assertThat(result.lastName()).isEqualTo("Dupont");
+    }
+
+    @Test
     @DisplayName("OWNER (no employee record) → returns profile with null fields")
     void owner_returnsPartialProfile() {
         User ownerUser = new User(userId, "+237600000002", "hashedPwd", Role.OWNER, true, Instant.now());

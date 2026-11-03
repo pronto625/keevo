@@ -71,6 +71,11 @@ public class AuthenticationService implements AuthenticateUserUseCase {
         // 3. Verify password — increment counter on failure.
         // Story 12.12: > 72 UTF-8 bytes can never match (BCrypt would throw → 500) — treat as a
         // wrong password without calling matches().
+        // Story 19.1: an account without a password (OTP/social only) can never match. Not counted as a failed
+        // attempt — otherwise anyone could lock such an account with 5 password tries.
+        if (!user.hasPassword()) {
+            throw new DomainException(ErrorCode.INVALID_CREDENTIALS);
+        }
         if (PasswordLimits.exceedsBcryptLimit(command.password())
                 || !passwordEncoder.matches(command.password(), user.getPasswordHash())) {
             user = incrementFailedAttempts(user);
@@ -104,13 +109,15 @@ public class AuthenticationService implements AuthenticateUserUseCase {
         Instant newLockedUntil = null;
         if (newCount >= MAX_FAILED_ATTEMPTS) {
             newLockedUntil = Instant.now().plus(LOCKOUT_MINUTES, ChronoUnit.MINUTES);
-            log.warn("Account locked for phone ending in ...{} until {}",
-                    user.getPhoneNumber().length() >= 4
-                            ? user.getPhoneNumber().substring(user.getPhoneNumber().length() - 4)
-                            : "***",
+            log.warn("Account locked for phone ending in ...{} until {}", phoneTail(user.getPhoneNumber()),
                     newLockedUntil);
         }
         return user.withLockoutState(newCount, newLockedUntil);
+    }
+
+    /** Last 4 digits for the lockout log; {@code "***"} when the account has no (or a short) phone — Story 19.1. */
+    static String phoneTail(String phone) {
+        return phone != null && phone.length() >= 4 ? phone.substring(phone.length() - 4) : "***";
     }
 }
 

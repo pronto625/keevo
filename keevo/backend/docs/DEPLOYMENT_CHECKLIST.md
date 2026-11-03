@@ -17,7 +17,8 @@ and provides rotation procedures for secrets.
 8. Server setup (files, prerequisites, DNS) · 9. Prod Traefik — known issue · 10. Stack checks ·
 11. Backups · 12. S3 protection (IAM, versioning, Object Lock) · 13. Restore — re-grant step ·
 14. Staging bring-up · 15. Staging TLS through the prod Traefik · 16. Legacy `DELETED` tenants
-cleanup · 17. Single backend instance · 18. Mise en production du lot « V1 stabilisation »
+cleanup · 17. Single backend instance · 18. Mise en production du lot « V1 stabilisation » ·
+19. Tables des tenants : migrations des modules · 20. Migrations publiques irréversibles
 
 ---
 
@@ -1057,3 +1058,9 @@ pour toujours. Il n'y a plus de copie `public → tenant` (`TenantSchemaSyncServ
   copie `public → tenant`. (Les commentaires des scripts publics déjà appliqués, V38… compris, citent encore
   l'ancien service de synchronisation : ils ne se modifient pas.) Voir `src/main/resources/db/modules/README.md`.
 
+## 20. Migrations publiques irréversibles
+
+- **V41 (story 19.1, `public.users` identifiants multiples)** : V41 cannot be undone once phone-less rows exist
+  (the V1 2.0.1 backend would NPE on them). Avant tout retour arrière du backend sous 19.1, vérifier
+  `SELECT count(*) FROM public.users WHERE phone_number IS NULL OR password_hash IS NULL;` = 0 ; sinon, pas de
+  retour arrière (corriger en avant).

@@ -120,6 +120,124 @@ class OwnerLookupPostgresIntegrationTest extends PostgresIntegrationTest {
         assertThat(resolver.resolveOwnerWhatsAppPhone(schema)).isEmpty();
     }
 
+    // ── Story 19.1 — phone-less (email/username-only) accounts ───────────────
+
+    @Test
+    @DisplayName("19.1 — oldest owner has no phone: the next owner having one is the recipient")
+    void phonelessOldestOwner_nextOwnerWithPhone() {
+        String schema = insertTenant();
+        String phone = randomPhone();
+        membership(insertEmailOnlyUser(), schema, "OWNER", true, T0);
+        membership(insertUser(phone, true), schema, "OWNER", true, T0.plusSeconds(60));
+
+        assertThat(resolver.resolveOwnerWhatsAppPhone(schema)).contains(phone);
+    }
+
+    @Test
+    @DisplayName("19.1 — only phone-less owners: no recipient (as before)")
+    void onlyPhonelessOwner_empty() {
+        String schema = insertTenant();
+        membership(insertEmailOnlyUser(), schema, "OWNER", true, T0);
+
+        assertThat(resolver.resolveOwnerWhatsAppPhone(schema)).isEmpty();
+        assertThat(userRepository.findOwnersByTenantSchemaName(schema)).hasSize(1)
+                .allSatisfy(u -> assertThat(u.getPhoneNumber()).isNull());
+    }
+
+    @Test
+    @DisplayName("19.1 — email-only user loads by id with its profile; a null/blank phone lookup never matches it")
+    void emailOnlyUser_loads_nullPhoneNeverMatches() {
+        UUID id = insertEmailOnlyUser();
+
+        User u = userRepository.findById(id).orElseThrow();
+        assertThat(u.getPhoneNumber()).isNull();
+        assertThat(u.getPasswordHash()).isNull();
+        assertThat(u.getEmail()).startsWith("Owner.").endsWith("@Example.cm");
+        assertThat(u.getFirstName()).isEqualTo("Awa");
+        assertThat(u.getEmailVerifiedAt()).isEqualTo(T0);
+
+        assertThat(userRepository.findByPhoneNumber(null)).isEmpty();
+        assertThat(userRepository.findByPhoneNumber("")).isEmpty();
+        assertThat(userRepository.existsByPhoneNumber(null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("19.1 — save keeps the new columns (JPA mapping validated against V41)")
+    void save_keepsNewColumns() {
+        UUID id = insertEmailOnlyUser();
+        User u = userRepository.findById(id).orElseThrow();
+
+        userRepository.save(u.withLockoutState(2, null).withUsername("awa_" + id.toString().substring(0, 8)));
+
+        User reloaded = userRepository.findById(id).orElseThrow();
+        assertThat(reloaded.failedAttempts()).isEqualTo(2);
+        assertThat(reloaded.getEmail()).isEqualTo(u.getEmail());
+        assertThat(reloaded.getUsername()).startsWith("awa_");
+        assertThat(reloaded.getLastName()).isEqualTo("Ndiaye");
+        assertThat(reloaded.getPhoneNumber()).isNull();
+    }
+
+    @Test
+    @DisplayName("19.1 — legacy oldest owner with a blank phone ('' or spaces): the next owner having a phone wins")
+    void blankPhoneOldestOwner_nextOwnerWithPhone() {
+        for (String blank : new String[] {"", "   "}) {
+            String schema = insertTenant();
+            String phone = randomPhone();
+            // raw SQL: the domain now stores a blank phone as NULL — this keeps the legacy-row case
+            membership(insertRawUser(blank, "legacy." + UUID.randomUUID() + "@x.cm", null), schema, "OWNER", true, T0);
+            membership(insertUser(phone, true), schema, "OWNER", true, T0.plusSeconds(60));
+
+            assertThat(resolver.resolveOwnerWhatsAppPhone(schema)).as("blank=[%s]", blank).contains(phone);
+            assertThat(userRepository.findOwnersByTenantSchemaName(schema)).first()
+                    .extracting(User::getPhoneNumber).isEqualTo(phone);
+        }
+    }
+
+    @Test
+    @DisplayName("19.1 — whitespace-only phone lookup never matches, even a legacy row with that phone")
+    void whitespacePhoneLookup_neverMatches() {
+        insertRawUser("    ", "ws." + UUID.randomUUID() + "@x.cm", null);
+
+        assertThat(userRepository.findByPhoneNumber("    ")).isEmpty();
+        assertThat(userRepository.existsByPhoneNumber("    ")).isFalse();
+    }
+
+    @Test
+    @DisplayName("19.1 — username-only user (no phone, no password) loads through JPA findById")
+    void usernameOnlyUser_loadsThroughJpa() {
+        String username = "awa_" + UUID.randomUUID().toString().substring(0, 8);
+        UUID id = insertRawUser(null, null, username);
+
+        User u = userRepository.findById(id).orElseThrow();
+        assertThat(u.getUsername()).isEqualTo(username);
+        assertThat(u.getPhoneNumber()).isNull();
+        assertThat(u.getEmail()).isNull();
+        assertThat(u.hasPassword()).isFalse();
+    }
+
+    @Test
+    @DisplayName("19.1 — OWNERS_BY_SCHEMA_SQL maps the new columns; owners with a phone first")
+    void ownersBySchema_mapsNewColumns() {
+        String schema = insertTenant();
+        UUID emailOnly = insertEmailOnlyUser();
+        String phone = randomPhone();
+        membership(emailOnly, schema, "OWNER", true, T0);
+        membership(insertUser(phone, true), schema, "OWNER", true, T0.plusSeconds(60));
+
+        var owners = userRepository.findOwnersByTenantSchemaName(schema);
+        assertThat(owners).hasSize(2);
+        assertThat(owners.get(0).getPhoneNumber()).isEqualTo(phone);
+        User mapped = owners.get(1);
+        assertThat(mapped.getId()).isEqualTo(emailOnly);
+        assertThat(mapped.getEmail()).isEqualTo("Owner." + emailOnly + "@Example.cm");
+        assertThat(mapped.getFirstName()).isEqualTo("Awa");
+        assertThat(mapped.getLastName()).isEqualTo("Ndiaye");
+        assertThat(mapped.getEmailVerifiedAt()).isEqualTo(T0);
+        assertThat(mapped.getPhoneVerifiedAt()).isNull();
+        assertThat(mapped.getUsername()).isNull();
+        assertThat(mapped.getPasswordHash()).isNull();
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────────
 
     private String insertTenant() {
@@ -139,6 +257,23 @@ class OwnerLookupPostgresIntegrationTest extends PostgresIntegrationTest {
         jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, "
                         + "password_hash, phone_number, role) VALUES (?, ?, ?, ?, 0, 'x', ?, 'OWNER')",
                 id, Timestamp.from(T0), Timestamp.from(T0), active, phone);
+        return id;
+    }
+
+    private UUID insertRawUser(String phone, String email, String username) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, role, "
+                        + "phone_number, email, username) VALUES (?, ?, ?, true, 0, 'OWNER', ?, ?, ?)",
+                id, Timestamp.from(T0), Timestamp.from(T0), phone, email, username);
+        return id;
+    }
+
+    private UUID insertEmailOnlyUser() {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, role, email, "
+                        + "first_name, last_name, email_verified_at) VALUES (?, ?, ?, true, 0, 'OWNER', ?, 'Awa', "
+                        + "'Ndiaye', ?)",
+                id, Timestamp.from(T0), Timestamp.from(T0), "Owner." + id + "@Example.cm", Timestamp.from(T0));
         return id;
     }
 

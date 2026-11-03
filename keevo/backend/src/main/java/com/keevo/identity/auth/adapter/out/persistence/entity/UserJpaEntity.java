@@ -23,10 +23,12 @@ import java.util.UUID;
 @Table(name = "users", schema = "public")
 public class UserJpaEntity extends JpaBaseEntity {
 
-    @Column(name = "phone_number", unique = true, nullable = false, length = 20)
+    // Story 19.1 (V41) — phone and password hash are optional: an account has at least one of phone, email,
+    // username (CHECK users_identifier_present).
+    @Column(name = "phone_number", unique = true, length = 20)
     private String phoneNumber;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
     @Column(name = "role", nullable = false, length = 20)
@@ -45,6 +47,25 @@ public class UserJpaEntity extends JpaBaseEntity {
     @Column(name = "locked_until")
     private Instant lockedUntil;
 
+    // Story 19.1 (V41) — unique case-insensitively through lower() expression indexes (not mapped as unique here).
+    @Column(name = "email", length = 254)
+    private String email;
+
+    @Column(name = "username", length = 50)
+    private String username;
+
+    @Column(name = "first_name", length = 100)
+    private String firstName;
+
+    @Column(name = "last_name", length = 100)
+    private String lastName;
+
+    @Column(name = "email_verified_at")
+    private Instant emailVerifiedAt;
+
+    @Column(name = "phone_verified_at")
+    private Instant phoneVerifiedAt;
+
     protected UserJpaEntity() {}
 
     public UserJpaEntity(UUID id, String phoneNumber, String passwordHash,
@@ -59,11 +80,32 @@ public class UserJpaEntity extends JpaBaseEntity {
         this.lockedUntil    = lockedUntil;
     }
 
+    /** Story 19.1 — full constructor including the optional identifiers and profile. */
+    public UserJpaEntity(UUID id, String phoneNumber, String passwordHash,
+                         String role, boolean active,
+                         int failedAttempts, Instant lockedUntil,
+                         String email, String username, String firstName, String lastName,
+                         Instant emailVerifiedAt, Instant phoneVerifiedAt) {
+        this(id, phoneNumber, passwordHash, role, active, failedAttempts, lockedUntil);
+        this.email           = email;
+        this.username        = username;
+        this.firstName       = firstName;
+        this.lastName        = lastName;
+        this.emailVerifiedAt = emailVerifiedAt;
+        this.phoneVerifiedAt = phoneVerifiedAt;
+    }
+
     public String  getPhoneNumber()    { return phoneNumber; }
     public String  getPasswordHash()   { return passwordHash; }
     public String  getRole()           { return role; }
     public boolean isActive()          { return active; }
     public int     getFailedAttempts() { return failedAttempts; }
     public Instant getLockedUntil()    { return lockedUntil; }
+    public String  getEmail()          { return email; }
+    public String  getUsername()       { return username; }
+    public String  getFirstName()      { return firstName; }
+    public String  getLastName()       { return lastName; }
+    public Instant getEmailVerifiedAt() { return emailVerifiedAt; }
+    public Instant getPhoneVerifiedAt() { return phoneVerifiedAt; }
 }
 

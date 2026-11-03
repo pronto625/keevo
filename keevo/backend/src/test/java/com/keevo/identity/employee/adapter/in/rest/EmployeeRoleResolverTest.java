@@ -49,4 +49,15 @@ class EmployeeRoleResolverTest {
 
         assertThat(resolver.resolvePhone(userId)).isNull();
     }
+
+    @Test
+    @DisplayName("19.1 — known user without phone: \"\" (never null for an existing account)")
+    void resolvePhone_returnsEmpty_whenKnownUserHasNoPhone() {
+        UUID userId = UUID.randomUUID();
+        User usernameOnly = new User(userId, null, "hash", com.keevo.identity.api.Role.EMPLOYEE, true,
+                java.time.Instant.now(), 0, null, null, "awa.n", null, null, null, null);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(usernameOnly));
+
+        assertThat(resolver.resolvePhone(userId)).isEqualTo("");
+    }
 }

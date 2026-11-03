@@ -75,7 +75,10 @@ public class ChangePasswordService implements ChangePasswordUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.INVALID_CREDENTIALS));
 
         // 2. Verify current password (Story 12.12: > 72 bytes can never match — skip BCrypt, no 500)
-        if (PasswordLimits.exceedsBcryptLimit(command.currentPassword())
+        // Story 19.1 — an OTP/social-only account has no hash: same INVALID_CREDENTIALS answer (setting a first
+        // password is story 19.2).
+        if (!user.hasPassword()
+                || PasswordLimits.exceedsBcryptLimit(command.currentPassword())
                 || !passwordEncoder.matches(command.currentPassword(), user.getPasswordHash())) {
             throw new DomainException(ErrorCode.INVALID_CREDENTIALS, "wrong current password");
         }

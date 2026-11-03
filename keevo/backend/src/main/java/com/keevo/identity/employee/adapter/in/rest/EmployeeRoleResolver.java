@@ -44,11 +44,12 @@ public class EmployeeRoleResolver {
      * <p>One lookup per employee, like {@link #resolveRole(UUID)}: lists are
      * bounded by {@code PlanLimitGuard} and the port offers no bulk finder.
      *
-     * @return the E.164 phone number, or {@code null} if the user is unknown
+     * @return the E.164 phone number, {@code ""} for a known user without phone (Story 19.1 — V1 clients never
+     *         get {@code null} for an existing account), or {@code null} if the user is unknown
      */
     public String resolvePhone(UUID userId) {
         return userRepository.findById(userId)
-                .map(User::getPhoneNumber)
+                .map(u -> u.getPhoneNumber() != null ? u.getPhoneNumber() : "")
                 .orElse(null);
     }
 

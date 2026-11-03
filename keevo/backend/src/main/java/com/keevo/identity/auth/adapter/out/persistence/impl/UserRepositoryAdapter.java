@@ -9,6 +9,9 @@ import com.keevo.identity.auth.domain.port.out.UserRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -39,25 +42,33 @@ public class UserRepositoryAdapter implements UserRepository {
             WHERE m.user_id = ? AND m.is_active = true
             """;
 
+    /**
+     * Story 19.1 — owners whose phone matches the recipient rule ({@code +<digits>}, as
+     * {@link OwnerRecipientResolverAdapter}) come first (an email-only owner cannot receive WhatsApp), then the
+     * oldest membership, tie-break on user id. Unchanged result for every tenant whose oldest owner has a phone.
+     * {@link #OWNERS_BY_SCHEMA_SQL} uses the same order.
+     */
     private static final String OWNER_BY_SCHEMA_SQL = """
             SELECT u.id, u.phone_number, u.password_hash, u.role, u.is_active,
-                   u.created_at, u.failed_attempts, u.locked_until
+                   u.created_at, u.failed_attempts, u.locked_until,
+                   u.email, u.username, u.first_name, u.last_name, u.email_verified_at, u.phone_verified_at
             FROM public.users u
             JOIN public.user_tenant_memberships m ON u.id = m.user_id
             JOIN public.tenants t ON t.id = m.tenant_id
             WHERE t.schema_name = ? AND m.role = 'OWNER' AND m.is_active = true
               AND u.is_active = true
-            ORDER BY m.created_at ASC, u.id ASC
+            ORDER BY (u.phone_number ~ '^\\+[0-9]+$') IS TRUE DESC, m.created_at ASC, u.id ASC
             LIMIT 1
             """;
     private static final String OWNERS_BY_SCHEMA_SQL = """
             SELECT u.id, u.phone_number, u.password_hash, u.role, u.is_active,
-                   u.created_at, u.failed_attempts, u.locked_until
+                   u.created_at, u.failed_attempts, u.locked_until,
+                   u.email, u.username, u.first_name, u.last_name, u.email_verified_at, u.phone_verified_at
             FROM public.users u
             JOIN public.user_tenant_memberships m ON u.id = m.user_id
             JOIN public.tenants t ON t.id = m.tenant_id
             WHERE t.schema_name = ? AND m.role = 'OWNER' AND m.is_active = true
-            ORDER BY u.created_at ASC
+            ORDER BY (u.phone_number ~ '^\\+[0-9]+$') IS TRUE DESC, m.created_at ASC, u.id ASC
             """;
 
     private final UserSpringRepository springRepository;
@@ -75,18 +86,28 @@ public class UserRepositoryAdapter implements UserRepository {
         return toDomain(saved);
     }
 
+    /**
+     * Story 19.1 — a null or blank phone never reaches Spring Data: a derived query would translate
+     * {@code null} into {@code phone_number IS NULL} and match phone-less (email/username-only) accounts.
+     */
     @Override
     public Optional<User> findByPhoneNumber(String phoneNumber) {
-        return springRepository.findByPhoneNumber(phoneNumber).map(this::toDomain);
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            return Optional.empty();
+        }
+        return springRepository.findByPhoneNumber(phoneNumber).map(UserRepositoryAdapter::toDomain);
     }
 
     @Override
     public Optional<User> findById(UUID id) {
-        return springRepository.findById(id).map(this::toDomain);
+        return springRepository.findById(id).map(UserRepositoryAdapter::toDomain);
     }
 
     @Override
     public boolean existsByPhoneNumber(String phoneNumber) {
+        if (phoneNumber == null || phoneNumber.isBlank()) {
+            return false; // Story 19.1 — see findByPhoneNumber
+        }
         return springRepository.existsByPhoneNumber(phoneNumber);
     }
 
@@ -116,19 +137,7 @@ public class UserRepositoryAdapter implements UserRepository {
     public Optional<User> findOwnerByTenantSchemaName(String schemaName) {
         List<User> results = jdbcTemplate.query(
                 OWNER_BY_SCHEMA_SQL,
-                (rs, rowNum) -> {
-                    var e = new com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity(
-                            (UUID) rs.getObject("id"),
-                            rs.getString("phone_number"),
-                            rs.getString("password_hash"),
-                            rs.getString("role"),
-                            rs.getBoolean("is_active"),
-                            rs.getInt("failed_attempts"),
-                            rs.getTimestamp("locked_until") != null
-                                    ? rs.getTimestamp("locked_until").toInstant() : null
-                    );
-                    return toDomain(e);
-                },
+                (rs, rowNum) -> mapUserRow(rs),
                 schemaName);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
@@ -137,38 +146,55 @@ public class UserRepositoryAdapter implements UserRepository {
     public List<User> findOwnersByTenantSchemaName(String schemaName) {
         return jdbcTemplate.query(
                 OWNERS_BY_SCHEMA_SQL,
-                (rs, rowNum) -> {
-                    var e = new com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity(
-                            (UUID) rs.getObject("id"),
-                            rs.getString("phone_number"),
-                            rs.getString("password_hash"),
-                            rs.getString("role"),
-                            rs.getBoolean("is_active"),
-                            rs.getInt("failed_attempts"),
-                            rs.getTimestamp("locked_until") != null
-                                    ? rs.getTimestamp("locked_until").toInstant() : null
-                    );
-                    return toDomain(e);
-                },
+                (rs, rowNum) -> mapUserRow(rs),
                 schemaName);
     }
 
     // ── Mapping ──────────────────────────────────────────────────────────────
 
-    private UserJpaEntity toEntity(User u) {
-        return new UserJpaEntity(
-            u.getId(), u.getPhoneNumber(), u.getPasswordHash(),
-            u.getRole().name(), u.isActive(),
-            u.failedAttempts(), u.lockedUntil()
+    private static User mapUserRow(ResultSet rs) throws SQLException {
+        Timestamp createdAt = rs.getTimestamp("created_at");
+        return new User(
+            (UUID) rs.getObject("id"),
+            rs.getString("phone_number"),
+            rs.getString("password_hash"),
+            Role.valueOf(rs.getString("role")),
+            rs.getBoolean("is_active"),
+            createdAt != null ? createdAt.toInstant() : Instant.now(),
+            rs.getInt("failed_attempts"),
+            instant(rs.getTimestamp("locked_until")),
+            rs.getString("email"),
+            rs.getString("username"),
+            rs.getString("first_name"),
+            rs.getString("last_name"),
+            instant(rs.getTimestamp("email_verified_at")),
+            instant(rs.getTimestamp("phone_verified_at"))
         );
     }
 
-    private User toDomain(UserJpaEntity e) {
+    private static Instant instant(Timestamp ts) {
+        return ts != null ? ts.toInstant() : null;
+    }
+
+    static UserJpaEntity toEntity(User u) {
+        return new UserJpaEntity(
+            u.getId(), User.normalizeIdentifier(u.getPhoneNumber()), u.getPasswordHash(),
+            u.getRole().name(), u.isActive(),
+            u.failedAttempts(), u.lockedUntil(),
+            User.normalizeIdentifier(u.getEmail()), User.normalizeIdentifier(u.getUsername()),
+            u.getFirstName(), u.getLastName(),
+            u.getEmailVerifiedAt(), u.getPhoneVerifiedAt()
+        );
+    }
+
+    static User toDomain(UserJpaEntity e) {
         return new User(
             e.getId(), e.getPhoneNumber(), e.getPasswordHash(),
             Role.valueOf(e.getRole()), e.isActive(),
             e.getCreatedAt() != null ? e.getCreatedAt() : Instant.now(),
-            e.getFailedAttempts(), e.getLockedUntil()
+            e.getFailedAttempts(), e.getLockedUntil(),
+            e.getEmail(), e.getUsername(), e.getFirstName(), e.getLastName(),
+            e.getEmailVerifiedAt(), e.getPhoneVerifiedAt()
         );
     }
 }

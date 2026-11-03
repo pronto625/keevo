@@ -347,6 +347,7 @@ development_status:
   m17-8-gating-config-rapports: backlog  # API bab15029 — écran Rapports : modifiable seulement si reportConfigEditable, sinon lecture seule « Rapport de fin de journée à 20:00 sur WhatsApp » + incitation Premium ; heures GET "HH:mm", PUT "HH:mm:ss"
   m17-7-notif-changement-prix-employe: backlog  # API 0e578d9d — notifications push EMPLOYEE_PRICE_CHANGED (ouvre la fiche produit) et EMPLOYEE_PRICE_CHANGED_BATCH (récapitulatif) : libellés, routage au toucher, centre de notifications ; rien à envoyer
   m17-2-leaderboard-vendeurs: backlog  # API 9448d043 — interrupteur owner « Afficher le classement aux employés » (confirmation à l'activation, PUT /tenant/leaderboard-visibility, GET leaderboardVisibleToEmployees) ; employé : onglet Classement, 403 FORBIDDEN « pas partagé » en état vide, sa boutique seule, ligne me:true, autres « Vendeur N »
+  m19-1-users-identifiants-multiples: backlog  # API 19-1 — profil : phoneNumber "" (jamais null) pour un compte sans téléphone, firstName/lastName de l'owner renseignés s'ils existent ; aucun nouvel écran
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -359,6 +360,7 @@ development_status:
   d16-2-a-la-carte-bundles: backlog  # API 165a3501 — page Packs (liste, création, modification, suppression) et application d'un pack
   d16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — page « Profils & plafonds » (plafonds, modules inclus, suivi de la resynchro)
   d16-14-api-prete-client-mobile: backlog  # API 525cbdaa — VALIDATION_ERROR avec le vrai message, CORE_MODULE_REQUIRED nommé, moduleId des profils, recherche par code, plan inconnu 404, historique paginé (limit/before)
+  d19-1-users-identifiants-multiples: backlog  # API 19-1 — liste des comptes : ownerPhone peut être "" (owner sans téléphone, à afficher « — ») ; rien d'autre
 
   # ─────────────────────────────────────────────────────────
   # Epic 17: Complétion Fonctionnelle & Gating Produit (Phase 7)
@@ -400,7 +402,7 @@ development_status:
   epic-18-retrospective: optional
 
   epic-19: backlog  # P1a Socle d'accueil
-  19-1-users-identifiants-multiples: in-progress  # 2026-11-03 build-auto (spec-19-1-users-identifiants-multiples.md)
+  19-1-users-identifiants-multiples: done  # 2026-11-03 build-auto done (spec-19-1-users-identifiants-multiples.md) — V41 identifiants multiples, 38 constats (15 corrigés), 5 016 tests verts, Redmi connexion OK ; essai copie prod en attente (décision user)
   19-2-authenticator-otp: backlog
   19-3-authenticators-google-apple: backlog
   19-4-login-username-membres: backlog

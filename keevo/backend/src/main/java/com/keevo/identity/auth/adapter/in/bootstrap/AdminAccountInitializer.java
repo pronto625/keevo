@@ -9,6 +9,10 @@ import com.keevo.identity.auth.adapter.out.persistence.jpa.UserSpringRepository;
 import com.keevo.identity.auth.adapter.out.persistence.jpa.UserTenantMembershipSpringRepository;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.shared.infrastructure.config.AdminProperties;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
+import org.springframework.core.env.StandardEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
@@ -63,12 +67,25 @@ public class AdminAccountInitializer implements ApplicationRunner {
     private final UserTenantMembershipSpringRepository membershipSpringRepository;
     private final PasswordEncoder                     passwordEncoder;
     private final AdminProperties                     adminProperties;
+    private final Environment                         environment;
 
     public AdminAccountInitializer(TenantSpringRepository tenantSpringRepository,
                                    UserSpringRepository userSpringRepository,
                                    UserTenantMembershipSpringRepository membershipSpringRepository,
                                    PasswordEncoder passwordEncoder,
                                    AdminProperties adminProperties) {
+        this(tenantSpringRepository, userSpringRepository, membershipSpringRepository, passwordEncoder,
+             adminProperties, new StandardEnvironment());
+    }
+
+    @Autowired
+    public AdminAccountInitializer(TenantSpringRepository tenantSpringRepository,
+                                   UserSpringRepository userSpringRepository,
+                                   UserTenantMembershipSpringRepository membershipSpringRepository,
+                                   PasswordEncoder passwordEncoder,
+                                   AdminProperties adminProperties,
+                                   Environment environment) {
+        this.environment             = environment;
         this.tenantSpringRepository  = tenantSpringRepository;
         this.userSpringRepository    = userSpringRepository;
         this.membershipSpringRepository = membershipSpringRepository;
@@ -108,6 +125,16 @@ public class AdminAccountInitializer implements ApplicationRunner {
         // Story 12.12 — canonical +<digits>: V10 rewrites unprefixed rows, so an unprefixed
         // ADMIN_PHONE would otherwise miss the existing row and create a second SUPER_ADMIN.
         String phone = PhoneNumbers.normalize(adminProperties.phone());
+        // Story 19.1 — a blank configured phone must not reach findByPhoneNumber (null would match a phone-less
+        // account) nor create a phone-less SUPER_ADMIN.
+        if (phone == null || phone.isBlank()) {
+            if (environment.acceptsProfiles(Profiles.of("prod"))) {
+                throw new IllegalStateException(
+                        "[AdminInit] ADMIN_PHONE is blank — set the super admin phone number (keevo.admin.phone)");
+            }
+            log.warn("[AdminInit] No super admin phone configured (ADMIN_PHONE) — super admin account not ensured");
+            return;
+        }
         UUID adminUserId;
         var existingUser = userSpringRepository.findByPhoneNumber(phone);
         if (existingUser.isEmpty()) {

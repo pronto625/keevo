@@ -458,6 +458,8 @@ So that **je n'ai pas besoin de mot de passe (parcours Bref)**.
 **When** un code est demandé
 **Then** la demande est refusée avec `PHONE_COUNTRY_NOT_SUPPORTED`
 
+- [ ] [Deferred-from: review 19-1, 2026-11-03] recherche par email : `findByEmail` via `lower(email) = lower(?)` (index `uq_users_email_lower`) et erreur métier en cas de violation d'unicité à l'enregistrement.
+
 **Implementation Notes:** porter la normalisation et le décompte d'échecs de `api-bref/src/otp/*` ; réutiliser `WhatsAppMessageService` existant pour le canal WhatsApp ; SMS/email via 19.9.
 
 ### Story 19.3 : Authenticators Google et Apple
@@ -495,6 +497,8 @@ So that **je n'ai rien à changer après la migration**.
 **Given** un owner
 **When** il crée un membre (`POST /employees`) avec un username sans téléphone
 **Then** le membre est créé ; l'unicité du username est globale ; le mot de passe temporaire n'est renvoyé qu'une fois (FUS-FR5)
+
+- [ ] [Deferred-from: review 19-1, 2026-11-03] recherche par identifiant : `findByUsername` via `lower(username) = lower(?)` (index `uq_users_username_lower`) ; désambiguïsation à la connexion entre un identifiant tout en chiffres (autorisé par la règle Bref `^[A-Za-z0-9._-]{1,50}$`) et un téléphone saisi sans « + ».
 
 ### Story 19.5 : Rôles MANAGER et VIEWER, permissions par rôle
 

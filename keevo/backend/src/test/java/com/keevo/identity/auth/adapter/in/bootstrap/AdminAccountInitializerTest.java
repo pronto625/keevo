@@ -50,6 +50,32 @@ class AdminAccountInitializerTest {
         initializer = new AdminAccountInitializer(tenantRepo, userRepo, membershipRepo, passwordEncoder, props);
     }
 
+    @Test
+    @DisplayName("19.1 — prod profile + blank configured phone: fails fast at startup, no user lookup")
+    void blankPhone_prod_failsFast() {
+        when(tenantRepo.existsById(AdminAccountInitializer.ADMIN_TENANT_ID)).thenReturn(true);
+        org.springframework.mock.env.MockEnvironment prod = new org.springframework.mock.env.MockEnvironment();
+        prod.setActiveProfiles("prod");
+        AdminAccountInitializer init = new AdminAccountInitializer(tenantRepo, userRepo, membershipRepo,
+                passwordEncoder, new AdminProperties("  ", "Admin@1234!"), prod);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> init.run(args))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ADMIN_PHONE");
+        verifyNoInteractions(userRepo, membershipRepo, passwordEncoder);
+    }
+
+    @Test
+    @DisplayName("19.1 — non-prod + blank configured phone: warning only, no lookup, no user created")
+    void blankPhone_ignored() {
+        when(tenantRepo.existsById(AdminAccountInitializer.ADMIN_TENANT_ID)).thenReturn(true);
+        for (String blank : new String[] {null, "", "   "}) {
+            new AdminAccountInitializer(tenantRepo, userRepo, membershipRepo, passwordEncoder,
+                    new AdminProperties(blank, "Admin@1234!")).run(args);
+        }
+        verifyNoInteractions(userRepo, membershipRepo, passwordEncoder);
+    }
+
     // ── First-boot: nothing exists ─────────────────────────────────────────
 
     @Nested

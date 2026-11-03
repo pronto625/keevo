@@ -127,6 +127,23 @@ class ChangePasswordServiceTest {
     }
 
     @Test
+    @DisplayName("19.1 — account without password hash → INVALID_CREDENTIALS, BCrypt never called, nothing saved")
+    void execute_noPasswordHash_invalidCredentials() {
+        User noHash = new User(userId, null, null, Role.OWNER, true, Instant.now(), 0, null,
+                "awa@example.cm", null, null, null, null, null);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(noHash));
+
+        ChangePasswordCommand cmd = new ChangePasswordCommand(userId, "AnyPass1", "NewPass1234");
+
+        assertThatThrownBy(() -> changePasswordService.execute(cmd))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.INVALID_CREDENTIALS.name());
+        verify(passwordEncoder, never()).matches(any(), any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("execute() should publish EmployeePasswordSetEvent on success")
     void execute_shouldPublishEmployeePasswordSetEvent_onSuccess() {
         when(userRepository.findById(userId)).thenReturn(Optional.of(user));
