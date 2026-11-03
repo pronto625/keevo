@@ -386,10 +386,10 @@ So that **ce que Keevo reproduit et ce que l'importeur lit restent alignés avec
 
 **Given** les dépôts `AI/bref` et `AI/api-bref`
 **When** la story démarre
-**Then** le commit de référence de `main` (ce qui tourne en prod) de chaque dépôt est noté dans ce document avec sa date (aucun tag ni règle imposés aux dépôts Bref), et un journal « Évolutions Bref » est ouvert en annexe de ce document
+**Then** le commit de référence de `main` (ce qui tourne en prod) de chaque dépôt est noté avec sa date (aucun tag ni règle imposés aux dépôts Bref), et le journal est ouvert dans `research/bref-evolutions/journal-evolutions-bref.md` avec son script de contrôle `check-bref.sh`
 
 **Given** un merge sur `main` d'un dépôt Bref (déployé en prod) depuis le dernier commit journalisé
-**When** la revue périodique est faite (au moins à chaque début de story des epics 20, 21, 23 et 24, et avant chaque vague de migration)
+**When** la revue est faite (**au début de chaque session de travail sur la fusion** — décision du 03/11/2026 —, et au moins à chaque début de story des epics 20, 21, 23 et 24 et avant chaque vague de migration)
 **Then** chaque commit est classé dans le journal : *sans impact* (texte, style, correctif local), *règle métier* (calcul, statut, quota, plan, TVA, numérotation), *schéma* (table, colonne, type, contrainte), *API/app* (contrat, écran, parcours)
 
 **Given** un commit classé *règle métier* ou *API/app*
@@ -793,7 +793,7 @@ So that **mes factures Bref sont reproduites à l'identique (FUS-FR19)**.
 
 **Acceptance Criteria:**
 
-**Given** `discount_amount`, `delivery_fee`, `vat_rate` (nullable, défaut vendeur), `vat_exempt`, `due_date`, `client_rccm`, `client_email`, `invoice_items.product_id` (nullable), `invoice_items.reference`
+**Given** `discount_amount`, `delivery_fee`, `vat_rate` (nullable, défaut vendeur), `vat_exempt`, `due_date`, `client_rccm`, `client_email`, `client_contact_name`, `client_website` (recopiés sur le document comme Bref le fait depuis `6faa8b4`, journal 18.3 ; `client_address` existe déjà), `invoice_items.product_id` (nullable), `invoice_items.reference`
 **When** une facture est calculée
 **Then** remise appliquée avant TVA, livraison hors assiette TVA, arrondi HALF_UP par ligne puis total, et le résultat est identique au calcul Bref sur 50 factures de référence extraites de la copie de prod (montants entiers XAF)
 
