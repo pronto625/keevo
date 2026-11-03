@@ -1,7 +1,7 @@
 package com.keevo.sync.sync.application.provider;
 
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner.SyncKeysetIndex;
+import com.keevo.shared.infrastructure.persistence.SyncKeysetIndex;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.application.port.sync.PullScope;
 import jakarta.persistence.EntityManager;
@@ -104,10 +104,10 @@ class SyncKeysetIndexesMatchProvidersTest {
         Map<String, Discovered> providers = providersUsingDeltaPageQuery();
         // Story 15.5b — a module table's index (e.g. invoices) belongs to the module's own delta provider, checked
         // by the module's tests (InvoiceDeltaProviderTest); the providers of com.keevo.sync read core tables only.
-        List<SyncKeysetIndex> core = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.stream()
+        List<SyncKeysetIndex> core = SyncKeysetIndex.SYNC_KEYSET_INDEXES.stream()
                 .filter(i -> !i.moduleTable()).toList();
-        assertThat(TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.stream().map(SyncKeysetIndex::table).distinct())
-                .as("one index per table").hasSameSizeAs(TenantSchemaProvisioner.SYNC_KEYSET_INDEXES);
+        assertThat(SyncKeysetIndex.SYNC_KEYSET_INDEXES.stream().map(SyncKeysetIndex::table).distinct())
+                .as("one index per table").hasSameSizeAs(SyncKeysetIndex.SYNC_KEYSET_INDEXES);
         Map<String, SyncKeysetIndex> byTable = core.stream()
                 .collect(Collectors.toMap(SyncKeysetIndex::table, Function.identity()));
         assertThat(byTable.keySet()).containsExactlyInAnyOrderElementsOf(providers.keySet());

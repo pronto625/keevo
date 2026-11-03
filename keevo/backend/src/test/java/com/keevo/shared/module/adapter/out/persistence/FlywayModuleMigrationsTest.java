@@ -71,17 +71,23 @@ class FlywayModuleMigrationsTest {
     }
 
     @Test
-    @DisplayName("Flyway never gets the pool: a Hikari pool is replaced by a DriverManagerDataSource, others refused")
+    @DisplayName("Flyway never gets the application pool: its own small lazy Hikari pool (same URL), closed with the bean; driver-based kept, others refused")
     void dedicatedDataSource() throws SQLException {
         try (HikariDataSource pool = new HikariDataSource()) { // lazy: no connection opened
             pool.setJdbcUrl("jdbc:postgresql://db.example/keevo");
             pool.setUsername("keevo");
             pool.setPassword("secret");
-            DataSource dedicated = new FlywayModuleMigrations(pool).dedicatedDataSource();
-            assertThat(dedicated).isInstanceOf(DriverManagerDataSource.class).isNotSameAs(pool);
-            DriverManagerDataSource dm = (DriverManagerDataSource) dedicated;
-            assertThat(dm.getUrl()).isEqualTo("jdbc:postgresql://db.example/keevo");
-            assertThat(dm.getUsername()).isEqualTo("keevo");
+            FlywayModuleMigrations migrations = new FlywayModuleMigrations(pool, 3);
+            DataSource dedicated = migrations.dedicatedDataSource();
+            assertThat(dedicated).isInstanceOf(HikariDataSource.class).isNotSameAs(pool);
+            HikariDataSource own = (HikariDataSource) dedicated;
+            assertThat(own.getJdbcUrl()).isEqualTo("jdbc:postgresql://db.example/keevo");
+            assertThat(own.getUsername()).isEqualTo("keevo");
+            assertThat(own.getMaximumPoolSize()).isEqualTo(4); // parallelism + 1
+            assertThat(own.getMinimumIdle()).isZero();
+            assertThat(migrations.dedicatedDataSource()).isSameAs(own); // one pool per bean
+            migrations.close();
+            assertThat(own.isClosed()).isTrue();
         }
         DriverManagerDataSource plain = new DriverManagerDataSource("jdbc:postgresql://unused/db");
         assertThat(new FlywayModuleMigrations(plain).dedicatedDataSource()).isSameAs(plain);
@@ -89,5 +95,27 @@ class FlywayModuleMigrationsTest {
         SingleConnectionDataSource single = new SingleConnectionDataSource("jdbc:postgresql://unused/db", true);
         assertThatThrownBy(() -> new FlywayModuleMigrations(single).dedicatedDataSource())
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("16.12: Flyway placeholders are off — no module script may contain ${ (registration runs the raw text)")
+    void noPlaceholderInModuleScripts() throws Exception {
+        org.springframework.core.io.Resource[] scripts = new org.springframework.core.io.support
+                .PathMatchingResourcePatternResolver().getResources("classpath*:db/modules/**/*.sql");
+        assertThat(scripts).isNotEmpty();
+        for (org.springframework.core.io.Resource script : scripts) {
+            assertThat(script.getContentAsString(java.nio.charset.StandardCharsets.UTF_8))
+                    .as(script.getDescription()).doesNotContain("${");
+        }
+    }
+
+    @Test
+    @DisplayName("16.12: an outcome version ignores the 0 baseline and the empty schema")
+    void meaningfulVersions() {
+        assertThat(FlywayModuleMigrations.meaningful(null)).isNull();
+        assertThat(FlywayModuleMigrations.meaningful("0")).isNull();
+        assertThat(FlywayModuleMigrations.meaningful("<< Empty Schema >>")).isNull();
+        assertThat(FlywayModuleMigrations.meaningful("1")).isEqualTo("1");
+        assertThat(FlywayModuleMigrations.meaningful("2.1")).isEqualTo("2.1");
     }
 }

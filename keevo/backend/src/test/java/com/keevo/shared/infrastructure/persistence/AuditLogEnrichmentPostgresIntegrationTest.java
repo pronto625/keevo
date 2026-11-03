@@ -101,7 +101,7 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
 
     @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED) // own connections take table locks
-    @DisplayName("boot/request sync upgrades a pre-V14 tenant: columns + trigger added, legacy row kept with NULLs")
+    @DisplayName("Story 16.12 — the foundation scripts upgrade a pre-V14 tenant: columns + trigger added, legacy row kept with NULLs")
     void tenantSync_upgradesLegacyTenant() throws Exception {
         String schema = uniqueSchema();
         UUID legacyId = UUID.randomUUID();
@@ -118,7 +118,7 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
                         + "VALUES ('" + legacyId + "', gen_random_uuid(), 'Product', gen_random_uuid(), 'PRODUCT_CREATED', '{}')");
             }
 
-            new TenantSchemaSyncService(dataSource).syncNow(schema);
+            TenantFoundation.upgrade(dataSource, schema);
 
             assertThat(columns(schema)).containsAll(NEW_COLUMNS);
             assertThat(triggers(schema)).contains("trg_audit_log_no_mutation", "trg_audit_log_no_truncate");
@@ -126,8 +126,8 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
                     + schema + "\".audit_log WHERE id = ?", Boolean.class, legacyId)).isTrue();
             assertMutationsRejected(schema);
 
-            // idempotent: a second sync (next boot) is a no-op
-            new TenantSchemaSyncService(dataSource).syncNow(schema);
+            // idempotent: a second run (next version check) is a no-op
+            TenantFoundation.upgrade(dataSource, schema);
         } finally {
             dropSchema(schema);
         }

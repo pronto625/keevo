@@ -10,7 +10,7 @@ import com.keevo.inventory.stock.adapter.out.export.StockLevelsExportDatasetProv
 import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.infrastructure.persistence.TenantFoundation;
 import com.keevo.shared.infrastructure.security.TestAccess;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -55,7 +55,7 @@ class StockTrackingFullContextTest extends FullContextIntegrationTest {
     @Autowired TransactionTemplate tx;
     @Autowired SessionTokenIssuer issuer;
     @Autowired StockLevelsExportDatasetProvider stockExport;
-    @Autowired TenantSchemaSyncService schemaSync;
+    @Autowired javax.sql.DataSource foundationDataSource;
     @Autowired com.keevo.catalog.product.adapter.out.export.ProductsExportDatasetProvider productsExport;
     @Autowired com.keevo.reporting.dashboard.application.service.DashboardService dashboardService;
     @Autowired com.keevo.reporting.report.application.service.EndOfDayReportBuilder endOfDay;
@@ -509,7 +509,7 @@ class StockTrackingFullContextTest extends FullContextIntegrationTest {
         jdbc.update("INSERT INTO \"" + schema + "\".products (id, name, sku, price) VALUES (?, 'Ancien', 'KEV-OLD001', 500)",
                 old);
 
-        schemaSync.syncNow(schema);
+        TenantFoundation.upgrade(foundationDataSource, schema);
 
         assertThat(trackStock(old)).isTrue();
         assertThat(jdbc.queryForObject("SELECT column_default FROM information_schema.columns WHERE table_schema = ? "

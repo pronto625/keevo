@@ -23,7 +23,7 @@ import java.util.UUID;
  * TenantFactory — Creates and provisions a new isolated tenant workspace.
  *
  * <p>GoF Pattern: Factory — encapsulates complex multi-step tenant creation:
- * code generation → schema creation → Flyway migration → role seeding → subscription init.
+ * code generation → schema creation → foundation module scripts → role seeding → subscription init.
  *
  * <p>Called WITHIN the RegistrationService transaction boundary — rollback on any failure.
  *
@@ -72,7 +72,7 @@ public class TenantFactory {
      *   <li>Generate unique tenant code (KV-XXXXXX)</li>
      *   <li>Derive schema name (kv_xxxxxx)</li>
      *   <li>Save tenant to public registry</li>
-     *   <li>Create PostgreSQL schema + run Flyway migrations</li>
+     *   <li>Create PostgreSQL schema + foundation module scripts + seeds</li>
      * </ol>
      *
      * @return the created and persisted Tenant domain object
@@ -95,8 +95,9 @@ public class TenantFactory {
         );
         Tenant savedTenant = tenantRepository.save(tenant);
 
-        // 3. Provision tenant schema: CREATE SCHEMA + DDL tables + seed data
-        //    Programmatic DDL defined in TenantSchemaProvisioner (no SQL files).
+        // 3. Provision tenant schema: CREATE SCHEMA + tables + seed data, in one transaction.
+        //    Story 16.12: the tables come from the foundation module migrations (db/modules/<id>/V*.sql), executed
+        //    by TenantSchemaProvisioner on its connection (Flyway cannot see the uncommitted schema).
         //    Compensating action (dropSchemaIfExists) prevents orphaned schemas on failure (AC4).
         //    Story 9-2 — plan history starts with the trial (same registration transaction); inside
         //    the try so a failure also drops the provisioned schema.
@@ -114,9 +115,11 @@ public class TenantFactory {
             throw e;
         }
 
-        // Story 13.9 — the module migrations of the active (free) modules, once the core DDL exists: after the
-        // registration commits (the module provisioner reads the committed tenant row); a failure never fails the
-        // registration — the tables already exist (core DDL) and the next start provisions it again.
+        // Story 13.9 / 16.12 — Flyway for the active modules after the registration commits (the module provisioner
+        // reads the committed tenant row): the foundation scripts, already executed above, are re-applied
+        // idempotently and their history recorded; paid modules active for the trial get their tables. A failure
+        // never fails the registration — the foundation tables already exist, and the next start (or the tenant's
+        // first request) provisions what is missing.
         afterCommit(() -> moduleProvisioner.provisionActiveModules(schemaName), savedTenant.getCode());
 
         return savedTenant;

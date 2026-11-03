@@ -29,11 +29,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Story v1s-13-12 — tenant schema provisioning hygiene on a real PostgreSQL 16 migrated by
  * Flyway (V1–V13): idempotent public CHECK constraints (V13), complete tenant {@code users}
- * DDL, and the boot-time full sync of existing tenants by {@link TenantSchemaMigrationRunner}.
+ * DDL, and (Story 16.12) the boot-time upgrade of existing tenants by {@link TenantSchemaMigrationRunner}
+ * through the foundation module migrations (real {@code ModuleProvisionerService}, catalogue and Flyway).
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class, TenantSchemaMigrationRunner.class})
+@Import({TenantSchemaProvisioner.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @ActiveProfiles("test")
 @DisplayName("Tenant schema provisioning hygiene on PostgreSQL (Story v1s-13-12)")
@@ -67,7 +68,21 @@ class SchemaProvisioningHygienePostgresIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired DataSource dataSource;
     @Autowired TenantSchemaProvisioner provisioner;
-    @Autowired TenantSchemaMigrationRunner runner;
+    TenantSchemaMigrationRunner runner;
+
+    @org.junit.jupiter.api.BeforeEach
+    void runner() {
+        com.keevo.shared.module.application.ModuleCatalog catalog = new com.keevo.shared.module.application.ModuleCatalog(
+                new org.springframework.core.io.support.PathMatchingResourcePatternResolver());
+        com.keevo.shared.module.adapter.out.persistence.JdbcTenantModuleStateStore store =
+                new com.keevo.shared.module.adapter.out.persistence.JdbcTenantModuleStateStore(dataSource);
+        com.keevo.shared.module.ModuleRegistry registry = new com.keevo.shared.module.application.ModuleRegistryService(
+                catalog, store, new com.keevo.shared.module.infrastructure.RequestScopedActiveModulesCache(),
+                java.time.Clock.systemUTC());
+        runner = new TenantSchemaMigrationRunner(new com.keevo.shared.module.application.ModuleProvisionerService(
+                catalog, registry, store, store,
+                new com.keevo.shared.module.adapter.out.persistence.FlywayModuleMigrations(dataSource)), 2);
+    }
 
     // ── V13 — public CHECK constraints ───────────────────────────────────────
 
@@ -119,7 +134,7 @@ class SchemaProvisioningHygienePostgresIntegrationTest {
         }
     }
 
-    // ── Tenant provisioning + boot-time sync ─────────────────────────────────
+    // ── Tenant provisioning + boot-time upgrade (foundation module migrations) ─
 
     @Test
     @DisplayName("provision(): tenant users has failed_attempts INTEGER NOT NULL DEFAULT 0 and locked_until TIMESTAMPTZ")
@@ -155,19 +170,18 @@ class SchemaProvisioningHygienePostgresIntegrationTest {
 
     @Test
     @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
-    @DisplayName("boot (follow-up): a tenant whose schema no longer exists is skipped (WARN), not failed")
+    @DisplayName("boot (follow-up): a tenant whose schema no longer exists is skipped, not failed nor created")
     void runnerSkipsTenantWhoseSchemaIsMissing(org.springframework.boot.test.system.CapturedOutput output) {
         String schema = "kv_hyg009";   // valid name, never provisioned
         registerTenant(schema, "KV-HYG009");
         try {
-            runner.runAll();
+            com.keevo.shared.module.FoundationUpgrade upgrade = runner.runAll();
 
             Integer schemas = jdbc.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name = ?", Integer.class, schema);
             assertThat(schemas).isZero();
-            assertThat(output.getOut() + output.getErr())
-                    .contains("skipping tenant schema '" + schema + "' — schema does not exist")
-                    .doesNotContain("FAILED for schema '" + schema + "'");
+            assertThat(upgrade.failed()).isZero();
+            assertThat(output.getOut() + output.getErr()).contains("Tenant tables:").doesNotContain("FAILED");
         } finally {
             jdbc.update("DELETE FROM public.tenants WHERE schema_name = ?", schema);
         }

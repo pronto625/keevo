@@ -897,7 +897,8 @@ Procédure pas-à-pas pour le serveur de prod existant : `docs/MOP_MISE_A_JOUR_P
 - [ ] Prévoir une fenêtre calme : au premier démarrage, Flyway applique V8→V26, puis
       `TenantSchemaSyncService` met à jour chaque schéma tenant (colonnes `reports.updated_at`,
       `sales.mobile_money_ref`, `sync_operations_log.device_id`, …) et `SyncKeysetIndexJob` construit les
-      index de synchro en arrière-plan (budget 5 h, `CONCURRENTLY`).
+      index de synchro en arrière-plan (budget 5 h, `CONCURRENTLY`). (Lot V1 2.0.x ; depuis la refonte — story
+      16.12 — ce service n'existe plus : voir §19.)
 
 ### 18.2bis Répétition faite en local (2026-10-14)
 Backend `deploy` (V7) démarré sur une base vide puis alimenté par son API (propriétaire, accueil, 3 produits
@@ -1012,3 +1013,47 @@ comme l'API de staging :
       unique (§15, étape 6).
 - [ ] Compte super-admin de staging : `ADMIN_PHONE` / `ADMIN_PASSWORD` restent dans `~/keevo-staging/.env`
       (pas encore de secrets GitHub dédiés pour staging).
+
+## 19. Tables des tenants : migrations des modules (refonte, story 16.12)
+
+Les tables d'un schéma tenant (`kv_xxxxxx`) n'ont plus qu'un auteur : les migrations `V1__<module>_baseline.sql`
+des modules gratuits (`db/modules/{core,store,catalog,inventory,crm,pos,sync,reporting,messaging}`), idempotentes
+pour toujours. Il n'y a plus de copie `public → tenant` (`TenantSchemaSyncService` supprimé) ni de DDL Java.
+
+- **Inscription** : `TenantSchemaProvisioner` exécute ces scripts dans la transaction d'inscription (ordre des
+  modules), puis les données initiales ; après le commit, Flyway les rejoue sans effet et écrit l'historique
+  `flyway_history_<module>` et `tenant_modules.provisioned_version`.
+- **Démarrage** (`TenantSchemaMigrationRunner`, avant l'ouverture du port HTTP) : une requête ensembliste repère
+  les tenants dont une version de module de base manque ou est en retard ; seuls ceux-là passent par Flyway,
+  `keevo.tenant-schema.upgrade-parallelism` à la fois (défaut 4). Ligne de journal unique :
+  « Tenant tables: N tenant(s) checked, P provisioned, F failed, D ms ». Un échec ne bloque pas le démarrage.
+- **Premier démarrage après la mise en production de la refonte** : chaque tenant existant est mis à niveau une fois
+  (9 exécutions Flyway par tenant ; mesurer la durée sur la copie de prod, story 16.7, et dimensionner les sondes de
+  démarrage/disponibilité en conséquence). Les démarrages suivants ne lancent aucun Flyway. Contrôle (les 9 modules
+  de base, `core` compris — il n'a pas de ligne `tenant_modules`, seul son historique fait foi) :
+
+  ```sql
+  SELECT m.module, count(c.oid) AS schemas_avec_historique,
+         (SELECT count(*) FROM public.tenants t WHERE t.status <> 'DELETED' AND t.schema_name ~ '^kv_') AS tenants
+  FROM unnest(ARRAY['core','store','catalog','inventory','crm','pos','sync','reporting','messaging']) AS m(module)
+  LEFT JOIN pg_class c ON c.relname = 'flyway_history_' || m.module AND c.relkind = 'r'
+  LEFT JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname ~ '^kv_[a-z0-9]{6}$'
+  GROUP BY m.module ORDER BY m.module;
+  ```
+  Chaque ligne doit afficher autant de schémas que de tenants vivants ; la ligne de démarrage
+  « Tenant tables: … 0 failed » confirme que chaque historique est à la dernière version.
+- Un tenant atteint avant la fin de la mise à niveau est mis à niveau sur sa première requête
+  (`ModuleProvisioner.ensureFoundation`) ; en cas d'échec la requête reçoit 503 « Service momentanément
+  indisponible » et réessaie à la suivante.
+- Schémas « dérivés » (anciennes copies `LIKE public`) : les scripts ajoutent index, valeurs par défaut et clés
+  primaires manquants, **jamais de clé étrangère** sur une table existante (décision 16.12, à revérifier sur la
+  copie de prod en 16.7). Aucune donnée modifiée (seuls `day_closures.received_at` / `reports.updated_at` sont
+  remplis quand la colonne vient d'être ajoutée). Les copies parasites de tables globales restent en place et sont
+  comptées au démarrage (`GlobalTableStrayCopiesReporter`).
+- Un script de module déjà appliqué ne se modifie jamais : un script modifié fait échouer ce module
+  (somme de contrôle Flyway) — toute évolution est un nouveau `V2__…`, idempotent lui aussi.
+- **Règle** : une nouvelle colonne ou table d'un schéma tenant arrive **uniquement** par une migration `V2+` du
+  module concerné (`db/modules/<module>/`), jamais par une migration publique (`db/migration`) — il n'y a plus de
+  copie `public → tenant`. (Les commentaires des scripts publics déjà appliqués, V38… compris, citent encore
+  l'ancien service de synchronisation : ils ne se modifient pas.) Voir `src/main/resources/db/modules/README.md`.
+

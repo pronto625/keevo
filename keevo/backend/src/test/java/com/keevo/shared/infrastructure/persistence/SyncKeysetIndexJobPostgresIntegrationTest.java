@@ -1,6 +1,5 @@
 package com.keevo.shared.infrastructure.persistence;
 
-import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner.SyncKeysetIndex;
 import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,13 +41,13 @@ import static org.mockito.Mockito.mock;
 class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest {
 
     /** Indexes of core tables: built at provisioning. */
-    private static final int INDEX_COUNT = (int) TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.stream()
+    private static final int INDEX_COUNT = (int) SyncKeysetIndex.SYNC_KEYSET_INDEXES.stream()
             .filter(i -> !i.moduleTable()).count();
     /**
      * Story 15.5b — indexes of module tables (invoices): never built at core provisioning; the job skips them in a
      * schema without the module's tables (the schemas of this test).
      */
-    private static final int MODULE_INDEX_COUNT = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.size() - INDEX_COUNT;
+    private static final int MODULE_INDEX_COUNT = SyncKeysetIndex.SYNC_KEYSET_INDEXES.size() - INDEX_COUNT;
 
     @Autowired JdbcTemplate jdbc;
     @Autowired DataSource dataSource;
@@ -61,7 +60,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
     void dropSchemas() {
         tenantIds.forEach(id -> jdbc.update("DELETE FROM public.tenants WHERE id = ?", id));
         schemas.forEach(s -> jdbc.execute("DROP SCHEMA IF EXISTS \"" + s + "\" CASCADE"));
-        provisioner.syncKeysetIndexes = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES;
+        provisioner.syncKeysetIndexes = SyncKeysetIndex.SYNC_KEYSET_INDEXES;
     }
 
     @Test
@@ -200,7 +199,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
     void provisionSurvivesAFailingIndex() {
         List<SyncKeysetIndex> withBogus = new ArrayList<>();
         withBogus.add(new SyncKeysetIndex("idx_bogus_sync_keyset", "no_such_table", "updated_at"));
-        withBogus.addAll(TenantSchemaProvisioner.SYNC_KEYSET_INDEXES);
+        withBogus.addAll(SyncKeysetIndex.SYNC_KEYSET_INDEXES);
         provisioner.syncKeysetIndexes = withBogus;
 
         String schema = provision(randomSchema());
@@ -273,7 +272,7 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
     }
 
     private void dropKeysetIndexes(String schema) {
-        for (SyncKeysetIndex index : TenantSchemaProvisioner.SYNC_KEYSET_INDEXES) {
+        for (SyncKeysetIndex index : SyncKeysetIndex.SYNC_KEYSET_INDEXES) {
             jdbc.execute("DROP INDEX IF EXISTS \"" + schema + "\"." + index.name());
         }
         assertThat(keysetIndexes(schema)).isEmpty();

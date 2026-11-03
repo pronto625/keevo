@@ -13,7 +13,7 @@ import com.keevo.invoicing.invoice.domain.model.VatTreatment;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner.SyncKeysetIndex;
+import com.keevo.shared.infrastructure.persistence.SyncKeysetIndex;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -93,7 +93,7 @@ class InvoiceDeltaProviderTest {
     @Test
     @DisplayName("its cursor leads the invoices entry of SYNC_KEYSET_INDEXES (module table, created by V6)")
     void cursorMatchesTheKeysetIndex() {
-        SyncKeysetIndex index = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.stream()
+        SyncKeysetIndex index = SyncKeysetIndex.SYNC_KEYSET_INDEXES.stream()
                 .filter(i -> i.table().equals("invoices")).findFirst().orElseThrow();
         assertThat(index.cursor()).isEqualTo(InvoiceDeltaProvider.CURSOR).isEqualTo("updated_at");
         assertThat(index.moduleId()).isEqualTo("invoicing");

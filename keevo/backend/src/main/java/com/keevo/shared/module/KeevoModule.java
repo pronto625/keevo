@@ -39,15 +39,6 @@ public interface KeevoModule {
     }
 
     /**
-     * For a module converted after its tables already existed in tenant schemas: the probe table and version at which
-     * such a schema is baselined without running the scripts (see {@link ExistingSchemaBaseline}). Empty (default):
-     * every script runs from {@code V1} on every schema.
-     */
-    default Optional<ExistingSchemaBaseline> existingSchemaBaseline() {
-        return Optional.empty();
-    }
-
-    /**
      * Story 14.1 — the permissions of this module (manifest {@code permissions}) granted to an {@code EMPLOYEE}.
      * The role mapping of a module's permissions is declared by the module: {@code OWNER} holds every permission of
      * every module, {@code EMPLOYEE} only those returned here, {@code SUPER_ADMIN} none (it is not a tenant user).

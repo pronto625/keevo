@@ -232,6 +232,37 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
         return versions;
     }
 
+    static final String PROVISIONED_VERSIONS_MANY_SQL = """
+            SELECT t.schema_name, tm.module_id, tm.provisioned_version
+            FROM public.tenants t
+            JOIN public.tenant_modules tm ON tm.tenant_id = t.id
+            WHERE t.status <> 'DELETED' AND tm.module_id = ANY (?) AND tm.provisioned_version IS NOT NULL
+            """;
+
+    /** Story 16.12 — one query for every live tenant and every requested module. */
+    @Override
+    public Map<String, Map<String, String>> provisionedVersions(java.util.Collection<String> moduleIds) {
+        Map<String, Map<String, String>> versions = new LinkedHashMap<>();
+        if (moduleIds.isEmpty()) {
+            return versions;
+        }
+        jdbc.query(con -> {
+            java.sql.PreparedStatement ps = con.prepareStatement(PROVISIONED_VERSIONS_MANY_SQL);
+            ps.setArray(1, con.createArrayOf("varchar", moduleIds.toArray()));
+            return ps;
+        }, (org.springframework.jdbc.core.RowCallbackHandler) rs -> versions
+                .computeIfAbsent(rs.getString("schema_name"), k -> new LinkedHashMap<>())
+                .put(rs.getString("module_id"), rs.getString("provisioned_version")));
+        return versions;
+    }
+
+    /** Story 16.12 — one row by schema name (logs only). */
+    @Override
+    public Optional<String> tenantCode(String tenantSchema) {
+        return jdbc.query("SELECT code FROM public.tenants WHERE schema_name = ? LIMIT 1",
+                (rs, i) -> rs.getString(1), tenantSchema).stream().findFirst();
+    }
+
     @Override
     public List<LiveTenant> liveTenants() {
         return jdbc.query(LIVE_TENANTS_SQL,

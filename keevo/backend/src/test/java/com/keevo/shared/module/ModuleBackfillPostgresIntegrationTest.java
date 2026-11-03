@@ -61,7 +61,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 /**
  * Story 16.5 — the {@code tenant_modules} backfill end to end on PostgreSQL with the shipped catalogue: a fresh
  * database migrated with the public Flyway (V32 back-labelling checked on rows written before it), real tenant
- * schemas ({@link TenantSchemaProvisioner}), real JDBC stores, real module migrations (crm baseline adoption,
+ * schemas ({@link TenantSchemaProvisioner}), real JDBC stores, real module migrations (foundation modules — 16.12,
  * invoicing), the row sync behind a Spring transaction proxy and the production ShedLock provider. Every row of the
  * spec's I/O matrix: trial, expired not yet downgraded, downgraded in grace, plain Free, super-admin row, unreadable
  * plan, missing schema, platform tenant, dry run, re-run, plan change after the backfill (and its rollback),
@@ -347,7 +347,8 @@ class ModuleBackfillPostgresIntegrationTest {
         assertThat(rows(NO_SUBSCRIPTIONS)).isEmpty();
         assertThat(rows(NO_SCHEMA)).isEmpty();
 
-        // crm adopted (baseline) for every synced tenant: SYSTEM ACTIVE/FREE row; invoicing for enabled tenants
+        // Story 16.12: the 9 foundation modules (crm among them, V1 idempotent, no baseline any more) provisioned for
+        // every synced tenant — crm keeps its SYSTEM ACTIVE/FREE row; invoicing for enabled tenants
         for (Tenant t : List.of(TRIAL, EXPIRED, GRACED, FREE, ADMIN_ROW)) {
             assertThat(rows(t).get("crm")).startsWith("ACTIVE/FREE/SYSTEM");
             assertThat(provisionedVersion(t, "crm")).isEqualTo("1");
@@ -355,7 +356,7 @@ class ModuleBackfillPostgresIntegrationTest {
         assertThat(provisionedVersion(TRIAL, "invoicing")).isEqualTo(latestInvoicing());
         assertThat(provisionedVersion(ADMIN_ROW, "invoicing")).isEqualTo(latestInvoicing());
         assertThat(provisionedVersion(EXPIRED, "invoicing")).isNull(); // read-only: not provisioned
-        assertThat(real.modulesProvisioned()).isEqualTo(5 + 2);
+        assertThat(real.modulesProvisioned()).isEqualTo(5 * 9 + 2);
 
         BackfillReport again = backfill().run(false);
         assertThat(again.rowsWritten()).isZero();

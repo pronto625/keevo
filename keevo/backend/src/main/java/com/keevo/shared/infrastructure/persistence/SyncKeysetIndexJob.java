@@ -1,6 +1,5 @@
 package com.keevo.shared.infrastructure.persistence;
 
-import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner.SyncKeysetIndex;
 import net.javacrumbs.shedlock.core.LockConfiguration;
 import net.javacrumbs.shedlock.core.LockProvider;
 import net.javacrumbs.shedlock.core.SimpleLock;
@@ -26,12 +25,12 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * SyncKeysetIndexJob — builds the keyset pull indexes ({@link TenantSchemaProvisioner#SYNC_KEYSET_INDEXES})
+ * SyncKeysetIndexJob — builds the keyset pull indexes ({@link SyncKeysetIndex#SYNC_KEYSET_INDEXES})
  * on EXISTING tenant schemas, in the background (Story 11.5).
  *
  * <p>New schemas get the indexes at provisioning (empty tables). Existing schemas may hold large
  * tables, so the indexes are never built on the request path nor inside
- * {@link TenantSchemaSyncService}: this job runs once after {@link ApplicationReadyEvent} (on its
+ * the module migrations (Story 16.12): this job runs once after {@link ApplicationReadyEvent} (on its
  * own thread, the boot is not delayed) and again every day, on a single instance (ShedLock lock
  * {@value #LOCK_NAME}).
  *
@@ -77,6 +76,12 @@ public class SyncKeysetIndexJob {
             + "LEFT JOIN pg_index i ON i.indexrelid = c.oid "
             + "WHERE n.nspname = ? AND c.relname = ?";
 
+    /** Non-deleted tenants, with whether their schema still exists. */
+    static final String LOAD_TENANTS_SQL =
+            "SELECT t.schema_name, EXISTS (SELECT 1 FROM information_schema.schemata s "
+            + "WHERE s.schema_name = t.schema_name) AS schema_present "
+            + "FROM public.tenants t WHERE t.status <> 'DELETED'";
+
     static final String TABLE_EXISTS_SQL =
             "SELECT 1 FROM information_schema.tables WHERE table_schema = ? AND table_name = ?";
 
@@ -117,7 +122,7 @@ public class SyncKeysetIndexJob {
 
     // ── Triggers ─────────────────────────────────────────────────────────────
 
-    /** After the boot (schema sync already done by TenantSchemaMigrationRunner), on its own thread. */
+    /** After the boot (foundation tables already upgraded by TenantSchemaMigrationRunner), on its own thread. */
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         if (!enabled) return;
@@ -207,7 +212,7 @@ public class SyncKeysetIndexJob {
             conn.setAutoCommit(true); // CONCURRENTLY cannot run inside a transaction block
             boolean aborted = false;
             try {
-                List<SyncKeysetIndex> indexes = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES;
+                List<SyncKeysetIndex> indexes = SyncKeysetIndex.SYNC_KEYSET_INDEXES;
                 for (int i = 0; i < indexes.size(); i++) {
                     if (budgetSpent(startedAt)) {
                         log.warn("SyncKeysetIndexJob: run budget {} spent — {} index(es) of schema {} left "
@@ -348,7 +353,7 @@ public class SyncKeysetIndexJob {
         List<String> schemas = new ArrayList<>();
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(TenantSchemaMigrationRunner.LOAD_TENANTS_SQL)) {
+             ResultSet rs = stmt.executeQuery(LOAD_TENANTS_SQL)) {
             while (rs.next()) {
                 String schema = rs.getString("schema_name");
                 if (rs.getBoolean("schema_present") && TenantSchema.isValid(schema)) schemas.add(schema);

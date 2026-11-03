@@ -3,7 +3,9 @@ package com.keevo.shared.infrastructure.security;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.module.ModuleProvisioner;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.access.AccessState;
 import com.keevo.shared.infrastructure.security.access.AccessStateService;
 import jakarta.servlet.FilterChain;
@@ -51,14 +53,14 @@ class JwtAuthFilterTest {
 
     private final JwtTokenProvider jwt = TestJwtKeys.provider(new JwtProperties(30, 365));
     private final AccessStateService accessStates = mock(AccessStateService.class);
-    private final TenantSchemaSyncService sync = mock(TenantSchemaSyncService.class);
+    private final ModuleProvisioner provisioner = mock(ModuleProvisioner.class);
     private final UserActivityRecorder recorder = mock(UserActivityRecorder.class);
     private final FilterChain chain = mock(FilterChain.class);
     private JwtAuthFilter filter;
 
     @BeforeEach
     void setUp() {
-        filter = new JwtAuthFilter(jwt, new ObjectMapper(), sync, accessStates, recorder);
+        filter = new JwtAuthFilter(jwt, new ObjectMapper(), provisioner, accessStates, recorder);
         // Default: the session check answers from the state (no database reload in unit tests).
         when(accessStates.withOpenSession(any(), any(), any(), any())).thenAnswer(inv -> {
             AccessState st = inv.getArgument(2);
@@ -263,8 +265,26 @@ class JwtAuthFilterTest {
         assertThat(mdc).containsEntry("tenantId", SCHEMA).containsEntry("userId", userId.toString());
         assertThat(TenantContext.getCurrentTenant()).isNull();
         assertThat(MDC.get("tenantId")).isNull();
-        verify(sync).syncIfNeeded(SCHEMA);
+        verify(provisioner).ensureFoundation(SCHEMA);
         verify(recorder).record(userId, SCHEMA, "OWNER");
+    }
+
+    @Test
+    @DisplayName("Story 16.12 — foundation tables cannot be provisioned: 503 with the French message, chain not called")
+    void foundationProvisioningFails() throws Exception {
+        UUID userId = UUID.randomUUID();
+        when(accessStates.get(userId, SCHEMA)).thenReturn(owner(Set.of()));
+        doThrow(new com.keevo.shared.module.FoundationUnavailableException("retry later", 42))
+                .when(provisioner).ensureFoundation(SCHEMA);
+
+        MockHttpServletResponse response = run(request("GET", "/api/v1/products",
+                jwt.generateAccessToken(userId, SCHEMA, null, null)));
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getContentAsString()).contains("SERVICE_UNAVAILABLE").contains("réessayez");
+        assertThat(response.getHeader("Retry-After")).isEqualTo("42");
+        verify(chain, never()).doFilter(any(), any());
+        assertThat(TenantContext.getCurrentTenant()).isNull();
     }
 
     @Test

@@ -12,13 +12,14 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
  * Story 13.4 — counts, once at boot and in the background (never delays readiness), the copies of global-only
- * public tables ({@link TenantSchemaSyncService#globalOnlyTables()}) that earlier versions of the schema sync
+ * public tables ({@link #GLOBAL_ONLY_TABLES}) that the former public → tenant schema sync (removed by Story 16.12)
  * mirrored into tenant schemas. They are never dropped by an update (production data is not altered); one INFO line
  * per boot gives, per table, the number of copies and how many look non-empty ({@code pg_class.reltuples > 0}, a
  * planner estimate) or were never analysed ({@code reltuples < 0}, unknown) — no schema name. Reads the catalogue
@@ -34,6 +35,34 @@ public class GlobalTableStrayCopiesReporter {
             + "JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace "
             + "WHERE c.relkind = 'r' AND n.nspname <> 'public' AND c.relname IN (";
     static final String COUNT_SQL_SUFFIX = ")";
+
+    /**
+     * The public tables that are global only (never tenant tables): any copy of them in a tenant schema is a stray
+     * copy left by the former schema sync. Story 16.12 added the ones that sync still mirrored ({@code plan_profiles},
+     * {@code profile_modules}, {@code bundle_definitions}, {@code bundle_modules}, {@code admin_jobs}).
+     */
+    public static final Set<String> GLOBAL_ONLY_TABLES = Set.of(
+            "tenants",
+            // Story 9-2 — super-admin plan management
+            "tenant_payments", "tenant_plan_events", "plan_expiry_reminders",
+            // Story 9-4 — platform analytics activity tracking
+            "user_daily_activity",
+            // Story 9-5 — system health samples, admin alert acks, sync silence notices, global push notifications
+            "platform_health_samples", "admin_alert_acks", "sync_silence_notices", "global_notifications",
+            // Story 13.1 — module registry: global catalogue + per-tenant module state
+            "module_definitions", "tenant_modules",
+            // Story 13.4 — infrastructure: ShedLock, public Flyway history, Spring Modulith outbox
+            "shedlock", "flyway_schema_history", "event_publication", "event_listener_receipt",
+            // identity — global auth
+            "refresh_tokens", "password_reset_tokens", "user_tenant_memberships",
+            // sync — device sync state
+            "user_sync_state",
+            // feedback — global inbox of the super admin
+            "feedback",
+            // Story 16.6 — RGPD account deletion trace
+            "account_deletion_log",
+            // Story 16.8 / 16.2 / 16.4 — plan profiles, bundles, admin jobs (were still mirrored until 16.12)
+            "plan_profiles", "profile_modules", "bundle_definitions", "bundle_modules", "admin_jobs");
 
     /**
      * Copies of one global-only table in tenant schemas.
@@ -54,7 +83,7 @@ public class GlobalTableStrayCopiesReporter {
 
     /** Global-only table → its copies in tenant schemas ({@link TenantSchema#isValid}); tables without copies omitted. */
     public Map<String, StrayCopies> countStrayCopies() {
-        List<String> tables = new ArrayList<>(TenantSchemaSyncService.globalOnlyTables());
+        List<String> tables = new ArrayList<>(GLOBAL_ONLY_TABLES);
         Collections.sort(tables);
         String placeholders = tables.stream().map(t -> "?").collect(Collectors.joining(", "));
         Map<String, long[]> counts = new TreeMap<>();

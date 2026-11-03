@@ -10,7 +10,7 @@ import com.keevo.admin.notification.domain.model.PushTenantRef;
 import com.keevo.shared.infrastructure.persistence.GlobalTableStrayCopiesReporter;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.infrastructure.persistence.TenantFoundation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -42,7 +42,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * except on rows of this test.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class, JdbcGlobalNotificationRepository.class,
+@Import({TenantSchemaProvisioner.class, JdbcGlobalNotificationRepository.class,
         JdbcPushAudienceAdapter.class, GlobalTableStrayCopiesReporter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Global push SQL on PostgreSQL (Story 9-5)")
@@ -52,7 +52,7 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
     @Autowired TenantSchemaProvisioner provisioner;
     @Autowired JdbcGlobalNotificationRepository repository;
     @Autowired JdbcPushAudienceAdapter audience;
-    @Autowired TenantSchemaSyncService schemaSync;
+    @Autowired javax.sql.DataSource foundationDataSource;
     @Autowired GlobalTableStrayCopiesReporter strayCopies;
 
     private final List<UUID> tenantIds = new ArrayList<>();
@@ -268,11 +268,11 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
     @Test
     void globalOnlyTables_neverMirroredIntoATenantSchema() throws Exception {
         PushTargetTenant t = tenant("ACTIVE", "FREE");
-        schemaSync.syncNow(t.schemaName());
+        TenantFoundation.upgrade(foundationDataSource, t.schemaName());
         List<String> tables = jdbc.queryForList(
                 "SELECT table_name FROM information_schema.tables WHERE table_schema = ?", String.class,
                 t.schemaName());
-        assertThat(tables).isNotEmpty().doesNotContainAnyElementsOf(TenantSchemaSyncService.globalOnlyTables());
+        assertThat(tables).isNotEmpty().doesNotContainAnyElementsOf(GlobalTableStrayCopiesReporter.GLOBAL_ONLY_TABLES);
         // explicit names: a table dropped from the global-only list by mistake would still be caught here
         assertThat(tables).doesNotContain("tenants", "tenant_payments", "tenant_plan_events", "plan_expiry_reminders",
                 "user_daily_activity", "platform_health_samples", "admin_alert_acks", "sync_silence_notices",
@@ -281,8 +281,10 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
                 "shedlock", "flyway_schema_history", "event_publication", "event_listener_receipt",
                 "refresh_tokens", "password_reset_tokens", "user_tenant_memberships", "user_sync_state", "feedback",
                 // Story 16.6 — RGPD deletion trace
-                "account_deletion_log");
-        // tenant tables stay mirrored / provisioned
+                "account_deletion_log",
+                // Story 16.12 — still mirrored by the former sync
+                "plan_profiles", "profile_modules", "bundle_definitions", "bundle_modules", "admin_jobs");
+        // tenant tables come from the foundation module scripts
         assertThat(tables).contains("users", "subscriptions", "stores", "products", "sales", "audit_log");
     }
 
@@ -307,10 +309,10 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
             assertThat(after.copies()).isEqualTo(before.copies() + 2);
             assertThat(after.nonEmpty()).isEqualTo(before.nonEmpty() + 1);
 
-            schemaSync.syncNow(t.schemaName());
+            TenantFoundation.upgrade(foundationDataSource, t.schemaName());
             assertThat(jdbc.queryForList("SELECT table_name FROM information_schema.tables WHERE table_schema = ?",
                     String.class, t.schemaName())).contains("shedlock");
-            assertThat(strayCopies.countStrayCopies().keySet()).isSubsetOf(TenantSchemaSyncService.globalOnlyTables());
+            assertThat(strayCopies.countStrayCopies().keySet()).isSubsetOf(GlobalTableStrayCopiesReporter.GLOBAL_ONLY_TABLES);
             // background report: completes, never throws
             java.util.concurrent.CompletableFuture<Void> report = strayCopies.startReport();
             report.get(30, java.util.concurrent.TimeUnit.SECONDS);

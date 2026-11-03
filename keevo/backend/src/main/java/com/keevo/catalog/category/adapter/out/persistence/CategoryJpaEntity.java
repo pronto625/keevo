@@ -9,8 +9,8 @@ import java.util.UUID;
 /**
  * CategoryJpaEntity — JPA entity mapping to the {@code categories} table in the tenant schema.
  *
- * <p>The table is created by {@link com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner}
- * (DDL_CATEGORIES constant) within each tenant's PostgreSQL schema.
+ * <p>The table is created by the catalog module migration ({@code db/modules/catalog/V1__catalog_baseline.sql},
+ * Story 16.12) within each tenant's PostgreSQL schema.
  *
  * <p>The UUID is assigned in Java: random for server-created categories, client-provided
  * for offline-created ones (sync CREATE_CATEGORY). {@link Persistable#isNew()} tells Spring

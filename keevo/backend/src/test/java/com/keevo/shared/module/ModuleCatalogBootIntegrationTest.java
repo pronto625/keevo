@@ -1,7 +1,7 @@
 package com.keevo.shared.module;
 
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.infrastructure.persistence.GlobalTableStrayCopiesReporter;
 import com.keevo.shared.module.application.ModuleCatalog;
 import com.keevo.shared.module.application.ModuleCatalogSeeder;
 import org.junit.jupiter.api.Test;
@@ -48,6 +48,6 @@ class ModuleCatalogBootIntegrationTest extends FullContextIntegrationTest {
         // 13.2: the registry is wired on the same set and works outside a request (no request-scope proxy)
         assertThat(registry.installed()).hasSize(18);
         assertThat(registry.activeModules("kv_nobody")).containsExactly("core");
-        assertThat(TenantSchemaSyncService.globalOnlyTables()).contains("module_definitions", "tenant_modules");
+        assertThat(GlobalTableStrayCopiesReporter.GLOBAL_ONLY_TABLES).contains("module_definitions", "tenant_modules");
     }
 }

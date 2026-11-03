@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
 import com.keevo.shared.infrastructure.security.access.AccessState;
 import com.keevo.shared.infrastructure.security.access.AccessStateService;
 import com.keevo.shared.infrastructure.web.ErrorMessages;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.module.FoundationUnavailableException;
+import com.keevo.shared.module.ModuleProvisioner;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -83,7 +85,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final ObjectMapper objectMapper;
-    private final TenantSchemaSyncService tenantSchemaSyncService;
+    /** Story 16.12 — foundation tables of a tenant reached before the boot upgrade finished (cached no-op after). */
+    private final ModuleProvisioner moduleProvisioner;
     /** Story 16.11 — server-side access state (role, store, statuses, revocation, sessions). */
     private final AccessStateService accessStates;
     /** Story 9-4 — DAU/MAU tracking (asynchronous, never throws). */
@@ -91,12 +94,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     public JwtAuthFilter(JwtTokenProvider jwtTokenProvider,
                          ObjectMapper objectMapper,
-                         TenantSchemaSyncService tenantSchemaSyncService,
+                         ModuleProvisioner moduleProvisioner,
                          AccessStateService accessStates,
                          UserActivityRecorder userActivityRecorder) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
-        this.tenantSchemaSyncService = tenantSchemaSyncService;
+        this.moduleProvisioner = java.util.Objects.requireNonNull(moduleProvisioner, "moduleProvisioner");
         this.accessStates = java.util.Objects.requireNonNull(accessStates, "accessStates");
         this.userActivityRecorder = java.util.Objects.requireNonNull(userActivityRecorder, "userActivityRecorder");
     }
@@ -253,8 +256,20 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // Sync tenant schema against public (no-op if already done this JVM lifetime)
-            tenantSchemaSyncService.syncIfNeeded(tenantId);
+            // Story 16.12 — the tenant's foundation tables at the shipped versions (cached per JVM: no database work
+            // once known; provisions synchronously a tenant created before the deploy and reached before the boot
+            // upgrade finished). A failure answers 503 (French message) and is retried on the next request.
+            if (!platformSchema) {
+                try {
+                    moduleProvisioner.ensureFoundation(schema);
+                } catch (DomainException ex) {
+                    long retryAfter = ex instanceof FoundationUnavailableException unavailable
+                            ? unavailable.retryAfterSeconds() : 30;
+                    response.setHeader("Retry-After", String.valueOf(retryAfter));
+                    writeErrorWithStatus(response, "SERVICE_UNAVAILABLE", HttpServletResponse.SC_SERVICE_UNAVAILABLE);
+                    return;
+                }
+            }
 
             // Story 3.5 — EMPLOYEE runtime guards, from the employee row of the access state.
             AccessState.EmployeeState employee = state.employee();

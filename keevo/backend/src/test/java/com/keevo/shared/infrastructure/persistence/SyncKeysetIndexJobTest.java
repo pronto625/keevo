@@ -121,7 +121,7 @@ class SyncKeysetIndexJobTest {
         SyncKeysetIndexJob job = new SyncKeysetIndexJob(dataSource, lockProvider, true);
         SyncKeysetIndexJob.Result result = job.ensureIndexes("kv_abc123");
 
-        int count = TenantSchemaProvisioner.SYNC_KEYSET_INDEXES.size();
+        int count = SyncKeysetIndex.SYNC_KEYSET_INDEXES.size();
         assertThat(result).isEqualTo(new SyncKeysetIndexJob.Result(0, 0, 0, 0, count));
         verify(conn).abort(any());
         verify(conn, times(1)).setAutoCommit(anyBoolean());

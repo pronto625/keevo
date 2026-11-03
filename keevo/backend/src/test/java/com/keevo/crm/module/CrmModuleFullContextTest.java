@@ -86,10 +86,10 @@ class CrmModuleFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("new tenant: crm tables (core DDL) adopted — flyway_history_crm baselined at 1, row ACTIVE/FREE v1")
+    @DisplayName("16.12 new tenant: crm V1 executed at registration then re-applied by Flyway — history 0 baseline + V1, row ACTIVE/FREE v1")
     void newTenantProvisioned() {
         assertThat(jdbc.queryForList("SELECT COALESCE(version, '-') || ':' || type || ':' || success FROM \"" + schema
-                + "\".flyway_history_crm ORDER BY installed_rank", String.class)).containsExactly("1:BASELINE:true");
+                + "\".flyway_history_crm ORDER BY installed_rank", String.class)).containsExactly("0:BASELINE:true", "1:SQL:true");
         Map<String, Object> row = jdbc.queryForMap("SELECT status, tier, provisioned_version FROM "
                 + "public.tenant_modules WHERE tenant_id = ? AND module_id = 'crm'", tenantId);
         assertThat(row).containsEntry("status", "ACTIVE").containsEntry("tier", "FREE")

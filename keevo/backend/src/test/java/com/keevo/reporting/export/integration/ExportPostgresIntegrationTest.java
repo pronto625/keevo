@@ -16,7 +16,7 @@ import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.infrastructure.persistence.TenantFoundation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -56,7 +56,7 @@ class ExportPostgresIntegrationTest extends FullContextIntegrationTest {
     @Autowired ExportJobRunner jobRunner;
     @Autowired ExportPurgeScheduler purgeScheduler;
     @Autowired ExportFileStorage storage;
-    @Autowired TenantSchemaSyncService syncService;
+    @Autowired javax.sql.DataSource dataSource;
 
     private final List<String> filesToDelete = new ArrayList<>();
 
@@ -115,11 +115,11 @@ class ExportPostgresIntegrationTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("boot / request sync re-creates a missing tenant export_jobs table")
-    void syncCreatesMissingTable() throws Exception {
+    @DisplayName("Story 16.12 — the reporting module script re-creates a missing tenant export_jobs table")
+    void foundationCreatesMissingTable() throws Exception {
         String b = newTenant();
         jdbc.execute("DROP TABLE \"" + b + "\".export_jobs");
-        syncService.syncNow(b);
+        TenantFoundation.upgrade(dataSource, b);
         assertThat(jdbc.queryForObject("SELECT to_regclass(?)::text", String.class, "\"" + b + "\".export_jobs"))
                 .isNotNull();
         assertThat(jdbc.queryForList("SELECT indexname FROM pg_indexes WHERE schemaname = ? AND tablename = 'export_jobs'",

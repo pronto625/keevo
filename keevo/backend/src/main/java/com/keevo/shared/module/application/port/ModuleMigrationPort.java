@@ -17,18 +17,7 @@ public interface ModuleMigrationPort {
      * @return the versions before/after and the number of migrations applied
      * @throws com.keevo.shared.module.ModuleProvisioningException on a migration failure
      */
-    default Outcome migrate(String tenantSchema, String moduleId) {
-        return migrate(tenantSchema, moduleId, null);
-    }
-
-    /**
-     * Same, adopting an existing schema (Story 13.9): when the module's history table does not exist yet and the
-     * baseline's probe table exists in the schema, the history is created with a baseline at the baseline's version and
-     * the scripts up to it are not executed.
-     *
-     * @param baseline the module's existing-schema baseline, {@code null} for none
-     */
-    Outcome migrate(String tenantSchema, String moduleId, com.keevo.shared.module.ExistingSchemaBaseline baseline);
+    Outcome migrate(String tenantSchema, String moduleId);
 
     /**
      * Story 14.1 — the highest versioned script the module ships ({@code V<version>__…sql}), {@code null} when none
@@ -50,6 +39,37 @@ public interface ModuleMigrationPort {
      */
     default String currentVersion(String tenantSchema, String moduleId) {
         return null;
+    }
+
+    /**
+     * Story 16.12 — {@link #currentVersion} of several modules in one schema (module id → version; a module without
+     * history or without a version is absent). The JDBC implementation reads them in two queries.
+     */
+    default java.util.Map<String, String> schemaVersions(String tenantSchema, java.util.Collection<String> moduleIds) {
+        java.util.Map<String, String> versions = new java.util.LinkedHashMap<>();
+        for (String moduleId : moduleIds) {
+            String version = currentVersion(tenantSchema, moduleId);
+            if (version != null) {
+                versions.put(moduleId, version);
+            }
+        }
+        return versions;
+    }
+
+    /**
+     * Story 16.12 — {@link #currentVersion} of one module in several schemas (schema → version; a schema without the
+     * module's history or without a version is absent): set-based detection of tenants behind, in two queries for
+     * the JDBC implementation (never one probe per tenant).
+     */
+    default java.util.Map<String, String> historyVersions(String moduleId, java.util.Collection<String> tenantSchemas) {
+        java.util.Map<String, String> versions = new java.util.LinkedHashMap<>();
+        for (String schema : tenantSchemas) {
+            String version = currentVersion(schema, moduleId);
+            if (version != null) {
+                versions.put(schema, version);
+            }
+        }
+        return versions;
     }
 
     /**

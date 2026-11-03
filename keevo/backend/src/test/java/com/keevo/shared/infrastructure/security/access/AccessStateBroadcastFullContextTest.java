@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.AuthDetails;
@@ -55,7 +55,7 @@ class AccessStateBroadcastFullContextTest extends FullContextIntegrationTest {
     @Autowired JwtTokenProvider jwt;
     @Autowired TenantFactory tenantFactory;
     @Autowired TransactionTemplate tx;
-    @Autowired TenantSchemaSyncService sync;
+    @Autowired ModuleProvisioner moduleProvisioner;
     @Autowired AccessStateLoader loader;
     @Autowired EmployeeRepository employeeRepository;
 
@@ -90,7 +90,7 @@ class AccessStateBroadcastFullContextTest extends FullContextIntegrationTest {
         AccessStateNotificationListener listener = new AccessStateNotificationListener(dataSource, cache, true);
         listener.start();
         listeners.add(listener);
-        return new JwtAuthFilter(jwt, new ObjectMapper(), sync, cache, mock(UserActivityRecorder.class));
+        return new JwtAuthFilter(jwt, new ObjectMapper(), moduleProvisioner, cache, mock(UserActivityRecorder.class));
     }
 
     /** Status code and authorities seen by the chain for one request on one instance. */

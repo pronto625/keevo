@@ -1,7 +1,6 @@
 package com.keevo.shared.module.adapter.out.persistence;
 
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
-import com.keevo.shared.module.ExistingSchemaBaseline;
 import com.keevo.shared.module.ModuleManifestLoader;
 import com.keevo.shared.module.ModuleProvisioningException;
 import com.keevo.shared.module.application.port.ModuleMigrationPort;
@@ -17,7 +16,6 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.jdbc.datasource.AbstractDriverBasedDataSource;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.SmartDataSource;
 import org.springframework.stereotype.Component;
 
@@ -40,23 +38,28 @@ import java.util.regex.Pattern;
  *
  * <p><b>Dedicated connections.</b> Flyway switches {@code search_path} to the tenant schema on the connections it
  * uses; on a pooled connection a failed restore would hand a tenant-scoped connection back to the pool. Flyway
- * therefore never sees the application pool: it gets a non-pooled {@link DriverManagerDataSource} built from the
- * pool's URL and credentials (every connection is physical and closed after use). A DataSource that is already
- * driver-based (non-pooled) is used as is; any other type is refused.
+ * therefore never sees the application pool: it gets its own small Hikari pool built from the application pool's
+ * URL and credentials (Story 16.12: {@code keevo.tenant-schema.upgrade-parallelism} + 1 connections, no idle
+ * connection kept, closed with the bean) — only Flyway uses it, and Flyway sets the schema of every run itself, so no
+ * connection reaches application code. A DataSource that is already driver-based (non-pooled) is used as is; any
+ * other type is refused.
  *
  * <p><b>{@code baselineVersion("0")}</b> (deviation from the §2.3 snippet, same choice as the public Flyway): a
  * tenant schema is never empty, so with Flyway's default baseline version {@code 1} the first run would record a
  * baseline at 1 and silently skip the module's {@code V1}. The baseline row is ignored for the version.
  *
- * <p><b>Existing-schema baseline (Story 13.9).</b> A converted module may declare an {@link ExistingSchemaBaseline}:
- * on a schema without the module's history table but with its probe table, the baseline version is that one (the
- * scripts up to it are not executed — the existing tables are adopted untouched) instead of {@code 0}.
+ * <p>Histories baselined at {@code 1} by Story 13.9 (crm adopted without running V1) are kept as they are: their
+ * version is {@code 1}, nothing is re-run.
  *
  * <p><b>Migration policy (Story 13.9).</b> {@code validateOnMigrate} on, {@code outOfOrder} off: an applied script
  * is immutable — editing it makes the next provisioning fail (checksum mismatch, {@code ModuleProvisioningException},
  * module unchanged) until the original is restored; a change always ships as a new versioned script. The manual
- * {@code flyway repair} procedure is documented in the 13.9 spec. {@code core} ships no migration (its tables are the
- * core DDL), so it has no history table.
+ * {@code flyway repair} procedure is documented in the 13.9 spec.
+ *
+ * <p><b>Foundation modules (Story 16.12).</b> The free modules' {@code V1} scripts are the tenant DDL; they are
+ * idempotent forever: registration executes them inside its own transaction (Flyway cannot see the uncommitted
+ * schema), then this class re-applies them after commit and records the history. Placeholder replacement is off so
+ * that Flyway executes exactly the text registration executes.
  *
  * <p>Concurrency: Flyway's lock on the history table serialises concurrent runs on the same (schema, module); each
  * migration runs in its own transaction (PostgreSQL DDL is transactional), so a failed script leaves the previous
@@ -73,13 +76,26 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
     /** Flyway default naming: versioned {@code V<version>__<desc>.sql} or repeatable {@code R__<desc>.sql}. */
     static final Pattern FLYWAY_SCRIPT = Pattern.compile("^(V[0-9]+([._][0-9]+)*__.+|R__.+)\\.sql$");
 
+    /** Story 16.12 — schemas per {@code UNION ALL} history read (bounded locks per statement). */
+    static final int HISTORY_CHUNK = 250;
+    /** A history version that cannot be parsed: always "behind" (the provisioning then fails loudly for it). */
+    public static final String UNREADABLE_VERSION = "unreadable";
+
     private final DataSource dataSource;
     private final List<String> roots;
     private final ResourcePatternResolver resources;
+    private final int poolSize;
+    private volatile HikariDataSource migrationPool;
 
-    @Autowired
     public FlywayModuleMigrations(DataSource dataSource) {
         this(dataSource, List.of(DEFAULT_ROOT));
+    }
+
+    @Autowired
+    public FlywayModuleMigrations(DataSource dataSource,
+                                  @org.springframework.beans.factory.annotation.Value(
+                                          "${keevo.tenant-schema.upgrade-parallelism:4}") int parallelism) {
+        this(dataSource, List.of(DEFAULT_ROOT), Math.max(1, parallelism) + 1);
     }
 
     /**
@@ -87,12 +103,26 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
      * e.g. a "next release" root that adds {@code V3}).
      */
     public FlywayModuleMigrations(DataSource dataSource, List<String> roots) {
+        this(dataSource, roots, 5);
+    }
+
+    private FlywayModuleMigrations(DataSource dataSource, List<String> roots, int poolSize) {
         if (roots.isEmpty()) {
             throw new IllegalArgumentException("At least one migration root is required");
         }
         this.dataSource = dataSource;
         this.roots = List.copyOf(roots);
         this.resources = new PathMatchingResourcePatternResolver(FlywayModuleMigrations.class.getClassLoader());
+        this.poolSize = poolSize;
+    }
+
+    /** Closes the migration pool (bean shutdown). */
+    @jakarta.annotation.PreDestroy
+    public void close() {
+        HikariDataSource pool = migrationPool;
+        if (pool != null) {
+            pool.close();
+        }
     }
 
     /** The module id, checked against the manifest id rule before any interpolation (raw value never echoed). */
@@ -213,54 +243,167 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
         }
     }
 
+    /**
+     * Story 16.12 — the highest version of each module's history in one schema: one catalogue query for the history
+     * tables that exist, then one {@code UNION ALL} over them.
+     */
     @Override
-    public Outcome migrate(String tenantSchema, String moduleId, ExistingSchemaBaseline baseline) {
+    public java.util.Map<String, String> schemaVersions(String tenantSchema, java.util.Collection<String> moduleIds) {
+        String schema = TenantSchema.validate(tenantSchema);
+        java.util.Map<String, String> tables = new java.util.LinkedHashMap<>(); // history table → module id
+        moduleIds.forEach(id -> tables.put(historyTable(id), id));
+        java.util.Map<String, String> versions = new java.util.LinkedHashMap<>();
+        if (tables.isEmpty()) {
+            return versions;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            java.util.List<String> present = new java.util.ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement("SELECT table_name FROM "
+                    + "information_schema.tables WHERE table_schema = ? AND table_name = ANY (?)")) {
+                statement.setString(1, schema);
+                statement.setArray(2, connection.createArrayOf("varchar", tables.keySet().toArray()));
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        present.add(rows.getString(1));
+                    }
+                }
+            }
+            if (present.isEmpty()) {
+                return versions;
+            }
+            StringBuilder sql = new StringBuilder();
+            for (String table : present) { // history table names come from historyTable() (validated module ids)
+                sql.append(sql.isEmpty() ? "" : " UNION ALL ").append("SELECT '").append(table)
+                        .append("' AS t, version, type FROM \"").append(TenantSchema.validate(schema)).append("\".")
+                        .append(table).append(" WHERE success AND version IS NOT NULL");
+            }
+            readHighest(connection, sql.toString(), (table, version) -> versions.merge(tables.get(table), version,
+                    FlywayModuleMigrations::higher));
+            return versions;
+        } catch (SQLException e) {
+            throw new ModuleProvisioningException("schema", schema, "HISTORY/" + failureCode(e), null);
+        }
+    }
+
+    /**
+     * Story 16.12 — the highest version of one module's history in many schemas (set-based detection of tenants
+     * behind): one catalogue query for the schemas holding the history table, then one {@code UNION ALL} over them.
+     * Invalid schema names are ignored.
+     */
+    @Override
+    public java.util.Map<String, String> historyVersions(String moduleId, java.util.Collection<String> tenantSchemas) {
+        String table = historyTable(moduleId);
+        java.util.List<String> schemas = tenantSchemas.stream().filter(TenantSchema::isValid).distinct().toList();
+        java.util.Map<String, String> versions = new java.util.LinkedHashMap<>();
+        if (schemas.isEmpty()) {
+            return versions;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            java.util.List<String> present = new java.util.ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement("SELECT table_schema FROM "
+                    + "information_schema.tables WHERE table_name = ? AND table_schema = ANY (?)")) {
+                statement.setString(1, table);
+                statement.setArray(2, connection.createArrayOf("varchar", schemas.toArray()));
+                try (ResultSet rows = statement.executeQuery()) {
+                    while (rows.next()) {
+                        present.add(rows.getString(1));
+                    }
+                }
+            }
+            if (present.isEmpty()) {
+                return versions;
+            }
+            for (int from = 0; from < present.size(); from += HISTORY_CHUNK) { // bounded locks per statement
+                StringBuilder sql = new StringBuilder();
+                for (String schema : present.subList(from, Math.min(present.size(), from + HISTORY_CHUNK))) {
+                    String tenantSchema = TenantSchema.validate(schema);
+                    sql.append(sql.isEmpty() ? "" : " UNION ALL ").append("SELECT '").append(tenantSchema)
+                            .append("' AS t, version, type FROM \"").append(TenantSchema.validate(tenantSchema))
+                            .append("\".").append(table).append(" WHERE success AND version IS NOT NULL");
+                }
+                readHighest(connection, sql.toString(), (schema, version) -> versions.merge(schema, version,
+                        FlywayModuleMigrations::higher));
+            }
+            return versions;
+        } catch (SQLException e) {
+            throw new ModuleProvisioningException(moduleId, "public", "HISTORY/" + failureCode(e), null);
+        }
+    }
+
+    /**
+     * Rows {@code (key, version, type)} of a history read; a {@code 0} baseline row does not count. A version that
+     * cannot be parsed is reported as {@link #UNREADABLE_VERSION} for its key (never aborts the whole read).
+     */
+    private static void readHighest(Connection connection, String sql,
+                                    java.util.function.BiConsumer<String, String> sink) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet rows = statement.executeQuery()) {
+            while (rows.next()) {
+                MigrationVersion version;
+                try {
+                    version = MigrationVersion.fromVersion(rows.getString(2));
+                } catch (RuntimeException e) {
+                    sink.accept(rows.getString(1), UNREADABLE_VERSION);
+                    continue;
+                }
+                boolean emptyBaseline = "BASELINE".equals(rows.getString(3))
+                        && version.compareTo(MigrationVersion.fromVersion("0")) <= 0;
+                if (!emptyBaseline) {
+                    sink.accept(rows.getString(1), version.getVersion());
+                }
+            }
+        }
+    }
+
+    /** The higher of two versions; an unreadable one wins (it keeps the key "behind"). */
+    private static String higher(String a, String b) {
+        if (UNREADABLE_VERSION.equals(a) || UNREADABLE_VERSION.equals(b)) {
+            return UNREADABLE_VERSION;
+        }
+        return MigrationVersion.fromVersion(a).compareTo(MigrationVersion.fromVersion(b)) >= 0 ? a : b;
+    }
+
+    @Override
+    public Outcome migrate(String tenantSchema, String moduleId) {
         String schema = TenantSchema.validate(tenantSchema);
         String table = historyTable(moduleId);
         String[] locations = roots.stream().map(root -> "classpath:" + root + "/" + moduleId).toArray(String[]::new);
-        DataSource flywayDataSource = dedicatedDataSource();
-        String baselineVersion = baselineVersion(flywayDataSource, schema, table, baseline, moduleId);
         Flyway flyway = Flyway.configure()
-                .dataSource(flywayDataSource)
+                .dataSource(dedicatedDataSource())
                 .schemas(schema)
                 .defaultSchema(schema)
                 .table(table)
                 .locations(locations)
                 .baselineOnMigrate(true)
-                .baselineVersion(baselineVersion)
+                .baselineVersion("0")
                 .createSchemas(false)
+                .placeholderReplacement(false) // Story 16.12: the same text as the registration executes
                 .validateMigrationNaming(true)
                 .validateOnMigrate(true) // Story 13.9: an edited applied script fails loudly (checksum mismatch)
                 .outOfOrder(false)       // Story 13.9: a version lower than the applied one is never run late
                 .load();
-        String from = null;
         try {
-            from = highestApplied(flyway.info().applied());
             MigrateResult result = flyway.migrate();
-            String to = highestApplied(flyway.info().applied());
+            String from = meaningful(result.initialSchemaVersion);
+            String to = result.migrationsExecuted > 0 && result.targetSchemaVersion != null
+                    ? meaningful(result.targetSchemaVersion) : from;
             return new Outcome(from, to, result.migrationsExecuted);
         } catch (RuntimeException e) {
-            throw new ModuleProvisioningException(moduleId, schema, failureCode(e), appliedAfterFailure(flyway, from));
+            throw new ModuleProvisioningException(moduleId, schema, failureCode(e), appliedAfterFailure(flyway));
         }
     }
 
-    /**
-     * Story 13.9 — {@code "0"} (every script runs), or the module's existing-schema baseline version when its history
-     * table does not exist yet and its probe table already exists in the schema (the existing tables are adopted
-     * as they are: Flyway records a baseline at that version and runs only the later scripts).
-     */
-    static String baselineVersion(DataSource dataSource, String schema, String historyTable,
-                                  ExistingSchemaBaseline baseline, String moduleId) {
-        if (baseline == null) {
-            return "0";
+    /** A Flyway version as an outcome version: {@code null} for none / the {@code 0} baseline of a fresh history. */
+    static String meaningful(String version) {
+        if (version == null || version.isBlank()) {
+            return null;
         }
-        try (Connection connection = dataSource.getConnection()) {
-            if (tableExists(connection, schema, historyTable) || !tableExists(connection, schema, baseline.probeTable())) {
-                return "0";
-            }
-            return baseline.version();
-        } catch (SQLException e) {
-            throw new ModuleProvisioningException(moduleId, schema, "PROBE/" + failureCode(e), null);
+        try {
+            MigrationVersion parsed = MigrationVersion.fromVersion(version);
+            return parsed.getVersion() == null || parsed.compareTo(MigrationVersion.fromVersion("0")) <= 0
+                    ? null : parsed.getVersion();
+        } catch (RuntimeException e) {
+            return null; // « << Empty Schema >> » and the like
         }
     }
 
@@ -275,12 +418,12 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
         }
     }
 
-    /** Highest version applied after a failure (earlier scripts of the run committed); {@code from} if unreadable. */
-    private static String appliedAfterFailure(Flyway flyway, String from) {
+    /** Highest version applied after a failure (earlier scripts of the run committed); {@code null} if unreadable. */
+    private static String appliedAfterFailure(Flyway flyway) {
         try {
             return highestApplied(flyway.info().applied());
         } catch (RuntimeException ignored) {
-            return from;
+            return null;
         }
     }
 
@@ -302,7 +445,31 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
         return code.isEmpty() ? e.getClass().getSimpleName() : code.toString();
     }
 
-    /** A non-pooled DataSource for Flyway (see class doc). */
+    /** The migration pool, created on first use from the application pool's URL and credentials. */
+    private HikariDataSource migrationPool(HikariDataSource app) {
+        HikariDataSource pool = migrationPool;
+        if (pool == null) {
+            synchronized (this) {
+                pool = migrationPool;
+                if (pool == null) {
+                    com.zaxxer.hikari.HikariConfig config = new com.zaxxer.hikari.HikariConfig();
+                    config.setJdbcUrl(app.getJdbcUrl());
+                    config.setUsername(app.getUsername());
+                    config.setPassword(app.getPassword());
+                    config.setPoolName("keevo-module-migrations");
+                    config.setMaximumPoolSize(poolSize);
+                    config.setMinimumIdle(0);
+                    config.setIdleTimeout(60_000);
+                    config.setInitializationFailTimeout(-1); // lazy: no connection opened here
+                    pool = new HikariDataSource(config);
+                    migrationPool = pool;
+                }
+            }
+        }
+        return pool;
+    }
+
+    /** The DataSource Flyway uses (see class doc): never the application pool. */
     DataSource dedicatedDataSource() {
         if (dataSource instanceof AbstractDriverBasedDataSource
                 && !(dataSource instanceof SmartDataSource)) {
@@ -314,7 +481,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
                 if (pool.getJdbcUrl() == null) {
                     throw new IllegalStateException("The connection pool has no JDBC URL");
                 }
-                return new DriverManagerDataSource(pool.getJdbcUrl(), pool.getUsername(), pool.getPassword());
+                return migrationPool(pool);
             }
         } catch (SQLException e) {
             throw new IllegalStateException("Cannot unwrap the application DataSource", e);

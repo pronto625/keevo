@@ -6,6 +6,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.job.ProgressListener;
 import com.keevo.shared.module.ModuleBackfill;
 import com.keevo.shared.module.ModuleCategory;
+import com.keevo.shared.module.ModuleOrder;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.ModuleRegistry;
@@ -28,7 +29,6 @@ import org.springframework.stereotype.Service;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -108,6 +108,16 @@ public class ModuleBackfillService implements ModuleBackfill {
         List<Failure> failures = new ArrayList<>();
 
         List<LiveTenant> tenants = rows.liveTenants();
+        // Story 16.12: latest shipped version once per module, applied versions in one chunked read per module
+        Map<String, String> latest = new java.util.HashMap<>();
+        Map<String, Map<String, String>> applied = new java.util.HashMap<>();
+        List<String> schemas = tenants.stream()
+                .filter(t -> TenantSchema.isValid(t.tenantSchema()) && t.schemaPresent())
+                .map(LiveTenant::tenantSchema).toList();
+        for (ModuleManifest module : migrating) {
+            latest.put(module.id(), migrations.latestVersion(module.id()));
+            applied.put(module.id(), migrations.historyVersions(module.id(), schemas));
+        }
         int total = tenants.size();
         int done = 0;
         progress.progress(0, total);
@@ -140,7 +150,7 @@ public class ModuleBackfillService implements ModuleBackfill {
             unchanged += result.unchanged();
             preserved += result.preserved();
 
-            List<String> provisioned = provision(tenant, migrating, dryRun, failures);
+            List<String> provisioned = provision(tenant, migrating, latest, applied, dryRun, failures);
             provisionedCount += provisioned.size();
             if (result.written() > 0 || !provisioned.isEmpty()) {
                 changes.add(new TenantChange(tenant.code(), result.inserted(), result.updated(), provisioned));
@@ -155,8 +165,8 @@ public class ModuleBackfillService implements ModuleBackfill {
     }
 
     /** The modules of the tenant to provision (display names): enabled, shipping migrations, not up to date. */
-    private List<String> provision(LiveTenant tenant, List<ModuleManifest> migrating, boolean dryRun,
-                                   List<Failure> failures) {
+    private List<String> provision(LiveTenant tenant, List<ModuleManifest> migrating, Map<String, String> latest,
+                                   Map<String, Map<String, String>> applied, boolean dryRun, List<Failure> failures) {
         String schema = tenant.tenantSchema();
         List<String> provisioned = new ArrayList<>();
         Map<String, ModuleState> states;
@@ -177,7 +187,7 @@ public class ModuleBackfillService implements ModuleBackfill {
                 continue;
             }
             try {
-                if (upToDate(schema, id, stored.get(id))) {
+                if (upToDate(module, latest.get(id), applied.get(id).get(schema), stored.get(id))) {
                     continue;
                 }
                 if (!dryRun) {
@@ -196,41 +206,30 @@ public class ModuleBackfillService implements ModuleBackfill {
         return provisioned;
     }
 
-    /** Flyway history at the latest shipped version and that version recorded on the module's row. */
-    private boolean upToDate(String schema, String moduleId, StoredRow row) {
-        String latest = migrations.latestVersion(moduleId);
-        if (latest == null || row == null || row.provisionedVersion() == null) {
+    /**
+     * Flyway history at the latest shipped version and that version recorded on the module's row ({@code core} never
+     * has a row — Story 16.12: its history alone tells).
+     */
+    private static boolean upToDate(ModuleManifest module, String latest, String current, StoredRow row) {
+        boolean rowless = module.isCore();
+        if (latest == null || current == null || (!rowless && (row == null || row.provisionedVersion() == null))) {
             return false;
         }
-        String current = migrations.currentVersion(schema, moduleId);
-        return current != null && sameVersion(latest, current) && sameVersion(latest, row.provisionedVersion());
+        try {
+            return sameVersion(latest, current) && (rowless || sameVersion(latest, row.provisionedVersion()));
+        } catch (RuntimeException e) {
+            return false; // unreadable version: provision (it fails loudly if the history is broken)
+        }
     }
 
     private static boolean sameVersion(String a, String b) {
         return MigrationVersion.fromVersion(a).equals(MigrationVersion.fromVersion(b));
     }
 
-    /** Installed tenant modules shipping migrations, each after its {@code requires} (id order otherwise). */
+    /** Installed tenant modules shipping migrations, in table-creation order (Story 16.12: {@link ModuleOrder}). */
     private List<ModuleManifest> migratingModules() {
-        List<ModuleManifest> sorted = new ArrayList<>(catalog.manifests());
-        sorted.sort(Comparator.comparing(ModuleManifest::id));
-        List<ModuleManifest> order = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        for (ModuleManifest module : sorted) {
-            visit(module, seen, order);
-        }
-        return order.stream()
+        return ModuleOrder.order(catalog.manifests()).stream()
                 .filter(m -> m.category() != ModuleCategory.PLATFORM && migrations.hasMigrations(m.id()))
                 .toList();
-    }
-
-    private void visit(ModuleManifest module, java.util.Set<String> seen, List<ModuleManifest> order) {
-        if (!seen.add(module.id())) {
-            return;
-        }
-        for (String dependency : module.requires()) {
-            catalog.find(dependency).ifPresent(d -> visit(d, seen, order));
-        }
-        order.add(module);
     }
 }

@@ -35,10 +35,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Story 13.9 — the crm module's {@code db/modules/crm/V1__crm_baseline.sql} on PostgreSQL, through the real
  * {@link ModuleProvisioner} and the shipped manifests: a fresh database of the shared container migrated with the
  * public Flyway, tenant schemas built by the real {@link TenantSchemaProvisioner} (the shape of every existing
- * tenant). With the crm existing-schema baseline (probe {@code clients}, version 1): an existing-shape tenant and a
- * drifted one are baselined at 1 without running V1 — only {@code flyway_history_crm} appears, every other table,
- * column, default, index and constraint unchanged, data untouched; a schema without the crm tables runs V1, which
- * builds the provisioner's shape; re-provisioning is a no-op.
+ * tenant). Story 16.12: crm is a foundation module without existing-schema baseline — V1 (idempotent) runs on an
+ * existing-shape tenant and changes nothing but the history; on a drifted tenant it adds the missing indexes and
+ * defaults but never a foreign key, data untouched; a tenant already baselined at 1 by 13.9 keeps that history and
+ * nothing is re-run; a schema without the crm tables gets the provisioner's shape; re-provisioning is a no-op.
  */
 class CrmMigrationPostgresIntegrationTest {
 
@@ -132,17 +132,17 @@ class CrmMigrationPostgresIntegrationTest {
     // ── matrix ──────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("existing-shape tenant: baselined at 1 without running V1 — only flyway_history_crm appears")
-    void existingTenantBaselined() {
+    @DisplayName("16.12 existing-shape tenant: V1 runs idempotently — only flyway_history_crm appears, data untouched")
+    void existingTenantUnchanged() {
         jdbc.update("INSERT INTO \"" + A + "\".clients (name, phone) VALUES ('Awa', '+237690000001')");
         List<String> before = snapshot(A, null);
         List<Map<String, Object>> clientsBefore = jdbc.queryForList("SELECT * FROM \"" + A + "\".clients");
 
         ProvisioningResult result = provisioner.provision(A, "crm");
 
-        assertThat(result.migrationsApplied()).isZero();
+        assertThat(result.migrationsApplied()).isEqualTo(1);
         assertThat(result.toVersion()).isEqualTo("1");
-        assertThat(history(A)).containsExactly("1:BASELINE:true");
+        assertThat(history(A)).containsExactly("0:BASELINE:true", "1:SQL:true");
         List<String> after = snapshot(A, null);
         assertThat(withoutHistory(after)).isEqualTo(before);
         assertThat(after).contains("table flyway_history_crm");
@@ -157,8 +157,26 @@ class CrmMigrationPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("drifted tenant (indexes, defaults, FK missing): baselined as is — nothing repaired, nothing stamped")
-    void driftedTenantUntouched() {
+    @DisplayName("16.12 tenant baselined at 1 by 13.9: history kept, nothing re-run")
+    void baselinedTenantKept() {
+        // a 13.9 adoption: history baselined at 1 without running V1
+        Flyway.configure().dataSource(dataSource).schemas(A).defaultSchema(A).table("flyway_history_crm")
+                .locations("classpath:db/modules/crm").baselineVersion("1").createSchemas(false).load().baseline();
+        assertThat(history(A)).containsExactly("1:BASELINE:true");
+        List<String> before = snapshot(A, null);
+
+        ProvisioningResult result = provisioner.provision(A, "crm");
+
+        assertThat(result.migrationsApplied()).isZero();
+        assertThat(result.toVersion()).isEqualTo("1");
+        assertThat(history(A)).containsExactly("1:BASELINE:true");
+        assertThat(snapshot(A, null)).isEqualTo(before);
+    }
+
+    @Test
+    @DisplayName("16.12 drifted tenant (indexes, defaults, FK missing): indexes and defaults added, the FK is not, data untouched")
+    void driftedTenantRepairedWithoutForeignKey() {
+        List<String> reference = snapshot(A, null);
         jdbc.update("INSERT INTO \"" + C + "\".clients (id, name, phone, archived, created_at, updated_at) "
                 + "VALUES (?, 'Awa', '+237690000001', true, now() - interval '3 days', now() - interval '3 days')",
                 UUID.randomUUID());
@@ -172,14 +190,15 @@ class CrmMigrationPostgresIntegrationTest {
             }
         }
         jdbc.execute("ALTER TABLE \"" + C + "\".product_suppliers DROP CONSTRAINT product_suppliers_product_id_fkey");
-        List<String> before = snapshot(C, null);
         List<Map<String, Object>> rowsBefore = jdbc.queryForList("SELECT * FROM \"" + C + "\".clients");
 
         provisioner.provision(C, "crm");
 
-        assertThat(withoutHistory(snapshot(C, null))).isEqualTo(before);
+        List<String> expected = reference.stream()
+                .filter(line -> !line.contains("product_suppliers_product_id_fkey")).toList();
+        assertThat(withoutHistory(snapshot(C, null))).isEqualTo(expected);
         assertThat(jdbc.queryForList("SELECT * FROM \"" + C + "\".clients")).isEqualTo(rowsBefore);
-        assertThat(history(C)).containsExactly("1:BASELINE:true");
+        assertThat(history(C)).containsExactly("0:BASELINE:true", "1:SQL:true");
     }
 
     @Test
@@ -197,13 +216,5 @@ class CrmMigrationPostgresIntegrationTest {
         List<String> expected = reference.stream()
                 .filter(line -> !line.contains("_sync_keyset")).toList(); // owned by the sync keyset index job
         assertThat(snapshot(B, CRM_TABLES)).isEqualTo(expected);
-    }
-
-    @Test
-    @DisplayName("without the module's existing-schema baseline (no KeevoModule bean): V1 would run — the bean decides")
-    void baselineComesFromTheModule() {
-        assertThat(new CrmModule(null).existingSchemaBaseline()).contains(CrmModule.EXISTING_SCHEMA);
-        assertThat(CrmModule.EXISTING_SCHEMA.probeTable()).isEqualTo("clients");
-        assertThat(CrmModule.EXISTING_SCHEMA.version()).isEqualTo("1");
     }
 }

@@ -257,8 +257,11 @@ class ConcurrencyPrimitivesPostgresIntegrationTest extends PostgresIntegrationTe
 
     private void createCooldownTable() {
         jdbc.execute("CREATE SCHEMA IF NOT EXISTS " + SCHEMA);
-        jdbc.execute(TenantSchemaProvisioner.DDL_NOTIFICATION_COOLDOWNS.replaceFirst(
-                "notification_cooldowns", SCHEMA + ".notification_cooldowns"));
+        // same DDL as db/modules/messaging/V1__messaging_baseline.sql (Story 16.12)
+        jdbc.execute("CREATE TABLE IF NOT EXISTS " + SCHEMA + ".notification_cooldowns ("
+                + "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), cooldown_type VARCHAR(30) NOT NULL, product_id UUID, "
+                + "store_id UUID, last_sent_at TIMESTAMPTZ NOT NULL, "
+                + "CONSTRAINT uq_cooldown_product_store_type UNIQUE (cooldown_type, product_id, store_id))");
     }
 
     private Instant lastSentAt(UUID product, UUID store) {

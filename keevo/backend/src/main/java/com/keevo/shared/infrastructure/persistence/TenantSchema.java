@@ -11,9 +11,8 @@ import java.util.regex.Pattern;
  * {@link #validate(String)} and keeps its own failure contract:
  * <ul>
  *   <li>{@code SchemaAwareMultiTenantConnectionProvider} — {@code search_path} gate (public/invalid → no SET)</li>
- *   <li>{@link TenantSchemaSyncService#syncIfNeeded(String)} — no-op on invalid;
- *       {@link TenantSchemaSyncService#syncNow(String)} — throws on invalid</li>
- *   <li>{@link TenantSchemaMigrationRunner} — invalid → skipped</li>
+ *   <li>{@code ModuleProvisioner#ensureFoundation} — no-op on invalid; {@code upgradeFoundation} (boot,
+ *       {@link TenantSchemaMigrationRunner}) — invalid → skipped</li>
  *   <li>{@link TenantSchemaProvisioner#provision(String, String)} — DomainException(TENANT_PROVISION_FAILED)</li>
  *   <li>{@link TenantSchemaProvisioner#dropSchemaIfExists(String)} — no-op on invalid</li>
  *   <li>{@link TenantSchemaProvisioner#dropSchemaForDeletion(String)} — IllegalArgumentException</li>

@@ -35,9 +35,8 @@ class TenantMigrationIntegrationTest {
     private static final String TENANT_ID = "00000000-0000-0000-0000-000000000001";
 
     // ── AC1: Tables created by TenantSchemaProvisioner ────────────────────────
-    // All 7 tables provisioned by TenantSchemaProvisioner.createTables().
-    // Note: products, stock_levels, sales, sale_items, warehouses, audit_log,
-    // sync_queue, notifications are provisioned by later epic stories.
+    // A sample of the 29 tenant tables, created at registration from the foundation module migrations
+    // (Story 16.12, db/modules/<id>/V1__*_baseline.sql); the full shape is checked by TenantShapePostgresIntegrationTest.
     private static final Set<String> REQUIRED_TABLES = Set.of(
             "users", "subscriptions", "roles", "user_roles",
             "stores", "categories", "tenant_preferences", "employees"
@@ -66,14 +65,14 @@ class TenantMigrationIntegrationTest {
 
     @Test
     @Order(1)
-    @DisplayName("migrate() creates all 7 required tables in the tenant schema (AC1)")
+    @DisplayName("migrate() creates the required tables in the tenant schema (AC1)")
     void migrate_createsAllRequiredTables() throws Exception {
         schemaProvisioner.provision(TENANT_ID, SCHEMA);
 
         Set<String> actualTables = getTablesInSchema(SCHEMA);
 
         assertThat(actualTables)
-                .as("Tenant schema '%s' must contain all 12 AC1-required tables", SCHEMA)
+                .as("Tenant schema '%s' must contain the AC1-required tables", SCHEMA)
                 .containsAll(REQUIRED_TABLES);
     }
 

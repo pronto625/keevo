@@ -37,6 +37,26 @@ public interface TenantModuleProvisioningPort {
         return java.util.Map.of();
     }
 
+    /**
+     * Story 16.12 — the stored {@code provisioned_version} of several modules for every live tenant, in one query
+     * (tenant schema → module id → version); rows without a version are absent.
+     */
+    default java.util.Map<String, java.util.Map<String, String>> provisionedVersions(
+            java.util.Collection<String> moduleIds) {
+        java.util.Map<String, java.util.Map<String, String>> versions = new java.util.LinkedHashMap<>();
+        for (String moduleId : moduleIds) {
+            provisionedVersions(moduleId).forEach((schema, version) ->
+                    versions.computeIfAbsent(schema, k -> new java.util.LinkedHashMap<>()).put(moduleId, version));
+        }
+        return versions;
+    }
+
+    /** Story 16.12 — the public code of the tenant owning {@code tenantSchema}, for logs (one-row lookup). */
+    default java.util.Optional<String> tenantCode(String tenantSchema) {
+        return liveTenants().stream().filter(t -> t.tenantSchema().equals(tenantSchema)).map(LiveTenant::code)
+                .findFirst();
+    }
+
     /** Every live tenant ({@code status <> 'DELETED'}), ordered by code. */
     List<LiveTenant> liveTenants();
 

@@ -112,8 +112,9 @@ class ModuleScopedAsyncListenerFullContextTest extends FullContextIntegrationTes
     @Test
     @DisplayName("reporting DISABLED → async listener not invoked, publication completed")
     void disabledSkipped() throws InterruptedException {
+        // Story 16.12: registration already wrote the ACTIVE/FREE row of the foundation module
         jdbc.update("INSERT INTO public.tenant_modules (tenant_id, module_id, status, tier) VALUES (?, 'reporting', "
-                + "'DISABLED', 'FREE')", tenantId);
+                + "'DISABLED', 'FREE') ON CONFLICT (tenant_id, module_id) DO UPDATE SET status = 'DISABLED'", tenantId);
 
         UUID probeId = publish();
 

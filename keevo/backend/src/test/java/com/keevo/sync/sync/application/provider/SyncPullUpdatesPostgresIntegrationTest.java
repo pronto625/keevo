@@ -4,7 +4,7 @@ import com.keevo.reporting.report.adapter.out.persistence.EndOfDayReportJpaEntit
 import com.keevo.reporting.report.adapter.out.persistence.EndOfDayReportSpringRepository;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
-import com.keevo.shared.infrastructure.persistence.TenantSchemaSyncService;
+import com.keevo.shared.infrastructure.persistence.TenantFoundation;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * writes one report in {@code public} and deletes it.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, TenantSchemaSyncService.class})
+@Import({TenantSchemaProvisioner.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Sync pull carries later changes and summaries (PostgreSQL)")
 class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
@@ -53,7 +53,7 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
     @Autowired EntityManager em;
     @Autowired PlatformTransactionManager txManager;
     @Autowired TenantSchemaProvisioner provisioner;
-    @Autowired TenantSchemaSyncService schemaSync;
+    @Autowired javax.sql.DataSource foundationDataSource;
     @Autowired EndOfDayReportSpringRepository reports;
 
     @BeforeEach
@@ -107,7 +107,7 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("schema sync: an old tenant gets reports.updated_at, backfilled from created_at")
+    @DisplayName("foundation scripts: an old tenant gets reports.updated_at, backfilled from created_at")
     void oldTenantReportsBackfilled() throws Exception {
         jdbc.execute("ALTER TABLE " + T + "reports DROP COLUMN updated_at");
         UUID id = UUID.randomUUID();
@@ -115,7 +115,7 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
                         + "created_at) VALUES (?, 'tenant', ?, 'DAILY', ?, 'x', ?)",
                 id, UUID.randomUUID(), java.sql.Date.valueOf(LocalDate.of(2026, 10, 14)), Timestamp.from(CREATED));
 
-        schemaSync.syncNow(SCHEMA);
+        TenantFoundation.upgrade(foundationDataSource, SCHEMA);
 
         Timestamp updatedAt = jdbc.queryForObject(
                 "SELECT updated_at FROM " + T + "reports WHERE id = ?", Timestamp.class, id);
@@ -140,11 +140,11 @@ class SyncPullUpdatesPostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("schema sync: an old tenant gets sales.mobile_money_ref")
+    @DisplayName("foundation scripts: an old tenant gets sales.mobile_money_ref")
     void oldTenantGetsMobileMoneyRef() throws Exception {
         jdbc.execute("ALTER TABLE " + T + "sales DROP COLUMN mobile_money_ref");
 
-        schemaSync.syncNow(SCHEMA);
+        TenantFoundation.upgrade(foundationDataSource, SCHEMA);
 
         Integer columns = jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = ? AND table_name = 'sales' AND column_name = 'mobile_money_ref'",

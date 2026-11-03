@@ -52,6 +52,34 @@ public interface ModuleProvisioner {
      */
     void ensureProvisioned(String tenantSchema, String moduleId);
 
+    /**
+     * Story 16.12 — makes sure the tenant schema has every foundation table ({@link ModuleOrder#isFoundation}) at the
+     * latest shipped version, provisioning the modules that are behind (a tenant created before the deploy and
+     * reached before the boot upgrade finished). Cached per JVM per schema (the shipped versions are fixed for the
+     * JVM): a warm call does no database work; the first call costs three reads (schema existence, history tables
+     * present, their versions in one {@code UNION ALL}). Calls for one schema are serialised by a per-schema lock
+     * shared with the boot upgrade and the after-commit registration run, waited for at most 2 s; provisionings of
+     * all tenants share {@code keevo.tenant-schema.upgrade-parallelism} slots. After a failure the schema backs off
+     * (30 s, doubling up to 10 min): calls fail at once until then. An invalid or platform schema, a schema not
+     * created yet: no-op (not cached).
+     *
+     * @throws FoundationUnavailableException {@code SERVICE_UNAVAILABLE} (HTTP 503, French message, with the seconds
+     *         to wait) when the provisioning fails, is backing off, or the lock / a slot is not obtained in time
+     */
+    void ensureFoundation(String tenantSchema);
+
+    /**
+     * Story 16.12 — boot upgrade of the foundation tables: set-based detection of the live tenants whose Flyway
+     * history of a foundation module is missing or older than the latest shipped version (one catalogue query and
+     * chunked {@code UNION ALL} reads per module — the same source as {@link #ensureFoundation}), then only those
+     * tenants are provisioned, {@code parallelism} at a time; one tenant's failure never stops the others, and tenants
+     * left unfinished by an interruption count as failed. Up-to-date tenants get no Flyway run. Never throws for a
+     * tenant failure.
+     *
+     * @param parallelism tenants provisioned at the same time ({@code >= 1})
+     */
+    FoundationUpgrade upgradeFoundation(int parallelism);
+
     /** Whether the module ships migrations ({@code db/modules/<moduleId>/**}{@code /*.sql} on the classpath). */
     boolean hasMigrations(String moduleId);
 
@@ -87,8 +115,9 @@ public interface ModuleProvisioner {
 
     /**
      * Story 13.9 — provisions, for one tenant, every installed module (category {@code platform} excluded) that ships
-     * migrations and is active for it, each after its {@code requires} (module id order otherwise). Used at tenant
-     * registration, once the core DDL exists. A failure of one module is logged (module id, tenant code, exception
+     * migrations and is active for it, in {@link ModuleOrder} (Story 16.12: foundation modules first). Used at tenant
+     * registration, after it commits: the foundation tables already exist (executed in the registration transaction),
+     * their idempotent scripts are re-applied and their history recorded. A failure of one module is logged (module id, tenant code, exception
      * class) and the others continue; never throws for a module failure.
      *
      * @param tenantSchema a tenant schema name ({@code kv_xxxxxx})

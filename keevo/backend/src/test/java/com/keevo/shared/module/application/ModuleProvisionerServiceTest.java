@@ -68,11 +68,11 @@ class ModuleProvisionerServiceTest {
     void isolation() {
         when(migrations.hasMigrations(anyString())).thenAnswer(inv -> List.of("provtest", "provbroken", "provbatch")
                 .contains(inv.<String>getArgument(0)));
-        when(migrations.migrate(eq(SCHEMA), eq("provbroken"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provbroken")))
                 .thenThrow(new ModuleProvisioningException("provbroken", SCHEMA, "42601", null));
-        when(migrations.migrate(eq(SCHEMA), eq("provtest"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provtest")))
                 .thenReturn(new ModuleMigrationPort.Outcome(null, "2", 2));
-        when(migrations.migrate(eq(SCHEMA), eq("provbatch"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provbatch")))
                 .thenReturn(new ModuleMigrationPort.Outcome(null, "1", 1));
         when(rows.insertActiveFree(anyString(), anyString(), anyString())).thenReturn(1);
         when(rows.liveTenants()).thenReturn(List.of(new LiveTenant("KV-ISO001", SCHEMA, true)));
@@ -80,7 +80,7 @@ class ModuleProvisionerServiceTest {
         List<ProvisioningResult> results = service().provisionActiveModules(SCHEMA);
 
         assertThat(results).extracting(ProvisioningResult::moduleId).containsExactly("provbatch", "provtest");
-        verify(migrations).migrate(eq(SCHEMA), eq("provbroken"), any()); // attempted, failed, the others went on
+        verify(migrations).migrate(eq(SCHEMA), eq("provbroken")); // attempted, failed, the others went on
         assertThat(transactions).hasSize(3);
         verify(rows, never()).insertActiveFree(SCHEMA, "provbroken", null);
     }
@@ -89,7 +89,7 @@ class ModuleProvisionerServiceTest {
     @DisplayName("provisionAll skips the platform tenant (schema public) — never reported as a failure")
     void platformTenantSkipped() {
         when(migrations.hasMigrations("provtest")).thenReturn(true);
-        when(migrations.migrate(eq(SCHEMA), eq("provtest"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provtest")))
                 .thenReturn(new ModuleMigrationPort.Outcome(null, "2", 2));
         when(rows.insertActiveFree(anyString(), anyString(), anyString())).thenReturn(1);
         when(rows.liveTenants()).thenReturn(List.of(new LiveTenant("KV-ADMIN", "public", true),
@@ -100,7 +100,7 @@ class ModuleProvisionerServiceTest {
         assertThat(report.skipped()).containsExactly("KV-ADMIN");
         assertThat(report.failures()).isEmpty();
         assertThat(report.provisioned()).containsExactly("KV-ISO001");
-        verify(migrations, never()).migrate(eq("public"), anyString(), any());
+        verify(migrations, never()).migrate(eq("public"), anyString());
     }
 
     // ── Story 14.1 ───────────────────────────────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ class ModuleProvisionerServiceTest {
     @DisplayName("14.1: a paid module without row is provisioned but no tenant_modules row is inserted (never ACTIVE/FREE for ever)")
     void paidModuleNoRowInsertsNothing() {
         when(migrations.hasMigrations("provpaid")).thenReturn(true);
-        when(migrations.migrate(eq(SCHEMA), eq("provpaid"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provpaid")))
                 .thenReturn(new ModuleMigrationPort.Outcome(null, "1", 1));
 
         ProvisioningResult result = premiumService().provision(SCHEMA, "provpaid");
@@ -143,7 +143,7 @@ class ModuleProvisionerServiceTest {
     @DisplayName("14.1: a free module without row still gets its ACTIVE/FREE row (13.4 rule unchanged)")
     void freeModuleNoRowStillInserted() {
         when(migrations.hasMigrations("provtest")).thenReturn(true);
-        when(migrations.migrate(eq(SCHEMA), eq("provtest"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provtest")))
                 .thenReturn(new ModuleMigrationPort.Outcome(null, "2", 2));
         when(rows.insertActiveFree(SCHEMA, "provtest", "2")).thenReturn(1);
 
@@ -159,12 +159,12 @@ class ModuleProvisionerServiceTest {
         when(migrations.latestVersion("provpaid")).thenReturn("2");
         when(migrations.schemaExists(anyString())).thenReturn(true);
         when(migrations.currentVersion(SCHEMA, "provpaid")).thenReturn("1");
-        when(migrations.migrate(eq(SCHEMA), eq("provpaid"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provpaid")))
                 .thenReturn(new ModuleMigrationPort.Outcome("1", "2", 1));
         ModuleProvisionerService service = premiumService();
 
         service.ensureProvisioned(SCHEMA, "provpaid");
-        verify(migrations, org.mockito.Mockito.times(1)).migrate(eq(SCHEMA), eq("provpaid"), any());
+        verify(migrations, org.mockito.Mockito.times(1)).migrate(eq(SCHEMA), eq("provpaid"));
         verify(migrations, org.mockito.Mockito.times(1)).currentVersion(SCHEMA, "provpaid");
 
         org.mockito.Mockito.clearInvocations(migrations, rows);
@@ -174,35 +174,7 @@ class ModuleProvisionerServiceTest {
 
         when(migrations.currentVersion("kv_iso002", "provpaid")).thenReturn("2");
         service.ensureProvisioned("kv_iso002", "provpaid");
-        verify(migrations, never()).migrate(eq("kv_iso002"), anyString(), any());
-    }
-
-    @Test
-    @DisplayName("14.1 ensureProvisioned: a legacy module (existing-schema baseline, e.g. crm) is never adopted on first use")
-    void ensureProvisionedSkipsLegacyModules() {
-        ModuleCatalog catalog = TestModuleCatalogs.provisioningCatalog();
-        com.keevo.shared.module.KeevoModule legacy = new com.keevo.shared.module.KeevoModule() {
-            @Override
-            public String id() {
-                return "provtest";
-            }
-
-            @Override
-            public Optional<com.keevo.shared.module.ExistingSchemaBaseline> existingSchemaBaseline() {
-                return Optional.of(new com.keevo.shared.module.ExistingSchemaBaseline("legacy_table", "1"));
-            }
-        };
-        ModuleRegistryService registry = new ModuleRegistryService(catalog, states,
-                new RequestScopedActiveModulesCache(), Clock.systemUTC());
-        ModuleProvisionerService service = new ModuleProvisionerService(catalog, registry, states, rows, migrations,
-                KeevoModuleDirectory.of(catalog, List.of(legacy)), recording);
-        when(migrations.hasMigrations("provtest")).thenReturn(true);
-
-        service.ensureProvisioned(SCHEMA, "provtest");
-
-        verify(migrations, never()).currentVersion(anyString(), anyString());
-        verify(migrations, never()).migrate(anyString(), anyString(), any());
-        org.mockito.Mockito.verifyNoInteractions(rows);
+        verify(migrations, never()).migrate(eq("kv_iso002"), anyString());
     }
 
     @Test
@@ -216,7 +188,7 @@ class ModuleProvisionerServiceTest {
         service.ensureProvisioned(SCHEMA, "ghost");
         service.ensureProvisioned(SCHEMA, "provempty");
 
-        verify(migrations, never()).migrate(anyString(), anyString(), any());
+        verify(migrations, never()).migrate(anyString(), anyString());
         verify(migrations, never()).currentVersion(anyString(), anyString());
     }
 
@@ -227,7 +199,7 @@ class ModuleProvisionerServiceTest {
         when(migrations.latestVersion("provpaid")).thenReturn("1");
         when(migrations.schemaExists(SCHEMA)).thenReturn(true);
         when(migrations.currentVersion(SCHEMA, "provpaid")).thenReturn(null);
-        when(migrations.migrate(eq(SCHEMA), eq("provpaid"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provpaid")))
                 .thenThrow(new ModuleProvisioningException("provpaid", SCHEMA, "42601", null))
                 .thenReturn(new ModuleMigrationPort.Outcome(null, "1", 1));
         when(rows.liveTenants()).thenReturn(List.of(new LiveTenant("KV-ISO001", SCHEMA, true)));
@@ -238,7 +210,7 @@ class ModuleProvisionerServiceTest {
                 .satisfies(e -> assertThat(((com.keevo.shared.domain.exception.DomainException) e).getDomainCode())
                         .isEqualTo("SERVICE_UNAVAILABLE"));
         service.ensureProvisioned(SCHEMA, "provpaid");
-        verify(migrations, org.mockito.Mockito.times(2)).migrate(eq(SCHEMA), eq("provpaid"), any());
+        verify(migrations, org.mockito.Mockito.times(2)).migrate(eq(SCHEMA), eq("provpaid"));
     }
 
     @Test
@@ -249,7 +221,7 @@ class ModuleProvisionerServiceTest {
         when(migrations.schemaExists(SCHEMA)).thenReturn(true);
         java.util.concurrent.atomic.AtomicReference<String> current = new java.util.concurrent.atomic.AtomicReference<>();
         when(migrations.currentVersion(SCHEMA, "provpaid")).thenAnswer(inv -> current.get());
-        when(migrations.migrate(eq(SCHEMA), eq("provpaid"), any())).thenAnswer(inv -> {
+        when(migrations.migrate(eq(SCHEMA), eq("provpaid"))).thenAnswer(inv -> {
             Thread.sleep(50);
             current.set("1");
             return new ModuleMigrationPort.Outcome(null, "1", 1);
@@ -267,7 +239,7 @@ class ModuleProvisionerServiceTest {
         } finally {
             pool.shutdownNow();
         }
-        verify(migrations, org.mockito.Mockito.times(1)).migrate(eq(SCHEMA), eq("provpaid"), any());
+        verify(migrations, org.mockito.Mockito.times(1)).migrate(eq(SCHEMA), eq("provpaid"));
     }
 
     @Test
@@ -282,7 +254,7 @@ class ModuleProvisionerServiceTest {
         service.ensureProvisioned(SCHEMA, "provpaid");
 
         verify(migrations, org.mockito.Mockito.times(2)).schemaExists(SCHEMA);
-        verify(migrations, never()).migrate(anyString(), anyString(), any());
+        verify(migrations, never()).migrate(anyString(), anyString());
     }
 
     @Test
@@ -293,14 +265,14 @@ class ModuleProvisionerServiceTest {
         when(migrations.schemaExists(anyString())).thenReturn(true);
         when(migrations.currentVersion(SCHEMA, "provpaid")).thenReturn("1.9");
         when(migrations.currentVersion("kv_iso002", "provpaid")).thenReturn("1.10");
-        when(migrations.migrate(eq(SCHEMA), eq("provpaid"), any()))
+        when(migrations.migrate(eq(SCHEMA), eq("provpaid")))
                 .thenReturn(new ModuleMigrationPort.Outcome("1.9", "1.10", 1));
         ModuleProvisionerService service = premiumService();
 
         service.ensureProvisioned(SCHEMA, "provpaid");
         service.ensureProvisioned("kv_iso002", "provpaid");
 
-        verify(migrations).migrate(eq(SCHEMA), eq("provpaid"), any());
-        verify(migrations, never()).migrate(eq("kv_iso002"), anyString(), any());
+        verify(migrations).migrate(eq(SCHEMA), eq("provpaid"));
+        verify(migrations, never()).migrate(eq("kv_iso002"), anyString());
     }
 }

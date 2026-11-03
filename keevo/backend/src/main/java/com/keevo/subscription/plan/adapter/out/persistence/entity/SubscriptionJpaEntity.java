@@ -12,8 +12,8 @@ import java.util.UUID;
  * SubscriptionJpaEntity — JPA mapping for the per-tenant {@code subscriptions} table.
  *
  * <p>Infrastructure layer only — NEVER used in domain or application layer.
- * The table schema is defined in {@code TenantSchemaProvisioner.DDL_SUBSCRIPTIONS}
- * and provisioned programmatically for each tenant on registration.
+ * The table schema is defined in {@code db/modules/core/V1__core_baseline.sql}
+ * and executed for each tenant on registration (Story 16.12).
  *
  * <p>Note: This entity does NOT extend {@code JpaBaseEntity} because the DDL
  * does not include an {@code updated_at} column. All @PrePersist/@PreUpdate hooks
