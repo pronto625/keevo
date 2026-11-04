@@ -252,7 +252,7 @@ deferred:
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.8, branche `refonte/modulaire`, poussé aussi sur `develop`).
+**Statut :** API livrée, commit `2611efd3` (branche `refonte/modulaire`, poussé aussi sur `develop`).
 
 **Ce qui est fait côté API**
 - Les quotas de l'offre sont comptés par client et par période :
@@ -291,7 +291,7 @@ deferred:
 
 ## Dashboard super-admin (autre dépôt)
 
-**Statut :** API livrée (commit de la story 19.8).
+**Statut :** API livrée, commit `2611efd3`.
 
 **Ce qui est fait côté API :** les quotas de chaque plan sont des données, modifiables sans redéploiement.
 
