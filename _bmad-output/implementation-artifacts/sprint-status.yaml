@@ -349,6 +349,7 @@ development_status:
   m17-2-leaderboard-vendeurs: backlog  # API 9448d043 — interrupteur owner « Afficher le classement aux employés » (confirmation à l'activation, PUT /tenant/leaderboard-visibility, GET leaderboardVisibleToEmployees) ; employé : onglet Classement, 403 FORBIDDEN « pas partagé » en état vide, sa boutique seule, ligne me:true, autres « Vendeur N »
   m19-1-users-identifiants-multiples: backlog  # API 19-1 — profil : phoneNumber "" (jamais null) pour un compte sans téléphone, firstName/lastName de l'owner renseignés s'ils existent ; aucun nouvel écran
   m19-7b-plans-fusion: backlog  # API 42783992 — /subscription/me : planCode/planLabel/planKind/maxEmployeesPerStore ; refus PLAN_LIMIT_EXCEEDED avec scope "store" ; essai Business 1 mois
+  m19-8-compteurs-usage-quotas: backlog  # API 19-8 — « Ma consommation » (quotas + packs de /subscription/me), message QUOTA_EXCEEDED, facture refusée à la synchro → brouillon
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -362,6 +363,7 @@ development_status:
   d16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — page « Profils & plafonds » (plafonds, modules inclus, suivi de la resynchro)
   d16-14-api-prete-client-mobile: backlog  # API 525cbdaa — VALIDATION_ERROR avec le vrai message, CORE_MODULE_REQUIRED nommé, moduleId des profils, recherche par code, plan inconnu 404, historique paginé (limit/before)
   d19-7b-plans-fusion: backlog  # API 42783992 — « Activer une offre » (planCode, Team par défaut), refus 422 plan archivé / date, profils : membres par boutique, kind, archived
+  d19-8-compteurs-usage-quotas: backlog  # API 19-8 — section « Quotas » de l'écran d'un plan (GET/PUT plan-profiles, quotas)
   d19-1-users-identifiants-multiples: backlog  # API 19-1 — liste des comptes : ownerPhone peut être "" (owner sans téléphone, à afficher « — ») ; rien d'autre
 
   # ─────────────────────────────────────────────────────────
@@ -412,7 +414,7 @@ development_status:
   19-6-multi-roles-multi-entreprises: backlog
   19-7a-plans-en-donnees: done  # 2026-11-04 revue 5 couches (50 constats, 25 corrigés, 8 reportés → 19-7b/21-10), 5 058 tests verts, live keevo_dev OK ; revue de suivi recommandée (cache du catalogue) | 2026-11-03 build-auto (spec-19-7a-plans-en-donnees.md) | 2026-11-03 découpage de 19.7 : catalogue des plans en base, plus d'énumération ni de CHECK sur les codes, compatibilité V1 ; comportement identique
   19-7b-plans-fusion: done  # 2026-11-04 revue 5 couches (36 constats, 27 corrigés), 5 077 tests verts, live keevo_dev + Redmi OK ; revue de suivi recommandée | 2026-11-04 build-auto (spec-19-7b-plans-fusion.md) | 2026-11-03 découpage de 19.7 : FREE/PRO/TEAM/BUSINESS, PREMIUM→TEAM, FREE 1 employé, essai 1 mois (plan BUSINESS_TRIAL)
-  19-8-compteurs-usage-quotas: in-progress  # 2026-11-04 build-auto (spec-19-8-compteurs-usage-quotas.md)
+  19-8-compteurs-usage-quotas: done  # 2026-11-04 revue 5 couches (38 constats, 21 corrigés, 2 reportés → 21-3/19-9), 5 103 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-8-compteurs-usage-quotas.md)
   19-9-sms-email-notifications-persistantes: backlog
   19-10-versions-minimales-app: backlog
   19-11-charge-nombre-tenants: backlog

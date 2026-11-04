@@ -11,6 +11,8 @@ import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
 import com.keevo.shared.capability.business.CompanyIdentity;
+import com.keevo.shared.capability.entitlement.UsageMetric;
+import com.keevo.shared.capability.entitlement.UsageQuotaPort;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,11 @@ import java.util.UUID;
  * Issues, pays and cancels invoices (Story 14.1). Issuing assigns, in one transaction with the invoice row locked:
  * the next number of the year's gapless sequence ({@code FAC-<yyyy>-<000001>}, calendar year in Africa/Douala), the
  * issue date and the seller snapshot — a rollback gives the number back, so the sequence never has a gap.
+ *
+ * <p>Story 19.8 — a user's issue (REST {@code POST /invoices/{id}/issue}, sync {@code ISSUE_INVOICE}) counts one
+ * {@code DOCUMENTS} unit of the plan's quota, in the same transaction, before numbering: a refusal
+ * ({@code QUOTA_EXCEEDED}) leaves the draft a draft and allocates no number. The automatic invoice of a POS sale
+ * ({@link #issue(UUID, UUID, String, boolean)}) is never counted, nor blocked.
  */
 @Service
 public class InvoiceLifecycleUseCase {
@@ -34,11 +41,13 @@ public class InvoiceLifecycleUseCase {
     private final CompanyIdentity companyIdentity;
     private final Clock clock;
     private final CreditNoteRepository creditNotes;
+    private final UsageQuotaPort quotas;
 
     public InvoiceLifecycleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                    ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock,
-                                   CreditNoteRepository creditNotes) {
+                                   CreditNoteRepository creditNotes, UsageQuotaPort quotas) {
         this.creditNotes = creditNotes;
+        this.quotas = quotas;
         this.invoices = invoices;
         this.settings = settings;
         this.events = events;
@@ -51,9 +60,10 @@ public class InvoiceLifecycleUseCase {
         return String.format("FAC-%04d-%06d", year, sequence);
     }
 
+    /** A user's issue: counts one {@code DOCUMENTS} unit of the plan's quota (Story 19.8). */
     @Transactional
     public Invoice issue(UUID id, UUID actorId, String tenantId) {
-        return issue(id, actorId, tenantId, false);
+        return issue(id, actorId, tenantId, false, true);
     }
 
     /**
@@ -63,6 +73,10 @@ public class InvoiceLifecycleUseCase {
      */
     @Transactional
     public Invoice issue(UUID id, UUID actorId, String tenantId, boolean pricesIncludeVat) {
+        return issue(id, actorId, tenantId, pricesIncludeVat, false);
+    }
+
+    private Invoice issue(UUID id, UUID actorId, String tenantId, boolean pricesIncludeVat, boolean counted) {
         Invoice draft = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         InvoicingSettings found = settings.find().orElseGet(InvoicingSettings::defaults);
         InvoicingSettings stored = pricesIncludeVat ? withPricesIncludingVat(found) : found;
@@ -75,6 +89,9 @@ public class InvoiceLifecycleUseCase {
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
         draft.assertIssuable(seller); // throws the precise error before any number is allocated
+        if (counted) { // 19.8: before numbering, same transaction — a refusal keeps the draft and the sequence
+            quotas.assertAndIncrementForSchema(tenantId, UsageMetric.DOCUMENTS, 1);
+        }
         Invoice issued = ManageDraftInvoiceUseCase.valid(() -> draft.issue(
                 number(today.getYear(), invoices.nextNumber(today.getYear())), today, seller, now))
                 .withSellerIdentity(nameFromDisplay, hasLogo);

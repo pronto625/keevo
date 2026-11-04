@@ -136,6 +136,7 @@ public enum ErrorCode {
     // ── Subscription / Plan Limits ────────────────────────────────
     SUBSCRIPTION_NOT_FOUND, // HTTP 404 — no active subscription for tenant (Story 2.4)
     PLAN_LIMIT_EXCEEDED,    // HTTP 403 — store/product/employee limit reached on Free plan
+    QUOTA_EXCEEDED,         // Story 19.8 — HTTP 403: a usage quota of the plan (documents, SMS, emails, AI credits) is used up
     PRODUCT_QUOTA_UNAVAILABLE, // Story 16.8 — HTTP 503: the product count could not be read for a finite limit (fail closed)
     PLAN_PROFILE_INVALID,   // Story 16.8 — HTTP 422: a super-admin plan profile edit is invalid; nothing saved
     PLAN_PROFILE_NOT_FOUND, // Story 16.14 — HTTP 404: unknown plan type on /admin/plan-profiles/{planType} (« Offre introuvable »)

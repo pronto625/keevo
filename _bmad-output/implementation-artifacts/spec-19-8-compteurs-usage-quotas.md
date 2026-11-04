@@ -2,15 +2,22 @@
 title: '19.8 — Atomic usage counters and plan quotas (documents, SMS, emails, AI credits)'
 type: 'feature'
 created: '2026-11-04'
-status: 'ready-for-dev'
-baseline_revision: '8d37567dbb282ac50cec44ec1f7e8452b7c600b9'
+status: 'done'
+baseline_revision: 'fe3b3b632c346db3a5db585b94982f97aca88cd9'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-19-7b-plans-fusion.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Pack-paid usage has no consumption record; SMS/email senders must count after provider success in a short transaction
+    evidence: |-
+      Routed to 21-3 (pack ledger / « Mon plan » display) and 19-9 (sender transaction boundary) in epics-fusion-keevo-bref.md, 2026-11-04.
+    location: >-
+      UsageQuotaService.increment, JdbcUsageCounterStore.consumeCredits
+    severity: medium
 ---
 
 <intent-contract>
@@ -172,6 +179,53 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 38 findings — high 0, medium 9, low 19, false 5, maybe-false 5
+- findings:
+  - Patterns/complexity:
+    - `[medium]` `[patch]` Nightly purge filters on length(period_key): full scan, period kind encoded in key length — `period` column + partial index, purge by period.
+    - `[low]` `[patch]` Admin update re-reads quotas after the tx — in-tx read, replaced list returned.
+    - `[low]` `[patch]` Null dependency instead of a null object in GetSubscriptionService — `UsageQuotaPort.NONE`.
+    - `[low]` `[reject]` Tenant resolved twice on /subscription/me — one unique-index lookup, same cost.
+    - `[low]` `[defer]` 19.9 senders must increment after provider success in a short tx, never around the HTTP call — routed to 19-9.
+    - `[low]` `[patch]` Enum parsing loop / string keys for duplicates — Enum.valueOf, EnumSet keys.
+  - Blind hunter:
+    - `[false]` `[reject]` FREE AI DAY=0 blocks AI packs — Bref parity: FREE has no AI at all (`aiConversational=false`, quota.service checkAiCredits refuses regardless of packs).
+    - `[medium]` `[defer]` Pack-paid usage not recorded (no ledger, « Mon plan » shows used=limit) — pack purchase/consumption history belongs with packs → 21-3.
+    - `[medium]` `[patch]` Periods without a limit not counted (DAY-only AI, unlimited counted on MONTH only) — MONTH and DAY always counted; LIFETIME only with a lifetime quota.
+    - `[low]` `[patch]` Partial count relies on caller rollback — documented on the port (MANDATORY); REST and sync both roll back per operation (verified SyncPushService one tx per op).
+    - `[maybe-false]` `[reject]` Quota plan read from public.tenants may disagree with the subscription — every plan change (expiry, admin, migration, registration) updates both in the same transaction and PlanTypeRealignJob repairs drift; the expiry case is identical on both sources until the job runs. Unknown-code fallback patched (row below).
+    - `[low]` `[patch]` String/UUID overloads easy to misuse — schema variants renamed `…ForSchema`.
+    - `[low]` `[patch]` Audit log lacks quota before-state — logged before/after in tx.
+    - `[low]` `[patch]` Dead null check (List.copyOf NPE) — null element → 422.
+    - `[medium]` `[patch]` QUOTA_EXCEEDED and quota items expose only codes — French metricLabel / periodLabel added (project rule).
+    - `[false]` `[reject]` V1/Bref clients and the QUOTA_EXCEEDED sync reason — no V1 tenant can reach it (FREE has no invoicing, paid plans unlimited documents); the mobile section documents the handling.
+    - `[low]` `[patch]` Admin invalid inputs untested — extra key, missing limit, fractional limit, null element.
+    - `[low]` `[patch]` Other untested paths — pack paid once (test), manual credit note not counted (test), purge failure log message, tearDown cleanup.
+    - `[medium]` `[patch]` Purge full scan — grouped with the patterns row.
+  - Edge-case hunter:
+    - `[medium]` `[patch]` Mid-month downgrade starts the monthly quota from zero — grouped with "always count MONTH and DAY".
+    - `[low]` `[patch]` Quota added later to DAY ignores past use — grouped (DAY always counted; LIFETIME only on lifetime plans by Bref semantics).
+    - `[low]` `[reject]` Pack-paid unit also consumes a LIFETIME allowance — needs MONTH and LIFETIME quotas on the same metric, which no plan has; fixing adds branching for an unreachable case.
+    - `[medium]` `[patch]` /subscription/me fails entirely when usage status throws — caught, empty quotas, WARN.
+    - `[low]` `[patch]` NULL plan_type → null planCode/unlimited — resolved to the free plan.
+    - `[low]` `[patch]` usage_credits.remaining integer overflow — bigint.
+    - `[low]` `[patch]` Quotas re-read outside the tx after admin update — grouped.
+    - `[low]` `[patch]` v44Idempotent count flaky with leftover test plans — restricted to seeded codes.
+  - Verification gap:
+    - `[medium]` `[patch]` Tenant deletion purge of usage tables untested — RGPD integration + unit verify.
+    - `[medium]` `[patch]` Pack paid once for MONTH+LIFETIME untested — test added.
+    - `[low]` `[patch]` Admin quota rejections untested — grouped.
+  - Intent alignment:
+    - `[false]` `[reject]` Seeded grid not enforced on any real tenant yet — intended (R1): FREE invoicing grant is 19.13, SMS/email/AI consumers 19.9+.
+    - `[maybe-false]` `[reject]` Plan source public.tenants vs subscription row — grouped with the blind row.
+    - `[maybe-false]` `[reject]` Two-period refusal not tested through REST/sync — only DOCUMENTS is wired (single period); covered at service level with rollback.
+    - `[maybe-false]` `[reject]` Concurrency tested at service level, not via endpoints — the atomicity lives in the single SQL statement; endpoints add no shared state.
+    - `[false]` `[reject]` Pack fallback tested only at service level — matches the intent (no purchase endpoint).
+    - `[low]` `[reject]` Extra PK read on the refusal path beyond the NFR budget — refusal path only, one PK read for the `used` detail.
+    - `[false]` `[reject]` Unlimited metrics listed with null limit / credits 0 shown — « Mon plan » visibility, additive.
+    - `[maybe-false]` `[reject]` Deletion purge / live check not in tests — deletion now tested (gap patch); live check performed and recorded.
+
 ## Design Notes
 
 - **Pattern:** guarded atomic upsert (optimistic, set-based) instead of read-check-write, so a race can never overshoot without locks held across calls. Quotas as data rows (strategy by metric and period): metrics stay code concepts because each one has a consumer in code, while limits are data (ADR-05). The pack fallback is a chain: plan quota, then pack, then refuse.
@@ -187,3 +241,76 @@ deferred: []
 
 **Manual checks:**
 - Local backend on keevo_dev (WhatsApp noop, FCM off): V44 success; issue an invoice via the API → `usage_counters` row for DOCUMENTS; `/subscription/me` shows `quotas`; with a test plan quota of 1 the second issue → 403 `QUOTA_EXCEEDED` with French message and details.
+
+## Auto Run Result
+
+- **Summary:** usage is metered per tenant and period with quotas as data. V44 adds `plan_quotas` (seeded from Bref's `plan-policy.constant.ts`: FREE documents 300/month, SMS 5 lifetime, emails 100/month, no AI; PRO/TEAM/BUSINESS SMS 20/50/80 per month, AI 500/750/unlimited per month and 20/30/50 per day), `usage_counters` (with a `period` column and a purge index) and `usage_credits` (packs, bigint). `UsageQuotaService` (port `UsageQuotaPort`, caller's transaction) counts MONTH and DAY always and LIFETIME under a lifetime quota, with one guarded upsert per period, and pays from packs once when a MONTH/LIFETIME quota is exhausted. The DAY cap is never paid from packs. Otherwise it throws `QUOTA_EXCEEDED` (403, French labels in details). Issuing an invoice counts one document; POS bridge invoices and credit notes do not. `/subscription/me` and admin plan profiles show and edit quotas. Nightly purge job; tenant deletion purges the tables.
+- **Review:** 38 findings — patched 21 rows (medium 7, low 14) in 12 fix groups (all-period counting, period column + purge index, bigint credits, unknown plan → free quotas, /subscription/me resilience + null object, French labels, `…ForSchema` renames + rollback doc, in-tx admin audit, null quota element → 422, 3 test gaps). Deferred 2 → 21-3 (pack consumption history) and 19-9 (count after provider success, short transaction). Rejected 15 (false 5, maybe-false 5, low 5) with reasons in the triage log.
+- **Follow-up review recommended: true** — first pass patched 7 medium entries; the counting rule (MONTH/DAY always, LIFETIME conditional) and the purge schema changed after review.
+- **Verification:** full suite by package green — 5,103 tests, 0 failure (acceptance 4, admin 586, architecture 34, catalog 306, commerce 263, crm 158, feedback 52, identity 525, inventory 410, invoicing 179, messaging 192, reporting 421, shared 1172, store 60, subscription 106, sync 635), run with the ≥ 4 GB memory guard. Live keevo_dev (WhatsApp noop, FCM off): V44 re-applied; registration KV-GJHO4C (BUSINESS_TRIAL) → `/subscription/me` quotas with French labels (SMS 80/month, AI 50/day, others unlimited), `resetAt` = 1 Dec 00:00 WAT; draft → issue FAC-2026-000001 → DOCUMENTS counted 1 on MONTH and DAY. Earlier implementer live check: a test plan with a limit of 2 gave 403 `QUOTA_EXCEEDED` with full details, invoice kept as draft.
+- **Residual risks:** no real tenant can hit a quota yet (FREE invoicing grant is 19.13; SMS/email/AI consumers 19.9 and later); quotas are read from `public.tenants.plan_type` (kept in step with the subscription by every plan change and the realign job); per-country period zones are 20.5 (WAT for now).
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée (commit de la story 19.8, branche `refonte/modulaire`, poussé aussi sur `develop`).
+
+**Ce qui est fait côté API**
+- Les quotas de l'offre sont comptés par client et par période :
+  - documents (factures émises) ;
+  - SMS ;
+  - emails ;
+  - crédits IA (par mois et par jour).
+- Les valeurs de départ sont celles de Bref. Aujourd'hui, seule l'émission d'une facture consomme un quota (1 document). SMS, emails et IA arriveront avec la 19.9 et les stories IA.
+- Un quota épuisé renvoie une erreur explicite. Les ventes en caisse, les paiements et les factures automatiques de la caisse ne sont jamais bloqués.
+
+**À utiliser**
+- **`GET /api/v1/subscription/me`** (`keevo/backend/src/main/java/com/keevo/subscription/plan/adapter/in/rest/dto/SubscriptionResponse.java`) gagne deux champs :
+  - `quotas` : une liste de `{metric, metricLabel, period, periodLabel, limit, used, remaining, resetAt}`. `limit` et `remaining` valent `null` quand c'est illimité. `resetAt` est la date ISO de remise à zéro, `null` pour un quota à vie.
+  - `credits` : `{metric: reste}`, pour les packs achetés.
+- **Refus pour quota épuisé :**
+  - HTTP 403, `domainCode` `QUOTA_EXCEEDED`, message « Quota de votre offre atteint ».
+  - `details` = `{metric, metricLabel, period, periodLabel, limit, used, resetAt, planCode, planLabel}`.
+  - En synchronisation : résultat `REJECTED`, raison `QUOTA_EXCEEDED`, mêmes détails dans `conflictData`.
+- **Cas concerné aujourd'hui :** `POST /api/v1/invoices/{id}/issue` et l'opération de sync `ISSUE_INVOICE`. La facture reste en brouillon.
+
+**À implémenter côté mobile**
+1. Ajouter une section « Ma consommation » dans « Mon plan ».
+   - Une ligne par quota, de la forme `{metricLabel} : {used} / {limit} {periodLabel}`. Exemple : « Documents : 12 / 300 par mois ». Écrire « illimité » si `limit` est nul.
+   - Afficher le reste des packs, s'il y en a.
+2. Sur `QUOTA_EXCEEDED`, afficher « Vous avez atteint votre quota de {metricLabel} {periodLabel} ({used}/{limit}). Il se renouvelle le {resetAt en date locale}. » Ne rien mettre sur le renouvellement si `resetAt` est nul. Proposer de voir les offres.
+3. Hors ligne, une facture émise sur l'appareil puis refusée à la synchro pour quota doit redevenir un brouillon, avec ce message. Elle ne doit pas rester « émise ».
+4. Ne jamais afficher les codes (`DOCUMENTS`, `AI_CREDITS`, `LIFETIME`), seulement les libellés.
+
+**Implémentation de référence :** aucune.
+
+**Critères d'acceptation mobile / scénarios de test**
+- **Consommation affichée.** Étant donné un compte qui vient d'émettre une facture, quand l'app ouvre « Mon plan », alors « Documents » indique 1 utilisé ce mois.
+- **Quota épuisé.** Étant donné un plan de test limité à 1 document, quand l'app émet une 2e facture, alors elle affiche le message de quota et la facture reste en brouillon.
+
+**Clé de suivi mobile :** `m19-8-compteurs-usage-quotas`.
+
+## Dashboard super-admin (autre dépôt)
+
+**Statut :** API livrée (commit de la story 19.8).
+
+**Ce qui est fait côté API :** les quotas de chaque plan sont des données, modifiables sans redéploiement.
+
+**À utiliser**
+- **`GET /api/v1/admin/plan-profiles`** et **`GET /api/v1/admin/plan-profiles/{plan}`** : chaque plan gagne `quotas`, une liste de `{metric, metricLabel, period, periodLabel, limit}`.
+- **`PUT /api/v1/admin/plan-profiles/{plan}`** accepte `quotas`, une liste de `{metric, period, limit}`, en remplacement complet.
+  - `quotas` absent : les quotas enregistrés sont gardés. Liste vide : plus aucun quota, donc tout est illimité.
+  - Valeurs autorisées :
+    - `metric` : `DOCUMENTS`, `SMS`, `EMAILS` ou `AI_CREDITS` ;
+    - `period` : `MONTH`, `DAY` ou `LIFETIME` ;
+    - `limit` : un entier ≥ 0.
+  - Une erreur renvoie 422 `PLAN_PROFILE_INVALID`, avec la raison en français : doublon, valeur inconnue, limite invalide ou champ en trop.
+
+**À implémenter côté dashboard**
+1. L'écran d'un plan gagne une section « Quotas ».
+   - Une ligne par quota : usage (liste de libellés), période (« par mois », « par jour », « à vie ») et limite.
+   - On peut ajouter ou supprimer une ligne. « Illimité » veut dire pas de ligne.
+2. Enregistrer en envoyant la liste complète dans `quotas`.
+
+**Critères d'acceptation / scénarios de test :** étant donné le plan Pro, quand on règle les SMS à 30 par mois, alors `GET /admin/plan-profiles/PRO` renvoie SMS 30 par mois, et le prochain envoi compté l'applique.
+
+**Clé de suivi dashboard :** `d19-8-compteurs-usage-quotas`.

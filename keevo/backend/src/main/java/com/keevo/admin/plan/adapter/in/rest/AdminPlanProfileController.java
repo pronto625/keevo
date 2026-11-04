@@ -2,6 +2,9 @@ package com.keevo.admin.plan.adapter.in.rest;
 
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.PlanQuota;
+import com.keevo.shared.capability.entitlement.QuotaPeriod;
+import com.keevo.shared.capability.entitlement.UsageMetric;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -71,7 +75,10 @@ public class AdminPlanProfileController {
     @Operation(summary = "Replace the profile of a plan type (applies to the next check, no restart)",
             description = "Body keys maxStores / maxProducts / maxEmployees are required: positive, or null "
                     + "(unlimited) sent explicitly; maxEmployeesPerStore (Story 19.7b) is optional: positive, null "
-                    + "(unlimited), or absent to keep the stored value; unknown keys are refused. modules: ids of installed paid modules "
+                    + "(unlimited), or absent to keep the stored value; quotas (Story 19.8) is optional: a list of "
+                    + "{metric DOCUMENTS|SMS|EMAILS|AI_CREDITS, period MONTH|DAY|LIFETIME, limit >= 0} replacing every "
+                    + "usage quota of the plan (a metric without quota is unlimited), absent to keep them; "
+                    + "unknown keys are refused. modules: ids of installed paid modules "
                     + "only (every other installed paid module is recorded as not granted). Tenants above a lowered limit keep their records; only new "
                     + "creations are refused. Answer {profile, compositionChanged, jobId}: when the modules change, "
                     + "the plan-derived module rows of every live tenant on this plan type are re-synced by a "
@@ -102,16 +109,55 @@ public class AdminPlanProfileController {
         PlanProfileAdmin.LimitPatch perStore = body.containsKey(PER_STORE)
                 ? new PlanProfileAdmin.LimitPatch.Set(limit(body, PER_STORE, "le plafond d'employés par boutique"))
                 : PlanProfileAdmin.LimitPatch.KEEP;
+        // Story 19.8 — optional: absent keeps the stored quotas, a list replaces them
+        PlanProfileAdmin.QuotaPatch quotas = body.containsKey(QUOTAS)
+                ? new PlanProfileAdmin.QuotaPatch.Replace(quotas(body.get(QUOTAS)))
+                : PlanProfileAdmin.QuotaPatch.KEEP;
         return ResponseEntity.ok(ApiResponseWrapper.ok(profiles.update(type, maxStores, maxProducts, maxEmployees,
-                perStore, modules(body), CurrentActor.actorId())));
+                perStore, modules(body), quotas, CurrentActor.actorId())));
     }
 
     // ── Parsing (adapter concern) ─────────────────────────────────────────────
 
     /** The accepted body keys: the three limits must be present (null = unlimited, sent explicitly). */
     private static final String PER_STORE = "maxEmployeesPerStore";
+    private static final String QUOTAS = "quotas";
     private static final Set<String> FIELDS = Set.of("maxStores", "maxProducts", "maxEmployees", PER_STORE,
-            "modules");
+            "modules", QUOTAS);
+    private static final Set<String> QUOTA_FIELDS = Set.of("metric", "period", "limit");
+
+    /** Story 19.8 — {@code [{metric, period, limit}]}; duplicates are refused by the service. */
+    private static List<PlanQuota> quotas(Object value) {
+        if (!(value instanceof List<?> list)) {
+            throw invalid("la liste des quotas est invalide");
+        }
+        List<PlanQuota> quotas = new ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> quota) || !QUOTA_FIELDS.containsAll(quota.keySet())) {
+                throw invalid("un des quotas est invalide");
+            }
+            UsageMetric metric = parse(UsageMetric.class, quota.get("metric"), "un des quotas porte sur un usage inconnu");
+            QuotaPeriod period = parse(QuotaPeriod.class, quota.get("period"), "un des quotas a une période inconnue");
+            Object limit = quota.get("limit");
+            if (!(limit instanceof Number n) || n.doubleValue() != Math.rint(n.doubleValue())
+                    || n.doubleValue() < 0 || n.doubleValue() > Integer.MAX_VALUE) {
+                throw invalid("la limite d'un quota doit être un nombre entier positif ou nul");
+            }
+            quotas.add(new PlanQuota(metric, period, n.intValue()));
+        }
+        return quotas;
+    }
+
+    private static <E extends Enum<E>> E parse(Class<E> type, Object value, String reason) {
+        if (value instanceof String s) {
+            try {
+                return Enum.valueOf(type, s);
+            } catch (IllegalArgumentException e) {
+                throw invalid(reason);
+            }
+        }
+        throw invalid(reason);
+    }
 
     private static Integer limit(Map<String, Object> body, String key, String what) {
         if (!body.containsKey(key)) {

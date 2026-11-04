@@ -5,6 +5,9 @@ import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.capability.entitlement.PlanProfiles;
+import com.keevo.shared.capability.entitlement.PlanQuota;
+import com.keevo.shared.capability.entitlement.QuotaPeriod;
+import com.keevo.shared.capability.entitlement.UsageMetric;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
@@ -17,11 +20,13 @@ import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.PlanProfileAdmin;
 import com.keevo.shared.module.PlanProfileAdmin.LimitPatch;
+import com.keevo.shared.module.PlanProfileAdmin.QuotaPatch;
 import com.keevo.shared.module.application.port.PlanModuleRowStore;
 import com.keevo.shared.module.application.port.PlanModuleRowStore.LiveTenant;
 import com.keevo.shared.module.application.port.PlanModuleRowSync;
 import com.keevo.shared.module.application.port.PlanModuleRowSync.SyncResult;
 import com.keevo.shared.module.application.port.PlanProfileStore;
+import com.keevo.shared.module.application.port.PlanQuotaStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -30,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -44,6 +50,9 @@ import java.util.UUID;
  * subscription) get their {@code PLAN} rows re-synced by a {@code PROFILE_RESYNC} background job (Story 16.4) ({@link PlanModuleRowSync#syncIfPlanType}, one transaction per tenant, a
  * failure reported by tenant code and the loop going on). Every change is logged {@code [ADMIN AUDIT]} with the
  * actor, the plan type and the profile before/after.
+ *
+ * <p>Story 19.8 — the plan's usage quotas ({@code public.plan_quotas}) are shown with the profile and, when given,
+ * replaced in the same transaction (one query for the quotas of every plan on {@link #list()}).
  */
 @Service
 public class PlanProfileAdminService implements PlanProfileAdmin {
@@ -58,6 +67,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
     private final TransactionTemplate tx;
     private final AdminJobs jobs;
     private final PlanCatalog plans;
+    private final PlanQuotaStore quotas;
 
     /** With the seeded plan catalogue (tests). */
     public PlanProfileAdminService(ModuleCatalog catalog, PlanProfiles profiles, PlanProfileStore store,
@@ -66,10 +76,19 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         this(catalog, profiles, store, rowSync, rows, transactionManager, jobs, PlanCatalog.SEED);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    /** Without usage quotas (tests). */
     public PlanProfileAdminService(ModuleCatalog catalog, PlanProfiles profiles, PlanProfileStore store,
                                    PlanModuleRowSync rowSync, PlanModuleRowStore rows,
                                    PlatformTransactionManager transactionManager, AdminJobs jobs, PlanCatalog plans) {
+        this(catalog, profiles, store, rowSync, rows, transactionManager, jobs, plans, PlanQuotaStore.NONE);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PlanProfileAdminService(ModuleCatalog catalog, PlanProfiles profiles, PlanProfileStore store,
+                                   PlanModuleRowSync rowSync, PlanModuleRowStore rows,
+                                   PlatformTransactionManager transactionManager, AdminJobs jobs, PlanCatalog plans,
+                                   PlanQuotaStore quotas) {
+        this.quotas = quotas;
         this.plans = plans;
         this.jobs = jobs;
         this.catalog = catalog;
@@ -84,14 +103,17 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
     public List<ProfileView> list() {
         List<ProfileView> views = new ArrayList<>();
         // Story 19.7a: every plan of the catalogue, in display order, profiles read in one query
-        profiles.profiles(plans.all().stream().map(PlanDefinition::code).toList())
-                .values().forEach(p -> views.add(view(p)));
+        List<PlanType> codes = plans.all().stream().map(PlanDefinition::code).toList();
+        Map<PlanType, List<PlanQuota>> quotasByPlan = quotas.quotas(codes); // 19.8: one query
+        profiles.profiles(codes).values()
+                .forEach(p -> views.add(view(p, quotasByPlan.getOrDefault(p.planType(), List.of()))));
         return views;
     }
 
     @Override
     public UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
-                               LimitPatch maxEmployeesPerStore, Set<String> modules, UUID actorId) {
+                               LimitPatch maxEmployeesPerStore, Set<String> modules, QuotaPatch quotaPatch,
+                               UUID actorId) {
         if (planType == null) {
             throw invalid("offre inconnue");
         }
@@ -108,6 +130,9 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
             throw invalid("indiquez les modules inclus dans l'offre (liste vide si aucun)");
         }
         Set<String> granted = validModules(modules);
+        // 19.8: validated before anything is written; null = keep the stored quotas
+        List<PlanQuota> newQuotas = quotaPatch instanceof QuotaPatch.Replace(List<PlanQuota> requestedQuotas)
+                ? validQuotas(requestedQuotas) : null;
         // explicit decision for every installed paid module (a module shipped later follows the plan's default)
         Set<String> withheld = new TreeSet<>(paidModules());
         withheld.removeAll(granted);
@@ -121,6 +146,8 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         AdminJobs.Reservation[] reserved = new AdminJobs.Reservation[1];
         PlanProfile[] before = new PlanProfile[1];
         PlanProfile[] saved = new PlanProfile[1];
+        java.util.concurrent.atomic.AtomicReference<List<PlanQuota>> quotasBefore =
+                new java.util.concurrent.atomic.AtomicReference<>(List.of());
         try {
             tx.executeWithoutResult(status -> {
                 PlanProfile stored = store.findForUpdate(planType).orElse(null); // row lock: edits serialise
@@ -133,6 +160,11 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                     reserved[0] = jobs.reserve(AdminJobs.Kind.PROFILE_RESYNC, params, actorId);
                 }
                 store.save(after, actorId);
+                // 19.8: quotas read in this transaction (audit « before », answer for Keep), replaced when given
+                quotasBefore.set(quotas.quotas(List.of(planType)).getOrDefault(planType, List.of()));
+                if (newQuotas != null) {
+                    quotas.replace(planType, newQuotas); // applies to the next increment
+                }
             });
         } catch (RuntimeException e) {
             if (reserved[0] != null) {
@@ -141,8 +173,10 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
             throw e;
         }
         boolean compositionChanged = reserved[0] != null;
-        log.info("[ADMIN AUDIT] Plan profile changed: actor={} plan={} before={} after={}", actorId, planType,
-                describe(before[0]), describe(saved[0]));
+        List<PlanQuota> savedQuotas = newQuotas != null ? newQuotas : quotasBefore.get();
+        log.info("[ADMIN AUDIT] Plan profile changed: actor={} plan={} before={} after={} quotasBefore={} "
+                        + "quotasAfter={}", actorId, planType, describe(before[0]), describe(saved[0]),
+                describe(quotasBefore.get()), newQuotas != null ? describe(newQuotas) : "unchanged");
 
         UUID jobId = null;
         if (compositionChanged) {
@@ -155,7 +189,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                         planType, e.getClass().getSimpleName());
             }
         }
-        return new UpdateResult(view(saved[0]), compositionChanged, jobId);
+        return new UpdateResult(view(saved[0], savedQuotas), compositionChanged, jobId);
     }
 
     /** Re-syncs the {@code PLAN} rows of every live tenant whose plan has this type. */
@@ -257,13 +291,34 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         return granted;
     }
 
+    /** Story 19.8 — limit {@code >= 0} (typed by the record), at most one quota per metric and period. */
+    private static List<PlanQuota> validQuotas(List<PlanQuota> requested) {
+        if (requested == null) {
+            throw invalid("la liste des quotas est invalide");
+        }
+        Set<Map.Entry<UsageMetric, QuotaPeriod>> seen = new HashSet<>();
+        for (PlanQuota q : requested) {
+            if (q == null) {
+                throw invalid("un des quotas est invalide");
+            }
+            if (!seen.add(Map.entry(q.metric(), q.period()))) {
+                throw invalid("un même quota est indiqué deux fois pour la même période");
+            }
+        }
+        return List.copyOf(requested);
+    }
+
+    private static String describe(List<PlanQuota> quotas) {
+        return quotas.stream().map(q -> q.metric() + "/" + q.period() + "=" + q.limit()).toList().toString();
+    }
+
     private static void requireLimit(Integer limit, String what) {
         if (limit != null && limit <= 0) {
             throw invalid(what + " maximal doit être supérieur à zéro (laissez vide pour illimité)");
         }
     }
 
-    private ProfileView view(PlanProfile profile) {
+    private ProfileView view(PlanProfile profile, List<PlanQuota> planQuotas) {
         List<ModuleRef> granted = catalog.manifests().stream()
                 .filter(PlanModuleRows::planDerived)
                 .filter(m -> profile.grants(m.id()))
@@ -274,7 +329,8 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         return new ProfileView(profile.planType().name(), label(profile.planType()), profile.maxStores(),
                 profile.maxProducts(), profile.maxEmployees(), granted, profile.fallback(),
                 plan.map(p -> p.kind().name()).orElse(profile.kind().name()),
-                plan.map(PlanDefinition::archived).orElse(false), profile.maxEmployeesPerStore());
+                plan.map(PlanDefinition::archived).orElse(false), profile.maxEmployeesPerStore(),
+                planQuotas.stream().map(QuotaRef::of).toList());
     }
 
     /** French name of the plan, from the catalogue (Story 19.7a). */

@@ -347,6 +347,7 @@ public class GlobalExceptionHandler {
                  "MODULE_DEACTIVATION_FAILED" -> HttpStatus.INTERNAL_SERVER_ERROR;
             case "CSV_PARSE_ERROR" -> HttpStatus.UNPROCESSABLE_ENTITY;  // Story 2.4 malformed CSV
             case "PLAN_LIMIT_EXCEEDED",
+                 "QUOTA_EXCEEDED",
                  "ACCOUNT_SUSPENDED",
                  "ACCOUNT_DELETION_PENDING",
                  "AUDIT_IMMUTABLE",

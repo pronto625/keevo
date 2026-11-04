@@ -28,6 +28,7 @@ public final class ErrorMessages {
             Map.entry("FORBIDDEN",                 "Vous n'avez pas les droits nécessaires"),
             Map.entry("TENANT_NOT_FOUND",          "Espace de travail introuvable"),
             Map.entry("PLAN_LIMIT_EXCEEDED",       "Limite de votre plan atteinte"),
+            Map.entry("QUOTA_EXCEEDED",            "Quota de votre offre atteint"),
             Map.entry("PRODUCT_QUOTA_UNAVAILABLE", "Impossible de vérifier votre quota de produits pour le moment. Réessayez dans quelques instants."),
             Map.entry("PLAN_PROFILE_INVALID",      "Profil non enregistré : {reason}"),
             Map.entry("RATE_LIMIT_EXCEEDED",       "Trop de requêtes, veuillez patienter"),

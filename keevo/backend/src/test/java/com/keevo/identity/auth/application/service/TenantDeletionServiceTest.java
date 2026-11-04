@@ -428,6 +428,8 @@ class TenantDeletionServiceTest {
         verify(jdbcTemplate).update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", (Object) tenantId);
         verify(jdbcTemplate).update("DELETE FROM public.plan_expiry_reminders WHERE tenant_id = ?", (Object) tenantId);
         verify(jdbcTemplate).update("DELETE FROM public.sync_silence_notices WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.usage_counters WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.usage_credits WHERE tenant_id = ?", (Object) tenantId);
         verify(jdbcTemplate).update(startsWith("UPDATE public.tenants SET designation = NULL"), eq((Object) tenantId));
         verify(jdbcTemplate).update(startsWith("UPDATE public.tenant_payments SET note = NULL"),
                 eq(TenantDeletionService.VOID_REASON_REDACTED), eq(tenantId));

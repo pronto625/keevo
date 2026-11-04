@@ -10,7 +10,9 @@ import java.util.Map;
  * @param conflictData {@code APPLIED} / {@code CONFLICT}: the conflict details (e.g. {@code conflictType}
  *                     {@code LAST_WRITE_SUPERSEDED}, {@code STOCK_NEGATIVE}); {@code REJECTED} with {@code reason}
  *                     {@code PLAN_LIMIT_EXCEEDED} (Story 16.14): the same details as the REST 403 —
- *                     {@code {entity, limit, current, plan}}; {@code null} for every other rejection
+ *                     {@code {entity, limit, current, plan}}; {@code QUOTA_EXCEEDED} (Story 19.8): the same details
+ *                     as the REST 403 — {@code {metric, period, limit, used, resetAt, planCode, planLabel}};
+ *                     {@code null} for every other rejection
  */
 public record SyncOperationResultDto(
         String operationId,

@@ -24,6 +24,10 @@ public abstract class AbstractSyncOperationHandler implements SyncOperationHandl
 
     private static final Logger log = LoggerFactory.getLogger(AbstractSyncOperationHandler.class);
 
+    /** Rejections whose details reach the device in {@code conflictData} (16.14, 19.8). */
+    private static final java.util.Set<String> DETAILED_REJECTIONS = java.util.Set.of("PLAN_LIMIT_EXCEEDED",
+            "QUOTA_EXCEEDED");
+
     @Override
     public final SyncOperationResult handle(SyncOperation op, UUID actorId, String tenantId) {
         try {
@@ -51,10 +55,11 @@ public abstract class AbstractSyncOperationHandler implements SyncOperationHandl
      * Story 16.14 — a {@code PLAN_LIMIT_EXCEEDED} rejection carries the same details as the REST 403
      * ({@code entity}, {@code limit}, {@code current}, {@code plan}) in {@code conflictData}, so the client can name
      * the limit without another call. Every other rejection keeps {@code conflictData = null} (V1 apps only read it on
-     * {@code APPLIED}).
+     * {@code APPLIED}). Story 19.8: a {@code QUOTA_EXCEEDED} rejection carries its details too ({@code metric},
+     * {@code period}, {@code limit}, {@code used}, {@code resetAt}, {@code planCode}, {@code planLabel}).
      */
     protected static Map<String, Object> rejectionDetails(String reason, DomainException e) {
-        if (!"PLAN_LIMIT_EXCEEDED".equals(reason) || e.getDetails() == null || e.getDetails().isEmpty()) {
+        if (!DETAILED_REJECTIONS.contains(reason) || e.getDetails() == null || e.getDetails().isEmpty()) {
             return null;
         }
         return new java.util.LinkedHashMap<>(e.getDetails());

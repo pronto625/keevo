@@ -66,6 +66,26 @@ class GetSubscriptionServiceTest {
         assertThat(response.currentProducts()).isNull(); // unknown, never 0;
     }
 
+    @Test
+    @DisplayName("19.8 — the usage read fails: the V1 fields still answer, quotas and credits empty")
+    void execute_usageFault_quotasEmpty() {
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeActiveSub()));
+        when(productCountPort.countActiveProducts(any())).thenReturn(3);
+        com.keevo.shared.capability.entitlement.UsageQuotaPort failing =
+                mock(com.keevo.shared.capability.entitlement.UsageQuotaPort.class);
+        when(failing.statusForSchema(any())).thenThrow(new IllegalStateException("db down"));
+        PlanProfiles source = type -> profiles.get(type);
+        GetSubscriptionService withUsage = new GetSubscriptionService(subscriptionRepository, storeCountPort,
+                productCountPort, userCountPort, new PlanLimitGuard(source), failing);
+
+        SubscriptionResponse response = withUsage.execute(new GetSubscriptionQuery("user-1"));
+
+        assertThat(response.planType()).isEqualTo("FREE");
+        assertThat(response.maxStores()).isEqualTo(1);
+        assertThat(response.quotas()).isEmpty();
+        assertThat(response.credits()).isEmpty();
+    }
+
     // ── FREE plan ─────────────────────────────────────────────────────────────
 
     @Test

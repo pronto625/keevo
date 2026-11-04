@@ -79,7 +79,9 @@ class SchedulerLockCoverageTest {
             Map.entry(GlobalNotificationPurgeJob.class, Duration.ofDays(1)), // 9-5 (2/2)
             Map.entry(EventPublicationPurgeJob.class, Duration.ofDays(1)), // 12.4
             Map.entry(EventPublicationResubmissionJob.class, Duration.ofMinutes(10)), // 12.4
-            Map.entry(ModuleExpiryScheduler.class, Duration.ofDays(1))); // 16.1
+            Map.entry(ModuleExpiryScheduler.class, Duration.ofDays(1)), // 16.1
+            Map.entry(com.keevo.subscription.plan.adapter.in.scheduling.UsageCounterPurgeJob.class,
+                    Duration.ofDays(1))); // 19.8
 
     /**
      * Per-instance sweeps: must run on every instance → never locked. Includes the 11.2 sync-lag

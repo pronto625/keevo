@@ -1,6 +1,7 @@
 package com.keevo.shared.module;
 
 import com.keevo.identity.api.PlanType;
+import com.keevo.shared.capability.entitlement.PlanQuota;
 
 import java.util.List;
 import java.util.Set;
@@ -39,8 +40,41 @@ public interface PlanProfileAdmin {
      * @param maxEmployeesPerStore {@link LimitPatch#KEEP} keeps the stored limit; {@link LimitPatch.Set} replaces it
      *                             (positive, or {@code null} = unlimited)
      */
+    default UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
+                                LimitPatch maxEmployeesPerStore, Set<String> modules, UUID actorId) {
+        return update(planType, maxStores, maxProducts, maxEmployees, maxEmployeesPerStore, modules,
+                QuotaPatch.KEEP, actorId);
+    }
+
+    /**
+     * Story 19.8 — same, with the plan's usage quotas.
+     *
+     * @param quotas {@link QuotaPatch#KEEP} keeps the stored quotas; {@link QuotaPatch.Replace} replaces them all
+     *               (limit {@code >= 0}, no duplicate metric and period; a metric without quota is unlimited). Applies
+     *               to the next increment.
+     * @throws com.keevo.shared.domain.exception.DomainException {@code PLAN_PROFILE_INVALID} (422, French reason) for
+     *         an invalid quota list — nothing saved
+     */
     UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
-                        LimitPatch maxEmployeesPerStore, Set<String> modules, UUID actorId);
+                        LimitPatch maxEmployeesPerStore, Set<String> modules, QuotaPatch quotas, UUID actorId);
+
+    /** Story 19.8 — the optional quotas of an update: kept as stored, or replaced. */
+    sealed interface QuotaPatch {
+
+        /** Keep the stored quotas (a client that does not send them). */
+        QuotaPatch KEEP = new Keep();
+
+        /** Keep the stored quotas. */
+        record Keep() implements QuotaPatch {
+        }
+
+        /**
+         * Replace every quota of the plan by these. The list is taken as given (a {@code null} element is refused by
+         * the service with a 422); the service saves an unmodifiable copy once validated.
+         */
+        record Replace(List<PlanQuota> quotas) implements QuotaPatch {
+        }
+    }
 
     /** Story 19.7b — an optional limit of an update: kept as stored, or set (a {@code null} value = unlimited). */
     sealed interface LimitPatch {
@@ -84,13 +118,32 @@ public interface PlanProfileAdmin {
      * @param kind         Story 19.7b — the plan's kind ({@code FREE|TRIAL|PAID})
      * @param archived     Story 19.7b — the plan is archived (kept for its tenants, no longer offered)
      * @param maxEmployeesPerStore Story 19.7b — active employees per store, {@code null} = unlimited
+     * @param quotas       Story 19.8 — the plan's usage quotas (a metric absent is unlimited)
      */
     record ProfileView(String planType, String label, Integer maxStores, Integer maxProducts, Integer maxEmployees,
                        List<ModuleRef> modules, boolean fallback, String kind, boolean archived,
-                       Integer maxEmployeesPerStore) {
+                       Integer maxEmployeesPerStore, List<QuotaRef> quotas) {
 
         public ProfileView {
             modules = List.copyOf(modules);
+            quotas = List.copyOf(quotas);
+        }
+    }
+
+    /**
+     * Story 19.8 — one usage quota of a plan.
+     *
+     * @param metric      {@code DOCUMENTS | SMS | EMAILS | AI_CREDITS}
+     * @param metricLabel French name (« Documents », « SMS », « Emails », « Crédits IA »)
+     * @param period      {@code MONTH | DAY | LIFETIME}
+     * @param periodLabel French wording (« par mois », « par jour », « à vie »)
+     * @param limit       {@code >= 0}
+     */
+    record QuotaRef(String metric, String metricLabel, String period, String periodLabel, int limit) {
+
+        public static QuotaRef of(PlanQuota q) {
+            return new QuotaRef(q.metric().name(), q.metric().label(), q.period().name(), q.period().label(),
+                    q.limit());
         }
     }
 

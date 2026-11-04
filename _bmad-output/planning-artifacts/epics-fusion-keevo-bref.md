@@ -615,6 +615,8 @@ As a **plateforme**,
 I want **envoyer des SMS (MboaSMS, Infobip) et des emails (Resend), et conserver les notifications in-app**,
 So that **OTP, envoi de documents et notifications Bref fonctionnent dans Keevo**.
 
+> **Routé depuis la revue 19.8 (04/11/2026) :** - [ ] [Deferred-from: revue 19.8, 2026-11-04] décompter un SMS ou un email par `UsageQuotaPort.assertAndIncrement` dans une transaction courte **après** la confirmation du fournisseur, jamais autour de l'appel HTTP (sinon chaque envoi du tenant attend sur la ligne de compteur pendant l'appel réseau).
+
 **Acceptance Criteria:**
 
 **Given** les ports `SmsSender` et `EmailSender` du module `messaging`
@@ -995,6 +997,8 @@ So that **mon abonnement Apple actuel continue après la migration (FUS-FR9, FUS
 As a **owner**,
 I want **retrouver et utiliser mon crédit et mes SMS achetés**,
 So that **je ne perds pas d'argent dans la fusion (FUS-FR10, R9)**.
+
+> **Routé depuis la revue 19.8 (04/11/2026) :** - [ ] [Deferred-from: revue 19.8, 2026-11-04] la consommation payée par un pack n'est enregistrée nulle part (`usage_credits.remaining` baisse seulement) : ajouter l'historique des consommations de packs (qui, quand, quel compteur) et l'afficher dans « Mon plan » à côté du quota du mois.
 
 **Acceptance Criteria:**
 
