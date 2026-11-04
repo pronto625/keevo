@@ -354,6 +354,7 @@ development_status:
   m19-2-authenticator-otp: backlog  # API c84780f4 — écrans OTP (demande, saisie du code), création d'entreprise si memberships vide, erreurs françaises
   m19-9b-canaux-bref-whatsapp-meta-web-push: backlog  # API cb99ea66 — version web : service worker + abonnement Web Push (clé VAPID, subscribe/unsubscribe) ; natif inchangé
   m19-3-authenticators-google-apple: backlog  # API 3fc1c4c0 — boutons Google/Apple, jeton brut au backend, suite selon memberships, 409 → connexion par code
+  m19-4-login-username-membres: backlog  # API 0238c034 — écran identifiant + mot de passe, ajout de membre par identifiant, mot de passe temporaire affiché une fois
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

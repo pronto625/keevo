@@ -143,7 +143,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.4, voir `git log --grep "feat(19-4)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+**Statut :** API livrée (commit 0238c034). Conventions : spec-16-11 ; synchro : spec-16-10.
 
 **Ce qui est fait côté API :** connexion des membres par identifiant + mot de passe (comme l'écran « identifiants » de Bref) ; création de membres avec un identifiant et sans téléphone.
 
