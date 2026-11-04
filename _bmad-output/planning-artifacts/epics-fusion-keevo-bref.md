@@ -589,7 +589,7 @@ As a **plateforme**,
 I want **décompter documents, SMS, emails et requêtes IA par tenant et par mois**,
 So that **les quotas Bref sont appliqués sans course entre appareils**.
 
-> **Routé depuis 19.7b (04/11/2026) :** le module `invoicing` accordé au plan FREE (Bref : 300 documents/mois) part avec le quota de documents de cette story, sinon les tenants FREE auraient des factures illimitées ; les quotas SMS (5/20/50/80), emails (100/∞) et crédits IA (0/500/750/∞ par mois, 0/20/30/50 par jour) de `plan-policy.constant.ts` sont les valeurs de départ des profils.
+> **Routé depuis 19.7b (04/11/2026) :** le quota de documents (FREE : 300/mois) est livré ici ; l'**octroi du module `invoicing` au plan FREE part en 19.13** (décision de conception du 04/11 : accordé maintenant, il apparaîtrait dans les apps V1 des tenants FREE et chaque vente caisse créerait une facture automatique, contraire à FUS-UX7) ; les quotas SMS (5/20/50/80), emails (100/∞) et crédits IA (0/500/750/∞ par mois, 0/20/30/50 par jour) de `plan-policy.constant.ts` sont les valeurs de départ des profils.
 
 **Acceptance Criteria:**
 
@@ -684,6 +684,8 @@ As a **utilisateur existant (Keevo ou Bref)**,
 I want **que l'app ne me montre que ce que j'utilisais déjà, avec mes repères**,
 So that **je ne sois pas perdu par des écrans que je ne connais pas**.
 
+> **Routé depuis 19.8 (04/11/2026) :** accorder le module `invoicing` au plan FREE (`profile_modules`), **désactivé par défaut** pour les tenants existants comme tout module nouveau pour eux ; le quota de 300 documents/mois est déjà appliqué par 19.8 ; vérifier que le pont vente → facture ne s'active pas pour un owner qui n'a pas activé le module.
+
 **Acceptance Criteria:**
 
 **Given** un tenant
@@ -771,6 +773,8 @@ So that **mes clients Bref et mes campagnes sont conformes (FUS-FR15)**.
 As a **commerçant**,
 I want **faire un devis, le modifier, puis le convertir en facture**,
 So that **je retrouve le parcours devis de Bref (FUS-FR18)**.
+
+> **Routé depuis 19.8 (04/11/2026) :** un devis ne consomme pas le quota DOCUMENTS ; sa conversion en facture le consomme (comme Bref, `invoice.controller.ts` validate), via `UsageQuotaService.assertAndIncrement`.
 
 **Acceptance Criteria:**
 
