@@ -30,6 +30,7 @@ public enum ErrorCode {
     OTP_TOO_MANY_REQUESTS,       // Story 19.2 — HTTP 429: code request rate limit or daily failure cap
     PUSH_ENDPOINT_OWNED,         // Story 19.9b — HTTP 409: the browser push endpoint is linked to another account (other keys)
     COMPANY_ALREADY_EXISTS,      // Story 19.2 — HTTP 409: create-company by a user who already owns a company
+    SOCIAL_TOKEN_INVALID,        // Story 19.3 — HTTP 401: Google / Apple ID token refused (signature, issuer, audience, expiry, email)
 
     // ── Tenant ────────────────────────────────────────────────────
     TENANT_NOT_FOUND,

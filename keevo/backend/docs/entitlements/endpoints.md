@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 229 — gated: 112, exempt: 117.
+Handlers: 231 — gated: 112, exempt: 119.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -97,6 +97,8 @@ Handlers: 229 — gated: 112, exempt: 117.
 | DELETE | `/api/v1/auth/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeMyOthers |
 | GET | `/api/v1/auth/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#mySessions |
 | DELETE | `/api/v1/auth/sessions/{sessionId}` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeMine |
+| POST | `/api/v1/auth/social/apple` | — | — | — | authentification | AuthController#signInWithApple |
+| POST | `/api/v1/auth/social/google` | — | — | — | authentification | AuthController#signInWithGoogle |
 | GET | `/api/v1/categories` | `catalog` | READ | — |  | CategoryController#getAllCategories |
 | POST | `/api/v1/categories` | `catalog` | WRITE | — |  | CategoryController#createCategory |
 | GET | `/api/v1/categories/roots` | `catalog` | READ | — |  | CategoryController#getRootCategories |

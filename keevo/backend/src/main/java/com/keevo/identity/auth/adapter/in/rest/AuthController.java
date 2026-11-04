@@ -1,6 +1,8 @@
 package com.keevo.identity.auth.adapter.in.rest;
 
+import com.keevo.identity.auth.adapter.in.rest.dto.AppleSignInDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.CreateCompanyRequestDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.GoogleSignInDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.LoginRequest;
 import com.keevo.identity.auth.adapter.in.rest.dto.OtpRequestDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.OtpRequestResponseDto;
@@ -24,6 +26,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.model.OtpChannel;
+import com.keevo.identity.auth.domain.model.SocialProvider;
+import com.keevo.identity.auth.domain.port.in.SocialSignInCommand;
+import com.keevo.identity.auth.domain.port.in.SocialSignInUseCase;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
 import com.keevo.identity.auth.domain.port.in.CreateCompanyCommand;
 import com.keevo.identity.auth.domain.port.in.CreateCompanyUseCase;
@@ -83,6 +88,7 @@ import java.util.UUID;
  * - POST /api/v1/auth/select-tenant (step 2: returns full access + refresh tokens)
  * - POST /api/v1/auth/refresh
  * - POST /api/v1/auth/otp/request, /otp/verify, /create-company (Story 19.2)
+ * - POST /api/v1/auth/social/google, /social/apple (Story 19.3)
  */
 @Tag(name = "Authentication", description = "User registration and login endpoints")
 @EntitlementExempt("authentification")
@@ -102,6 +108,7 @@ public class AuthController {
     private final RequestOtpUseCase      requestOtpUseCase;
     private final VerifyOtpUseCase       verifyOtpUseCase;
     private final CreateCompanyUseCase   createCompanyUseCase;
+    private final SocialSignInUseCase    socialSignInUseCase;
 
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
@@ -114,7 +121,8 @@ public class AuthController {
                           RefreshRateLimiter refreshRateLimiter,
                           RequestOtpUseCase requestOtpUseCase,
                           VerifyOtpUseCase verifyOtpUseCase,
-                          CreateCompanyUseCase createCompanyUseCase) {
+                          CreateCompanyUseCase createCompanyUseCase,
+                          SocialSignInUseCase socialSignInUseCase) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
@@ -127,6 +135,7 @@ public class AuthController {
         this.requestOtpUseCase      = requestOtpUseCase;
         this.verifyOtpUseCase       = verifyOtpUseCase;
         this.createCompanyUseCase   = createCompanyUseCase;
+        this.socialSignInUseCase    = socialSignInUseCase;
     }
 
     @Operation(
@@ -476,6 +485,69 @@ public class AuthController {
                 request.loginToken(), DeviceInfo.of(request.deviceId(), request.deviceLabel())));
         return ResponseEntity.status(HttpStatus.CREATED).body(new RegistrationResponse(
                 result.tenantCode(), result.token(), result.userId(), result.tenantId(), result.refreshToken()));
+    }
+
+    // ── Google / Apple sign-in (Story 19.3) ───────────────────────────────────
+
+    @Operation(
+        summary = "Sign in with Google (login step 1)",
+        description = """
+            Story 19.3 — verifies the Google ID token on the server (Google's published keys, issuer, audience
+            among the configured client ids, expiry) and answers exactly like /auth/login: a loginToken (5 min)
+            and the memberships. The account is found by its Google identity, else linked by the verified email
+            of an owner whose email is verified, else created without company (memberships empty → the app
+            calls /auth/create-company with the loginToken).
+
+            firstName / lastName (optional) override Google's names for a new account.
+            Refused token or unverified Google email → 401 SOCIAL_TOKEN_INVALID. Email of a team member or
+            never verified → 409 EMAIL_ALREADY_EXISTS. More than 30 calls per hour from one IP → 429.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Signed in — loginToken + memberships",
+            content = @Content(schema = @Schema(implementation = LoginSessionResponse.class))),
+        @ApiResponse(responseCode = "401", description = "SOCIAL_TOKEN_INVALID"),
+        @ApiResponse(responseCode = "409", description = "EMAIL_ALREADY_EXISTS (email of a member or never verified)"),
+        @ApiResponse(responseCode = "422", description = "Validation error"),
+        @ApiResponse(responseCode = "429", description = "RATE_LIMIT_EXCEEDED")
+    })
+    @SecurityRequirements
+    @PostMapping("/social/google")
+    public ResponseEntity<LoginSessionResponse> signInWithGoogle(@Valid @RequestBody GoogleSignInDto request,
+                                                                 HttpServletRequest httpRequest) {
+        LoginSessionResult result = socialSignInUseCase.signIn(new SocialSignInCommand(SocialProvider.GOOGLE,
+                request.idToken(), request.firstName(), request.lastName(), clientIp(httpRequest)));
+        return ResponseEntity.ok(toLoginSessionResponse(result));
+    }
+
+    @Operation(
+        summary = "Sign in with Apple (login step 1)",
+        description = """
+            Story 19.3 — verifies the Apple identity token on the server (Apple's published keys, issuer,
+            audience among the configured bundle ids, expiry) and answers exactly like /auth/login. Apple may
+            omit the email after the first consent: the account is then found by its Apple identity; a new one
+            without email is created without company. firstName / lastName: send the names Apple gives at the
+            first consent.
+
+            Refused token → 401 SOCIAL_TOKEN_INVALID. Email of a team member or never verified → 409
+            EMAIL_ALREADY_EXISTS. More than 30 calls per hour from one IP → 429.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Signed in — loginToken + memberships",
+            content = @Content(schema = @Schema(implementation = LoginSessionResponse.class))),
+        @ApiResponse(responseCode = "401", description = "SOCIAL_TOKEN_INVALID"),
+        @ApiResponse(responseCode = "409", description = "EMAIL_ALREADY_EXISTS (email of a member or never verified)"),
+        @ApiResponse(responseCode = "422", description = "Validation error"),
+        @ApiResponse(responseCode = "429", description = "RATE_LIMIT_EXCEEDED")
+    })
+    @SecurityRequirements
+    @PostMapping("/social/apple")
+    public ResponseEntity<LoginSessionResponse> signInWithApple(@Valid @RequestBody AppleSignInDto request,
+                                                                HttpServletRequest httpRequest) {
+        LoginSessionResult result = socialSignInUseCase.signIn(new SocialSignInCommand(SocialProvider.APPLE,
+                request.identityToken(), request.firstName(), request.lastName(), clientIp(httpRequest)));
+        return ResponseEntity.ok(toLoginSessionResponse(result));
     }
 
     // ── Mapping helpers ───────────────────────────────────────────────────────

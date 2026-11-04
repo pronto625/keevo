@@ -37,6 +37,7 @@ class TokenClaimsGuardTest {
             "com/keevo/shared/infrastructure/security/JwtTokenProvider.java",
             "com/keevo/shared/infrastructure/security/JwtAuthFilter.java",
             "com/keevo/identity/auth/application/service/LoginTokens.java", // 19.2 — login-token check shared by select-tenant and create-company
+            "com/keevo/identity/auth/adapter/out/social/JwksSocialTokenVerifier.java", // 19.3 — Google/Apple ID tokens (identity claims only)
             "com/keevo/sync/sync/adapter/in/rest/SyncController.java",
             "com/keevo/commerce/sale/adapter/in/rest/DayClosureController.java");
     private static final Pattern CLAIM_READ = Pattern.compile("\\.get\\(\\s*\"(\\w+)\"");

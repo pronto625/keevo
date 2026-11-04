@@ -106,6 +106,20 @@ public final class User {
     }
 
     /**
+     * Story 19.3 — account created by a Google or Apple sign-in: OWNER (it creates its company next), no password,
+     * no phone, no membership. Identified by the provider-verified email (verified at {@code verifiedAt}) or, when
+     * the token carries none, by a technical username never shown to the user; the social identity itself lives in
+     * {@code user_authenticators}.
+     */
+    public static User newSocialAccount(String email, String username, String firstName, String lastName,
+                                        Instant verifiedAt) {
+        String mail = normalizeIdentifier(email);
+        return new User(UUID.randomUUID(), null, null, Role.OWNER, true, Instant.now(), 0, null,
+                mail, normalizeIdentifier(username), normalizeIdentifier(firstName), normalizeIdentifier(lastName),
+                mail != null ? verifiedAt : null, null);
+    }
+
+    /**
      * Factory method for creating an employee user account (Story 3.5).
      * Role is EMPLOYEE; active from creation.
      */

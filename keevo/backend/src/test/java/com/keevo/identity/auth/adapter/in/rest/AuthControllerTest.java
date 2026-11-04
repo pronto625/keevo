@@ -80,6 +80,7 @@ class AuthControllerTest {
     @MockitoBean com.keevo.identity.auth.domain.port.in.RequestOtpUseCase requestOtpUseCase;
     @MockitoBean com.keevo.identity.auth.domain.port.in.VerifyOtpUseCase verifyOtpUseCase;
     @MockitoBean com.keevo.identity.auth.domain.port.in.CreateCompanyUseCase createCompanyUseCase;
+    @MockitoBean com.keevo.identity.auth.domain.port.in.SocialSignInUseCase socialSignInUseCase;
     @MockitoBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach
@@ -416,5 +417,60 @@ class AuthControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.domainCode").value("COMPANY_ALREADY_EXISTS"))
                 .andExpect(jsonPath("$.error").value("Vous avez déjà une entreprise"));
+    }
+
+    @Test
+    @DisplayName("19.3 POST /social/google → 200 like /login, command carries provider, token, names and IP")
+    void socialGoogle() throws Exception {
+        when(socialSignInUseCase.signIn(any())).thenReturn(new LoginSessionResult("login-tok",
+                List.of(new UserMembershipInfo("KV-ABC123", "Boutique", "OWNER", "kv_abc123"))));
+        mockMvc.perform(post("/api/v1/auth/social/google").contentType(MediaType.APPLICATION_JSON)
+                        .header("X-Forwarded-For", "10.0.0.9")
+                        .content("{\"idToken\":\"g-token\",\"firstName\":\"Ana\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loginToken").value("login-tok"))
+                .andExpect(jsonPath("$.memberships[0].tenantCode").value("KV-ABC123"));
+        var captor = org.mockito.ArgumentCaptor.forClass(
+                com.keevo.identity.auth.domain.port.in.SocialSignInCommand.class);
+        verify(socialSignInUseCase).signIn(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue()).isEqualTo(
+                new com.keevo.identity.auth.domain.port.in.SocialSignInCommand(
+                        com.keevo.identity.auth.domain.model.SocialProvider.GOOGLE, "g-token", "Ana", null,
+                        "10.0.0.9"));
+    }
+
+    @Test
+    @DisplayName("19.3 POST /social/apple → 200; 401 SOCIAL_TOKEN_INVALID; 409 EMAIL_ALREADY_EXISTS; 429; 422")
+    void socialApple() throws Exception {
+        when(socialSignInUseCase.signIn(any())).thenReturn(new LoginSessionResult("login-tok", List.of()));
+        mockMvc.perform(post("/api/v1/auth/social/apple").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identityToken\":\"a-token\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.memberships").isEmpty());
+
+        org.mockito.Mockito.reset(socialSignInUseCase);
+        when(socialSignInUseCase.signIn(any())).thenThrow(new DomainException(ErrorCode.SOCIAL_TOKEN_INVALID));
+        mockMvc.perform(post("/api/v1/auth/social/apple").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identityToken\":\"a-token\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.domainCode").value("SOCIAL_TOKEN_INVALID"))
+                .andExpect(jsonPath("$.error").value("Connexion Google ou Apple refusée. Réessayez"));
+
+        org.mockito.Mockito.reset(socialSignInUseCase);
+        when(socialSignInUseCase.signIn(any())).thenThrow(new DomainException(ErrorCode.EMAIL_ALREADY_EXISTS));
+        mockMvc.perform(post("/api/v1/auth/social/apple").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identityToken\":\"a-token\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("EMAIL_ALREADY_EXISTS"));
+
+        org.mockito.Mockito.reset(socialSignInUseCase);
+        when(socialSignInUseCase.signIn(any())).thenThrow(new DomainException(ErrorCode.RATE_LIMIT_EXCEEDED));
+        mockMvc.perform(post("/api/v1/auth/social/apple").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identityToken\":\"a-token\"}"))
+                .andExpect(status().isTooManyRequests());
+
+        mockMvc.perform(post("/api/v1/auth/social/apple").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identityToken\":\"\"}"))
+                .andExpect(status().isUnprocessableEntity());
     }
 }

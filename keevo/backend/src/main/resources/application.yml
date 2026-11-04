@@ -161,6 +161,15 @@ keevo:
       verify-per-ip-per-hour: 30
       review-identifier: ${KEEVO_OTP_REVIEW_IDENTIFIER:}
       review-code: ${KEEVO_OTP_REVIEW_CODE:}
+    # Story 19.3 — Google / Apple sign-in: ID tokens verified locally against the provider's published keys. Accepted
+    # audiences are comma lists (both the Keevo and com.brefpoint.app apps); an empty list disables that provider.
+    social:
+      ip-max-per-hour: 30
+      google:
+        client-ids: ${GOOGLE_CLIENT_IDS:}
+      apple:
+        audiences: ${APPLE_BUNDLE_IDS:}
+        bundle-id: ${APPLE_BUNDLE_ID:}   # Bref's single value, used when audiences is empty
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.

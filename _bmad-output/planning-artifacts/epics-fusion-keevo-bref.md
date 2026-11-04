@@ -482,6 +482,16 @@ So that **mon compte Bref social fonctionne dans l'app unifiée**.
 **When** l'un ou l'autre envoie un token
 **Then** les deux audiences sont acceptées
 
+### Story 19.3b : Comptes Google/Apple — nonce, liaison et retrait, révocation Apple
+
+> **Créée le 2026-11-04** (revue 19.3).
+
+- [ ] [Deferred-from: revue 19.3, 2026-11-04] nonce : l'app envoie un nonce haché à Google/Apple et le nonce clair au backend, qui vérifie la claim `nonce` (rejeu d'un jeton capturé jusqu'à son expiration) — à faire avec 23.1 côté app.
+- [ ] [Deferred-from: revue 19.3, 2026-11-04] endpoints authentifiés pour lier, lister et retirer Google/Apple (aujourd'hui un 409 `EMAIL_ALREADY_EXISTS` n'a pas d'issue : membre ou email non prouvé).
+- [ ] [Deferred-from: revue 19.3, 2026-11-04] suppression de compte : révoquer le jeton Sign in with Apple (`appleid.apple.com/auth/revoke`, exigence App Store) — demande la clé privée Apple (client secret) en configuration [AccountDeletionService].
+
+**Critère provisoire :** **Given** un compte lié à Apple **When** il est supprimé **Then** la révocation Apple est appelée et les liens `user_authenticators` disparaissent.
+
 ### Story 19.4 : Connexion par username pour les membres
 
 As a **membre d'équipe ex-Bref**,
@@ -499,6 +509,10 @@ So that **je n'ai rien à changer après la migration**.
 **Then** le membre est créé ; l'unicité du username est globale ; le mot de passe temporaire n'est renvoyé qu'une fois (FUS-FR5)
 
 - [ ] [Deferred-from: review 19-1, 2026-11-03] recherche par identifiant : `findByUsername` via `lower(username) = lower(?)` (index `uq_users_username_lower`) ; désambiguïsation à la connexion entre un identifiant tout en chiffres (autorisé par la règle Bref `^[A-Za-z0-9._-]{1,50}$`) et un téléphone saisi sans « + ».
+
+
+**Éléments reportés routés vers 19.4 (revue 19.3, 2026-11-04) :**
+- [ ] [Deferred-from: revue 19.3, 2026-11-04] réserver les préfixes `google-` et `apple-` (usernames techniques des comptes sociaux sans email, SocialSignInService) : un username choisi ne doit pas pouvoir les prendre, sinon la première connexion sociale de la victime échoue.
 
 ### Story 19.5 : Rôles MANAGER et VIEWER, permissions par rôle
 
@@ -542,6 +556,7 @@ So that **la réconciliation d'identité ne me force pas à choisir**.
 
 **Éléments reportés routés vers 19.6 (revue 19.2, 2026-11-04) :**
 - [ ] [Deferred-from: revue 19.2, 2026-11-04] `POST /auth/create-company` refuse (`COMPANY_ALREADY_EXISTS`) un utilisateur dont `users.role` n'est pas OWNER, car `ChangePasswordService` émet les jetons avec ce rôle global [CreateCompanyService.java] — quand le rôle sera porté par la membership (plusieurs rôles), autoriser un employé à créer sa propre entreprise.
+- [ ] [Deferred-from: revue 19.3, 2026-11-04] la liaison Google/Apple par email refuse un compte dont `users.role` n'est pas OWNER (règle « pas uniquement membre », FUS-FR6) [SocialSignInService.link] — avec plusieurs rôles par personne, juger sur les memberships (au moins une OWNER, ou aucune) plutôt que sur le rôle global.
 
 ### Story 19.7 : Profils PRO, TEAM, BUSINESS et bundles associés (ADR-03, 04, 06)
 
@@ -1719,6 +1734,9 @@ So that **je n'ai pas deux identités (R2)**.
 **Given** un username Bref déjà pris ou égal à un téléphone existant
 **When** il est détecté
 **Then** l'import de l'owner est bloqué avant écriture avec un cas listé dans le rapport à résoudre manuellement
+
+**Éléments reportés routés vers 24.7 (revue 19.3, 2026-11-04) :**
+- [ ] [Deferred-from: revue 19.3, 2026-11-04] importer `users.social_id`/`provider` de Bref dans `public.user_authenticators` (V48, `(provider, subject)` unique) pour chaque owner importé — sans ces lignes, un owner Bref Google/Apple n'est pas retrouvé par son identité sociale et retombe sur la liaison par email ou un nouveau compte [`JdbcUserAuthenticatorRepository`].
 
 ### Story 24.8 : Réconciliation automatique et bloquante
 

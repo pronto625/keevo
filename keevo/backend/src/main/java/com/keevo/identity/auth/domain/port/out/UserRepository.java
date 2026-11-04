@@ -5,6 +5,7 @@ import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -39,6 +40,14 @@ public interface UserRepository {
      * @return true when the row was inserted
      */
     boolean insertIfAbsent(User user);
+
+    /**
+     * Story 19.3 — gives the account the email, verified at {@code verifiedAt}, only if it has none and no other account
+     * holds it case-insensitively: one conditional {@code UPDATE} (no read-then-write, no JPA merge).
+     *
+     * @return rows updated (0 when the account already has an email or the email is taken)
+     */
+    int setEmailIfAbsent(UUID id, String email, Instant verifiedAt);
 
     /**
      * Story 19.2 — locks the user row ({@code FOR UPDATE}) until the transaction ends, so two concurrent

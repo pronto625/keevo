@@ -30,6 +30,7 @@ public final class ErrorMessages {
             Map.entry("OTP_TOO_MANY_REQUESTS",     "Trop de demandes de code. Réessayez plus tard"),
             Map.entry("PUSH_ENDPOINT_OWNED",       "Cet appareil est déjà lié à un autre compte"),
             Map.entry("COMPANY_ALREADY_EXISTS",    "Vous avez déjà une entreprise"),
+            Map.entry("SOCIAL_TOKEN_INVALID",      "Connexion Google ou Apple refusée. Réessayez"),
             Map.entry("UNAUTHORIZED",              "Accès non autorisé"),
             Map.entry("FORBIDDEN",                 "Vous n'avez pas les droits nécessaires"),
             Map.entry("TENANT_NOT_FOUND",          "Espace de travail introuvable"),

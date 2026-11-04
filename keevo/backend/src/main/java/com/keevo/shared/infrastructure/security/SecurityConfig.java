@@ -68,6 +68,8 @@ public class SecurityConfig {
             "/api/v1/auth/otp/request",      // Story 19.2 — sign-in code request (SMS, WhatsApp, email)
             "/api/v1/auth/otp/verify",       // Story 19.2 — sign-in code check → loginToken + memberships
             "/api/v1/auth/create-company",   // Story 19.2 — company creation from a loginToken (account without company)
+            "/api/v1/auth/social/google",    // Story 19.3 — Google ID token → loginToken + memberships
+            "/api/v1/auth/social/apple",     // Story 19.3 — Apple identity token → loginToken + memberships
             "/api/v1/web-push/vapid-public-key", // Story 19.9b — VAPID public key of browser notifications
             "/api/v1/exports/download",      // v1s-18-1 — signed export link (HMAC token, no JWT)
             "/api/v1/invoices/shared",       // 14.2 — signed invoice PDF link sent by WhatsApp (HMAC token, no JWT)

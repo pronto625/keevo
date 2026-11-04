@@ -52,7 +52,7 @@ class AuthControllerChangePasswordTest {
     @BeforeEach
     void setUp() {
         // AuthController — standalone setup; pass null for unused use cases (Story 14.12 adds 2 more)
-        AuthController authController = new AuthController(null, null, null, null, changePasswordUseCase, null, null, null, null, null, null, null);
+        AuthController authController = new AuthController(null, null, null, null, changePasswordUseCase, null, null, null, null, null, null, null, null);
         mockMvc = MockMvcBuilders.standaloneSetup(authController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -134,7 +134,7 @@ class AuthControllerChangePasswordTest {
                         org.mockito.Mockito.mock(com.keevo.identity.auth.domain.port.out.TenantRepository.class),
                         org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                        new AuthController(null, null, null, null, service, null, null, null, null, null, null, null))
+                        new AuthController(null, null, null, null, service, null, null, null, null, null, null, null, null))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         String body = """

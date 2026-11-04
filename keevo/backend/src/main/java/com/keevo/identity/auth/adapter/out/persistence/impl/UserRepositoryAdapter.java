@@ -79,6 +79,12 @@ public class UserRepositoryAdapter implements UserRepository {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING
             """;
+    /** Story 19.3 — email of a social account, only if it has none and nobody else holds it. */
+    private static final String SET_EMAIL_IF_ABSENT_SQL = """
+            UPDATE public.users SET email = ?, email_verified_at = ?, updated_at = now()
+            WHERE id = ? AND email IS NULL
+              AND NOT EXISTS (SELECT 1 FROM public.users WHERE lower(email) = lower(?))
+            """;
     private static final String LOCK_BY_ID_SQL = "SELECT 1 FROM public.users WHERE id = ? FOR UPDATE";
 
     private final UserSpringRepository springRepository;
@@ -128,6 +134,15 @@ public class UserRepositoryAdapter implements UserRepository {
                 u.getFirstName(), u.getLastName(), ts(u.getEmailVerifiedAt()), ts(u.getPhoneVerifiedAt()),
                 now, now);
         return inserted == 1;
+    }
+
+    @Override
+    public int setEmailIfAbsent(UUID id, String email, Instant verifiedAt) {
+        String normalized = User.normalizeIdentifier(email);
+        if (normalized == null) {
+            return 0;
+        }
+        return jdbcTemplate.update(SET_EMAIL_IF_ABSENT_SQL, normalized, ts(verifiedAt), id, normalized);
     }
 
     @Override

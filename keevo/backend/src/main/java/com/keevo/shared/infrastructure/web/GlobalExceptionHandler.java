@@ -274,6 +274,7 @@ public class GlobalExceptionHandler {
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
                  "OTP_INVALID",
+                 "SOCIAL_TOKEN_INVALID",
                  "INVALID_CREDENTIALS", "ACCOUNT_LOCKED",
                  "REFRESH_TOKEN_INVALID",
                  "ACCOUNT_INACTIVE",

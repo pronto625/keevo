@@ -411,10 +411,11 @@ development_status:
   epic-19: backlog  # P1a Socle d'accueil
   19-1-users-identifiants-multiples: done  # 2026-11-03 build-auto done (spec-19-1-users-identifiants-multiples.md) — V41 identifiants multiples, 38 constats (15 corrigés), 5 016 tests verts, Redmi connexion OK ; essai copie prod en attente (décision user)
   19-2-authenticator-otp: done  # 2026-11-04 revue 5 couches (44 constats, 11 corrigés, 1 reporté → 19-6), 5 273 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-2-authenticator-otp.md)
-  19-3-authenticators-google-apple: backlog
-  19-4-login-username-membres: backlog
+  19-3-authenticators-google-apple: done  # 2026-11-05 revue 5 couches (31 constats, 12 corrigés, 5 routés → 19-6/24-7/19-3b/19-4), 5 411 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-3-authenticators-google-apple.md)
+  19-3b-comptes-sociaux-gestion: backlog  # 2026-11-04 revue 19.3 — 3 items (nonce, lier/retirer, révocation Apple)
+  19-4-login-username-membres: backlog  # 2026-11-04 revue 19.3 — 1 item (préfixes google-/apple- réservés)
   19-5-roles-manager-viewer-permissions: backlog
-  19-6-multi-roles-multi-entreprises: backlog  # 2026-11-04 revue 19.2 — 1 item (create-company pour un employé)
+  19-6-multi-roles-multi-entreprises: backlog  # 2026-11-04 revues 19.2 + 19.3 — 2 items (create-company pour un employé, liaison sociale par memberships)
   19-7a-plans-en-donnees: done  # 2026-11-04 revue 5 couches (50 constats, 25 corrigés, 8 reportés → 19-7b/21-10), 5 058 tests verts, live keevo_dev OK ; revue de suivi recommandée (cache du catalogue) | 2026-11-03 build-auto (spec-19-7a-plans-en-donnees.md) | 2026-11-03 découpage de 19.7 : catalogue des plans en base, plus d'énumération ni de CHECK sur les codes, compatibilité V1 ; comportement identique
   19-7b-plans-fusion: done  # 2026-11-04 revue 5 couches (36 constats, 27 corrigés), 5 077 tests verts, live keevo_dev + Redmi OK ; revue de suivi recommandée | 2026-11-04 build-auto (spec-19-7b-plans-fusion.md) | 2026-11-03 découpage de 19.7 : FREE/PRO/TEAM/BUSINESS, PREMIUM→TEAM, FREE 1 employé, essai 1 mois (plan BUSINESS_TRIAL)
   19-8-compteurs-usage-quotas: done  # 2026-11-04 revue 5 couches (38 constats, 21 corrigés, 2 reportés → 21-3/19-9), 5 103 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-8-compteurs-usage-quotas.md)
@@ -499,7 +500,7 @@ development_status:
   24-4-import-documents-paiements-depenses: backlog
   24-5-import-monetisation: backlog
   24-6-import-annexes-index-portail: backlog
-  24-7-bridge-identite-collisions: backlog
+  24-7-bridge-identite-collisions: backlog  # 2026-11-04 revue 19.3 — 1 item (import social_id Bref → user_authenticators)
   24-8-reconciliation-bloquante: backlog
   24-9-pilotage-vagues-rollback: backlog
   24-10-liens-publics-webhooks: backlog
