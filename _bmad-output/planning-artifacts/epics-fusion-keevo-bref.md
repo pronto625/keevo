@@ -544,7 +544,7 @@ So that **la réconciliation d'identité ne me force pas à choisir**.
 
 > **Découpage du 03/11/2026 (taille mesurée : `PlanType` dans 80 fichiers de production et 128 de test, 9 points qui cassent sur un code inconnu, contraintes CHECK dans `public` et dans chaque schéma tenant, essai de 6 mois écrit en SQL).** La story est livrée en deux parties, sans changer son périmètre :
 > - **19.7a — Plans en données (`19-7a-plans-en-donnees`)** : catalogue des plans en base (code, libellé, description, ordre, visibilité, archivage, code de compatibilité V1), `plan_profiles` indexé par code de plan, suppression de l'énumération `PlanType` comme liste fermée (valeur métier « code de plan » lue dans le catalogue) et des CHECK sur les codes (`plan_profiles`, `tenant_plan_events`, `subscriptions` des schémas tenant via une migration de module V2), les 9 lectures `valueOf`/`values()` passent par le catalogue, correspondance configurable vers `FREE`/`PREMIUM_TRIAL`/`PREMIUM` pour les apps V1 (`GET /subscription/me`, `PLAN_LIMIT_EXCEEDED.details.plan`), durée d'essai lue en base au lieu du SQL figé. **Comportement identique** avec les trois codes actuels (non-régression complète).
-> - **19.7b — Plans de la fusion (`19-7b-plans-fusion`)** : données de départ FREE, PRO, TEAM, BUSINESS (ADR-05), passage des tenants PREMIUM à TEAM au même prix jusqu'à la fin de la période payée (ADR-06, événement de plan tracé), FREE à 1 employé avec droit acquis (ADR-03), essai d'1 mois du plan le plus complet pour tout nouvel inscrit porté par l'abonnement (statut d'essai) plutôt que par un plan à part, essais PREMIUM_TRIAL en cours menés à terme (ADR-04), libellés français et revenus (`tenant_plan_events`) alignés, correspondance V1 étendue (un plan payant → `PREMIUM`, un essai → `PREMIUM_TRIAL`, FREE → `FREE`).
+> - **19.7b — Plans de la fusion (`19-7b-plans-fusion`)** : données de départ FREE, PRO, TEAM, BUSINESS (ADR-05), passage des tenants PREMIUM à TEAM au même prix jusqu'à la fin de la période payée (ADR-06, événement de plan tracé), FREE à 1 employé avec droit acquis (ADR-03), essai d'1 mois du plan le plus complet pour tout nouvel inscrit, porté par un plan de nature « essai » `BUSINESS_TRIAL` (« Essai Business », profil = BUSINESS) — choix de conception du 04/11 : un indicateur d'essai sur l'abonnement aurait dédoublé la nature du plan dans une quinzaine d'endroits (revenus, audiences, événements), PREMIUM et PREMIUM_TRIAL archivés, essais PREMIUM_TRIAL en cours menés à terme (ADR-04), libellés français et revenus (`tenant_plan_events`) alignés, correspondance V1 étendue (un plan payant → `PREMIUM`, un essai → `PREMIUM_TRIAL`, FREE → `FREE`).
 >
 > **Éléments reportés routés vers 19.7b (revue 19.7a, 2026-11-04) :**
 > - [ ] [Deferred-from: revue 19.7a, 2026-11-04] « Activer Premium » (`AdminPlanService.activatePremium`) attribue encore la constante `PlanType.PREMIUM` — le plan payant attribué doit devenir un paramètre (ou un réglage), autorisé seulement par la liste blanche du test `PlanCodeLiteralGateTest` jusque-là.
@@ -588,6 +588,8 @@ So that **chaque owner migré retrouve exactement ses droits et que la grille so
 As a **plateforme**,
 I want **décompter documents, SMS, emails et requêtes IA par tenant et par mois**,
 So that **les quotas Bref sont appliqués sans course entre appareils**.
+
+> **Routé depuis 19.7b (04/11/2026) :** le module `invoicing` accordé au plan FREE (Bref : 300 documents/mois) part avec le quota de documents de cette story, sinon les tenants FREE auraient des factures illimitées ; les quotas SMS (5/20/50/80), emails (100/∞) et crédits IA (0/500/750/∞ par mois, 0/20/30/50 par jour) de `plan-policy.constant.ts` sont les valeurs de départ des profils.
 
 **Acceptance Criteria:**
 
@@ -1116,7 +1118,7 @@ So that **rien ne soit figé dans le code et que l'offre évolue sans redéploie
 
 **Éléments reportés routés (revue 19.7a, 2026-11-04) :**
 - [ ] [Deferred-from: revue 19.7a, 2026-11-04] Changer la nature (kind) d'un plan déjà attribué ne resynchronise pas les lignes de modules des tenants concernés (`JdbcPlanCatalog.save`) — la CRUD doit soit interdire le changement de nature d'un plan utilisé, soit déclencher la resynchronisation des profils.
-- [ ] [Deferred-from: revue 19.7a, 2026-11-04] `archived_at` et `visible` ne sont pas appliqués à l'attribution : un plan archivé ou masqué peut encore être attribué (`AdminSubscriptionController`, `AdminPlanProfileController.parsePlanType`, `ActivatePlanService`) — refuser un plan archivé pour une nouvelle attribution.
+- [ ] [Deferred-from: revue 19.7a, 2026-11-04] (les deux chemins d'activation super-admin refusent déjà un plan archivé depuis 19.7b) `archived_at` et `visible` ne sont pas appliqués à l'attribution : un plan archivé ou masqué peut encore être attribué (`AdminSubscriptionController`, `AdminPlanProfileController.parsePlanType`, `ActivatePlanService`) — refuser un plan archivé pour une nouvelle attribution.
 - [ ] [Deferred-from: revue 19.7a, 2026-11-04] Les revenus comptent tous les plans payants dans un seul seau « PREMIUM » (`RevenueMetrics`) faute de prix par plan — à ventiler par plan et cycle une fois les prix en base.
 
 ## Epic 22 : App React Native — fondations et parité Keevo (P2)
