@@ -16,17 +16,22 @@ import java.util.UUID;
 
 /**
  * ReassignStoreService — Reassigns an employee to a different store (Story 3.5 AC6).
+ *
+ * <p>Story 19.7b — the plan's per-store employee limit of the target store applies ({@link StoreEmployeeLimit}).
  */
 @Service
 public class ReassignStoreService implements ReassignStoreUseCase {
 
     private final EmployeeRepository employeeRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final StoreEmployeeLimit storeEmployeeLimit;
 
     public ReassignStoreService(EmployeeRepository employeeRepository,
-                                 ApplicationEventPublisher eventPublisher) {
+                                 ApplicationEventPublisher eventPublisher,
+                                 StoreEmployeeLimit storeEmployeeLimit) {
         this.employeeRepository = employeeRepository;
         this.eventPublisher = eventPublisher;
+        this.storeEmployeeLimit = storeEmployeeLimit;
     }
 
     @Override
@@ -37,6 +42,7 @@ public class ReassignStoreService implements ReassignStoreUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.EMPLOYEE_NOT_FOUND));
 
         UUID oldStoreId = employee.getStoreId();
+        storeEmployeeLimit.checkMove(employee, command.newStoreId()); // 19.7b — per-store limit
 
         // 2. Update store assignment
         Employee updated = employeeRepository.updateStoreId(command.employeeId(), command.newStoreId());

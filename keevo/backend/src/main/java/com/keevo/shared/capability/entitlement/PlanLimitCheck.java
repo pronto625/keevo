@@ -31,4 +31,12 @@ public interface PlanLimitCheck {
     int remainingProducts(PlanView plan, IntSupplier currentProducts);
 
     void checkEmployeeLimit(PlanView plan, int currentEmployees);
+
+    /**
+     * Story 19.7b — per-store employee check (Bref's member limit is per shop): {@code currentInStore} = ACTIVE
+     * employees of the target store, the employee being moved excluded. Same refusal as
+     * {@link #checkEmployeeLimit} with the extra detail {@code scope = "store"}. Runs after the tenant-wide check;
+     * the caller counts only when {@link PlanView#maxEmployeesPerStore()} is finite.
+     */
+    void checkStoreEmployeeLimit(PlanView plan, int currentInStore);
 }

@@ -73,6 +73,11 @@ public interface PlanCatalog {
         return settings().trialMonths();
     }
 
+    /** Story 19.7b — the paid plan granted by default ({@code plan_settings.default_paid_plan_code}). */
+    default PlanType defaultPaidPlan() {
+        return settings().defaultPaidPlan();
+    }
+
     /** The V1 compatibility code of the plan, derived from its kind ({@link PlanKind#v1Plan()}). */
     default PlanType v1Code(PlanType code) {
         return kind(code).v1Plan();
@@ -109,12 +114,30 @@ public interface PlanCatalog {
     }
 
     /**
-     * The V42 seed (three plans, 6-month trial): the adapter's built-in fallback when the catalogue cannot be read,
-     * and the default of test doubles. Same values as the seeded rows, so behaviour is identical.
+     * The V42 + V43 seed (Story 19.7b, merged offer): FREE / PRO / TEAM / BUSINESS / BUSINESS_TRIAL, the Keevo plans
+     * PREMIUM_TRIAL and PREMIUM archived and hidden; trial BUSINESS_TRIAL for 1 month, default paid plan TEAM. The
+     * adapter's built-in fallback when the catalogue cannot be read, and the default of test doubles. Same values as
+     * the seeded rows (archive instant aside), so behaviour is identical whichever answers.
      */
     PlanCatalog SEED = of(List.of(
-                    new PlanDefinition(PlanType.FREE, "Gratuit", null, 1, true, PlanKind.FREE, null),
-                    new PlanDefinition(PlanType.PREMIUM_TRIAL, "Essai Premium", null, 2, true, PlanKind.TRIAL, null),
-                    new PlanDefinition(PlanType.PREMIUM, "Premium", null, 3, true, PlanKind.PAID, null)),
-            new PlanSettings(PlanType.FREE, PlanType.PREMIUM_TRIAL, 6));
+                    new PlanDefinition(PlanType.FREE, "Gratuit", null, 0, true, PlanKind.FREE, null),
+                    new PlanDefinition(PlanType.of("PRO"), "Pro", null, 10, true, PlanKind.PAID, null),
+                    new PlanDefinition(PlanType.of("TEAM"), "Team", null, 20, true, PlanKind.PAID, null),
+                    new PlanDefinition(PlanType.of("BUSINESS"), "Business", null, 30, true, PlanKind.PAID, null),
+                    new PlanDefinition(PlanType.of("BUSINESS_TRIAL"), "Essai Business", null, 40, true,
+                            PlanKind.TRIAL, null),
+                    new PlanDefinition(PlanType.PREMIUM_TRIAL, "Essai Premium", null, 90, false, PlanKind.TRIAL,
+                            SeedHolder.V43_ARCHIVED),
+                    new PlanDefinition(PlanType.PREMIUM, "Premium", null, 91, false, PlanKind.PAID,
+                            SeedHolder.V43_ARCHIVED)),
+            new PlanSettings(PlanType.FREE, PlanType.of("BUSINESS_TRIAL"), 1, PlanType.of("TEAM")));
+
+    /** Constants of the built-in seed. */
+    final class SeedHolder {
+        /** When V43 archived the Keevo plans (the fallback only needs « archived »). */
+        static final java.time.Instant V43_ARCHIVED = java.time.Instant.parse("2026-11-04T00:00:00Z");
+
+        private SeedHolder() {
+        }
+    }
 }

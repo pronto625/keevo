@@ -2,6 +2,8 @@ package com.keevo.subscription.plan.application.service;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 
+import com.keevo.identity.api.PlanKind;
+import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -13,6 +15,8 @@ import com.keevo.subscription.api.ProductCountPort;
 import com.keevo.subscription.plan.domain.port.out.StoreCountPort;
 import com.keevo.subscription.plan.domain.port.out.SubscriptionRepository;
 import com.keevo.subscription.plan.domain.port.out.UserCountPort;
+import java.util.Optional;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -60,9 +64,13 @@ public class GetSubscriptionService implements GetSubscriptionUseCase {
         int currentEmployees = userCountPort.countEmployees();
 
         PlanProfile profile = planLimitGuard.profile(sub.getPlanType());
+        String code = sub.getPlanType().code();
+        // 19.7b: one catalogue lookup for kind and label; an unknown code is taken as free (as PlanLimitGuard.kind)
+        Optional<PlanDefinition> plan = planLimitGuard.definition(sub.getPlanType());
+        PlanKind kind = plan.map(PlanDefinition::kind).orElse(PlanKind.FREE);
 
         return new SubscriptionResponse(
-                planLimitGuard.kind(sub.getPlanType()).v1Plan().name(), // 19.7a: V1 code, derived from the kind
+                kind.v1Plan().name(), // 19.7a: V1 code, derived from the kind
                 sub.getStatus().name(),
                 sub.getExpiresAt() != null ? sub.getExpiresAt().toString() : null,
                 profile.maxStores(),
@@ -70,7 +78,11 @@ public class GetSubscriptionService implements GetSubscriptionUseCase {
                 profile.maxEmployees(),
                 currentStores,
                 currentProducts,
-                currentEmployees
+                currentEmployees,
+                code, // 19.7b: additive fields
+                plan.map(PlanDefinition::label).orElse(code),
+                kind.name(),
+                profile.maxEmployeesPerStore()
         );
     }
 

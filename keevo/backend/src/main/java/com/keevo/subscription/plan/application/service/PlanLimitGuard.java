@@ -24,7 +24,9 @@ import java.util.function.IntSupplier;
  * next creation without a restart, and the check, its message and the CSV quota use the same values. {@code null} =
  * unlimited: no check (and, for products, no count). Existing records above a lowered limit are kept: only the next
  * creation/reactivation is refused. Refusal details: {@code entity}, {@code limit}, {@code current}, {@code plan}
- * (Story 19.7a: the plan's V1 code, derived from its kind — a V1 app knows three codes only).
+ * (Story 19.7a: the plan's V1 code, derived from its kind — a V1 app knows three codes only); Story 19.7b adds
+ * {@code planCode} and {@code planLabel} (the plan's own code and French name), and {@code scope = "store"} for the
+ * per-store employee limit.
  */
 @Service
 public class PlanLimitGuard {
@@ -79,6 +81,27 @@ public class PlanLimitGuard {
         checkLimit(plan, currentEmployees, plan.maxEmployees(), "employees");
     }
 
+    /**
+     * Story 19.7b — per-store employee limit (Bref's member limit is per shop): {@code currentInStore} = ACTIVE
+     * employees of the target store, the moved employee excluded.
+     *
+     * @throws DomainException PLAN_LIMIT_EXCEEDED with the V1 details plus {@code scope = "store"}
+     */
+    public void checkStoreEmployeeLimit(PlanView plan, int currentInStore) {
+        Integer max = plan.maxEmployeesPerStore();
+        if (max != null && currentInStore >= max) {
+            throw new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "employees per store limit reached",
+                    Map.of("entity", "employees", "limit", max, "current", currentInStore,
+                            "plan", plan.v1Plan().name(), "scope", "store",
+                            "planCode", plan.planType().code(), "planLabel", label(plan)));
+        }
+    }
+
+    /** Story 19.7b — the catalogue entry of the plan (label, kind), empty when the catalogue does not know it. */
+    public java.util.Optional<PlanDefinition> definition(PlanType planType) {
+        return catalog.find(planType);
+    }
+
     /** The current profile of the plan type (limits {@code null} = unlimited), read live. */
     public PlanProfile profile(PlanType planType) {
         return profiles.profile(planType);
@@ -107,11 +130,18 @@ public class PlanLimitGuard {
         }
     }
 
-    private static void checkLimit(PlanView plan, int current, Integer max, String entity) {
+    private void checkLimit(PlanView plan, int current, Integer max, String entity) {
         if (max != null && current >= max) {
+            // 19.7a: plan = V1 code (kind); 19.7b: additive planCode / planLabel (the plan's own code and name)
             throw new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED,
                     entity + " limit reached",
-                    Map.of("entity", entity, "limit", max, "current", current, "plan", plan.v1Plan().name())); // 19.7a: V1 code (kind)
+                    Map.of("entity", entity, "limit", max, "current", current, "plan", plan.v1Plan().name(),
+                            "planCode", plan.planType().code(), "planLabel", label(plan)));
         }
+    }
+
+    /** French label of the plan (catalogue), its code when the catalogue does not know it. */
+    private String label(PlanView plan) {
+        return catalog.label(plan.planType().code(), plan.planType().code());
     }
 }

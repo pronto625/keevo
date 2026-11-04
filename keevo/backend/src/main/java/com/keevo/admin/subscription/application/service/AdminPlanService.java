@@ -48,6 +48,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -153,6 +154,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, WAT);
         validateActivation(cmd, today, now);
+        PlanType granted = paidPlan(cmd.planCode()); // 19.7b: the chosen plan, else plan_settings default
 
         TargetTenant tenant = tenantLookup.load(cmd.tenantId());
         requireNotDeleted(tenant);
@@ -161,13 +163,10 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "No subscription for tenant " + tenant.id()));
 
-        // Renewal: a still-running Premium is extended from the day after its current expiry
-        // (the last covered day is never paid twice); the new expiry must be strictly later.
-        // An expiry granted by a since-voided payment does not count (typo correction).
+        // Renewal: a still-running plan of kind PAID (any paid plan: already-paid days are never lost, ADR-06) is
+        // extended from the day after its current expiry (the last covered day is never paid twice); the new expiry
+        // must be strictly later. An expiry granted by a since-voided payment does not count (typo correction).
         LocalDate periodStart = today;
-        // Story 19.7a: « Premium » = the seeded paid plan this legacy action grants; a running plan of kind PAID is
-        // renewed from its end (19.7b/21.10 make the granted plan a parameter).
-        PlanType premium = PlanType.PREMIUM;
         if (kindOf(current.planType()) == PlanKind.PAID && current.expiresAt() != null) {
             LocalDate currentEnd = effectiveCurrentEnd(tenant.id(), LocalDate.ofInstant(current.expiresAt(), WAT));
             if (currentEnd != null && !currentEnd.isBefore(today)) {
@@ -186,14 +185,29 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                 periodStart, cmd.expiresAt(), blankToNull(cmd.note()), cmd.actorId()));
 
         CurrentPlan previous = changeTenantPlan.changePlan(new ChangePlanInput(
-                tenant.id(), tenant.schemaName(), premium, expiresAt,
+                tenant.id(), tenant.schemaName(), granted, expiresAt,
                 PlanChangeCause.ADMIN_ACTIVATION, cmd.actorId(), blankToNull(cmd.note())));
 
-        log.info("[ADMIN AUDIT] Premium activated: actor={} tenant={} until={} amountXaf={} method={} previousPlan={}",
-                cmd.actorId(), tenant.id(), cmd.expiresAt(), cmd.amountXaf(), cmd.method(), previous.planType());
+        log.info("[ADMIN AUDIT] Paid plan activated: actor={} tenant={} plan={} until={} amountXaf={} method={} "
+                        + "previousPlan={}", cmd.actorId(), tenant.id(), granted, cmd.expiresAt(), cmd.amountXaf(),
+                cmd.method(), previous.planType());
         eventPublisher.publishEvent(new PlanActivatedEvent(cmd.actorId(), tenant.id(), tenant.schemaName(),
-                previous.planType(), expiresAt, cmd.amountXaf(), now));
-        return new CurrentPlan(premium, expiresAt);
+                previous.planType(), expiresAt, cmd.amountXaf(), now, granted));
+        return new CurrentPlan(granted, expiresAt);
+    }
+
+    /**
+     * Story 19.7b — the plan « activate » grants: the given code, else {@code plan_settings.default_paid_plan_code};
+     * it must be a live (not archived) plan of kind PAID.
+     *
+     * @throws DomainException VALIDATION_ERROR (422) « Ce plan ne peut pas être attribué »
+     */
+    private PlanType paidPlan(String planCode) {
+        String code = planCode == null || planCode.isBlank() ? null : planCode.trim().toUpperCase(Locale.ROOT);
+        PlanDefinition plan = (code == null ? catalog.find(catalog.defaultPaidPlan()) : catalog.find(code))
+                .filter(p -> p.kind() == PlanKind.PAID && !p.archived())
+                .orElseThrow(() -> validation("planCode", "Ce plan ne peut pas être attribué"));
+        return plan.code();
     }
 
     // ── Downgrade to FREE ─────────────────────────────────────────────────────

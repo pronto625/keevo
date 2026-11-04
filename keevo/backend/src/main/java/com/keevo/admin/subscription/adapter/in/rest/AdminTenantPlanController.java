@@ -88,7 +88,8 @@ public class AdminTenantPlanController {
         this.voidTenantPaymentUseCase = voidTenantPaymentUseCase;
     }
 
-    @Operation(summary = "Activate / renew Premium after an off-platform payment",
+    @Operation(summary = "Activate / renew a paid plan after an off-platform payment (planCode optional, default "
+            + "plan_settings.default_paid_plan_code; 422 VALIDATION_ERROR for a plan that is not a live paid plan)",
             security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/tenants/{tenantId}/plan/premium")
     public ResponseEntity<ApiResponseWrapper<PlanStateDto>> activatePremium(
@@ -101,7 +102,8 @@ public class AdminTenantPlanController {
                 request.amountXaf(),
                 PaymentMethod.valueOf(request.method()),
                 parsePaidAt(request.paidAt()),
-                request.note()));
+                request.note(),
+                request.planCode()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 new PlanStateDto(plan.planType().name(), plan.expiresAt())));
     }

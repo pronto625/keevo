@@ -16,9 +16,10 @@ import java.time.Instant;
  * @param maxStores    store limit, {@code null} = unlimited
  * @param maxProducts  active-product limit, {@code null} = unlimited
  * @param maxEmployees employee limit, {@code null} = unlimited
+ * @param maxEmployeesPerStore Story 19.7b — active employees per store, {@code null} = unlimited
  */
 public record PlanView(PlanType planType, PlanKind kind, boolean active, Instant expiresAt, Integer maxStores,
-                       Integer maxProducts, Integer maxEmployees) {
+                       Integer maxProducts, Integer maxEmployees, Integer maxEmployeesPerStore) {
 
     public PlanView {
         if (planType == null) { // subscriptions.plan_type is NOT NULL: a null here is a programming error
@@ -29,10 +30,17 @@ public record PlanView(PlanType planType, PlanKind kind, boolean active, Instant
         }
     }
 
+    /** A view without a per-store employee limit. */
+    public PlanView(PlanType planType, PlanKind kind, boolean active, Instant expiresAt, Integer maxStores,
+                    Integer maxProducts, Integer maxEmployees) {
+        this(planType, kind, active, expiresAt, maxStores, maxProducts, maxEmployees, null);
+    }
+
     /** A view whose limits are those of the given profile ({@code null}: unlimited). */
     public PlanView(PlanType planType, PlanKind kind, boolean active, Instant expiresAt, PlanProfile profile) {
         this(planType, kind, active, expiresAt, profile != null ? profile.maxStores() : null,
-                profile != null ? profile.maxProducts() : null, profile != null ? profile.maxEmployees() : null);
+                profile != null ? profile.maxProducts() : null, profile != null ? profile.maxEmployees() : null,
+                profile != null ? profile.maxEmployeesPerStore() : null);
     }
 
     /** The plan code a V1 client understands ({@link PlanKind#v1Plan()}). */

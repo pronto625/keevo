@@ -28,8 +28,39 @@ public interface PlanProfileAdmin {
      *         naming modules by display name) — nothing saved; {@code ADMIN_JOB_RUNNING} (409) when the
      *         composition changes while a re-sync job is still running — nothing saved
      */
+    default UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
+                                Set<String> modules, UUID actorId) {
+        return update(planType, maxStores, maxProducts, maxEmployees, LimitPatch.KEEP, modules, actorId);
+    }
+
+    /**
+     * Story 19.7b — same, with the per-store employee limit.
+     *
+     * @param maxEmployeesPerStore {@link LimitPatch#KEEP} keeps the stored limit; {@link LimitPatch.Set} replaces it
+     *                             (positive, or {@code null} = unlimited)
+     */
     UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
-                        Set<String> modules, UUID actorId);
+                        LimitPatch maxEmployeesPerStore, Set<String> modules, UUID actorId);
+
+    /** Story 19.7b — an optional limit of an update: kept as stored, or set (a {@code null} value = unlimited). */
+    sealed interface LimitPatch {
+
+        /** Keep the stored value (a client that does not send it). */
+        LimitPatch KEEP = new Keep();
+
+        /** Keep the stored value. */
+        record Keep() implements LimitPatch {
+        }
+
+        /** Set the value ({@code null} = unlimited). */
+        record Set(Integer value) implements LimitPatch {
+        }
+
+        /** The value to save, given the stored one. */
+        default Integer resolve(Integer stored) {
+            return this instanceof Set(Integer value) ? value : stored;
+        }
+    }
 
     /**
      * Re-syncs the {@code PLAN} rows of every live tenant whose plan has this type (the work of the
@@ -50,9 +81,13 @@ public interface PlanProfileAdmin {
      * @param modules      the paid modules granted (explicitly, or by the plan type's default), by display name order
      * @param fallback     the stored profile is missing or unreadable: these values come from the free plan's
      *                     profile or the last one read (Story 19.7a)
+     * @param kind         Story 19.7b — the plan's kind ({@code FREE|TRIAL|PAID})
+     * @param archived     Story 19.7b — the plan is archived (kept for its tenants, no longer offered)
+     * @param maxEmployeesPerStore Story 19.7b — active employees per store, {@code null} = unlimited
      */
     record ProfileView(String planType, String label, Integer maxStores, Integer maxProducts, Integer maxEmployees,
-                       List<ModuleRef> modules, boolean fallback) {
+                       List<ModuleRef> modules, boolean fallback, String kind, boolean archived,
+                       Integer maxEmployeesPerStore) {
 
         public ProfileView {
             modules = List.copyOf(modules);

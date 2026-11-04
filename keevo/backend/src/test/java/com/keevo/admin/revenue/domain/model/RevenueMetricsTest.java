@@ -30,7 +30,7 @@ class RevenueMetricsTest {
     /** Story 19.7a: the kind joined from the catalogue — the seeded codes' kinds, TEST_PAID a plan of kind PAID. */
     static com.keevo.identity.api.PlanKind kind(String code) {
         if (code == null) return null;
-        if (code.equals("TEST_PAID")) return com.keevo.identity.api.PlanKind.PAID;
+        if (code.equals("TEST_PAID") || code.equals("TEAM")) return com.keevo.identity.api.PlanKind.PAID;
         return com.keevo.identity.api.PlanType.of(code).seedKind().orElseThrow();
     }
 
@@ -274,6 +274,31 @@ class RevenueMetricsTest {
         assertThat(with.churned(first, last).keySet()).isEqualTo(without.churned(first, last).keySet()).containsOnly(B);
         assertThat(with.conversion(first, last)).isEqualTo(without.conversion(first, last));
         assertThat(with.conversion(first, last).trialsEnded()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("19.7b: PLAN_MIGRATION rows (PREMIUM → TEAM, one-shot data migration) change neither churn nor "
+            + "conversion")
+    void planMigration_ignoredByChurnAndConversion() {
+        List<PlanChange> base = List.of(
+                event(A, null, "PREMIUM_TRIAL", "REGISTRATION", "2026-04-01T10:00:00Z"),
+                event(A, "PREMIUM_TRIAL", "PREMIUM", "ADMIN_ACTIVATION", "2026-10-05T10:00:00Z"),
+                event(B, "PREMIUM", "FREE", "ADMIN_DOWNGRADE", "2026-10-03T10:00:00Z"),
+                event(C, null, "PREMIUM_TRIAL", "REGISTRATION", "2026-04-02T10:00:00Z"));
+        List<PlanChange> withMigration = new java.util.ArrayList<>(base);
+        withMigration.add(event(A, "PREMIUM", "TEAM", "PLAN_MIGRATION", "2026-10-10T10:00:00Z"));
+        // would read as « back to paid » after B's churn, and as C's trial ending in a conversion
+        withMigration.add(event(B, "PREMIUM", "TEAM", "PLAN_MIGRATION", "2026-10-12T10:00:00Z"));
+        withMigration.add(event(C, "PREMIUM", "TEAM", "PLAN_MIGRATION", "2026-10-12T10:00:00Z"));
+
+        LocalDate first = LocalDate.of(2026, 10, 1);
+        LocalDate last = LocalDate.of(2026, 10, 31);
+        var without = new RevenueMetrics(List.of(), base);
+        var with = new RevenueMetrics(List.of(), withMigration);
+
+        assertThat(with.churned(first, last).keySet()).isEqualTo(without.churned(first, last).keySet()).containsOnly(B);
+        assertThat(with.conversion(first, last)).isEqualTo(without.conversion(first, last));
+        assertThat(with.conversion(first, last)).isEqualTo(new RevenueMetrics.Conversion(1, 1));
     }
 
     @Test

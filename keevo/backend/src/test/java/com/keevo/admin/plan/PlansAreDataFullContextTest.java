@@ -59,6 +59,8 @@ class PlansAreDataFullContextTest extends FullContextIntegrationTest {
     private static final PlanType TEST_PAID = PlanType.of("TEST_PAID");
     private static final PlanType TEST_TRIAL = PlanType.of("TEST_TRIAL");
     private static final PlanType TEST_FREE = PlanType.of("TEST_FREE");
+    private static final PlanType TEAM = PlanType.of("TEAM");
+    private static final PlanType BUSINESS_TRIAL = PlanType.of("BUSINESS_TRIAL");
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -113,7 +115,7 @@ class PlansAreDataFullContextTest extends FullContextIntegrationTest {
         jdbc.update("DELETE FROM public.tenant_plan_events WHERE from_plan LIKE 'TEST\\_%' OR to_plan LIKE 'TEST\\_%'");
         jdbc.update("DELETE FROM public.profile_modules WHERE plan_type LIKE 'TEST\\_%'");
         jdbc.update("DELETE FROM public.plan_profiles WHERE plan_type LIKE 'TEST\\_%'");
-        catalogStore.saveSettings(new PlanSettings(PlanType.FREE, PlanType.PREMIUM_TRIAL, 6));
+        catalogStore.saveSettings(new PlanSettings(PlanType.FREE, BUSINESS_TRIAL, 1, TEAM)); // V43 settings
         jdbc.update("DELETE FROM public.plans WHERE code LIKE 'TEST\\_%'");
         catalogStore.invalidate();
         TenantContext.clear();
@@ -192,7 +194,7 @@ class PlansAreDataFullContextTest extends FullContextIntegrationTest {
                 .content(objectMapper.writeValueAsString(Map.of("name", "Boutique refusée")))).andReturn();
         assertThat(store.getResponse().getStatus()).as(body(store)).isEqualTo(403);
         assertThat(body(store)).contains("PLAN_LIMIT_EXCEEDED").contains("\"plan\":\"PREMIUM\"")
-                .contains("\"limit\":1").doesNotContain("TEST_PAID");
+                .contains("\"limit\":1").contains("\"planCode\":\"TEST_PAID\"");
 
         // paid modules from its profile_modules, undecided ones by its kind
         assertThat(row("exports")).isEqualTo("ACTIVE/PREMIUM/PLAN");
@@ -244,7 +246,7 @@ class PlansAreDataFullContextTest extends FullContextIntegrationTest {
     @DisplayName("plan_settings free plan = a data plan of kind FREE: the expiry job and the admin downgrade move the "
             + "tenant onto it (schema, public row, history)")
     void freePlanFromSettings() throws Exception {
-        catalogStore.saveSettings(new PlanSettings(TEST_FREE, PlanType.PREMIUM_TRIAL, 6));
+        catalogStore.saveSettings(new PlanSettings(TEST_FREE, BUSINESS_TRIAL, 1, TEAM));
 
         plan(TEST_PAID, "now() - interval '1 hour'");
         expiryJob.execute(new DowngradeExpiredTrialsCommand("test"));
@@ -269,17 +271,18 @@ class PlansAreDataFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("registration: trial plan and length from plan_settings (6 months seeded; 1 month after a change)")
+    @DisplayName("registration: trial plan and length from plan_settings (V43: BUSINESS_TRIAL 1 month; 2 months after "
+            + "a change)")
     void registrationTrialFromSettings() {
-        String sixMonths = jdbc.queryForObject("SELECT plan_type || ':' || (expires_at - created_at > interval '180 days' "
-                + "AND expires_at - created_at < interval '185 days') FROM \"" + schema + "\".subscriptions", String.class);
-        assertThat(sixMonths).isEqualTo("PREMIUM_TRIAL:true");
+        String oneMonth = jdbc.queryForObject("SELECT plan_type || ':' || (expires_at - created_at > interval '27 days' "
+                + "AND expires_at - created_at < interval '32 days') FROM \"" + schema + "\".subscriptions", String.class);
+        assertThat(oneMonth).isEqualTo("BUSINESS_TRIAL:true");
 
-        catalogStore.saveSettings(new PlanSettings(PlanType.FREE, TEST_TRIAL, 1));
+        catalogStore.saveSettings(new PlanSettings(PlanType.FREE, TEST_TRIAL, 2, TEAM));
         String next = register();
         Instant expires = jdbc.queryForObject("SELECT expires_at FROM \"" + next + "\".subscriptions",
                 java.sql.Timestamp.class).toInstant();
-        assertThat(Duration.between(Instant.now(), expires).toDays()).isBetween(27L, 31L);
+        assertThat(Duration.between(Instant.now(), expires).toDays()).isBetween(58L, 62L);
         assertThat(jdbc.queryForObject("SELECT plan_type FROM \"" + next + "\".subscriptions", String.class))
                 .isEqualTo("TEST_TRIAL");
         assertThat(jdbc.queryForObject("SELECT plan_type FROM public.tenants WHERE schema_name = ?", String.class, next))

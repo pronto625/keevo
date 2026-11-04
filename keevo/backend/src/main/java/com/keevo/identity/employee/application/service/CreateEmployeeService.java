@@ -90,8 +90,12 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         transactionLock.lock("employee-limit:" + TenantContext.getCurrentTenant());
         var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
-        int currentCount = employeeCountPort.countActiveEmployees();
-        planLimit.checkEmployeeLimit(plan, currentCount);
+        // Story 19.7b — tenant and target-store counts in one query; per-store limit after the tenant-wide one
+        var counts = employeeCountPort.countActive(command.storeId(), null);
+        planLimit.checkEmployeeLimit(plan, counts.tenant());
+        if (plan.maxEmployeesPerStore() != null && command.storeId() != null) {
+            planLimit.checkStoreEmployeeLimit(plan, counts.store());
+        }
 
         // 3. Generate temp password
         String tempPassword = TempPasswordFactory.generate();

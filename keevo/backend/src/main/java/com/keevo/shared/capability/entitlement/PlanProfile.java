@@ -23,13 +23,16 @@ import java.util.Set;
  * @param maxStores    store limit, {@code null} = unlimited
  * @param maxProducts  active-product limit, {@code null} = unlimited
  * @param maxEmployees employee limit, {@code null} = unlimited
+ * @param maxEmployeesPerStore Story 19.7b — active employees per store, {@code null} = unlimited (Bref's member
+ *                     limit is per shop)
  * @param modules      paid modules explicitly granted
  * @param withheld     paid modules explicitly not granted
  * @param fallback     the plan's own profile could not be read: these values come from another profile (free plan,
  *                     last known) or, as a last resort, carry no limit
  */
 public record PlanProfile(PlanType planType, PlanKind kind, Integer maxStores, Integer maxProducts,
-                          Integer maxEmployees, Set<String> modules, Set<String> withheld, boolean fallback) {
+                          Integer maxEmployees, Integer maxEmployeesPerStore, Set<String> modules,
+                          Set<String> withheld, boolean fallback) {
 
     public PlanProfile {
         Objects.requireNonNull(planType, "planType");
@@ -44,10 +47,24 @@ public record PlanProfile(PlanType planType, PlanKind kind, Integer maxStores, I
         return of(planType, kind, maxStores, maxProducts, maxEmployees, modules, Set.of());
     }
 
-    /** A stored profile with explicit grants and explicit refusals. */
+    /** A stored profile with explicit grants and explicit refusals, no per-store employee limit. */
     public static PlanProfile of(PlanType planType, PlanKind kind, Integer maxStores, Integer maxProducts,
                                  Integer maxEmployees, Set<String> modules, Set<String> withheld) {
-        return new PlanProfile(planType, kind, maxStores, maxProducts, maxEmployees, modules, withheld, false);
+        return of(planType, kind, maxStores, maxProducts, maxEmployees, null, modules, withheld);
+    }
+
+    /** Story 19.7b — a stored profile with its per-store employee limit. */
+    public static PlanProfile of(PlanType planType, PlanKind kind, Integer maxStores, Integer maxProducts,
+                                 Integer maxEmployees, Integer maxEmployeesPerStore, Set<String> modules,
+                                 Set<String> withheld) {
+        return new PlanProfile(planType, kind, maxStores, maxProducts, maxEmployees, maxEmployeesPerStore, modules,
+                withheld, false);
+    }
+
+    /** This profile with another per-store employee limit ({@code null} = unlimited). */
+    public PlanProfile withMaxEmployeesPerStore(Integer perStore) {
+        return new PlanProfile(planType, kind, maxStores, maxProducts, maxEmployees, perStore, modules, withheld,
+                fallback);
     }
 
     /**
@@ -73,7 +90,7 @@ public record PlanProfile(PlanType planType, PlanKind kind, Integer maxStores, I
      */
     public static PlanProfile fallbackFrom(PlanType planType, PlanProfile source) {
         return new PlanProfile(planType, source.kind(), source.maxStores(), source.maxProducts(),
-                source.maxEmployees(), source.modules(), source.withheld(), true);
+                source.maxEmployees(), source.maxEmployeesPerStore(), source.modules(), source.withheld(), true);
     }
 
     /**
@@ -81,7 +98,7 @@ public record PlanProfile(PlanType planType, PlanKind kind, Integer maxStores, I
      * modules follow the kind — a commercial gate never blocks on a database fault. Flagged {@link #fallback()}.
      */
     public static PlanProfile unavailable(PlanType planType, PlanKind kind) {
-        return new PlanProfile(planType, kind, null, null, null, Set.of(), Set.of(), true);
+        return new PlanProfile(planType, kind, null, null, null, null, Set.of(), Set.of(), true);
     }
 
     /** Whether this profile grants the given paid module: its explicit decision, else the kind's default. */

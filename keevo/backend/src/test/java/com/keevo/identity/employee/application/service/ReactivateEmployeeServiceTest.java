@@ -78,7 +78,7 @@ class ReactivateEmployeeServiceTest {
         freeSubscription = mock(Subscription.class);
         lenient().when(freeSubscription.getPlanType()).thenReturn(PlanType.FREE);
         lenient().when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSubscription));
-        lenient().when(employeeCountPort.countActiveEmployees()).thenReturn(2);
+        lenient().when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(2, 0));
     }
 
     @AfterEach
@@ -155,7 +155,7 @@ class ReactivateEmployeeServiceTest {
         order.verify(transactionLock).lock("employee-limit:kv_abc123");
         order.verify(employeeRepository).findById(employeeId);
         order.verify(subscriptionRepository).findActivePlan();
-        order.verify(employeeCountPort).countActiveEmployees();
+        order.verify(employeeCountPort).countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         order.verify(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(2));
         order.verify(employeeRepository).updateStatus(employeeId, EmployeeStatus.ACTIVE);
         order.verify(membershipRepository).reactivate(userId, tenant.getId());
@@ -165,7 +165,7 @@ class ReactivateEmployeeServiceTest {
     @DisplayName("v1s-14-13: at the cap → PLAN_LIMIT_EXCEEDED, nothing written")
     void execute_atCap_refusedWithoutWrite() {
         when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(inactiveEmployee));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(3);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(3, 0));
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED))
                 .when(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(3));
 

@@ -11,6 +11,8 @@ import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanProfile;
 import com.keevo.identity.api.PlanKind;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.shared.capability.entitlement.PlanDefinition;
+import com.keevo.shared.capability.entitlement.UnknownPlanException;
 import com.keevo.shared.capability.entitlement.PlanProfiles;
 import com.keevo.subscription.plan.domain.model.SubscriptionStatus;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
@@ -25,6 +27,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Clock;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -67,6 +71,7 @@ public class ActivatePlanService implements ActivatePlanUseCase {
     private final PlanModuleRowSync planModuleRows;
     private final PlanProfiles planProfiles;
     private final PlanCatalog catalog;
+    private final Clock clock;
 
     /** Production constructor — Spring injects the {@link PlatformTransactionManager}. */
     @org.springframework.beans.factory.annotation.Autowired
@@ -76,9 +81,10 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                                PlanChangeRecorder planChangeRecorder,
                                PlanModuleRowSync planModuleRows,
                                PlanProfiles planProfiles,
-                               PlanCatalog catalog) {
+                               PlanCatalog catalog,
+                               Clock clock) {
         this(subscriptionRepository, tenantQuery, buildTemplate(transactionManager), planChangeRecorder,
-                planModuleRows, planProfiles, catalog);
+                planModuleRows, planProfiles, catalog, clock);
     }
 
     /**
@@ -93,10 +99,10 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                         PlanModuleRowSync planModuleRows,
                         PlanProfiles planProfiles) {
         this(subscriptionRepository, tenantQuery, requiresNewTemplate, planChangeRecorder, planModuleRows,
-                planProfiles, PlanCatalog.SEED);
+                planProfiles, PlanCatalog.SEED, Clock.systemUTC());
     }
 
-    /** Testing constructor with the plan catalogue (Story 19.7a). */
+    /** Testing constructor with the plan catalogue (Story 19.7a), system clock. */
     ActivatePlanService(SubscriptionRepository subscriptionRepository,
                         TenantQueryPort tenantQuery,
                         TransactionTemplate requiresNewTemplate,
@@ -104,7 +110,21 @@ public class ActivatePlanService implements ActivatePlanUseCase {
                         PlanModuleRowSync planModuleRows,
                         PlanProfiles planProfiles,
                         PlanCatalog catalog) {
+        this(subscriptionRepository, tenantQuery, requiresNewTemplate, planChangeRecorder, planModuleRows,
+                planProfiles, catalog, Clock.systemUTC());
+    }
+
+    /** Testing constructor with the plan catalogue and the clock (Story 19.7b: expiry must be in the future). */
+    ActivatePlanService(SubscriptionRepository subscriptionRepository,
+                        TenantQueryPort tenantQuery,
+                        TransactionTemplate requiresNewTemplate,
+                        PlanChangeRecorder planChangeRecorder,
+                        PlanModuleRowSync planModuleRows,
+                        PlanProfiles planProfiles,
+                        PlanCatalog catalog,
+                        Clock clock) {
         this.catalog = catalog;
+        this.clock = clock;
         this.planProfiles = planProfiles;
         this.subscriptionRepository = subscriptionRepository;
         this.tenantQuery = tenantQuery;
@@ -121,6 +141,8 @@ public class ActivatePlanService implements ActivatePlanUseCase {
 
     @Override
     public void execute(ActivatePlanCommand command) {
+        validate(command);
+
         // Step 1: Verify tenant exists via schemaName (public schema — safe with current OEMIV session)
         String schemaName = command.targetTenantId(); // e.g., "kv_abc123" from LoginResponse.tenantId
         TenantView tenant = tenantQuery.findBySchemaName(schemaName)
@@ -176,6 +198,31 @@ public class ActivatePlanService implements ActivatePlanUseCase {
             // Step 4: Always restore the caller's tenant context (SUPER_ADMIN = null/public)
             TenantContext.setCurrentTenant(previousTenant);
         }
+    }
+
+    /**
+     * Story 19.7b — the plan must be live (not archived); a FREE-kind plan takes no expiry, a TRIAL or PAID one an
+     * expiry in the future.
+     *
+     * @throws DomainException VALIDATION_ERROR (422) with a French message
+     */
+    private void validate(ActivatePlanCommand command) {
+        PlanDefinition plan = catalog.find(command.newPlan())
+                .orElseThrow(UnknownPlanException::new);
+        if (plan.archived()) {
+            throw invalid("planType", "Ce plan ne peut pas être attribué");
+        }
+        if (plan.kind() == PlanKind.FREE) {
+            if (command.expiresAt() != null) {
+                throw invalid("expiresAt", "Pas de date d'expiration pour un plan gratuit");
+            }
+        } else if (command.expiresAt() == null || !command.expiresAt().isAfter(clock.instant())) {
+            throw invalid("expiresAt", "Date d'expiration requise et future pour ce plan");
+        }
+    }
+
+    private static DomainException invalid(String field, String message) {
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
     }
 
     private static UUID parseActor(String actorId) {

@@ -79,7 +79,8 @@ class ActivatePlanServiceTest {
         // Use the package-private test constructor
         service = new ActivatePlanService(subscriptionRepository,
                 IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), requiresNewTemplate,
-                planChangeRecorder, planModuleRows, com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS);
+                planChangeRecorder, planModuleRows, com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS,
+                com.keevo.shared.capability.entitlement.TestPlanCatalogs.V42); // 19.7b: the Keevo plans live
     }
 
     @Test
@@ -128,7 +129,7 @@ class ActivatePlanServiceTest {
         when(tenantRepository.findBySchemaName("kv_unknown")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.execute(
-                new ActivatePlanCommand("admin", "kv_unknown", PlanType.PREMIUM, null)))
+                new ActivatePlanCommand("admin", "kv_unknown", PlanType.PREMIUM, FUTURE)))
                 .isInstanceOf(DomainException.class);
 
         // findActivePlan should never be called if tenant lookup fails
@@ -141,8 +142,41 @@ class ActivatePlanServiceTest {
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.execute(
-                new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.PREMIUM, null)))
+                new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.PREMIUM, FUTURE)))
                 .isInstanceOf(DomainException.class);
+    }
+
+    private static final Instant FUTURE = Instant.now().plus(java.time.Duration.ofDays(30));
+
+    @Test
+    @DisplayName("19.7b: expiresAt follows the plan kind (none for FREE, future for TRIAL/PAID); archived plan "
+            + "refused — 422 VALIDATION_ERROR, nothing read or written")
+    void execute_validatesExpiryAgainstKindAndArchive() {
+        java.util.List<com.keevo.shared.capability.entitlement.PlanDefinition> plans =
+                new java.util.ArrayList<>(com.keevo.shared.capability.entitlement.TestPlanCatalogs.V42.all());
+        plans.add(new com.keevo.shared.capability.entitlement.PlanDefinition(PlanType.of("TEST_OLD"), "Ancien",
+                null, 9, false, com.keevo.identity.api.PlanKind.PAID, Instant.now()));
+        ActivatePlanService checked = new ActivatePlanService(subscriptionRepository,
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), requiresNewTemplate,
+                planChangeRecorder, planModuleRows, com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS,
+                com.keevo.shared.capability.entitlement.PlanCatalog.of(plans,
+                        com.keevo.shared.capability.entitlement.TestPlanCatalogs.V42.settings()));
+        Instant past = Instant.now().minusSeconds(60);
+        java.util.Map<ActivatePlanCommand, String> refused = new java.util.LinkedHashMap<>();
+        refused.put(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.FREE, FUTURE),
+                "Pas de date d'expiration pour un plan gratuit");
+        refused.put(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.PREMIUM, null),
+                "Date d'expiration requise et future pour ce plan");
+        refused.put(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.PREMIUM_TRIAL, past),
+                "Date d'expiration requise et future pour ce plan");
+        refused.put(new ActivatePlanCommand("admin", SCHEMA_NAME, PlanType.of("TEST_OLD"), FUTURE),
+                "Ce plan ne peut pas être attribué");
+        refused.forEach((cmd, message) -> assertThatThrownBy(() -> checked.execute(cmd))
+                .isInstanceOfSatisfying(DomainException.class, e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(com.keevo.shared.domain.exception.ErrorCode.VALIDATION_ERROR);
+                    assertThat(e.getUserMessage()).isEqualTo(message);
+                }));
+        verifyNoInteractions(subscriptionRepository, planChangeRecorder, planModuleRows);
     }
 
     @Test

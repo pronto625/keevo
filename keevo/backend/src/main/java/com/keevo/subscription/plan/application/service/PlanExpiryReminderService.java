@@ -51,7 +51,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
 
     /** Story 19.7a: the subscription of a plan that expires, with its kind; parameters: the two kinds. */
     static final String EXPIRY_SQL =
-            "SELECT p.kind, s.expires_at FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
+            "SELECT p.kind, p.label, s.expires_at FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
             + "WHERE p.kind IN (?, ?) AND s.status = 'ACTIVE' AND s.expires_at IS NOT NULL "
             + "ORDER BY s.created_at ASC LIMIT 1";
 
@@ -63,7 +63,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
             "DELETE FROM public.plan_expiry_reminders "
             + "WHERE tenant_id = ? AND threshold_days = ? AND expiry_date = ?";
 
-    private record Expiry(PlanKind kind, LocalDate date) {}
+    private record Expiry(PlanKind kind, String label, LocalDate date) {}
 
     private final JdbcTemplate jdbc;
     private final WhatsAppSender whatsAppSender;
@@ -134,7 +134,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
         Object exp = row.get("expires_at");
         java.time.Instant instant = exp instanceof Timestamp ts ? ts.toInstant()
                 : exp instanceof java.time.OffsetDateTime odt ? odt.toInstant() : (java.time.Instant) exp;
-        return Optional.of(new Expiry(PlanKind.valueOf((String) row.get("kind")),
+        return Optional.of(new Expiry(PlanKind.valueOf((String) row.get("kind")), (String) row.get("label"),
                 instant.atZone(KeevoZones.WAT).toLocalDate()));
     }
 
@@ -149,7 +149,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
             }
             String text = expiry.kind() == PlanKind.TRIAL
                     ? PlanWhatsAppMessages.trialReminder(expiry.date())
-                    : PlanWhatsAppMessages.reminder(expiry.date());
+                    : PlanWhatsAppMessages.reminder(expiry.label(), expiry.date()); // 19.7b: plan label
             whatsAppSender.sendReport(phone.get(), text);
             log.info("Plan expiry reminder ({} d) sent for tenant {}", threshold, tenantId);
             return true;

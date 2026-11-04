@@ -18,17 +18,22 @@ public final class PlanWhatsAppMessages {
 
     static final String DOWNGRADED =
             "Votre abonnement Keevo est repassé au plan Gratuit. Vos données sont conservées.";
-    static final String EXPIRED =
-            "Votre abonnement Keevo Premium a expiré : votre compte est passé au plan Gratuit. "
-            + "Vos données sont conservées.";
     static final String TRIAL_EXPIRED =
-            "Votre essai Keevo Premium est terminé : votre compte est passé au plan Gratuit. "
-            + "Vos données sont conservées.";
+            "Votre essai Keevo est terminé : votre compte est passé au plan Gratuit. Vos données sont conservées.";
 
     private PlanWhatsAppMessages() {}
 
-    public static String activated(Instant expiresAt) {
-        return "🎉 Votre compte Keevo Premium est activé jusqu'au " + format(expiresAt)
+    /**
+     * Story 19.7b — « Keevo Team », « Keevo Pro »… from the plan's catalogue label; a missing label (unknown plan,
+     * event published before 19.7b) gives the neutral « Keevo ».
+     */
+    static String offer(String planLabel) {
+        return planLabel == null || planLabel.isBlank() ? "Keevo" : "Keevo " + planLabel.strip();
+    }
+
+    /** @param planLabel catalogue label of the granted plan, {@code null} → neutral text */
+    public static String activated(String planLabel, Instant expiresAt) {
+        return "🎉 Votre abonnement " + offer(planLabel) + " est activé jusqu'au " + format(expiresAt)
                 + ". Profitez de toutes les fonctionnalités !";
     }
 
@@ -36,23 +41,26 @@ public final class PlanWhatsAppMessages {
         return DOWNGRADED;
     }
 
-    public static String expired() {
-        return EXPIRED;
+    /**
+     * Expiry text by the expired plan's kind: a trial end is not an expired paid subscription.
+     *
+     * @param planLabel catalogue label of the expired paid plan, {@code null} → neutral text
+     */
+    public static String expired(PlanKind previousKind, String planLabel) {
+        return previousKind == PlanKind.TRIAL ? TRIAL_EXPIRED
+                : "Votre abonnement " + offer(planLabel) + " a expiré : votre compte est passé au plan Gratuit. "
+                        + "Vos données sont conservées.";
     }
 
-    /** Expiry text by the expired plan's kind: a trial end is not an expired paid subscription. */
-    public static String expired(PlanKind previousKind) {
-        return previousKind == PlanKind.TRIAL ? TRIAL_EXPIRED : EXPIRED;
-    }
-
-    public static String reminder(LocalDate expiryDate) {
-        return "⏰ Votre abonnement Keevo Premium expire le " + DATE.format(expiryDate)
+    /** @param planLabel catalogue label of the paid plan, {@code null} → neutral text */
+    public static String reminder(String planLabel, LocalDate expiryDate) {
+        return "⏰ Votre abonnement " + offer(planLabel) + " expire le " + DATE.format(expiryDate)
                 + ". Contactez-nous pour renouveler.";
     }
 
     public static String trialReminder(LocalDate expiryDate) {
-        return "⏰ Votre essai Keevo Premium se termine le " + DATE.format(expiryDate)
-                + ". Contactez-nous pour passer au Premium et garder toutes les fonctionnalités.";
+        return "⏰ Votre essai Keevo se termine le " + DATE.format(expiryDate)
+                + ". Contactez-nous pour choisir une offre et garder toutes les fonctionnalités.";
     }
 
     static String format(Instant instant) {

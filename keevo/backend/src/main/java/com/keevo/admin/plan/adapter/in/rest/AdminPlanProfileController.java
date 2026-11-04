@@ -70,7 +70,8 @@ public class AdminPlanProfileController {
 
     @Operation(summary = "Replace the profile of a plan type (applies to the next check, no restart)",
             description = "Body keys maxStores / maxProducts / maxEmployees are required: positive, or null "
-                    + "(unlimited) sent explicitly; unknown keys are refused. modules: ids of installed paid modules "
+                    + "(unlimited) sent explicitly; maxEmployeesPerStore (Story 19.7b) is optional: positive, null "
+                    + "(unlimited), or absent to keep the stored value; unknown keys are refused. modules: ids of installed paid modules "
                     + "only (every other installed paid module is recorded as not granted). Tenants above a lowered limit keep their records; only new "
                     + "creations are refused. Answer {profile, compositionChanged, jobId}: when the modules change, "
                     + "the plan-derived module rows of every live tenant on this plan type are re-synced by a "
@@ -97,14 +98,20 @@ public class AdminPlanProfileController {
         Integer maxStores = limit(body, "maxStores", "le plafond de boutiques");
         Integer maxProducts = limit(body, "maxProducts", "le plafond de produits");
         Integer maxEmployees = limit(body, "maxEmployees", "le plafond d'employés");
+        // Story 19.7b — optional: absent keeps the stored per-store limit
+        PlanProfileAdmin.LimitPatch perStore = body.containsKey(PER_STORE)
+                ? new PlanProfileAdmin.LimitPatch.Set(limit(body, PER_STORE, "le plafond d'employés par boutique"))
+                : PlanProfileAdmin.LimitPatch.KEEP;
         return ResponseEntity.ok(ApiResponseWrapper.ok(profiles.update(type, maxStores, maxProducts, maxEmployees,
-                modules(body), CurrentActor.actorId())));
+                perStore, modules(body), CurrentActor.actorId())));
     }
 
     // ── Parsing (adapter concern) ─────────────────────────────────────────────
 
     /** The accepted body keys: the three limits must be present (null = unlimited, sent explicitly). */
-    private static final Set<String> FIELDS = Set.of("maxStores", "maxProducts", "maxEmployees", "modules");
+    private static final String PER_STORE = "maxEmployeesPerStore";
+    private static final Set<String> FIELDS = Set.of("maxStores", "maxProducts", "maxEmployees", PER_STORE,
+            "modules");
 
     private static Integer limit(Map<String, Object> body, String key, String what) {
         if (!body.containsKey(key)) {

@@ -17,6 +17,8 @@ import jakarta.validation.constraints.Size;
  * @param method    MOBILE_MONEY | CASH | BANK_TRANSFER | OTHER
  * @param paidAt    optional ISO date-time or date of the payment, default now
  * @param note      optional, 500 chars max
+ * @param planCode  Story 19.7b — optional paid plan code of the catalogue (kind PAID, not archived); absent → the
+ *                  default paid plan of {@code plan_settings}
  */
 public record ActivatePremiumRequest(
         @NotBlank(message = "Date d'expiration requise")
@@ -35,5 +37,8 @@ public record ActivatePremiumRequest(
         String paidAt,
 
         @Size(max = 500, message = "500 caractères maximum")
-        String note
+        String note,
+
+        @Pattern(regexp = "^[A-Za-z][A-Za-z0-9_]{1,29}$", message = "Code de plan invalide")
+        String planCode
 ) {}

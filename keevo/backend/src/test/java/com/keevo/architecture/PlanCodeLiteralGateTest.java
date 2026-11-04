@@ -48,8 +48,8 @@ class PlanCodeLiteralGateTest {
             // seeds, not behaviour
             "com/keevo/identity/auth/adapter/in/bootstrap/AdminAccountInitializer.java",
             "the system tenant's seeded plan",
-            "com/keevo/admin/subscription/application/service/AdminPlanService.java",
-            "the legacy « activate Premium » admin action grants the seeded Premium plan (19.7b makes it a parameter)");
+            "com/keevo/subscription/plan/adapter/in/bootstrap/PlanMigrationJob.java",
+            "one-shot ADR-06 data migration: Keevo PREMIUM becomes TEAM (Story 19.7b)");
 
     @Test
     @DisplayName("no plan code literal, well-known constant, closed-list call or trial interval outside the allow-list")

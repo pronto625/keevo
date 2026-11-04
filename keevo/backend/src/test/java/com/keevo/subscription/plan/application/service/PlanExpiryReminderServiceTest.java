@@ -68,7 +68,7 @@ class PlanExpiryReminderServiceTest {
         // Story 19.7a: the subscription's kind is joined from the catalogue (seeded codes → their kinds)
         String kind = com.keevo.identity.api.PlanType.of(plan).seedKind().orElseThrow().name();
         when(jdbc.queryForList(contains("\"" + schema + "\""), eq("TRIAL"), eq("PAID")))
-                .thenReturn(List.of(Map.of("kind", kind, "expires_at", Timestamp.from(expiry))));
+                .thenReturn(List.of(Map.of("kind", kind, "label", "Team", "expires_at", Timestamp.from(expiry))));
     }
 
     private void claim(UUID tenant, int threshold, int days, int inserted) {
@@ -98,7 +98,7 @@ class PlanExpiryReminderServiceTest {
         assertThat(service.execute()).isEqualTo(1);
 
         verify(whatsApp).sendReport(PHONE,
-                "⏰ Votre abonnement Keevo Premium expire le 20/10/2026. Contactez-nous pour renouveler.");
+                "⏰ Votre abonnement Keevo Team expire le 20/10/2026. Contactez-nous pour renouveler."); // 19.7b label
         verify(jdbc, never()).update(eq(PlanExpiryReminderService.UNCLAIM_SQL), any(), any(), any());
     }
 
@@ -127,8 +127,8 @@ class PlanExpiryReminderServiceTest {
 
         service.execute();
 
-        verify(whatsApp).sendReport(PHONE, "⏰ Votre essai Keevo Premium se termine le 14/10/2026. "
-                + "Contactez-nous pour passer au Premium et garder toutes les fonctionnalités.");
+        verify(whatsApp).sendReport(PHONE, "⏰ Votre essai Keevo se termine le 14/10/2026. "
+                + "Contactez-nous pour choisir une offre et garder toutes les fonctionnalités.");
     }
 
     @Test

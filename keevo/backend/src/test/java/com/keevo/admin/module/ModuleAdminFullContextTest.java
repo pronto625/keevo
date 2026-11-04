@@ -122,7 +122,7 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
     void legacyActivationSyncsPlanRows() {
         Instant until = Instant.parse("2027-06-01T22:59:59Z");
         activatePlan.execute(new com.keevo.subscription.plan.domain.port.in.ActivatePlanCommand(
-                adminId.toString(), schema, com.keevo.identity.api.PlanType.PREMIUM, until));
+                adminId.toString(), schema, com.keevo.identity.api.PlanType.of("TEAM"), until));
 
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT status, tier, origin, expires_at "
                 + "FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN'", tenantId);

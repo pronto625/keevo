@@ -59,6 +59,11 @@ class SubscriptionPlanAdapter implements TenantPlanQuery, PlanLimitCheck {
         planLimitGuard.checkEmployeeLimit(requirePlan(plan), currentEmployees);
     }
 
+    @Override
+    public void checkStoreEmployeeLimit(PlanView plan, int currentInStore) {
+        planLimitGuard.checkStoreEmployeeLimit(requirePlan(plan), currentInStore);
+    }
+
     private static PlanView requirePlan(PlanView plan) {
         if (plan == null) {
             throw new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND, "Aucun abonnement actif");

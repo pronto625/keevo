@@ -103,7 +103,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
     @AfterEach
     void restoreSeed() {
         awaitJobs();
-        profileAdmin.update(PlanType.FREE, 1, 500, 2, Set.of(), adminId);
+        profileAdmin.update(PlanType.FREE, 1, 500, 1, new PlanProfileAdmin.LimitPatch.Set(1), Set.of(), adminId); // V43 FREE profile
         awaitJobs();
         profileAdmin.update(PlanType.PREMIUM_TRIAL, null, null, null, Set.copyOf(PAID), adminId);
         awaitJobs();
@@ -195,19 +195,21 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
     // ── tests ────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("seed: FREE 1/500/2 without paid module; premium profiles unlimited with the 8 paid modules")
+    @DisplayName("seed (V33 + V43): FREE 1/500/1 without paid module; complete plans unlimited with the 8 paid "
+            + "modules; PRO 3 stores")
     void seed() throws Exception {
         assertThat(jdbc.queryForList("SELECT plan_type || ':' || coalesce(max_stores::text, '∞') || '/' "
                 + "|| coalesce(max_products::text, '∞') || '/' || coalesce(max_employees::text, '∞') "
                 + "FROM public.plan_profiles ORDER BY plan_type", String.class))
-                .containsExactly("FREE:1/500/2", "PREMIUM:∞/∞/∞", "PREMIUM_TRIAL:∞/∞/∞");
-        for (String type : List.of("PREMIUM_TRIAL", "PREMIUM")) {
+                .containsExactly("BUSINESS:∞/∞/∞", "BUSINESS_TRIAL:∞/∞/∞", "FREE:1/500/1", "PREMIUM:∞/∞/∞",
+                        "PREMIUM_TRIAL:∞/∞/∞", "PRO:3/∞/∞", "TEAM:8/∞/∞");
+        for (String type : List.of("PREMIUM_TRIAL", "PREMIUM", "TEAM", "BUSINESS", "BUSINESS_TRIAL")) {
             assertThat(jdbc.queryForList("SELECT module_id FROM public.profile_modules WHERE plan_type = ? "
                     + "AND granted ORDER BY module_id", String.class, type)).containsExactlyElementsOf(PAID);
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.profile_modules WHERE plan_type = 'FREE' "
                 + "AND granted", Integer.class)).isZero();
-        assertThat(planProfiles.profile(PlanType.FREE).maxEmployees()).isEqualTo(2);
+        assertThat(planProfiles.profile(PlanType.FREE).maxEmployees()).isEqualTo(1);
         assertThat(planProfiles.profile(PlanType.FREE).fallback()).isFalse();
 
         MvcResult list = mockMvc.perform(get("/api/v1/admin/plan-profiles")
@@ -277,7 +279,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
         assertThat(body(unknownKey)).contains("champ non reconnu");
         assertThat(planProfiles.profile(PlanType.FREE))
                 .satisfies(p -> assertThat(List.of(p.maxStores(), p.maxProducts(), p.maxEmployees()))
-                        .containsExactly(1, 500, 2));
+                        .containsExactly(1, 500, 1));
         assertThat(planProfiles.profile(PlanType.PREMIUM).modules()).containsExactlyInAnyOrderElementsOf(PAID);
     }
 
@@ -309,7 +311,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("profile row missing → built-in defaults (FREE 1 store, 2 employees), no error")
+    @DisplayName("profile row missing → built-in defaults (FREE 1 store, 1 employee), no error")
     void missingRowFallsBack() throws Exception {
         plan(schema, tenantId, "FREE", "NULL");
         jdbc.update("DELETE FROM public.plan_profiles WHERE plan_type = 'FREE'"); // restored by restoreSeed()
@@ -324,7 +326,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
         MvcResult me = mockMvc.perform(get("/api/v1/subscription/me")
                 .header("Authorization", "Bearer " + ownerToken)).andReturn();
         assertThat(me.getResponse().getStatus()).isEqualTo(200);
-        assertThat(body(me)).contains("\"maxEmployees\":2").contains("\"maxProducts\":500");
+        assertThat(body(me)).contains("\"maxEmployees\":1").contains("\"maxProducts\":500");
     }
 
     @Test
@@ -412,7 +414,8 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
     void employeeLimitLowered() throws Exception {
         plan(schema, tenantId, "FREE", "NULL");
         UUID storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
-        profileAdmin.update(PlanType.FREE, 1, 500, 4, Set.of(), adminId);
+        // tenant-wide limit only: the per-store limit (19.7b, FREE = 1) lifted for this scenario
+        profileAdmin.update(PlanType.FREE, 1, 500, 4, new PlanProfileAdmin.LimitPatch.Set(null), Set.of(), adminId);
         for (int i = 0; i < 4; i++) {
             MvcResult created = createEmployee(storeId);
             assertThat(created.getResponse().getStatus()).as(body(created)).isEqualTo(201);

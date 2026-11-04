@@ -253,8 +253,9 @@ class FoundationMigrationsPostgresIntegrationTest {
         registerTenantRow(schema, "KV-FMPL1O");
         List<FoundationScripts.Script> v1Only = FoundationScripts.fromClasspath().scripts().stream()
                 .filter(sc -> !("core".equals(sc.moduleId()) && !"1".equals(sc.version()))).toList();
+        // seeded as such a tenant was (19.7b: today's seed trial BUSINESS_TRIAL postdates the core V1 CHECK)
         new TenantSchemaProvisioner(dataSource, new FoundationScripts(v1Only))
-                .provision(UUID.randomUUID().toString(), schema);
+                .provision(UUID.randomUUID().toString(), schema, com.keevo.identity.api.PlanType.PREMIUM_TRIAL, 6);
         jdbc.execute("ALTER TABLE \"" + schema + "\".subscriptions ADD CONSTRAINT legacy_plan_check "
                 + "CHECK (plan_type IN ('FREE', 'PREMIUM_TRIAL', 'PREMIUM'))");
         assertThat(planTypeChecks(schema)).hasSize(2);

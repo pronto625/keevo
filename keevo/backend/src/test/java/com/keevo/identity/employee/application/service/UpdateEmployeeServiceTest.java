@@ -39,6 +39,10 @@ class UpdateEmployeeServiceTest {
     @Mock EmployeeRepository employeeRepository;
     @Mock UserRepository userRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.keevo.shared.capability.entitlement.PlanLimitCheck planLimit;
+    @Mock com.keevo.identity.employee.domain.port.out.EmployeeCountPort employeeCountPort;
+    @Mock com.keevo.shared.capability.entitlement.TenantPlanQuery tenantPlanQuery;
+    @Mock com.keevo.shared.application.port.TransactionLockPort transactionLock;
 
     UpdateEmployeeService service;
 
@@ -52,7 +56,8 @@ class UpdateEmployeeServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UpdateEmployeeService(employeeRepository, userRepository, eventPublisher);
+        service = new UpdateEmployeeService(employeeRepository, userRepository, eventPublisher,
+                new StoreEmployeeLimit(planLimit, employeeCountPort, tenantPlanQuery, transactionLock));
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         userId = UUID.randomUUID();
@@ -184,12 +189,52 @@ class UpdateEmployeeServiceTest {
                 .thenReturn(new Employee(employeeId, userId, newStoreId, "Loïc", "Nkoulou",
                         EmployeeStatus.ACTIVE, true, Instant.now()));
 
+        when(tenantPlanQuery.findCurrentPlan("kv_test123")).thenReturn(Optional.of(perStorePlan(null)));
+
         UpdateEmployeeCommand cmd = new UpdateEmployeeCommand(actorId, employeeId,
                 null, null, null, newStoreId);
         service.execute(cmd);
 
         verify(employeeRepository).updateStoreId(employeeId, newStoreId);
         verify(eventPublisher).publishEvent(any(Object.class));
+        verify(employeeCountPort, never()).countActiveEmployeesInStore(any(), any()); // unlimited: no count
+    }
+
+    private static com.keevo.shared.capability.entitlement.PlanView perStorePlan(Integer perStore) {
+        return new com.keevo.shared.capability.entitlement.PlanView(com.keevo.identity.api.PlanType.of("PRO"),
+                com.keevo.identity.api.PlanKind.PAID, true, null, 3, null, null, perStore);
+    }
+
+    @Test
+    @DisplayName("19.7b: moving an ACTIVE employee into a full store is refused (per-store check, under the lock, "
+            + "the moved employee not counted); nothing written")
+    void storeChange_perStoreLimit() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        var plan = perStorePlan(3);
+        when(tenantPlanQuery.findCurrentPlan("kv_test123")).thenReturn(Optional.of(plan));
+        when(employeeCountPort.countActiveEmployeesInStore(newStoreId, employeeId)).thenReturn(3);
+        doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED)).when(planLimit).checkStoreEmployeeLimit(plan, 3);
+
+        assertThatThrownBy(() -> service.execute(new UpdateEmployeeCommand(actorId, employeeId,
+                null, null, null, newStoreId)))
+                .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.PLAN_LIMIT_EXCEEDED);
+        verify(transactionLock).lock("employee-limit:kv_test123");
+        verify(employeeRepository, never()).updateStoreId(any(), any());
+    }
+
+    @Test
+    @DisplayName("19.7b: an INACTIVE employee moved to another store is not counted (its reactivation checks)")
+    void storeChange_inactiveNotChecked() {
+        Employee inactive = new Employee(employeeId, userId, storeId, "Loïc", "Nkoulou",
+                EmployeeStatus.INACTIVE, true, Instant.now());
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(inactive));
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(employeeRepository.updateStoreId(employeeId, newStoreId)).thenReturn(inactive);
+
+        service.execute(new UpdateEmployeeCommand(actorId, employeeId, null, null, null, newStoreId));
+
+        verifyNoInteractions(tenantPlanQuery, planLimit, employeeCountPort, transactionLock);
     }
 
     @Test

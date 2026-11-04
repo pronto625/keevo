@@ -16,6 +16,7 @@ import com.keevo.shared.module.ModuleBackfill.TenantChange;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.PlanProfileAdmin;
+import com.keevo.shared.module.PlanProfileAdmin.LimitPatch;
 import com.keevo.shared.module.application.port.PlanModuleRowStore;
 import com.keevo.shared.module.application.port.PlanModuleRowStore.LiveTenant;
 import com.keevo.shared.module.application.port.PlanModuleRowSync;
@@ -90,7 +91,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
 
     @Override
     public UpdateResult update(PlanType planType, Integer maxStores, Integer maxProducts, Integer maxEmployees,
-                               Set<String> modules, UUID actorId) {
+                               LimitPatch maxEmployeesPerStore, Set<String> modules, UUID actorId) {
         if (planType == null) {
             throw invalid("offre inconnue");
         }
@@ -100,6 +101,9 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         requireLimit(maxStores, "le nombre de boutiques");
         requireLimit(maxProducts, "le nombre de produits");
         requireLimit(maxEmployees, "le nombre d'employés");
+        if (maxEmployeesPerStore instanceof LimitPatch.Set(Integer perStore)) {
+            requireLimit(perStore, "le nombre d'employés par boutique");
+        }
         if (modules == null) {
             throw invalid("indiquez les modules inclus dans l'offre (liste vide si aucun)");
         }
@@ -107,8 +111,8 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         // explicit decision for every installed paid module (a module shipped later follows the plan's default)
         Set<String> withheld = new TreeSet<>(paidModules());
         withheld.removeAll(granted);
-        PlanProfile after = PlanProfile.of(planType, plans.kind(planType), maxStores, maxProducts, maxEmployees,
-                granted, withheld);
+        PlanProfile requested = PlanProfile.of(planType, plans.kind(planType), maxStores, maxProducts, maxEmployees,
+                maxEmployeesPerStore.resolve(null), granted, withheld);
 
         // Story 16.4: a composition change re-syncs the plan's tenants in a background job. The change is decided
         // from the row read under its lock, and the job slot is reserved before the write: a refusal (409, a re-sync
@@ -116,10 +120,15 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         Map<String, Object> params = Map.of("planType", planType.name(), "plan", label(planType));
         AdminJobs.Reservation[] reserved = new AdminJobs.Reservation[1];
         PlanProfile[] before = new PlanProfile[1];
+        PlanProfile[] saved = new PlanProfile[1];
         try {
             tx.executeWithoutResult(status -> {
                 PlanProfile stored = store.findForUpdate(planType).orElse(null); // row lock: edits serialise
                 before[0] = stored;
+                // 19.7b: a per-store limit not sent keeps the stored one (clients that do not know it)
+                saved[0] = stored == null ? requested : requested.withMaxEmployeesPerStore(
+                        maxEmployeesPerStore.resolve(stored.maxEmployeesPerStore()));
+                PlanProfile after = saved[0];
                 if (!effective(stored != null ? stored : profiles.profile(planType)).equals(effective(after))) {
                     reserved[0] = jobs.reserve(AdminJobs.Kind.PROFILE_RESYNC, params, actorId);
                 }
@@ -133,7 +142,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
         }
         boolean compositionChanged = reserved[0] != null;
         log.info("[ADMIN AUDIT] Plan profile changed: actor={} plan={} before={} after={}", actorId, planType,
-                describe(before[0]), describe(after));
+                describe(before[0]), describe(saved[0]));
 
         UUID jobId = null;
         if (compositionChanged) {
@@ -146,7 +155,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                         planType, e.getClass().getSimpleName());
             }
         }
-        return new UpdateResult(view(after), compositionChanged, jobId);
+        return new UpdateResult(view(saved[0]), compositionChanged, jobId);
     }
 
     /** Re-syncs the {@code PLAN} rows of every live tenant whose plan has this type. */
@@ -261,8 +270,11 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
                 .sorted(Comparator.comparing(ModuleManifest::displayName))
                 .map(m -> new ModuleRef(m.id(), m.displayName()))
                 .toList();
+        Optional<PlanDefinition> plan = plans.find(profile.planType());
         return new ProfileView(profile.planType().name(), label(profile.planType()), profile.maxStores(),
-                profile.maxProducts(), profile.maxEmployees(), granted, profile.fallback());
+                profile.maxProducts(), profile.maxEmployees(), granted, profile.fallback(),
+                plan.map(p -> p.kind().name()).orElse(profile.kind().name()),
+                plan.map(PlanDefinition::archived).orElse(false), profile.maxEmployeesPerStore());
     }
 
     /** French name of the plan, from the catalogue (Story 19.7a). */
@@ -275,7 +287,7 @@ public class PlanProfileAdminService implements PlanProfileAdmin {
             return "none";
         }
         return "{stores=" + limit(p.maxStores()) + ", products=" + limit(p.maxProducts()) + ", employees="
-                + limit(p.maxEmployees()) + ", granted=" + new TreeSet<>(p.modules()) + ", withheld="
+                + limit(p.maxEmployees()) + ", employeesPerStore=" + limit(p.maxEmployeesPerStore()) + ", granted=" + new TreeSet<>(p.modules()) + ", withheld="
                 + new TreeSet<>(p.withheld()) + (p.fallback() ? ", built-in defaults" : "") + "}";
     }
 

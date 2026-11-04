@@ -110,7 +110,7 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
         assertThat(active.orderCount()).isEqualTo(2L);
         assertThat(active.tenantName()).isEqualTo("Boutique Active");
         // Seeded by the provisioner in the tenant schema (public.tenants.plan_type is FREE): proves the subscriptions read.
-        assertThat(active.plan()).isEqualTo("PREMIUM_TRIAL");
+        assertThat(active.plan()).isEqualTo("BUSINESS_TRIAL"); // 19.7b: the seed trial plan (V43)
         assertThat(active.lastActivityAt()).isNotNull();
         // Provisioner seeds one STORE; the WAREHOUSE added in seed() is not counted.
         assertThat(active.storeCount()).isEqualTo(

@@ -104,7 +104,7 @@ class CreateEmployeeServiceTest {
         TenantContext.setCurrentTenant("kv_test01");
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(2);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(2, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(tenantRepository.findBySchemaName("kv_test01")).thenReturn(Optional.of(
@@ -118,7 +118,7 @@ class CreateEmployeeServiceTest {
         InOrder order = inOrder(transactionLock, employeeCountPort, planLimitGuard,
                 userRepository, membershipRepository, employeeRepository);
         order.verify(transactionLock).lock("employee-limit:kv_test01");
-        order.verify(employeeCountPort).countActiveEmployees();
+        order.verify(employeeCountPort).countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         order.verify(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.PREMIUM_TRIAL), org.mockito.ArgumentMatchers.eq(2));
         order.verify(userRepository).save(any(User.class));
         order.verify(membershipRepository).save(any(UserTenantMembership.class));
@@ -130,7 +130,7 @@ class CreateEmployeeServiceTest {
     void execute_shouldCreateUserMembershipAndEmployee_whenValidCommand() {
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(0);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
@@ -165,7 +165,7 @@ class CreateEmployeeServiceTest {
 
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(5);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(5, 0));
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "employees limit reached"))
                 .when(planLimitGuard).checkEmployeeLimit(com.keevo.subscription.plan.adapter.in.api.SubscriptionApiTestSupport.plan(PlanType.FREE), org.mockito.ArgumentMatchers.eq(5));
 
@@ -197,7 +197,7 @@ class CreateEmployeeServiceTest {
     void execute_normalisesPhoneBeforeUniquenessAndSave() {
         when(userRepository.existsByPhoneNumber("+237690000004")).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(0);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
@@ -228,7 +228,7 @@ class CreateEmployeeServiceTest {
     void execute_shouldPublishEmployeeCreatedEvent_onSuccess() {
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(0);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
@@ -252,7 +252,7 @@ class CreateEmployeeServiceTest {
     void execute_shouldReturnTempPasswordCleartext_onSuccess() {
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
-        when(employeeCountPort.countActiveEmployees()).thenReturn(0);
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
         when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(

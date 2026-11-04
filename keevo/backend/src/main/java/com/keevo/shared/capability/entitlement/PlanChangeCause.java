@@ -17,5 +17,10 @@ public enum PlanChangeCause {
      * One-shot correction of a stale {@code public.tenants.plan_type} by {@code PlanTypeRealignJob}
      * (not a real plan change at that time: ignored by 9-3 churn and conversion).
      */
-    REALIGNMENT
+    REALIGNMENT,
+    /**
+     * Story 19.7b — one-shot data migration of the merged offer by {@code PlanMigrationJob} (Keevo PREMIUM → TEAM,
+     * same end date, ADR-06): not a commercial change (no churn, no conversion).
+     */
+    PLAN_MIGRATION
 }

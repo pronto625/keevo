@@ -6,6 +6,8 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
+
 /**
  * EmployeeCountAdapter — JDBC implementation of {@link EmployeeCountPort}.
  *
@@ -22,11 +24,23 @@ public class EmployeeCountAdapter implements EmployeeCountPort {
     }
 
     @Override
-    public int countActiveEmployees() {
+    public ActiveCounts countActive(UUID storeId, UUID excludedEmployeeId) {
+        String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
+        ActiveCounts counts = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FILTER (WHERE status = 'ACTIVE') AS tenant, "
+                        + "COUNT(*) FILTER (WHERE status = 'ACTIVE' AND store_id = ? AND id IS DISTINCT FROM ?) AS store "
+                        + "FROM \"" + schema + "\".employees",
+                (rs, i) -> new ActiveCounts(rs.getInt("tenant"), rs.getInt("store")), storeId, excludedEmployeeId);
+        return counts != null ? counts : new ActiveCounts(0, 0);
+    }
+
+    @Override
+    public int countActiveEmployeesInStore(UUID storeId, UUID excludedEmployeeId) {
         String schema = TenantSchema.validate(TenantContext.getCurrentTenant());
         Integer count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM \"" + schema + "\".employees WHERE status = 'ACTIVE'",
-                Integer.class);
+                "SELECT COUNT(*) FROM \"" + schema + "\".employees WHERE store_id = ? AND status = 'ACTIVE' "
+                        + "AND id IS DISTINCT FROM ?",
+                Integer.class, storeId, excludedEmployeeId);
         return count != null ? count : 0;
     }
 }

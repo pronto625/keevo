@@ -57,14 +57,16 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
     private static final Logger log = LoggerFactory.getLogger(JdbcPlanProfileStore.class);
 
     static final String FIND_SQL = """
-            SELECT p.plan_type, p.max_stores, p.max_products, p.max_employees, pm.module_id, pm.granted
+            SELECT p.plan_type, p.max_stores, p.max_products, p.max_employees, p.max_employees_per_store,
+                pm.module_id, pm.granted
             FROM public.plan_profiles p
             LEFT JOIN public.profile_modules pm ON pm.plan_type = p.plan_type
             WHERE p.plan_type = ?
             """;
 
     static final String FIND_ALL_SQL = """
-            SELECT p.plan_type, p.max_stores, p.max_products, p.max_employees, pm.module_id, pm.granted
+            SELECT p.plan_type, p.max_stores, p.max_products, p.max_employees, p.max_employees_per_store,
+                pm.module_id, pm.granted
             FROM public.plan_profiles p
             LEFT JOIN public.profile_modules pm ON pm.plan_type = p.plan_type
             """;
@@ -72,10 +74,12 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
     static final String LOCK_SQL = "SELECT plan_type FROM public.plan_profiles WHERE plan_type = ? FOR UPDATE";
 
     static final String UPSERT_SQL = """
-            INSERT INTO public.plan_profiles (plan_type, max_stores, max_products, max_employees, updated_at, updated_by)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO public.plan_profiles (plan_type, max_stores, max_products, max_employees,
+                max_employees_per_store, updated_at, updated_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (plan_type) DO UPDATE SET max_stores = EXCLUDED.max_stores,
                 max_products = EXCLUDED.max_products, max_employees = EXCLUDED.max_employees,
+                max_employees_per_store = EXCLUDED.max_employees_per_store,
                 updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by
             """;
 
@@ -222,7 +226,7 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
                 while (rs.next()) {
                     String code = rs.getString("plan_type");
                     limits.put(code, new Integer[] {nullableInt(rs, "max_stores"), nullableInt(rs, "max_products"),
-                            nullableInt(rs, "max_employees")});
+                            nullableInt(rs, "max_employees"), nullableInt(rs, "max_employees_per_store")});
                     String moduleId = rs.getString("module_id");
                     if (moduleId != null) {
                         (rs.getBoolean("granted") ? granted : withheld)
@@ -233,7 +237,8 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
         }
         Map<String, PlanProfile> all = new HashMap<>();
         limits.forEach((code, l) -> PlanType.parse(code).ifPresent(type -> all.put(code,
-                PlanProfile.of(type, kindOf(type, kinds), l[0], l[1], l[2], granted.get(code), withheld.get(code)))));
+                PlanProfile.of(type, kindOf(type, kinds), l[0], l[1], l[2], l[3], granted.get(code),
+                        withheld.get(code)))));
         return all;
     }
 
@@ -252,7 +257,7 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
     public void save(PlanProfile profile, UUID actorId) {
         String type = profile.planType().name();
         jdbc.update(UPSERT_SQL, type, profile.maxStores(), profile.maxProducts(), profile.maxEmployees(),
-                Timestamp.from(Instant.now()), actorId);
+                profile.maxEmployeesPerStore(), Timestamp.from(Instant.now()), actorId);
         jdbc.update(DELETE_MODULES_SQL, type);
         for (String moduleId : profile.modules()) {
             jdbc.update(INSERT_MODULE_SQL, type, moduleId, true);
@@ -264,7 +269,7 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
 
     private static Optional<PlanProfile> read(Connection connection, PlanType planType, PlanKind kind)
             throws SQLException {
-        Integer[] limits = new Integer[3];
+        Integer[] limits = new Integer[4];
         boolean found = false;
         Set<String> granted = new HashSet<>();
         Set<String> withheld = new HashSet<>();
@@ -277,6 +282,7 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
                     limits[0] = nullableInt(rs, "max_stores");
                     limits[1] = nullableInt(rs, "max_products");
                     limits[2] = nullableInt(rs, "max_employees");
+                    limits[3] = nullableInt(rs, "max_employees_per_store");
                     String moduleId = rs.getString("module_id");
                     if (moduleId != null) {
                         (rs.getBoolean("granted") ? granted : withheld).add(moduleId);
@@ -287,7 +293,8 @@ public class JdbcPlanProfileStore implements PlanProfiles, PlanProfileStore {
         if (!found) {
             return Optional.empty();
         }
-        return Optional.of(PlanProfile.of(planType, kind, limits[0], limits[1], limits[2], granted, withheld));
+        return Optional.of(PlanProfile.of(planType, kind, limits[0], limits[1], limits[2], limits[3], granted,
+                withheld));
     }
 
     private static Integer nullableInt(ResultSet rs, String column) throws SQLException {

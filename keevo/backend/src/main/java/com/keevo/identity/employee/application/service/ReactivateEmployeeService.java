@@ -85,8 +85,12 @@ public class ReactivateEmployeeService implements ReactivateEmployeeUseCase {
         if (employee.getStatus() != EmployeeStatus.ACTIVE) {
             var plan = tenantPlanQuery.findCurrentPlan(TenantContext.getCurrentTenant())
                     .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
-            int currentCount = employeeCountPort.countActiveEmployees();
-            planLimit.checkEmployeeLimit(plan, currentCount);
+            // Story 19.7b — tenant and store counts in one query; per-store limit after the tenant-wide one
+            var counts = employeeCountPort.countActive(employee.getStoreId(), employee.getId());
+            planLimit.checkEmployeeLimit(plan, counts.tenant());
+            if (plan.maxEmployeesPerStore() != null && employee.getStoreId() != null) {
+                planLimit.checkStoreEmployeeLimit(plan, counts.store());
+            }
         }
 
         employeeRepository.updateStatus(command.employeeId(), EmployeeStatus.ACTIVE);

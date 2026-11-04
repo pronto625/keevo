@@ -2,10 +2,10 @@
 title: '19.7b — Fusion plans: FREE/PRO/TEAM/BUSINESS as data, PREMIUM → TEAM, 1-month trial, FREE 1 employee'
 type: 'feature'
 created: '2026-11-04'
-status: 'ready-for-dev'
-baseline_revision: 'bb4e8828621d3b36cf286bc7aa298edd4a1e694f'
+status: 'done'
+baseline_revision: 'c9234c67723e11c53ad6dd183bf4ac45cbe402b3'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-19-7a-plans-en-donnees.md'
@@ -164,6 +164,51 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-04 — Review pass
+- verdicts: 36 findings — high 0, medium 11, low 16, false 7, maybe-false 2
+- findings:
+  - Patterns/complexity:
+    - `[medium]` `[patch]` PlanMigrationJob scans every tenant on every boot forever — done-marker table `public.data_migrations`, skip when present.
+    - `[low]` `[patch]` StoreEmployeeLimit locks and reads the plan before knowing a per-store limit exists — plan read first, early return on unlimited.
+    - `[low]` `[patch]` Two count round-trips on create/reactivate — one query with two FILTER counts.
+    - `[low]` `[patch]` V43 cause CHECK validated under ACCESS EXCLUSIVE — NOT VALID + VALIDATE.
+    - `[low]` `[patch]` Flag argument `perStoreGiven` in PlanProfileAdmin.update — sealed LimitPatch type.
+    - `[low]` `[patch]` GetSubscriptionService two catalogue lookups — one definition() call.
+  - Verification gap:
+    - `[medium]` `[patch]` PLAN_MIGRATION exclusion in RevenueMetrics untested — RevenueMetricsTest case added.
+    - `[medium]` `[patch]` PlanMigrationJob guard and per-tenant failure isolation untested — guard + isolation tests.
+    - `[medium]` `[patch]` PlanCatalog.SEED still the V42 offer (default paid PREMIUM) — SEED mirrors V43.
+  - Intent alignment:
+    - `[medium]` `[patch]` Renewal narrowed to same-plan (R3) — restored kind-based renewal (spec: behaviour unchanged; ADR-06 no loss).
+    - `[false]` `[reject]` `/plan/premium` response planType now TEAM — admin APIs return catalogue codes (19.7a intent); the V1 boundary is the tenant app surfaces only.
+    - `[false]` `[reject]` Per-store check also on ReassignStoreService — it is an "update when storeId changes" path; covering it is the intent.
+    - `[false]` `[reject]` MIGRATE_SQL also writes legacy max_* columns — same as every other plan-change path (expiry, activation); expires_at and status kept.
+    - `[false]` `[reject]` RevenueMetrics ignores PLAN_MIGRATION — required so the migration is not counted as conversion/churn (tested by the gap patch).
+    - `[false]` `[reject]` FREE label clause had nothing to act on — V42 label already « Gratuit »; sort order guarded.
+    - `[medium]` `[patch]` SEED default paid PREMIUM — grouped with the SEED patch.
+    - `[low]` `[patch]` Test surface (job via migrateAll only, failure isolation) — grouped with the gap tests; boot wiring mirrors PlanTypeRealignJob.
+    - `[false]` `[reject]` Live check not in the diff — performed (keevo_dev: 4 tenants migrated, registration BUSINESS_TRIAL +1 month); Redmi recorded under Verification.
+  - Blind hunter:
+    - `[medium]` `[patch]` Paid-to-paid switch loses paid days — grouped with the renewal patch.
+    - `[medium]` `[patch]` Activation WhatsApp text says « Premium » for any plan — event carries the granted plan; label or neutral wording.
+    - `[medium]` `[patch]` SEED fallback — grouped.
+    - `[maybe-false]` `[reject]` Migration moves EXPIRED/SUSPENDED PREMIUM rows — the move is a rename of the plan whatever the status; a single subscription row per tenant schema; module sync handles status as for PREMIUM.
+    - `[low]` `[patch]` Fallback target profile written into migrated rows — job refuses a fallback profile.
+    - `[medium]` `[patch]` Boot scan forever — grouped with the done-marker.
+    - `[false]` `[reject]` `/activate` refusing archived PREMIUM breaks legacy callers — refusing archived plans is the intent; V1 apps never call admin endpoints.
+    - `[low]` `[patch]` Per-store refusal names V1 `PREMIUM` — V1 `plan` kept; additive `planCode`/`planLabel`.
+    - `[low]` `[patch]` ActivatePlanService uses Instant.now() and inline FQNs — injected Clock, imports.
+    - `[low]` `[patch]` planCode @Size message misleading, no format check — @Pattern « Code de plan invalide ».
+  - Edge-case hunter:
+    - `[medium]` `[patch]` Renewal onto another paid plan — grouped.
+    - `[low]` `[patch]` V43 trial switch skipped when months edited, leaving the archived PREMIUM_TRIAL — code switched whenever PREMIUM_TRIAL, months only when 6.
+    - `[low]` `[patch]` Job accepts an archived TEAM — guard refuses archived.
+    - `[low]` `[patch]` Fallback target profile — grouped.
+    - `[low]` `[reject]` PUT without per-store on a plan without stored profile saves unlimited — every catalogue plan has a profile row (V33/V43).
+    - `[maybe-false]` `[reject]` Null tenant in StoreEmployeeLimit — TenantSchema.validate rejects null before any lock; employee endpoints always run in a tenant context.
+    - `[low]` `[patch]` SEED — grouped.
+    - `[low]` `[reject]` AC "no PREMIUM in any schema" vs deleted/failed tenants — deleted tenants are out of scope by design; failures are logged and retried at next boot (no done-marker on failure).
+
 ## Design Notes
 
 - **Trial as a TRIAL-kind plan, not a subscription flag.** The epic note suggested a trial status on the subscription. That would split the effective kind over the plan code and a flag in about 15 kind-based sites: SQL on `public.tenants`, events, revenue conversion and push audiences. It would also lose the trial → paid event when the plan code stays the same. A dedicated TRIAL-kind plan whose profile mirrors BUSINESS keeps the 19.7a model intact, with one rule: behaviour follows the plan's kind. ADR-04 asks only for a 1-month trial of the most complete plan, with modifiable values, and this design meets it. The admin keeps BUSINESS_TRIAL aligned through the profile endpoints. The epic note is updated to match.
@@ -182,3 +227,11 @@ deferred: []
 
 **Manual checks:**
 - Local backend (WhatsApp noop, FCM off) on keevo_dev: Flyway V43 success; `PlanMigrationJob` log; SQL: no `PREMIUM` in any `kv_*.subscriptions`; registration via API → BUSINESS_TRIAL +1 month; `/subscription/me` V1 fields unchanged + new fields.
+
+## Auto Run Result
+
+- **Summary:** the fusion offer is data. V43 seeds FREE « Gratuit » / PRO « Pro » / TEAM « Team » / BUSINESS « Business » / BUSINESS_TRIAL « Essai Business » (TRIAL, profile = BUSINESS); PREMIUM and PREMIUM_TRIAL archived; profiles with the new per-store employee limit (FREE 1/1/1, PRO 3/–/3, TEAM 8/–/8, BUSINESS unlimited); settings trial BUSINESS_TRIAL 1 month, default paid plan TEAM; cause PLAN_MIGRATION; `public.data_migrations` done-marker. `PlanMigrationJob` (one-shot, ShedLock, done-marker) moves PREMIUM subscriptions to TEAM keeping expiry, with event and module resync. Per-store employee limit on create / reactivate / update / reassign. `/plan/premium` takes an optional `planCode` (default TEAM); both activation paths refuse archived / wrong-kind plans and check `expiresAt` against the kind. WhatsApp plan texts use the plan label. Additive fields on `/subscription/me`, `PLAN_LIMIT_EXCEEDED` details and admin plan profiles; V1 values unchanged.
+- **Review:** 36 findings — patched 27 rows (medium 11, low 16) in 15 fix groups (kind-based renewal restored, plan label in WhatsApp texts, SEED = V43, migration job guards + done-marker, V43 trial switch and NOT VALID constraint, lock-after-limit and single count query, sealed LimitPatch, single catalogue lookup, additive planCode/planLabel in limit details, injected Clock, planCode format, 3 test gaps). Rejected 9 (false 7, maybe-false 2) with reasons in the triage log. Nothing deferred.
+- **Follow-up review recommended: true** — first pass patched 11 medium entries; the renewal rule, the migration job (guards, done-marker, failure isolation) and the WhatsApp texts changed after review and were not re-reviewed.
+- **Verification:** full suite by package green — 5,077 tests, 0 failure (acceptance 4, admin 586, architecture 34, catalog 306, commerce 263, crm 158, feedback 52, identity 525, inventory 410, invoicing 170, messaging 192, reporting 421, shared 1172, store 60, subscription 89, sync 635); four outdated expectations (old trial / default paid plan) updated. Live keevo_dev (WhatsApp noop, FCM off): V43 re-applied, settings (FREE, BUSINESS_TRIAL, 1, TEAM), PREMIUM/PREMIUM_TRIAL archived, 4 PLAN_MIGRATION events, no PREMIUM subscription left in any live tenant schema, done-marker written, second boot moved 0; API registration KV-9D6KUN → `planType=PREMIUM_TRIAL`, `planCode=BUSINESS_TRIAL`, « Essai Business », expires +1 month; Redmi V1 app (KV-EW02A2, running 6-month trial): « Essai Premium », expires 01/05/2027, unlimited — unchanged.
+- **Residual risks:** a dashboard still calling `/admin/subscriptions/{schema}/activate` with `PREMIUM` now gets 422 (archived) — it must send TEAM or use `/plan/premium`; BUSINESS_TRIAL's profile is a copy of BUSINESS (keep both aligned until 21.10); quotas and the FREE invoicing grant are 19.8.

@@ -25,6 +25,9 @@ import java.util.regex.Pattern;
  * phone number, store ID). Partial update: only non-null fields are applied.
  *
  * <p>Story 14.11 — AC1.
+ *
+ * <p>Story 19.7b — moving an ACTIVE employee to another store enforces the plan's per-store employee limit (Bref's
+ * member limit is per shop), {@link StoreEmployeeLimit}.
  */
 @Service
 public class UpdateEmployeeService implements UpdateEmployeeUseCase {
@@ -34,13 +37,16 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final StoreEmployeeLimit storeEmployeeLimit;
 
     public UpdateEmployeeService(EmployeeRepository employeeRepository,
                                   UserRepository userRepository,
-                                  ApplicationEventPublisher eventPublisher) {
+                                  ApplicationEventPublisher eventPublisher,
+                                  StoreEmployeeLimit storeEmployeeLimit) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
+        this.storeEmployeeLimit = storeEmployeeLimit;
     }
 
     @Override
@@ -97,6 +103,7 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
 
         // 5. Apply storeId if provided and different
         if (command.storeId() != null && !command.storeId().equals(employee.getStoreId())) {
+            storeEmployeeLimit.checkMove(employee, command.storeId()); // 19.7b — per-store limit
             // No revocation: STORE_REASSIGNED + refresh renews onto the new store.
             employee = employeeRepository.updateStoreId(employee.getId(), command.storeId());
             storeChanged = true;

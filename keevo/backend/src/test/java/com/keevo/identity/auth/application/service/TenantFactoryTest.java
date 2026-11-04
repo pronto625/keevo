@@ -45,6 +45,9 @@ class TenantFactoryTest {
 
     private TenantFactory tenantFactory;
 
+    /** Story 19.7b — the registration trial of the seed catalogue (V43): BUSINESS_TRIAL, 1 month. */
+    private static final PlanType BUSINESS_TRIAL = PlanType.of("BUSINESS_TRIAL");
+
     @BeforeEach
     void setUp() {
         tenantFactory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner, planChangeRecorder);
@@ -67,7 +70,7 @@ class TenantFactoryTest {
     }
 
     @Test
-    @DisplayName("Story 9-2: create() records a REGISTRATION plan event → PREMIUM_TRIAL")
+    @DisplayName("Story 9-2: create() records a REGISTRATION plan event → the trial plan (19.7b: BUSINESS_TRIAL)")
     void create_recordsRegistrationPlanEvent() {
         String code = "KV-REG123";
         UUID id = UUID.randomUUID();
@@ -78,7 +81,7 @@ class TenantFactoryTest {
 
         tenantFactory.create();
 
-        verify(planChangeRecorder).recordEvent(id, null, PlanType.PREMIUM_TRIAL,
+        verify(planChangeRecorder).recordEvent(id, null, BUSINESS_TRIAL,
                 PlanChangeCause.REGISTRATION, null, null);
     }
 
@@ -100,7 +103,7 @@ class TenantFactoryTest {
         factory.create(); // no transaction synchronization: the provisioning runs right away
 
         InOrder order = inOrder(schemaProvisioner, planChangeRecorder, planModuleRows, moduleProvisioner);
-        order.verify(schemaProvisioner).provision(anyString(), eq(schema), eq(PlanType.PREMIUM_TRIAL), eq(6));
+        order.verify(schemaProvisioner).provision(anyString(), eq(schema), eq(BUSINESS_TRIAL), eq(1));
         order.verify(planChangeRecorder).recordEvent(any(), any(), any(), any(), any(), any());
         order.verify(planModuleRows).sync(id, schema);
         order.verify(moduleProvisioner).provisionActiveModules(schema);
@@ -162,7 +165,7 @@ class TenantFactoryTest {
 
         // assert
         verify(schemaProvisioner, times(1))
-                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(PlanType.PREMIUM_TRIAL), eq(6));
+                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(BUSINESS_TRIAL), eq(1));
     }
 
     @Test
@@ -221,11 +224,11 @@ class TenantFactoryTest {
 
         // assert — domain object must carry PREMIUM_TRIAL, not FREE
         assertThat(result.getPlanType())
-                .as("New tenant must start on PREMIUM_TRIAL, not FREE (SPEC CHANGE 2026-03-06)")
-                .isEqualTo(PlanType.PREMIUM_TRIAL);
+                .as("New tenant must start on the trial plan (19.7b: BUSINESS_TRIAL), not FREE")
+                .isEqualTo(BUSINESS_TRIAL);
         assertThat(tenantCaptor.getValue().getPlanType())
-                .as("Argument passed to tenantRepository.save() must be PREMIUM_TRIAL")
-                .isEqualTo(PlanType.PREMIUM_TRIAL);
-        assertThat(result.getPlanType()).isEqualTo(PlanType.PREMIUM_TRIAL);
+                .as("Argument passed to tenantRepository.save() must be the trial plan")
+                .isEqualTo(BUSINESS_TRIAL);
+        assertThat(result.getPlanType()).isEqualTo(BUSINESS_TRIAL);
     }
 }

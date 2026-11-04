@@ -53,6 +53,8 @@ public final class RevenueMetrics {
     static final Set<String> CHURN_CAUSES = Set.of(EXPIRY, "ADMIN_DOWNGRADE");
     /** Correction of a stale public plan (9-2 realign job): not a plan change, ignored by churn and conversion. */
     static final String REALIGNMENT = "REALIGNMENT";
+    /** Story 19.7b — one-shot data migration of the merged offer (PREMIUM → TEAM): not a plan change either. */
+    static final String PLAN_MIGRATION = "PLAN_MIGRATION";
 
     private final List<RevenuePayment> payments;
     private final Map<UUID, List<PlanChange>> eventsByTenant;
@@ -164,7 +166,7 @@ public final class RevenueMetrics {
         eventsByTenant.forEach((tenant, events) -> {
             PlanChange lastChurn = null;
             for (PlanChange e : events) {
-                if (REALIGNMENT.equals(e.cause())) continue;
+                if (notAPlanChange(e)) continue;
                 if (!inRange(watDate(e.occurredAt()), from, to)) continue;
                 if (isChurn(e)) {
                     lastChurn = e;
@@ -188,6 +190,11 @@ public final class RevenueMetrics {
     public static LocalDate planEndDate(PlanChange churn) {
         LocalDate day = watDate(churn.occurredAt());
         return EXPIRY.equals(churn.cause()) ? day.minusDays(1) : day;
+    }
+
+    /** A correction or a data migration: ignored by churn and conversion. */
+    static boolean notAPlanChange(PlanChange e) {
+        return REALIGNMENT.equals(e.cause()) || PLAN_MIGRATION.equals(e.cause());
     }
 
     static boolean isChurn(PlanChange e) {
@@ -216,7 +223,7 @@ public final class RevenueMetrics {
             PlanChange firstActivation = null;
             PlanChange trialEnd = null;
             for (PlanChange e : events) {
-                if (REALIGNMENT.equals(e.cause())) continue;
+                if (notAPlanChange(e)) continue;
                 if (trialStart == null) {
                     if (TRIAL == e.toKind()) trialStart = e;
                     continue; // nothing before the trial start counts

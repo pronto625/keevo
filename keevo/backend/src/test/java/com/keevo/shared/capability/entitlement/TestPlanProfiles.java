@@ -31,9 +31,13 @@ public final class TestPlanProfiles {
         return PlanProfile.of(planType, kind, null, null, null, Set.of());
     }
 
-    /** The kind the V42 seed gives the plan; any other code is free. */
+    /**
+     * The kind the seed gives the plan (19.7b: the built-in catalogue, {@link PlanCatalog#SEED} — the V42 codes and the
+     * merged offer PRO / TEAM / BUSINESS / BUSINESS_TRIAL); any other code is free.
+     */
     public static PlanKind kind(PlanType planType) {
-        return planType.seedKind().orElse(PlanKind.FREE);
+        return PlanCatalog.SEED.find(planType).map(PlanDefinition::kind)
+                .orElseGet(() -> planType.seedKind().orElse(PlanKind.FREE));
     }
 
     /** A plan view of the seeded plan with its seeded limits. */

@@ -41,7 +41,8 @@ class PlanWhatsAppNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("activation → « 🎉 … activé jusqu'au dd/MM/yyyy … » (WAT date)")
+    @DisplayName("activation without the granted plan (pre-19.7b publication) → neutral « Votre abonnement Keevo est "
+            + "activé jusqu'au dd/MM/yyyy … » (WAT date)")
     void activated() {
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
 
@@ -49,7 +50,23 @@ class PlanWhatsAppNotificationListenerTest {
                 Instant.parse("2026-11-12T22:59:59Z"), 10_000, Instant.now()));
 
         verify(whatsApp).sendReport(PHONE,
-                "🎉 Votre compte Keevo Premium est activé jusqu'au 12/11/2026. Profitez de toutes les fonctionnalités !");
+                "🎉 Votre abonnement Keevo est activé jusqu'au 12/11/2026. Profitez de toutes les fonctionnalités !");
+    }
+
+    @Test
+    @DisplayName("19.7b: activation names the granted plan by its catalogue label; an unknown code → neutral text")
+    void activatedWithPlanLabel() {
+        when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
+
+        listener.onActivated(new PlanActivatedEvent(UUID.randomUUID(), TENANT, SCHEMA, PlanType.FREE,
+                Instant.parse("2026-11-12T22:59:59Z"), 10_000, Instant.now(), PlanType.of("TEAM")));
+        listener.onActivated(new PlanActivatedEvent(UUID.randomUUID(), TENANT, SCHEMA, PlanType.FREE,
+                Instant.parse("2026-11-12T22:59:59Z"), 10_000, Instant.now(), PlanType.of("NOPE")));
+
+        verify(whatsApp).sendReport(PHONE,
+                "🎉 Votre abonnement Keevo Team est activé jusqu'au 12/11/2026. Profitez de toutes les fonctionnalités !");
+        verify(whatsApp).sendReport(PHONE,
+                "🎉 Votre abonnement Keevo est activé jusqu'au 12/11/2026. Profitez de toutes les fonctionnalités !");
     }
 
     @Test
@@ -64,7 +81,7 @@ class PlanWhatsAppNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("expiry → « … Premium a expiré : … plan Gratuit. Vos données sont conservées. »")
+    @DisplayName("expiry → « … Keevo <label> a expiré : … plan Gratuit. Vos données sont conservées. »")
     void expired() {
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
 
@@ -75,14 +92,14 @@ class PlanWhatsAppNotificationListenerTest {
     }
 
     @Test
-    @DisplayName("trial expiry → « Votre essai Keevo Premium est terminé … » (not the paid-subscription text)")
+    @DisplayName("trial expiry → « Votre essai Keevo est terminé … » (not the paid-subscription text)")
     void trialExpired() {
         when(resolver.resolveOwnerWhatsAppPhone(SCHEMA)).thenReturn(Optional.of(PHONE));
 
         listener.onExpired(new PlanExpiredEvent(TENANT, SCHEMA, PlanType.PREMIUM_TRIAL, Instant.now()));
 
         verify(whatsApp).sendReport(PHONE,
-                "Votre essai Keevo Premium est terminé : votre compte est passé au plan Gratuit. Vos données sont conservées.");
+                "Votre essai Keevo est terminé : votre compte est passé au plan Gratuit. Vos données sont conservées.");
     }
 
     @Test

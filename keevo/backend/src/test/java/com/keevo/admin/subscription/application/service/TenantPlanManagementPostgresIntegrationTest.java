@@ -115,7 +115,8 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
     // ── Activation / downgrade ────────────────────────────────────────────────
 
     @Test
-    @DisplayName("activate Premium: payment row, schema subscription PREMIUM, public plan_type synced, ADMIN_ACTIVATION event; then downgrade")
+    @DisplayName("activate the default paid plan (19.7b: TEAM): payment row, schema subscription TEAM, public plan_type "
+            + "synced, ADMIN_ACTIVATION event; then downgrade")
     void activateThenDowngrade() {
         UUID t = tenant("kv_pm9202", "KV-PM9202", "PREMIUM_TRIAL");
         UUID actor = UUID.randomUUID();
@@ -131,20 +132,20 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         assertThat(payments.get(0).periodEnd()).isEqualTo(today.plusDays(30));
         Map<String, Object> sub = jdbc.queryForMap(
                 "SELECT plan_type, status, max_stores, expires_at FROM \"kv_pm9202\".subscriptions");
-        assertThat(sub.get("plan_type")).isEqualTo("PREMIUM");
+        assertThat(sub.get("plan_type")).isEqualTo("TEAM");
         assertThat(sub.get("status")).isEqualTo("ACTIVE");
         assertThat(sub.get("max_stores")).isEqualTo(Integer.MAX_VALUE);
         assertThat(((java.sql.Timestamp) sub.get("expires_at")).toInstant())
                 .isEqualTo(AdminPlanService.endOfDayWat(today.plusDays(30)));
-        assertThat(publicPlan(t)).isEqualTo("PREMIUM");
-        assertThat(events(t)).containsExactly("PREMIUM_TRIAL>PREMIUM:ADMIN_ACTIVATION");
+        assertThat(publicPlan(t)).isEqualTo("TEAM");
+        assertThat(events(t)).containsExactly("BUSINESS_TRIAL>TEAM:ADMIN_ACTIVATION");
 
         service.downgradeToFree(new DowngradeToFreeCommand(actor, t, "non renouvelé"));
 
         assertThat(jdbc.queryForObject("SELECT plan_type FROM \"kv_pm9202\".subscriptions", String.class)).isEqualTo("FREE");
         assertThat(jdbc.queryForObject("SELECT max_products FROM \"kv_pm9202\".subscriptions", Integer.class)).isEqualTo(500);
         assertThat(publicPlan(t)).isEqualTo("FREE");
-        assertThat(events(t)).containsExactly("PREMIUM_TRIAL>PREMIUM:ADMIN_ACTIVATION", "PREMIUM>FREE:ADMIN_DOWNGRADE");
+        assertThat(events(t)).containsExactly("BUSINESS_TRIAL>TEAM:ADMIN_ACTIVATION", "TEAM>FREE:ADMIN_DOWNGRADE");
     }
 
     // ── Suspension ────────────────────────────────────────────────────────────
@@ -352,7 +353,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
                 .containsExactly("PREMIUM_TRIAL");
 
         var detail = tenantService.execute(new com.keevo.admin.tenant.domain.port.in.GetTenantDetailQuery(t, 0));
-        assertThat(detail.plan().planType()).isEqualTo("PREMIUM_TRIAL");
+        assertThat(detail.plan().planType()).isEqualTo("BUSINESS_TRIAL"); // 19.7b: the registration trial (V43)
         assertThat(detail.plan().expiresAt()).isEqualTo(expires);
     }
 
@@ -436,7 +437,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
 
     private UUID tenant(String schema, String code, String publicPlan) {
         schemas.add(schema);
-        provisioner.provision("tenant-" + schema, schema); // seeds a PREMIUM_TRIAL subscription
+        provisioner.provision("tenant-" + schema, schema); // seeds the plan_settings trial (BUSINESS_TRIAL since V43)
         UUID id = UUID.randomUUID();
         tenantIds.add(id);
         jdbc.update("INSERT INTO public.tenants (id, created_at, updated_at, code, name, max_employees, max_products, "

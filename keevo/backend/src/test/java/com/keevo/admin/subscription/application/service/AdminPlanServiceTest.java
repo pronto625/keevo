@@ -85,7 +85,8 @@ class AdminPlanServiceTest {
     // ── Activate ──────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("activate from FREE: payment today→expiresAt, PREMIUM until end of day WAT, event published")
+    @DisplayName("activate from FREE: payment today→expiresAt, the default paid plan (19.7b: TEAM) until end of day "
+            + "WAT, event published with the granted plan")
     void activate_fromFree() {
         tenant("ACTIVE");
         when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(PlanType.FREE, null)));
@@ -95,7 +96,7 @@ class AdminPlanServiceTest {
         CurrentPlan result = service.activatePremium(activation(expires, 10_000, PaymentMethod.MOBILE_MONEY));
 
         Instant endOfDay = Instant.parse("2026-11-12T22:59:59Z"); // 23:59:59 WAT
-        assertThat(result).isEqualTo(new CurrentPlan(PlanType.PREMIUM, endOfDay));
+        assertThat(result).isEqualTo(new CurrentPlan(PlanType.of("TEAM"), endOfDay));
 
         ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
         verify(payments).insert(payment.capture());
@@ -108,13 +109,13 @@ class AdminPlanServiceTest {
 
         ArgumentCaptor<ChangeTenantPlanCommand> change = ArgumentCaptor.forClass(ChangeTenantPlanCommand.class);
         verify(changePlan).changePlan(change.capture());
-        assertThat(change.getValue().newPlan()).isEqualTo(PlanType.PREMIUM);
+        assertThat(change.getValue().newPlan()).isEqualTo(PlanType.of("TEAM"));
         assertThat(change.getValue().expiresAt()).isEqualTo(endOfDay);
         assertThat(change.getValue().cause()).isEqualTo(PlanChangeCause.ADMIN_ACTIVATION);
         assertThat(change.getValue().schemaName()).isEqualTo(SCHEMA);
 
         verify(publisher).publishEvent(new PlanActivatedEvent(ACTOR, TENANT, SCHEMA, PlanType.FREE,
-                endOfDay, 10_000, NOW));
+                endOfDay, 10_000, NOW, PlanType.of("TEAM")));
     }
 
     @Test
@@ -308,13 +309,14 @@ class AdminPlanServiceTest {
                 true, com.keevo.identity.api.PlanKind.FREE, null));
         com.keevo.shared.capability.entitlement.PlanCatalog catalog = com.keevo.shared.capability.entitlement
                 .PlanCatalog.of(plans, new com.keevo.shared.capability.entitlement.PlanSettings(TEST_FREE,
-                        PlanType.PREMIUM_TRIAL, 6));
+                        PlanType.PREMIUM_TRIAL, 6, PlanType.PREMIUM));
         return new AdminPlanService(lookup, SubscriptionApiTestSupport.administrationPort(null, changePlan), payments,
                 publisher, jdbc, Clock.fixed(NOW, ZoneOffset.UTC), catalog);
     }
 
     @Test
-    @DisplayName("19.7a: a running plan of kind PAID (data) is renewed from its end; a non-later expiry is refused")
+    @DisplayName("19.7a/19.7b: a running data plan of kind PAID, granted again by code, is renewed from its end; a "
+            + "non-later expiry is refused")
     void activate_renewalOfADataPaidPlan() {
         AdminPlanService dataService = dataPlanService();
         tenant("ACTIVE");
@@ -322,13 +324,61 @@ class AdminPlanServiceTest {
         when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(TEST_PAID, currentExpiry)));
         when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(TEST_PAID, currentExpiry));
 
-        assertValidationError(() -> dataService.activatePremium(activation(TODAY.plusDays(5), 10_000,
-                PaymentMethod.CASH)), "expiresAt");
-        dataService.activatePremium(activation(TODAY.plusDays(35), 10_000, PaymentMethod.CASH));
+        assertValidationError(() -> dataService.activatePremium(activation(TODAY.plusDays(5), "test_paid")),
+                "expiresAt");
+        dataService.activatePremium(activation(TODAY.plusDays(35), "test_paid"));
 
         ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
         verify(payments).insert(payment.capture());
         assertThat(payment.getValue().periodStart()).isEqualTo(TODAY.plusDays(6));
+        ArgumentCaptor<ChangeTenantPlanCommand> change = ArgumentCaptor.forClass(ChangeTenantPlanCommand.class);
+        verify(changePlan).changePlan(change.capture());
+        assertThat(change.getValue().newPlan()).isEqualTo(TEST_PAID);
+    }
+
+    private ActivatePremiumCommand activation(LocalDate expiresAt, String planCode) {
+        return new ActivatePremiumCommand(ACTOR, TENANT, expiresAt, 10_000, PaymentMethod.CASH, null, null, planCode);
+    }
+
+    @Test
+    @DisplayName("19.7b: moving from a running paid plan to another paid plan keeps the paid days: the period starts "
+            + "the day after the current end (ADR-06 no loss)")
+    void activate_otherPaidPlan_renewsFromCurrentEnd() {
+        AdminPlanService dataService = dataPlanService();
+        tenant("ACTIVE");
+        Instant currentExpiry = AdminPlanService.endOfDayWat(TODAY.plusDays(5));
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(PlanType.PREMIUM, currentExpiry)));
+        when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(PlanType.PREMIUM, currentExpiry));
+
+        CurrentPlan result = dataService.activatePremium(activation(TODAY.plusDays(30), "TEST_PAID"));
+
+        assertThat(result.planType()).isEqualTo(TEST_PAID);
+        ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
+        verify(payments).insert(payment.capture());
+        assertThat(payment.getValue().periodStart()).isEqualTo(TODAY.plusDays(6));
+    }
+
+    @Test
+    @DisplayName("19.7b: a plan code that is not a live paid plan (free, trial, archived, unknown) → 422 « Ce plan ne "
+            + "peut pas être attribué », nothing written")
+    void activate_invalidPlanCode() {
+        java.util.List<com.keevo.shared.capability.entitlement.PlanDefinition> plans =
+                new java.util.ArrayList<>(com.keevo.shared.capability.entitlement.PlanCatalog.SEED.all());
+        plans.add(new com.keevo.shared.capability.entitlement.PlanDefinition(PlanType.of("TEST_OLD"), "Ancien", null,
+                9, false, com.keevo.identity.api.PlanKind.PAID, NOW));
+        AdminPlanService archivedService = new AdminPlanService(lookup,
+                SubscriptionApiTestSupport.administrationPort(null, changePlan), payments, publisher, jdbc,
+                Clock.fixed(NOW, ZoneOffset.UTC), com.keevo.shared.capability.entitlement.PlanCatalog.of(plans,
+                        com.keevo.shared.capability.entitlement.PlanCatalog.SEED.settings()));
+        for (String code : List.of("FREE", "PREMIUM_TRIAL", "TEST_OLD", "NOPE")) {
+            assertThatThrownBy(() -> archivedService.activatePremium(activation(TODAY.plusDays(30), code)))
+                    .isInstanceOfSatisfying(DomainException.class, e -> {
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+                        assertThat(e.getUserMessage()).isEqualTo("Ce plan ne peut pas être attribué");
+                    });
+        }
+        verifyNoInteractions(lookup, payments, publisher);
+        verify(changePlan, never()).changePlan(any());
     }
 
     @Test

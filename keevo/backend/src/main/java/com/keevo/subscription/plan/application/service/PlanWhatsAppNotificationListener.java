@@ -2,6 +2,7 @@ package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.identity.api.PlanKind;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.capability.notification.WhatsAppSender;
@@ -64,7 +65,7 @@ public class PlanWhatsAppNotificationListener {
     @DeliverOnce
     public void onActivated(PlanActivatedEvent event) {
         send(event.tenantId(), event.schemaName(), "activation",
-                PlanWhatsAppMessages.activated(event.expiresAt()));
+                PlanWhatsAppMessages.activated(label(event.planCode()), event.expiresAt()));
     }
 
     @ApplicationModuleListener
@@ -76,8 +77,15 @@ public class PlanWhatsAppNotificationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @DeliverOnce
     public void onExpired(PlanExpiredEvent event) {
+        Optional<PlanDefinition> previous = catalog.find(event.previousPlan());
         send(event.tenantId(), event.schemaName(), "expiry", PlanWhatsAppMessages.expired(
-                catalog.find(event.previousPlan()).map(PlanDefinition::kind).orElse(PlanKind.PAID)));
+                previous.map(PlanDefinition::kind).orElse(PlanKind.PAID),
+                previous.map(PlanDefinition::label).orElse(null)));
+    }
+
+    /** Story 19.7b — catalogue label of the plan, {@code null} for an absent or unknown code (neutral text). */
+    private String label(PlanType plan) {
+        return catalog.find(plan).map(PlanDefinition::label).orElse(null);
     }
 
     private void send(UUID tenantId, String schemaName, String kind, String text) {

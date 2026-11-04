@@ -35,6 +35,7 @@ class ReassignStoreServiceTest {
 
     @Mock EmployeeRepository employeeRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock StoreEmployeeLimit storeEmployeeLimit;
 
     @InjectMocks ReassignStoreService reassignStoreService;
 

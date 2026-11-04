@@ -97,35 +97,34 @@ class TenantMigrationIntegrationTest {
 
     @Test
     @Order(4)
-    @DisplayName("migrate() seeds PREMIUM_TRIAL subscription with unlimited limits and 6-month expiry (AC1 — SPEC CHANGE 2026-03-06)")
-    void migrate_seedsPremiumTrialSubscription() throws Exception {
-        // SPEC CHANGE 2026-03-06: new tenants start on PREMIUM_TRIAL (unlimited, 6 months), NOT FREE
+    @DisplayName("migrate() seeds the trial subscription with unlimited limits — 19.7b: BUSINESS_TRIAL for 1 month "
+            + "(SPEC CHANGE 2026-03-06: a trial, not FREE)")
+    void migrate_seedsTrialSubscription() throws Exception {
+        // SPEC CHANGE 2026-03-06: new tenants start on a trial, NOT FREE; 19.7b (ADR-04): the 1-month BUSINESS_TRIAL
         schemaProvisioner.provision(TENANT_ID, SCHEMA);
 
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(
                      "SELECT plan_type, max_stores, max_products, max_employees, status, expires_at " +
-                     "FROM \"" + SCHEMA + "\".subscriptions WHERE plan_type = 'PREMIUM_TRIAL'")) {
+                     "FROM \"" + SCHEMA + "\".subscriptions WHERE plan_type = 'BUSINESS_TRIAL'")) {
 
-            assertThat(rs.next()).as("PREMIUM_TRIAL subscription row must exist").isTrue();
-            assertThat(rs.getString("plan_type")).isEqualTo("PREMIUM_TRIAL");
+            assertThat(rs.next()).as("BUSINESS_TRIAL subscription row must exist").isTrue();
+            assertThat(rs.getString("plan_type")).isEqualTo("BUSINESS_TRIAL");
             assertThat(rs.getInt("max_stores")).isEqualTo(Integer.MAX_VALUE);
             assertThat(rs.getInt("max_products")).isEqualTo(Integer.MAX_VALUE);
             assertThat(rs.getInt("max_employees")).isEqualTo(Integer.MAX_VALUE);
             assertThat(rs.getString("status")).isEqualTo("ACTIVE");
 
-            // expires_at must be approximately NOW() + 6 months
-            // PostgreSQL INTERVAL '6 months' = 181-184 calendar days depending on the month.
-            // We accept [180, 187] days from now to handle all calendar combinations.
+            // expires_at must be approximately NOW() + 1 month (28-31 calendar days depending on the month)
             java.sql.Timestamp expiresAt = rs.getTimestamp("expires_at");
             assertThat(expiresAt).as("expires_at must be set").isNotNull();
             long expiryFromNowSeconds = expiresAt.toInstant().getEpochSecond()
                     - java.time.Instant.now().getEpochSecond();
-            long minSeconds = 180L * 86400L; // 180 days
-            long maxSeconds = 187L * 86400L; // 187 days
+            long minSeconds = 27L * 86400L; // 27 days
+            long maxSeconds = 32L * 86400L; // 32 days
             assertThat(expiryFromNowSeconds)
-                    .as("expires_at must be 6 months from now (180–187 days)")
+                    .as("expires_at must be 1 month from now (27–32 days)")
                     .isBetween(minSeconds, maxSeconds);
         }
     }
