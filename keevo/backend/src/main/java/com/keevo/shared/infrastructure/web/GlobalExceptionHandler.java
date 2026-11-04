@@ -273,12 +273,14 @@ public class GlobalExceptionHandler {
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
+                 "OTP_INVALID",
                  "INVALID_CREDENTIALS", "ACCOUNT_LOCKED",
                  "REFRESH_TOKEN_INVALID",
                  "ACCOUNT_INACTIVE",
                  "STORE_REASSIGNED",
                  "SESSION_REVOKED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
+                 "COMPANY_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS",
                  "PRODUCT_NAME_ALREADY_EXISTS",
@@ -305,6 +307,7 @@ public class GlobalExceptionHandler {
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
+                 "PHONE_COUNTRY_NOT_SUPPORTED",
                  "INSUFFICIENT_STOCK",
                  "STOCK_NOT_TRACKED",
                  "STORE_NOT_ACTIVE",
@@ -364,6 +367,8 @@ public class GlobalExceptionHandler {
                  "PLAN_FEATURE_REQUIRED",
                  "EXPORT_LINK_INVALID" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
             case "RATE_LIMIT_EXCEEDED",
+                 "OTP_TOO_MANY_ATTEMPTS",
+                 "OTP_TOO_MANY_REQUESTS",
                  "INVOICE_LINK_RATE_LIMITED",
                  "EXPORT_QUEUE_FULL" -> HttpStatus.TOO_MANY_REQUESTS;
             case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure

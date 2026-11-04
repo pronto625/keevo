@@ -24,6 +24,11 @@ public enum ErrorCode {
     TOKEN_INVALID,              // Story 1.7 — loginToken used as accessToken, or invalid scope
     REFRESH_TOKEN_INVALID,
     UNAUTHORIZED,
+    PHONE_COUNTRY_NOT_SUPPORTED, // Story 19.2 — HTTP 422: sign-in code requested for a phone outside the allowed countries
+    OTP_INVALID,                 // Story 19.2 — HTTP 401: wrong, expired or already used sign-in code
+    OTP_TOO_MANY_ATTEMPTS,       // Story 19.2 — HTTP 429: 5 wrong codes, the code is dead
+    OTP_TOO_MANY_REQUESTS,       // Story 19.2 — HTTP 429: code request rate limit or daily failure cap
+    COMPANY_ALREADY_EXISTS,      // Story 19.2 — HTTP 409: create-company by a user who already owns a company
 
     // ── Tenant ────────────────────────────────────────────────────
     TENANT_NOT_FOUND,

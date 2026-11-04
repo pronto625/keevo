@@ -71,6 +71,16 @@ public class UserRepositoryAdapter implements UserRepository {
             ORDER BY (u.phone_number ~ '^\\+[0-9]+$') IS TRUE DESC, m.created_at ASC, u.id ASC
             """;
 
+    /** Story 19.2 — any unique conflict (phone, lower(email), lower(username), id) leaves the row out. */
+    private static final String INSERT_IF_ABSENT_SQL = """
+            INSERT INTO public.users (id, phone_number, password_hash, role, is_active, failed_attempts, locked_until,
+                                      email, username, first_name, last_name, email_verified_at, phone_verified_at,
+                                      created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
+            """;
+    private static final String LOCK_BY_ID_SQL = "SELECT 1 FROM public.users WHERE id = ? FOR UPDATE";
+
     private final UserSpringRepository springRepository;
     private final JdbcTemplate jdbcTemplate;
 
@@ -96,6 +106,37 @@ public class UserRepositoryAdapter implements UserRepository {
             return Optional.empty();
         }
         return springRepository.findByPhoneNumber(phoneNumber).map(UserRepositoryAdapter::toDomain);
+    }
+
+    /** Story 19.2 — null / blank never reaches the query (see {@link #findByPhoneNumber}). */
+    @Override
+    public Optional<User> findByEmail(String email) {
+        String normalized = User.normalizeIdentifier(email);
+        if (normalized == null) {
+            return Optional.empty();
+        }
+        return springRepository.findByEmailIgnoreCase(normalized).map(UserRepositoryAdapter::toDomain);
+    }
+
+    @Override
+    public boolean insertIfAbsent(User u) {
+        Timestamp now = Timestamp.from(Instant.now());
+        int inserted = jdbcTemplate.update(INSERT_IF_ABSENT_SQL,
+                u.getId(), User.normalizeIdentifier(u.getPhoneNumber()), u.getPasswordHash(), u.getRole().name(),
+                u.isActive(), u.failedAttempts(), ts(u.lockedUntil()),
+                User.normalizeIdentifier(u.getEmail()), User.normalizeIdentifier(u.getUsername()),
+                u.getFirstName(), u.getLastName(), ts(u.getEmailVerifiedAt()), ts(u.getPhoneVerifiedAt()),
+                now, now);
+        return inserted == 1;
+    }
+
+    @Override
+    public boolean lockById(UUID id) {
+        return !jdbcTemplate.queryForList(LOCK_BY_ID_SQL, Integer.class, id).isEmpty();
+    }
+
+    private static Timestamp ts(Instant instant) {
+        return instant != null ? Timestamp.from(instant) : null;
     }
 
     @Override

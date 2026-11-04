@@ -27,12 +27,13 @@ class AuthTokenCleanupJobTest {
 
     @Mock PasswordResetTokenRepository resetRepo;
     @Mock RefreshTokenRepository refreshRepo;
+    @Mock com.keevo.identity.auth.domain.port.out.OtpChallengeRepository otpRepo;
 
     AuthTokenCleanupJob job;
 
     @BeforeEach
     void setUp() {
-        job = new AuthTokenCleanupJob(resetRepo, refreshRepo, Clock.fixed(NOW, ZoneOffset.UTC));
+        job = new AuthTokenCleanupJob(resetRepo, refreshRepo, otpRepo, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -72,5 +73,15 @@ class AuthTokenCleanupJobTest {
     void scheduledDaily() throws NoSuchMethodException {
         Scheduled s = AuthTokenCleanupJob.class.getMethod("cleanup").getAnnotation(Scheduled.class);
         assertThat(s.cron()).isEqualTo("0 30 3 * * *");
+    }
+
+    @Test
+    @DisplayName("19.2 — purges sign-in code challenges created more than 24 h ago, even when another purge failed")
+    void purgesOtpChallenges() {
+        when(refreshRepo.purgeExpiredBefore(CUTOFF)).thenThrow(new DataAccessResourceFailureException("down"));
+
+        job.cleanup();
+
+        verify(otpRepo).purgeCreatedBefore(CUTOFF);
     }
 }

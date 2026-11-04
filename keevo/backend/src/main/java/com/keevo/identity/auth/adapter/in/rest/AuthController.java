@@ -1,6 +1,10 @@
 package com.keevo.identity.auth.adapter.in.rest;
 
+import com.keevo.identity.auth.adapter.in.rest.dto.CreateCompanyRequestDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.LoginRequest;
+import com.keevo.identity.auth.adapter.in.rest.dto.OtpRequestDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.OtpRequestResponseDto;
+import com.keevo.identity.auth.adapter.in.rest.dto.OtpVerifyDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.LoginResponse;
 import com.keevo.identity.auth.adapter.in.rest.dto.LoginSessionResponse;
 import com.keevo.identity.auth.adapter.in.rest.dto.RefreshRequest;
@@ -19,7 +23,14 @@ import com.keevo.identity.auth.application.service.RefreshRateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.model.UserProfileData;
+import com.keevo.identity.auth.domain.model.OtpChannel;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserCommand;
+import com.keevo.identity.auth.domain.port.in.CreateCompanyCommand;
+import com.keevo.identity.auth.domain.port.in.CreateCompanyUseCase;
+import com.keevo.identity.auth.domain.port.in.RequestOtpCommand;
+import com.keevo.identity.auth.domain.port.in.RequestOtpUseCase;
+import com.keevo.identity.auth.domain.port.in.VerifyOtpCommand;
+import com.keevo.identity.auth.domain.port.in.VerifyOtpUseCase;
 import com.keevo.identity.auth.domain.port.in.AuthenticateUserUseCase;
 import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
 import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
@@ -51,6 +62,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -70,6 +82,7 @@ import java.util.UUID;
  * - POST /api/v1/auth/login         (step 1: returns loginToken + memberships)
  * - POST /api/v1/auth/select-tenant (step 2: returns full access + refresh tokens)
  * - POST /api/v1/auth/refresh
+ * - POST /api/v1/auth/otp/request, /otp/verify, /create-company (Story 19.2)
  */
 @Tag(name = "Authentication", description = "User registration and login endpoints")
 @EntitlementExempt("authentification")
@@ -86,6 +99,9 @@ public class AuthController {
     private final RequestPasswordResetUseCase requestPasswordResetUseCase;
     private final ResetPasswordUseCase   resetPasswordUseCase;
     private final RefreshRateLimiter     refreshRateLimiter;
+    private final RequestOtpUseCase      requestOtpUseCase;
+    private final VerifyOtpUseCase       verifyOtpUseCase;
+    private final CreateCompanyUseCase   createCompanyUseCase;
 
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
@@ -95,7 +111,10 @@ public class AuthController {
                           GetUserProfileUseCase getUserProfileUseCase,
                           RequestPasswordResetUseCase requestPasswordResetUseCase,
                           ResetPasswordUseCase resetPasswordUseCase,
-                          RefreshRateLimiter refreshRateLimiter) {
+                          RefreshRateLimiter refreshRateLimiter,
+                          RequestOtpUseCase requestOtpUseCase,
+                          VerifyOtpUseCase verifyOtpUseCase,
+                          CreateCompanyUseCase createCompanyUseCase) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
@@ -105,6 +124,9 @@ public class AuthController {
         this.requestPasswordResetUseCase = requestPasswordResetUseCase;
         this.resetPasswordUseCase   = resetPasswordUseCase;
         this.refreshRateLimiter     = refreshRateLimiter;
+        this.requestOtpUseCase      = requestOtpUseCase;
+        this.verifyOtpUseCase       = verifyOtpUseCase;
+        this.createCompanyUseCase   = createCompanyUseCase;
     }
 
     @Operation(
@@ -364,6 +386,96 @@ public class AuthController {
         resetPasswordUseCase.execute(new ResetPasswordCommand(
                 request.phoneNumber(), request.code(), request.newPassword()));
         return ResponseEntity.ok(new ResetPasswordResponseDto(true));
+    }
+
+    // ── Sign-in code (Story 19.2) ─────────────────────────────────────────────
+
+    @Operation(
+        summary = "Request a sign-in code (SMS, WhatsApp or email)",
+        description = """
+            Story 19.2 — sends a 6-digit code valid 5 minutes. Public endpoint.
+
+            identifier: email, or phone in E.164 (00 accepted for +) of an allowed country
+            (Cameroun, Gabon, Tchad, RD Congo, Sénégal by default).
+            channel (optional): SMS | WHATSAPP | EMAIL. Email → EMAIL only; phone → the given channel,
+            or SMS and WhatsApp when absent.
+
+            Always 200 {"expiresIn":300}, whether or not an account exists. Messages in French, English when
+            Accept-Language starts with "en".
+            Limits: 3 requests / 10 min and 5 / hour per identifier, 10 / hour per IP, and 20 wrong codes
+            in 24 h block the identifier → 429 OTP_TOO_MANY_REQUESTS.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Code sent (silent when the account does not exist)",
+            content = @Content(schema = @Schema(implementation = OtpRequestResponseDto.class))),
+        @ApiResponse(responseCode = "422",
+            description = "VALIDATION_FAILED (identifier or channel) or PHONE_COUNTRY_NOT_SUPPORTED"),
+        @ApiResponse(responseCode = "429", description = "OTP_TOO_MANY_REQUESTS")
+    })
+    @SecurityRequirements
+    @PostMapping("/otp/request")
+    public ResponseEntity<OtpRequestResponseDto> requestOtp(
+            @Valid @RequestBody OtpRequestDto request,
+            @RequestHeader(value = "Accept-Language", required = false) String acceptLanguage,
+            HttpServletRequest httpRequest) {
+        int expiresIn = requestOtpUseCase.request(new RequestOtpCommand(
+                request.identifier(), OtpChannel.parseOptional(request.channel()),
+                clientIp(httpRequest), acceptLanguage));
+        return ResponseEntity.ok(new OtpRequestResponseDto(expiresIn));
+    }
+
+    @Operation(
+        summary = "Verify a sign-in code (login step 1)",
+        description = """
+            Story 19.2 — checks the code and answers exactly like /auth/login: a loginToken (5 min) and the
+            memberships. An unknown identifier gets a new account without company: memberships is empty and
+            the app calls /auth/create-company with the loginToken. Otherwise /auth/select-tenant as usual.
+
+            Wrong code → 401 OTP_INVALID; the 5th wrong code kills it → 429 OTP_TOO_MANY_ATTEMPTS.
+            Expired, used or unknown code → 401 OTP_INVALID. 20 wrong codes in 24 h, or more than 30 checks
+            per hour from one IP → 429 OTP_TOO_MANY_REQUESTS.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Code accepted — loginToken + memberships",
+            content = @Content(schema = @Schema(implementation = LoginSessionResponse.class))),
+        @ApiResponse(responseCode = "401", description = "OTP_INVALID"),
+        @ApiResponse(responseCode = "409", description = "USER_ALREADY_EXISTS (concurrent account creation)"),
+        @ApiResponse(responseCode = "422", description = "VALIDATION_FAILED or PHONE_COUNTRY_NOT_SUPPORTED"),
+        @ApiResponse(responseCode = "429", description = "OTP_TOO_MANY_ATTEMPTS or OTP_TOO_MANY_REQUESTS")
+    })
+    @SecurityRequirements
+    @PostMapping("/otp/verify")
+    public ResponseEntity<LoginSessionResponse> verifyOtp(@Valid @RequestBody OtpVerifyDto request,
+                                                          HttpServletRequest httpRequest) {
+        LoginSessionResult result = verifyOtpUseCase.verify(
+                new VerifyOtpCommand(request.identifier(), request.code(), clientIp(httpRequest)));
+        return ResponseEntity.ok(toLoginSessionResponse(result));
+    }
+
+    @Operation(
+        summary = "Create my company (account without company)",
+        description = """
+            Story 19.2 — with the loginToken of /auth/otp/verify, creates the company exactly like
+            /auth/register (trial plan, owner) and opens its session: no /auth/select-tenant needed.
+            Same token errors as /auth/select-tenant. Refused when the user already owns a company.
+            """
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "201", description = "Company created — session issued",
+            content = @Content(schema = @Schema(implementation = RegistrationResponse.class))),
+        @ApiResponse(responseCode = "401", description = "TOKEN_EXPIRED or TOKEN_INVALID"),
+        @ApiResponse(responseCode = "409", description = "COMPANY_ALREADY_EXISTS"),
+        @ApiResponse(responseCode = "422", description = "Validation error")
+    })
+    @SecurityRequirements
+    @PostMapping("/create-company")
+    public ResponseEntity<RegistrationResponse> createCompany(@Valid @RequestBody CreateCompanyRequestDto request) {
+        RegistrationResult result = createCompanyUseCase.create(new CreateCompanyCommand(
+                request.loginToken(), DeviceInfo.of(request.deviceId(), request.deviceLabel())));
+        return ResponseEntity.status(HttpStatus.CREATED).body(new RegistrationResponse(
+                result.tenantCode(), result.token(), result.userId(), result.tenantId(), result.refreshToken()));
     }
 
     // ── Mapping helpers ───────────────────────────────────────────────────────

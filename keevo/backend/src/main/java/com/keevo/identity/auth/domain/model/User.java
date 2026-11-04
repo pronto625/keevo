@@ -93,6 +93,19 @@ public final class User {
     }
 
     /**
+     * Story 19.2 — account created by a successful sign-in code: OWNER (it creates its company next), no password,
+     * no membership, identified by the phone or the email the code was sent to, which is verified at
+     * {@code verifiedAt}.
+     */
+    public static User newOtpAccount(String phoneNumber, String email, Instant verifiedAt) {
+        String phone = normalizeIdentifier(phoneNumber);
+        String mail = normalizeIdentifier(email);
+        return new User(UUID.randomUUID(), phone, null, Role.OWNER, true, Instant.now(), 0, null,
+                mail, null, null, null,
+                mail != null ? verifiedAt : null, phone != null ? verifiedAt : null);
+    }
+
+    /**
      * Factory method for creating an employee user account (Story 3.5).
      * Role is EMPLOYEE; active from creation.
      */

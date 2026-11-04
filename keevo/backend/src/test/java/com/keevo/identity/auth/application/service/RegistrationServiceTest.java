@@ -17,7 +17,6 @@ import com.keevo.identity.auth.domain.model.AuthTokens;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,8 +43,15 @@ class RegistrationServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private TenantSchemaPort tenantSchemaPort; // C2 — role assignment in tenant schema
 
-    @InjectMocks
     private RegistrationService registrationService;
+
+    /** Story 19.2 — provisioning steps live in OwnerTenantProvisioner (real instance over the same mocks). */
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        registrationService = new RegistrationService(userRepository, passwordEncoder,
+                new OwnerTenantProvisioner(userMembershipRepository, tenantFactory, sessionTokenIssuer,
+                        eventPublisher, tenantSchemaPort));
+    }
 
     // ── Fixtures ────────────────────────────────────────────────────────────
 

@@ -2,6 +2,8 @@ package com.keevo.identity.auth.adapter.out.persistence.jpa;
 
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
@@ -20,4 +22,8 @@ public interface UserSpringRepository extends JpaRepository<UserJpaEntity, UUID>
     Optional<UserJpaEntity> findByPhoneNumber(String phoneNumber);
 
     boolean existsByPhoneNumber(String phoneNumber);
+
+    /** Story 19.2 — case-insensitive lookup on the {@code uq_users_email_lower} expression index. */
+    @Query(value = "SELECT * FROM public.users WHERE lower(email) = lower(:email)", nativeQuery = true)
+    Optional<UserJpaEntity> findByEmailIgnoreCase(@Param("email") String email);
 }

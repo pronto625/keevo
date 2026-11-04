@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 223 — gated: 112, exempt: 111.
+Handlers: 226 — gated: 112, exempt: 114.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -83,9 +83,12 @@ Handlers: 223 — gated: 112, exempt: 111.
 | GET | `/api/v1/audit/{id}` | — | — | — | core: journal d'audit | AuditController#getAuditEntry |
 | PUT | `/api/v1/audit/{id}` | — | — | — | core: journal d'audit | AuditController#update |
 | POST | `/api/v1/auth/change-password` | — | — | — | authentification | AuthController#changePassword |
+| POST | `/api/v1/auth/create-company` | — | — | — | authentification | AuthController#createCompany |
 | POST | `/api/v1/auth/forgot-password` | — | — | — | authentification | AuthController#forgotPassword |
 | POST | `/api/v1/auth/login` | — | — | — | authentification | AuthController#login |
 | POST | `/api/v1/auth/logout` | — | — | — | authentification | AuthController#logout |
+| POST | `/api/v1/auth/otp/request` | — | — | — | authentification | AuthController#requestOtp |
+| POST | `/api/v1/auth/otp/verify` | — | — | — | authentification | AuthController#verifyOtp |
 | GET | `/api/v1/auth/profile` | — | — | — | authentification | AuthController#getProfile |
 | POST | `/api/v1/auth/refresh` | — | — | — | authentification | AuthController#refresh |
 | POST | `/api/v1/auth/register` | — | — | — | authentification | AuthController#register |

@@ -59,7 +59,7 @@ class AuthControllerProfileTest {
         UserProfileService profile = new UserProfileService(userRepository, employeeRepository,
                 StoreApiTestSupport.queryPort(storeRepository), tenantRepository, membershipRepository,
                 sessionTokenIssuer);
-        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(null, null, null, null, null, profile, null, null, null))
+        mockMvc = MockMvcBuilders.standaloneSetup(new AuthController(null, null, null, null, null, profile, null, null, null, null, null, null))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         userId = UUID.randomUUID();

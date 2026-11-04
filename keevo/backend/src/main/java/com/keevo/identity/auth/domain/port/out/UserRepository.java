@@ -26,6 +26,28 @@ public interface UserRepository {
     /** Find user by phone number. Returns empty if not found. */
     Optional<User> findByPhoneNumber(String phoneNumber);
 
+    /**
+     * Story 19.2 — find a user by email, case-insensitively ({@code lower(email) = lower(?)} on
+     * {@code uq_users_email_lower}). Empty for a null or blank email.
+     */
+    Optional<User> findByEmail(String email);
+
+    /**
+     * Story 19.2 — inserts the user unless a unique identifier (phone, email, username) is already taken
+     * ({@code ON CONFLICT DO NOTHING}: a concurrent registration never aborts the caller's transaction).
+     *
+     * @return true when the row was inserted
+     */
+    boolean insertIfAbsent(User user);
+
+    /**
+     * Story 19.2 — locks the user row ({@code FOR UPDATE}) until the transaction ends, so two concurrent
+     * company creations of the same user run one after the other.
+     *
+     * @return false when the user does not exist
+     */
+    boolean lockById(UUID id);
+
     /** Check if a phone number is already registered (for fast uniqueness check). */
     boolean existsByPhoneNumber(String phoneNumber);
 

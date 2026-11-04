@@ -149,6 +149,18 @@ keevo:
     # for installed V1 apps — never read by the server. Switched off by Story 16.7 once the minimum
     # app version is forced.
     legacy-claims: ${KEEVO_JWT_LEGACY_CLAIMS:true}
+  # Story 19.2 — sign-in codes (SMS, WhatsApp, email). Phones outside the allowed dialing prefixes are refused
+  # (PHONE_COUNTRY_NOT_SUPPORTED); defaults: Cameroun, Gabon, Tchad, RD Congo, Sénégal. Store-review account: fixed
+  # identifier + code (≥ 6 digits), empty = disabled; change both after each review campaign.
+  auth:
+    otp:
+      allowed-phone-prefixes: ${KEEVO_AUTH_ALLOWED_PHONE_PREFIXES:237,241,235,243,221}
+      identifier-max-per-10-minutes: 3
+      identifier-max-per-hour: 5
+      ip-max-per-hour: 10
+      verify-per-ip-per-hour: 30
+      review-identifier: ${KEEVO_OTP_REVIEW_IDENTIFIER:}
+      review-code: ${KEEVO_OTP_REVIEW_CODE:}
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.

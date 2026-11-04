@@ -540,6 +540,9 @@ So that **la réconciliation d'identité ne me force pas à choisir**.
 **When** il se connecte
 **Then** le tenant-picker liste les deux entreprises avec leur rôle
 
+**Éléments reportés routés vers 19.6 (revue 19.2, 2026-11-04) :**
+- [ ] [Deferred-from: revue 19.2, 2026-11-04] `POST /auth/create-company` refuse (`COMPANY_ALREADY_EXISTS`) un utilisateur dont `users.role` n'est pas OWNER, car `ChangePasswordService` émet les jetons avec ce rôle global [CreateCompanyService.java] — quand le rôle sera porté par la membership (plusieurs rôles), autoriser un employé à créer sa propre entreprise.
+
 ### Story 19.7 : Profils PRO, TEAM, BUSINESS et bundles associés (ADR-03, 04, 06)
 
 > **Découpage du 03/11/2026 (taille mesurée : `PlanType` dans 80 fichiers de production et 128 de test, 9 points qui cassent sur un code inconnu, contraintes CHECK dans `public` et dans chaque schéma tenant, essai de 6 mois écrit en SQL).** La story est livrée en deux parties, sans changer son périmètre :

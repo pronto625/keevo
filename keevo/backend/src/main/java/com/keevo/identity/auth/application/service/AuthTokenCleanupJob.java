@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.identity.auth.domain.port.out.OtpChallengeRepository;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
@@ -20,6 +21,9 @@ import java.time.Instant;
  * (an expired token is rejected whatever its consumed / rotated / revoked state); the one-day
  * grace keeps recent rows for support diagnostics. Each purge runs in its own transaction and a
  * failure of one does not skip the other. Mirrors {@code SyncErrorLogCleanupJob}.
+ *
+ * <p>Story 19.2 — also deletes {@code public.otp_challenges} rows created more than 24 h ago (one set-based
+ * {@code DELETE}): past the daily failure window they are never read again.
  */
 @Component
 public class AuthTokenCleanupJob {
@@ -30,13 +34,16 @@ public class AuthTokenCleanupJob {
 
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OtpChallengeRepository otpChallengeRepository;
     private final Clock clock;
 
     public AuthTokenCleanupJob(PasswordResetTokenRepository passwordResetTokenRepository,
                                RefreshTokenRepository refreshTokenRepository,
+                               OtpChallengeRepository otpChallengeRepository,
                                Clock clock) {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.otpChallengeRepository = otpChallengeRepository;
         this.clock = clock;
     }
 
@@ -55,6 +62,13 @@ public class AuthTokenCleanupJob {
             log.info("AuthTokenCleanupJob: purged {} refresh tokens expired before {}", deleted, cutoff);
         } catch (RuntimeException e) {
             log.warn("AuthTokenCleanupJob: refresh token purge failed", e);
+        }
+        Instant otpCutoff = clock.instant().minus(OtpSettings.DAILY_WINDOW);
+        try {
+            int deleted = otpChallengeRepository.purgeCreatedBefore(otpCutoff);
+            log.info("AuthTokenCleanupJob: purged {} sign-in code challenges created before {}", deleted, otpCutoff);
+        } catch (RuntimeException e) {
+            log.warn("AuthTokenCleanupJob: sign-in code challenge purge failed", e);
         }
     }
 }

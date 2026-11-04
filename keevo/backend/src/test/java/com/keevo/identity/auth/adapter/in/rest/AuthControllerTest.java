@@ -77,6 +77,9 @@ class AuthControllerTest {
     @MockitoBean RequestPasswordResetUseCase requestPasswordResetUseCase;
     @MockitoBean ResetPasswordUseCase  resetPasswordUseCase;
     @MockitoBean com.keevo.identity.auth.application.service.RefreshRateLimiter refreshRateLimiter;
+    @MockitoBean com.keevo.identity.auth.domain.port.in.RequestOtpUseCase requestOtpUseCase;
+    @MockitoBean com.keevo.identity.auth.domain.port.in.VerifyOtpUseCase verifyOtpUseCase;
+    @MockitoBean com.keevo.identity.auth.domain.port.in.CreateCompanyUseCase createCompanyUseCase;
     @MockitoBean JwtAuthFilter         jwtAuthFilter;
 
     @BeforeEach
@@ -318,5 +321,100 @@ class AuthControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(refreshTokenUseCase, never()).revoke(any());
+    }
+
+    // ══════════════════════════════════════════════════
+    // Story 19.2 — sign-in code and company creation
+    // ══════════════════════════════════════════════════
+
+    @Test
+    @DisplayName("19.2 POST /otp/request → 200 {expiresIn:300}, channel, IP and Accept-Language passed down")
+    void otpRequest_returns200() throws Exception {
+        when(requestOtpUseCase.request(any())).thenReturn(300);
+
+        mockMvc.perform(post("/api/v1/auth/otp/request")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("Accept-Language", "en-US")
+                        .header("X-Forwarded-For", "41.202.1.1")
+                        .content("{\"identifier\":\"Ana@Ex.com\",\"channel\":\"email\"}"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("{\"expiresIn\":300}", true));
+
+        org.mockito.ArgumentCaptor<com.keevo.identity.auth.domain.port.in.RequestOtpCommand> cmd =
+                org.mockito.ArgumentCaptor.forClass(com.keevo.identity.auth.domain.port.in.RequestOtpCommand.class);
+        verify(requestOtpUseCase).request(cmd.capture());
+        org.assertj.core.api.Assertions.assertThat(cmd.getValue().identifier()).isEqualTo("Ana@Ex.com");
+        org.assertj.core.api.Assertions.assertThat(cmd.getValue().channel())
+                .isEqualTo(com.keevo.identity.auth.domain.model.OtpChannel.EMAIL);
+        org.assertj.core.api.Assertions.assertThat(cmd.getValue().clientIp()).isEqualTo("41.202.1.1");
+        org.assertj.core.api.Assertions.assertThat(cmd.getValue().language()).isEqualTo("en-US");
+    }
+
+    @Test
+    @DisplayName("19.2 POST /otp/request → 422 for an unknown channel, PHONE_COUNTRY_NOT_SUPPORTED, 429 limits")
+    void otpRequest_errors() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"+237699001122\",\"channel\":\"PIGEON\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"));
+
+        when(requestOtpUseCase.request(any())).thenThrow(new DomainException(ErrorCode.PHONE_COUNTRY_NOT_SUPPORTED));
+        mockMvc.perform(post("/api/v1/auth/otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"+33612345678\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("PHONE_COUNTRY_NOT_SUPPORTED"))
+                .andExpect(jsonPath("$.error").value("Ce pays n'est pas encore pris en charge"));
+
+        org.mockito.Mockito.reset(requestOtpUseCase);
+        when(requestOtpUseCase.request(any())).thenThrow(new DomainException(ErrorCode.OTP_TOO_MANY_REQUESTS));
+        mockMvc.perform(post("/api/v1/auth/otp/request").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"+237699001122\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.domainCode").value("OTP_TOO_MANY_REQUESTS"));
+    }
+
+    @Test
+    @DisplayName("19.2 POST /otp/verify → 200 like /login; 401 OTP_INVALID; 429 OTP_TOO_MANY_ATTEMPTS")
+    void otpVerify() throws Exception {
+        when(verifyOtpUseCase.verify(any())).thenReturn(new LoginSessionResult("login-tok", List.of()));
+        mockMvc.perform(post("/api/v1/auth/otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"ana@ex.com\",\"code\":\"123456\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loginToken").value("login-tok"))
+                .andExpect(jsonPath("$.memberships").isEmpty());
+
+        org.mockito.Mockito.reset(verifyOtpUseCase);
+        when(verifyOtpUseCase.verify(any())).thenThrow(new DomainException(ErrorCode.OTP_INVALID));
+        mockMvc.perform(post("/api/v1/auth/otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"ana@ex.com\",\"code\":\"000000\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.domainCode").value("OTP_INVALID"));
+
+        org.mockito.Mockito.reset(verifyOtpUseCase);
+        when(verifyOtpUseCase.verify(any())).thenThrow(new DomainException(ErrorCode.OTP_TOO_MANY_ATTEMPTS));
+        mockMvc.perform(post("/api/v1/auth/otp/verify").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identifier\":\"ana@ex.com\",\"code\":\"000000\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.domainCode").value("OTP_TOO_MANY_ATTEMPTS"));
+    }
+
+    @Test
+    @DisplayName("19.2 POST /create-company → 201 RegistrationResponse; 409 COMPANY_ALREADY_EXISTS")
+    void createCompany() throws Exception {
+        when(createCompanyUseCase.create(any())).thenReturn(
+                new RegistrationResult("KV-ABC123", "access", "user-id", "tenant-id", "refresh"));
+        mockMvc.perform(post("/api/v1/auth/create-company").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginToken\":\"login-tok\",\"deviceId\":\"dev-1\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.tenantCode").value("KV-ABC123"))
+                .andExpect(jsonPath("$.refreshToken").value("refresh"));
+
+        org.mockito.Mockito.reset(createCompanyUseCase);
+        when(createCompanyUseCase.create(any())).thenThrow(new DomainException(ErrorCode.COMPANY_ALREADY_EXISTS));
+        mockMvc.perform(post("/api/v1/auth/create-company").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginToken\":\"login-tok\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("COMPANY_ALREADY_EXISTS"))
+                .andExpect(jsonPath("$.error").value("Vous avez déjà une entreprise"));
     }
 }

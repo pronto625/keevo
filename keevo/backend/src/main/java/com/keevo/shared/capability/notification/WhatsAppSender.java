@@ -44,4 +44,13 @@ public interface WhatsAppSender {
                 + ". Il expire dans 10 minutes."
                 + " Si vous n'avez pas demandé, ignorez ce message.");
     }
+
+    /**
+     * Story 19.2 — sends a sign-in code message (text already built and localised by the caller). Delegates to
+     * {@link #sendReport(String, String)}; the Meta template switch is story 19-9b. {@link #sendOtp} stays the
+     * password-reset text.
+     */
+    default void sendLoginCode(String phoneNumber, String text) {
+        sendReport(phoneNumber, text);
+    }
 }
