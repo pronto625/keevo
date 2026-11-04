@@ -631,6 +631,16 @@ So that **OTP, envoi de documents et notifications Bref fonctionnent dans Keevo*
 **When** un événement métier notifiable survient
 **Then** une notification est persistée, exposée par `GET /notifications` (paginé, compteur non lus) et `PATCH /notifications/{id}/read`, et un push FCM est envoyé si un token existe
 
+### Story 19.9b : Canaux Bref — WhatsApp plateforme par Meta Cloud API, Web Push
+
+> **Créée le 04/11/2026** (décision utilisateur pendant 19.9 : « pour tout ce qui est notification, WhatsApp, on fera comme Bref — les fournisseurs de Bref dominent »). La 19.9 livre déjà SMS (MboaSMS, Infobip), email (Resend, Infobip) et le push Expo ; restent :
+
+- [ ] WhatsApp plateforme par Meta WhatsApp Cloud API (`graph.facebook.com/v21.0/{phoneNumberId}/messages`, modèles système Bref `bref_point_otp`, `bref_facture` — `api-bref/src/whatsapp/whatsapp.service.ts`, `system-templates.ts`) comme premier fournisseur de `WhatsAppSender` ; Wassender/Twilio en repli tant que les envois en texte libre de Keevo (rapport quotidien, alertes) n'ont pas de modèle Meta approuvé.
+- [ ] Modèles Meta pour les messages Keevo envoyés hors fenêtre de 24 h (rapport quotidien, rappels d'abonnement, alertes) ou bascule de ces envois vers push/inbox ; liste et libellés à valider.
+- [ ] Web Push (VAPID) comme Bref : `GET /web-push/vapid-public-key`, `POST/DELETE /web-push/subscribe`, abonnements par utilisateur, suppression sur 404/410 (`api-bref/src/web-push/*`), branché sur le composite de push de la 19.9.
+
+**Critère provisoire :** **Given** `keevo.whatsapp.provider` réglé sur Meta avec ses secrets **When** un OTP ou une facture part par WhatsApp **Then** le message passe par le modèle Meta Bref, le repli n'intervient qu'en échec, et le fail-fast 10-3 exige les secrets Meta seulement si le canal est activé.
+
 ### Story 19.10 : Versions minimales d'app
 
 As a **super-admin**,
