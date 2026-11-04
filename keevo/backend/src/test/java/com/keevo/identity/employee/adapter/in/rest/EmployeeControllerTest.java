@@ -71,8 +71,36 @@ class EmployeeControllerTest {
                         List.of(new SimpleGrantedAuthority("ROLE_OWNER"))));
         sampleEmployee = new Employee(employeeId, UUID.randomUUID(), storeId,
                 "Loïc", "Nkoulou", EmployeeStatus.ACTIVE, true, Instant.now());
-        lenient().when(employeeRoleResolver.resolveRole(any())).thenReturn("EMPLOYEE");
-        lenient().when(employeeRoleResolver.resolvePhone(any())).thenReturn("+237690000001");
+        enrichWith(new EmployeeRoleResolver.Enrichment("EMPLOYEE", "+237690000001", null));
+    }
+
+    /** Every requested user gets the same enrichment (one bulk call per request). */
+    private void enrichWith(EmployeeRoleResolver.Enrichment enrichment) {
+        lenient().doAnswer(inv -> {
+            java.util.Map<UUID, EmployeeRoleResolver.Enrichment> map = new java.util.HashMap<>();
+            for (Object id : (java.util.Collection<?>) inv.getArgument(0)) {
+                map.put((UUID) id, enrichment);
+            }
+            return map;
+        }).when(employeeRoleResolver).resolveAll(any());
+    }
+
+    @Test
+    @DisplayName("19.4 GET /api/v1/employees enriches the whole list with ONE bulk call (no per-employee lookup)")
+    void listEmployees_enrichesInOneBulkCall() throws Exception {
+        Employee second = new Employee(UUID.randomUUID(), UUID.randomUUID(), storeId,
+                "Awa", "Kamga", EmployeeStatus.ACTIVE, false, Instant.now());
+        Employee third = new Employee(UUID.randomUUID(), UUID.randomUUID(), storeId,
+                "Jean", "Ndi", EmployeeStatus.ACTIVE, false, Instant.now());
+        when(listEmployeesUseCase.execute(any())).thenReturn(List.of(sampleEmployee, second, third));
+
+        mockMvc.perform(get("/api/v1/employees"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(3))
+                .andExpect(jsonPath("$.data[2].phoneNumber").value("+237690000001"));
+
+        verify(employeeRoleResolver, times(1)).resolveAll(any());
+        verify(employeeRoleResolver, never()).resolveRole(any());
     }
 
     @Test
@@ -89,6 +117,45 @@ class EmployeeControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.temporaryPassword").value("TmpPass12345"))
                 .andExpect(jsonPath("$.data.employee.firstName").value("Loïc"));
+    }
+
+    @Test
+    @DisplayName("19.4 POST /api/v1/employees with a username only → 201, phoneNumber \"\" (19.1), username, command carries it")
+    void createEmployee_usernameOnly_returns201() throws Exception {
+        when(createEmployeeUseCase.execute(any())).thenReturn(
+                new CreateEmployeeResult(sampleEmployee, "TmpPass12345"));
+        enrichWith(new EmployeeRoleResolver.Enrichment("EMPLOYEE", "", "awa_k"));
+
+        mockMvc.perform(post("/api/v1/employees")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"Awa","lastName":"Kamga","username":"awa_k","storeId":"%s"}
+                                """.formatted(storeId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.temporaryPassword").value("TmpPass12345"))
+                .andExpect(jsonPath("$.data.employee.username").value("awa_k"))
+                .andExpect(jsonPath("$.data.employee.phoneNumber").value(""));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(CreateEmployeeCommand.class);
+        verify(createEmployeeUseCase).execute(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().username()).isEqualTo("awa_k");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().phoneNumber()).isNull();
+    }
+
+    @Test
+    @DisplayName("19.4 POST /api/v1/employees → 409 USERNAME_ALREADY_EXISTS with the French message")
+    void createEmployee_usernameTaken_returns409() throws Exception {
+        when(createEmployeeUseCase.execute(any()))
+                .thenThrow(new DomainException(ErrorCode.USERNAME_ALREADY_EXISTS));
+
+        mockMvc.perform(post("/api/v1/employees")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"Awa","lastName":"Kamga","username":"AWA_K","storeId":"%s"}
+                                """.formatted(storeId)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("USERNAME_ALREADY_EXISTS"))
+                .andExpect(jsonPath("$.error").value("Cet identifiant est déjà utilisé"));
     }
 
     @Test

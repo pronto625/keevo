@@ -231,7 +231,7 @@ class EmployeeRepositoryAdapterTest {
         when(jpa.findById(EMPLOYEE_ID)).thenReturn(Optional.of(sampleEntity));
         EmployeeJpaEntity updated = toEntity(sampleEmployee);
         updated.setPasswordChangeRequired(false);
-        when(jpa.save(any(EmployeeJpaEntity.class))).thenReturn(updated);
+        when(jpa.saveAndFlush(any(EmployeeJpaEntity.class))).thenReturn(updated); // 19.4 — visible to JDBC reads
 
         Employee result = adapter.updatePasswordChangeRequired(EMPLOYEE_ID, false);
 

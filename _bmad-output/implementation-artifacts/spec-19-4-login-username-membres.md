@@ -2,9 +2,10 @@
 title: '19.4 — Username + password sign-in for members, members created with a username and no phone'
 type: 'feature'
 created: '2026-11-04'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '813a3731895cba36ec1380e48b8636b41d0fd69e'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
 warnings: []
@@ -83,6 +84,34 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-05 — Review pass
+- verdicts: 24 findings — high 0, medium 3, low 19, false 2, maybe-false 0 (grouped rows list every reviewer finding they cover)
+- findings:
+  - `[low]` `[reject]` (patterns 1) username pre-check loads a full row — one unique-index lookup; an exists port adds surface for nothing measurable.
+  - `[low]` `[reject]` (patterns 2) Javadoc calls the if/else a Strategy — wording only.
+  - `[medium]` `[patch]` (patterns N+1) GET /employees runs 3 queries per employee on the path this story touched — tenant once + bulk users/memberships (3 queries total).
+  - `[low]` `[patch]` (blind 1, edge 1) blank phoneNumber with username fails @Pattern — blank phone treated as absent.
+  - `[low]` `[reject]` (blind 2, edge 4) ACCOUNT_LOCKED reveals a username exists — same as the phone path; hiding the lock would mislead real members.
+  - `[medium]` `[patch]` (blind 3) no per-IP brake on /auth/login (spraying 6-char passwords, mass lockout) — per-IP limiter on failed logins, 50/h, 429.
+  - `[low]` `[patch]` (blind 4) technical google-/apple- usernames accepted at login — treated as unknown.
+  - `[low]` `[patch]` (blind 5) lockout log useless for username accounts — user id logged.
+  - `[medium]` `[patch]` (blind 6, edge 6, edge 9, intent V1) phoneNumber "" → null for phoneless members breaks the 19.1 V1 contract — "" restored for known users, 19.1 test restored.
+  - `[low]` `[reject]` (blind 7) no self-service reset / rename / sync-push username for username-only members — owner reset exists (regenerate/set password); rename and offline creation not in the story.
+  - `[low]` `[patch]` (blind 8) Usernames.key dead code — removed.
+  - `[low]` `[patch]` (blind 9, edge 3) no upper bound on username / username-path password — @Size(50), password ≤ 200.
+  - `[low]` `[reject]` (blind 10) phone-only creation still uses save (500 on concurrent duplicate phone) — pre-existing, pre-check covers the normal case.
+  - `[low]` `[patch]` (blind 11, vg 1, vg 2) test gaps: message on wrong password, dummy bcrypt on noPassword/superAdmin, $.username, blank phone, Math.random — tests added.
+  - `[low]` `[patch]` (blind 12) OpenAPI silent on username — @Schema and 401 text documented.
+  - `[low]` `[patch]` (edge 2) neither identifier + short password gives the length error — validator skips without phone.
+  - `[low]` `[patch]` (edge 5) lost race on a username-only request answers the phone error — USERNAME_ALREADY_EXISTS.
+  - `[low]` `[reject]` (edge 7) missing phone no longer gives details.phoneNumber « obligatoire » — V1 always sends a phone; the 422 code is unchanged.
+  - `[low]` `[reject]` (edge 8) employees sync delta has no username — the spec adds it only where the delta carries phoneNumber, which it does not.
+  - `[false]` `[reject]` (intent R1b) single identifier field to classify — separate fields settle the 19-1 disambiguation item by construction.
+  - `[low]` `[reject]` (intent R2b) Bref role whitelist and 6-char minimum not mirrored — Keevo owners keep phone + password; any non-blank password accepted for imports.
+  - `[low]` `[reject]` (intent R4) 3–50 at creation vs Bref 1–50 — imported short usernames still log in (lookup does not validate).
+  - `[low]` `[reject]` (intent R6) no test that the temporary password is absent from later reads — unchanged V1 behaviour.
+  - `[false]` `[reject]` (intent, Bref /auth/login/credentials alias) — the unified app is rebuilt on Keevo endpoints (epic 23); no Bref client calls Keevo.
+
 ## Design Notes
 
 **Patterns.** Strategy-by-field for the account lookup inside the existing `AuthenticationService` Façade (one `Function<command, Optional<User>>` chosen from the command, the rest of the flow shared — no second login service). Value-object style validator `Usernames` shared by creation and future rename. Unique constraint as the source of truth for concurrency (pre-check for a friendly error, index violation mapped to the same error).
@@ -97,3 +126,46 @@ deferred: []
 
 **Manual checks:**
 - Local backend: owner creates a username-only member, member logs in by username (200), wrong password 401, V1-style phone login unchanged.
+
+## Auto Run Result
+
+Status: done
+
+**Summary.** `POST /api/v1/auth/login` accepts `{username, password}` as an alternative to `{phoneNumber, password}` (exactly one, blank = absent): case-insensitive `findByUsername` on `uq_users_username_lower`, existing lockout and two-step flow, any bcrypt `$2a$/$2b$/$2y$` hash checked without rehash, 1–200-char passwords on the username path (Bref 6-char passwords), dummy bcrypt for unknown/technical/password-less/super-admin usernames, « Identifiant ou mot de passe incorrect ». Failed logins are limited per IP (50/h, both paths, 429). `POST /api/v1/employees` creates members with a username and no phone (3–50 Bref characters, `google-`/`apple-` reserved, 409 `USERNAME_ALREADY_EXISTS`, conflict-safe insert). `username` added to employee and profile responses (technical usernames hidden; phone stays `""` for V1). Employee list enrichment in 3 queries instead of 3 per employee. Pre-existing bug fixed: `/auth/change-password` now reports `passwordChangeRequired:false`.
+
+**Files.** New: `Usernames`, `LoginPasswordLength` validator, `LoginRateLimiter`; changed: `LoginRequest`, `AuthenticateUserCommand`, `AuthController`, `AuthenticationService`, `UserRepository` (+ adapter: `findByUsername`, `findAllByIds`), `UserMembershipRepository.findByTenantIdAndUserIdIn`, `CreateEmployeeRequestDto`/`Command`/`Service`, `EmployeeController`, `EmployeeRoleResolver.resolveAll`, `EmployeeResponseDto`, `UserProfileData`/`Response`/`Service`, `EmployeeRepositoryAdapter` (saveAndFlush), error code `USERNAME_ALREADY_EXISTS` 409, `application.yml`.
+
+**Review.** 24 entries (5 layers): 0 high, 3 medium, 19 low, 2 false. Patched: 3 medium (per-IP failed-login limit, V1 `""` phone contract, employee list N+1) and 12 low (blank phone, technical usernames at login, lockout log, bounds, OpenAPI, race error, dead code, validator order, tests) plus the change-password flag bug. Rejected: 9, reasons in the triage log. Nothing routed.
+
+**Follow-up review: recommended (true)** — 3 medium patches; unverified risk: the per-IP failed-login limit is in memory per instance and keyed on the last `X-Forwarded-For` entry (prod: Traefik directly on the server, no CDN — checked read-only on `oracle`).
+
+**Verification.** Targeted classes green. Full suite package by package: 5 481 tests, 0 failures. Live `keevo_dev`: username-only member created 201 (`phoneNumber:""`, `username`), same username other case 409, `apple-x1` 422, login by username in upper case 200 (hash `$2a$` unchanged), wrong password 401 « Identifiant ou mot de passe incorrect », both identifiers 422, phone login 200, list shows username / `""` / EMPLOYEE.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée (commit de la story 19.4, voir `git log --grep "feat(19-4)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+
+**Ce qui est fait côté API :** connexion des membres par identifiant + mot de passe (comme l'écran « identifiants » de Bref) ; création de membres avec un identifiant et sans téléphone.
+
+**À utiliser :**
+1. `POST /api/v1/auth/login` body `{"username":"jean.dupont","password":"…"}` (ou `{"phoneNumber","password"}`, jamais les deux) → `200 {"loginToken","memberships"}` comme aujourd'hui, puis `select-tenant` ; si `passwordChangeRequired` → `POST /auth/change-password`. Erreurs : 401 `INVALID_CREDENTIALS` « Identifiant ou mot de passe incorrect » ; 423/`ACCOUNT_LOCKED` après 5 échecs (15 min) ; 429 `RATE_LIMIT_EXCEEDED` « Trop de requêtes, veuillez patienter » ; 422 `VALIDATION_FAILED` « Indiquez un numéro de téléphone ou un identifiant ».
+2. `POST /api/v1/employees` body `{"firstName","lastName","username"?,"phoneNumber"?,"storeId"}` (au moins un identifiant) → `201` avec le mot de passe temporaire (affiché une seule fois). Erreurs : 409 `USERNAME_ALREADY_EXISTS` « Cet identifiant est déjà utilisé » ; 409 `USER_ALREADY_EXISTS` (téléphone) ; 422 « Identifiant invalide (3 à 50 lettres, chiffres, point, tiret ou souligné) ».
+3. Réponses employés et `/auth/profile` : champ `username` (null si aucun) ; `phoneNumber` vaut `""` quand le membre n'a pas de téléphone.
+
+Code backend : `keevo/backend/src/main/java/com/keevo/identity/auth/application/service/AuthenticationService.java`, `identity/employee/application/service/CreateEmployeeService.java`, `identity/auth/domain/model/Usernames.java`.
+
+**À implémenter côté mobile :**
+1. Écran de connexion « Identifiant et mot de passe » (Bref) envoyant `username` ; l'écran téléphone envoie `phoneNumber`. Ne jamais deviner le type à partir de la saisie.
+2. Formulaire « Ajouter un membre » : identifiant ou téléphone (au moins un), afficher le mot de passe temporaire une seule fois avec un bouton copier.
+3. Liste d'équipe : afficher l'identifiant quand il n'y a pas de téléphone ; ne pas afficher de valeur vide.
+4. Messages d'erreur de l'API affichés tels quels (français).
+
+**Implémentation de référence :** écran identifiants de `AI/bref` (`/auth/login/credentials` côté Bref).
+
+**Critères d'acceptation mobile / scénarios de test :**
+- Given un membre créé avec l'identifiant `awa_k`, When il se connecte avec `AWA_K` et le mot de passe temporaire, Then il doit changer son mot de passe puis arrive sur l'accueil de sa boutique.
+- Given un identifiant déjà pris, Then « Cet identifiant est déjà utilisé ».
+- Mise en place : `curl -X POST localhost:4500/api/v1/employees -H 'Authorization: Bearer <owner>' -H 'Content-Type: application/json' -d '{"firstName":"Awa","lastName":"K","username":"awa_k","storeId":"<id>"}'`.
+
+**Clé de suivi mobile :** `m19-4-login-username-membres`.
+

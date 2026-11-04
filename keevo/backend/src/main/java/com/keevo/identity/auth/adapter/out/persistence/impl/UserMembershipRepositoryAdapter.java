@@ -9,6 +9,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -45,6 +46,14 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
     public List<UserTenantMembership> findByUserId(UUID userId) {
         return springRepository.findByUserId(userId)
                 .stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public List<UserTenantMembership> findByTenantIdAndUserIdIn(UUID tenantId, Collection<UUID> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return List.of();
+        }
+        return springRepository.findByTenantIdAndUserIdIn(tenantId, userIds).stream().map(this::toDomain).toList();
     }
 
     @Override

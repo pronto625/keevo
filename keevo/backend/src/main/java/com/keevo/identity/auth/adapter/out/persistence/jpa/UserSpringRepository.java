@@ -26,4 +26,8 @@ public interface UserSpringRepository extends JpaRepository<UserJpaEntity, UUID>
     /** Story 19.2 — case-insensitive lookup on the {@code uq_users_email_lower} expression index. */
     @Query(value = "SELECT * FROM public.users WHERE lower(email) = lower(:email)", nativeQuery = true)
     Optional<UserJpaEntity> findByEmailIgnoreCase(@Param("email") String email);
+
+    /** Story 19.4 — case-insensitive lookup on the {@code uq_users_username_lower} expression index. */
+    @Query(value = "SELECT * FROM public.users WHERE lower(username) = lower(:username)", nativeQuery = true)
+    Optional<UserJpaEntity> findByUsernameIgnoreCase(@Param("username") String username);
 }

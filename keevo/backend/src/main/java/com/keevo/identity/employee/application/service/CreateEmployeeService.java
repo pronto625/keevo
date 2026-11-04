@@ -2,6 +2,7 @@ package com.keevo.identity.employee.application.service;
 
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
@@ -29,6 +30,9 @@ import java.time.Instant;
 
 /**
  * CreateEmployeeService — Orchestrates employee creation (Story 3.5 AC1).
+ *
+ * <p>Story 19.4 — the member is identified by a phone, a username (Bref members), or both. Complexity: one indexed
+ * lookup per identifier given, then today's flow.
  */
 @Service
 public class CreateEmployeeService implements CreateEmployeeUseCase {
@@ -72,16 +76,29 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
     @Override
     @Transactional
     public CreateEmployeeResult execute(CreateEmployeeCommand command) {
+        // Story 19.4 — a phone, a username, or both; a blank one counts as absent.
+        String rawPhone = User.normalizeIdentifier(command.phoneNumber());
+        String rawUsername = User.normalizeIdentifier(command.username());
+        if (rawPhone == null && rawUsername == null) {
+            throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, Usernames.IDENTIFIER_REQUIRED_MESSAGE);
+        }
         // Story 12.12 — same format rule as UpdateEmployeeService, then canonical +<digits> form
         // before uniqueness check and persist (never store e.g. "+abc" as an identity).
-        if (command.phoneNumber() == null || !PHONE_PATTERN.matcher(command.phoneNumber()).matches()) {
-            throw new DomainException(ErrorCode.VALIDATION_FAILED, "Invalid phone number format");
+        String phone = null;
+        if (rawPhone != null) {
+            if (!PHONE_PATTERN.matcher(rawPhone).matches()) {
+                throw new DomainException(ErrorCode.VALIDATION_FAILED, "Invalid phone number format");
+            }
+            phone = PhoneNumbers.normalize(rawPhone);
         }
-        String phone = PhoneNumbers.normalize(command.phoneNumber());
+        String username = rawUsername != null ? Usernames.requireValid(rawUsername) : null;
 
-        // 1. Check phone uniqueness
-        if (userRepository.existsByPhoneNumber(phone)) {
+        // 1. Check identifier uniqueness (friendly pre-check; the unique indexes stay the source of truth)
+        if (phone != null && userRepository.existsByPhoneNumber(phone)) {
             throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "phone number already registered");
+        }
+        if (username != null && userRepository.findByUsername(username).isPresent()) {
+            throw new DomainException(ErrorCode.USERNAME_ALREADY_EXISTS);
         }
 
         // 2. Enforce plan limit — v1s-13-13: per-tenant lock BEFORE the count so two concurrent
@@ -102,8 +119,8 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         String hash = passwordEncoder.encode(tempPassword);
 
         // 4. Create user in public.users
-        User newUser = User.newEmployee(phone, hash);
-        newUser = userRepository.save(newUser);
+        User newUser = User.newEmployee(phone, username, hash);
+        newUser = username == null ? userRepository.save(newUser) : insertWithUsername(newUser);
 
         // 5. Create membership in public.user_tenant_memberships
         String schemaName = TenantContext.getCurrentTenant();
@@ -123,5 +140,21 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
                 command.storeId(), Instant.now()));
 
         return new CreateEmployeeResult(employee, tempPassword);
+    }
+
+    /**
+     * Story 19.4 — conflict-safe insert ({@code ON CONFLICT DO NOTHING}): a concurrent creation of the same username
+     * (case-insensitive {@code uq_users_username_lower}) or phone answers 409 instead of failing the transaction at
+     * commit with a 500. Pattern: unique constraint as the source of truth, mapped to the pre-check's error.
+     */
+    private User insertWithUsername(User newUser) {
+        if (userRepository.insertIfAbsent(newUser)) {
+            return newUser;
+        }
+        // Without a phone only the username can have collided (the id is random).
+        if (!newUser.hasPhoneNumber() || userRepository.findByUsername(newUser.getUsername()).isPresent()) {
+            throw new DomainException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        }
+        throw new DomainException(ErrorCode.USER_ALREADY_EXISTS, "phone number already registered");
     }
 }

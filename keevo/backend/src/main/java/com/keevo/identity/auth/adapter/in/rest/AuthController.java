@@ -25,6 +25,7 @@ import com.keevo.identity.auth.application.service.RefreshRateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.model.UserProfileData;
+import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.model.OtpChannel;
 import com.keevo.identity.auth.domain.model.SocialProvider;
 import com.keevo.identity.auth.domain.port.in.SocialSignInCommand;
@@ -52,6 +53,8 @@ import com.keevo.identity.auth.domain.port.in.ResetPasswordUseCase;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordCommand;
 import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -187,7 +190,11 @@ public class AuthController {
         description = """
             Story 1.7 — Two-step login.
 
-            Step 1: Authenticates with phone + password.
+            Step 1: Authenticates with phone + password, or (Story 19.4) username + password: send exactly one of
+            phoneNumber / username (both or neither → 422 VALIDATION_FAILED). The username is compared
+            case-insensitively; on the username path any non-blank password is accepted (no length check before
+            the lookup). The response, the lockout and the next step are the same for both. An IP with 50 failed
+            logins in the hour is answered 429 RATE_LIMIT_EXCEEDED (successful logins are never counted).
             Returns a short-lived loginToken (5min) and the list of tenant memberships.
 
             Flutter auto-calls /auth/select-tenant when memberships.length == 1
@@ -200,19 +207,26 @@ public class AuthController {
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Authentication step 1 successful",
             content = @Content(schema = @Schema(implementation = LoginSessionResponse.class))),
-        @ApiResponse(responseCode = "401", description = "Invalid credentials or account locked"),
-        @ApiResponse(responseCode = "422", description = "Validation error")
+        @ApiResponse(responseCode = "401", description = "INVALID_CREDENTIALS (« Téléphone ou mot de passe incorrect » on "
+            + "the phone path, « Identifiant ou mot de passe incorrect » on the username path) or ACCOUNT_LOCKED"),
+        @ApiResponse(responseCode = "422", description = "Validation error; VALIDATION_FAILED « Indiquez un numéro de "
+            + "téléphone ou un identifiant » when both or neither of phoneNumber / username are sent"),
+        @ApiResponse(responseCode = "429", description = "RATE_LIMIT_EXCEEDED — too many failed logins from this IP "
+            + "(50 per hour)")
     })
     @SecurityRequirements
     @PostMapping("/login")
     public ResponseEntity<LoginSessionResponse> login(
-            @Valid @RequestBody LoginRequest request) {
+            @Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
 
-        AuthenticateUserCommand command = new AuthenticateUserCommand(
-            request.phoneNumber(),
-            request.password(),
-            null
-        );
+        // Story 19.4 — exactly one identifier: the phone path (V1, unchanged) or the username path (members).
+        if (request.hasPhoneNumber() == request.hasUsername()) {
+            throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, Usernames.IDENTIFIER_REQUIRED_MESSAGE);
+        }
+        String ip = clientIp(httpRequest);
+        AuthenticateUserCommand command = request.hasUsername()
+                ? AuthenticateUserCommand.byUsername(request.username(), request.password(), ip)
+                : AuthenticateUserCommand.byPhone(request.phoneNumber(), request.password(), ip);
 
         LoginSessionResult result = authenticateUserUseCase.authenticate(command);
 
@@ -577,7 +591,8 @@ public class AuthController {
             data.storeName(),
             data.passwordChangeRequired(),
             data.tenantStatus(),
-            data.onboardingCompleted()
+            data.onboardingCompleted(),
+            data.username()
         );
     }
 

@@ -6,6 +6,7 @@ import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,6 +25,12 @@ public interface UserRepository {
     /** Find user by ID. */
     Optional<User> findById(UUID id);
 
+    /**
+     * Story 19.4 — the users with these ids in one query ({@code id = ANY(?)}); unknown ids are absent from the result,
+     * an empty collection answers an empty list without a query.
+     */
+    List<User> findAllByIds(Collection<UUID> ids);
+
     /** Find user by phone number. Returns empty if not found. */
     Optional<User> findByPhoneNumber(String phoneNumber);
 
@@ -32,6 +39,12 @@ public interface UserRepository {
      * {@code uq_users_email_lower}). Empty for a null or blank email.
      */
     Optional<User> findByEmail(String email);
+
+    /**
+     * Story 19.4 — find a user by username, stripped and case-insensitively ({@code lower(username) = lower(?)} on
+     * {@code uq_users_username_lower}). Empty for a null or blank username.
+     */
+    Optional<User> findByUsername(String username);
 
     /**
      * Story 19.2 — inserts the user unless a unique identifier (phone, email, username) is already taken

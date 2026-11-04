@@ -1,6 +1,7 @@
 package com.keevo.identity.employee.adapter.in.rest;
 
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
@@ -10,7 +11,12 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * EmployeeRoleResolver — Helper component that resolves an employee's role
@@ -38,19 +44,43 @@ public class EmployeeRoleResolver {
     }
 
     /**
-     * Resolve the phone number of a given user ({@code public.users}), so the
-     * employee edit form can be pre-filled (Story 14.11, AC6).
+     * What the employee card and edit form show beside the aggregate (Story 14.11 AC5/AC6, Story 19.4).
      *
-     * <p>One lookup per employee, like {@link #resolveRole(UUID)}: lists are
-     * bounded by {@code PlanLimitGuard} and the port offers no bulk finder.
-     *
-     * @return the E.164 phone number, {@code ""} for a known user without phone (Story 19.1 — V1 clients never
-     *         get {@code null} for an existing account), or {@code null} if the user is unknown
+     * @param role        membership role in the current tenant, {@code "EMPLOYEE"} when none
+     * @param phoneNumber E.164 phone; {@code ""} for a known account without phone (Story 19.1 — V1 clients never get
+     *                    {@code null} for an existing account), {@code null} only when the user is unknown
+     * @param username    username as typed, {@code null} when none or when it is the technical username of a social
+     *                    account (never shown)
      */
-    public String resolvePhone(UUID userId) {
-        return userRepository.findById(userId)
-                .map(u -> u.getPhoneNumber() != null ? u.getPhoneNumber() : "")
-                .orElse(null);
+    public record Enrichment(String role, String phoneNumber, String username) {
+    }
+
+    /**
+     * Story 19.4 — enrichment of several employees in three queries whatever their number (tenant once, users by
+     * {@code id = ANY(?)}, memberships of the tenant for those users), instead of three per employee.
+     *
+     * @return one entry per requested user id
+     */
+    public Map<UUID, Enrichment> resolveAll(Collection<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return Map.of();
+        }
+        var tenant = tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
+        Map<UUID, User> users = userRepository.findAllByIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity(), (a, b) -> a));
+        Map<UUID, String> roles = membershipRepository.findByTenantIdAndUserIdIn(tenant.getId(), userIds).stream()
+                .collect(Collectors.toMap(UserTenantMembership::getUserId, UserTenantMembership::getRole,
+                        (a, b) -> a));
+        Map<UUID, Enrichment> result = new HashMap<>();
+        for (UUID userId : userIds) {
+            User user = users.get(userId);
+            result.put(userId, new Enrichment(
+                    roles.getOrDefault(userId, "EMPLOYEE"),
+                    user == null ? null : (user.getPhoneNumber() != null ? user.getPhoneNumber() : ""),
+                    user == null || Usernames.isTechnical(user.getUsername()) ? null : user.getUsername()));
+        }
+        return result;
     }
 
     /**

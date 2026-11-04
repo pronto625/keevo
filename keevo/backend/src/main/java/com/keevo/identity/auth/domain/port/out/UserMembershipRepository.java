@@ -2,6 +2,7 @@ package com.keevo.identity.auth.domain.port.out;
 
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -22,6 +23,12 @@ public interface UserMembershipRepository {
 
     /** Find all active memberships for a given user. */
     List<UserTenantMembership> findByUserId(UUID userId);
+
+    /**
+     * Story 19.4 — the memberships of these users in one tenant, in one query (employee list); an empty collection
+     * answers an empty list without a query.
+     */
+    List<UserTenantMembership> findByTenantIdAndUserIdIn(UUID tenantId, Collection<UUID> userIds);
 
     /** Find a specific membership entry for (userId, tenantId). */
     Optional<UserTenantMembership> findByUserIdAndTenantId(UUID userId, UUID tenantId);

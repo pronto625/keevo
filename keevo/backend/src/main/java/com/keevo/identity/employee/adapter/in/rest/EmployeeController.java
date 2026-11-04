@@ -18,8 +18,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * EmployeeController — REST adapter for employee management (Story 3.5).
@@ -68,11 +71,18 @@ public class EmployeeController {
         this.getEmployeeActivityUseCase = getEmployeeActivityUseCase;
     }
 
-    @Operation(summary = "Create a new employee")
+    @Operation(summary = "Create a new employee",
+            description = "Story 19.4 — phoneNumber and username are optional, at least one is required. A username is "
+                    + "3 to 50 letters, digits, '.', '_' or '-', unique case-insensitively; the member signs in with it "
+                    + "and the temporary password, returned once.")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Employee created"),
             @ApiResponse(responseCode = "403", description = "Plan limit exceeded or not OWNER"),
-            @ApiResponse(responseCode = "409", description = "Phone already registered")
+            @ApiResponse(responseCode = "409",
+                    description = "Phone already registered (USER_ALREADY_EXISTS) or username taken, case-insensitively "
+                            + "(USERNAME_ALREADY_EXISTS)"),
+            @ApiResponse(responseCode = "422",
+                    description = "Neither phone nor username, or invalid username (VALIDATION_FAILED)")
     })
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> createEmployee(
@@ -81,7 +91,7 @@ public class EmployeeController {
         UUID actorId = CurrentActor.actorId();
         CreateEmployeeCommand command = new CreateEmployeeCommand(
                 actorId, request.phoneNumber(), request.firstName(),
-                request.lastName(), request.storeId());
+                request.lastName(), request.storeId(), request.username());
         CreateEmployeeResult result = createEmployeeUseCase.execute(command);
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
                 toDto(result.employee()),
@@ -96,9 +106,7 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<List<EmployeeResponseDto>>> listEmployees() {
         CurrentActor.requireOwner("OWNER role required");
         UUID actorId = CurrentActor.actorId();
-        List<EmployeeResponseDto> dtos = listEmployeesUseCase
-                .execute(new ListEmployeesQuery(actorId))
-                .stream().map(e -> toDto(e)).toList();
+        List<EmployeeResponseDto> dtos = toDtos(listEmployeesUseCase.execute(new ListEmployeesQuery(actorId)));
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
@@ -257,14 +265,19 @@ public class EmployeeController {
     }
 
     /**
-     * Enriches the aggregate with what lives outside it (membership role,
-     * {@code public.users} phone) — Story 14.11 AC5/AC6. One lookup each per
-     * employee; lists are bounded by {@code PlanLimitGuard}.
+     * Enriches the aggregate with what lives outside it (membership role, {@code public.users} phone and username) —
+     * Story 14.11 AC5/AC6, Story 19.4. Lists are enriched in bulk: three queries whatever the number of employees.
      */
     private EmployeeResponseDto toDto(Employee e) {
-        UUID userId = e.getUserId();
-        return EmployeeResponseDto.fromDomain(e,
-                employeeRoleResolver.resolveRole(userId),
-                employeeRoleResolver.resolvePhone(userId));
+        return toDtos(List.of(e)).get(0);
+    }
+
+    private List<EmployeeResponseDto> toDtos(List<Employee> employees) {
+        Map<UUID, EmployeeRoleResolver.Enrichment> enrichment = employeeRoleResolver.resolveAll(
+                employees.stream().map(Employee::getUserId).collect(Collectors.toCollection(LinkedHashSet::new)));
+        return employees.stream().map(e -> {
+            EmployeeRoleResolver.Enrichment x = enrichment.get(e.getUserId());
+            return EmployeeResponseDto.fromDomain(e, x.role(), x.phoneNumber(), x.username());
+        }).toList();
     }
 }

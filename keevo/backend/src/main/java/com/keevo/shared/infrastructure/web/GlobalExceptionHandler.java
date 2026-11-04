@@ -281,6 +281,7 @@ public class GlobalExceptionHandler {
                  "STORE_REASSIGNED",
                  "SESSION_REVOKED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
+                 "USERNAME_ALREADY_EXISTS",
                  "COMPANY_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",
                  "MEMBERSHIP_ALREADY_EXISTS",

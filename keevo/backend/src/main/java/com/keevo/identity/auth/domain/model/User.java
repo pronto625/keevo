@@ -124,16 +124,16 @@ public final class User {
      * Role is EMPLOYEE; active from creation.
      */
     public static User newEmployee(String phoneNumber, String passwordHash) {
-        return new User(
-            UUID.randomUUID(),
-            phoneNumber,
-            passwordHash,
-            Role.EMPLOYEE,
-            true,
-            Instant.now(),
-            0,
-            null
-        );
+        return newEmployee(phoneNumber, null, passwordHash);
+    }
+
+    /**
+     * Story 19.4 — employee account identified by a phone, a username, or both (at least one, checked by the caller
+     * and by the {@code users_identifier_present} CHECK). The username is stored as typed (stripped).
+     */
+    public static User newEmployee(String phoneNumber, String username, String passwordHash) {
+        return new User(UUID.randomUUID(), phoneNumber, passwordHash, Role.EMPLOYEE, true, Instant.now(), 0, null,
+                null, username, null, null, null, null);
     }
 
     public UUID    getId()             { return id; }

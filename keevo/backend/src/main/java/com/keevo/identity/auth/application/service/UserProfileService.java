@@ -2,6 +2,7 @@ package com.keevo.identity.auth.application.service;
 
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.identity.auth.domain.model.User;
+import com.keevo.identity.auth.domain.model.Usernames;
 import com.keevo.identity.auth.domain.model.UserProfileData;
 import com.keevo.identity.auth.domain.port.in.GetUserProfileUseCase;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
@@ -96,7 +97,8 @@ public class UserProfileService implements GetUserProfileUseCase {
                     storeName,
                     employeeRole && emp.isPasswordChangeRequired(),
                     tenantStatus,
-                    onboardingCompleted
+                    onboardingCompleted,
+                    shownUsername(user)
             );
         }
 
@@ -111,8 +113,14 @@ public class UserProfileService implements GetUserProfileUseCase {
                 null,
                 false,
                 tenantStatus,
-                onboardingCompleted
+                onboardingCompleted,
+                shownUsername(user)
         );
+    }
+
+    /** Story 19.4 — the sign-in username; a social account's technical username is never shown. */
+    private static String shownUsername(User user) {
+        return Usernames.isTechnical(user.getUsername()) ? null : user.getUsername();
     }
 
     /** Story 19.1 — null-object at the read boundary: V1 clients expect a non-null phone string. */

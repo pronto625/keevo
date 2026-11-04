@@ -210,6 +210,154 @@ class AuthControllerTest {
                 .andExpect(status().isUnprocessableEntity());
     }
 
+    // ── Story 19.4 — username + password ──────────────────────────────────
+
+    @Test
+    @DisplayName("19.4 POST /login {username, 6-char password} → 200, command uses the username path only")
+    void login_byUsername_returns200() throws Exception {
+        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class))).thenReturn(
+                new LoginSessionResult("login-tok", List.of(
+                        new UserMembershipInfo("KV-ABC123", "Boutique", "EMPLOYEE", "kv_abc123"))));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"Jean.Dupont\",\"password\":\"abc123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.loginToken").value("login-tok"))
+                .andExpect(jsonPath("$.memberships[0].tenantCode").value("KV-ABC123"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AuthenticateUserCommand.class);
+        verify(authenticateUserUseCase).authenticate(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().username()).isEqualTo("Jean.Dupont");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().phoneNumber()).isNull();
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().password()).isEqualTo("abc123");
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login with both phone and username → 422 VALIDATION_FAILED, use case not called")
+    void login_withBoth_returns422() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"+237690000001\",\"username\":\"awa_k\",\"password\":\"SecurePass1!\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error").value("Indiquez un numéro de téléphone ou un identifiant"));
+        verify(authenticateUserUseCase, never()).authenticate(any());
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login with neither phone nor username → 422 VALIDATION_FAILED")
+    void login_withNeither_returns422() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"SecurePass1!\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error").value("Indiquez un numéro de téléphone ou un identifiant"));
+        verify(authenticateUserUseCase, never()).authenticate(any());
+    }
+
+    @Test
+    @DisplayName("19.4 V1 phone login keeps the 8–72 password rule and its message on the password field")
+    void login_phonePath_keepsPasswordLength() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("+237690000001", "abc123"))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.details.password")
+                        .value("Le mot de passe doit contenir entre 8 et 72 caractères"));
+        verify(authenticateUserUseCase, never()).authenticate(any());
+    }
+
+    @Test
+    @DisplayName("19.4 V1 phone login: request shape and command unchanged")
+    void login_phonePath_commandUnchanged() throws Exception {
+        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class)))
+                .thenReturn(new LoginSessionResult("login-tok", List.of()));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"+237690000001\",\"password\":\"SecurePass1!\"}"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AuthenticateUserCommand.class);
+        verify(authenticateUserUseCase).authenticate(captor.capture());
+        AuthenticateUserCommand c = captor.getValue();
+        org.assertj.core.api.Assertions.assertThat(c.phoneNumber()).isEqualTo("+237690000001");
+        org.assertj.core.api.Assertions.assertThat(c.password()).isEqualTo("SecurePass1!");
+        org.assertj.core.api.Assertions.assertThat(c.username()).isNull();
+        org.assertj.core.api.Assertions.assertThat(c.clientIp()).isNotBlank(); // per-IP brake on failed logins
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login {phoneNumber: \"\", username} → username path (a blank phone is absent)")
+    void login_blankPhoneWithUsername_takesUsernamePath() throws Exception {
+        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class)))
+                .thenReturn(new LoginSessionResult("login-tok", List.of()));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"phoneNumber\":\"\",\"username\":\"awa_k\",\"password\":\"abc123\"}"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AuthenticateUserCommand.class);
+        verify(authenticateUserUseCase).authenticate(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().username()).isEqualTo("awa_k");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().usesUsername()).isTrue();
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login with neither identifier and a short password → the identifier message wins")
+    void login_neitherWithShortPassword_identifierMessage() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"abc\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_FAILED"))
+                .andExpect(jsonPath("$.error").value("Indiquez un numéro de téléphone ou un identifiant"));
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login username path: username > 50 or password > 200 characters → 422")
+    void login_byUsername_upperBounds() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(null, "abc123", "a".repeat(51)))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.details.username").exists());
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest(null, "p".repeat(201), "awa_k"))))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.details.password")
+                        .value("Le mot de passe ne doit pas dépasser 200 caractères"));
+        verify(authenticateUserUseCase, never()).authenticate(any());
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login → 429 RATE_LIMIT_EXCEEDED when the IP brake refuses")
+    void login_rateLimited_returns429() throws Exception {
+        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class)))
+                .thenThrow(new DomainException(ErrorCode.RATE_LIMIT_EXCEEDED));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"awa_k\",\"password\":\"abc123\"}"))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.domainCode").value("RATE_LIMIT_EXCEEDED"));
+    }
+
+    @Test
+    @DisplayName("19.4 POST /login {username, blank password} → 422 (password required)")
+    void login_byUsername_blankPassword_returns422() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"awa_k\",\"password\":\"\"}"))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.details.password").value("Le mot de passe est obligatoire"));
+    }
+
     // ══════════════════════════════════════════════════
     // POST /api/v1/auth/select-tenant  (Story 1.7 step-2 — AC3)
     // ══════════════════════════════════════════════════

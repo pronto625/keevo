@@ -15,7 +15,8 @@ public record EmployeeResponseDto(
         boolean passwordChangeRequired,
         Instant createdAt,
         String role,
-        String phoneNumber
+        String phoneNumber,
+        String username
 ) {
     /** @deprecated use {@link #fromDomain(Employee, String, String)} to include role and phone */
     @Deprecated
@@ -34,9 +35,17 @@ public record EmployeeResponseDto(
      * pre-filled.
      */
     public static EmployeeResponseDto fromDomain(Employee e, String role, String phoneNumber) {
+        return fromDomain(e, role, phoneNumber, null);
+    }
+
+    /**
+     * Story 19.4 — with the member's username (additive field; {@code phoneNumber} is {@code null} for a member
+     * identified by a username only).
+     */
+    public static EmployeeResponseDto fromDomain(Employee e, String role, String phoneNumber, String username) {
         return new EmployeeResponseDto(
                 e.getId(), e.getUserId(), e.getFirstName(), e.getLastName(),
                 e.getStoreId(), e.getStatus().name(),
-                e.isPasswordChangeRequired(), e.getCreatedAt(), role, phoneNumber);
+                e.isPasswordChangeRequired(), e.getCreatedAt(), role, phoneNumber, username);
     }
 }

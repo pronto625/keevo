@@ -79,7 +79,8 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     public Employee updatePasswordChangeRequired(UUID employeeId, boolean required) {
         EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
         entity.setPasswordChangeRequired(required);
-        return entityToDomain(accessChanged(jpa.save(entity)));
+        // Story 19.4 — flushed: the session issued right after (change-password) reads the flag with plain JDBC.
+        return entityToDomain(accessChanged(jpa.saveAndFlush(entity)));
     }
 
     @Override

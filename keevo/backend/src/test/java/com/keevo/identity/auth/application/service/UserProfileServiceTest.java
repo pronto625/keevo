@@ -117,6 +117,21 @@ class UserProfileServiceTest {
     }
 
     @Test
+    @DisplayName("19.4 — username of a member is in the profile; a social technical username is never shown")
+    void username_shown_technicalHidden() {
+        User member = new User(userId, null, "hash", Role.EMPLOYEE, true, Instant.now(), 0, null,
+                null, "Awa.K", null, null, null, null);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(member));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        assertThat(sut.execute(userId, tenantId).username()).isEqualTo("Awa.K");
+
+        User social = new User(userId, null, null, Role.OWNER, true, Instant.now(), 0, null,
+                null, "apple-0123abcd", null, null, null, null);
+        when(userRepository.findById(userId)).thenReturn(Optional.of(social));
+        assertThat(sut.execute(userId, tenantId).username()).isNull();
+    }
+
+    @Test
     @DisplayName("19.1 — phone-less EMPLOYEE: phoneNumber is \"\", names still from the employee record")
     void phonelessEmployee_emptyPhone() {
         User usernameOnly = new User(userId, null, "hash", Role.EMPLOYEE, true, Instant.now(), 0, null,

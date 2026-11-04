@@ -6,7 +6,8 @@ import java.util.UUID;
  * UserProfileResponse — REST DTO for GET /api/v1/auth/profile (Story 8.6 AC4, Story 16.11).
  *
  * <p>Story 16.11 — the source of role, store, first name, password-change flag, account status and
- * onboarding state for the apps (cached on the device for offline display only).
+ * onboarding state for the apps (cached on the device for offline display only). Story 19.4 — {@code username}
+ * (additive, null when the account has none).
  */
 public record UserProfileResponse(
         UUID userId,
@@ -18,5 +19,6 @@ public record UserProfileResponse(
         String storeName,
         boolean passwordChangeRequired,
         String tenantStatus,
-        boolean onboardingCompleted
+        boolean onboardingCompleted,
+        String username
 ) {}

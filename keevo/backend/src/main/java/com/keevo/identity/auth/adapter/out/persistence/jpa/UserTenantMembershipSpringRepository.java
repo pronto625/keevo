@@ -3,6 +3,7 @@ package com.keevo.identity.auth.adapter.out.persistence.jpa;
 import com.keevo.identity.auth.adapter.out.persistence.entity.UserTenantMembershipJpaEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,4 +25,7 @@ public interface UserTenantMembershipSpringRepository
 
     /** Find a specific membership by (userId, tenantId). */
     Optional<UserTenantMembershipJpaEntity> findByUserIdAndTenantId(UUID userId, UUID tenantId);
+
+    /** Story 19.4 — memberships of several users in one tenant (employee list, one query). */
+    List<UserTenantMembershipJpaEntity> findByTenantIdAndUserIdIn(UUID tenantId, Collection<UUID> userIds);
 }

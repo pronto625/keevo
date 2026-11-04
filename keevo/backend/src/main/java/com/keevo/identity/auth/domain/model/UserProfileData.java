@@ -12,6 +12,9 @@ import java.util.UUID;
  * <p>EMPLOYEE: firstName, lastName, storeId, storeName populated.
  * OWNER / SUPER_ADMIN: firstName, lastName, storeId, storeName null (unless the owner also has an
  * employee row, then its names).
+ *
+ * <p>Story 19.4 — {@code username}: the sign-in username of the account ({@code null} when none, or when it is the
+ * technical username of a social account, never shown).
  */
 public record UserProfileData(
         UUID userId,
@@ -23,11 +26,20 @@ public record UserProfileData(
         String storeName,
         boolean passwordChangeRequired,
         String tenantStatus,
-        boolean onboardingCompleted
+        boolean onboardingCompleted,
+        String username
 ) {
     /** Pre-16.11 shape (tests). */
     public UserProfileData(UUID userId, String phoneNumber, String role, String firstName,
                            String lastName, String storeId, String storeName) {
         this(userId, phoneNumber, role, firstName, lastName, storeId, storeName, false, "ACTIVE", true);
+    }
+
+    /** Pre-19.4 shape (no username). */
+    public UserProfileData(UUID userId, String phoneNumber, String role, String firstName, String lastName,
+                           String storeId, String storeName, boolean passwordChangeRequired, String tenantStatus,
+                           boolean onboardingCompleted) {
+        this(userId, phoneNumber, role, firstName, lastName, storeId, storeName, passwordChangeRequired, tenantStatus,
+             onboardingCompleted, null);
     }
 }

@@ -16,6 +16,7 @@ public enum ErrorCode {
     USER_NOT_FOUND,
     USER_ALREADY_EXISTS,
     EMAIL_ALREADY_EXISTS,
+    USERNAME_ALREADY_EXISTS,    // Story 19.4 — HTTP 409: username taken (case-insensitive)
     INVALID_PHONE_NUMBER,
     INVALID_PASSWORD,
     INVALID_CREDENTIALS,

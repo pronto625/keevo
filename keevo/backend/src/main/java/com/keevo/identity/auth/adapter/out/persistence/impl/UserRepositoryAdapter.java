@@ -13,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -85,6 +86,12 @@ public class UserRepositoryAdapter implements UserRepository {
             WHERE id = ? AND email IS NULL
               AND NOT EXISTS (SELECT 1 FROM public.users WHERE lower(email) = lower(?))
             """;
+    /** Story 19.4 — bulk load for the employee list (one query, primary key). */
+    private static final String BY_IDS_SQL = """
+            SELECT id, phone_number, password_hash, role, is_active, created_at, failed_attempts, locked_until,
+                   email, username, first_name, last_name, email_verified_at, phone_verified_at
+            FROM public.users WHERE id = ANY(?)
+            """;
     private static final String LOCK_BY_ID_SQL = "SELECT 1 FROM public.users WHERE id = ? FOR UPDATE";
 
     private final UserSpringRepository springRepository;
@@ -124,6 +131,16 @@ public class UserRepositoryAdapter implements UserRepository {
         return springRepository.findByEmailIgnoreCase(normalized).map(UserRepositoryAdapter::toDomain);
     }
 
+    /** Story 19.4 — stripped, case-insensitive; null / blank never reaches the query (see {@link #findByPhoneNumber}). */
+    @Override
+    public Optional<User> findByUsername(String username) {
+        String normalized = User.normalizeIdentifier(username);
+        if (normalized == null) {
+            return Optional.empty();
+        }
+        return springRepository.findByUsernameIgnoreCase(normalized).map(UserRepositoryAdapter::toDomain);
+    }
+
     @Override
     public boolean insertIfAbsent(User u) {
         Timestamp now = Timestamp.from(Instant.now());
@@ -157,6 +174,17 @@ public class UserRepositoryAdapter implements UserRepository {
     @Override
     public Optional<User> findById(UUID id) {
         return springRepository.findById(id).map(UserRepositoryAdapter::toDomain);
+    }
+
+    @Override
+    public List<User> findAllByIds(Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        Object[] distinct = ids.stream().distinct().toArray();
+        return jdbcTemplate.query(BY_IDS_SQL,
+                ps -> ps.setArray(1, ps.getConnection().createArrayOf("uuid", distinct)),
+                (rs, rowNum) -> mapUserRow(rs));
     }
 
     @Override

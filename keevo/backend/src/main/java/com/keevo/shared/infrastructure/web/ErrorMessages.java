@@ -142,6 +142,7 @@ public final class ErrorMessages {
             Map.entry("INVALID_AMOUNT", "Montant invalide"),
             Map.entry("NEGATIVE_MONETARY_VALUE", "Un montant ne peut pas être négatif"),
             Map.entry("EMAIL_ALREADY_EXISTS", "Cette adresse e-mail est déjà utilisée"),
+            Map.entry("USERNAME_ALREADY_EXISTS", "Cet identifiant est déjà utilisé"),
             Map.entry("INVALID_PHONE_NUMBER", "Numéro de téléphone invalide"),
             Map.entry("INVALID_PASSWORD", "Mot de passe invalide"),
             Map.entry("TENANT_ALREADY_EXISTS", "Cet espace de travail existe déjà"),
