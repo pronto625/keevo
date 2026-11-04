@@ -206,7 +206,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.2, voir `git log --grep "feat(19-2)"`). Conventions : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commit c84780f4). Conventions : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** connexion par code (SMS, WhatsApp, email) comme dans Bref, compte créé automatiquement pour un identifiant inconnu, création d'entreprise depuis le jeton de connexion.
 
