@@ -108,10 +108,13 @@ class FoundationMigrationsPostgresIntegrationTest {
                 "sync", "reporting", "messaging");
         latest.forEach((module, version) ->
                 assertThat(migrations.currentVersion(schema, module)).as(module).isEqualTo(version));
-        assertThat(jdbc.queryForList("SELECT module_id FROM public.tenant_modules tm JOIN public.tenants t "
-                + "ON t.id = tm.tenant_id WHERE t.schema_name = ? AND tm.provisioned_version = '1'", String.class, schema))
-                .containsExactlyInAnyOrder("store", "catalog", "inventory", "crm", "pos", "sync", "reporting",
-                        "messaging"); // core never has a row
+        // core never has a row; every other foundation module is provisioned at its latest version (19.9: messaging 2)
+        Map<String, String> provisioned = new LinkedHashMap<>(latest);
+        provisioned.remove("core");
+        assertThat(jdbc.queryForList("SELECT module_id || ':' || tm.provisioned_version FROM public.tenant_modules tm "
+                + "JOIN public.tenants t ON t.id = tm.tenant_id WHERE t.schema_name = ?", String.class, schema))
+                .containsExactlyInAnyOrderElementsOf(provisioned.entrySet().stream()
+                        .map(e -> e.getKey() + ":" + e.getValue()).toList());
         assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".roles", Integer.class)).isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".subscriptions", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForList("SELECT name FROM \"" + schema + "\".stores", String.class))
@@ -160,7 +163,7 @@ class FoundationMigrationsPostgresIntegrationTest {
         tenants.provision(UUID.randomUUID().toString(), schema); // no Flyway history: like every tenant before 16.12
         insertOneRowPerTable(schema);
         Map<String, String> before = checksums(schema);
-        assertThat(before).hasSize(29).allSatisfy((table, sum) -> assertThat(sum).as(table).doesNotStartWith("0:"));
+        assertThat(before).hasSize(30).allSatisfy((table, sum) -> assertThat(sum).as(table).doesNotStartWith("0:"));
         Map<String, List<String>> shapeBefore = shape(schema);
 
         FoundationUpgrade first = modules.upgradeFoundation(2);
@@ -206,7 +209,11 @@ class FoundationMigrationsPostgresIntegrationTest {
         assertThat(upgrade.provisioned()).isEqualTo(1);
         assertThat(upgrade.failed()).isZero();
         assertThat(checksums(schema)).isEqualTo(before);
-        Map<String, List<String>> shape = shape(schema);
+        // restricted to the reference tables: tables of later module versions (19.9 notifications) are created whole
+        Set<String> referenceTables = Set.copyOf(TenantSchemaShape.tables(reference));
+        Map<String, List<String>> shape = new LinkedHashMap<>();
+        shape(schema).forEach((kind, lines) -> shape.put(kind, lines.stream()
+                .filter(line -> kind.equals("functions") || referenceTables.contains(owner(line))).toList()));
         assertThat(shape.get("columns")).as("types, defaults, nullability")
                 .containsExactlyElementsOf(reference.get("columns"));
         Predicate<String> scripted = line -> !line.contains("_sync_keyset")
@@ -275,6 +282,54 @@ class FoundationMigrationsPostgresIntegrationTest {
                 .contains("PREMIUM_TRIAL");
         assertThat(jdbc.queryForList("SELECT conname FROM pg_constraint WHERE conrelid = ?::regclass AND contype = 'c'",
                 String.class, "\"" + schema + "\".subscriptions")).containsExactly("subscriptions_status_check");
+    }
+
+    @Test
+    @DisplayName("19.9 messaging V2: a new tenant has notifications and its two indexes; a tenant on messaging V1 gets "
+            + "it at its foundation upgrade without any other table touched; a second upgrade is a no-op")
+    void messagingV2CreatesNotifications() throws Exception {
+        String fresh = register("kv_fmnot1", "KV-FMNOT1");
+        assertThat(notificationColumns(fresh)).containsExactly("id", "user_id", "type", "title", "body", "data",
+                "read_at", "created_at");
+        assertThat(jdbc.queryForList("SELECT indexname FROM pg_indexes WHERE schemaname = ? AND tablename = "
+                + "'notifications'", String.class, fresh)).containsExactlyInAnyOrder("notifications_pkey",
+                "idx_notifications_user_created", "idx_notifications_user_unread");
+
+        // an existing tenant built before 19.9: messaging at V1 only
+        String schema = "kv_fmnot2";
+        registerTenantRow(schema, "KV-FMNOT2");
+        List<FoundationScripts.Script> v1Only = FoundationScripts.fromClasspath().scripts().stream()
+                .filter(sc -> !("messaging".equals(sc.moduleId()) && !"1".equals(sc.version()))).toList();
+        new TenantSchemaProvisioner(dataSource, new FoundationScripts(v1Only))
+                .provision(UUID.randomUUID().toString(), schema);
+        assertThat(notificationColumns(schema)).isEmpty();
+        insertOneRowPerTable(schema);
+        Map<String, String> before = checksums(schema);
+        Map<String, List<String>> shapeBefore = shape(schema);
+
+        modules.ensureFoundation(schema);
+
+        assertThat(migrations.currentVersion(schema, "messaging")).isEqualTo("2");
+        assertThat(notificationColumns(schema)).hasSize(8);
+        Map<String, String> after = new LinkedHashMap<>(checksums(schema));
+        assertThat(after.remove("notifications")).as("created empty").startsWith("0:");
+        assertThat(after).isEqualTo(before);
+        Map<String, List<String>> shapeAfter = shape(schema);
+        shapeBefore.forEach((kind, lines) -> assertThat(shapeAfter.get(kind).stream()
+                .filter(line -> !owner(line).equals("notifications")).toList()).as(kind)
+                .containsExactlyElementsOf(lines));
+
+        List<String> history = histories(schema);
+        TenantFoundation.upgrade(dataSource, schema); // the scripts again: idempotent
+        services();
+        modules.ensureFoundation(schema);
+        assertThat(histories(schema)).isEqualTo(history);
+        assertThat(shape(schema)).isEqualTo(shapeAfter);
+    }
+
+    private List<String> notificationColumns(String schema) {
+        return jdbc.queryForList("SELECT column_name FROM information_schema.columns WHERE table_schema = ? "
+                + "AND table_name = 'notifications' ORDER BY ordinal_position", String.class, schema);
     }
 
     private List<String> planTypeChecks(String schema) {
@@ -390,7 +445,7 @@ class FoundationMigrationsPostgresIntegrationTest {
         }
     }
 
-    /** The shape restricted to the 29 tenant tables equals the committed reference. */
+    /** The shape restricted to the 30 tenant tables equals the committed reference. */
     private static void assertShapeIsReference(String schema) throws Exception {
         Map<String, List<String>> reference = TenantSchemaShape.reference();
         Set<String> tables = Set.copyOf(TenantSchemaShape.tables(reference));
@@ -409,10 +464,16 @@ class FoundationMigrationsPostgresIntegrationTest {
         return cut < 0 ? line : line.substring(0, cut);
     }
 
-    /** Table → {@code count:md5} of its rows (text form, sorted). */
+    /**
+     * Table → {@code count:md5} of its rows (text form, sorted), for the reference tables present in the schema (a
+     * tenant on an older module version lacks the later tables, e.g. 19.9 notifications).
+     */
     private static Map<String, String> checksums(String schema) {
         Map<String, String> sums = new LinkedHashMap<>();
+        Set<String> present = Set.copyOf(jdbc.queryForList("SELECT table_name FROM information_schema.tables "
+                + "WHERE table_schema = ?", String.class, schema));
         for (String table : TenantSchemaShape.tables(TenantSchemaShape.reference())) {
+            if (!present.contains(table)) continue;
             sums.put(table, jdbc.queryForObject("SELECT count(*) || ':' || md5(COALESCE(string_agg(t::text, '|' "
                     + "ORDER BY t::text), '')) FROM \"" + schema + "\"." + table + " t", String.class));
         }
@@ -484,6 +545,11 @@ class FoundationMigrationsPostgresIntegrationTest {
                         + "VALUES ('STOCK_ALERT', gen_random_uuid(), gen_random_uuid(), now())"};
         for (String sql : statements) {
             jdbc.update(sql);
+        }
+        if (Boolean.TRUE.equals(jdbc.queryForObject("SELECT to_regclass(?) IS NOT NULL", Boolean.class,
+                s + "notifications"))) { // messaging V2 (19.9)
+            jdbc.update("INSERT INTO " + s + "notifications (user_id, type, title, body, data) VALUES "
+                    + "(gen_random_uuid(), 'STOCK_ALERT', 'Stock bas', 'Savon', '{\"deepLink\":\"/stock\"}'::jsonb)");
         }
     }
 }

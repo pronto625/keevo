@@ -121,6 +121,19 @@ class ProdSecretsFailFastContextTest {
         assertThat(failFast.getMessage()).contains("WASSENDER_API_TOKEN").doesNotContain(placeholder);
     }
 
+    @Test
+    @DisplayName("Story 19.9: KEEVO_SMS_PROVIDERS=mboasms without MBOASMS_API_KEY → prod context refuses to start")
+    void smsProviderWithoutKeyAbortsStartup() {
+        Throwable thrown = catchStartupFailure(VALID_DB_PASSWORD, VALID_ADMIN_PASSWORD, Map.of(
+                "keevo.sms.providers", "mboasms",
+                "keevo.sms.mboasms.base-url", "https://api.mboasms.com",
+                "keevo.sms.mboasms.api-key", ""));
+
+        IllegalStateException failFast = findFailFast(thrown);
+        assertThat(failFast).as("[FailFast] IllegalStateException in cause chain").isNotNull();
+        assertThat(failFast.getMessage()).startsWith("[FailFast] MBOASMS_API_KEY");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private static Throwable catchStartupFailure(String dbPassword, String adminPassword) {
@@ -145,6 +158,8 @@ class ProdSecretsFailFastContextTest {
                 Map.entry("keevo.jwt.public-key-path", "file:" + publicKey.toAbsolutePath()),
                 Map.entry("keevo.whatsapp.provider", "noop"),
                 Map.entry("keevo.fcm.enabled", "false"),
+                Map.entry("keevo.sms.providers", ""),
+                Map.entry("keevo.email.providers", ""),
                 Map.entry("spring.main.banner-mode", "off")));
         props.putAll(extraProps);
         List<String> args = new ArrayList<>();

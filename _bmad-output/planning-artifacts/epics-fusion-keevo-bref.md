@@ -637,6 +637,7 @@ So that **OTP, envoi de documents et notifications Bref fonctionnent dans Keevo*
 
 - [ ] WhatsApp plateforme par Meta WhatsApp Cloud API (`graph.facebook.com/v21.0/{phoneNumberId}/messages`, modèles système Bref `bref_point_otp`, `bref_facture` — `api-bref/src/whatsapp/whatsapp.service.ts`, `system-templates.ts`) comme premier fournisseur de `WhatsAppSender` ; Wassender/Twilio en repli tant que les envois en texte libre de Keevo (rapport quotidien, alertes) n'ont pas de modèle Meta approuvé.
 - [ ] Modèles Meta pour les messages Keevo envoyés hors fenêtre de 24 h (rapport quotidien, rappels d'abonnement, alertes) ou bascule de ces envois vers push/inbox ; liste et libellés à valider.
+- [ ] [Deferred-from: revue 19.9, 2026-11-04] reçus Expo (`getReceipts`) : les `DeviceNotRegistered`/`MessageRateExceeded` signalés après coup ne sont pas lus, les jetons Expo périmés s'accumulent [`messaging/notification/adapter/out/ExpoPushAdapter.java`] — relever les reçus par lot (job court) et supprimer les jetons en un ordre SQL.
 - [ ] Web Push (VAPID) comme Bref : `GET /web-push/vapid-public-key`, `POST/DELETE /web-push/subscribe`, abonnements par utilisateur, suppression sur 404/410 (`api-bref/src/web-push/*`), branché sur le composite de push de la 19.9.
 
 **Critère provisoire :** **Given** `keevo.whatsapp.provider` réglé sur Meta avec ses secrets **When** un OTP ou une facture part par WhatsApp **Then** le message passe par le modèle Meta Bref, le repli n'intervient qu'en échec, et le fail-fast 10-3 exige les secrets Meta seulement si le canal est activé.
@@ -654,6 +655,8 @@ So that **je peux retirer Flutter et l'ancienne app Bref en temps voulu (FUS-FR3
 **Then** la réponse indique `{updateRequired, updateAvailable, storeUrl, message}`, et la page dashboard permet de modifier ces valeurs avec audit
 
 ### Story 19.11 : Tenir la charge d'un grand nombre de tenants (R1)
+
+> **Routé depuis la revue 19.9 (04/11/2026) :** - [ ] [Deferred-from: revue 19.9, 2026-11-04] rétention de la boîte de notifications : aucune purge de `kv_x.notifications` (une ligne par destinataire et par événement, pour toujours ; lignes orphelines quand un utilisateur quitte le tenant, `user_id` sans FK) [`db/modules/messaging/V2__notifications.sql`, `JdbcNotificationInboxAdapter.java`] — purge ensembliste par tenant (ex. lues > 90 j) dans le job multi-tenant de cette story, et suppression des lignes d'un utilisateur retiré.
 
 As a **exploitant**,
 I want **un backend qui démarre et migre vite avec le nombre de tenants mesuré en P0 × 2**,

@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 219 — gated: 108, exempt: 111.
+Handlers: 223 — gated: 112, exempt: 111.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -163,7 +163,11 @@ Handlers: 219 — gated: 108, exempt: 111.
 | GET | `/api/v1/invoicing/settings` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoicingSettingsController#get |
 | PUT | `/api/v1/invoicing/settings` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoicingSettingsController#update |
 | GET | `/api/v1/messaging/status` | `messaging` | READ | — |  | MessagingStatusController#getStatus |
+| GET | `/api/v1/notifications` | `messaging` | READ | — |  | NotificationController#list |
 | GET | `/api/v1/notifications/announcements` | — | — | — | core: annonces de la plateforme | AnnouncementController#list |
+| PATCH | `/api/v1/notifications/read-all` | `messaging` | WRITE | — |  | NotificationController#markAllRead |
+| GET | `/api/v1/notifications/unread-count` | `messaging` | READ | — |  | NotificationController#unreadCount |
+| PATCH | `/api/v1/notifications/{id}/read` | `messaging` | WRITE | — |  | NotificationController#markRead |
 | POST | `/api/v1/onboarding/complete` | — | — | — | inscription / onboarding | OnboardingController#complete |
 | GET | `/api/v1/products` | `catalog` | READ | — |  | ProductController#listProducts |
 | POST | `/api/v1/products` | `catalog` | WRITE | — |  | ProductController#createProduct |

@@ -7,6 +7,7 @@ import com.keevo.messaging.notification.domain.model.DeviceToken;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -48,6 +49,12 @@ public class DeviceTokenRepositoryAdapter implements DeviceTokenRepository {
     @Override
     public int deleteByToken(String token) {
         return springRepo.deleteByTokenValue(token);
+    }
+
+    @Override
+    public int deleteByTokens(Collection<String> tokens) {
+        if (tokens == null || tokens.isEmpty()) return 0;
+        return springRepo.deleteByTokenValues(tokens);
     }
 
     @Override

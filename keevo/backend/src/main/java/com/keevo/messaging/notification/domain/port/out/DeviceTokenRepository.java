@@ -2,6 +2,7 @@ package com.keevo.messaging.notification.domain.port.out;
 
 import com.keevo.messaging.notification.domain.model.DeviceToken;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -12,6 +13,9 @@ public interface DeviceTokenRepository {
     List<DeviceToken> findByUserIdAndRole(UUID userId, String role);
     List<DeviceToken> findOwnerTokens();
     int deleteByToken(String token);
+
+    /** Story 19.9 — deletes every listed token in one statement; the number deleted. */
+    int deleteByTokens(Collection<String> tokens);
 
     /** Deletes the token only when it is registered to {@code userId}; 0 otherwise. */
     int deleteByTokenAndUserId(String token, UUID userId);

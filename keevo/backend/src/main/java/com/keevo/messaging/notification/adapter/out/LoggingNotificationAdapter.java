@@ -1,54 +1,45 @@
 package com.keevo.messaging.notification.adapter.out;
 
+import com.keevo.messaging.notification.domain.model.PushTokens;
+import com.keevo.messaging.notification.domain.port.out.PushDeliveryChannel;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushSendResult;
-import com.keevo.shared.capability.notification.PushNotifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
-import java.util.UUID;
 
 /**
- * Stub notification adapter — logs the notification payload.
+ * Stub push channel — logs the notification, sends nothing.
  *
- * <p>Story 8.0: No longer @Primary. FcmNotificationAdapter is @Primary when FCM is enabled.
- * This adapter is active only when keevo.fcm.enabled is false or absent (matchIfMissing=true).
+ * <p>Story 8.0: active only when keevo.fcm.enabled is false or absent (matchIfMissing=true).
+ * Story 19.9 — the {@link PushDeliveryChannel} of the non-Expo tokens when FCM is off; never available (a global
+ * push is marked FAILED, Story 9-5).
  */
 @Component
 @ConditionalOnProperty(name = "keevo.fcm.enabled", havingValue = "false", matchIfMissing = true)
-public class LoggingNotificationAdapter implements PushNotifier {
+public class LoggingNotificationAdapter implements PushDeliveryChannel {
 
     private static final Logger log = LoggerFactory.getLogger(LoggingNotificationAdapter.class);
 
     @Override
-    public void notifyOwners(String tenantId, NotificationPayload payload) {
-        log.info("[NOTIFICATION STUB] tenant={} type={} title='{}' body='{}' deepLink={} metadata={}",
-                tenantId, payload.type(), payload.title(), payload.body(),
-                payload.deepLink(), payload.metadata());
+    public boolean supports(String token) {
+        return token != null && !PushTokens.isExpo(token);
     }
 
     @Override
-    public void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload) {
-        if (userIds == null || userIds.isEmpty()) return;
-        log.info("[NOTIFICATION STUB] tenant={} recipients={} type={} title='{}' deepLink={}",
-                tenantId, userIds.size(), payload.type(), payload.title(), payload.deepLink());
-    }
-
-    /** No push channel: a global push is marked FAILED (Story 9-5). */
-    @Override
-    public boolean isPushAvailable() {
+    public boolean isAvailable() {
         return false;
     }
 
     /** Nothing is sent: every token counted as a failure of one failed chunk. */
     @Override
-    public PushSendResult sendToTokens(String tenantId, List<String> tokens, NotificationPayload payload) {
+    public PushSendResult send(String tenantSchema, List<String> tokens, NotificationPayload payload) {
         if (tokens == null || tokens.isEmpty()) return PushSendResult.EMPTY;
-        log.info("[NOTIFICATION STUB] tenant={} tokens={} type={} title='{}' — not sent (FCM disabled)",
-                tenantId, tokens.size(), payload.type(), payload.title());
+        log.info("[NOTIFICATION STUB] tenant={} tokens={} type={} title='{}' deepLink={} — not sent (FCM disabled)",
+                tenantSchema, tokens.size(), payload.type(), payload.title(), payload.deepLink());
         return new PushSendResult(0, tokens.size(), 1, 1);
     }
 }

@@ -269,6 +269,7 @@ public class GlobalExceptionHandler {
                  "CREDIT_NOTE_NOT_FOUND",
                  "INVOICE_LINK_INVALID",
                  "COMPANY_LOGO_NOT_FOUND",
+                 "NOTIFICATION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",

@@ -50,7 +50,7 @@ class TenantShapePostgresIntegrationTest {
         if (CAPTURE) {
             TenantSchemaShape.write(shape);
         }
-        assertThat(TenantSchemaShape.tables(shape)).hasSize(29);
+        assertThat(TenantSchemaShape.tables(shape)).hasSize(30); // 19.9: + notifications (messaging V2)
         Map<String, List<String>> reference = TenantSchemaShape.reference();
         assertThat(shape.keySet()).isEqualTo(reference.keySet());
         reference.forEach((kind, lines) -> assertThat(shape.get(kind)).as(kind).containsExactlyElementsOf(lines));

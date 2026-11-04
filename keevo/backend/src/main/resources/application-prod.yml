@@ -36,3 +36,9 @@ server:
     max-threads: 30
     min-spare-threads: 5
     accept-count: 50
+
+# Story 19.9 — Bref's push provider (Expo) prevails in prod; dev and test keep it off (application.yml).
+keevo:
+  push:
+    expo:
+      enabled: ${KEEVO_EXPO_PUSH_ENABLED:true}

@@ -1,38 +1,45 @@
 package com.keevo.messaging.notification.adapter.out;
 
-import com.keevo.messaging.notification.domain.model.DeviceToken;
+import com.google.firebase.messaging.BatchResponse;
+import com.google.firebase.messaging.FirebaseMessaging;
+import com.google.firebase.messaging.FirebaseMessagingException;
+import com.google.firebase.messaging.MessagingErrorCode;
+import com.google.firebase.messaging.MulticastMessage;
+import com.google.firebase.messaging.Notification;
+import com.google.firebase.messaging.SendResponse;
+import com.keevo.messaging.notification.domain.model.PushTokens;
+import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
+import com.keevo.messaging.notification.domain.port.out.PushDeliveryChannel;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushSendResult;
-import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
-import com.keevo.shared.capability.notification.PushNotifier;
-import com.google.firebase.messaging.*;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import java.util.stream.Collectors;
 
 /**
  * FCM adapter — sends push notifications via Firebase Cloud Messaging.
- * Story 8.0 — Replaces LoggingNotificationAdapter as @Primary when enabled.
+ * Story 8.0 — Replaces LoggingNotificationAdapter when enabled.
+ * Story 19.9 — a {@link PushDeliveryChannel} behind {@code PersistingPushNotifier}: the FCM tokens of the Flutter V1
+ * app (every non-Expo token); multicast chunks of {@value #MULTICAST_CHUNK_SIZE}, unregistered tokens deleted.
  *
  * <p>Best-effort delivery: NEVER throws — catch and log internally.
  */
 @Component
-@Primary
 @ConditionalOnProperty(name = "keevo.fcm.enabled", havingValue = "true")
-public class FcmNotificationAdapter implements PushNotifier {
+public class FcmNotificationAdapter implements PushDeliveryChannel {
 
     private static final Logger log = LoggerFactory.getLogger(FcmNotificationAdapter.class);
+
+    /** FCM multicast limit. */
+    static final int MULTICAST_CHUNK_SIZE = 500;
 
     private final FirebaseMessaging firebaseMessaging;
     private final DeviceTokenRepository deviceTokenRepository;
@@ -44,97 +51,35 @@ public class FcmNotificationAdapter implements PushNotifier {
     }
 
     @Override
-    public void notifyOwners(String tenantId, NotificationPayload payload) {
-        if (firebaseMessaging == null) {
-            log.warn("[FCM] FirebaseMessaging is null (init failed) — skipping notification for tenant={}", tenantId);
-            return;
-        }
-        TenantContext.setCurrentTenant(tenantId);
-        try {
-            List<DeviceToken> ownerTokens = deviceTokenRepository.findOwnerTokens();
-            if (ownerTokens.isEmpty()) {
-                log.debug("[FCM] No OWNER tokens found for tenant={} — skipping", tenantId);
-                return;
-            }
-
-            List<String> tokens = ownerTokens.stream()
-                    .map(DeviceToken::token)
-                    .collect(Collectors.toList());
-
-            MulticastMessage message = MulticastMessage.builder()
-                    .setNotification(Notification.builder()
-                            .setTitle(payload.title())
-                            .setBody(payload.body())
-                            .build())
-                    .putAllData(buildData(payload))
-                    .addAllTokens(tokens)
-                    .build();
-
-            BatchResponse response = firebaseMessaging.sendEachForMulticast(message);
-            processResponse(response, tokens);
-
-        } catch (Exception e) {
-            log.warn("[FCM] Failed to send notification for tenant={} type={}: {}",
-                    tenantId, payload.type(), e.getMessage());
-        } finally {
-            TenantContext.clear();
-        }
+    public boolean supports(String token) {
+        return token != null && !PushTokens.isExpo(token);
     }
 
     @Override
-    public void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload) {
-        if (firebaseMessaging == null || userIds == null || userIds.isEmpty()) return;
-        TenantContext.setCurrentTenant(tenantId);
-        try {
-            List<DeviceToken> tokens = deviceTokenRepository.findByUserIds(userIds);
-            if (tokens.isEmpty()) {
-                log.debug("[FCM] No tokens found for {} users in tenant={}", userIds.size(), tenantId);
-                return;
-            }
-            Map<String, String> data = buildData(payload);
-            List<String> tokenStrings = tokens.stream().map(DeviceToken::token).collect(Collectors.toList());
-            MulticastMessage message = MulticastMessage.builder()
-                    .setNotification(Notification.builder()
-                            .setTitle(payload.title())
-                            .setBody(payload.body())
-                            .build())
-                    .putAllData(data)
-                    .addAllTokens(tokenStrings)
-                    .build();
-            BatchResponse response = firebaseMessaging.sendEachForMulticast(message);
-            processResponse(response, tokenStrings);
-        } catch (Exception e) {
-            log.warn("[FCM] notifyUsers failed for tenant={} type={}: {}", tenantId, payload.type(), e.getMessage());
-        } finally {
-            TenantContext.clear();
-        }
-    }
-
-    @Override
-    public boolean isPushAvailable() {
+    public boolean isAvailable() {
         return firebaseMessaging != null;
     }
 
     /**
-     * Story 9-5 — counted multicast send of a global push: chunks of {@link #MULTICAST_CHUNK_SIZE},
-     * unregistered tokens removed from the tenant's {@code device_tokens}. Never throws.
+     * Counted multicast send: chunks of {@link #MULTICAST_CHUNK_SIZE}, unregistered tokens removed from the tenant's
+     * {@code device_tokens}. Never throws.
      */
     @Override
-    public PushSendResult sendToTokens(String tenantId, List<String> tokens, NotificationPayload payload) {
+    public PushSendResult send(String tenantSchema, List<String> tokens, NotificationPayload payload) {
         if (tokens == null || tokens.isEmpty()) return PushSendResult.EMPTY;
         if (firebaseMessaging == null) {
             log.warn("[FCM] FirebaseMessaging is null (init failed) — {} token(s) of tenant={} not sent",
-                    tokens.size(), tenantId);
+                    tokens.size(), tenantSchema);
             return new PushSendResult(0, tokens.size(), 1, 1);
         }
         Map<String, String> data = buildData(payload);
         PushSendResult total = PushSendResult.EMPTY;
-        TenantContext.setCurrentTenant(tenantId);
+        TenantContext.setCurrentTenant(tenantSchema);
         try {
             for (int from = 0; from < tokens.size(); from += MULTICAST_CHUNK_SIZE) {
                 List<String> chunk = new ArrayList<>(
                         tokens.subList(from, Math.min(from + MULTICAST_CHUNK_SIZE, tokens.size())));
-                total = total.plus(sendChunk(tenantId, chunk, payload, data));
+                total = total.plus(sendChunk(tenantSchema, chunk, payload, data));
             }
         } finally {
             TenantContext.clear();

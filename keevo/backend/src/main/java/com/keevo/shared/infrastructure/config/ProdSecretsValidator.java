@@ -4,6 +4,7 @@ import com.keevo.shared.domain.PasswordLimits;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -38,6 +40,10 @@ import java.util.Set;
  *   <li>{@code KEEVO_WHATSAPP_PROVIDER} — the tokens of the selected provider are present and
  *       not placeholders ({@code wassender}: URL + token; {@code twilio}: SID + auth token;
  *       {@code failover}: both). Twilio also requires {@code TWILIO_FROM_NUMBER}. {@code noop}/unset stays legal and only logs a WARN.</li>
+ *   <li>{@code KEEVO_SMS_PROVIDERS} / {@code KEEVO_EMAIL_PROVIDERS} (Story 19.9) — the keys of every listed provider
+ *       ({@code mboasms}: MBOASMS_BASE_URL + MBOASMS_API_KEY; {@code infobip}: INFOBIP_BASE_URL + INFOBIP_API_KEY;
+ *       {@code resend}: RESEND_API_KEY; an enabled email channel also needs KEEVO_EMAIL_FROM). An unknown name
+ *       fails; an empty list only logs a WARN (channel disabled).</li>
  *   <li>{@code DASHBOARD_ORIGIN} — WARN only (never fails): when unset, CORS allows no browser
  *       origin in prod/staging (Story 11.4 AC5).</li>
  * </ul>
@@ -79,6 +85,8 @@ public class ProdSecretsValidator {
     private static final String PROVIDER_WASSENDER = "wassender";
     private static final String PROVIDER_TWILIO = "twilio";
     private static final String PROVIDER_FAILOVER = "failover";
+    private static final String SMS_SELECTOR = "KEEVO_SMS_PROVIDERS";
+    private static final String EMAIL_SELECTOR = "KEEVO_EMAIL_PROVIDERS";
 
     private final AdminProperties adminProperties;
     private final String jwtPrivateKeyPath;
@@ -91,7 +99,21 @@ public class ProdSecretsValidator {
     private final String twilioAuthToken;
     private final String twilioFromNumber;
     private final String dashboardOrigin;
+    private final ChannelSecrets channels;
 
+    /**
+     * Story 19.9 — SMS / email channel settings: the provider lists ({@code keevo.sms.providers},
+     * {@code keevo.email.providers}, comma lists) and the keys of each provider.
+     */
+    record ChannelSecrets(String smsProviders, String mboasmsBaseUrl, String mboasmsApiKey,
+                          String smsInfobipBaseUrl, String smsInfobipApiKey,
+                          String emailProviders, String emailFrom, String resendApiKey,
+                          String emailInfobipBaseUrl, String emailInfobipApiKey) {
+
+        static final ChannelSecrets NONE = new ChannelSecrets("", "", "", "", "", "", "", "", "", "");
+    }
+
+    @Autowired
     public ProdSecretsValidator(
             AdminProperties adminProperties,
             @Value("${keevo.jwt.private-key-path}") String jwtPrivateKeyPath,
@@ -103,7 +125,28 @@ public class ProdSecretsValidator {
             @Value("${keevo.whatsapp.twilio.account-sid:}") String twilioAccountSid,
             @Value("${keevo.whatsapp.twilio.auth-token:}") String twilioAuthToken,
             @Value("${keevo.whatsapp.twilio.from-number:}") String twilioFromNumber,
-            @Value("${DASHBOARD_ORIGIN:}") String dashboardOrigin) {
+            @Value("${DASHBOARD_ORIGIN:}") String dashboardOrigin,
+            @Value("${keevo.sms.providers:}") String smsProviders,
+            @Value("${keevo.sms.mboasms.base-url:}") String mboasmsBaseUrl,
+            @Value("${keevo.sms.mboasms.api-key:}") String mboasmsApiKey,
+            @Value("${keevo.sms.infobip.base-url:}") String smsInfobipBaseUrl,
+            @Value("${keevo.sms.infobip.api-key:}") String smsInfobipApiKey,
+            @Value("${keevo.email.providers:}") String emailProviders,
+            @Value("${keevo.email.from:}") String emailFrom,
+            @Value("${keevo.email.resend.api-key:}") String resendApiKey,
+            @Value("${keevo.email.infobip.base-url:}") String emailInfobipBaseUrl,
+            @Value("${keevo.email.infobip.api-key:}") String emailInfobipApiKey) {
+        this(adminProperties, jwtPrivateKeyPath, jwtPublicKeyPath, dbPassword, whatsappProvider, wassenderApiUrl,
+                wassenderApiToken, twilioAccountSid, twilioAuthToken, twilioFromNumber, dashboardOrigin,
+                new ChannelSecrets(smsProviders, mboasmsBaseUrl, mboasmsApiKey, smsInfobipBaseUrl, smsInfobipApiKey,
+                        emailProviders, emailFrom, resendApiKey, emailInfobipBaseUrl, emailInfobipApiKey));
+    }
+
+    ProdSecretsValidator(AdminProperties adminProperties, String jwtPrivateKeyPath, String jwtPublicKeyPath,
+                         String dbPassword, String whatsappProvider, String wassenderApiUrl,
+                         String wassenderApiToken, String twilioAccountSid, String twilioAuthToken,
+                         String twilioFromNumber, String dashboardOrigin, ChannelSecrets channels) {
+        this.channels = channels == null ? ChannelSecrets.NONE : channels;
         this.adminProperties = adminProperties;
         this.jwtPrivateKeyPath = jwtPrivateKeyPath;
         this.jwtPublicKeyPath = jwtPublicKeyPath;
@@ -124,6 +167,8 @@ public class ProdSecretsValidator {
         validateAdminPassword();
         validateJwtKeys();
         validateWhatsAppProvider();
+        validateSmsProviders();
+        validateEmailProviders();
         checkDashboardOrigin();
         log.info("[FailFast] Production secrets validation passed.");
     }
@@ -211,11 +256,73 @@ public class ProdSecretsValidator {
     }
 
     private static void requireProviderValue(String envVar, String value) {
+        requireProviderValue("KEEVO_WHATSAPP_PROVIDER", envVar, value);
+    }
+
+    private static void requireProviderValue(String selector, String envVar, String value) {
         if (isBlankOrPlaceholder(value)) {
             throw new IllegalStateException(
                     "[FailFast] " + envVar + " is missing or a placeholder, but the selected "
-                            + "KEEVO_WHATSAPP_PROVIDER requires it. Set " + envVar + " to the real value.");
+                            + selector + " requires it. Set " + envVar + " to the real value.");
         }
+    }
+
+    /**
+     * Story 19.9 — each provider listed in {@code KEEVO_SMS_PROVIDERS} has its keys; an unknown name fails; an empty
+     * list only warns (SMS channel disabled).
+     */
+    private void validateSmsProviders() {
+        List<String> providers = providerList(channels.smsProviders());
+        if (providers.isEmpty()) {
+            log.warn("[FailFast] KEEVO_SMS_PROVIDERS is empty — SMS will NOT be sent in this environment.");
+            return;
+        }
+        for (String provider : providers) {
+            switch (provider) {
+                case "mboasms" -> {
+                    requireProviderValue(SMS_SELECTOR, "MBOASMS_BASE_URL", channels.mboasmsBaseUrl());
+                    requireProviderValue(SMS_SELECTOR, "MBOASMS_API_KEY", channels.mboasmsApiKey());
+                }
+                case "infobip" -> {
+                    requireProviderValue(SMS_SELECTOR, "INFOBIP_BASE_URL", channels.smsInfobipBaseUrl());
+                    requireProviderValue(SMS_SELECTOR, "INFOBIP_API_KEY", channels.smsInfobipApiKey());
+                }
+                default -> throw new IllegalStateException(
+                        "[FailFast] KEEVO_SMS_PROVIDERS lists an unknown provider — expected mboasms, infobip.");
+            }
+        }
+        log.info("[FailFast] SMS providers configuration ✓");
+    }
+
+    /** Story 19.9 — same for {@code KEEVO_EMAIL_PROVIDERS}; an enabled channel also needs its sender address. */
+    private void validateEmailProviders() {
+        List<String> providers = providerList(channels.emailProviders());
+        if (providers.isEmpty()) {
+            log.warn("[FailFast] KEEVO_EMAIL_PROVIDERS is empty — emails will NOT be sent in this environment.");
+            return;
+        }
+        for (String provider : providers) {
+            switch (provider) {
+                case "resend" -> requireProviderValue(EMAIL_SELECTOR, "RESEND_API_KEY", channels.resendApiKey());
+                case "infobip" -> {
+                    requireProviderValue(EMAIL_SELECTOR, "INFOBIP_BASE_URL", channels.emailInfobipBaseUrl());
+                    requireProviderValue(EMAIL_SELECTOR, "INFOBIP_API_KEY", channels.emailInfobipApiKey());
+                }
+                default -> throw new IllegalStateException(
+                        "[FailFast] KEEVO_EMAIL_PROVIDERS lists an unknown provider — expected resend, infobip.");
+            }
+        }
+        requireProviderValue(EMAIL_SELECTOR, "KEEVO_EMAIL_FROM", channels.emailFrom());
+        log.info("[FailFast] Email providers configuration ✓");
+    }
+
+    private static List<String> providerList(String raw) {
+        if (raw == null || raw.isBlank()) return List.of();
+        return Arrays.stream(raw.split(","))
+                .map(p -> p.strip().toLowerCase(Locale.ROOT))
+                .filter(p -> !p.isEmpty())
+                .distinct()
+                .toList();
     }
 
     private static void validateJwtKey(String envVar, String keyPath) {

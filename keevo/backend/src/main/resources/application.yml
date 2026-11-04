@@ -240,6 +240,31 @@ keevo:
       account-sid: ${TWILIO_ACCOUNT_SID:}
       auth-token: ${TWILIO_AUTH_TOKEN:}
       from-number: ${TWILIO_FROM_NUMBER:}
+  # Story 19.9 — SMS / email channels. providers = failover order (comma list: mboasms,infobip / resend,infobip);
+  # empty = channel disabled. Keys of each listed provider are required in prod/staging (ProdSecretsValidator).
+  sms:
+    providers: ${KEEVO_SMS_PROVIDERS:}
+    sender-id: ${KEEVO_SMS_SENDER_ID:BrefPoint}
+    mboasms:
+      base-url: ${MBOASMS_BASE_URL:}
+      api-key: ${MBOASMS_API_KEY:}
+    infobip:
+      base-url: ${INFOBIP_BASE_URL:}
+      api-key: ${INFOBIP_API_KEY:}
+  email:
+    providers: ${KEEVO_EMAIL_PROVIDERS:}
+    from: ${KEEVO_EMAIL_FROM:}
+    from-name: ${KEEVO_EMAIL_FROM_NAME:}
+    resend:
+      api-key: ${RESEND_API_KEY:}
+    infobip:
+      base-url: ${INFOBIP_BASE_URL:}
+      api-key: ${INFOBIP_API_KEY:}
+  # Story 19.9 — Expo push (React Native app tokens ExponentPushToken[…]); off by default like FCM, on in prod by env.
+  push:
+    expo:
+      enabled: ${KEEVO_EXPO_PUSH_ENABLED:false}
+      access-token: ${EXPO_ACCESS_TOKEN:}
 
 # Springdoc OpenAPI / Swagger UI
 springdoc:

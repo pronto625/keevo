@@ -93,6 +93,7 @@ class ProdSecretsValidatorTest {
         private String twilioToken = "";
         private String twilioFrom = "";
         private String dashboardOrigin = "https://admin.keevo.cm";
+        private ProdSecretsValidator.ChannelSecrets channels = ProdSecretsValidator.ChannelSecrets.NONE;
 
         Builder adminPassword(String v) { adminPassword = v; return this; }
         Builder privateKey(String v) { privKey = v; return this; }
@@ -105,12 +106,13 @@ class ProdSecretsValidatorTest {
         }
         Builder twilioFrom(String v) { twilioFrom = v; return this; }
         Builder dashboardOrigin(String v) { dashboardOrigin = v; return this; }
+        Builder channels(ProdSecretsValidator.ChannelSecrets v) { channels = v; return this; }
 
         ProdSecretsValidator build() {
             return new ProdSecretsValidator(
                     new AdminProperties("+237600000000", adminPassword), privKey, pubKey,
                     dbPassword, provider, wassenderUrl, wassenderToken, twilioSid, twilioToken, twilioFrom,
-                    dashboardOrigin);
+                    dashboardOrigin, channels);
         }
     }
 
@@ -544,6 +546,101 @@ class ProdSecretsValidatorTest {
             assertRejects(builder().provider("failover")
                     .wassender(WASSENDER_URL, "your_wassender_api_token_here").twilio(TWILIO_SID, TWILIO_TOKEN).build(),
                     "WASSENDER_API_TOKEN", "your_wassender_api_token_here");
+        }
+    }
+
+    // ── SMS / email providers (Story 19.9) ─────────────────────────────────
+
+    @Nested
+    @DisplayName("SMS / email providers (Story 19.9)")
+    class ChannelProviderValidation {
+
+        private static final String MBOA_URL = "https://api.mboasms.com";
+        private static final String MBOA_KEY = "mboa_9a8b7c6d5e4f3a2b1c";
+        private static final String INFOBIP_URL = "xyz123.api.infobip.com";
+        private static final String INFOBIP_KEY = "ib_0123456789abcdef0123";
+        private static final String RESEND_KEY = "re_0123456789abcdef";
+
+        private ProdSecretsValidator.ChannelSecrets sms(String providers, String mboaUrl, String mboaKey,
+                                                        String ibUrl, String ibKey) {
+            return new ProdSecretsValidator.ChannelSecrets(providers, mboaUrl, mboaKey, ibUrl, ibKey,
+                    "", "", "", "", "");
+        }
+
+        private ProdSecretsValidator.ChannelSecrets email(String providers, String from, String resendKey,
+                                                          String ibUrl, String ibKey) {
+            return new ProdSecretsValidator.ChannelSecrets("", "", "", "", "",
+                    providers, from, resendKey, ibUrl, ibKey);
+        }
+
+        @Test
+        @DisplayName("mboasms listed without MBOASMS_API_KEY → fails naming MBOASMS_API_KEY")
+        void mboasmsMissingKey() {
+            assertRejects(builder().channels(sms("mboasms", MBOA_URL, "", "", "")).build(), "MBOASMS_API_KEY", null);
+        }
+
+        @Test
+        @DisplayName("mboasms with a placeholder key → fails without echoing it")
+        void mboasmsPlaceholderKey() {
+            assertRejects(builder().channels(sms("mboasms", MBOA_URL, "your_mboasms_key", "", "")).build(),
+                    "MBOASMS_API_KEY", "your_mboasms_key");
+        }
+
+        @Test
+        @DisplayName("infobip second in the SMS list is checked too")
+        void infobipSecondChecked() {
+            assertRejects(builder().channels(sms("mboasms, infobip", MBOA_URL, MBOA_KEY, INFOBIP_URL, "")).build(),
+                    "INFOBIP_API_KEY", null);
+        }
+
+        @Test
+        @DisplayName("unknown SMS provider → fails naming KEEVO_SMS_PROVIDERS")
+        void unknownSmsProvider() {
+            assertRejects(builder().channels(sms("twilio", "", "", "", "")).build(), "KEEVO_SMS_PROVIDERS", null);
+        }
+
+        @Test
+        @DisplayName("SMS providers fully configured → passes")
+        void smsValid() {
+            assertThatCode(builder().channels(sms("MboaSMS,infobip", MBOA_URL, MBOA_KEY, INFOBIP_URL, INFOBIP_KEY))
+                    .build()::validate).doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("empty provider lists → WARN only (channels disabled)")
+        void emptyListsOnlyWarn() {
+            List<String> warnings = captureWarnings(() ->
+                    assertThatCode(builder().build()::validate).doesNotThrowAnyException());
+            assertThat(warnings).anyMatch(m -> m.contains("KEEVO_SMS_PROVIDERS"))
+                    .anyMatch(m -> m.contains("KEEVO_EMAIL_PROVIDERS"));
+        }
+
+        @Test
+        @DisplayName("resend listed without RESEND_API_KEY → fails naming RESEND_API_KEY")
+        void resendMissingKey() {
+            assertRejects(builder().channels(email("resend", "noreply@brefpoint.app", "", "", "")).build(),
+                    "RESEND_API_KEY", null);
+        }
+
+        @Test
+        @DisplayName("enabled email channel without KEEVO_EMAIL_FROM → fails")
+        void emailMissingFrom() {
+            assertRejects(builder().channels(email("resend", "", RESEND_KEY, "", "")).build(),
+                    "KEEVO_EMAIL_FROM", null);
+        }
+
+        @Test
+        @DisplayName("unknown email provider → fails naming KEEVO_EMAIL_PROVIDERS")
+        void unknownEmailProvider() {
+            assertRejects(builder().channels(email("sendgrid", "noreply@brefpoint.app", "", "", "")).build(),
+                    "KEEVO_EMAIL_PROVIDERS", null);
+        }
+
+        @Test
+        @DisplayName("email providers fully configured → passes")
+        void emailValid() {
+            assertThatCode(builder().channels(email("resend,infobip", "noreply@brefpoint.app", RESEND_KEY,
+                    INFOBIP_URL, INFOBIP_KEY)).build()::validate).doesNotThrowAnyException();
         }
     }
 

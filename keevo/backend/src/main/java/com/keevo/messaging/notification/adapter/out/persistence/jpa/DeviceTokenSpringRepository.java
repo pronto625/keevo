@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,6 +27,12 @@ public interface DeviceTokenSpringRepository extends JpaRepository<DeviceTokenJp
     @Transactional
     @Query("DELETE FROM DeviceTokenJpaEntity d WHERE d.token = :token")
     int deleteByTokenValue(@Param("token") String token);
+
+    /** Story 19.9 — one DELETE for every unregistered token of a push. */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM DeviceTokenJpaEntity d WHERE d.token IN :tokens")
+    int deleteByTokenValues(@Param("tokens") Collection<String> tokens);
 
     @Modifying
     @Transactional

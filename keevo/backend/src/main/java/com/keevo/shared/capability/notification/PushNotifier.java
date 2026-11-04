@@ -11,8 +11,10 @@ import java.util.UUID;
  * and MUST NOT roll back their own transaction if notification delivery fails.
  *
  * <p>Core capability (Story 12.6a, formerly {@code messaging.api.NotificationPort}); the implementations stay internal to
- * messaging: {@code FcmNotificationAdapter} is the {@code @Primary} implementation when FCM is
- * enabled (Story 8.0); otherwise {@code LoggingNotificationAdapter} (logs only) is the one wired.
+ * messaging. Story 19.9: the {@code @Primary} implementation is {@code PersistingPushNotifier}, which stores one
+ * inbox row per recipient ({@code notifications}) for {@link #notifyOwners} / {@link #notifyUsers}, then delivers
+ * through every channel: {@code ExpoPushAdapter} (Expo tokens, when enabled) and {@code FcmNotificationAdapter} (other
+ * tokens, when FCM is enabled) or {@code LoggingNotificationAdapter} (logs only).
  */
 public interface PushNotifier {
 

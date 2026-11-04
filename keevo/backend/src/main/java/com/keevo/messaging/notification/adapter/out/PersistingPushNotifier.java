@@ -1,0 +1,173 @@
+package com.keevo.messaging.notification.adapter.out;
+
+import com.keevo.identity.api.UserQueryPort;
+import com.keevo.messaging.notification.domain.model.DeviceToken;
+import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
+import com.keevo.messaging.notification.domain.port.out.NotificationInboxRepository;
+import com.keevo.messaging.notification.domain.port.out.PushDeliveryChannel;
+import com.keevo.shared.capability.notification.NotificationPayload;
+import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PushSendResult;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Primary;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * Story 19.9 — the single {@code @Primary} {@link PushNotifier}: a Decorator that writes one inbox row per recipient
+ * ({@code notifications}), then a Composite over the {@link PushDeliveryChannel}s (Expo for {@code ExponentPushToken[…]}
+ * tokens, FCM — or the logging stub — for the others; Web Push later). Every existing business notification thus
+ * lands in the inbox with no change to its caller.
+ *
+ * <p>Per event: inbox = 1 owner-id query + 1 JDBC batch insert, in their own short transaction (a failure never
+ * reaches the caller's transaction nor the push: logged at ERROR); delivery = 1 token query, each token routed to
+ * the first channel that supports it, one {@code send} per channel. {@link #sendToTokens} (global admin broadcast,
+ * kept in {@code public.global_notifications}) is not persisted: its tokens are routed the same way and the results
+ * summed. Each channel is isolated and best effort; the caller's {@link TenantContext} is restored afterwards.
+ */
+@Component
+@Primary
+public class PersistingPushNotifier implements PushNotifier {
+
+    private static final Logger log = LoggerFactory.getLogger(PersistingPushNotifier.class);
+
+    private final NotificationInboxRepository inbox;
+    private final UserQueryPort users;
+    private final DeviceTokenRepository deviceTokens;
+    private final List<PushDeliveryChannel> channels;
+    private final TransactionTemplate requiresNew;
+
+    public PersistingPushNotifier(NotificationInboxRepository inbox, UserQueryPort users,
+                                  DeviceTokenRepository deviceTokens, List<PushDeliveryChannel> channels,
+                                  PlatformTransactionManager transactionManager) {
+        this.inbox = inbox;
+        this.users = users;
+        this.deviceTokens = deviceTokens;
+        this.channels = List.copyOf(channels);
+        this.requiresNew = new TransactionTemplate(transactionManager);
+        this.requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        log.info("[Push] delivery channels: {}",
+                this.channels.stream().map(c -> c.getClass().getSimpleName()).toList());
+    }
+
+    /** The delivery channels, in their order (tests). */
+    List<PushDeliveryChannel> channels() {
+        return channels;
+    }
+
+    @Override
+    public void notifyOwners(String tenantId, NotificationPayload payload) {
+        persist(tenantId, payload, null);
+        deliver(tenantId, payload, deviceTokens::findOwnerTokens);
+    }
+
+    @Override
+    public void notifyUsers(String tenantId, List<UUID> userIds, NotificationPayload payload) {
+        if (userIds == null || userIds.isEmpty()) return;
+        List<UUID> recipients = List.copyOf(new LinkedHashSet<>(userIds.stream().filter(Objects::nonNull).toList()));
+        if (recipients.isEmpty()) return;
+        persist(tenantId, payload, recipients);
+        deliver(tenantId, payload, () -> deviceTokens.findByUserIds(recipients));
+    }
+
+    @Override
+    public boolean isPushAvailable() {
+        return channels.stream().anyMatch(PushDeliveryChannel::isAvailable);
+    }
+
+    @Override
+    public PushSendResult sendToTokens(String tenantId, List<String> tokens, NotificationPayload payload) {
+        if (tokens == null || tokens.isEmpty()) return PushSendResult.EMPTY;
+        String previous = TenantContext.getCurrentTenant();
+        try {
+            return route(tenantId, tokens, payload);
+        } finally {
+            restore(previous);
+        }
+    }
+
+    /** {@code recipients} null = the tenant's owners, resolved inside the same short transaction. */
+    private void persist(String tenantId, NotificationPayload payload, List<UUID> recipients) {
+        try {
+            requiresNew.executeWithoutResult(s -> {
+                List<UUID> userIds = recipients != null ? recipients
+                        : List.copyOf(new LinkedHashSet<>(users.findOwnerUserIds(tenantId)));
+                if (!userIds.isEmpty()) {
+                    inbox.insertAll(tenantId, userIds, payload);
+                }
+            });
+        } catch (RuntimeException e) {
+            log.error("[Inbox] notification not persisted for tenant={} type={} ({})", tenantId, payload.type(),
+                    e.getClass().getSimpleName(), e);
+        }
+    }
+
+    private void deliver(String tenantId, NotificationPayload payload, Supplier<List<DeviceToken>> tokenQuery) {
+        String previous = TenantContext.getCurrentTenant();
+        try {
+            List<String> tokens;
+            TenantContext.setCurrentTenant(tenantId);
+            try {
+                tokens = tokenQuery.get().stream().map(DeviceToken::token).filter(Objects::nonNull).distinct()
+                        .toList();
+            } catch (RuntimeException e) {
+                log.warn("[Push] token lookup failed for tenant={} type={} ({})", tenantId, payload.type(),
+                        e.getClass().getSimpleName());
+                return;
+            }
+            if (!tokens.isEmpty()) {
+                route(tenantId, tokens, payload);
+            }
+        } finally {
+            restore(previous);
+        }
+    }
+
+    /** Each token to the first channel supporting it; tokens no channel supports count as failures. */
+    private PushSendResult route(String tenantId, List<String> tokens, NotificationPayload payload) {
+        Map<PushDeliveryChannel, List<String>> byChannel = new LinkedHashMap<>();
+        int unsupported = 0;
+        for (String token : tokens) {
+            PushDeliveryChannel channel = channels.stream().filter(c -> c.supports(token)).findFirst().orElse(null);
+            if (channel == null) {
+                unsupported++;
+            } else {
+                byChannel.computeIfAbsent(channel, c -> new ArrayList<>()).add(token);
+            }
+        }
+        PushSendResult total = new PushSendResult(0, unsupported, 0, 0);
+        for (Map.Entry<PushDeliveryChannel, List<String>> entry : byChannel.entrySet()) {
+            PushDeliveryChannel channel = entry.getKey();
+            List<String> own = entry.getValue();
+            try {
+                total = total.plus(channel.send(tenantId, own, payload));
+            } catch (RuntimeException e) {
+                log.warn("[Push] {} failed for tenant={} type={} ({})", channel.getClass().getSimpleName(), tenantId,
+                        payload.type(), e.getClass().getSimpleName());
+                total = total.plus(new PushSendResult(0, own.size(), 1, 1));
+            }
+        }
+        return total;
+    }
+
+    private static void restore(String previous) {
+        if (previous == null) {
+            TenantContext.clear();
+        } else {
+            TenantContext.setCurrentTenant(previous);
+        }
+    }
+}

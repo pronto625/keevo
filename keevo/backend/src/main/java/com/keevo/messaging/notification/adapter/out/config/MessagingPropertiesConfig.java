@@ -52,4 +52,13 @@ public class MessagingPropertiesConfig {
         factory.setReadTimeout(30_000);
         return new RestTemplate(factory);
     }
+
+    /** Story 19.9 — RestTemplate of the Expo push API: connect 5s, read 10s. */
+    @Bean("expoRestTemplate")
+    public RestTemplate expoRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(5_000);
+        factory.setReadTimeout(10_000);
+        return new RestTemplate(factory);
+    }
 }
