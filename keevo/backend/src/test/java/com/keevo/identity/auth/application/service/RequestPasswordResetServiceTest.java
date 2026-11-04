@@ -73,7 +73,7 @@ class RequestPasswordResetServiceTest {
         // Verify previous tokens were invalidated
         verify(passwordResetTokenRepository).invalidateActiveTokensForUser(userId);
         // Verify WhatsApp was called
-        verify(whatsAppSender).sendOtp(eq(phoneNumber), anyString());
+        verify(whatsAppSender).sendCode(eq(phoneNumber), anyString(), anyString(), eq("fr"));
         // Verify event was published
         ArgumentCaptor<PasswordResetRequestedEvent> eventCaptor =
                 ArgumentCaptor.forClass(PasswordResetRequestedEvent.class);
@@ -91,7 +91,7 @@ class RequestPasswordResetServiceTest {
 
         // No token saved, no WhatsApp, no event
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
+        verify(whatsAppSender, never()).sendCode(anyString(), anyString(), anyString(), anyString());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -120,7 +120,7 @@ class RequestPasswordResetServiceTest {
         // No lookups, no token, no WhatsApp, no event
         verify(userRepository, never()).findByPhoneNumber(anyString());
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
+        verify(whatsAppSender, never()).sendCode(anyString(), anyString(), anyString(), anyString());
         verify(eventPublisher, never()).publishEvent(any());
     }
 
@@ -134,7 +134,7 @@ class RequestPasswordResetServiceTest {
 
         verify(userRepository, never()).findByPhoneNumber(anyString());
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
+        verify(whatsAppSender, never()).sendCode(anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
@@ -182,11 +182,11 @@ class RequestPasswordResetServiceTest {
             service.execute(new RequestPasswordResetCommand(phoneNumber));
 
             verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
-            verify(whatsAppSender, never()).sendOtp(anyString(), anyString());
+            verify(whatsAppSender, never()).sendCode(anyString(), anyString(), anyString(), anyString());
 
             TransactionSynchronizationManager.getSynchronizations()
                     .forEach(TransactionSynchronization::afterCommit);
-            verify(whatsAppSender).sendOtp(eq(phoneNumber), matches("\\d{6}"));
+            verify(whatsAppSender).sendCode(eq(phoneNumber), matches("\\d{6}"), contains("réinitialisation"), eq("fr"));
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
@@ -198,7 +198,7 @@ class RequestPasswordResetServiceTest {
         when(rateLimiter.tryAcquire(phoneNumber)).thenReturn(true);
         when(userRepository.findByPhoneNumber(phoneNumber)).thenReturn(Optional.of(user));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$bcryptHash");
-        doThrow(new RuntimeException("provider down")).when(whatsAppSender).sendOtp(anyString(), anyString());
+        doThrow(new RuntimeException("provider down")).when(whatsAppSender).sendCode(anyString(), anyString(), anyString(), anyString());
 
         TransactionSynchronizationManager.initSynchronization();
         try {
@@ -208,7 +208,7 @@ class RequestPasswordResetServiceTest {
         } finally {
             TransactionSynchronizationManager.clearSynchronization();
         }
-        verify(whatsAppSender).sendOtp(eq(phoneNumber), anyString());
+        verify(whatsAppSender).sendCode(eq(phoneNumber), anyString(), anyString(), eq("fr"));
         verify(eventPublisher).publishEvent(any(PasswordResetRequestedEvent.class));
     }
 
@@ -224,6 +224,6 @@ class RequestPasswordResetServiceTest {
         ArgumentCaptor<PasswordResetToken> tokenCaptor = ArgumentCaptor.forClass(PasswordResetToken.class);
         verify(passwordResetTokenRepository).save(tokenCaptor.capture());
         assertThat(tokenCaptor.getValue().phoneNumber()).isEqualTo(phoneNumber);
-        verify(whatsAppSender).sendOtp(eq(phoneNumber), anyString());
+        verify(whatsAppSender).sendCode(eq(phoneNumber), anyString(), anyString(), eq("fr"));
     }
 }

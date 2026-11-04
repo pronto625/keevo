@@ -643,7 +643,17 @@ So that **OTP, envoi de documents et notifications Bref fonctionnent dans Keevo*
 - [ ] [Deferred-from: revue 19.9, 2026-11-04] reçus Expo (`getReceipts`) : les `DeviceNotRegistered`/`MessageRateExceeded` signalés après coup ne sont pas lus, les jetons Expo périmés s'accumulent [`messaging/notification/adapter/out/ExpoPushAdapter.java`] — relever les reçus par lot (job court) et supprimer les jetons en un ordre SQL.
 - [ ] Web Push (VAPID) comme Bref : `GET /web-push/vapid-public-key`, `POST/DELETE /web-push/subscribe`, abonnements par utilisateur, suppression sur 404/410 (`api-bref/src/web-push/*`), branché sur le composite de push de la 19.9.
 
+> **Livraison 19.9b (04/11/2026) :** WhatsApp plateforme par Meta pour les codes (`bref_point_otp`) ; `bref_facture` part du numéro de l'owner chez Bref → routé vers 21.5 ; modèles des messages Keevo en texte libre → 19.9c.
+
 **Critère provisoire :** **Given** `keevo.whatsapp.provider` réglé sur Meta avec ses secrets **When** un OTP ou une facture part par WhatsApp **Then** le message passe par le modèle Meta Bref, le repli n'intervient qu'en échec, et le fail-fast 10-3 exige les secrets Meta seulement si le canal est activé.
+
+### Story 19.9c : Modèles Meta pour les messages WhatsApp de Keevo
+
+> **Créée le 04/11/2026** (découpage de la 19.9b). Les messages WhatsApp en texte libre de Keevo (rapport quotidien et hebdomadaire, rappels et changements d'abonnement, alertes de stock, de silence de synchro, suppression de compte) partent encore par Wassender/Twilio : Meta n'accepte le texte libre que dans les 24 h suivant un message du destinataire. Il faut, pour chacun, soit un modèle Meta approuvé (catégorie UTILITY), soit une bascule vers push + boîte de notifications.
+
+- [ ] [Split-from: 19.9b, 2026-11-04] liste des messages et libellés des modèles à valider par l'utilisateur, puis soumission à Meta (Business Manager) ; ensuite envoi par modèle via la chaîne `WhatsAppProvider` de la 19.9b, texte libre Wassender/Twilio en repli.
+
+**Critère provisoire :** **Given** un modèle Meta approuvé pour un message Keevo **When** ce message part **Then** il passe par le modèle Meta et le repli Wassender/Twilio n'intervient qu'en échec.
 
 ### Story 19.10 : Versions minimales d'app
 
@@ -1073,6 +1083,9 @@ So that **je garde ma boîte WhatsApp Bref (FUS-FR28)**.
 **Given** les modèles de messages
 **When** l'owner en crée ou en envoie
 **Then** le cycle de validation Meta est suivi et l'envoi respecte la fenêtre de 24 h
+
+**Éléments reportés routés vers 21.5 (revue 19.9b, 2026-11-04) :**
+- [ ] [Deferred-from: revue 19.9b, 2026-11-04] envoi des factures et devis par le modèle Meta `bref_facture` (PDF en en-tête, `api-bref/src/whatsapp/whatsapp.service.ts:324-410`) depuis le numéro WABA de l'owner, jamais depuis le numéro plateforme (règle Bref) ; aujourd'hui `SendInvoiceUseCase` envoie un lien signé en texte libre via `WhatsAppSender.sendReport` (Wassender/Twilio) [invoicing/…/SendInvoiceUseCase] — brancher l'envoi sur le compte WABA du tenant quand il est connecté, texte libre plateforme en repli.
 
 ### Story 21.6 : Campagnes clients et campagnes plateforme
 

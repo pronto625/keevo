@@ -304,6 +304,7 @@ public class GlobalExceptionHandler {
                  "TRANSFER_IN_TRANSIT",
                  "INVOICE_NOT_EDITABLE",
                  "INVOICE_INVALID_TRANSITION",
+                 "PUSH_ENDPOINT_OWNED",
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",

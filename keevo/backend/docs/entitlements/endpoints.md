@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, `SUPER_ADMIN` none.
 
-Handlers: 226 — gated: 112, exempt: 114.
+Handlers: 229 — gated: 112, exempt: 117.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -235,3 +235,6 @@ Handlers: 226 — gated: 112, exempt: 114.
 | GET | `/api/v1/tenant/stores` | `store` | READ | — |  | TenantPreferencesController#getStores |
 | GET | `/api/v1/tenants/me/extensions/{pointId}` | — | — | — | points d'extension du commerçant | TenantExtensionsController#extensions |
 | GET | `/api/v1/tenants/me/modules` | — | — | — | liste des modules du commerçant | TenantModulesController#modules |
+| DELETE | `/api/v1/web-push/subscribe` | — | — | — | notifications du navigateur — compte | WebPushController#unsubscribe |
+| POST | `/api/v1/web-push/subscribe` | — | — | — | notifications du navigateur — compte | WebPushController#subscribe |
+| GET | `/api/v1/web-push/vapid-public-key` | — | — | — | notifications du navigateur — compte | WebPushController#vapidPublicKey |

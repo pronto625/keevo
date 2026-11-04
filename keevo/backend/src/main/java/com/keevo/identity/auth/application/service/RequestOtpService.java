@@ -130,7 +130,7 @@ public class RequestOtpService implements RequestOtpUseCase {
                     case EMAIL -> deliver(emailSender.send(new EmailMessage(identifier.value(),
                             OtpMessages.emailSubject(lang), OtpMessages.emailText(lang, code),
                             OtpMessages.emailHtml(lang, code), null, List.of())));
-                    case WHATSAPP -> sendWhatsApp(identifier, OtpMessages.sms(lang, code));
+                    case WHATSAPP -> sendWhatsApp(identifier, code, lang);
                 };
                 if (delivered == null) {
                     continue; // WhatsApp: no delivery result (logged in sendWhatsApp)
@@ -151,14 +151,18 @@ public class RequestOtpService implements RequestOtpUseCase {
         return result != null && result.delivered();
     }
 
-    /** The no-op adapter logs the whole text (the code): nothing is handed to it. */
-    private Boolean sendWhatsApp(OtpIdentifier identifier, String text) {
-        if (!whatsAppSender.isConfigured()) {
+    /**
+     * Story 19.9b — Meta template {@code bref_point_otp} first, the localized text as fallback. Without a real
+     * provider (no-op stub) nothing is handed over.
+     */
+    private Boolean sendWhatsApp(OtpIdentifier identifier, String code, OtpMessages.Lang lang) {
+        if (!whatsAppSender.canSendCodes()) {
             log.debug("OTP WhatsApp skipped for {}: no WhatsApp provider", identifier.masked());
             return null;
         }
-        whatsAppSender.sendLoginCode(identifier.value(), text);
-        // sendReport gives no delivery result: the message was handed over, not confirmed.
+        whatsAppSender.sendCode(identifier.value(), code, OtpMessages.sms(lang, code),
+                lang == OtpMessages.Lang.EN ? "en" : "fr");
+        // sendCode gives no delivery result: the message was handed over, not confirmed.
         log.info("OTP handed to WhatsApp provider for {}", identifier.masked());
         return null;
     }

@@ -26,7 +26,7 @@ import java.util.Locale;
  * acceptance — failing over would send the message twice). A read timeout is {@link SendOutcome#UNKNOWN}: the request
  * went out and the provider may have accepted it. Connect failures and non-2xx are {@link SendOutcome#FAILED}.
  */
-final class ProviderHttp {
+public final class ProviderHttp {
 
     private static final Logger log = LoggerFactory.getLogger(ProviderHttp.class);
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -73,8 +73,11 @@ final class ProviderHttp {
         }
     }
 
-    /** A socket timeout once connected (a connect timeout says so in its message and is a plain failure). */
-    private static boolean isReadTimeout(ResourceAccessException e) {
+    /**
+     * A socket timeout once connected (a connect timeout says so in its message and is a plain failure). Story 19.9b
+     * — public for the WhatsApp Meta provider, which reads the error body itself.
+     */
+    public static boolean isReadTimeout(ResourceAccessException e) {
         for (Throwable t = e.getCause(); t != null; t = t.getCause()) {
             if (t instanceof SocketTimeoutException) {
                 String message = t.getMessage() == null ? "" : t.getMessage().toLowerCase(Locale.ROOT);

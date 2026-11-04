@@ -49,6 +49,9 @@ class PersistingPushNotifierTest {
     private DeviceTokenRepository tokens;
     private final List<String> txEvents = new ArrayList<>();
     private PlatformTransactionManager tx;
+    private WebPushSender webPush;
+    /** Story 19.9b — tasks handed to the notification executor, run only when the test says so. */
+    private final List<Runnable> dispatched = new ArrayList<>();
 
     /** A channel stub: records its calls and, like the real adapters, clears the TenantContext. */
     private static final class StubChannel implements PushDeliveryChannel {
@@ -91,6 +94,7 @@ class PersistingPushNotifierTest {
         inbox = mock(NotificationInboxRepository.class);
         users = mock(UserQueryPort.class);
         tokens = mock(DeviceTokenRepository.class);
+        webPush = mock(WebPushSender.class);
         tx = new PlatformTransactionManager() {
             @Override
             public TransactionStatus getTransaction(TransactionDefinition definition) {
@@ -116,7 +120,7 @@ class PersistingPushNotifierTest {
     }
 
     private PersistingPushNotifier notifier(PushDeliveryChannel... channels) {
-        return new PersistingPushNotifier(inbox, users, tokens, List.of(channels), tx);
+        return new PersistingPushNotifier(inbox, users, tokens, List.of(channels), webPush, tx, dispatched::add);
     }
 
     private static DeviceToken token(String value) {
@@ -125,7 +129,7 @@ class PersistingPushNotifierTest {
     }
 
     @Test
-    @DisplayName("notifyOwners: owners resolved and persisted in one short transaction, tokens read once, each "
+    @DisplayName("notifyOwners: owners resolved once, persisted in one short transaction, tokens read once, each "
             + "channel gets its own kind")
     void ownersPersistedThenRouted() {
         UUID a = UUID.randomUUID();
@@ -149,6 +153,7 @@ class PersistingPushNotifierTest {
         assertThat(tenantDuringQuery).containsExactly(TENANT);
         assertThat(expo.calls).containsExactly(List.of("ExponentPushToken[a]"));
         assertThat(fcm.calls).containsExactly(List.of("fcm-1", "fcm-2"));
+        verify(users, times(1)).findOwnerUserIds(TENANT);
     }
 
     @Test
@@ -181,15 +186,81 @@ class PersistingPushNotifierTest {
     }
 
     @Test
-    @DisplayName("an owner lookup failure stays inside the short transaction; the push still goes")
+    @DisplayName("an owner lookup failure stays inside the short transaction: nothing persisted, no Web Push; the "
+            + "device push still goes")
     void ownerLookupFailure() {
         when(users.findOwnerUserIds(TENANT)).thenThrow(new IllegalStateException("db down"));
         when(tokens.findOwnerTokens()).thenReturn(List.of(token("fcm-1")));
+        when(webPush.isEnabled()).thenReturn(true);
 
         notifier(fcm).notifyOwners(TENANT, PAYLOAD);
 
         assertThat(txEvents).containsExactly("begin", "rollback");
+        assertThat(dispatched).isEmpty();
+        verify(inbox, never()).insertAll(anyString(), any(), any());
+        verify(webPush, never()).sendToUsers(any(), any());
         assertThat(fcm.calls).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Story 19.9b — Web Push to the owners resolved once, after the device push")
+    void webPushToOwners() {
+        UUID a = UUID.randomUUID();
+        when(users.findOwnerUserIds(TENANT)).thenReturn(List.of(a, a));
+        when(tokens.findOwnerTokens()).thenReturn(List.of(token("fcm-1")));
+        when(webPush.isEnabled()).thenReturn(true);
+
+        notifier(fcm).notifyOwners(TENANT, PAYLOAD);
+
+        // dispatched to the executor, not run on the caller's thread
+        verify(webPush, never()).sendToUsers(any(), any());
+        assertThat(dispatched).hasSize(1);
+        dispatched.get(0).run();
+        verify(webPush).sendToUsers(List.of(a), PAYLOAD);
+        verify(users, times(1)).findOwnerUserIds(TENANT);
+        assertThat(fcm.calls).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Story 19.9b — Web Push to the given users; a Web Push failure reaches neither the inbox nor the caller")
+    void webPushIsolated() {
+        UUID a = UUID.randomUUID();
+        when(tokens.findByUserIds(List.of(a))).thenReturn(List.of(token("fcm-1")));
+        when(webPush.isEnabled()).thenReturn(true);
+        doThrow(new IllegalStateException("boom")).when(webPush).sendToUsers(any(), any());
+
+        notifier(fcm).notifyUsers(TENANT, List.of(a), PAYLOAD);
+        dispatched.forEach(Runnable::run); // the worker swallows the failure
+
+        verify(inbox).insertAll(TENANT, List.of(a), PAYLOAD);
+        verify(webPush).sendToUsers(List.of(a), PAYLOAD);
+        assertThat(fcm.calls).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("Story 19.9b — Web Push disabled (no VAPID keys): never called")
+    void webPushDisabled() {
+        UUID a = UUID.randomUUID();
+        when(tokens.findByUserIds(List.of(a))).thenReturn(List.of());
+
+        notifier(fcm).notifyUsers(TENANT, List.of(a), PAYLOAD);
+
+        assertThat(dispatched).isEmpty();
+        verify(webPush, never()).sendToUsers(any(), any());
+    }
+
+    @Test
+    @DisplayName("Story 19.9b — executor saturated/refusing: logged, the caller never sees it")
+    void executorRefuses() {
+        UUID a = UUID.randomUUID();
+        when(tokens.findByUserIds(List.of(a))).thenReturn(List.of());
+        when(webPush.isEnabled()).thenReturn(true);
+        PersistingPushNotifier n = new PersistingPushNotifier(inbox, users, tokens, List.of(fcm), webPush, tx,
+                r -> { throw new java.util.concurrent.RejectedExecutionException("full"); });
+
+        n.notifyUsers(TENANT, List.of(a), PAYLOAD);
+
+        verify(inbox).insertAll(TENANT, List.of(a), PAYLOAD);
     }
 
     @Test

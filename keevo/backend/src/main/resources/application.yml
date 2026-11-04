@@ -241,9 +241,15 @@ keevo:
     enabled: ${KEEVO_FCM_ENABLED:false}
     credentials-path: ${GOOGLE_APPLICATION_CREDENTIALS:}
   whatsapp:
-    # Providers: noop | wassender | twilio | failover
+    # Providers: noop | wassender | twilio | failover | meta
     # failover = tries Wassender first, falls back to Twilio automatically
+    # meta (Story 19.9b) = sign-in codes by the Meta template (bref_point_otp), Wassender then Twilio as fallback and
+    #   for every free-text message (Meta free text only works inside the 24-hour window)
     provider: ${KEEVO_WHATSAPP_PROVIDER:noop}
+    meta:
+      access-token: ${WHATSAPP_ACCESS_TOKEN:}
+      phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+      otp-template: ${WHATSAPP_OTP_TEMPLATE:bref_point_otp}
     wassender:
       api-url: ${WASSENDER_API_URL:}
       api-token: ${WASSENDER_API_TOKEN:}
@@ -277,6 +283,12 @@ keevo:
     expo:
       enabled: ${KEEVO_EXPO_PUSH_ENABLED:false}
       access-token: ${EXPO_ACCESS_TOKEN:}
+    # Story 19.9b — browser notifications (Web Push, VAPID): Bref's keys, so imported subscriptions stay valid.
+    # Missing keys = Web Push disabled (WARN at boot), endpoints still answer.
+    web:
+      vapid-public-key: ${VAPID_PUBLIC_KEY:}
+      vapid-private-key: ${VAPID_PRIVATE_KEY:}
+      subject: ${VAPID_SUBJECT:mailto:admin@brefpoint.app}
 
 # Springdoc OpenAPI / Swagger UI
 springdoc:

@@ -1,6 +1,7 @@
 package com.keevo.messaging.notification.adapter.out;
 
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
+import com.keevo.messaging.notification.domain.port.out.ExpoPushTicketRepository;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushSendResult;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -22,7 +23,9 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,12 +49,14 @@ class ExpoPushAdapterTest {
     private RestTemplate http;
     private MockRestServiceServer server;
     private DeviceTokenRepository tokens;
+    private ExpoPushTicketRepository tickets;
 
     @BeforeEach
     void setUp() {
         http = new RestTemplate();
         server = MockRestServiceServer.bindTo(http).build();
         tokens = mock(DeviceTokenRepository.class);
+        tickets = mock(ExpoPushTicketRepository.class);
     }
 
     private static String okTickets(int n) {
@@ -61,7 +66,7 @@ class ExpoPushAdapterTest {
     @Test
     @DisplayName("supports only Expo tokens")
     void supports() {
-        ExpoPushAdapter adapter = new ExpoPushAdapter(http, tokens, "");
+        ExpoPushAdapter adapter = new ExpoPushAdapter(http, tokens, tickets, "");
         assertThat(adapter.supports("ExponentPushToken[a]")).isTrue();
         assertThat(adapter.supports("ExpoPushToken[a]")).isTrue();
         assertThat(adapter.supports("fcm-token")).isFalse();
@@ -87,7 +92,7 @@ class ExpoPushAdapterTest {
                         + "\"details\":{\"error\":\"DeviceNotRegistered\"}},{\"status\":\"error\","
                         + "\"details\":{\"error\":\"DeviceNotRegistered\"}}]}", MediaType.APPLICATION_JSON));
 
-        PushSendResult result = new ExpoPushAdapter(http, tokens, "").send(TENANT,
+        PushSendResult result = new ExpoPushAdapter(http, tokens, tickets, "").send(TENANT,
                 List.of("ExponentPushToken[aaa]", "ExpoPushToken[bbb]", "ExpoPushToken[ccc]"), PAYLOAD);
 
         server.verify();
@@ -96,6 +101,30 @@ class ExpoPushAdapterTest {
         verify(tokens, never()).deleteByToken(any());
         assertThat(tenantDuringDelete).containsExactly(TENANT);
         assertThat(TenantContext.getCurrentTenant()).isNull();
+        // Story 19.9b — the ok ticket is stored with its token for the receipt job
+        verify(tickets).saveAll(TENANT, Map.of("t1", "ExponentPushToken[aaa]"));
+    }
+
+    @Test
+    @DisplayName("Story 19.9b — ok tickets of every chunk stored in one batch; storage failure never throws")
+    void ticketsStoredOncePerSend() {
+        List<String> expo = IntStream.range(0, 101).mapToObj(i -> "ExponentPushToken[" + i + "]").toList();
+        String ids100 = "{\"data\":[" + String.join(",", IntStream.range(0, 100)
+                .mapToObj(i -> "{\"status\":\"ok\",\"id\":\"id" + i + "\"}").toList()) + "]}";
+        server.expect(ExpectedCount.once(), requestTo(URL))
+                .andRespond(withSuccess(ids100, MediaType.APPLICATION_JSON));
+        server.expect(ExpectedCount.once(), requestTo(URL))
+                .andRespond(withSuccess("{\"data\":[{\"status\":\"ok\",\"id\":\"id100\"}]}",
+                        MediaType.APPLICATION_JSON));
+        doThrow(new IllegalStateException("db down")).when(tickets).saveAll(any(), any());
+
+        PushSendResult result = new ExpoPushAdapter(http, tokens, tickets, "").send(TENANT, expo, PAYLOAD);
+
+        assertThat(result.successCount()).isEqualTo(101);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<Map<String, String>> captor = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(tickets, times(1)).saveAll(org.mockito.ArgumentMatchers.eq(TENANT), captor.capture());
+        assertThat(captor.getValue()).hasSize(101).containsEntry("id100", "ExponentPushToken[100]");
     }
 
     @Test
@@ -104,7 +133,7 @@ class ExpoPushAdapterTest {
         server.expect(requestTo(URL)).andExpect(header("Authorization", "Bearer expo-secret"))
                 .andRespond(withSuccess(okTickets(1), MediaType.APPLICATION_JSON));
 
-        new ExpoPushAdapter(http, tokens, "expo-secret").send(TENANT, List.of("ExponentPushToken[a]"), PAYLOAD);
+        new ExpoPushAdapter(http, tokens, tickets, "expo-secret").send(TENANT, List.of("ExponentPushToken[a]"), PAYLOAD);
 
         server.verify();
     }
@@ -120,11 +149,12 @@ class ExpoPushAdapterTest {
         server.expect(ExpectedCount.once(), requestTo(URL)).andExpect(jsonPath("$.length()").value(50))
                 .andRespond(withSuccess(ok50, MediaType.APPLICATION_JSON));
 
-        PushSendResult result = new ExpoPushAdapter(http, tokens, "").send(TENANT, expo, PAYLOAD);
+        PushSendResult result = new ExpoPushAdapter(http, tokens, tickets, "").send(TENANT, expo, PAYLOAD);
 
         server.verify();
         assertThat(result).isEqualTo(new PushSendResult(149, 1, 2, 0));
         verify(tokens, never()).deleteByTokens(any());
+        verify(tickets, never()).saveAll(any(), any()); // ok tickets without an id: nothing to store
     }
 
     @Test
@@ -134,7 +164,7 @@ class ExpoPushAdapterTest {
                 "{\"errors\":[{\"code\":\"PUSH_TOO_MANY_EXPERIENCE_IDS\",\"message\":\"x\"}]}",
                 MediaType.APPLICATION_JSON));
 
-        assertThat(new ExpoPushAdapter(http, tokens, "").send(TENANT,
+        assertThat(new ExpoPushAdapter(http, tokens, tickets, "").send(TENANT,
                 List.of("ExponentPushToken[a]", "ExponentPushToken[b]"), PAYLOAD))
                 .isEqualTo(new PushSendResult(0, 2, 1, 1));
     }
@@ -144,7 +174,7 @@ class ExpoPushAdapterTest {
     void serverError() {
         server.expect(requestTo(URL)).andRespond(withStatus(HttpStatus.BAD_GATEWAY));
 
-        assertThat(new ExpoPushAdapter(http, tokens, "").send(TENANT, List.of("ExponentPushToken[x]"), PAYLOAD))
+        assertThat(new ExpoPushAdapter(http, tokens, tickets, "").send(TENANT, List.of("ExponentPushToken[x]"), PAYLOAD))
                 .isEqualTo(new PushSendResult(0, 1, 1, 1));
     }
 }

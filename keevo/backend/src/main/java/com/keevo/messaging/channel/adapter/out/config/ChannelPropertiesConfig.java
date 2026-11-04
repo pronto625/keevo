@@ -86,7 +86,8 @@ public class ChannelPropertiesConfig {
                 .collect(Collectors.toCollection(LinkedHashSet::new)));
     }
 
-    static <P> List<P> ordered(String property, List<String> names, List<P> available, Function<P, String> name) {
+    /** The providers named in {@code names}, in that order; an unknown name fails (Story 19.9b — also WhatsApp). */
+    public static <P> List<P> ordered(String property, List<String> names, List<P> available, Function<P, String> name) {
         Map<String, P> byName = available.stream().collect(Collectors.toMap(name, Function.identity()));
         List<P> chain = new ArrayList<>(names.size());
         for (String n : names) {

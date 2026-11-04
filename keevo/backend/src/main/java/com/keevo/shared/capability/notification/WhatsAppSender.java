@@ -7,8 +7,8 @@ package com.keevo.shared.capability.notification;
  * Story 12.2e — Published in messaging.api (implementations stay internal)
  * Story 12.6a — Core capability (formerly messaging.api.WhatsAppPort), implemented by messaging
  *
- * <p>MVP: NoOpWhatsAppAdapter logs the message (no real sending).
- * Production: WassenderWhatsAppAdapter sends via Wassender API.
+ * <p>Story 19.9b — implemented by messaging's {@code ChainWhatsAppSender} over the providers of the
+ * {@code keevo.whatsapp.provider} preset (noop stub, Wassender, Twilio, Meta Cloud API).
  */
 public interface WhatsAppSender {
 
@@ -30,27 +30,27 @@ public interface WhatsAppSender {
     void sendReport(String phoneNumber, String reportText);
 
     /**
-     * Story 14.12 — Send an OTP (one-time password) for password reset.
-     *
-     * <p>Default implementation delegates to {@link #sendReport(String, String)}
-     * so all existing adapters work without modification (D5).
-     *
-     * @param phoneNumber Recipient phone (E.164 format)
-     * @param code        6-digit OTP code
+     * Story 19.9b — true when a sign-in code can really go out (a template provider such as Meta, or a free-text
+     * one). {@link #isConfigured} only covers free text ({@link #sendReport}). Defaults to {@link #isConfigured}.
      */
-    default void sendOtp(String phoneNumber, String code) {
-        sendReport(phoneNumber,
-                "Votre code de réinitialisation Keevo est " + code
-                + ". Il expire dans 10 minutes."
-                + " Si vous n'avez pas demandé, ignorez ce message.");
+    default boolean canSendCodes() {
+        return isConfigured();
     }
 
     /**
-     * Story 19.2 — sends a sign-in code message (text already built and localised by the caller). Delegates to
-     * {@link #sendReport(String, String)}; the Meta template switch is story 19-9b. {@link #sendOtp} stays the
-     * password-reset text.
+     * Story 19.9b — sends a sign-in or password-reset code. The platform sender tries an approved template first
+     * (Meta {@code bref_point_otp}: code as body and URL button parameter, French then English on a missing
+     * translation); on a certain failure it sends {@code fallbackText} as free text (Wassender then Twilio). An
+     * unknown template outcome (timeout) sends nothing more: no second code. Logs never carry the code.
+     *
+     * <p>The default sends {@code fallbackText} through {@link #sendReport} (test doubles).
+     *
+     * @param phoneNumber  recipient phone (E.164)
+     * @param code         the code, as the template parameter
+     * @param fallbackText complete localized text holding the code, sent when no template provider delivers it
+     * @param language     {@code fr} or {@code en} (anything else not starting with {@code en} is French)
      */
-    default void sendLoginCode(String phoneNumber, String text) {
-        sendReport(phoneNumber, text);
+    default void sendCode(String phoneNumber, String code, String fallbackText, String language) {
+        sendReport(phoneNumber, fallbackText);
     }
 }

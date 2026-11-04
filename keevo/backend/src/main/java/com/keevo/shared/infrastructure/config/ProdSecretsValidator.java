@@ -39,7 +39,8 @@ import java.util.Set;
  *       readable, non-empty files (not {@code classpath:}); private key not world-readable</li>
  *   <li>{@code KEEVO_WHATSAPP_PROVIDER} — the tokens of the selected provider are present and
  *       not placeholders ({@code wassender}: URL + token; {@code twilio}: SID + auth token;
- *       {@code failover}: both). Twilio also requires {@code TWILIO_FROM_NUMBER}. {@code noop}/unset stays legal and only logs a WARN.</li>
+ *       {@code failover}: both; {@code meta} (Story 19.9b): WHATSAPP_ACCESS_TOKEN + WHATSAPP_PHONE_NUMBER_ID, the
+ *       Wassender/Twilio fallback being optional). Twilio also requires {@code TWILIO_FROM_NUMBER}. {@code noop}/unset stays legal and only logs a WARN.</li>
  *   <li>{@code KEEVO_SMS_PROVIDERS} / {@code KEEVO_EMAIL_PROVIDERS} (Story 19.9) — the keys of every listed provider
  *       ({@code mboasms}: MBOASMS_BASE_URL + MBOASMS_API_KEY; {@code infobip}: INFOBIP_BASE_URL + INFOBIP_API_KEY;
  *       {@code resend}: RESEND_API_KEY; an enabled email channel also needs KEEVO_EMAIL_FROM). An unknown name
@@ -85,6 +86,7 @@ public class ProdSecretsValidator {
     private static final String PROVIDER_WASSENDER = "wassender";
     private static final String PROVIDER_TWILIO = "twilio";
     private static final String PROVIDER_FAILOVER = "failover";
+    private static final String PROVIDER_META = "meta";
     private static final String SMS_SELECTOR = "KEEVO_SMS_PROVIDERS";
     private static final String EMAIL_SELECTOR = "KEEVO_EMAIL_PROVIDERS";
 
@@ -100,6 +102,13 @@ public class ProdSecretsValidator {
     private final String twilioFromNumber;
     private final String dashboardOrigin;
     private final ChannelSecrets channels;
+    private final MetaSecrets meta;
+
+    /** Story 19.9b — Meta WhatsApp Cloud API keys ({@code keevo.whatsapp.meta.*}). */
+    record MetaSecrets(String accessToken, String phoneNumberId) {
+
+        static final MetaSecrets NONE = new MetaSecrets("", "");
+    }
 
     /**
      * Story 19.9 — SMS / email channel settings: the provider lists ({@code keevo.sms.providers},
@@ -135,18 +144,31 @@ public class ProdSecretsValidator {
             @Value("${keevo.email.from:}") String emailFrom,
             @Value("${keevo.email.resend.api-key:}") String resendApiKey,
             @Value("${keevo.email.infobip.base-url:}") String emailInfobipBaseUrl,
-            @Value("${keevo.email.infobip.api-key:}") String emailInfobipApiKey) {
+            @Value("${keevo.email.infobip.api-key:}") String emailInfobipApiKey,
+            @Value("${keevo.whatsapp.meta.access-token:}") String metaAccessToken,
+            @Value("${keevo.whatsapp.meta.phone-number-id:}") String metaPhoneNumberId) {
         this(adminProperties, jwtPrivateKeyPath, jwtPublicKeyPath, dbPassword, whatsappProvider, wassenderApiUrl,
                 wassenderApiToken, twilioAccountSid, twilioAuthToken, twilioFromNumber, dashboardOrigin,
                 new ChannelSecrets(smsProviders, mboasmsBaseUrl, mboasmsApiKey, smsInfobipBaseUrl, smsInfobipApiKey,
-                        emailProviders, emailFrom, resendApiKey, emailInfobipBaseUrl, emailInfobipApiKey));
+                        emailProviders, emailFrom, resendApiKey, emailInfobipBaseUrl, emailInfobipApiKey),
+                new MetaSecrets(metaAccessToken, metaPhoneNumberId));
     }
 
     ProdSecretsValidator(AdminProperties adminProperties, String jwtPrivateKeyPath, String jwtPublicKeyPath,
                          String dbPassword, String whatsappProvider, String wassenderApiUrl,
                          String wassenderApiToken, String twilioAccountSid, String twilioAuthToken,
                          String twilioFromNumber, String dashboardOrigin, ChannelSecrets channels) {
+        this(adminProperties, jwtPrivateKeyPath, jwtPublicKeyPath, dbPassword, whatsappProvider, wassenderApiUrl,
+                wassenderApiToken, twilioAccountSid, twilioAuthToken, twilioFromNumber, dashboardOrigin, channels,
+                MetaSecrets.NONE);
+    }
+
+    ProdSecretsValidator(AdminProperties adminProperties, String jwtPrivateKeyPath, String jwtPublicKeyPath,
+                         String dbPassword, String whatsappProvider, String wassenderApiUrl,
+                         String wassenderApiToken, String twilioAccountSid, String twilioAuthToken,
+                         String twilioFromNumber, String dashboardOrigin, ChannelSecrets channels, MetaSecrets meta) {
         this.channels = channels == null ? ChannelSecrets.NONE : channels;
+        this.meta = meta == null ? MetaSecrets.NONE : meta;
         this.adminProperties = adminProperties;
         this.jwtPrivateKeyPath = jwtPrivateKeyPath;
         this.jwtPublicKeyPath = jwtPublicKeyPath;
@@ -225,8 +247,8 @@ public class ProdSecretsValidator {
     }
 
     private void validateWhatsAppProvider() {
-        // No trim: the adapters' @ConditionalOnProperty compare the raw value (case-insensitive),
-        // so an empty or padded value would leave no WhatsAppSender adapter — reject it here.
+        // No trim: an empty or padded value is a configuration mistake in prod — reject it here even though
+        // WhatsAppChainConfig (Story 19.9b) would read a blank value as noop.
         String provider = whatsappProvider == null ? PROVIDER_NOOP : whatsappProvider.toLowerCase(Locale.ROOT);
         switch (provider) {
             case PROVIDER_NOOP -> log.warn("[FailFast] KEEVO_WHATSAPP_PROVIDER is noop — "
@@ -237,9 +259,22 @@ public class ProdSecretsValidator {
                 validateWassender();
                 validateTwilio();
             }
+            case PROVIDER_META -> {
+                // Story 19.9b — Meta sends the sign-in codes; Wassender/Twilio stay an optional fallback
+                requireProviderValue("WHATSAPP_ACCESS_TOKEN", meta.accessToken());
+                requireProviderValue("WHATSAPP_PHONE_NUMBER_ID", meta.phoneNumberId());
+                boolean wassender = !isBlankOrPlaceholder(wassenderApiUrl) && !isBlankOrPlaceholder(wassenderApiToken);
+                boolean twilio = !isBlankOrPlaceholder(twilioAccountSid) && !isBlankOrPlaceholder(twilioAuthToken)
+                        && !isBlankOrPlaceholder(twilioFromNumber);
+                if (!wassender && !twilio) {
+                    log.warn("[FailFast] KEEVO_WHATSAPP_PROVIDER is meta without Wassender nor Twilio keys — only "
+                            + "sign-in codes go out by WhatsApp; free-text messages (reports, alerts, reminders, "
+                            + "invoices) will NOT be delivered.");
+                }
+            }
             default -> throw new IllegalStateException(
                     "[FailFast] KEEVO_WHATSAPP_PROVIDER has an unknown value — expected one of "
-                            + "noop, wassender, twilio, failover.");
+                            + "noop, wassender, twilio, failover, meta.");
         }
         log.info("[FailFast] WhatsApp provider configuration ✓");
     }

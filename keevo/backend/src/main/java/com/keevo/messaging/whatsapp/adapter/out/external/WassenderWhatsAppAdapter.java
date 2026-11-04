@@ -1,27 +1,34 @@
 package com.keevo.messaging.whatsapp.adapter.out.external;
 
+import com.keevo.messaging.channel.adapter.out.external.ProviderHttp;
+import com.keevo.messaging.channel.domain.model.SendOutcome;
 import com.keevo.messaging.notification.adapter.out.config.WassenderProperties;
-import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
-import com.keevo.shared.capability.notification.WhatsAppSender;
+import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
 
 /**
- * Wassender WhatsApp adapter — sends messages via Wassenger API.
- * Story 8.0 — AC5.
+ * Wassender WhatsApp provider — free text via {@code POST {api-url}/api/send-message}, {@code Authorization: Bearer}.
+ * Story 8.0 — AC5. Story 19.9b — a {@link WhatsAppProvider} of the chain (same HTTP call): any failure, a timeout
+ * included, is {@link SendOutcome#FAILED} so the chain falls back to Twilio as the former failover adapter did.
  *
- * <p>The API token is NEVER logged in full — only the first 4 characters.
+ * <p>The API token, the text and the full phone are never logged.
  */
 @Component
-@ConditionalOnProperty(name = "keevo.whatsapp.provider", havingValue = "wassender")
-public class WassenderWhatsAppAdapter implements WhatsAppSender {
+public class WassenderWhatsAppAdapter implements WhatsAppProvider {
 
     private static final Logger log = LoggerFactory.getLogger(WassenderWhatsAppAdapter.class);
+
+    public static final String NAME = "wassender";
 
     private final RestTemplate restTemplate;
     private final WassenderProperties properties;
@@ -30,61 +37,56 @@ public class WassenderWhatsAppAdapter implements WhatsAppSender {
                                     WassenderProperties properties) {
         this.restTemplate = restTemplate;
         this.properties = properties;
-
-        if (properties.apiToken() == null || properties.apiToken().isBlank()) {
-            log.error("[WhatsApp] Wassender provider selected but WASSENDER_API_TOKEN is missing — falling back to NoOp");
-        } else {
-            String tokenPrefix = properties.apiToken().length() >= 4
-                    ? properties.apiToken().substring(0, 4)
-                    : "????";
-            log.info("[WhatsApp] Using Wassender API token: {}****", tokenPrefix);
-        }
     }
 
-    /**
-     * True only when the Wassender API token is set: without it the provider is selected but
-     * cannot send (v1s-15-9 — explicit now that the port method is abstract).
-     */
+    @Override
+    public String name() {
+        return NAME;
+    }
+
+    /** True only when the Wassender API token is set (v1s-15-9). */
     @Override
     public boolean isConfigured() {
         return properties.apiToken() != null && !properties.apiToken().isBlank();
     }
 
     @Override
-    public void sendReport(String phoneNumber, String reportText) {
-        String sanitizedPhone = sanitizePhone(phoneNumber);
+    public SendOutcome sendText(String phone, String text) {
+        return post(phone, text, false);
+    }
 
+    /** Story 19.9b — the fallback of a code: a read timeout is {@link SendOutcome#UNKNOWN} (no second code). */
+    @Override
+    public SendOutcome sendCodeText(String phone, String text) {
+        return post(phone, text, true);
+    }
+
+    private SendOutcome post(String phone, String text, boolean code) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set("Authorization", "Bearer " + properties.apiToken());
 
-        String body = String.format(
-                "{\"to\":\"%s\",\"text\":\"%s\"}",
-                sanitizedPhone,
-                escapeJson(reportText));
-
-        HttpEntity<String> entity = new HttpEntity<>(body, headers);
-
+        String body = String.format("{\"to\":\"%s\",\"text\":\"%s\"}", escapeJson(phone),
+                escapeJson(text == null ? "" : text));
         try {
-            restTemplate.exchange(
-                    properties.apiUrl() + "/api/send-message",
-                    HttpMethod.POST,
-                    entity,
-                    String.class);
-        } catch (Exception e) {
-            throw new WhatsAppDeliveryException("Wassender delivery failed: " + e.getMessage(), e);
+            restTemplate.exchange(properties.apiUrl() + "/api/send-message", HttpMethod.POST,
+                    new HttpEntity<>(body, headers), String.class);
+            return SendOutcome.DELIVERED;
+        } catch (RestClientResponseException e) {
+            log.warn("[WhatsApp] wassender failed (HTTP {})", e.getStatusCode().value());
+        } catch (ResourceAccessException e) {
+            if (code && ProviderHttp.isReadTimeout(e)) {
+                log.warn("[WhatsApp] wassender did not answer in time — code delivery unknown");
+                return SendOutcome.UNKNOWN;
+            }
+            log.warn("[WhatsApp] wassender failed (connection error)");
+        } catch (RuntimeException e) {
+            log.warn("[WhatsApp] wassender failed ({})", e.getClass().getSimpleName());
         }
+        return SendOutcome.FAILED;
     }
 
-    private String sanitizePhone(String phone) {
-        String cleaned = phone.replaceAll("[\\s\\-()]", "");
-        if (!cleaned.startsWith("+")) {
-            cleaned = "+" + cleaned;
-        }
-        return cleaned;
-    }
-
-    private String escapeJson(String text) {
+    static String escapeJson(String text) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);

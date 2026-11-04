@@ -3,6 +3,7 @@ package com.keevo.messaging.notification.adapter.out;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.keevo.messaging.notification.domain.model.PushTokens;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
+import com.keevo.messaging.notification.domain.port.out.ExpoPushTicketRepository;
 import com.keevo.messaging.notification.domain.port.out.PushDeliveryChannel;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushSendResult;
@@ -33,9 +34,10 @@ import java.util.Map;
  * {@code priority:'high'}, {@code channelId:'default'}, {@code data} = metadata + {@code deepLink} + {@code type};
  * {@code Authorization: Bearer} when {@code keevo.push.expo.access-token} is set. Supports the Expo tokens
  * ({@link PushTokens#isExpo}); the tokens whose ticket says {@code DeviceNotRegistered} are deleted in one statement.
- * Receipts are not polled (ticket errors only, as Bref). Best effort: never throws.
+ * Story 19.9b — the {@code ok} tickets are stored with their token and tenant schema (one batch insert per send) for
+ * {@code ExpoReceiptJob}, which reads their receipts later. Best effort: never throws.
  *
- * <p>Cost per event: ⌈tokens/100⌉ requests + at most 1 DELETE.
+ * <p>Cost per event: ⌈tokens/100⌉ requests + at most 1 DELETE + at most 1 batch INSERT.
  */
 @Component
 @ConditionalOnProperty(name = "keevo.push.expo.enabled", havingValue = "true")
@@ -48,12 +50,15 @@ public class ExpoPushAdapter implements PushDeliveryChannel {
 
     private final RestTemplate http;
     private final DeviceTokenRepository deviceTokens;
+    private final ExpoPushTicketRepository ticketStore;
     private final String accessToken;
 
     public ExpoPushAdapter(@Qualifier("expoRestTemplate") RestTemplate http, DeviceTokenRepository deviceTokens,
+                           ExpoPushTicketRepository ticketStore,
                            @Value("${keevo.push.expo.access-token:}") String accessToken) {
         this.http = http;
         this.deviceTokens = deviceTokens;
+        this.ticketStore = ticketStore;
         this.accessToken = accessToken == null ? "" : accessToken.strip();
     }
 
@@ -72,10 +77,19 @@ public class ExpoPushAdapter implements PushDeliveryChannel {
         if (tokens == null || tokens.isEmpty()) return PushSendResult.EMPTY;
         Map<String, String> data = data(payload);
         List<String> unregistered = new ArrayList<>();
+        Map<String, String> accepted = new LinkedHashMap<>();
         PushSendResult total = PushSendResult.EMPTY;
         for (int from = 0; from < tokens.size(); from += CHUNK_SIZE) {
             List<String> chunk = tokens.subList(from, Math.min(from + CHUNK_SIZE, tokens.size()));
-            total = total.plus(sendChunk(tenantSchema, chunk, payload, data, unregistered));
+            total = total.plus(sendChunk(tenantSchema, chunk, payload, data, unregistered, accepted));
+        }
+        if (!accepted.isEmpty()) {
+            try {
+                ticketStore.saveAll(tenantSchema, accepted);
+            } catch (RuntimeException e) {
+                log.warn("[Expo] ticket storage failed ({}) — receipts of this send not read",
+                        e.getClass().getSimpleName());
+            }
         }
         if (!unregistered.isEmpty()) {
             TenantContext.setCurrentTenant(tenantSchema);
@@ -92,7 +106,8 @@ public class ExpoPushAdapter implements PushDeliveryChannel {
     }
 
     private PushSendResult sendChunk(String tenantId, List<String> chunk, NotificationPayload payload,
-                                     Map<String, String> data, List<String> unregistered) {
+                                     Map<String, String> data, List<String> unregistered,
+                                     Map<String, String> accepted) {
         List<Map<String, Object>> messages = new ArrayList<>(chunk.size());
         for (String token : chunk) {
             Map<String, Object> m = new LinkedHashMap<>();
@@ -135,17 +150,20 @@ public class ExpoPushAdapter implements PushDeliveryChannel {
                     body == null ? "empty answer" : body.path("errors").path(0).path("code").asText("no tickets"));
             return new PushSendResult(0, chunk.size(), 1, 1);
         }
-        return tickets(tickets, chunk, unregistered);
+        return tickets(tickets, chunk, unregistered, accepted);
     }
 
     /** Tickets come back in the order of the messages. */
-    private static PushSendResult tickets(JsonNode tickets, List<String> chunk, List<String> unregistered) {
+    private static PushSendResult tickets(JsonNode tickets, List<String> chunk, List<String> unregistered,
+                                          Map<String, String> accepted) {
         int ok = 0;
         int failed = 0;
         for (int i = 0; i < chunk.size(); i++) {
             JsonNode ticket = tickets.path(i);
             if ("ok".equals(ticket.path("status").asText())) {
                 ok++;
+                String id = ticket.path("id").asText("");
+                if (!id.isEmpty()) accepted.put(id, chunk.get(i));
                 continue;
             }
             failed++;

@@ -28,6 +28,7 @@ public final class ErrorMessages {
             Map.entry("OTP_INVALID",               "Code incorrect ou expiré"),
             Map.entry("OTP_TOO_MANY_ATTEMPTS",     "Trop d'essais. Demandez un nouveau code"),
             Map.entry("OTP_TOO_MANY_REQUESTS",     "Trop de demandes de code. Réessayez plus tard"),
+            Map.entry("PUSH_ENDPOINT_OWNED",       "Cet appareil est déjà lié à un autre compte"),
             Map.entry("COMPANY_ALREADY_EXISTS",    "Vous avez déjà une entreprise"),
             Map.entry("UNAUTHORIZED",              "Accès non autorisé"),
             Map.entry("FORBIDDEN",                 "Vous n'avez pas les droits nécessaires"),

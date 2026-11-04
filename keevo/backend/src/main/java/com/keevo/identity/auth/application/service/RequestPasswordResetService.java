@@ -105,7 +105,7 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
         final UUID userId = user.getId();
         Runnable send = () -> {
             try {
-                whatsAppSender.sendOtp(phone, code);
+                whatsAppSender.sendCode(phone, code, resetText(code), "fr");
                 log.info("forgot-password: OTP generated and sent for userId={}", userId);
             } catch (RuntimeException e) {
                 // Exception class only: provider messages (e.g. Twilio "The 'To' number +… is
@@ -128,5 +128,12 @@ public class RequestPasswordResetService implements RequestPasswordResetUseCase 
         // Publish event (only if user exists — anti-enumeration, AC2). No phone (PII) — 12.12.
         eventPublisher.publishEvent(new PasswordResetRequestedEvent(userId, Instant.now()));
 
+    }
+
+    /** Story 14.12 reset text, the free-text fallback of the Meta code template (Story 19.9b). */
+    static String resetText(String code) {
+        return "Votre code de réinitialisation Keevo est " + code
+                + ". Il expire dans 10 minutes."
+                + " Si vous n'avez pas demandé, ignorez ce message.";
     }
 }

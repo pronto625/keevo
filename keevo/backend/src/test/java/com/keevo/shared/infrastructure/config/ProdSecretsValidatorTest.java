@@ -94,6 +94,7 @@ class ProdSecretsValidatorTest {
         private String twilioFrom = "";
         private String dashboardOrigin = "https://admin.keevo.cm";
         private ProdSecretsValidator.ChannelSecrets channels = ProdSecretsValidator.ChannelSecrets.NONE;
+        private ProdSecretsValidator.MetaSecrets meta = ProdSecretsValidator.MetaSecrets.NONE;
 
         Builder adminPassword(String v) { adminPassword = v; return this; }
         Builder privateKey(String v) { privKey = v; return this; }
@@ -107,12 +108,15 @@ class ProdSecretsValidatorTest {
         Builder twilioFrom(String v) { twilioFrom = v; return this; }
         Builder dashboardOrigin(String v) { dashboardOrigin = v; return this; }
         Builder channels(ProdSecretsValidator.ChannelSecrets v) { channels = v; return this; }
+        Builder meta(String token, String phoneNumberId) {
+            meta = new ProdSecretsValidator.MetaSecrets(token, phoneNumberId); return this;
+        }
 
         ProdSecretsValidator build() {
             return new ProdSecretsValidator(
                     new AdminProperties("+237600000000", adminPassword), privKey, pubKey,
                     dbPassword, provider, wassenderUrl, wassenderToken, twilioSid, twilioToken, twilioFrom,
-                    dashboardOrigin, channels);
+                    dashboardOrigin, channels, meta);
         }
     }
 
@@ -546,6 +550,34 @@ class ProdSecretsValidatorTest {
             assertRejects(builder().provider("failover")
                     .wassender(WASSENDER_URL, "your_wassender_api_token_here").twilio(TWILIO_SID, TWILIO_TOKEN).build(),
                     "WASSENDER_API_TOKEN", "your_wassender_api_token_here");
+        }
+
+        @Test
+        @DisplayName("Story 19.9b — meta passes with its token + phone number id, no fallback required")
+        void metaValid() {
+            assertThatCode(builder().provider("meta").meta("EAAGrealToken9876543", "1098765432").build()::validate)
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("Story 19.9b — meta without WHATSAPP_ACCESS_TOKEN fails fast")
+        void metaMissingToken() {
+            assertRejects(builder().provider("meta").meta("", "1098765432").build(), "WHATSAPP_ACCESS_TOKEN", null);
+        }
+
+        @Test
+        @DisplayName("Story 19.9b — meta with a placeholder phone number id fails without echoing it")
+        void metaPlaceholderPhoneId() {
+            assertRejects(builder().provider("meta").meta("EAAGrealToken9876543", "your_phone_number_id").build(),
+                    "WHATSAPP_PHONE_NUMBER_ID", "your_phone_number_id");
+        }
+
+        @Test
+        @DisplayName("Story 19.9b — Meta keys are not required by the other presets")
+        void metaKeysOnlyForMeta() {
+            assertThatCode(builder().provider("failover")
+                    .wassender(WASSENDER_URL, WASSENDER_TOKEN).twilio(TWILIO_SID, TWILIO_TOKEN).build()::validate)
+                    .doesNotThrowAnyException();
         }
     }
 

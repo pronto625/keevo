@@ -64,7 +64,7 @@ class RequestOtpServiceTest {
         when(encoder.encode(anyString())).thenReturn("$2a$12$hash");
         when(sms.send(any())).thenReturn(DeliveryResult.deliveredBy("mboasms"));
         when(email.send(any())).thenReturn(DeliveryResult.deliveredBy("resend"));
-        when(whatsApp.isConfigured()).thenReturn(true);
+        when(whatsApp.canSendCodes()).thenReturn(true);
         when(txManager.getTransaction(any())).thenReturn(txStatus);
     }
 
@@ -88,7 +88,7 @@ class RequestOtpServiceTest {
         order.verify(repo).insert(any(), anyString(), anyString(), any(), any());
         order.verify(txManager).commit(txStatus);
         order.verify(sms).send(any());
-        order.verify(whatsApp).sendLoginCode(anyString(), anyString());
+        order.verify(whatsApp).sendCode(anyString(), anyString(), anyString(), anyString());
         assertThat(expiresIn).isEqualTo(300);
         ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
         verify(encoder).encode(code.capture());
@@ -100,7 +100,7 @@ class RequestOtpServiceTest {
         assertThat(smsMsg.getValue().to()).isEqualTo(PHONE);
         assertThat(smsMsg.getValue().text()).isEqualTo(
                 "Votre code de connexion Bref Point : " + code.getValue() + ". Valable 5 minutes. Ne le partagez pas.");
-        verify(whatsApp).sendLoginCode(PHONE, smsMsg.getValue().text());
+        verify(whatsApp).sendCode(PHONE, code.getValue(), smsMsg.getValue().text(), "fr");
         verifyNoInteractions(email);
     }
 
@@ -118,10 +118,20 @@ class RequestOtpServiceTest {
     }
 
     @Test
+    @DisplayName("Story 19.9b — English request: WhatsApp code in en with the English fallback text; gate is "
+            + "canSendCodes, not isConfigured (meta with only Meta keys)")
+    void whatsAppEnglish() {
+        lenient().when(whatsApp.isConfigured()).thenReturn(false);
+        service.request(new RequestOtpCommand(PHONE, OtpChannel.WHATSAPP, "10.0.0.1", "en-US"));
+        verify(whatsApp).sendCode(eq(PHONE), matches("[1-9]\\d{5}"), startsWith("Your Bref Point login code: "),
+                eq("en"));
+    }
+
+    @Test
     @DisplayName("single phone channel: only that channel")
     void singleChannel() {
         service.request(cmd(PHONE, OtpChannel.WHATSAPP));
-        verify(whatsApp).sendLoginCode(eq(PHONE), anyString());
+        verify(whatsApp).sendCode(eq(PHONE), matches("[1-9]\\d{5}"), anyString(), eq("fr"));
         verifyNoInteractions(sms, email);
     }
 
@@ -139,7 +149,7 @@ class RequestOtpServiceTest {
     @DisplayName("provider failure (exception or not delivered) never changes the answer")
     void providerFailureSwallowed() {
         when(sms.send(any())).thenThrow(new IllegalStateException("To +237699001122 invalid"));
-        doThrow(new RuntimeException("down")).when(whatsApp).sendLoginCode(anyString(), anyString());
+        doThrow(new RuntimeException("down")).when(whatsApp).sendCode(anyString(), anyString(), anyString(), anyString());
         assertThat(service.request(cmd(PHONE, null))).isEqualTo(300);
 
         when(email.send(any())).thenReturn(DeliveryResult.notDelivered());
@@ -147,11 +157,11 @@ class RequestOtpServiceTest {
     }
 
     @Test
-    @DisplayName("WhatsApp not configured: nothing handed to the no-op adapter (it would log the code)")
+    @DisplayName("WhatsApp cannot send codes: nothing handed to the no-op stub")
     void whatsAppNotConfigured() {
-        when(whatsApp.isConfigured()).thenReturn(false);
+        when(whatsApp.canSendCodes()).thenReturn(false);
         service.request(cmd(PHONE, null));
-        verify(whatsApp, never()).sendLoginCode(anyString(), anyString());
+        verify(whatsApp, never()).sendCode(anyString(), anyString(), anyString(), anyString());
         verify(whatsApp, never()).sendReport(anyString(), anyString());
         verify(sms).send(any());
     }

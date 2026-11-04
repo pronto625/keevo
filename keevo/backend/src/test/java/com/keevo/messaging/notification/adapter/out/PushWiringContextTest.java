@@ -3,6 +3,7 @@ package com.keevo.messaging.notification.adapter.out;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.keevo.identity.api.UserQueryPort;
 import com.keevo.messaging.notification.domain.port.out.DeviceTokenRepository;
+import com.keevo.messaging.notification.domain.port.out.ExpoPushTicketRepository;
 import com.keevo.messaging.notification.domain.port.out.NotificationInboxRepository;
 import com.keevo.shared.capability.notification.PushNotifier;
 import org.junit.jupiter.api.DisplayName;
@@ -21,6 +22,9 @@ class PushWiringContextTest {
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
             .withBean(FirebaseMessaging.class, () -> mock(FirebaseMessaging.class))
             .withBean(DeviceTokenRepository.class, () -> mock(DeviceTokenRepository.class))
+            .withBean(ExpoPushTicketRepository.class, () -> mock(ExpoPushTicketRepository.class))
+            .withBean(WebPushSender.class, () -> mock(WebPushSender.class))
+            .withBean("notificationExecutor", java.util.concurrent.Executor.class, () -> Runnable::run)
             .withBean(NotificationInboxRepository.class, () -> mock(NotificationInboxRepository.class))
             .withBean(UserQueryPort.class, () -> mock(UserQueryPort.class))
             .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))

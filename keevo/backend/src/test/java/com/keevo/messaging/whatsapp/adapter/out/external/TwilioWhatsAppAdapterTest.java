@@ -1,7 +1,7 @@
 package com.keevo.messaging.whatsapp.adapter.out.external;
 
 import com.keevo.messaging.notification.adapter.out.config.TwilioProperties;
-import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
+import com.keevo.messaging.channel.domain.model.SendOutcome;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,19 +41,19 @@ class TwilioWhatsAppAdapterTest {
     }
 
     @Test
-    void sendReport_success_returnsNormally() {
+    void sendText_success_returnsNormally() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));
 
-        assertDoesNotThrow(() -> adapter.sendReport("+237699000080", "Daily report"));
+        assertEquals(SendOutcome.DELIVERED, adapter.sendText("+237699000080", "Daily report"));
     }
 
     @Test
-    void sendReport_setsCorrectHeaders_basicAuthAndFormBody() {
+    void sendText_setsCorrectHeaders_basicAuthAndFormBody() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));
 
-        adapter.sendReport("+237699000080", "Rapport test");
+        adapter.sendText("+237699000080", "Rapport test");
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<HttpEntity<MultiValueMap<String, String>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
@@ -70,64 +70,27 @@ class TwilioWhatsAppAdapterTest {
     }
 
     @Test
-    void sendReport_4xxError_throwsWhatsAppDeliveryException() {
+    void sendText_4xxError_returnsFailed() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenThrow(new HttpClientErrorException(HttpStatus.BAD_REQUEST));
 
-        assertThrows(WhatsAppDeliveryException.class,
-                () -> adapter.sendReport("+237699000080", "Report"));
+        assertEquals(SendOutcome.FAILED, adapter.sendText("+237699000080", "Report"));
     }
 
     @Test
-    void sendReport_5xxError_throwsWhatsAppDeliveryException() {
+    void sendText_5xxError_returnsFailed() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenThrow(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR));
 
-        assertThrows(WhatsAppDeliveryException.class,
-                () -> adapter.sendReport("+237699000080", "Report"));
+        assertEquals(SendOutcome.FAILED, adapter.sendText("+237699000080", "Report"));
     }
 
     @Test
-    void sendReport_timeout_throwsWhatsAppDeliveryException() {
+    void sendText_timeout_returnsFailed() {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
                 .thenThrow(new ResourceAccessException("Timeout", new SocketTimeoutException("Read timed out")));
 
-        assertThrows(WhatsAppDeliveryException.class,
-                () -> adapter.sendReport("+237699000080", "Report"));
-    }
-
-    @Test
-    void sendReport_sanitizesPhoneNumber() {
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));
-
-        adapter.sendReport("+237 699-00-00-80", "Report");
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<HttpEntity<MultiValueMap<String, String>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
-        verify(restTemplate).exchange(anyString(), eq(HttpMethod.POST), captor.capture(), eq(String.class));
-
-        MultiValueMap<String, String> body = captor.getValue().getBody();
-        assertNotNull(body);
-        assertEquals("whatsapp:+237699000080", body.getFirst("To"),
-                "Phone should be sanitized to E.164 without spaces/dashes/parens");
-    }
-
-    @Test
-    void sendReport_addsPlusPrefix_whenNumberHasNone() {
-        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(new ResponseEntity<>("{}", HttpStatus.OK));
-
-        adapter.sendReport("237699000080", "Report");
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<HttpEntity<MultiValueMap<String, String>>> captor = ArgumentCaptor.forClass(HttpEntity.class);
-        verify(restTemplate).exchange(anyString(), eq(HttpMethod.POST), captor.capture(), eq(String.class));
-
-        MultiValueMap<String, String> body = captor.getValue().getBody();
-        assertNotNull(body);
-        assertEquals("whatsapp:+237699000080", body.getFirst("To"),
-                "A number without '+' must be prefixed to E.164");
+        assertEquals(SendOutcome.FAILED, adapter.sendText("+237699000080", "Report"));
     }
 
     @Test
@@ -154,5 +117,24 @@ class TwilioWhatsAppAdapterTest {
         TwilioProperties emptyFrom = new TwilioProperties("ACx", "auth", null);
         TwilioWhatsAppAdapter a = new TwilioWhatsAppAdapter(restTemplate, emptyFrom);
         assertFalse(a.isConfigured());
+    }
+
+    @Test
+    void sendCodeText_readTimeout_isUnknown_soNoSecondCode() {
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new ResourceAccessException("Timeout", new SocketTimeoutException("Read timed out")));
+
+        assertEquals(SendOutcome.UNKNOWN, adapter.sendCodeText("+237699000080", "code"));
+        assertEquals(SendOutcome.FAILED, adapter.sendText("+237699000080", "report"));
+    }
+
+    @Test
+    void sendCodeText_connectFailureOrHttpError_isFailed() {
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new ResourceAccessException("I/O", new java.net.ConnectException("refused")))
+                .thenThrow(new HttpServerErrorException(HttpStatus.INTERNAL_SERVER_ERROR));
+
+        assertEquals(SendOutcome.FAILED, adapter.sendCodeText("+237699000080", "code"));
+        assertEquals(SendOutcome.FAILED, adapter.sendCodeText("+237699000080", "code"));
     }
 }

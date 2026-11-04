@@ -28,6 +28,7 @@ public enum ErrorCode {
     OTP_INVALID,                 // Story 19.2 — HTTP 401: wrong, expired or already used sign-in code
     OTP_TOO_MANY_ATTEMPTS,       // Story 19.2 — HTTP 429: 5 wrong codes, the code is dead
     OTP_TOO_MANY_REQUESTS,       // Story 19.2 — HTTP 429: code request rate limit or daily failure cap
+    PUSH_ENDPOINT_OWNED,         // Story 19.9b — HTTP 409: the browser push endpoint is linked to another account (other keys)
     COMPANY_ALREADY_EXISTS,      // Story 19.2 — HTTP 409: create-company by a user who already owns a company
 
     // ── Tenant ────────────────────────────────────────────────────

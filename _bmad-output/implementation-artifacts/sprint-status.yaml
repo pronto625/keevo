@@ -418,7 +418,8 @@ development_status:
   19-7b-plans-fusion: done  # 2026-11-04 revue 5 couches (36 constats, 27 corrigés), 5 077 tests verts, live keevo_dev + Redmi OK ; revue de suivi recommandée | 2026-11-04 build-auto (spec-19-7b-plans-fusion.md) | 2026-11-03 découpage de 19.7 : FREE/PRO/TEAM/BUSINESS, PREMIUM→TEAM, FREE 1 employé, essai 1 mois (plan BUSINESS_TRIAL)
   19-8-compteurs-usage-quotas: done  # 2026-11-04 revue 5 couches (38 constats, 21 corrigés, 2 reportés → 21-3/19-9), 5 103 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-8-compteurs-usage-quotas.md)
   19-9-sms-email-notifications-persistantes: done  # 2026-11-04 revue 5 couches (37 constats, 22 corrigés, 3 reportés → 19-11/19-9b), 5 194 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-9-fournisseurs-sms-email-notifications.md)
-  19-9b-canaux-bref-whatsapp-meta-web-push: backlog  # 2026-11-04 décision utilisateur « notifications, WhatsApp : comme Bref, les fournisseurs Bref dominent » — 4 items (dont 1 de la revue 19.9)
+  19-9b-canaux-bref-whatsapp-meta-web-push: done  # 2026-11-04 revue 5 couches (40 constats, 11 corrigés, 1 reporté → 21-5 ; 1 item découpé → 19-9c), 5 361 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-9b-canaux-bref-whatsapp-meta-web-push.md)
+  19-9c-modeles-meta-messages-keevo: backlog  # 2026-11-04 découpage de la 19-9b — 1 item (liste et libellés à valider par l'utilisateur, approbation Meta)
   19-10-versions-minimales-app: backlog
   19-11-charge-nombre-tenants: backlog  # 2026-11-04 revue 19.9 — 1 item routé (rétention des notifications)
   19-12-boutiques-etendues-parcours-vente: backlog
@@ -446,7 +447,7 @@ development_status:
   21-2-storekit-revenuecat: backlog
   21-3-credit-packs-sms: backlog
   21-4-ai-assistant: backlog  # 2026-11-02 réécrite : assistant par outils (21-8), parité Bref Point, pas de SQL généré
-  21-5-whatsapp-cloud: backlog
+  21-5-whatsapp-cloud: backlog  # 2026-11-04 revue 19.9b — 1 item (factures par le modèle Meta bref_facture depuis le WABA de l'owner)
   21-6-campagnes: backlog
   21-7-client-portal: backlog
   21-8-couche-outils-ia-mcp: backlog  # 2026-11-02 décision utilisateur : IA par outils MCP directement (FUS-FR39) — avant 21-4
