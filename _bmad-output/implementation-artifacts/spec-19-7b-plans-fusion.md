@@ -235,3 +235,99 @@ deferred: []
 - **Follow-up review recommended: true** — first pass patched 11 medium entries; the renewal rule, the migration job (guards, done-marker, failure isolation) and the WhatsApp texts changed after review and were not re-reviewed.
 - **Verification:** full suite by package green — 5,077 tests, 0 failure (acceptance 4, admin 586, architecture 34, catalog 306, commerce 263, crm 158, feedback 52, identity 525, inventory 410, invoicing 170, messaging 192, reporting 421, shared 1172, store 60, subscription 89, sync 635); four outdated expectations (old trial / default paid plan) updated. Live keevo_dev (WhatsApp noop, FCM off): V43 re-applied, settings (FREE, BUSINESS_TRIAL, 1, TEAM), PREMIUM/PREMIUM_TRIAL archived, 4 PLAN_MIGRATION events, no PREMIUM subscription left in any live tenant schema, done-marker written, second boot moved 0; API registration KV-9D6KUN → `planType=PREMIUM_TRIAL`, `planCode=BUSINESS_TRIAL`, « Essai Business », expires +1 month; Redmi V1 app (KV-EW02A2, running 6-month trial): « Essai Premium », expires 01/05/2027, unlimited — unchanged.
 - **Residual risks:** a dashboard still calling `/admin/subscriptions/{schema}/activate` with `PREMIUM` now gets 422 (archived) — it must send TEAM or use `/plan/premium`; BUSINESS_TRIAL's profile is a copy of BUSINESS (keep both aligned until 21.10); quotas and the FREE invoicing grant are 19.8.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée, commit `42783992` (branche `refonte/modulaire`, poussée aussi sur `develop`).
+
+**Ce qui est fait côté API**
+- Les offres de la fusion sont en base. Grille de départ :
+
+  | Code | Libellé | Boutiques | Membres par boutique | Modules payants |
+  |---|---|---|---|---|
+  | `FREE` | Gratuit | 1 | 1 | aucun |
+  | `PRO` | Pro | 3 | 3 | factures, exports, réglage des rapports |
+  | `TEAM` | Team | 8 | 8 | les 8 modules payants |
+  | `BUSINESS` | Business | illimité | illimité | les 8 modules payants |
+  | `BUSINESS_TRIAL` | Essai Business | illimité | illimité | les 8 modules payants |
+
+  Le plan `BUSINESS_TRIAL` est un essai.
+- Un nouvel inscrit reçoit 1 mois d'« Essai Business », puis passe en Gratuit. Les essais Premium de 6 mois déjà en cours vont à leur terme.
+- Les comptes Premium sont passés sur Team, avec la même date de fin.
+- La limite de membres par boutique s'applique à l'ajout, à la réactivation et au changement de boutique d'un employé. Un compte déjà au-dessus d'une limite garde tout le monde, mais ne peut rien ajouter.
+- Les valeurs V1 sont inchangées : `planType` vaut toujours `FREE`, `PREMIUM_TRIAL` ou `PREMIUM`.
+
+**À utiliser**
+- **`GET /api/v1/subscription/me`** (`keevo/backend/src/main/java/com/keevo/subscription/plan/adapter/in/rest/dto/SubscriptionResponse.java`). Champs ajoutés :
+  - `planCode` : le plan réel (`TEAM`, `BUSINESS_TRIAL`…) ;
+  - `planLabel` : le nom français à afficher ;
+  - `planKind` : `FREE`, `TRIAL` ou `PAID` ;
+  - `maxEmployeesPerStore` : `null` = illimité.
+
+  `planType` reste la valeur V1 ; ne pas l'afficher dans la nouvelle app.
+- **Refus pour limite atteinte.** HTTP 403, `domainCode` = `PLAN_LIMIT_EXCEEDED`, message « Limite de votre plan atteinte ». Les `details` contiennent :
+  - `entity` : `stores`, `products` ou `employees` ;
+  - `limit` et `current` ;
+  - `plan` : la valeur V1 ;
+  - champs ajoutés : `planCode`, `planLabel`, et `scope: "store"` quand c'est la limite par boutique qui bloque.
+
+  Ce refus vient de `PlanLimitGuard.java`. Il est renvoyé aussi dans le résultat d'une opération de synchronisation.
+
+**À implémenter côté mobile**
+1. L'écran Abonnement affiche `planLabel`, jamais un code. Utiliser `planKind` pour le style : « Essai » si `TRIAL`, « Gratuit » si `FREE`.
+2. Pour un essai, afficher la date de fin (`expiresAt`) et, à l'approche de l'échéance, une invitation à choisir une offre.
+3. Afficher la limite par boutique quand `maxEmployeesPerStore` n'est pas nul.
+4. Sur un refus `PLAN_LIMIT_EXCEEDED` :
+   - si `scope` vaut `"store"` : « Cette boutique a atteint sa limite de {limit} membres avec l'offre {planLabel}. » ;
+   - sinon : « Limite de l'offre {planLabel} atteinte ({current}/{limit}). ».
+
+   Proposer de voir les offres, sans afficher de code technique.
+5. Mettre ces champs en cache comme le reste du profil d'abonnement, et les relire au retour en ligne.
+
+**Implémentation de référence :** aucune (l'app Flutter de ce dépôt ne sert qu'aux contrôles et ne lit pas les nouveaux champs).
+
+**Critères d'acceptation mobile / scénarios de test**
+- **Nouvel inscrit.** Étant donné un compte créé par `POST /api/v1/auth/register`, quand l'app ouvre Abonnement, alors elle affiche « Essai Business » et une date de fin à +1 mois.
+- **Limite par boutique.** Étant donné un compte Pro dont une boutique a 3 employés actifs, quand l'owner y ajoute un 4e employé, alors l'app affiche le message de limite par boutique et la création n'a pas lieu. Ajouter le même employé dans une autre boutique réussit.
+- **Ancien compte Premium.** Étant donné ce compte, quand l'app ouvre Abonnement, alors elle affiche « Team » avec la même date de fin qu'avant.
+
+**Clé de suivi mobile :** `m19-7b-plans-fusion`.
+
+## Dashboard super-admin (autre dépôt)
+
+**Statut :** API livrée, commit `42783992`.
+
+**Ce qui est fait côté API**
+- **« Activer Premium » choisit le plan payant.**
+  - Il n'y a plus de plan Premium à vendre. Le plan attribué par défaut est Team.
+  - Un plan payant encore en cours est prolongé à partir de sa fin, comme avant.
+- **Les deux chemins d'activation refusent un plan qui ne convient pas** : plan archivé, mauvaise nature de plan, ou date d'expiration incohérente avec le plan.
+- **Les profils de plans ont un nouveau réglage** : le nombre maximum de membres par boutique.
+
+**À utiliser**
+- **`POST /api/v1/admin/tenants/{tenantId}/plan/premium`**
+  - Corps : `{expiresAt "AAAA-MM-JJ", amountXaf, method, paidAt?, note?, planCode?}`. Le champ `planCode` est optionnel ; absent, c'est Team.
+  - 422 `VALIDATION_ERROR` :
+    - « Ce plan ne peut pas être attribué » : plan inconnu, archivé, gratuit ou essai ;
+    - « Code de plan invalide » : format du code.
+  - La réponse `planType` donne maintenant le vrai code du plan (`TEAM`, `PRO`…).
+  - Fichiers : `keevo/backend/src/main/java/com/keevo/admin/subscription/adapter/in/rest/AdminTenantPlanController.java` et `keevo/backend/src/main/java/com/keevo/admin/subscription/application/service/AdminPlanService.java`.
+- **`POST /api/v1/admin/subscriptions/{schema}/activate`**, réponses 422 `VALIDATION_ERROR` :
+  - « Ce plan ne peut pas être attribué » : plan archivé, dont `PREMIUM` et `PREMIUM_TRIAL` ;
+  - « Pas de date d'expiration pour un plan gratuit » ;
+  - « Date d'expiration requise et future pour ce plan ».
+- **`GET /api/v1/admin/plan-profiles`**
+  - Chaque plan gagne `kind` (`FREE`, `TRIAL` ou `PAID`), `archived` et `maxEmployeesPerStore`. `label` existait déjà.
+  - `PUT /api/v1/admin/plan-profiles/{plan}` accepte `maxEmployeesPerStore` (optionnel : absent = valeur gardée ; `null` explicite = illimité).
+
+**À implémenter côté dashboard**
+1. Le bouton « Activer Premium » devient « Activer une offre ». Il propose un choix parmi les plans `kind = PAID` non archivés de `GET /admin/plan-profiles`, avec Team présélectionné, et envoie `planCode`.
+2. Afficher partout le `label` du plan, jamais le code. Les plans archivés n'apparaissent pas dans les listes de choix.
+3. Ajouter « Membres par boutique » à l'écran d'édition d'un profil de plan.
+4. Garder « Essai Business » aligné sur « Business » : c'est une copie, elle n'est pas synchronisée automatiquement avant la 21.10.
+
+**Critères d'acceptation / scénarios de test**
+- **Activation par défaut.** Étant donné un compte Gratuit, quand le super-admin active une offre sans choisir de plan, alors le compte passe sur Team.
+- **Plan archivé.** Étant donné qu'on envoie `PREMIUM` à `/activate`, alors on reçoit 422 « Ce plan ne peut pas être attribué ».
+
+**Clé de suivi dashboard :** `d19-7b-plans-fusion`.

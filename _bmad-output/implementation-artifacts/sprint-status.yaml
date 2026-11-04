@@ -348,6 +348,7 @@ development_status:
   m17-7-notif-changement-prix-employe: backlog  # API 0e578d9d — notifications push EMPLOYEE_PRICE_CHANGED (ouvre la fiche produit) et EMPLOYEE_PRICE_CHANGED_BATCH (récapitulatif) : libellés, routage au toucher, centre de notifications ; rien à envoyer
   m17-2-leaderboard-vendeurs: backlog  # API 9448d043 — interrupteur owner « Afficher le classement aux employés » (confirmation à l'activation, PUT /tenant/leaderboard-visibility, GET leaderboardVisibleToEmployees) ; employé : onglet Classement, 403 FORBIDDEN « pas partagé » en état vide, sa boutique seule, ligne me:true, autres « Vendeur N »
   m19-1-users-identifiants-multiples: backlog  # API 19-1 — profil : phoneNumber "" (jamais null) pour un compte sans téléphone, firstName/lastName de l'owner renseignés s'ils existent ; aucun nouvel écran
+  m19-7b-plans-fusion: backlog  # API 42783992 — /subscription/me : planCode/planLabel/planKind/maxEmployeesPerStore ; refus PLAN_LIMIT_EXCEEDED avec scope "store" ; essai Business 1 mois
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -360,6 +361,7 @@ development_status:
   d16-2-a-la-carte-bundles: backlog  # API 165a3501 — page Packs (liste, création, modification, suppression) et application d'un pack
   d16-8-profils-plan-plafonds-configurables: backlog  # API f6492009 — page « Profils & plafonds » (plafonds, modules inclus, suivi de la resynchro)
   d16-14-api-prete-client-mobile: backlog  # API 525cbdaa — VALIDATION_ERROR avec le vrai message, CORE_MODULE_REQUIRED nommé, moduleId des profils, recherche par code, plan inconnu 404, historique paginé (limit/before)
+  d19-7b-plans-fusion: backlog  # API 42783992 — « Activer une offre » (planCode, Team par défaut), refus 422 plan archivé / date, profils : membres par boutique, kind, archived
   d19-1-users-identifiants-multiples: backlog  # API 19-1 — liste des comptes : ownerPhone peut être "" (owner sans téléphone, à afficher « — ») ; rien d'autre
 
   # ─────────────────────────────────────────────────────────
