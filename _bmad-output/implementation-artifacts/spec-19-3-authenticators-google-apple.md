@@ -182,7 +182,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.3, voir `git log --grep "feat(19-3)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+**Statut :** API livrée (commit 3fc1c4c0). Conventions : spec-16-11 ; synchro : spec-16-10.
 
 **Ce qui est fait côté API :** connexion Google et Apple vérifiée par le serveur ; compte retrouvé par son identité Google/Apple, ou lié à un compte patron par email vérifié, ou créé sans entreprise.
 
