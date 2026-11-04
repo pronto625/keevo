@@ -352,6 +352,7 @@ development_status:
   m19-8-compteurs-usage-quotas: backlog  # API 2611efd3 — « Ma consommation » (quotas + packs de /subscription/me), message QUOTA_EXCEEDED, facture refusée à la synchro → brouillon
   m19-9-sms-email-notifications-persistantes: backlog  # API 3997299f — écran Notifications (liste, non lues, lu, tout lu), badge, jeton Expo via /devices/token
   m19-2-authenticator-otp: backlog  # API c84780f4 — écrans OTP (demande, saisie du code), création d'entreprise si memberships vide, erreurs françaises
+  m19-9b-canaux-bref-whatsapp-meta-web-push: backlog  # API cb99ea66 — version web : service worker + abonnement Web Push (clé VAPID, subscribe/unsubscribe) ; natif inchangé
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

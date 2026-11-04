@@ -164,7 +164,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.9b, voir `git log --grep "feat(19-9b)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+**Statut :** API livrée (commit cb99ea66). Conventions : spec-16-11 ; synchro : spec-16-10.
 
 **Ce qui est fait côté API :** codes de connexion WhatsApp par le modèle Meta de Bref (rien à faire côté app) ; nettoyage des jetons Expo désinscrits ; notifications navigateur (Web Push) pour la version web de l'app, avec les mêmes clés VAPID que Bref.
 
