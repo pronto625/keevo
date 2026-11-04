@@ -412,3 +412,65 @@ Status: done
   - Expo is on in prod unless `KEEVO_EXPO_PUSH_ENABLED=false`; `EXPO_ACCESS_TOKEN` is optional;
   - the sender id defaults to `BrefPoint` and must be registered with the operators.
 - **Read-timeout trade-off.** A provider that accepted a message but answered late returns not-delivered and is not counted. No duplicate is sent; the message may still arrive.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée — commit `3997299fed05deccd39328550f296da348ddf48a` (branche `refonte/modulaire`, poussée sur `develop`). Conventions d'appel : spec-16-11 ; protocole de synchro : spec-16-10.
+
+**Ce qui est fait côté API :**
+- **Boîte de notifications.** Chaque notification métier envoyée en push est aussi conservée : alertes de stock, transferts, ventes à valider, produits en brouillon, clôture de journée, export prêt, modules qui expirent, tendances de vente, etc.
+- **Push Expo.** Un jeton Expo (`ExponentPushToken[…]`) enregistré par l'app reçoit les push via Expo, le fournisseur de Bref. Les jetons FCM de l'app Flutter V1 restent servis par FCM.
+- **SMS et email.** Ils existent côté serveur, mais aucun écran n'y est encore branché : l'OTP arrive en 19.2, l'envoi de facture par SMS ou email en epic 20.
+
+**À utiliser :**
+
+Toutes les routes demandent `Authorization: Bearer <accessToken>` d'un tenant sélectionné. Les réponses sont dans l'enveloppe `ApiResponseWrapper`. Code : `keevo/backend/src/main/java/com/keevo/messaging/notification/adapter/in/rest/NotificationController.java`.
+
+1. **Lister les notifications** : `GET /api/v1/notifications?page=0&size=20`.
+   - `page` vaut 0 ou plus ; `size` va de 1 à 100.
+   - Réponse 200 : `{"data":[{"id","type","title","body","data":{…},"read":false,"readAt":null,"createdAt":"…Z"}],"meta":{"page","size","totalElements","totalPages"}}`.
+   - Ordre : la plus récente d'abord.
+   - `data` contient les métadonnées de l'événement, plus `deepLink` s'il y en a un (route de l'app).
+   - Erreur 400 `VALIDATION_ERROR` « Paramètre invalide : size » ou « … page » : erreur de programmation, ne rien afficher de technique.
+2. **Nombre de non lues** : `GET /api/v1/notifications/unread-count`, réponse 200 `{"data":{"count":3}}`.
+3. **Marquer une notification lue** : `PATCH /api/v1/notifications/{id}/read`.
+   - Réponse 204, même si elle était déjà lue.
+   - 404 `NOTIFICATION_NOT_FOUND` « Notification introuvable » si l'id est inconnu ou appartient à un autre utilisateur : la retirer de la liste locale, sans message.
+4. **Tout marquer comme lu** : `PATCH /api/v1/notifications/read-all`, réponse 204.
+5. **Jeton de push** (route existante, inchangée) : `POST /api/v1/devices/token` avec le corps `{"token":"ExponentPushToken[…]","platform":"ANDROID|IOS","deviceName":"…"}` ; `DELETE /api/v1/devices/token` à la déconnexion.
+   - Code : `DeviceTokenController.java`.
+   - Le serveur supprime lui-même un jeton qu'Expo déclare `DeviceNotRegistered`.
+
+**À implémenter côté mobile :**
+1. **Enregistrement du jeton.** Récupérer le jeton Expo (`getExpoPushTokenAsync`) après connexion et sélection du tenant, puis l'envoyer à `POST /api/v1/devices/token`. Le renvoyer quand il change ; le supprimer à la déconnexion.
+2. **Écran « Notifications ».**
+   - Liste paginée en défilement infini (pages de 20) et tirer pour rafraîchir.
+   - Une notification non lue est mise en valeur.
+   - Afficher `title`, `body` et l'heure relative en français (« il y a 5 min »).
+   - Ne jamais afficher `type`, `id` ni le contenu brut de `data`.
+3. **Badge.** Pastille avec `unread-count` sur l'icône de cloche ou l'onglet, rafraîchie à l'ouverture de l'app, à la réception d'un push et au retour sur l'écran.
+4. **Ouverture d'une notification.** Toucher une notification appelle `PATCH …/{id}/read` (mise à jour optimiste), puis navigue vers `data.deepLink` s'il correspond à une route de l'app. Sinon, rester sur la liste.
+5. **« Tout marquer comme lu ».** Action en haut de l'écran qui appelle `PATCH …/read-all`.
+6. **Hors connexion.**
+   - Afficher la dernière page en cache, avec le libellé « Hors connexion — notifications non à jour ».
+   - Mettre les « lu » en file et les rejouer au retour du réseau. Ils sont idempotents ; un 404 au rejeu est ignoré.
+7. **Push reçu au premier plan.** Bandeau in-app, puis incrémenter le badge localement.
+8. **Libellés.** Titre de l'écran « Notifications ». Écran vide : « Aucune notification pour le moment ».
+
+**Implémentation de référence :** aucune dans `keevo/app` (Flutter = client de test seulement). Côté Bref : `api-bref/src/notification/*` pour l'esprit. Les routes, la pagination (`page` commence à 0, `size`) et l'absence de `GET /all` sont celles de Keevo, décrites ci-dessus.
+
+**Critères d'acceptation mobile / scénarios de test :**
+
+Préparation :
+```
+curl -s -X POST $API/auth/register -H 'Content-Type: application/json' -d '{"phoneNumber":"+2376XXXXXXXX","password":"Passw0rd!x"}'
+```
+Puis `/auth/login` et `/auth/select-tenant`. Pour avoir des notifications de test, déclencher une alerte de stock : seuil d'un produit plus une vente qui passe dessous.
+
+- **Notification reçue.** Étant donné un owner avec un jeton Expo enregistré, quand une alerte de stock survient, alors il reçoit le push, le badge passe à 1, et la notification apparaît en tête de l'écran Notifications.
+- **Notification lue.** Étant donné une notification non lue, quand l'utilisateur la touche, alors elle passe en lue, le badge diminue, et l'app ouvre l'écran ciblé par `deepLink`.
+- **Tout lire.** Étant donné 3 non lues, quand l'utilisateur touche « Tout marquer comme lu », alors le badge passe à 0.
+- **Lecture hors connexion.** Étant donné l'app hors connexion, quand l'utilisateur lit une notification, alors elle est marquée lue localement et le serveur est mis à jour au retour du réseau.
+- **Autre utilisateur.** Étant donné un employé, quand il ouvre l'écran, alors il ne voit que ses propres notifications.
+
+**Clé de suivi mobile :** `m19-9-sms-email-notifications-persistantes`.
