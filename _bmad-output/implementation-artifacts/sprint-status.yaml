@@ -397,7 +397,7 @@ development_status:
   17-8-gating-config-rapports: done  # 2026-11-02 build-auto done (spec-17-8-gating-config-rapports.md) — report-config DISABLED → préférences fixes (EOD 20:00 WhatsApp, auto-clôture 20:00) pour tous les jobs, préférences du trial conservées mais ignorées ; GET /tenant/preferences valeurs effectives + reportConfigEditable ; 35 constats (15 corrigés) ; mobile → m17-8
   17-7-notif-changement-prix-employe: done  # 2026-11-02 build-auto done (spec-17-7-notif-changement-prix-employe.md) — owner notifié (push + WhatsApp) quand un employé change un prix au catalogue (ProductPriceChangedEvent) ou vend à un autre prix (SalePriceOverriddenEvent), module alerts (Free → rien), regroupé par employé sur 5 min ; 31 constats (7 corrigés) ; mobile → m17-7
   17-2-leaderboard-vendeurs: done  # 2026-11-02 build-auto done (spec-17-2-leaderboard-vendeurs.md) — réglage owner « Afficher le classement aux employés » (désactivé par défaut, advanced-reports, audité), employé : sa boutique, anonymisé, refusé en grâce ; 29 constats (6 corrigés) ; mobile → m17-2
-  17-9-regression-e2e-multi-surface: backlog  # 2026-11-03 au jalon GL (tout le merge), couvre parcours Keevo + Bref, app Flutter V1 + app RN | 2026-11-01 GATE GO-LIVE : à passer sur staging avant 16-7 (canary)
+  17-9-regression-e2e-multi-surface: backlog  # 2026-11-05 spec 19.11 — +1 item (mesure de charge rejouée sur staging) | 2026-11-03 au jalon GL (tout le merge), couvre parcours Keevo + Bref, app Flutter V1 + app RN | 2026-11-01 GATE GO-LIVE : à passer sur staging avant 16-7 (canary)
   epic-17-retrospective: optional
   # ═══════════════════════════════════════════════════════════════════════
   # FUSION KEEVO × BREF POINT — Epics 18-25 (85 stories) — ajouté 2026-11-01

@@ -1907,6 +1907,8 @@ As a **plateforme**, I want **que la config des rapports (toggle, heures, types,
 **Acceptance Criteria:** **Given** un tenant **Free** **When** il tente de configurer ses rapports **Then** refus/lecture seule (rapport EOD fixe : heure par défaut) ; **Given Premium** **Then** configuration autorisée. **Notes:** `reporting`/`messaging` + `@RequiresEntitlement` ; UI Flutter conditionnée.
 
 ### Story 17.9 : Régression E2E multi-surface (mobile + backend + dashboard)
+
+> **Routé depuis la spec 19.11 (05/11/2026) :** - [ ] [Deferred-from: spec 19.11, 2026-11-05] Rejouer la mesure de charge sur staging (`keevo/backend/scripts/load/measure-tenants.sh`, base jetable copiée de staging, N = 52 schémas minimum) : démarrage, provisioning d'un tenant, migration d'un module sur tous les schémas, sauvegarde/restauration ; comparer au rapport local `research/fusion-mesures/rapport-charge-tenants-2026-11-05.md` — nécessite le serveur.
 As a **équipe**, I want **une suite de régression de bout en bout couvrant les parcours critiques après modularisation**, So that **l'app reste fonctionnelle sur les 3 surfaces (gap G13)**.
 **Acceptance Criteria:** **Given** la refonte déployée en staging **When** la suite E2E tourne **Then** parcours critiques verts : inscription→onboarding, vente offline→sync, transfert, inventaire, rapport WhatsApp, activation/désactivation module, facturation auto, gating Free/Premium. **Notes:** étend les scripts E2E Python existants + tests dashboard (15.7) ; exécutée avant le go-live (16.7).
 
