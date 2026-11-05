@@ -88,6 +88,21 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
         springRepository.save(entity);
     }
 
+    @Override
+    public boolean hasActiveOwnerMembership(UUID userId) {
+        return springRepository.existsByUserIdAndRoleAndActiveTrue(userId, "OWNER");
+    }
+
+    @Override
+    public boolean hasAnyMembership(UUID userId) {
+        return springRepository.existsByUserId(userId);
+    }
+
+    @Override
+    public boolean hasMembershipOutside(UUID userId, UUID tenantId) {
+        return springRepository.existsByUserIdAndTenantIdNot(userId, tenantId);
+    }
+
     // ── Mapping ──────────────────────────────────────────────────────────────
 
     private UserTenantMembershipJpaEntity toEntity(UserTenantMembership m) {

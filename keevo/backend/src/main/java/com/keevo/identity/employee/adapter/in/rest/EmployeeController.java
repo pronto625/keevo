@@ -80,13 +80,19 @@ public class EmployeeController {
     @Operation(summary = "Create a new employee",
             description = "Story 19.4 — phoneNumber and username are optional, at least one is required. A username is "
                     + "3 to 50 letters, digits, '.', '_' or '-', unique case-insensitively; the member signs in with it "
-                    + "and the temporary password, returned once.")
+                    + "and the temporary password, returned once. Story 19.6 — when the phone (then the username) "
+                    + "already belongs to an account, that account is added to the company as is: password unchanged, "
+                    + "temporaryPassword \"\" (never null), existingAccount true; the person is notified (inbox, "
+                    + "then WhatsApp or email, best effort).")
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Employee created"),
+            @ApiResponse(responseCode = "201",
+                    description = "Employee created (existingAccount false) or existing account added (existingAccount "
+                            + "true, temporaryPassword \"\")"),
             @ApiResponse(responseCode = "403", description = "Plan limit exceeded or not OWNER"),
             @ApiResponse(responseCode = "409",
-                    description = "Phone already registered (USER_ALREADY_EXISTS) or username taken, case-insensitively "
-                            + "(USERNAME_ALREADY_EXISTS)"),
+                    description = "Already a member of this company (MEMBER_ALREADY_IN_COMPANY) or deactivated here "
+                            + "(MEMBER_INACTIVE_IN_COMPANY); phone and username of two different accounts or only one "
+                            + "of them matching, a platform administrator's or an inactive account (USER_ALREADY_EXISTS); username taken by a concurrent creation (USERNAME_ALREADY_EXISTS)"),
             @ApiResponse(responseCode = "422",
                     description = "Neither phone nor username, or invalid username (VALIDATION_FAILED)")
     })
@@ -99,9 +105,11 @@ public class EmployeeController {
                 actorId, request.phoneNumber(), request.firstName(),
                 request.lastName(), request.storeId(), request.username(), request.role());
         CreateEmployeeResult result = createEmployeeUseCase.execute(command);
+        // Story 19.6 — V1 reads temporaryPassword as a String: "" (never null) for an attached account.
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
                 toDto(result.employee()),
-                result.temporaryPassword());
+                result.existingAccount() ? "" : result.temporaryPassword(),
+                result.existingAccount());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(dto));
     }
@@ -171,7 +179,9 @@ public class EmployeeController {
     @Operation(summary = "Regenerate temporary password for an employee")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "New temporary password generated"),
-            @ApiResponse(responseCode = "404", description = "Employee not found")
+            @ApiResponse(responseCode = "404", description = "Employee not found"),
+            @ApiResponse(responseCode = "409", description = "Member's account also used elsewhere "
+                    + "(MEMBER_ACCOUNT_SHARED, Story 19.6)")
     })
     @PostMapping("/{employeeId}/regenerate-password")
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> regeneratePassword(
@@ -193,7 +203,8 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Profile updated"),
             @ApiResponse(responseCode = "403", description = "Not an OWNER"),
             @ApiResponse(responseCode = "404", description = "Employee not found"),
-            @ApiResponse(responseCode = "409", description = "Phone already registered by another user")
+            @ApiResponse(responseCode = "409", description = "Phone already registered by another user, or phone change "
+                    + "on a member whose account is also used elsewhere (MEMBER_ACCOUNT_SHARED, Story 19.6)")
     })
     @PatchMapping("/{employeeId}")
     public ResponseEntity<ApiResponseWrapper<EmployeeResponseDto>> updateEmployee(
@@ -236,6 +247,8 @@ public class EmployeeController {
             @ApiResponse(responseCode = "200", description = "Password set"),
             @ApiResponse(responseCode = "403", description = "Not an OWNER"),
             @ApiResponse(responseCode = "404", description = "Employee not found"),
+            @ApiResponse(responseCode = "409", description = "Member's account also used elsewhere "
+                    + "(MEMBER_ACCOUNT_SHARED, Story 19.6)"),
             @ApiResponse(responseCode = "422", description = "Weak password")
     })
     @PostMapping("/{employeeId}/password")

@@ -73,6 +73,7 @@ class CreateEmployeeServiceTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock PasswordEncoder passwordEncoder;
     @Mock TransactionLockPort transactionLock;
+    @Mock MemberAddedNotifier memberAddedNotifier;
 
     CreateEmployeeService createEmployeeService;
 
@@ -86,7 +87,7 @@ class CreateEmployeeServiceTest {
         createEmployeeService = new CreateEmployeeService(userRepository, membershipRepository, employeeRepository,
                 SubscriptionApiTestSupport.limitPort(planLimitGuard), employeeCountPort,
                 SubscriptionApiTestSupport.queryPort(subscriptionRepository), tenantRepository, passwordEncoder,
-                eventPublisher, transactionLock);
+                eventPublisher, transactionLock, memberAddedNotifier);
         actorId = UUID.randomUUID();
         storeId = UUID.randomUUID();
         premiumSubscription = mock(Subscription.class);
@@ -102,7 +103,7 @@ class CreateEmployeeServiceTest {
     @DisplayName("v1s-13-13: execute() takes the per-tenant employee-limit lock before the count and the saves")
     void execute_locksBeforeCountAndSaves() {
         TenantContext.setCurrentTenant("kv_test01");
-        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(2, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
@@ -128,7 +129,7 @@ class CreateEmployeeServiceTest {
     @Test
     @DisplayName("execute() should create user, membership, and employee when valid command")
     void execute_shouldCreateUserMembershipAndEmployee_whenValidCommand() {
-        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
@@ -163,7 +164,7 @@ class CreateEmployeeServiceTest {
         Subscription freeSub = mock(Subscription.class);
         when(freeSub.getPlanType()).thenReturn(PlanType.FREE);
 
-        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(freeSub));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(5, 0));
         doThrow(new DomainException(ErrorCode.PLAN_LIMIT_EXCEEDED, "employees limit reached"))
@@ -179,9 +180,15 @@ class CreateEmployeeServiceTest {
     }
 
     @Test
-    @DisplayName("execute() should throw USER_ALREADY_EXISTS when phone number exists")
-    void execute_shouldThrowPhoneAlreadyRegistered_whenPhoneNumberExists() {
-        when(userRepository.existsByPhoneNumber("+237690000003")).thenReturn(true);
+    @DisplayName("19.6 — phone of an account already member here → MEMBER_ALREADY_IN_COMPANY (was USER_ALREADY_EXISTS)")
+    void execute_shouldThrowMemberAlreadyInCompany_whenPhoneBelongsToAMember() {
+        User existing = User.newEmployee("+237690000003", "$2a$12$x");
+        UUID tenantId = UUID.randomUUID();
+        when(userRepository.findByPhoneNumber("+237690000003")).thenReturn(Optional.of(existing));
+        when(tenantRepository.findBySchemaName("kv_test01")).thenReturn(Optional.of(
+                new Tenant(tenantId, "KV-TEST01", "kv_test01", TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now())));
+        when(membershipRepository.findByUserIdAndTenantId(existing.getId(), tenantId)).thenReturn(Optional.of(
+                new UserTenantMembership(UUID.randomUUID(), existing.getId(), tenantId, "EMPLOYEE", true, Instant.now())));
 
         CreateEmployeeCommand cmd = new CreateEmployeeCommand(
                 actorId, "+237690000003", "Test", "User", storeId);
@@ -189,13 +196,14 @@ class CreateEmployeeServiceTest {
         assertThatThrownBy(() -> createEmployeeService.execute(cmd))
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getDomainCode())
-                .isEqualTo(ErrorCode.USER_ALREADY_EXISTS.name());
+                .isEqualTo(ErrorCode.MEMBER_ALREADY_IN_COMPANY.name());
+        verifyNoInteractions(employeeRepository, memberAddedNotifier);
     }
 
     @Test
     @DisplayName("12.12 — '237…' is checked for uniqueness and saved as '+237…'")
     void execute_normalisesPhoneBeforeUniquenessAndSave() {
-        when(userRepository.existsByPhoneNumber("+237690000004")).thenReturn(false);
+        when(userRepository.findByPhoneNumber("+237690000004")).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
@@ -207,7 +215,7 @@ class CreateEmployeeServiceTest {
 
         createEmployeeService.execute(new CreateEmployeeCommand(actorId, "237690000004", "Test", "User", storeId));
 
-        verify(userRepository).existsByPhoneNumber("+237690000004");
+        verify(userRepository).findByPhoneNumber("+237690000004");
         verify(userRepository).save(org.mockito.ArgumentMatchers.<User>argThat(
                 u -> "+237690000004".equals(u.getPhoneNumber())));
     }
@@ -226,7 +234,7 @@ class CreateEmployeeServiceTest {
     @Test
     @DisplayName("execute() should publish EmployeeCreatedEvent on success")
     void execute_shouldPublishEmployeeCreatedEvent_onSuccess() {
-        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
@@ -250,7 +258,7 @@ class CreateEmployeeServiceTest {
     @Test
     @DisplayName("execute() should return cleartext temp password on success")
     void execute_shouldReturnTempPasswordCleartext_onSuccess() {
-        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any())).thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
@@ -271,7 +279,7 @@ class CreateEmployeeServiceTest {
     @Test
     @DisplayName("19.5: a VIEWER member → VIEWER membership and global role; an OWNER role is refused before any write")
     void execute_createsViewer_refusesOwner() {
-        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(userRepository.findByPhoneNumber(anyString())).thenReturn(Optional.empty());
         when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
         when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));

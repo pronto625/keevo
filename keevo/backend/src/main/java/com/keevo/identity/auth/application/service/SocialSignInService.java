@@ -10,6 +10,7 @@ import com.keevo.identity.auth.domain.port.in.SocialSignInCommand;
 import com.keevo.identity.auth.domain.port.in.SocialSignInUseCase;
 import com.keevo.identity.auth.domain.port.out.SocialTokenVerifier;
 import com.keevo.identity.auth.domain.port.out.UserAuthenticatorRepository;
+import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -40,8 +41,8 @@ import java.util.Optional;
  * <ol>
  *   <li>known {@code (provider, subject)} → that account; a verified email is added when the account has none and no
  *       other account holds it;</li>
- *   <li>else a verified email of an existing account → linked only if that account is an OWNER whose email is
- *       verified, otherwise {@code EMAIL_ALREADY_EXISTS} (members' and unproven emails are never linked);</li>
+ *   <li>else a verified email of an existing account → linked only if that account is an owner account (Story 19.6: an
+ *       active OWNER membership, or no membership at all) whose email is verified, otherwise {@code EMAIL_ALREADY_EXISTS} (members' and unproven emails are never linked);</li>
  *   <li>else a new OWNER account without company (verified email, or a technical username when the token has none).</li>
  * </ol>
  * The super-admin never signs in this way ({@code SOCIAL_TOKEN_INVALID}). Concurrent first logins: the user insert and
@@ -64,6 +65,7 @@ public class SocialSignInService implements SocialSignInUseCase {
     private final SocialSignInRateLimiter rateLimiter;
     private final UserRepository userRepository;
     private final UserAuthenticatorRepository authenticatorRepository;
+    private final UserMembershipRepository membershipRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
@@ -72,6 +74,7 @@ public class SocialSignInService implements SocialSignInUseCase {
                                SocialSignInRateLimiter rateLimiter,
                                UserRepository userRepository,
                                UserAuthenticatorRepository authenticatorRepository,
+                               UserMembershipRepository membershipRepository,
                                JwtTokenProvider jwtTokenProvider,
                                TransactionTemplate transactionTemplate,
                                Clock clock) {
@@ -83,6 +86,7 @@ public class SocialSignInService implements SocialSignInUseCase {
         this.rateLimiter = rateLimiter;
         this.userRepository = userRepository;
         this.authenticatorRepository = authenticatorRepository;
+        this.membershipRepository = membershipRepository;
         this.jwtTokenProvider = jwtTokenProvider;
         this.transactionTemplate = transactionTemplate;
         this.clock = clock;
@@ -148,12 +152,17 @@ public class SocialSignInService implements SocialSignInUseCase {
     }
 
     /**
-     * Step 2 — links the identity to the account holding its verified email, only for an OWNER whose email is
+     * Step 2 — links the identity to the account holding its verified email, only for an owner account whose email is
      * verified (Bref, FUS-FR6): a member's email is typed by the owner and an unverified one was never proven.
+     *
+     * <p>Story 19.6 — « owner account » is judged on memberships: at least one active OWNER membership, or no
+     * membership at all (an account created by a sign-in code, without company yet). Two {@code EXISTS}, at most.
      */
     private User link(User user, SocialIdentity identity) {
         refuseSuperAdmin(user);
-        if (user.getRole() != Role.OWNER || user.getEmailVerifiedAt() == null) {
+        boolean ownerAccount = membershipRepository.hasActiveOwnerMembership(user.getId())
+                || !membershipRepository.hasAnyMembership(user.getId());
+        if (!ownerAccount || user.getEmailVerifiedAt() == null) {
             throw new DomainException(ErrorCode.EMAIL_ALREADY_EXISTS);
         }
         if (!authenticatorRepository.insertIfAbsent(user.getId(), identity.provider(), identity.subject())) {

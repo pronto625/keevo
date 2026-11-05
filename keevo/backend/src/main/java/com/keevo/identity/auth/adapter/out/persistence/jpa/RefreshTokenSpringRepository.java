@@ -34,6 +34,12 @@ public interface RefreshTokenSpringRepository extends JpaRepository<RefreshToken
     @Query("UPDATE RefreshTokenJpaEntity r SET r.revoked = true WHERE r.userId = :userId")
     void revokeAllByUserId(@Param("userId") UUID userId);
 
+    /** Story 19.6 — revokes the live tokens of a user in one account only (shared-account deactivation). */
+    @Modifying
+    @Query(value = "UPDATE public.refresh_tokens SET revoked = true, updated_at = now() "
+            + "WHERE user_id = :userId AND tenant_id = :tenantId AND revoked = false", nativeQuery = true)
+    int revokeAllByUserIdAndTenantId(@Param("userId") UUID userId, @Param("tenantId") String tenantId);
+
     /** Story 16.11 — live tokens (one per open device session) of a user in one account. */
     @Query("SELECT r FROM RefreshTokenJpaEntity r WHERE r.userId = :userId AND r.tenantId = :tenantId "
             + "AND r.revoked = false AND r.expiresAt > :now ORDER BY r.lastUsedAt DESC NULLS LAST")

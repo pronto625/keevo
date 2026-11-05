@@ -27,6 +27,12 @@ public interface RefreshTokenRepository {
     /** Revoke all refresh tokens for a user (e.g., on logout or password change). */
     void revokeAllByUserId(UUID userId);
 
+    /**
+     * Story 19.6 — revokes the user's refresh tokens of ONE account (tenant schema) only: a shared account deactivated
+     * in one company keeps its sessions in the others. One UPDATE. Returns tokens revoked.
+     */
+    int revokeAllByUserIdAndTenantId(UUID userId, String tenantId);
+
     /** Story 16.11 — live tokens (one per open device session) of a user in one account, latest use first. */
     List<RefreshToken> findLiveSessions(UUID userId, String tenantId, Instant now);
 

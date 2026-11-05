@@ -54,6 +54,7 @@ class ChangeEmployeeRoleServiceTest {
     @Mock TokenRevocationPort tokenRevocationPort;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock TransactionLockPort transactionLock;
+    @Mock SharedAccountGuard sharedAccountGuard; // 19.6 — false: the non-shared path (shared: EmployeeSharedAccountTest)
 
     ChangeEmployeeRoleService service;
 
@@ -70,7 +71,7 @@ class ChangeEmployeeRoleServiceTest {
     void setUp() {
         service = new ChangeEmployeeRoleService(employeeRepository, userRepository,
                 membershipRepository, tenantRepository, refreshTokenRepository,
-                tokenRevocationPort, eventPublisher, transactionLock);
+                tokenRevocationPort, eventPublisher, transactionLock, sharedAccountGuard);
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         employeeUserId = UUID.randomUUID();

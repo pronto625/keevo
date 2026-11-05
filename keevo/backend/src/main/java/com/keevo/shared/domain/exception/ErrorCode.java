@@ -41,6 +41,9 @@ public enum ErrorCode {
     // ── Membership (Story 1.7) ─────────────────────────────────────
     MEMBERSHIP_ALREADY_EXISTS,  // UNIQUE(user_id, tenant_id) violated
     MEMBERSHIP_NOT_FOUND,       // user is not a member of the requested tenant
+    MEMBER_ALREADY_IN_COMPANY,  // Story 19.6 — HTTP 409: the added person already has a membership (active or not) here
+    MEMBER_INACTIVE_IN_COMPANY, // Story 19.6 — HTTP 409: the added person has an inactive membership here (reactivate)
+    MEMBER_ACCOUNT_SHARED,      // Story 19.6 — HTTP 409: account-wide change refused, the member's account is used elsewhere
     // ── Onboarding ────────────────────────────────────────────────────────
     ONBOARDING_ALREADY_COMPLETED,
     SECTOR_TEMPLATE_NOT_FOUND,    PREFERENCES_NOT_FOUND,       // Story 7.5 — tenant_preferences row missing    // ── Catalog ───────────────────────────────────────────────────

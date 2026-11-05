@@ -28,4 +28,13 @@ public interface UserTenantMembershipSpringRepository
 
     /** Story 19.4 — memberships of several users in one tenant (employee list, one query). */
     List<UserTenantMembershipJpaEntity> findByTenantIdAndUserIdIn(UUID tenantId, Collection<UUID> userIds);
+
+    /** Story 19.6 — one EXISTS: active membership with this role. */
+    boolean existsByUserIdAndRoleAndActiveTrue(UUID userId, String role);
+
+    /** Story 19.6 — one EXISTS: any membership. */
+    boolean existsByUserId(UUID userId);
+
+    /** Story 19.6 — one EXISTS: a membership in another tenant. */
+    boolean existsByUserIdAndTenantIdNot(UUID userId, UUID tenantId);
 }

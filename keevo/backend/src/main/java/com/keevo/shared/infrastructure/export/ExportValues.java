@@ -159,8 +159,9 @@ public final class ExportValues {
     /**
      * SQL joins resolving the display name of a user id the way the audit adapter does: latest
      * {@code employees} row of that user (LATERAL, {@code LIMIT 1} — never duplicates a row), else
-     * « Propriétaire » when {@code public.users.role = 'OWNER'}, else null. Use with
-     * {@link #actorNameSelect(String)} and the same alias.
+     * « Propriétaire » when the user's membership of the current company ({@link #CURRENT_TENANT_ID}) is OWNER — never
+     * the global {@code users.role} (Story 19.6: a person may own another company), else null. Use with
+     * {@link #actorNameSelect(String)} and the same alias. The {@code alias_m} join exposes that membership's role.
      *
      * @param userIdExpr SQL expression of the user id (e.g. {@code m.actor_id})
      * @param alias      unique alias prefix in the query
@@ -169,12 +170,29 @@ public final class ExportValues {
         return " LEFT JOIN LATERAL (SELECT NULLIF(TRIM(CONCAT_WS(' ', emp.first_name, emp.last_name)), '') AS name"
                 + " FROM employees emp WHERE emp.user_id = " + userIdExpr
                 + " ORDER BY emp.updated_at DESC LIMIT 1) " + alias + "_e ON TRUE"
-                + " LEFT JOIN public.users " + alias + "_u ON " + alias + "_u.id = " + userIdExpr;
+                + memberJoin(userIdExpr, alias);
+    }
+
+    /**
+     * Story 19.6 — id of the company whose schema the query runs in (the tenant schema heads the search_path); an
+     * uncorrelated scalar subquery on the {@code tenants.schema_name} unique index, evaluated once per query.
+     */
+    public static final String CURRENT_TENANT_ID =
+            "(SELECT cur_t.id FROM public.tenants cur_t WHERE cur_t.schema_name = current_schema())";
+
+    /**
+     * Story 19.6 — {@code LEFT JOIN} of the membership of {@code userIdExpr} in the current company, aliased
+     * {@code <alias>_m}: the role to read instead of the global {@code users.role}. At most one row (unique
+     * {@code (user_id, tenant_id)}). Same construction as the other actor joins (suffixed alias).
+     */
+    public static String memberJoin(String userIdExpr, String alias) {
+        return " LEFT JOIN public.user_tenant_memberships " + alias + "_m ON " + alias + "_m.user_id = " + userIdExpr
+                + " AND " + alias + "_m.tenant_id = " + CURRENT_TENANT_ID;
     }
 
     /** Select expression of the actor name joined by {@link #actorJoins(String, String)}. */
     public static String actorNameSelect(String alias) {
-        return "COALESCE(" + alias + "_e.name, CASE WHEN " + alias + "_u.role = 'OWNER' THEN '"
+        return "COALESCE(" + alias + "_e.name, CASE WHEN " + alias + "_m.role = 'OWNER' THEN '"
                 + OWNER_LABEL + "' END)";
     }
 }

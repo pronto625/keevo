@@ -50,6 +50,7 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
     private final TokenRevocationPort tokenRevocationPort;
     private final ApplicationEventPublisher eventPublisher;
     private final TransactionLockPort transactionLock;
+    private final SharedAccountGuard sharedAccountGuard;
 
     public ChangeEmployeeRoleService(EmployeeRepository employeeRepository,
                                       UserRepository userRepository,
@@ -58,7 +59,8 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
                                       RefreshTokenRepository refreshTokenRepository,
                                       TokenRevocationPort tokenRevocationPort,
                                       ApplicationEventPublisher eventPublisher,
-                                      TransactionLockPort transactionLock) {
+                                      TransactionLockPort transactionLock,
+                                      SharedAccountGuard sharedAccountGuard) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.membershipRepository = membershipRepository;
@@ -67,6 +69,7 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
         this.tokenRevocationPort = tokenRevocationPort;
         this.eventPublisher = eventPublisher;
         this.transactionLock = transactionLock;
+        this.sharedAccountGuard = sharedAccountGuard;
     }
 
     @Override
@@ -120,17 +123,24 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
             }
         }
 
+        // Story 19.6 — evaluated on the membership BEFORE the change (OWNER here counts as shared).
+        boolean sharedAccount = sharedAccountGuard.isShared(employee.getUserId(), tenant.getId(),
+                java.util.Optional.of(membership));
+
         // 6. Update membership role (tenant-scoped)
         membershipRepository.updateRole(employee.getUserId(), tenant.getId(), command.newRole());
 
-        // 7. Sync global User.role (fixes stale role on refresh/password-change)
-        User user = userRepository.findById(employee.getUserId())
-                .orElseThrow(() -> new DomainException(ErrorCode.USER_NOT_FOUND));
-        user = user.withRole(Role.valueOf(command.newRole()));
-        userRepository.save(user);
-
-        // 8. Revoke refresh tokens (force re-login — pattern DeactivateEmployeeService)
-        refreshTokenRepository.revokeAllByUserId(employee.getUserId());
+        // 7-8. Story 19.6 — a shared account keeps its global users.role (informational, it belongs to the person)
+        // and only this company's refresh tokens are revoked; otherwise unchanged: global role kept in step and every
+        // refresh token revoked (force re-login — pattern DeactivateEmployeeService).
+        if (sharedAccount) {
+            refreshTokenRepository.revokeAllByUserIdAndTenantId(employee.getUserId(), tenantSchema);
+        } else {
+            User user = userRepository.findById(employee.getUserId())
+                    .orElseThrow(() -> new DomainException(ErrorCode.USER_NOT_FOUND));
+            userRepository.save(user.withRole(Role.valueOf(command.newRole())));
+            refreshTokenRepository.revokeAllByUserId(employee.getUserId());
+        }
 
         // 9. Revoke access tokens (tenant-scoped, not everywhere)
         tokenRevocationPort.revokeAllSessions(employee.getUserId(), tenantSchema);

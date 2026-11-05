@@ -19,6 +19,8 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Updates the bcrypt hash in public.users, sets passwordChangeRequired = true,
  * and revokes existing refresh tokens to force re-login.
+ *
+ * <p>Story 19.6 — refused ({@code MEMBER_ACCOUNT_SHARED}) on a shared account ({@link SharedAccountGuard}).
  */
 @Service
 public class RegeneratePasswordService implements RegeneratePasswordUseCase {
@@ -27,15 +29,18 @@ public class RegeneratePasswordService implements RegeneratePasswordUseCase {
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SharedAccountGuard sharedAccountGuard;
 
     public RegeneratePasswordService(EmployeeRepository employeeRepository,
                                       UserRepository userRepository,
                                       RefreshTokenRepository refreshTokenRepository,
-                                      PasswordEncoder passwordEncoder) {
+                                      PasswordEncoder passwordEncoder,
+                                      SharedAccountGuard sharedAccountGuard) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.passwordEncoder = passwordEncoder;
+        this.sharedAccountGuard = sharedAccountGuard;
     }
 
     @Override
@@ -44,6 +49,9 @@ public class RegeneratePasswordService implements RegeneratePasswordUseCase {
         // 1. Load employee
         Employee employee = employeeRepository.findById(command.employeeId())
                 .orElseThrow(() -> new DomainException(ErrorCode.EMPLOYEE_NOT_FOUND));
+
+        // 1b. Story 19.6 — the account is also used elsewhere: the person manages their own password.
+        sharedAccountGuard.refuseIfShared(employee.getUserId());
 
         // 2. Generate new temp password
         String tempPassword = TempPasswordFactory.generate();

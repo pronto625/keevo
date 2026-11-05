@@ -54,6 +54,11 @@ public class RefreshTokenRepositoryAdapter implements RefreshTokenRepository {
     }
 
     @Override
+    public int revokeAllByUserIdAndTenantId(UUID userId, String tenantId) {
+        return springRepository.revokeAllByUserIdAndTenantId(userId, tenantId);
+    }
+
+    @Override
     public List<RefreshToken> findLiveSessions(UUID userId, String tenantId, Instant now) {
         return springRepository.findLive(userId, tenantId, now).stream().map(this::toDomain).toList();
     }

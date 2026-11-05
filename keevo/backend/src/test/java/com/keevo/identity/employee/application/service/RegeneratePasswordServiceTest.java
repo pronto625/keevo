@@ -39,6 +39,7 @@ class RegeneratePasswordServiceTest {
     @Mock UserRepository userRepository;
     @Mock RefreshTokenRepository refreshTokenRepository;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock SharedAccountGuard sharedAccountGuard;
 
     @InjectMocks RegeneratePasswordService regeneratePasswordService;
 
@@ -119,5 +120,18 @@ class RegeneratePasswordServiceTest {
                 .isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getDomainCode())
                 .isEqualTo(ErrorCode.EMPLOYEE_NOT_FOUND.name());
+    }
+
+    @Test
+    @DisplayName("19.6 — the shared-account guard is consulted before any write: refused → nothing saved or revoked")
+    void sharedAccount_refusedBeforeAnyWrite() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        doThrow(new DomainException(ErrorCode.MEMBER_ACCOUNT_SHARED)).when(sharedAccountGuard).refuseIfShared(userId);
+
+        assertThatThrownBy(() -> regeneratePasswordService.execute(new RegeneratePasswordCommand(actorId, employeeId)))
+                .isInstanceOf(DomainException.class);
+        verify(userRepository, never()).save(any());
+        verify(employeeRepository, never()).updatePasswordChangeRequired(any(), anyBoolean());
+        verifyNoInteractions(refreshTokenRepository, passwordEncoder);
     }
 }

@@ -126,6 +126,22 @@ class JdbcSellerLeaderboardRepositoryPostgresIntegrationTest extends PostgresInt
     }
 
     @Test
+    @DisplayName("19.6 — role read in this company, not users.role: owner elsewhere but EMPLOYEE here → not owner; "
+            + "OWNER here with global EMPLOYEE → owner")
+    void ownerFlagFromMembershipHere() {
+        UUID ownerElsewhere = user("OWNER", "EMPLOYEE");
+        UUID ownerHere = user("EMPLOYEE", "OWNER");
+        sale(ownerElsewhere, store, NOON, 2_000, "COMPLETED");
+        sale(ownerHere, store, NOON, 3_000, "COMPLETED");
+
+        var rows = byId(repo.findRawSellers(DAY, DAY, store));
+        assertThat(rows.get(ownerElsewhere).owner()).isFalse();
+        assertThat(rows.get(ownerElsewhere).sellerName()).isEqualTo("Vendeur inconnu");
+        assertThat(rows.get(ownerHere).owner()).isTrue();
+        assertThat(rows.get(ownerHere).sellerName()).isEqualTo("Propriétaire");
+    }
+
+    @Test
     @DisplayName("no sale, no employee → empty")
     void empty() {
         assertThat(repo.findRawSellers(DAY, DAY, UUID.randomUUID())).isEmpty();
@@ -138,11 +154,34 @@ class JdbcSellerLeaderboardRepositoryPostgresIntegrationTest extends PostgresInt
     }
 
     private UUID user(String role) {
+        return user(role, role);
+    }
+
+    /**
+     * Story 19.6 — a user whose global {@code users.role} and membership role in the current company (the tenant
+     * whose schema heads the search_path: here {@code public}, row created when absent — rolled back) may differ.
+     */
+    private UUID user(String globalRole, String roleHere) {
         UUID id = UUID.randomUUID();
         String phone = "+2376" + ThreadLocalRandom.current().nextLong(10_000_000L, 99_999_999L);
         jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, "
                         + "password_hash, phone_number, role) VALUES (?, now(), now(), true, 0, 'x', ?, ?)",
-                id, phone, role);
+                id, phone, globalRole);
+        jdbc.update("INSERT INTO public.user_tenant_memberships (id, created_at, updated_at, is_active, role, "
+                + "tenant_id, user_id) VALUES (gen_random_uuid(), now(), now(), true, ?, ?, ?)",
+                roleHere, currentTenantId(), id);
+        return id;
+    }
+
+    private UUID currentTenantId() {
+        List<UUID> ids = jdbc.queryForList(
+                "SELECT id FROM public.tenants WHERE schema_name = current_schema()", UUID.class);
+        if (!ids.isEmpty()) return ids.get(0);
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.tenants (id, created_at, updated_at, code, max_employees, max_products, "
+                + "max_stores, plan_type, schema_name, status, name) "
+                + "VALUES (?, now(), now(), ?, 3, 500, 1, 'FREE', current_schema(), 'ACTIVE', 'Test')",
+                id, "KV-" + id.toString().substring(0, 6).toUpperCase());
         return id;
     }
 

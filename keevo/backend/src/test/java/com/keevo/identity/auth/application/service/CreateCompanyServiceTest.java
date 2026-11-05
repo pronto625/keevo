@@ -45,13 +45,14 @@ class CreateCompanyServiceTest {
     @Mock JwtTokenProvider jwt;
     @Mock UserRepository users;
     @Mock OwnerTenantProvisioner provisioner;
+    @Mock com.keevo.identity.auth.domain.port.out.UserMembershipRepository memberships;
     @Mock Claims claims;
 
     CreateCompanyService service;
 
     @BeforeEach
     void setUp() {
-        service = new CreateCompanyService(jwt, users, provisioner);
+        service = new CreateCompanyService(jwt, users, memberships, provisioner);
         when(jwt.parseToken("login-token")).thenReturn(claims);
         when(jwt.extractScope(claims)).thenReturn("login_pending");
         when(jwt.extractUserId(claims)).thenReturn(USER_ID);
@@ -73,7 +74,6 @@ class CreateCompanyServiceTest {
     @DisplayName("account without company: provisioned through the shared provisioner with the device")
     @SuppressWarnings("unchecked")
     void provisions() {
-        when(users.findMembershipsWithTenantInfo(USER_ID)).thenReturn(List.of());
         RegistrationResult expected = new RegistrationResult("KV-ABC123", "access", USER_ID.toString(), "t", "refresh");
         when(provisioner.provision(any(), eq(DeviceInfo.of("dev-1", "Redmi")))).thenReturn(expected);
 
@@ -86,21 +86,38 @@ class CreateCompanyServiceTest {
     }
 
     @Test
-    @DisplayName("global role EMPLOYEE (employee elsewhere) → COMPANY_ALREADY_EXISTS until multi-role (19.6)")
+    @DisplayName("19.6 — employee elsewhere (no OWNER membership, global role EMPLOYEE) → provisioned")
     void employeeElsewhere() {
         when(users.findById(USER_ID)).thenReturn(Optional.of(user(Role.EMPLOYEE)));
-        when(users.findMembershipsWithTenantInfo(USER_ID)).thenReturn(
-                List.of(new UserMembershipInfo("KV-X", "X", "EMPLOYEE", "kv_x")));
+        when(memberships.hasActiveOwnerMembership(USER_ID)).thenReturn(false);
+        RegistrationResult expected = new RegistrationResult("KV-NEW", "access", USER_ID.toString(), "t", "refresh");
+        when(provisioner.provision(any(), any())).thenReturn(expected);
+
+        assertThat(service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE))).isSameAs(expected);
+    }
+
+    @Test
+    @DisplayName("already holds an active OWNER membership → COMPANY_ALREADY_EXISTS, nothing provisioned")
+    void alreadyOwner() {
+        when(memberships.hasActiveOwnerMembership(USER_ID)).thenReturn(true);
         assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
                 ErrorCode.COMPANY_ALREADY_EXISTS);
         verifyNoInteractions(provisioner);
     }
 
     @Test
-    @DisplayName("already owner → COMPANY_ALREADY_EXISTS, nothing provisioned")
-    void alreadyOwner() {
-        when(users.findMembershipsWithTenantInfo(USER_ID)).thenReturn(
-                List.of(new UserMembershipInfo("KV-ABC123", "Boutique", "OWNER", "kv_abc123")));
+    @DisplayName("user locked but not readable (gone) → TOKEN_INVALID, never taken for a platform administrator")
+    void missingUser() {
+        when(users.findById(USER_ID)).thenReturn(Optional.empty());
+        assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
+                ErrorCode.TOKEN_INVALID);
+        verifyNoInteractions(provisioner);
+    }
+
+    @Test
+    @DisplayName("platform administrator → COMPANY_ALREADY_EXISTS, nothing provisioned")
+    void superAdmin() {
+        when(users.findById(USER_ID)).thenReturn(Optional.of(user(Role.SUPER_ADMIN)));
         assertCode(() -> service.create(new CreateCompanyCommand("login-token", DeviceInfo.NONE)),
                 ErrorCode.COMPANY_ALREADY_EXISTS);
         verifyNoInteractions(provisioner);

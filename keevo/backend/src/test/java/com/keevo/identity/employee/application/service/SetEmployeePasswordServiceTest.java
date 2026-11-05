@@ -44,6 +44,7 @@ class SetEmployeePasswordServiceTest {
     @Mock TokenRevocationPort tokenRevocationPort;
     @Mock PasswordEncoder passwordEncoder;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock SharedAccountGuard sharedAccountGuard;
 
     SetEmployeePasswordService service;
 
@@ -58,7 +59,7 @@ class SetEmployeePasswordServiceTest {
     @BeforeEach
     void setUp() {
         service = new SetEmployeePasswordService(employeeRepository, userRepository,
-                refreshTokenRepository, tokenRevocationPort, passwordEncoder, eventPublisher);
+                refreshTokenRepository, tokenRevocationPort, passwordEncoder, eventPublisher, sharedAccountGuard);
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         userId = UUID.randomUUID();
@@ -185,5 +186,18 @@ class SetEmployeePasswordServiceTest {
                 .extracting("domainCode")
                 .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
         verify(passwordEncoder, never()).encode(anyString());
+    }
+
+    @Test
+    @DisplayName("19.6 — the shared-account guard is consulted before any write: refused → nothing saved or revoked")
+    void sharedAccount_refusedBeforeAnyWrite() {
+        when(employeeRepository.findById(employeeId)).thenReturn(java.util.Optional.of(employee));
+        doThrow(new DomainException(ErrorCode.MEMBER_ACCOUNT_SHARED)).when(sharedAccountGuard).refuseIfShared(userId);
+
+        assertThatThrownBy(() -> service.execute(new SetEmployeePasswordCommand(actorId, employeeId, "NewPass123")))
+                .isInstanceOf(DomainException.class);
+        verify(userRepository, never()).save(any());
+        verify(employeeRepository, never()).updatePasswordChangeRequired(any(), anyBoolean());
+        verifyNoInteractions(refreshTokenRepository, tokenRevocationPort, passwordEncoder, eventPublisher);
     }
 }

@@ -26,6 +26,9 @@ import java.util.UUID;
 
 /**
  * DeactivateEmployeeService — Revokes employee access (Story 3.5 AC7).
+ *
+ * <p>Story 19.6 — for a shared account (membership in another company, or OWNER here) only this company's membership
+ * and refresh tokens are closed; the other companies' sessions are untouched.
  */
 @Service
 public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
@@ -38,6 +41,7 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final TransactionLockPort transactionLock;
+    private final SharedAccountGuard sharedAccountGuard;
 
     public DeactivateEmployeeService(EmployeeRepository employeeRepository,
                                       UserMembershipRepository membershipRepository,
@@ -46,7 +50,8 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
                                       ApplicationEventPublisher eventPublisher,
                                       TenantRepository tenantRepository,
                                       UserRepository userRepository,
-                                      TransactionLockPort transactionLock) {
+                                      TransactionLockPort transactionLock,
+                                      SharedAccountGuard sharedAccountGuard) {
         this.employeeRepository = employeeRepository;
         this.membershipRepository = membershipRepository;
         this.refreshTokenRepository = refreshTokenRepository;
@@ -55,6 +60,7 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
         this.transactionLock = transactionLock;
+        this.sharedAccountGuard = sharedAccountGuard;
     }
 
     @Override
@@ -76,10 +82,13 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
         UUID tenantId = tenantRepository.findBySchemaName(currentSchema)
                 .map(Tenant::getId)
                 .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
-        boolean isActiveOwner = membershipRepository.findByUserIdAndTenantId(employee.getUserId(), tenantId)
+        var membership = membershipRepository.findByUserIdAndTenantId(employee.getUserId(), tenantId);
+        boolean isActiveOwner = membership
                 .filter(UserTenantMembership::isActive)
                 .map(m -> "OWNER".equals(m.getRole()))
                 .orElse(false);
+        // Story 19.6 — shared account (membership elsewhere or OWNER here): only this company's access is closed.
+        boolean sharedAccount = sharedAccountGuard.isShared(employee.getUserId(), tenantId, membership);
         if (isActiveOwner) {
             transactionLock.lock("owners:" + currentSchema);
             if (userRepository.findOwnersByTenantSchemaName(currentSchema).size() <= 1) {
@@ -94,8 +103,13 @@ public class DeactivateEmployeeService implements DeactivateEmployeeUseCase {
         // belong to — or own — other shops, which must keep their access).
         membershipRepository.deactivate(employee.getUserId(), tenantId);
 
-        // 4. Revoke refresh tokens
-        refreshTokenRepository.revokeAllByUserId(employee.getUserId());
+        // 4. Revoke refresh tokens — Story 19.6: for a shared account only this company's (one UPDATE by user and
+        // tenant); the person's sessions in their other companies stay valid.
+        if (sharedAccount) {
+            refreshTokenRepository.revokeAllByUserIdAndTenantId(employee.getUserId(), currentSchema);
+        } else {
+            refreshTokenRepository.revokeAllByUserId(employee.getUserId());
+        }
 
         // Story 12.2 — revoke access tokens issued before now (<5min propagation, NFR12).
         // Subject = the deactivated EMPLOYEE (employee.getUserId()), NOT the OWNER actor.

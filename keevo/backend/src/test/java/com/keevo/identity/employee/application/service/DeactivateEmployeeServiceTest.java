@@ -57,6 +57,7 @@ class DeactivateEmployeeServiceTest {
     @Mock TenantRepository tenantRepository;
     @Mock UserRepository userRepository;
     @Mock TransactionLockPort transactionLock;
+    @Mock SharedAccountGuard sharedAccountGuard; // 19.6 — false: the non-shared path (shared: EmployeeSharedAccountTest)
 
     @InjectMocks DeactivateEmployeeService deactivateEmployeeService;
 

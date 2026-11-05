@@ -138,11 +138,11 @@ class UsernameLoginFullContextTest extends FullContextIntegrationTest {
         assertThat(listed.get("role").asText()).isEqualTo("EMPLOYEE");
         assertThat(listed.get("phoneNumber").asText()).isEqualTo("");
 
-        // Same username in another case → 409
+        // Same username in another case → that account, already a member here → 409 (Story 19.6)
         MvcResult taken = createMember(username.toUpperCase());
         assertThat(taken.getResponse().getStatus()).isEqualTo(409);
-        assertThat(json(taken).get("domainCode").asText()).isEqualTo("USERNAME_ALREADY_EXISTS");
-        assertThat(json(taken).get("error").asText()).isEqualTo("Cet identifiant est déjà utilisé");
+        assertThat(json(taken).get("domainCode").asText()).isEqualTo("MEMBER_ALREADY_IN_COMPANY");
+        assertThat(json(taken).get("error").asText()).isEqualTo("Cette personne fait déjà partie de l'entreprise");
 
         // Wrong password → 401
         MvcResult wrong = login(Map.of("username", username, "password", "wrong-one"));

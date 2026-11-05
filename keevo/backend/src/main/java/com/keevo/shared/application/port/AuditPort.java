@@ -213,7 +213,7 @@ public interface AuditPort {
      * <p>Returned by query methods; mapped to response DTOs by the controller layer.
      * Enrichment fields (Story v1s-18-6) are null for rows written before V14, except
      * {@code actorName}, which is resolved at read time. {@code metadata} is raw JSON text.
-     * {@code actorRole} (Story v1s-18-2) is the actor's {@code public.users.role}
+     * {@code actorRole} (Story v1s-18-2) is the actor's role in this company (Story 19.6: membership role, or SUPER_ADMIN)
      * ({@code OWNER} / {@code EMPLOYEE}), null when unknown.
      */
     record AuditEntryRecord(

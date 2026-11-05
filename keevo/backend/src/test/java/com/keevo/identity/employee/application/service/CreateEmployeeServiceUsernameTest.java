@@ -63,6 +63,7 @@ class CreateEmployeeServiceUsernameTest {
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock PasswordEncoder passwordEncoder;
     @Mock TransactionLockPort transactionLock;
+    @Mock MemberAddedNotifier memberAddedNotifier;
 
     CreateEmployeeService service;
     UUID actorId = UUID.randomUUID();
@@ -74,7 +75,7 @@ class CreateEmployeeServiceUsernameTest {
         service = new CreateEmployeeService(userRepository, membershipRepository, employeeRepository,
                 SubscriptionApiTestSupport.limitPort(planLimitGuard), employeeCountPort,
                 SubscriptionApiTestSupport.queryPort(subscriptionRepository), tenantRepository, passwordEncoder,
-                eventPublisher, transactionLock);
+                eventPublisher, transactionLock, memberAddedNotifier);
     }
 
     @AfterEach
@@ -116,7 +117,7 @@ class CreateEmployeeServiceUsernameTest {
         assertThat(created.getPasswordHash()).isEqualTo("$2a$12$hashedpassword");
         assertThat(result.temporaryPassword()).isNotBlank().doesNotStartWith("$2");
         verify(userRepository, never()).save(any());
-        verify(userRepository, never()).existsByPhoneNumber(any());
+        verify(userRepository, never()).findByPhoneNumber(any());
         verify(membershipRepository).save(any(UserTenantMembership.class));
         verify(eventPublisher).publishEvent(any(Object.class));
     }
@@ -125,7 +126,7 @@ class CreateEmployeeServiceUsernameTest {
     @DisplayName("phone and username → both checked and stored")
     void phoneAndUsername_creates() {
         stubCreationFlow();
-        when(userRepository.existsByPhoneNumber("+237690000009")).thenReturn(false);
+        when(userRepository.findByPhoneNumber("+237690000009")).thenReturn(Optional.empty());
         when(userRepository.findByUsername("awa.k")).thenReturn(Optional.empty());
         when(userRepository.insertIfAbsent(any(User.class))).thenReturn(true);
 
@@ -138,17 +139,20 @@ class CreateEmployeeServiceUsernameTest {
     }
 
     @Test
-    @DisplayName("username taken in another case → 409 USERNAME_ALREADY_EXISTS before the plan lock")
-    void usernameTaken() {
+    @DisplayName("19.6 — username of an existing account in another case → that account is attached (no new user, no "
+            + "USERNAME_ALREADY_EXISTS)")
+    void usernameTaken_attachesExistingAccount() {
+        stubCreationFlow();
         User existing = User.newEmployee(null, "AWA_K", "$2b$12$x");
         when(userRepository.findByUsername("awa_k")).thenReturn(Optional.of(existing));
 
-        assertThatThrownBy(() -> service.execute(command(null, "awa_k")))
-                .isInstanceOf(DomainException.class)
-                .extracting(e -> ((DomainException) e).getDomainCode())
-                .isEqualTo(ErrorCode.USERNAME_ALREADY_EXISTS.name());
-        verifyNoInteractions(transactionLock, membershipRepository, employeeRepository);
+        CreateEmployeeResult result = service.execute(command(null, "awa_k"));
+
+        assertThat(result.existingAccount()).isTrue();
+        assertThat(result.temporaryPassword()).isNull();
         verify(userRepository, never()).insertIfAbsent(any());
+        verify(userRepository, never()).save(any());
+        verify(membershipRepository).save(any(UserTenantMembership.class));
     }
 
     @Test
@@ -171,7 +175,7 @@ class CreateEmployeeServiceUsernameTest {
     @DisplayName("concurrent insert lost with phone + username, username row visible → 409 USERNAME_ALREADY_EXISTS")
     void concurrentInsertUsernameVisible() {
         stubCreationFlow();
-        when(userRepository.existsByPhoneNumber("+237690000009")).thenReturn(false);
+        when(userRepository.findByPhoneNumber("+237690000009")).thenReturn(Optional.empty());
         when(userRepository.findByUsername("awa_k"))
                 .thenReturn(Optional.empty())
                 .thenReturn(Optional.of(User.newEmployee(null, "AWA_K", "$2b$12$x")));
@@ -187,7 +191,7 @@ class CreateEmployeeServiceUsernameTest {
     @DisplayName("concurrent insert lost on the phone only → 409 USER_ALREADY_EXISTS")
     void concurrentPhoneInsert() {
         stubCreationFlow();
-        when(userRepository.existsByPhoneNumber("+237690000009")).thenReturn(false);
+        when(userRepository.findByPhoneNumber("+237690000009")).thenReturn(Optional.empty());
         when(userRepository.findByUsername("awa_k")).thenReturn(Optional.empty());
         when(userRepository.insertIfAbsent(any(User.class))).thenReturn(false);
 

@@ -24,7 +24,8 @@ import java.time.Instant;
  * SetEmployeePasswordService — Owner sets a new password for an employee,
  * forcing passwordChangeRequired = true and revoking all sessions.
  *
- * <p>Story 14.11 — AC3.
+ * <p>Story 14.11 — AC3. Story 19.6 — refused ({@code MEMBER_ACCOUNT_SHARED}) on a shared account
+ * ({@link SharedAccountGuard}).
  */
 @Service
 public class SetEmployeePasswordService implements SetEmployeePasswordUseCase {
@@ -35,19 +36,22 @@ public class SetEmployeePasswordService implements SetEmployeePasswordUseCase {
     private final TokenRevocationPort tokenRevocationPort;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final SharedAccountGuard sharedAccountGuard;
 
     public SetEmployeePasswordService(EmployeeRepository employeeRepository,
                                        UserRepository userRepository,
                                        RefreshTokenRepository refreshTokenRepository,
                                        TokenRevocationPort tokenRevocationPort,
                                        PasswordEncoder passwordEncoder,
-                                       ApplicationEventPublisher eventPublisher) {
+                                       ApplicationEventPublisher eventPublisher,
+                                       SharedAccountGuard sharedAccountGuard) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.tokenRevocationPort = tokenRevocationPort;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
+        this.sharedAccountGuard = sharedAccountGuard;
     }
 
     @Override
@@ -72,6 +76,9 @@ public class SetEmployeePasswordService implements SetEmployeePasswordUseCase {
             throw new DomainException(ErrorCode.CANNOT_SET_OWN_PASSWORD,
                     "You cannot set your own password through this endpoint");
         }
+
+        // 1c. Story 19.6 — the account is also used elsewhere: the person manages their own password.
+        sharedAccountGuard.refuseIfShared(employee.getUserId());
 
         // 2. Load user
         User user = userRepository.findById(employee.getUserId())

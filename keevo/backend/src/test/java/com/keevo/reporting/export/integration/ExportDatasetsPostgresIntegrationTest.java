@@ -106,8 +106,8 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
     private Seed seed(String tag) {
         String schema = tx.execute(status -> tenantFactory.create()).getSchemaName();
         String q = "\"" + schema + "\".";
-        UUID owner = insertUser("OWNER");
-        UUID empUser = insertUser("EMPLOYEE");
+        UUID owner = insertUser("OWNER", schema);
+        UUID empUser = insertUser("EMPLOYEE", schema);
         UUID s0 = jdbc.queryForObject("SELECT id FROM " + q + "stores LIMIT 1", UUID.class); // « Ma Boutique »
         UUID s1 = UUID.randomUUID();
         UUID s2 = UUID.randomUUID();
@@ -215,11 +215,16 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         return new Seed(schema, tag, owner, empUser, s1, s2, s0, p1, p2, client);
     }
 
-    private UUID insertUser(String role) {
+    /**
+     * A user with its membership in the seeded company: Story 19.6 — actor labels (« Propriétaire ») come from the
+     * membership role in the current company, never from the global {@code users.role}.
+     */
+    private UUID insertUser(String role, String schema) {
         UUID id = UUID.randomUUID();
         String phone = "+2378" + String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000));
         jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, "
                 + "password_hash, phone_number, role) VALUES (?, now(), now(), true, 0, 'hash', ?, ?)", id, phone, role);
+        com.keevo.shared.infrastructure.security.TestAccess.grant(jdbc, id, schema, role);
         return id;
     }
 

@@ -50,6 +50,10 @@ class ChangePasswordServiceTest {
     @Mock com.keevo.identity.auth.application.service.SessionTokenIssuer sessionTokenIssuer;
     @Mock com.keevo.identity.auth.domain.port.out.TenantRepository tenantRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.keevo.identity.auth.domain.port.out.UserMembershipRepository membershipRepository;
+
+    /** Story 19.6 — role of the caller's membership in the current company (stubbed by stubIssuer). */
+    String membershipRole = "EMPLOYEE";
 
     @InjectMocks ChangePasswordService changePasswordService;
 
@@ -233,9 +237,10 @@ class ChangePasswordServiceTest {
     }
 
     @Test
-    @DisplayName("REGRESSION (Story 14.11 Task 5.2): promoted employee (Role.OWNER with Employee record) "
+    @DisplayName("REGRESSION (Story 14.11 Task 5.2): promoted employee (OWNER membership with Employee record) "
             + "gets JWT role=OWNER after forced password change — NOT 'EMPLOYEE' from heuristic")
     void shouldIssueOwnerRoleJwtAfterPromotionAndForcedPasswordChange() {
+        membershipRole = "OWNER"; // Story 19.6 — the role comes from the membership of the current company
         // Employee was promoted to OWNER → User.role = OWNER (synced by ChangeEmployeeRoleService)
         // but Employee record still exists (not deleted on promotion)
         User promotedUser = new User(userId, "+237690000001", "$2a$12$oldHash",
@@ -256,6 +261,73 @@ class ChangePasswordServiceTest {
         verify(sessionTokenIssuer).issue(eq(userId), any(),
                 eq("OWNER"),       // ← this is the regression assertion
                 any(), any());
+    }
+
+    @Test
+    @DisplayName("19.6 — global role OWNER (owner elsewhere) but EMPLOYEE membership here → token role EMPLOYEE")
+    void roleComesFromTheCurrentMembership() {
+        User ownerElsewhere = new User(userId, "+237690000001", "$2a$12$oldHash", Role.OWNER, true, Instant.now());
+        when(userRepository.findById(userId)).thenReturn(Optional.of(ownerElsewhere));
+        when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+        when(passwordEncoder.encode("NewPass1234")).thenReturn("$2a$12$newHash");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(employee));
+        when(employeeRepository.updatePasswordChangeRequired(employeeId, false))
+                .thenReturn(employee.withPasswordChangeRequired(false));
+        stubIssuer("token");
+        TenantContext.setCurrentTenant("kv_abc123");
+
+        changePasswordService.execute(new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
+
+        verify(sessionTokenIssuer).issue(eq(userId), any(), eq("EMPLOYEE"), any(), any());
+    }
+
+    @Test
+    @DisplayName("19.6 — SUPER_ADMIN: its system-tenant membership (schema public) gives the SUPER_ADMIN session role")
+    void superAdmin_roleFromSystemTenantMembership() {
+        User admin = new User(userId, "+237690000001", "$2a$12$oldHash", Role.SUPER_ADMIN, true, Instant.now());
+        UUID systemTenantId = UUID.randomUUID();
+        TenantContext.setCurrentTenant("public");
+        when(userRepository.findById(userId)).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+        when(passwordEncoder.encode("NewPass1234")).thenReturn("$2a$12$newHash");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.empty());
+        when(tenantRepository.findBySchemaName("public")).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.Tenant(systemTenantId, "SYSTEM", "public",
+                        com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
+                        Instant.now())));
+        when(membershipRepository.findByUserIdAndTenantId(userId, systemTenantId)).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.UserTenantMembership(UUID.randomUUID(), userId,
+                        systemTenantId, "SUPER_ADMIN", true, Instant.now())));
+        when(sessionTokenIssuer.issue(any(), any(), any(), any(), any())).thenAnswer(inv ->
+                new com.keevo.identity.auth.application.service.SessionTokenIssuer.IssuedSession(
+                        new AuthTokens("t", "refresh", 1800, inv.getArgument(0), "public", inv.getArgument(2)),
+                        UUID.randomUUID()));
+
+        AuthTokens tokens = changePasswordService.execute(
+                new ChangePasswordCommand(userId, "tempPass123", "NewPass1234"));
+
+        assertThat(tokens.role()).isEqualTo("SUPER_ADMIN");
+        verify(sessionTokenIssuer).issue(eq(userId), any(), eq("SUPER_ADMIN"), any(), any());
+    }
+
+    @Test
+    @DisplayName("19.6 — no active membership in the current company → MEMBERSHIP_NOT_FOUND, nothing saved")
+    void noMembershipHere_refused() {
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("tempPass123", "$2a$12$oldHash")).thenReturn(true);
+        when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-ABC123", "kv_abc123",
+                        com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
+                        Instant.now())));
+
+        assertThatThrownBy(() -> changePasswordService.execute(
+                new ChangePasswordCommand(userId, "tempPass123", "NewPass1234")))
+                .isInstanceOf(DomainException.class)
+                .extracting(e -> ((DomainException) e).getDomainCode())
+                .isEqualTo(ErrorCode.MEMBERSHIP_NOT_FOUND.name());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -289,10 +361,14 @@ class ChangePasswordServiceTest {
 
     /** Story 16.11 — tokens are issued by SessionTokenIssuer (same path as login / refresh). */
     private void stubIssuer(String accessToken) {
+        UUID tenantId = UUID.randomUUID();
         when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
-                new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-ABC123", "kv_abc123",
+                new com.keevo.identity.auth.domain.model.Tenant(tenantId, "KV-ABC123", "kv_abc123",
                         com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
                         Instant.now())));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantId)).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.UserTenantMembership(UUID.randomUUID(), userId, tenantId,
+                        membershipRole, true, Instant.now())));
         when(sessionTokenIssuer.issue(any(), any(), any(), any(), any())).thenAnswer(inv ->
                 new com.keevo.identity.auth.application.service.SessionTokenIssuer.IssuedSession(
                         new AuthTokens(accessToken, "refresh", 1800, inv.getArgument(0), "kv_abc123",

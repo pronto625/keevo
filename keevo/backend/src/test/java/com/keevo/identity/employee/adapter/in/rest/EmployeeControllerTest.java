@@ -121,7 +121,24 @@ class EmployeeControllerTest {
                                 """.formatted(storeId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.data.temporaryPassword").value("TmpPass12345"))
+                .andExpect(jsonPath("$.data.existingAccount").value(false)) // 19.6 — always present
                 .andExpect(jsonPath("$.data.employee.firstName").value("Loïc"));
+    }
+
+    @Test
+    @DisplayName("19.6 POST /api/v1/employees with an existing account → 201, temporaryPassword \"\" (never null: V1 "
+            + "reads a String), existingAccount true")
+    void createEmployee_existingAccount_emptyTempPassword() throws Exception {
+        when(createEmployeeUseCase.execute(any())).thenReturn(new CreateEmployeeResult(sampleEmployee, null, true));
+
+        mockMvc.perform(post("/api/v1/employees")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"firstName":"Loïc","lastName":"Nkoulou","phoneNumber":"+237690000001","storeId":"%s"}
+                                """.formatted(storeId)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.temporaryPassword").value(""))
+                .andExpect(jsonPath("$.data.existingAccount").value(true));
     }
 
     @Test

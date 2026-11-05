@@ -28,6 +28,9 @@ import java.util.regex.Pattern;
  *
  * <p>Story 19.7b — moving an ACTIVE employee to another store enforces the plan's per-store employee limit (Bref's
  * member limit is per shop), {@link StoreEmployeeLimit}.
+ *
+ * <p>Story 19.6 — a phone change on a shared account ({@link SharedAccountGuard}) is refused with
+ * {@code MEMBER_ACCOUNT_SHARED}; name and store live on the employee row and stay allowed.
  */
 @Service
 public class UpdateEmployeeService implements UpdateEmployeeUseCase {
@@ -38,15 +41,18 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
     private final UserRepository userRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final StoreEmployeeLimit storeEmployeeLimit;
+    private final SharedAccountGuard sharedAccountGuard;
 
     public UpdateEmployeeService(EmployeeRepository employeeRepository,
                                   UserRepository userRepository,
                                   ApplicationEventPublisher eventPublisher,
-                                  StoreEmployeeLimit storeEmployeeLimit) {
+                                  StoreEmployeeLimit storeEmployeeLimit,
+                                  SharedAccountGuard sharedAccountGuard) {
         this.employeeRepository = employeeRepository;
         this.userRepository = userRepository;
         this.eventPublisher = eventPublisher;
         this.storeEmployeeLimit = storeEmployeeLimit;
+        this.sharedAccountGuard = sharedAccountGuard;
     }
 
     @Override
@@ -90,6 +96,8 @@ public class UpdateEmployeeService implements UpdateEmployeeUseCase {
             // Story 12.12 — canonical +<digits> form before comparison, uniqueness check and persist
             String phone = PhoneNumbers.normalize(command.phoneNumber());
             if (!phone.equals(user.getPhoneNumber())) {
+                // Story 19.6 — the phone is an identifier of an account also used elsewhere: refused.
+                sharedAccountGuard.refuseIfShared(user.getId());
                 // Check uniqueness cross-tenant
                 if (userRepository.existsByPhoneNumber(phone)) {
                     throw new DomainException(ErrorCode.PHONE_ALREADY_REGISTERED);

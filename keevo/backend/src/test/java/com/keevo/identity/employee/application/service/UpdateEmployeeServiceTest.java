@@ -39,6 +39,7 @@ class UpdateEmployeeServiceTest {
     @Mock EmployeeRepository employeeRepository;
     @Mock UserRepository userRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock SharedAccountGuard sharedAccountGuard;
     @Mock com.keevo.shared.capability.entitlement.PlanLimitCheck planLimit;
     @Mock com.keevo.identity.employee.domain.port.out.EmployeeCountPort employeeCountPort;
     @Mock com.keevo.shared.capability.entitlement.TenantPlanQuery tenantPlanQuery;
@@ -57,7 +58,7 @@ class UpdateEmployeeServiceTest {
     @BeforeEach
     void setUp() {
         service = new UpdateEmployeeService(employeeRepository, userRepository, eventPublisher,
-                new StoreEmployeeLimit(planLimit, employeeCountPort, tenantPlanQuery, transactionLock));
+                new StoreEmployeeLimit(planLimit, employeeCountPort, tenantPlanQuery, transactionLock), sharedAccountGuard);
         actorId = UUID.randomUUID();
         employeeId = UUID.randomUUID();
         userId = UUID.randomUUID();
@@ -256,5 +257,20 @@ class UpdateEmployeeServiceTest {
                 ArgumentCaptor.forClass(com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().fieldsChanged()).contains("firstName", "lastName", "phoneNumber");
+    }
+
+    @Test
+    @DisplayName("19.6 — phone change: the shared-account guard is consulted before the user write; refused → not saved")
+    void sharedAccount_phoneChangeRefusedBeforeWrite() {
+        when(employeeRepository.findById(employeeId)).thenReturn(java.util.Optional.of(employee));
+        when(userRepository.findById(userId)).thenReturn(java.util.Optional.of(user));
+        doThrow(new DomainException(ErrorCode.MEMBER_ACCOUNT_SHARED)).when(sharedAccountGuard).refuseIfShared(userId);
+
+        assertThatThrownBy(() -> service.execute(
+                new UpdateEmployeeCommand(actorId, employeeId, null, null, "+237690000099", null)))
+                .isInstanceOf(DomainException.class);
+        verify(userRepository, never()).save(any());
+        verify(userRepository, never()).existsByPhoneNumber(any());
+        verifyNoInteractions(eventPublisher);
     }
 }

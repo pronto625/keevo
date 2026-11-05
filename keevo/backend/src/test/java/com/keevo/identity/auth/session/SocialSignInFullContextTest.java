@@ -158,10 +158,15 @@ class SocialSignInFullContextTest extends FullContextIntegrationTest {
         assertThat(postJson("/api/v1/auth/social/apple", Map.of("identityToken", forged))
                 .getResponse().getStatus()).isEqualTo(401);
 
+        // Story 19.6 — a member-only account (an EMPLOYEE membership, no OWNER one) is never linked by email
         String employeeEmail = "emp-" + UUID.randomUUID().toString().substring(0, 8) + "@ex.com";
+        UUID employeeId = UUID.randomUUID();
         jdbc.update("INSERT INTO public.users (id, email, role, is_active, failed_attempts, email_verified_at, "
                 + "created_at, updated_at) VALUES (?, ?, 'EMPLOYEE', true, 0, now(), now(), now())",
-                UUID.randomUUID(), employeeEmail);
+                employeeId, employeeEmail);
+        jdbc.update("INSERT INTO public.user_tenant_memberships (id, created_at, updated_at, is_active, role, "
+                + "tenant_id, user_id) VALUES (gen_random_uuid(), now(), now(), true, 'EMPLOYEE', ?, ?)",
+                UUID.randomUUID(), employeeId);
         MvcResult conflict = postJson("/api/v1/auth/social/google",
                 Map.of("idToken", googleToken("g-" + UUID.randomUUID(), employeeEmail)));
         assertThat(conflict.getResponse().getStatus()).isEqualTo(409);

@@ -132,7 +132,8 @@ class AuthControllerChangePasswordTest {
                         encoder,
                         org.mockito.Mockito.mock(com.keevo.identity.auth.application.service.SessionTokenIssuer.class),
                         org.mockito.Mockito.mock(com.keevo.identity.auth.domain.port.out.TenantRepository.class),
-                        org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
+                        org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class),
+                        org.mockito.Mockito.mock(com.keevo.identity.auth.domain.port.out.UserMembershipRepository.class));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
                         new AuthController(null, null, null, null, service, null, null, null, null, null, null, null, null))
                 .setControllerAdvice(new GlobalExceptionHandler())

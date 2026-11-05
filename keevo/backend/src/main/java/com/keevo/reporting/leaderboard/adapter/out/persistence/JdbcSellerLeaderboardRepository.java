@@ -63,7 +63,7 @@ public class JdbcSellerLeaderboardRepository implements SellerLeaderboardReposit
             ") " +
             "SELECT x.seller_id, x.sales_count, x.total_revenue, " +
             "  COALESCE(" + ExportValues.actorNameSelect(ALIAS) + ", '" + UNKNOWN_SELLER + "') AS seller_name, " +
-            "  COALESCE(" + ALIAS + "_u.role = 'OWNER', FALSE) AS is_owner " +
+            "  COALESCE(" + ALIAS + "_m.role = 'OWNER', FALSE) AS is_owner " + // 19.6 — role in this company
             "FROM sellers x" +
             ExportValues.actorJoins("x.seller_id", ALIAS);
 

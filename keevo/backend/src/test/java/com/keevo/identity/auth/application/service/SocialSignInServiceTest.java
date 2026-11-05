@@ -50,6 +50,7 @@ class SocialSignInServiceTest {
 
     @Mock UserRepository users;
     @Mock UserAuthenticatorRepository authenticators;
+    @Mock com.keevo.identity.auth.domain.port.out.UserMembershipRepository memberships;
     @Mock JwtTokenProvider jwt;
     @Mock PlatformTransactionManager txManager;
 
@@ -77,7 +78,7 @@ class SocialSignInServiceTest {
     void setUp() {
         MutableTestClock clock = new MutableTestClock(NOW);
         service = new SocialSignInService(List.of(google, apple), new SocialSignInRateLimiter(clock, 30), users,
-                authenticators, jwt, new TransactionTemplate(txManager), clock);
+                authenticators, memberships, jwt, new TransactionTemplate(txManager), clock);
         when(jwt.generateLoginToken(any())).thenReturn("login-tok");
         when(users.findMembershipsWithTenantInfo(any())).thenReturn(List.of());
         when(users.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -144,10 +145,27 @@ class SocialSignInServiceTest {
     }
 
     @Test
-    @DisplayName("verified email of an EMPLOYEE, or of an OWNER whose email is unverified → 409 EMAIL_ALREADY_EXISTS")
+    @DisplayName("19.6 — verified email of an account EMPLOYEE in A and OWNER in B (global role EMPLOYEE) → linked")
+    void linkEmployeeHereOwnerElsewhere() {
+        User account = account(Role.EMPLOYEE, EMAIL, NOW.minusSeconds(3600));
+        when(users.findByEmail(EMAIL)).thenReturn(Optional.of(account));
+        when(memberships.hasActiveOwnerMembership(account.getId())).thenReturn(true);
+        when(memberships.hasAnyMembership(account.getId())).thenReturn(true);
+        google.identity = identity(SocialProvider.GOOGLE, "g9", EMAIL, true);
+
+        service.signIn(command(SocialProvider.GOOGLE));
+
+        verify(authenticators).insertIfAbsent(account.getId(), SocialProvider.GOOGLE, "g9");
+    }
+
+    @Test
+    @DisplayName("verified email of an account member only (no OWNER membership, global role OWNER), or of an "
+            + "owner account whose email is unverified → 409 EMAIL_ALREADY_EXISTS")
     void refuseLink() {
         google.identity = identity(SocialProvider.GOOGLE, "g1", EMAIL, true);
-        when(users.findByEmail(EMAIL)).thenReturn(Optional.of(account(Role.EMPLOYEE, EMAIL, NOW)));
+        User memberOnly = account(Role.OWNER, EMAIL, NOW); // 19.6 — the global role is not read any more
+        when(memberships.hasAnyMembership(memberOnly.getId())).thenReturn(true);
+        when(users.findByEmail(EMAIL)).thenReturn(Optional.of(memberOnly));
         assertCode(() -> service.signIn(command(SocialProvider.GOOGLE)), ErrorCode.EMAIL_ALREADY_EXISTS);
 
         when(users.findByEmail(EMAIL)).thenReturn(Optional.of(account(Role.OWNER, EMAIL, null)));
@@ -348,8 +366,8 @@ class SocialSignInServiceTest {
     void duplicateVerifier() {
         MutableTestClock clock = new MutableTestClock(NOW);
         assertThatThrownBy(() -> new SocialSignInService(List.of(google, new StubVerifier(SocialProvider.GOOGLE)),
-                new SocialSignInRateLimiter(clock, 30), users, authenticators, jwt, new TransactionTemplate(txManager),
-                clock)).isInstanceOf(IllegalStateException.class);
+                new SocialSignInRateLimiter(clock, 30), users, authenticators, memberships, jwt,
+                new TransactionTemplate(txManager), clock)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test

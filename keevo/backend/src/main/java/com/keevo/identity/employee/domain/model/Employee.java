@@ -43,6 +43,15 @@ public final class Employee {
                 EmployeeStatus.ACTIVE, true, Instant.now());
     }
 
+    /**
+     * Story 19.6 — an existing account added to this company: it keeps its own password, so no forced change
+     * ({@code passwordChangeRequired = false}).
+     */
+    public static Employee createForExistingAccount(UUID userId, UUID storeId, String firstName, String lastName) {
+        return new Employee(UUID.randomUUID(), userId, storeId, firstName, lastName,
+                EmployeeStatus.ACTIVE, false, Instant.now());
+    }
+
     public UUID getId() { return id; }
     public UUID getUserId() { return userId; }
     public UUID getStoreId() { return storeId; }

@@ -48,4 +48,19 @@ public interface UserMembershipRepository {
      * Story 14.11 — update the role for a specific (userId, tenantId) membership.
      */
     void updateRole(UUID userId, UUID tenantId, String newRole);
+
+    /**
+     * Story 19.6 — true when the user holds an ACTIVE OWNER membership in any company (one {@code EXISTS} on the
+     * {@code (user_id, tenant_id)} unique index).
+     */
+    boolean hasActiveOwnerMembership(UUID userId);
+
+    /** Story 19.6 — true when the user holds any membership (any role, active or not) in any company. */
+    boolean hasAnyMembership(UUID userId);
+
+    /**
+     * Story 19.6 — true when the user holds a membership (any role, active or not) in a company other than this one:
+     * the account is shared, so account-wide changes are refused to this company's owner.
+     */
+    boolean hasMembershipOutside(UUID userId, UUID tenantId);
 }

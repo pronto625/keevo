@@ -66,9 +66,11 @@ public class AuditLogRepositoryAdapter implements AuditPort {
                    CAST(a.metadata AS text),
                    NULLIF(TRIM(COALESCE(e.first_name, '') || ' ' || COALESCE(e.last_name, '')), ''),
                    a.metadata ->> 'actorLabel',
-                   u.role
+                   CASE WHEN u.role = 'SUPER_ADMIN' THEN u.role ELSE am.role END
             FROM audit_log a
             LEFT JOIN public.users u ON a.user_id = u.id
+            LEFT JOIN public.user_tenant_memberships am ON am.user_id = a.user_id
+                 AND am.tenant_id = (SELECT cur_t.id FROM public.tenants cur_t WHERE cur_t.schema_name = current_schema())
             LEFT JOIN stores st ON st.id = a.store_id
             LEFT JOIN employees te ON a.entity_type = 'Employee' AND te.id = a.entity_id
             LEFT JOIN LATERAL (
@@ -265,7 +267,7 @@ public class AuditLogRepositoryAdapter implements AuditPort {
                 (String) r[13],                   // source
                 (String) r[14],                   // metadata (raw JSON text)
                 actorName((String) r[15], (String) r[16], (String) r[17]),
-                (String) r[17]                    // actorRole (public.users.role)
+                (String) r[17]                    // actorRole (19.6: membership role here, or SUPER_ADMIN)
         )).toList();
     }
 

@@ -158,6 +158,20 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
     }
 
     @Test
+    @DisplayName("19.6 — actorRole is the membership role in this company (owner elsewhere, EMPLOYEE here → EMPLOYEE); "
+            + "the platform administrator stays SUPER_ADMIN")
+    void actorRole_fromMembershipHere() {
+        UUID ownerElsewhere = insertUser("OWNER", "EMPLOYEE");
+        UUID admin = insertUser("SUPER_ADMIN", null);
+        Instant at = Instant.parse("2026-02-02T10:00:00Z");
+        UUID byMember = insertEnriched(ownerElsewhere, null, at, null);
+        UUID byAdmin = insertEnriched(admin, null, at.plusSeconds(1), null);
+
+        assertThat(adapter.findById(byMember).orElseThrow().actorRole()).isEqualTo("EMPLOYEE");
+        assertThat(adapter.findById(byAdmin).orElseThrow().actorRole()).isEqualTo("SUPER_ADMIN");
+    }
+
+    @Test
     @DisplayName("actorName: employee name > stored actorLabel; storeName resolved from stores")
     void actorAndStoreNames() {
         UUID storeId = insertStore("Boutique Centre");
@@ -384,11 +398,37 @@ class AuditLogEnrichmentPostgresIntegrationTest extends PostgresIntegrationTest 
     }
 
     private UUID insertUser(String role) {
+        return insertUser(role, role);
+    }
+
+    /**
+     * Story 19.6 — global {@code users.role} and the role of the membership in the current company (the tenant whose
+     * schema heads the search_path, here {@code public}: row created when absent, rolled back) may differ; a
+     * {@code null} {@code roleHere} inserts no membership.
+     */
+    private UUID insertUser(String globalRole, String roleHere) {
         UUID id = UUID.randomUUID();
         Timestamp now = Timestamp.from(Instant.now());
         jdbc.update("INSERT INTO users (id, created_at, updated_at, is_active, failed_attempts, password_hash, "
                         + "phone_number, role) VALUES (?, ?, ?, TRUE, 0, 'x', ?, ?)",
-                id, now, now, "+2376" + id.toString().replace("-", "").substring(0, 8), role);
+                id, now, now, "+2376" + id.toString().replace("-", "").substring(0, 8), globalRole);
+        if (roleHere != null) {
+            jdbc.update("INSERT INTO public.user_tenant_memberships (id, created_at, updated_at, is_active, role, "
+                    + "tenant_id, user_id) VALUES (gen_random_uuid(), now(), now(), true, ?, ?, ?)",
+                    roleHere, currentTenantId(), id);
+        }
+        return id;
+    }
+
+    private UUID currentTenantId() {
+        List<UUID> ids = jdbc.queryForList(
+                "SELECT id FROM public.tenants WHERE schema_name = current_schema()", UUID.class);
+        if (!ids.isEmpty()) return ids.get(0);
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.tenants (id, created_at, updated_at, code, max_employees, max_products, "
+                + "max_stores, plan_type, schema_name, status, name) "
+                + "VALUES (?, now(), now(), ?, 3, 500, 1, 'FREE', current_schema(), 'ACTIVE', 'Test')",
+                id, "KV-" + id.toString().substring(0, 6).toUpperCase());
         return id;
     }
 

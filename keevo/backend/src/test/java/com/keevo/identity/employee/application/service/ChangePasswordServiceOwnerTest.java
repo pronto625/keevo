@@ -44,6 +44,7 @@ class ChangePasswordServiceOwnerTest {
     @Mock com.keevo.identity.auth.application.service.SessionTokenIssuer sessionTokenIssuer;
     @Mock com.keevo.identity.auth.domain.port.out.TenantRepository tenantRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock com.keevo.identity.auth.domain.port.out.UserMembershipRepository membershipRepository;
 
     @InjectMocks ChangePasswordService changePasswordService;
 
@@ -109,10 +110,15 @@ class ChangePasswordServiceOwnerTest {
 
     /** Story 16.11 — tokens are issued by SessionTokenIssuer (same path as login / refresh). */
     private void stubIssuer(String accessToken) {
+        UUID tenantId = UUID.randomUUID();
         when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
-                new com.keevo.identity.auth.domain.model.Tenant(UUID.randomUUID(), "KV-ABC123", "kv_abc123",
+                new com.keevo.identity.auth.domain.model.Tenant(tenantId, "KV-ABC123", "kv_abc123",
                         com.keevo.identity.api.TenantStatus.ACTIVE, com.keevo.identity.api.PlanType.FREE,
                         Instant.now())));
+        // Story 19.6 — the session role comes from the OWNER membership of the current company
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantId)).thenReturn(Optional.of(
+                new com.keevo.identity.auth.domain.model.UserTenantMembership(UUID.randomUUID(), userId, tenantId,
+                        "OWNER", true, Instant.now())));
         when(sessionTokenIssuer.issue(any(), any(), any(), any(), any())).thenAnswer(inv ->
                 new com.keevo.identity.auth.application.service.SessionTokenIssuer.IssuedSession(
                         new AuthTokens(accessToken, "refresh", 1800, inv.getArgument(0), "kv_abc123",
