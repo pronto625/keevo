@@ -356,6 +356,7 @@ development_status:
   m19-3-authenticators-google-apple: backlog  # API 3fc1c4c0 — boutons Google/Apple, jeton brut au backend, suite selon memberships, 409 → connexion par code
   m19-4-login-username-membres: backlog  # API 0238c034 — écran identifiant + mot de passe, ajout de membre par identifiant, mot de passe temporaire affiché une fois
   m19-5-roles-manager-viewer-permissions: backlog  # API 54c53a82 — navigation selon memberRole, lecteur en lecture seule, « Mon équipe » du gérant, choix du rôle à l'ajout
+  m19-6-multi-roles-multi-entreprises: backlog  # API 89e4782d — sélecteur d'entreprise avec rôle, ajout d'un compte existant (existingAccount), refus sur compte partagé
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

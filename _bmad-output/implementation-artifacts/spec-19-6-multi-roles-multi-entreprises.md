@@ -161,7 +161,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.6, voir `git log --grep "feat(19-6)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+**Statut :** API livrée (commit 89e4782d). Conventions : spec-16-11 ; synchro : spec-16-10.
 
 **Ce qui est fait côté API :** une même personne peut appartenir à plusieurs entreprises avec des rôles différents ; ajouter quelqu'un qui a déjà un compte le rattache à l'entreprise ; ses identifiants et son mot de passe restent à lui.
 
