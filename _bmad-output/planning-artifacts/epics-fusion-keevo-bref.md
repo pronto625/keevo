@@ -1679,6 +1679,8 @@ So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
 
 > **Routé depuis la revue 19.12 (05/11/2026) :** - [ ] [Deferred-from: revue 19.12, 2026-11-05] `default_sale_flow=DOCUMENT` s'écrit par `TenantSaleFlowCommandPort.set(schema, SaleFlow.DOCUMENT)` (identity.api, livré par 19.12, audité) ; les logos de boutiques passent par `StoreLogoUseCase` (port de stockage, nom de fichier unique, `logo_path`) — ne pas écrire ces colonnes en SQL direct.
 
+> **Routé depuis 19.13 (05/11/2026) :** - [ ] [Deferred-from: spec 19.13, 2026-11-05] Profil d'interface de l'owner importé : après `TenantSaleFlowCommandPort.set(schema, DOCUMENT)`, appeler `ModuleActivationRulesPort.applyInitialRules(schema)` (19.13 : désactive caisse, stock, inventaire, transferts selon les règles en base). Les fournisseurs font partie du module `crm` avec les clients et ne peuvent pas être désactivés seuls — décider ici comment les masquer à un owner Bref (sous-module ou masquage par le préréglage DOCUMENT) [keevo/resources/keevo/modules/crm/module.json] — à trancher avec l'import des clients.
+
 **Acceptance Criteria:**
 
 **Given** `migration_batches` et `migration_records(target_table, target_id, source_table, source_id, checksum, note)` et le module `migration` (plateforme, SUPER_ADMIN)
