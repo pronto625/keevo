@@ -276,6 +276,47 @@ class RefreshTokenServiceTest {
 
         assertThat(tx).isNotNull();
         assertThat(tx.noRollbackFor()).contains(DomainException.class);
+        // Story 19.10 — the legacy-aware overload too
+        Transactional legacy = RefreshTokenService.class.getMethod("refresh", String.class, DeviceInfo.class,
+                boolean.class).getAnnotation(Transactional.class);
+        assertThat(legacy).isNotNull();
+        assertThat(legacy.noRollbackFor()).contains(DomainException.class);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"MANAGER", "VIEWER"})
+    @DisplayName("19.10 — legacy client: MANAGER / VIEWER renewal refused APP_UPDATE_REQUIRED, no token issued")
+    void legacyClientRefusedForManagerAndViewer(String role) {
+        var old = stored(false, null, null);
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
+        when(tenantRepository.findBySchemaName(SCHEMA)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId()))
+                .thenReturn(Optional.of(UserTenantMembership.create(userId, tenant.getId(), role)));
+
+        assertThatThrownBy(() -> service.refresh(RAW, DeviceInfo.NONE, true))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.APP_UPDATE_REQUIRED));
+        verify(issuer, never()).issue(any(), any(), any(), any(), any());
+        verify(refreshTokenRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("19.10 — legacy client: EMPLOYEE renewed as before; a headered VIEWER too")
+    void legacyClientEmployeeUntouched() {
+        var old = stored(false, null, null);
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(old));
+        activeEmployeeMembership();
+        var session = issued();
+        when(issuer.issue(eq(userId), eq(tenant), eq("EMPLOYEE"), any(), any())).thenReturn(session);
+        assertThat(service.refresh(RAW, DeviceInfo.NONE, true)).isSameAs(session.tokens());
+
+        var viewerToken = stored(false, null, null);
+        when(refreshTokenRepository.findByHash(SessionTokenIssuer.hash(RAW))).thenReturn(Optional.of(viewerToken));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenant.getId()))
+                .thenReturn(Optional.of(UserTenantMembership.create(userId, tenant.getId(), "VIEWER")));
+        when(issuer.issue(eq(userId), eq(tenant), eq("VIEWER"), any(), any())).thenReturn(session);
+        assertThat(service.refresh(RAW, DeviceInfo.NONE, false)).isSameAs(session.tokens());
     }
 
     @Test

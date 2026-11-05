@@ -170,6 +170,14 @@ keevo:
       apple:
         audiences: ${APPLE_BUNDLE_IDS:}
         bundle-id: ${APPLE_BUNDLE_ID:}   # Bref's single value, used when audiences is empty
+  # Story 19.10 — app versions. Public check limited per IP. Legacy-role guard: an auth request without the
+  # X-App-Version header comes from the Flutter V1 app, which knows only OWNER / EMPLOYEE: MANAGER / VIEWER
+  # memberships are hidden from its login lists and refused at select-tenant / refresh (APP_UPDATE_REQUIRED).
+  app-version:
+    check:
+      ip-max-per-minute: 1200   # per IP — high: many phones share one carrier NAT address
+    legacy-role-guard:
+      enabled: ${KEEVO_APP_VERSION_LEGACY_ROLE_GUARD:true}
   admin:
     phone: ${ADMIN_PHONE:+237600000000}
     # Story 10.3 (AC2): dev keeps the well-known default Admin@1234! so a local admin is usable.

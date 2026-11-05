@@ -22,6 +22,7 @@ import com.keevo.identity.auth.adapter.in.rest.dto.ResetPasswordRequestDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.ResetPasswordResponseDto;
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.DeviceInfo;
+import com.keevo.identity.auth.domain.model.LegacyClients;
 import com.keevo.identity.auth.application.service.RefreshRateLimiter;
 import jakarta.servlet.http.HttpServletRequest;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
@@ -56,6 +57,7 @@ import com.keevo.identity.employee.domain.port.in.ChangePasswordUseCase;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.infrastructure.web.ClientIps;
 import com.keevo.shared.module.EntitlementExempt;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -65,6 +67,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -93,12 +97,21 @@ import java.util.UUID;
  * - POST /api/v1/auth/refresh
  * - POST /api/v1/auth/otp/request, /otp/verify, /create-company (Story 19.2)
  * - POST /api/v1/auth/social/google, /social/apple (Story 19.3)
+ *
+ * <p>Story 19.10 — legacy clients: a request to login, otp/verify, social/*, select-tenant or refresh WITHOUT a
+ * non-blank {@value #APP_VERSION_HEADER} header comes from an app that does not declare its version (Flutter V1).
+ * For such a client MANAGER / VIEWER memberships are left out of the login lists and refused at select-tenant and
+ * refresh (403 APP_UPDATE_REQUIRED, see {@link LegacyClients}). OWNER / EMPLOYEE are never affected. Switch:
+ * {@code keevo.app-version.legacy-role-guard.enabled} (default true).
  */
 @Tag(name = "Authentication", description = "User registration and login endpoints")
 @EntitlementExempt("authentification")
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
+
+    /** Story 19.10 — the header new apps send with their version; its absence marks a legacy (V1) client. */
+    public static final String APP_VERSION_HEADER = "X-App-Version";
 
     private final RegisterUserUseCase    registerUserUseCase;
     private final AuthenticateUserUseCase authenticateUserUseCase;
@@ -113,7 +126,9 @@ public class AuthController {
     private final VerifyOtpUseCase       verifyOtpUseCase;
     private final CreateCompanyUseCase   createCompanyUseCase;
     private final SocialSignInUseCase    socialSignInUseCase;
+    private final boolean                legacyRoleGuard;
 
+    /** Guard on (the default) — used by the tests that build the controller by hand. */
     public AuthController(RegisterUserUseCase registerUserUseCase,
                           AuthenticateUserUseCase authenticateUserUseCase,
                           SelectTenantUseCase selectTenantUseCase,
@@ -127,6 +142,27 @@ public class AuthController {
                           VerifyOtpUseCase verifyOtpUseCase,
                           CreateCompanyUseCase createCompanyUseCase,
                           SocialSignInUseCase socialSignInUseCase) {
+        this(registerUserUseCase, authenticateUserUseCase, selectTenantUseCase, refreshTokenUseCase,
+                changePasswordUseCase, getUserProfileUseCase, requestPasswordResetUseCase, resetPasswordUseCase,
+                refreshRateLimiter, requestOtpUseCase, verifyOtpUseCase, createCompanyUseCase, socialSignInUseCase,
+                true);
+    }
+
+    @Autowired
+    public AuthController(RegisterUserUseCase registerUserUseCase,
+                          AuthenticateUserUseCase authenticateUserUseCase,
+                          SelectTenantUseCase selectTenantUseCase,
+                          RefreshTokenUseCase refreshTokenUseCase,
+                          ChangePasswordUseCase changePasswordUseCase,
+                          GetUserProfileUseCase getUserProfileUseCase,
+                          RequestPasswordResetUseCase requestPasswordResetUseCase,
+                          ResetPasswordUseCase resetPasswordUseCase,
+                          RefreshRateLimiter refreshRateLimiter,
+                          RequestOtpUseCase requestOtpUseCase,
+                          VerifyOtpUseCase verifyOtpUseCase,
+                          CreateCompanyUseCase createCompanyUseCase,
+                          SocialSignInUseCase socialSignInUseCase,
+                          @Value("${keevo.app-version.legacy-role-guard.enabled:true}") boolean legacyRoleGuard) {
         this.registerUserUseCase    = registerUserUseCase;
         this.authenticateUserUseCase = authenticateUserUseCase;
         this.selectTenantUseCase    = selectTenantUseCase;
@@ -140,6 +176,7 @@ public class AuthController {
         this.verifyOtpUseCase       = verifyOtpUseCase;
         this.createCompanyUseCase   = createCompanyUseCase;
         this.socialSignInUseCase    = socialSignInUseCase;
+        this.legacyRoleGuard        = legacyRoleGuard;
     }
 
     @Operation(
@@ -231,7 +268,7 @@ public class AuthController {
 
         LoginSessionResult result = authenticateUserUseCase.authenticate(command);
 
-        return ResponseEntity.ok(toLoginSessionResponse(result));
+        return ResponseEntity.ok(toLoginSessionResponse(result, httpRequest));
     }
 
     // ── Login step 2: select-tenant ───────────────────────────────────────────
@@ -253,17 +290,19 @@ public class AuthController {
             content = @Content(schema = @Schema(implementation = LoginResponse.class))),
         @ApiResponse(responseCode = "401",
             description = "loginToken expired, invalid, or wrong scope"),
+        @ApiResponse(responseCode = "403", description = "APP_UPDATE_REQUIRED — MANAGER / VIEWER membership opened "
+            + "without the X-App-Version header (legacy app)"),
         @ApiResponse(responseCode = "404", description = "Tenant not found or no membership"),
         @ApiResponse(responseCode = "422", description = "Validation error")
     })
     @SecurityRequirements
     @PostMapping("/select-tenant")
     public ResponseEntity<LoginResponse> selectTenant(
-            @Valid @RequestBody SelectTenantRequest request) {
+            @Valid @RequestBody SelectTenantRequest request, HttpServletRequest httpRequest) {
 
         AuthTokens tokens = selectTenantUseCase.select(new SelectTenantCommand(
                 request.loginToken(), request.tenantCode(),
-                DeviceInfo.of(request.deviceId(), request.deviceLabel())));
+                DeviceInfo.of(request.deviceId(), request.deviceLabel()), legacyClient(httpRequest)));
 
         return ResponseEntity.ok(toLoginResponse(tokens));
     }
@@ -281,6 +320,8 @@ public class AuthController {
         @ApiResponse(responseCode = "200", description = "Token refreshed successfully",
             content = @Content(schema = @Schema(implementation = LoginResponse.class))),
         @ApiResponse(responseCode = "401", description = "Refresh token invalid, expired or revoked"),
+        @ApiResponse(responseCode = "403", description = "APP_UPDATE_REQUIRED — MANAGER / VIEWER session renewed "
+            + "without the X-App-Version header (legacy app)"),
         @ApiResponse(responseCode = "422", description = "Validation error")
     })
     @SecurityRequirements
@@ -291,7 +332,7 @@ public class AuthController {
         // Story 16.11 — per-token and per-IP rate limit (429 « Trop de requêtes »).
         refreshRateLimiter.acquire(request.refreshToken(), clientIp(httpRequest));
         AuthTokens tokens = refreshTokenUseCase.refresh(request.refreshToken(),
-                DeviceInfo.of(request.deviceId(), request.deviceLabel()));
+                DeviceInfo.of(request.deviceId(), request.deviceLabel()), legacyClient(httpRequest));
         return ResponseEntity.ok(toLoginResponse(tokens));
     }
 
@@ -475,7 +516,7 @@ public class AuthController {
                                                           HttpServletRequest httpRequest) {
         LoginSessionResult result = verifyOtpUseCase.verify(
                 new VerifyOtpCommand(request.identifier(), request.code(), clientIp(httpRequest)));
-        return ResponseEntity.ok(toLoginSessionResponse(result));
+        return ResponseEntity.ok(toLoginSessionResponse(result, httpRequest));
     }
 
     @Operation(
@@ -532,7 +573,7 @@ public class AuthController {
                                                                  HttpServletRequest httpRequest) {
         LoginSessionResult result = socialSignInUseCase.signIn(new SocialSignInCommand(SocialProvider.GOOGLE,
                 request.idToken(), request.firstName(), request.lastName(), clientIp(httpRequest)));
-        return ResponseEntity.ok(toLoginSessionResponse(result));
+        return ResponseEntity.ok(toLoginSessionResponse(result, httpRequest));
     }
 
     @Operation(
@@ -562,7 +603,7 @@ public class AuthController {
                                                                 HttpServletRequest httpRequest) {
         LoginSessionResult result = socialSignInUseCase.signIn(new SocialSignInCommand(SocialProvider.APPLE,
                 request.identityToken(), request.firstName(), request.lastName(), clientIp(httpRequest)));
-        return ResponseEntity.ok(toLoginSessionResponse(result));
+        return ResponseEntity.ok(toLoginSessionResponse(result, httpRequest));
     }
 
     // ── Mapping helpers ───────────────────────────────────────────────────────
@@ -572,13 +613,19 @@ public class AuthController {
      * reverse proxy appended — a client cannot forge it), else the socket address.
      */
     static String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            String[] parts = forwarded.split(",");
-            String last = parts[parts.length - 1].trim();
-            if (!last.isEmpty()) return last;
+        return ClientIps.of(request);
+    }
+
+    /**
+     * Story 19.10 — whether the request comes from a legacy app to guard: the guard is on and no non-blank
+     * {@value #APP_VERSION_HEADER} header is sent (V1 2.0.1 sends none).
+     */
+    boolean legacyClient(HttpServletRequest request) {
+        if (!legacyRoleGuard) {
+            return false;
         }
-        return request.getRemoteAddr();
+        String version = request.getHeader(APP_VERSION_HEADER);
+        return version == null || version.isBlank();
     }
 
     private UserProfileResponse toProfileResponse(UserProfileData data) {
@@ -598,8 +645,11 @@ public class AuthController {
         );
     }
 
-    private LoginSessionResponse toLoginSessionResponse(LoginSessionResult result) {
+    /** Story 19.10 — a legacy client gets no MANAGER / VIEWER membership in the list (in-memory filter, no query). */
+    private LoginSessionResponse toLoginSessionResponse(LoginSessionResult result, HttpServletRequest httpRequest) {
+        boolean legacy = legacyClient(httpRequest);
         List<LoginSessionResponse.MembershipDto> dtos = result.memberships().stream()
+                .filter(m -> !legacy || !LegacyClients.refuses(m.role()))
                 .map(m -> new LoginSessionResponse.MembershipDto(
                         m.tenantCode(), m.tenantName(), Role.v1Label(m.role()), m.schemaName(), m.role()))
                 .toList();

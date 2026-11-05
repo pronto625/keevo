@@ -40,6 +40,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -409,7 +410,7 @@ class AuthControllerTest {
         UUID userId = UUID.randomUUID();
         AuthTokens tokens = new AuthTokens("new.access.token", "new-opaque-refresh-token",
                 86400L, userId, "kv_abc123", "OWNER");
-        when(refreshTokenUseCase.refresh(eq("valid-refresh-token"), any())).thenReturn(tokens);
+        when(refreshTokenUseCase.refresh(eq("valid-refresh-token"), any(), anyBoolean())).thenReturn(tokens);
 
         mockMvc.perform(post("/api/v1/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -424,7 +425,7 @@ class AuthControllerTest {
     @Test
     @DisplayName("POST /refresh → 401 REFRESH_TOKEN_INVALID on expired or unknown token")
     void refresh_returns401OnInvalidRefreshToken() throws Exception {
-        when(refreshTokenUseCase.refresh(any(), any()))
+        when(refreshTokenUseCase.refresh(any(), any(), anyBoolean()))
                 .thenThrow(new DomainException(ErrorCode.REFRESH_TOKEN_INVALID));
 
         mockMvc.perform(post("/api/v1/auth/refresh")
@@ -623,7 +624,8 @@ class AuthControllerTest {
     }
 
     @Test
-    @DisplayName("19.5 — V1 vocabulary: login memberships and tokens show MANAGER/VIEWER as EMPLOYEE, memberRole real")
+    @DisplayName("19.5 — V1 vocabulary: login memberships and tokens show MANAGER/VIEWER as EMPLOYEE, memberRole real "
+            + "(19.10: app declaring its version)")
     void storeMemberRoles_shownInV1Vocabulary() throws Exception {
         when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class))).thenReturn(
                 new LoginSessionResult("login-tok", List.of(
@@ -631,6 +633,7 @@ class AuthControllerTest {
                         new UserMembershipInfo("KV-DEF456", "Dépôt", "VIEWER", "kv_def456"),
                         new UserMembershipInfo("KV-GHI789", "Siège", "OWNER", "kv_ghi789"))));
         mockMvc.perform(post("/api/v1/auth/login")
+                        .header(AuthController.APP_VERSION_HEADER, "2.0.0")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new LoginRequest("+22670000001", "SecurePass1!"))))
                 .andExpect(status().isOk())
@@ -644,6 +647,7 @@ class AuthControllerTest {
         when(selectTenantUseCase.select(any(SelectTenantCommand.class))).thenReturn(new AuthTokens(
                 "access", "refresh", 86400L, UUID.randomUUID(), "kv_abc123", "MANAGER"));
         mockMvc.perform(post("/api/v1/auth/select-tenant")
+                        .header(AuthController.APP_VERSION_HEADER, "2.0.0")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"loginToken\":\"login-tok\",\"tenantCode\":\"KV-ABC123\"}"))
                 .andExpect(status().isOk())

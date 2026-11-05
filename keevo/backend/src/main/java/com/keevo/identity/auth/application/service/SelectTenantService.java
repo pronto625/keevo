@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
+import com.keevo.identity.auth.domain.model.LegacyClients;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.shared.event.catalog.auth.UserAuthenticatedEvent;
 import com.keevo.identity.auth.domain.model.UserTenantMembership;
@@ -66,6 +67,9 @@ public class SelectTenantService implements SelectTenantUseCase {
                 .findByUserIdAndTenantId(userId, tenant.getId())
                 .filter(UserTenantMembership::isActive)
                 .orElseThrow(() -> new DomainException(ErrorCode.MEMBERSHIP_NOT_FOUND));
+
+        // Story 19.10 — a legacy app (V1) may not open a MANAGER / VIEWER membership: refused before any token.
+        LegacyClients.requireAllowed(command.legacyClient(), membership.getRole());
 
         // Step 4 — Issue the session (claims built from current tenant/membership/employee
         // data — the same path refresh uses, so a renewed token never differs from a login).

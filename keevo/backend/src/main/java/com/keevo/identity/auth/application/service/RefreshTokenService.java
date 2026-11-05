@@ -2,6 +2,7 @@ package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.DeviceInfo;
+import com.keevo.identity.auth.domain.model.LegacyClients;
 import com.keevo.identity.auth.domain.model.RefreshToken;
 import com.keevo.identity.auth.domain.model.Tenant;
 import com.keevo.identity.api.TenantStatus;
@@ -74,9 +75,16 @@ public class RefreshTokenService implements RefreshTokenUseCase {
         this.eventPublisher = eventPublisher;
     }
 
+    /** Not a legacy client — transactional itself, so a call through the proxy never runs outside a transaction. */
     @Override
     @Transactional(noRollbackFor = DomainException.class)
     public AuthTokens refresh(String rawRefreshToken, DeviceInfo device) {
+        return refresh(rawRefreshToken, device, false);
+    }
+
+    @Override
+    @Transactional(noRollbackFor = DomainException.class)
+    public AuthTokens refresh(String rawRefreshToken, DeviceInfo device, boolean legacyClient) {
         RefreshToken presented = refreshTokenRepository.findByHash(SessionTokenIssuer.hash(rawRefreshToken))
                 .orElseThrow(RefreshTokenService::invalid);
 
@@ -94,6 +102,9 @@ public class RefreshTokenService implements RefreshTokenUseCase {
                 .findByUserIdAndTenantId(presented.userId(), tenant.getId())
                 .filter(UserTenantMembership::isActive)
                 .orElseThrow(RefreshTokenService::invalid);
+        // Story 19.10 — a legacy app (V1) may not renew a MANAGER / VIEWER session: refused before rotation (V1 ends
+        // the session on a 403 refresh). No new token is issued.
+        LegacyClients.requireAllowed(legacyClient, membership.getRole());
 
         // Story 16.11 — same device session (sid) for the whole chain.
         // Merged field by field: what the app sends wins, the known value stays otherwise.

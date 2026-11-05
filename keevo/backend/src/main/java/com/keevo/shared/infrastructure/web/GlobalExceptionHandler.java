@@ -272,6 +272,7 @@ public class GlobalExceptionHandler {
                  "STORE_LOGO_NOT_FOUND",
                  "PREFERENCES_NOT_FOUND",      // 19.12: tenant not onboarded yet (was an unmapped 500)
                  "NOTIFICATION_NOT_FOUND",
+                 "APP_VERSION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
                  "TOKEN_INVALID",
@@ -342,6 +343,7 @@ public class GlobalExceptionHandler {
                  "PLAN_PROFILE_INVALID",
                  "BUNDLE_INVALID",
                  "MODULE_ACTIVATION_RULE_INVALID",
+                 "APP_VERSION_INVALID",
                  "BUNDLE_NOT_APPLICABLE",
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE",
@@ -381,6 +383,7 @@ public class GlobalExceptionHandler {
                  "CANNOT_DEMOTE_LAST_OWNER",
                  "CANNOT_SET_OWN_PASSWORD",
                  "PLAN_FEATURE_REQUIRED",
+                 "APP_UPDATE_REQUIRED",
                  "EXPORT_LINK_INVALID" -> HttpStatus.FORBIDDEN;   // H2 fix: role mismatch is 403, not 401; AUDIT_IMMUTABLE = immutable log; DEVICE_ID_MISMATCH = deviceId belongs to another user (v1s-13-2); CANNOT_* = role anti-lockout (v1s-14-11)
             case "RATE_LIMIT_EXCEEDED",
                  "OTP_TOO_MANY_ATTEMPTS",

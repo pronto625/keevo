@@ -15,10 +15,16 @@ public interface RefreshTokenUseCase {
      * Issue new access + refresh token pair using a valid refresh token.
      *
      * @param rawRefreshToken raw opaque refresh token from client
+     * @param legacyClient    Story 19.10 — the app declares no version (V1): a MANAGER / VIEWER session is refused
      * @return new token pair
-     * @throws com.keevo.shared.domain.exception.DomainException REFRESH_TOKEN_INVALID
+     * @throws com.keevo.shared.domain.exception.DomainException REFRESH_TOKEN_INVALID, APP_UPDATE_REQUIRED
      */
-    AuthTokens refresh(String rawRefreshToken, DeviceInfo device);
+    AuthTokens refresh(String rawRefreshToken, DeviceInfo device, boolean legacyClient);
+
+    /** Not a legacy client. */
+    default AuthTokens refresh(String rawRefreshToken, DeviceInfo device) {
+        return refresh(rawRefreshToken, device, false);
+    }
 
     /** Refresh without device data (the session keeps its known device). */
     default AuthTokens refresh(String rawRefreshToken) {

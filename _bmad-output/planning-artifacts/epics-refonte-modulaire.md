@@ -1613,6 +1613,8 @@ So that **mes droits RGPD sont respectés (MOD-FR20, FR91)**.
 
 ### Story 16.7 : Go-live progressif (canary) + runbook
 
+> **Routé depuis la revue 19.10 (05/11/2026) :** - [ ] [Deferred-from: revue 19.10, 2026-11-05] Retrait de la V1 Flutter : la V1 2.0.1 n'appelle pas `/api/v1/app-version/check` et n'envoie aucune version, donc `public.app_versions` ne peut pas la forcer à se mettre à jour. Au moment du retrait, décider d'étendre le refus des clients sans `X-App-Version` (`LegacyClients`, 19.10, aujourd'hui limité à MANAGER/VIEWER) à tous les rôles, et prévenir les owners avant [keevo/backend/src/main/java/com/keevo/identity/auth/domain/model/LegacyClients.java].
+
 As a **exploitant**,
 I want **déployer la refonte en canary (10 % des tenants) avec un runbook**,
 So that **le risque de mise en production est maîtrisé (MOD-NFR12, fiabilité)**.

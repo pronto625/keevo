@@ -102,6 +102,9 @@ class MultiCompanyMemberFullContextTest extends FullContextIntegrationTest {
         request.contentType(MediaType.APPLICATION_JSON);
         if (body != null) request.content(objectMapper.writeValueAsString(body));
         if (token != null) request.header("Authorization", "Bearer " + token);
+        // Story 19.10 — a new app (declares its version): she becomes MANAGER of A below, which a legacy V1
+        // client may not open
+        request.header("X-App-Version", "2.0.0");
         return mockMvc.perform(request).andReturn();
     }
 

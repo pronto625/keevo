@@ -218,6 +218,46 @@ class SelectTenantServiceTest {
         verify(eventPublisher).publishEvent((Object) any());
     }
 
+    // ── Story 19.10 — legacy client (no X-App-Version) ──────────────────────
+
+    @org.junit.jupiter.params.ParameterizedTest(name = "{0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"MANAGER", "VIEWER"})
+    @DisplayName("19.10 — legacy client: MANAGER / VIEWER refused APP_UPDATE_REQUIRED before any token")
+    void legacyClientRefusedForManagerAndViewer(String role) {
+        UUID userId     = UUID.randomUUID();
+        UUID tenantUuid = UUID.randomUUID();
+        String loginToken = realJwtProvider.generateLoginToken(userId);
+        when(tenantRepository.findByCode(TENANT_CODE))
+                .thenReturn(Optional.of(buildTenant(tenantUuid, TENANT_CODE, SCHEMA_NAME)));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantUuid))
+                .thenReturn(Optional.of(UserTenantMembership.create(userId, tenantUuid, role)));
+
+        assertThatThrownBy(() -> selectTenantService.select(new SelectTenantCommand(loginToken, TENANT_CODE,
+                com.keevo.identity.auth.domain.model.DeviceInfo.NONE, true)))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.APP_UPDATE_REQUIRED));
+        verify(refreshTokenRepository, never()).save(any(RefreshToken.class));
+        verify(eventPublisher, never()).publishEvent((Object) any());
+    }
+
+    @Test
+    @DisplayName("19.10 — legacy client: OWNER untouched")
+    void legacyClientOwnerUntouched() {
+        UUID userId     = UUID.randomUUID();
+        UUID tenantUuid = UUID.randomUUID();
+        String loginToken = realJwtProvider.generateLoginToken(userId);
+        when(tenantRepository.findByCode(TENANT_CODE))
+                .thenReturn(Optional.of(buildTenant(tenantUuid, TENANT_CODE, SCHEMA_NAME)));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantUuid))
+                .thenReturn(Optional.of(UserTenantMembership.create(userId, tenantUuid, "OWNER")));
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AuthTokens result = selectTenantService.select(new SelectTenantCommand(loginToken, TENANT_CODE,
+                com.keevo.identity.auth.domain.model.DeviceInfo.NONE, true));
+        assertThat(result.role()).isEqualTo("OWNER");
+    }
+
     // ── Multi-tenant scenario (AC12) ────────────────────────────────────────
 
     @Test
