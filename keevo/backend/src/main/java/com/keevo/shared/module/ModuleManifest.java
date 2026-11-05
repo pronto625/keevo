@@ -37,6 +37,9 @@ import java.util.TreeMap;
  *                        {@code VIEWER}; {@code OWNER} implicitly holds every permission): an immutable sorted copy,
  *                        empty when the manifest declares none. Completeness and consistency are validated at boot by
  *                        {@code ModulePermissions}.
+ * @param ownerToggleable Story 19.13 — whether the tenant's owner may disable the module in « Mes modules » (manifest
+ *                        {@code ownerToggleable}, default {@code true}); never for {@code core}/{@code platform}
+ *                        categories, whatever the manifest says ({@link #ownerCanToggle()})
  */
 public record ModuleManifest(
         String id,
@@ -54,7 +57,8 @@ public record ModuleManifest(
         List<String> routes,
         String entitlement,
         boolean free,
-        Map<String, List<String>> rolePermissions) {
+        Map<String, List<String>> rolePermissions,
+        boolean ownerToggleable) {
 
     /** Story 19.5 — the membership roles every manifest must declare in {@code rolePermissions}. */
     public static final List<String> DECLARED_ROLES = Role.STORE_MEMBER_NAMES;
@@ -97,6 +101,16 @@ public record ModuleManifest(
         rolePermissions = Collections.unmodifiableMap(byRole);
     }
 
+    /** Pre-19.13 arity — {@code ownerToggleable = true} (hand-built manifests: tests, tooling). */
+    public ModuleManifest(String id, String version, String displayName, ModuleCategory category,
+                          List<String> requires, List<String> enhances, List<String> publishes,
+                          List<String> consumes, List<String> provides, List<String> needs,
+                          ExtensionPoints extensionPoints, List<String> permissions, List<String> routes,
+                          String entitlement, boolean free, Map<String, List<String>> rolePermissions) {
+        this(id, version, displayName, category, requires, enhances, publishes, consumes, provides, needs,
+                extensionPoints, permissions, routes, entitlement, free, rolePermissions, true);
+    }
+
     /**
      * A manifest whose {@code rolePermissions} grants nothing to {@code MANAGER}, {@code EMPLOYEE} and {@code VIEWER}
      * (explicit empty entries) — hand-built manifests (tests, tooling).
@@ -129,6 +143,14 @@ public record ModuleManifest(
     /** Whether this is the core module. */
     public boolean isCore() {
         return CORE_ID.equals(id);
+    }
+
+    /**
+     * Story 19.13 — whether the owner may activate / disable this module for the tenant: the manifest allows it and
+     * the module is neither core nor of category {@code core} / {@code platform}.
+     */
+    public boolean ownerCanToggle() {
+        return ownerToggleable && !isCore() && category != ModuleCategory.CORE && category != ModuleCategory.PLATFORM;
     }
 
     /**

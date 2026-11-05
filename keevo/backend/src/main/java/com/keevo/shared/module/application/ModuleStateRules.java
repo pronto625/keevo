@@ -72,6 +72,72 @@ final class ModuleStateRules {
         };
     }
 
+    /**
+     * Story 19.13 — the owner layer over the entitlement state (Specification « usable = entitled ∧ activated »): an
+     * ENABLED or READ_ONLY module the owner may toggle and that is owner-off ({@code ownerDisabled} holds its id — pass
+     * the propagated set of {@link #ownerOff}) is DISABLED; anything else keeps its entitlement state (core always ENABLED, a module outside the plan stays
+     * DISABLED whatever the owner chose).
+     */
+    static ModuleState stateOf(ModuleManifest manifest, Optional<Map<String, Row>> rows, Plan plan,
+                               PlanProfile profile, java.util.Set<String> ownerDisabled, Instant now) {
+        return withOwnerChoice(manifest, stateOf(manifest, rows, plan, profile, now), ownerDisabled);
+    }
+
+    /**
+     * Story 19.13 — the owner layer propagated through the manifests' {@code requires}: the owner-toggleable modules
+     * that are off because their owner disabled them <em>or</em> because one of their requirements is owner-disabled,
+     * directly or through its own requirements (a module never runs on a requirement the owner switched off — e.g.
+     * {@code reporting} disabled while {@code exports} enters the plan later). {@code ownerDisabled} is the owner's
+     * raw choices; the result is what {@link #withOwnerChoice} expects. O(installed modules + requires edges).
+     */
+    static java.util.Set<String> ownerOff(java.util.Collection<ModuleManifest> installed,
+                                          java.util.Set<String> ownerDisabled) {
+        if (ownerDisabled == null || ownerDisabled.isEmpty()) {
+            return java.util.Set.of();
+        }
+        Map<String, ModuleManifest> byId = new java.util.HashMap<>();
+        installed.forEach(m -> byId.put(m.id(), m));
+        Map<String, Boolean> blocked = new java.util.HashMap<>();
+        java.util.Set<String> off = new java.util.TreeSet<>();
+        for (ModuleManifest m : installed) {
+            if (m.ownerCanToggle() && blocked(m.id(), byId, ownerDisabled, blocked, new java.util.HashSet<>())) {
+                off.add(m.id());
+            }
+        }
+        return java.util.Collections.unmodifiableSet(off);
+    }
+
+    /** Whether the module is owner-disabled itself or (transitively) requires one; memoised, cycle-safe. */
+    private static boolean blocked(String id, Map<String, ModuleManifest> byId, java.util.Set<String> ownerDisabled,
+                                   Map<String, Boolean> memo, java.util.Set<String> visiting) {
+        Boolean known = memo.get(id);
+        if (known != null) {
+            return known;
+        }
+        ModuleManifest m = byId.get(id);
+        if (m == null || !visiting.add(id)) {
+            return false;
+        }
+        boolean result = m.ownerCanToggle() && ownerDisabled.contains(id);
+        for (String requirement : m.requires()) {
+            if (!result && blocked(requirement, byId, ownerDisabled, memo, visiting)) {
+                result = true;
+            }
+        }
+        memo.put(id, result);
+        return result;
+    }
+
+    /** The owner layer alone, applied to an entitlement state already computed. */
+    static ModuleState withOwnerChoice(ModuleManifest manifest, ModuleState entitled,
+                                       java.util.Set<String> ownerDisabled) {
+        if (entitled != ModuleState.DISABLED && ownerDisabled != null && manifest.ownerCanToggle()
+                && ownerDisabled.contains(manifest.id())) {
+            return ModuleState.DISABLED;
+        }
+        return entitled;
+    }
+
     /** Read-only grace after the end of a plan (spec-socle §6.4, plan-refonte §6.4: « grâce 7 j »). */
     static final Duration PLAN_GRACE = Duration.ofDays(7);
 

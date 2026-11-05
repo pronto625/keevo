@@ -97,6 +97,11 @@ public class OnboardingService implements CompleteOnboardingUseCase {
             true,           // default stock alerts enabled
             now
         );
+        // Story 19.13 — the sale flow chosen at sign-up, saved before OnboardingCompletedEvent (whose after-commit
+        // listener applies the initial module activation rules of this flow and sector)
+        if (command.defaultSaleFlow() != null) {
+            prefs = prefs.withDefaultSaleFlow(command.defaultSaleFlow());
+        }
         tenantPreferencesRepository.save(prefs);
 
         // 6. Publish domain event (Observer → AuditEventListener)

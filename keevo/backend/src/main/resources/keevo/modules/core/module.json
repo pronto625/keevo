@@ -21,5 +21,6 @@
     "VIEWER": []
   },
   "entitlement": "module.core",
-  "free": true
+  "free": true,
+  "ownerToggleable": false
 }

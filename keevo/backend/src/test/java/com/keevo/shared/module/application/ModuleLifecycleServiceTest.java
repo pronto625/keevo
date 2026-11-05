@@ -75,6 +75,13 @@ class ModuleLifecycleServiceTest {
         final Map<String, StoredRow> stored = new TreeMap<>();
         final List<String> writes = new ArrayList<>();
         final List<String> events = new ArrayList<>();
+        /** Story 19.13 — modules the owner disabled ({@code tenant_module_activation}), read with the rows. */
+        final java.util.Set<String> ownerDisabled = new java.util.HashSet<>();
+
+        @Override
+        public Optional<TenantRows> findTenantRows(String tenantSchema) {
+            return findRows(tenantSchema).map(r -> new TenantRows(r, Plan.NONE, ownerDisabled));
+        }
 
         @Override
         public Optional<Map<String, Row>> findRows(String tenantSchema) {
@@ -732,6 +739,49 @@ class ModuleLifecycleServiceTest {
         assertThat(entry.action()).isEqualTo("MODULE_DEACTIVATED");
         assertThat(entry.valueAfter()).contains("Module simple", "Désactivé", "Conservées")
                 .doesNotContain("lcplain", CODE, "entreprise");
+    }
+
+    // ── Story 19.13 — the lifecycle manages the entitlement, never the owner's choice ───────────────────────
+
+    @Test
+    @DisplayName("19.13 — owner-disabled in-plan module: super-admin deactivate really writes the DISABLED row (no "
+            + "early « already disabled » return)")
+    void ownerDisabledDeactivateWritesRow() {
+        rows.ownerDisabled.add("lcplain");
+
+        ModuleLifecycle.DeactivationResult result = lifecycle.deactivate(TENANT, "lcplain", SUPER_ADMIN);
+
+        assertThat(result.status()).isEqualTo(TenantModuleStatus.DISABLED);
+        assertThat(rows.writes).containsExactly("lcplain");
+        assertThat(rows.stored.get("lcplain").status()).isEqualTo(TenantModuleStatus.DISABLED);
+    }
+
+    @Test
+    @DisplayName("19.13 — owner-disabled in-plan paid module: super-admin activation is a renewal — activated_at kept, "
+            + "no « inactive → active » transition")
+    void ownerDisabledActivateKeepsActivatedAt() {
+        Instant first = NOW.minus(Duration.ofDays(40));
+        rows.stored.put("lcpaid", new TenantModuleLifecyclePort.StoredRow(UUID.randomUUID(),
+                TenantModuleStatus.ACTIVE, "STANDARD", first, NOW.plus(Duration.ofDays(5)),
+                NOW.plus(Duration.ofDays(12)), null, null));
+        rows.ownerDisabled.add("lcpaid");
+
+        lifecycle.activate(TENANT, "lcpaid", new ActivationRequest(TenantModuleStatus.ACTIVE,
+                NOW.plus(Duration.ofDays(60))), SUPER_ADMIN);
+
+        assertThat(rows.writes).containsExactly("lcpaid");
+        assertThat(rows.stored.get("lcpaid").activatedAt()).isEqualTo(first);
+        assertThat(rows.stored.get("lcpaid").expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(60)));
+    }
+
+    @Test
+    @DisplayName("19.13 — deactivating the requirement of an owner-disabled in-plan dependent → MODULE_HAS_DEPENDENTS")
+    void ownerDisabledDependentStillBlocks() {
+        rows.ownerDisabled.add("lctop");
+        rows.ownerDisabled.add("lcbroken");
+
+        assertThat(code(() -> lifecycle.deactivate(TENANT, "lcbase", SUPER_ADMIN))).isEqualTo("MODULE_HAS_DEPENDENTS");
+        assertThat(rows.writes).isEmpty();
     }
 
     @Test

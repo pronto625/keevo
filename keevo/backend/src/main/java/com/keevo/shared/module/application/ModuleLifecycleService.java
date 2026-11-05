@@ -291,7 +291,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         Map<String, Terms> kept = new java.util.HashMap<>();
         if (defaultTrial) {
             for (ModuleManifest target : targets) {
-                if (!target.free() && registry.moduleState(schema, target.id()) == ModuleState.ENABLED) {
+                if (!target.free() && entitledState(schema, target.id()) == ModuleState.ENABLED) {
                     StoredRow current = rows.get(target.id());
                     kept.put(target.id(), current != null ? new Terms(current.status(), current.expiresAt())
                             : new Terms(TenantModuleStatus.ACTIVE, null));
@@ -314,7 +314,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         List<String> planned = new ArrayList<>(plan.moduleIds());
         for (ModuleManifest target : targets) {
             if (!planned.contains(target.id())
-                    && (registry.moduleState(schema, target.id()) != ModuleState.ENABLED
+                    && (entitledState(schema, target.id()) != ModuleState.ENABLED
                         || (renewEnabled && !target.free()
                             && changes(rows.get(target.id()), termsOf.apply(target))))) {
                 planned.add(target.id()); // renewal of a read-only module, or a new status/expiry of a paid one
@@ -340,12 +340,14 @@ public class ModuleLifecycleService implements ModuleLifecycle {
         }
 
         List<Written> written = new ArrayList<>();
+        // one snapshot of the entitlement states before the writes (each write evicts the registry cache)
+        Map<String, ModuleState> entitledBefore = registry.entitledStates(schema);
         for (String id : toWrite) {
             ModuleManifest module = catalog.find(id).orElseThrow();
             Terms terms = termsOf.apply(module);
             Instant grace = terms.expiresAt() != null ? terms.expiresAt().plus(GRACE) : null;
             // activated_at is only set on an inactive → active transition
-            boolean wasActive = registry.moduleState(schema, id) != ModuleState.DISABLED;
+            boolean wasActive = entitledBefore.getOrDefault(id, ModuleState.DISABLED) != ModuleState.DISABLED;
             UUID rowId = store.upsertActivated(tenant.id(), id, terms.status(),
                     module.free() ? TIER_FREE : TIER_PAID, now, wasActive, terms.expiresAt(), grace);
             registry.evict(schema);
@@ -573,7 +575,7 @@ public class ModuleLifecycleService implements ModuleLifecycle {
             throw DomainException.userFacing(ErrorCode.CORE_MODULE_REQUIRED,
                     "Le module « " + target.displayName() + " » fait partie du socle et ne peut pas être désactivé");
         }
-        if (registry.moduleState(schema, target.id()) == ModuleState.DISABLED) {
+        if (entitledState(schema, target.id()) == ModuleState.DISABLED) {
             return new DeactivationResult(target.id(), target.displayName(), TenantModuleStatus.DISABLED);
         }
         List<ModuleManifest> toDisable = new ArrayList<>();
@@ -650,6 +652,9 @@ public class ModuleLifecycleService implements ModuleLifecycle {
     @Transactional(readOnly = true)
     public List<TenantModuleView> tenantModules(String tenantSchema) {
         Map<String, ModuleState> states = registry.moduleStates(tenantSchema);
+        // Story 19.13 — same cached lookup: the plan's state without the owner layer, and the owner's choices
+        Map<String, ModuleState> entitled = registry.entitledStates(tenantSchema);
+        java.util.Set<String> ownerDisabled = registry.ownerDisabledModules(tenantSchema);
         Map<String, StoredRow> rows = store.findStoredRows(tenantSchema);
         List<TenantModuleView> views = new ArrayList<>();
         for (ModuleManifest module : catalogue()) {
@@ -658,12 +663,23 @@ public class ModuleLifecycleService implements ModuleLifecycle {
                     states.getOrDefault(module.id(), ModuleState.DISABLED),
                     row != null ? row.status() : null, row != null ? row.expiresAt() : null,
                     row != null ? row.graceUntil() : null, row != null ? row.provisionedVersion() : null,
-                    row != null ? row.origin() : null));
+                    row != null ? row.origin() : null,
+                    entitled.getOrDefault(module.id(), ModuleState.DISABLED) != ModuleState.DISABLED,
+                    !(module.ownerCanToggle() && ownerDisabled.contains(module.id()))));
         }
         return List.copyOf(views);
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /**
+     * Story 19.13 — the module's state as the plan / the rows make it, without the owner's choice: the lifecycle
+     * manages the entitlement only (an owner-disabled module is not « inactive » here, and its activation by the
+     * super-admin never overrides the owner's choice).
+     */
+    private ModuleState entitledState(String schema, String moduleId) {
+        return registry.entitledStates(schema).getOrDefault(moduleId, ModuleState.DISABLED);
+    }
 
     /** The per-tenant lock {@code module-lifecycle:<tenant UUID>}; a null id is refused without any statement. */
     private void lockTenant(UUID tenantId) {

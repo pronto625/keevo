@@ -96,6 +96,9 @@ public final class AuditLabels {
             // Modules (Story 13.8a: super-admin activation / deactivation)
             entry("MODULE_ACTIVATED", "Module activé"),
             entry("MODULE_DEACTIVATED", "Module désactivé"),
+            // Modules — the owner's choice in « Mes modules » (Story 19.13)
+            entry("MODULE_ENABLED_BY_OWNER", "Module activé par le propriétaire"),
+            entry("MODULE_DISABLED_BY_OWNER", "Module désactivé par le propriétaire"),
             // Invoicing (Story 14.1)
             entry("INVOICE_CREATED", "Facture créée"),
             entry("INVOICE_ISSUED", "Facture émise"),

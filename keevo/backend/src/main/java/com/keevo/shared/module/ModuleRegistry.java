@@ -70,6 +70,39 @@ public interface ModuleRegistry {
     Map<String, ModuleState> moduleStates(String tenantSchema);
 
     /**
+     * Story 19.13 — the state of every installed module as the plan alone makes it (entitlement), <b>without</b> the
+     * owner's choice: « in plan » = not DISABLED here. Same lookup and cache as {@link #moduleStates}. Default (test
+     * doubles without an owner layer): {@link #moduleStates}.
+     */
+    default Map<String, ModuleState> entitledStates(String tenantSchema) {
+        return moduleStates(tenantSchema);
+    }
+
+    /**
+     * Story 19.13 — ids of the modules the tenant's owner disabled ({@code public.tenant_module_activation}
+     * {@code activated = false}: the owner's own choices, not propagated through {@code requires}), read in the same
+     * lookup as the states; empty for an unknown tenant or the platform
+     * schema. Default (test doubles): none.
+     */
+    default Set<String> ownerDisabledModules(String tenantSchema) {
+        return Set.of();
+    }
+
+    /**
+     * Story 19.13 — whether {@code moduleId} is DISABLED <em>because</em> of its owner: in the plan (entitled state not
+     * DISABLED) and owner-disabled itself or through an owner-disabled requirement (transitively, manifest
+     * {@code requires}). {@code false} for an unknown id. The default (test doubles) only knows direct choices.
+     */
+    default boolean disabledByOwner(String tenantSchema, String moduleId) {
+        if (moduleId == null || !ownerDisabledModules(tenantSchema).contains(moduleId)) {
+            return false;
+        }
+        ModuleState entitled = entitledStates(tenantSchema).get(moduleId);
+        return entitled != null && entitled != ModuleState.DISABLED
+                && moduleState(tenantSchema, moduleId) == ModuleState.DISABLED;
+    }
+
+    /**
      * Drops the tenant's cached active modules of the current request (no-op without a request, for the platform
      * schema or an invalid schema string), so the next call reads the database again.
      */

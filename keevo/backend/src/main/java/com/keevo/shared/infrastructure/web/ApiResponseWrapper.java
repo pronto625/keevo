@@ -32,6 +32,14 @@ public record ApiResponseWrapper<T>(
         return new ApiResponseWrapper<>(data, null, null, null, null, null, Instant.now());
     }
 
+    /**
+     * Story 19.13 — a success response with a non-paginated {@code meta} object (e.g. the interface profile's
+     * {@code navigationPreset} next to a list); {@code null} meta is omitted like everywhere else.
+     */
+    public static <T> ApiResponseWrapper<T> ok(T data, Object meta) {
+        return new ApiResponseWrapper<>(data, null, null, null, null, meta, Instant.now());
+    }
+
     public static <T> ApiResponseWrapper<T> error(
             String error, String code, String domainCode, Object details) {
         return new ApiResponseWrapper<>(null, error, code, domainCode, details, null, Instant.now());

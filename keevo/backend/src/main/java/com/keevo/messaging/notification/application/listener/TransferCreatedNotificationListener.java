@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.module.ModuleScoped;
 import com.keevo.shared.event.catalog.transfer.TransferCreatedEvent;
 import com.keevo.messaging.notification.application.strategy.TransferNotificationRecipientStrategy;
 import com.keevo.shared.capability.notification.NotificationPayload;
@@ -38,6 +39,8 @@ import java.util.UUID;
  *
  * Story HF-2 AC2, AC7.
  */
+// Story 19.13 — nothing runs for a tenant whose owner disabled « multi-store » (state DISABLED)
+@ModuleScoped("multi-store")
 @Component
 public class TransferCreatedNotificationListener {
 

@@ -564,13 +564,21 @@ class InvoicingFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("Free tenant: 403 MODULE_NOT_ENTITLED and no table created")
+    @DisplayName("19.13 — Free tenant at go-live (invoicing granted to FREE by V50 but owner-disabled): 403 "
+            + "MODULE_DISABLED_BY_OWNER and no table created")
     void freeTenant() throws Exception {
         dropInvoicingTables();
         plan("FREE", null);
-        assertError(owner(HttpMethod.GET, "/api/v1/invoices", null), 403, "MODULE_NOT_ENTITLED");
-        assertError(owner(HttpMethod.POST, "/api/v1/invoices", draft("Awa", List.of())), 403, "MODULE_NOT_ENTITLED");
-        assertThat(tables()).isEmpty();
+        jdbc.update("INSERT INTO public.tenant_module_activation (tenant_id, module_id, activated) "
+                + "VALUES (?, 'invoicing', false) ON CONFLICT DO NOTHING", tenantId);
+        try {
+            assertError(owner(HttpMethod.GET, "/api/v1/invoices", null), 403, "MODULE_DISABLED_BY_OWNER");
+            assertError(owner(HttpMethod.POST, "/api/v1/invoices", draft("Awa", List.of())), 403,
+                    "MODULE_DISABLED_BY_OWNER");
+            assertThat(tables()).isEmpty();
+        } finally {
+            jdbc.update("DELETE FROM public.tenant_module_activation WHERE tenant_id = ?", tenantId);
+        }
     }
 
     @Test

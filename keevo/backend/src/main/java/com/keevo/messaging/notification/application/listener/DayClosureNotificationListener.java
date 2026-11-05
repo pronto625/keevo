@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.module.ModuleScoped;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.shared.event.catalog.sale.DayClosureSummary;
 import com.keevo.shared.capability.notification.NotificationPayload;
@@ -33,6 +34,8 @@ import java.util.Optional;
  * warehouse closure, nor for an automatic closure without any sale (the closure is
  * still recorded for the reporting chain — FR51 — only the push is skipped).
  */
+// Story 19.13 — nothing runs for a tenant whose owner disabled « pos » (state DISABLED)
+@ModuleScoped("pos")
 @Component
 public class DayClosureNotificationListener {
 

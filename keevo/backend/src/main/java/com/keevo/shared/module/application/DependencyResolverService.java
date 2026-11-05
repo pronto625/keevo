@@ -92,7 +92,8 @@ public class DependencyResolverService implements DependencyResolver {
         for (String moduleId : moduleIds) {
             targets.add(checkArguments(tenantSchema, moduleId).id());
         }
-        Map<String, ModuleState> states = registry.moduleStates(tenantSchema);
+        // Story 19.13: the entitlement states (without the owner's choice) — the plan is the lifecycle's business
+        Map<String, ModuleState> states = registry.entitledStates(tenantSchema);
         // Story 16.1: a dependency counts as met only when ENABLED — a read-only (expired, in grace) or disabled
         // dependency is (re)activated by the plan, so an activation never leaves a target on a read-only
         // dependency. A target itself counts as active when readable: its renewal is the lifecycle's business.
@@ -139,7 +140,13 @@ public class DependencyResolverService implements DependencyResolver {
         if (target.isCore()) {
             return new DeactivationCheck(target.id(), List.of(), true);
         }
-        Set<String> active = registry.activeModules(tenantSchema);
+        // Story 19.13: active by entitlement (an owner-disabled dependent still holds its plan row)
+        Set<String> active = new TreeSet<>();
+        registry.entitledStates(tenantSchema).forEach((id, state) -> {
+            if (state.readable()) {
+                active.add(id);
+            }
+        });
 
         // every module requiring the target, transitively; only the active ones block
         Set<String> seen = new TreeSet<>();

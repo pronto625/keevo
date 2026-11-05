@@ -283,7 +283,7 @@ class EndpointEntitlementCoverageTest {
                 .append("Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest -D")
                 .append(REGENERATE_PROPERTY).append("=true`.\n\n")
                 .append("Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; ")
-                .append("`WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. ")
+                .append("`WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). ")
                 .append("Exempt handlers state why. ")
                 .append("A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: ")
                 .append("missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` ")

@@ -1,5 +1,6 @@
 package com.keevo.identity.onboarding.adapter.in.rest;
 
+import com.keevo.identity.api.SaleFlow;
 import com.keevo.identity.onboarding.adapter.in.rest.dto.OnboardingRequest;
 import com.keevo.identity.onboarding.adapter.in.rest.dto.OnboardingResponse;
 import com.keevo.identity.onboarding.domain.model.SectorType;
@@ -51,7 +52,9 @@ public class OnboardingController {
 
             - Creates default categories from the sector template (Strategy pattern)
             - Updates the store name from the default "Ma Boutique"
-            - Seeds tenant preferences with defaults (EOD report time, stock alerts)
+            - Seeds tenant preferences with defaults (EOD report time, stock alerts) and the optional
+              defaultSaleFlow (POS | DOCUMENT, absent = POS; other value = 422) — Story 19.13
+            - Applies the initial module activation rules of the sale flow and sector (after commit)
             - Publishes OnboardingCompletedEvent for audit trail
 
             JWT authentication required.
@@ -74,10 +77,19 @@ public class OnboardingController {
         // Parse sectorType — throws DomainException(SECTOR_TEMPLATE_NOT_FOUND) if invalid
         SectorType sectorType = parseSectorType(request.sectorType());
 
+        // Story 19.13 — optional sale flow: absent → POS, unknown → 422
+        SaleFlow saleFlow = null;
+        if (request.defaultSaleFlow() != null) {
+            saleFlow = SaleFlow.fromCode(request.defaultSaleFlow())
+                    .orElseThrow(() -> DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                            "Parcours de vente inconnu : choisissez Caisse ou Documents"));
+        }
+
         CompleteOnboardingCommand command = new CompleteOnboardingCommand(
             sectorType,
             request.storeName(),
-            actorId
+            actorId,
+            saleFlow
         );
 
         OnboardingResult result = completeOnboardingUseCase.complete(command);

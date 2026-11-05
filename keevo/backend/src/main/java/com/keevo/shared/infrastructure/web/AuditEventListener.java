@@ -10,6 +10,7 @@ import com.keevo.shared.event.catalog.auth.DeviceSessionClosedEvent;
 import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetRequestedEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
+import com.keevo.shared.event.catalog.module.ModuleOwnerActivationChangedEvent;
 import com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent;
 import com.keevo.shared.event.catalog.category.CategoryActiveChangedEvent;
 import com.keevo.shared.event.catalog.category.CategoryCreatedEvent;
@@ -624,6 +625,33 @@ public class AuditEventListener {
         }
         log.info("AUDIT: sale_flow_updated after={} tenantId={} actorId={}", event.afterLabel(), event.tenantId(),
                 event.actorId());
+    }
+
+    /**
+     * Story 19.13 — « Module activé / désactivé par le propriétaire » (« Mes modules »), labelled with the module's
+     * French display name; entity = the tenant ({@code Tenant}, its {@code public.tenants.id}). Distinct from the
+     * super-admin MODULE_ACTIVATED / MODULE_DEACTIVATED.
+     */
+    @EventListener
+    public void on(ModuleOwnerActivationChangedEvent event) {
+        String previous = TenantContext.getCurrentTenant();
+        boolean bind = previous == null || !previous.equals(event.tenantId());
+        if (bind) {
+            TenantContext.setCurrentTenant(event.tenantId());
+        }
+        try {
+            write(event.actorId(), event.tenantId(),
+                    event.activated() ? "MODULE_ENABLED_BY_OWNER" : "MODULE_DISABLED_BY_OWNER", "Tenant",
+                    event.tenantUuid(), null, map("module", event.moduleDisplayName()),
+                    null, event.moduleDisplayName(), null, null);
+        } finally {
+            if (bind) {
+                if (previous == null) TenantContext.clear();
+                else TenantContext.setCurrentTenant(previous);
+            }
+        }
+        log.info("AUDIT: module_{}_by_owner module={} tenantId={} actorId={}",
+                event.activated() ? "enabled" : "disabled", event.moduleId(), event.tenantId(), event.actorId());
     }
 
     @EventListener

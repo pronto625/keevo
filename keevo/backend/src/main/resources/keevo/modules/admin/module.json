@@ -23,5 +23,6 @@
     "VIEWER": []
   },
   "entitlement": "module.admin",
-  "free": true
+  "free": true,
+  "ownerToggleable": false
 }

@@ -11,6 +11,8 @@ import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.module.ModuleRegistry;
+import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.ModuleStateScope;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.api.StoreQueryPort;
@@ -57,6 +59,11 @@ public class DayClosureAutoScheduler {
     private final CloseDayUseCase closeDayUseCase;
     private final TenantPreferencesQueryPort preferencesQuery;
     private final Clock clock;
+    /** Story 19.13 — gate on {@code pos} (till disabled by the owner or the subscription); {@code null} only in unit
+     *  tests built without it (no gate). */
+    private final ModuleRegistry modules;
+
+    static final String POS = "pos";
 
     /** Production constructor — Spring calls this; system clock is used. */
     @Autowired
@@ -64,9 +71,10 @@ public class DayClosureAutoScheduler {
                                    StoreQueryPort storeQuery,
                                    DayClosureRepository dayClosureRepository,
                                    CloseDayUseCase closeDayUseCase,
-                                   TenantPreferencesQueryPort preferencesQuery) {
+                                   TenantPreferencesQueryPort preferencesQuery,
+                                   ModuleRegistry modules) {
         this(tenantQuery, storeQuery, dayClosureRepository,
-             closeDayUseCase, preferencesQuery, Clock.systemDefaultZone());
+             closeDayUseCase, preferencesQuery, Clock.systemDefaultZone(), modules);
     }
 
     /** Package-private constructor for tests with an injected clock. */
@@ -76,6 +84,18 @@ public class DayClosureAutoScheduler {
                             CloseDayUseCase closeDayUseCase,
                             TenantPreferencesQueryPort preferencesQuery,
                             Clock clock) {
+        this(tenantQuery, storeQuery, dayClosureRepository, closeDayUseCase, preferencesQuery, clock, null);
+    }
+
+    /** Package-private constructor for tests with an injected clock and the module gate. */
+    DayClosureAutoScheduler(TenantQueryPort tenantQuery,
+                            StoreQueryPort storeQuery,
+                            DayClosureRepository dayClosureRepository,
+                            CloseDayUseCase closeDayUseCase,
+                            TenantPreferencesQueryPort preferencesQuery,
+                            Clock clock,
+                            ModuleRegistry modules) {
+        this.modules = modules;
         this.tenantQuery = tenantQuery;
         this.storeQuery = storeQuery;
         this.dayClosureRepository = dayClosureRepository;
@@ -100,10 +120,17 @@ public class DayClosureAutoScheduler {
             if (tenant.status() != TenantStatus.ACTIVE) {
                 return;
             }
-            tenantCount[0]++;
             TenantContext.setCurrentTenant(tenant.schemaName());
             // one module-state lookup per tenant: the preferences port and the EOD report listener's gate share it
             try (var moduleStates = ModuleStateScope.open()) {
+                // Story 19.13 — till disabled (by the owner or by the subscription): no automatic closure (nor its
+                // notifications), and the tenant is not counted as processed
+                if (modules != null && modules.moduleState(tenant.schemaName(), POS) == ModuleState.DISABLED) {
+                    log.debug("EOD auto-close skipped for tenant={}: till disabled (owner or subscription)",
+                            tenant.schemaName());
+                    return;
+                }
+                tenantCount[0]++;
                 processTenant(tenant, todayWAT, nowWAT);
             } catch (Exception e) {
                 log.error("DayClosureAutoScheduler error for tenant={}: {}", tenant.schemaName(), e.getMessage(), e);

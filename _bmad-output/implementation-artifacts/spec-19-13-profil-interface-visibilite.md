@@ -2,14 +2,22 @@
 title: '19.13 — Interface profile: owner activation of plan modules, navigation preset, new modules disabled'
 type: 'feature'
 created: '2026-11-05'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '4de03c49203bb66b6fe40921cc11736ff23586db'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
   - '{project-root}/keevo/backend/src/main/resources/db/modules/README.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      Bref owner profile is keyed on the DOCUMENT flow, not on each owner's Bref plan; other in-plan modules stay activated.
+    evidence: |-
+      Entitlement already follows the plan; the Bref-equivalence list belongs to the importer. Routed to story 24.2 in epics-fusion-keevo-bref.md.
+    location: >-
+      keevo/backend/src/main/resources/db/migration/V50__module_owner_activation.sql
+    severity: low
 ---
 
 <intent-contract>
@@ -106,7 +114,57 @@ deferred: []
 
 ## Spec Change Log
 
+- 2026-11-05 (review): blind-hunter / edge-case finding — new FREE tenants on the (POS, NULL) default rule would get `invoicing` activated (automatic invoice for every POS sale, documents quota burnt). Amended the seed — this OVERRIDES the contract's « Seeds: (POS, NULL) = none » line (seeds are editable data, ADR-05; the contract text is left untouched as read-only): (POS, NULL) disables `invoicing`; (DOCUMENT, NULL) keeps `pos, inventory, counting, multi-store`. Avoids: FREE POS owners invoicing every sale without having chosen it. Applied as a one-line seed patch instead of a full re-derivation (the rest of the code is KEEP). Also: the owner layer propagates through manifest `requires` (a module whose requirement is owner-disabled is DISABLED). KEEP: separate `tenant_module_activation` table, lateral read in the status query, entitlement vs owner layer split, advisory lock per tenant, rules as data with most-specific-wins.
+
 ## Review Triage Log
+
+### 2026-11-05 — Review pass
+- verdicts: 39 findings — high 0, medium 7, low 19, false 6, maybe-false 0 (+7 descriptive intent-alignment observations, triaged below)
+- findings:
+  - Patterns/complexity (FUS-NFR11):
+    - `[low]` `[patch]` `ModuleLifecycleService` activation loop re-reads `entitledState` after each `evict` (k+1 lookups; loop pre-existing, line touched by this diff) — snapshot `entitledStates` once before the loop.
+    - `[low]` `[reject]` `ModuleActivationRulesService.save` re-reads every rule set — super-admin path on a table of a handful of rows; not worth a new store contract.
+    - `[low]` `[reject]` dependency-closure validation O(k·M·r) — M ≈ 18 manifests, admin-only path.
+    - `[false]` `[reject]` `Object[]` accumulators in `JdbcModuleActivationRuleStore` — style; no harm named.
+    - `[false]` `[reject]` `setActivation` rebuilds the module list — reviewer says no change required (2 queries, keeps the response identical to the list).
+    - `[false]` `[reject]` `ModuleRegistry.disabledByOwner` default method builds 3 maps — only test doubles use it; the service overrides it.
+    - `[low]` `[reject]` lateral array repeated per `tenant_modules` row / `findRows` pays for it — ~10 rows, negligible.
+  - Intent alignment (descriptive):
+    - `[false]` `[reject]` UI surfaces (menus, tabs, « Mes modules ») not exercised — project rule API-only; the mobile section carries the app requirements.
+    - `[low]` `[reject]` « synchronisé vers les appareils » = devices re-fetch `/tenants/me/modules` (+ `MODULE_INACTIVE` rejection) — design note of the spec; the mobile section states when to re-fetch.
+    - `[medium]` `[patch]` V50 backfill never executed by a test — same as the verification-gap finding below.
+    - `[low]` `[defer]` Bref owner profile keyed on flow, not per Bref plan; other in-plan modules (e.g. exports) stay on — entitlement already follows the plan; the Bref-equivalence decision belongs to the importer → routed to 24.2 (with suppliers).
+    - `[false]` `[reject]` storage differs from the note's wording (separate table instead of an OWNER origin) — deliberate, justified in Design Notes (plan sync / expiry would overwrite it); the effective state is DISABLED as the note requires.
+    - `[false]` `[reject]` V1 sees `MODULE_DISABLED_BY_OWNER` instead of `MODULE_NOT_ENTITLED` on invoicing — V1 2.0.1 has no invoicing and never calls these endpoints.
+    - `[medium]` `[patch]` new `@ModuleScoped` listener gates untested — same as the verification-gap finding below.
+  - Blind hunter:
+    - `[medium]` `[patch]` new FREE tenants on the POS default rule get invoicing activated, so every POS sale becomes an automatic invoice and burns the 300 documents/month quota — the harm V50 prevents for existing tenants — seed `invoicing` in the (POS, NULL) default set (spec amended, see change log); a new owner enables it in « Mes modules ».
+    - `[medium]` `[patch]` `OnboardingModuleRulesListener` swallows failures: the Modulith publication completes and the rules are never applied — log and rethrow so the publication stays incomplete and is republished on restart (`republish-outstanding-events-on-restart: true`); the insert is idempotent.
+    - `[low]` `[patch]` stored rule sets never re-checked against manifests — test that every seeded/stored default set passes the service validation (dependency-closed, toggleable).
+    - `[low]` `[patch]` a sector set replaces the flow default entirely, undocumented — state « most specific set wins, no merge » in the admin API description and `ModuleActivationRulesAdmin` Javadoc.
+    - `[medium]` `[patch]` the « new module ⇒ public migration owner-disabling it for existing tenants » rule is only a README convention — architecture test pinning the module ids known at V50; a new `module.json` fails it with a message pointing to the README rule.
+    - `[low]` `[patch]` owner-toggle audit row has entity type `Module` with the tenant UUID as id — use entity type `Tenant`.
+    - `[low]` `[patch]` `list()` Javadoc promises defaults first but SQL orders by flow then sector — fix the Javadoc to the actual order.
+    - `[low]` `[patch]` blank `sectorType` silently targets the default set — 422 `MODULE_ACTIVATION_RULE_INVALID` « Secteur inconnu » for a blank string (null = default).
+    - `[low]` `[reject]` admin `TenantModuleDto` lacks `inPlan` — new public surface; the console can read `state` + `ownerActivated`; not needed by the intent.
+    - `[low]` `[patch]` `DayClosureAutoScheduler` counts skipped tenants as processed and its comment says « owner » while it skips any DISABLED pos — count after the skip; comment « pos disabled (owner or entitlement) ». Skipping on any DISABLED pos is the intended « runs nothing ».
+    - `[medium]` `[patch]` missing tests: rules listener failure path, `TenantSaleFlowQueryAdapter`, annotation placement of the 4 gated listeners — add them (annotation pins in the `AlertsModuleScopedFullContextTest` style).
+    - `[low]` `[reject]` super-admin rule edits only log `[ADMIN AUDIT]` — same as every super-admin catalogue edit (bundles, plan profiles); public schema has no audit table.
+    - `[false]` `[reject]` patch omits `endpoints.md` — excluded from the review diff on purpose (generated); it is modified and committed with the change.
+  - Verification gap:
+    - `[medium]` `[patch]` V50 backfill + FREE grant never replayed on a pre-existing tenant — Postgres integration test re-running `V50__module_owner_activation.sql` (V41/V43 pattern): pre-existing tenant gets `invoicing=false`, an existing owner choice is kept, an edited DOCUMENT default is not reseeded.
+    - `[medium]` `[patch]` lifecycle / dependency resolver switched to `entitledStates` with no owner-disabled case — tests: super-admin deactivate of an owner-disabled in-plan module writes the plan row; activate keeps `activated_at`; deactivating a requirement of an owner-disabled in-plan dependent → `MODULE_HAS_DEPENDENTS`; `FakeRegistry` overrides `entitledStates` separately.
+    - `[medium]` `[patch]` the 4 new `@ModuleScoped` gates untested — grouped with the blind-hunter missing-tests entry.
+    - `[low]` `[patch]` admin `ownerActivated` not asserted — `jsonPath` assertion in `ModuleAdminControllerTest`.
+    - `[low]` `[patch]` manifest `ownerToggleable` type check untested — `ModuleManifestLoaderTest` cases (string → problem, absent → true).
+    - `[medium]` `[patch]` listener swallows failures — grouped with the blind-hunter entry.
+  - Edge case hunter:
+    - `[medium]` `[patch]` new FREE POS tenants get invoicing — grouped with the blind-hunter entry.
+    - `[medium]` `[patch]` a module can become usable while a module it requires is owner-disabled (owner disables `reporting` while `exports` is outside the plan; the plan later grants `exports`; or super-admin activation) — the owner layer propagates through `requires`: a module whose (transitive) requirement is owner-disabled is effectively DISABLED and `disabledByOwner` reports it as owner-caused; `activated` stays the owner's own choice.
+    - `[medium]` `[patch]` same root as the previous row (dependent outside the plan when the requirement was disabled).
+    - `[low]` `[reject]` rule validation message when a dependent is non-toggleable — no non-toggleable manifest requires a toggleable one (they all require only `core`); unreachable today.
+    - `[medium]` `[patch]` rules listener log-and-drop — grouped with the blind-hunter entry.
+    - `[low]` `[patch]` scheduler comment says owner but skips any DISABLED pos — grouped with the blind-hunter scheduler entry.
 
 ## Design Notes
 
@@ -125,3 +183,82 @@ deferred: []
 
 **Manual checks:**
 - Local backend (WhatsApp noop, FCM/Expo off): `GET /tenants/me/modules` on a FREE dev tenant shows invoicing `activated:false`; PUT toggles; invoice endpoint 403 `MODULE_DISABLED_BY_OWNER`; onboarding with DOCUMENT; admin rules GET/PUT; `psql` rows in `public.tenant_module_activation`.
+
+## Auto Run Result
+
+Status: done
+
+**Summary.** A module is now usable only when the plan includes it AND the owner has not disabled it. The owner's choice lives in `public.tenant_module_activation` (no row = activated), read in the same statement as module statuses and applied as a layer over the entitlement state (propagated through manifest `requires`), so every existing gate stops an owner-disabled module (REST 403 `MODULE_DISABLED_BY_OWNER`, sync push `REJECTED/MODULE_INACTIVE`, sync pull skip, `@ModuleScoped` listeners, scheduler gates; four more notification listeners and the day-closure auto scheduler now gated). `GET /tenants/me/modules` adds `inPlan`, `activated`, `ownerToggleable` and `meta.navigationPreset` (CAISSE/DOCUMENT from `default_sale_flow`); preferences add `navigationPreset`. Owner toggle `PUT /tenants/me/modules/{id}/activation` (locked per tenant, dependency rules, audited, never touches `tenant_modules`). V50: tables, go-live backfill (`invoicing` owner-disabled for every existing tenant) and the FREE `invoicing` grant in one migration. Initial activation rules are data (by sale flow, optional sector; most specific set wins) applied after onboarding (optional `defaultSaleFlow`) and via `ModuleActivationRulesPort` for 24.2; super-admin CRUD on `/api/v1/admin/module-activation-rules`.
+
+**Files.** New: `V50__module_owner_activation.sql`; `OwnerModuleActivation(Service)`, `OwnerModuleActivationStore` + JDBC, `ModuleActivationRulesPort`/`Admin`/`Service`, `ModuleActivationRuleStore` + JDBC, `OnboardingModuleRulesListener`, `ModuleOwnerActivationChangedEvent`, `ModuleActivationRulesAdminController` + DTO, `TenantSaleFlowQueryPort` + adapter, `NavigationPreset`; tests (`InterfaceProfileFullContextTest`, `ModuleOwnerLayerTest`, `OwnerModuleActivationServiceTest`, `ModuleActivationRulesServiceTest`, `OnboardingModuleRulesListenerTest`, `ModuleOwnerActivationMigrationPostgresIntegrationTest`, `DefaultActivationRuleSetsPostgresIntegrationTest`, `TenantSaleFlowQueryAdapterPostgresIntegrationTest`, `OwnerGatedListenersPlacementTest`, `ModuleIdsAtGoLivePinTest`). Changed: `ModuleStateRules`, `ModuleRegistry(Service)`, `JdbcTenantModuleStateStore`, `ModuleEntitlementService`, `ModuleLifecycleService` + `DependencyResolverService` (plan-only state), `ModuleManifest`(+loader, `ownerToggleable`, 5 manifests), `TenantModulesController`, admin `TenantModuleDto` (`ownerActivated`), onboarding request/service, preferences DTO, `ApiResponseWrapper` (meta helper), error codes, audit labels/listener, 5 gated listeners/scheduler, `db/modules/README.md`, `docs/entitlements/endpoints.md`, export datasets contract.
+
+**Review.** 39 findings (5 layers): 0 high, 7 medium, 19 low, 6 false (+7 intent observations). Patched: all 7 medium (new FREE POS tenants getting invoicing → POS default rule disables it; owner layer propagated through `requires`; onboarding rules listener rethrows so the publication is republished; V50 replay test; lifecycle/dependency tests with owner-disabled modules; listener annotation pins; new-module pin test) and 10 low. Deferred: 1 low → 24.2 (Bref-equivalence per Bref plan). Rejected: 12 (reasons in the triage log). Spec change log: the (POS, NULL) seed now disables `invoicing` (overrides the contract's seed line).
+
+**Follow-up review: recommended (true)** — 7 medium patches; unverified risk: the requires-propagation of the owner layer and the POS-default `invoicing` seed change what new and existing tenants see, verified by tests and on `keevo_dev` but not yet on the RN app; the onboarding-rules republish path is unit-tested only.
+
+**Verification.** Full suite package by package: 5 785 tests, 0 failures. Live `keevo_dev` (WhatsApp noop, FCM/Expo off) after V50: 362 tenants, 361 `invoicing` rows disabled (one re-enabled by the test owner), FREE grant present, rule sets POS→`invoicing`, DOCUMENT→`counting,inventory,multi-store,pos`. Existing tenant: list with `meta.navigationPreset` DOCUMENT, `invoicing` `inPlan:true, activated:false, DISABLED`; `GET /invoices` 403 `MODULE_DISABLED_BY_OWNER`; enable → 200 and `/invoices` 200; same value → 200 not audited; disable `inventory` while `pos` on → 409 `MODULE_HAS_DEPENDENTS`; `store` → 409 `MODULE_NOT_TOGGLEABLE`; `foo` → 404; `{}` → 422; `pos` while `inventory` off → 409 `MODULE_REQUIREMENT_DISABLED`; audit 4 `MODULE_DISABLED_BY_OWNER` + 5 `MODULE_ENABLED_BY_OWNER`. New tenant onboarded with `defaultSaleFlow:"DOCUMENT"` → preset DOCUMENT and pos/inventory/counting/multi-store DISABLED; `defaultSaleFlow:"FOO"` → 422. Super-admin rules API exercised by `InterfaceProfileFullContextTest` only (no super-admin login used live).
+
+**Residual risks.** Devices learn an owner change only on re-fetch; existing `keevo_dev` FREE tenants holding a PLAN `DISABLED` invoicing row show `inPlan:false` until their next plan resync (prod tenants get their rows after V50, so they are not affected).
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+
+**Ce qui est fait côté API :** chaque module compris dans le plan peut être activé ou désactivé par le propriétaire pour toute l'entreprise ; un module désactivé ne fait plus rien (écritures refusées, pas de notification, pas de tâche planifiée) ; ses données sont gardées. L'API indique aussi le préréglage de navigation : Caisse ou Documents. À la mise en prod, la facturation est désactivée pour toutes les entreprises existantes ; une entreprise qui démarre en « Documents » a la caisse, le stock, l'inventaire et les transferts désactivés, une entreprise en « Caisse » a la facturation désactivée (règles modifiables par le super-admin).
+
+**À utiliser :**
+1. `GET /api/v1/tenants/me/modules` (tous les rôles) : `data` = liste des modules ; champs ajoutés `inPlan` (compris dans le plan), `activated` (choix du propriétaire), `ownerToggleable` (peut être changé dans « Mes modules ») ; `state` reste l'état effectif (`ENABLED` / `READ_ONLY` / `DISABLED`). `meta.navigationPreset` = `CAISSE` ou `DOCUMENT`. Code : `keevo/backend/src/main/java/com/keevo/shared/module/adapter/in/rest/TenantModulesController.java`.
+2. `GET /api/v1/tenant/preferences` : nouveau dernier champ `navigationPreset`.
+3. `PUT /api/v1/tenants/me/modules/{moduleId}/activation` (OWNER) corps `{"activated": true|false}` → 200 avec le module à jour. Erreurs :
+
+| Code | HTTP | Message | Réaction de l'app |
+|---|---|---|---|
+| `MODULE_NOT_IN_PLAN` | 409 | « Ce module n'est pas compris dans votre plan : voyez Mon plan » | proposer « Mon plan » |
+| `MODULE_NOT_TOGGLEABLE` | 409 | « Ce module ne peut pas être désactivé » | ne pas afficher d'interrupteur (`ownerToggleable:false`) |
+| `MODULE_HAS_DEPENDENTS` | 409 | « Désactivez d'abord : Point de vente, … » | afficher le message |
+| `MODULE_REQUIREMENT_DISABLED` | 409 | « Activez d'abord : Stock et inventaire » | afficher le message |
+| `MODULE_NOT_FOUND` | 404 | « Module introuvable » | recharger la liste |
+| `VALIDATION_ERROR` | 422 | « Indiquez si le module est activé » | — |
+| `FORBIDDEN` | 403 | — | interrupteurs réservés au propriétaire |
+
+4. Toute requête vers un module désactivé par le propriétaire → 403 `MODULE_DISABLED_BY_OWNER` « Ce module est désactivé : le propriétaire peut l'activer dans Paramètres › Mes modules » ; en synchro, l'opération revient `REJECTED` / `MODULE_INACTIVE`.
+5. `POST /api/v1/onboarding/complete` accepte `defaultSaleFlow` (`POS` | `DOCUMENT`, facultatif, POS par défaut) : le choix fait à l'inscription fixe le préréglage et les modules activés au départ. Valeur inconnue → 422 « Parcours de vente inconnu : choisissez Caisse ou Documents ».
+
+**À implémenter côté mobile :**
+1. Navigation : n'afficher dans les menus, onglets, accueil et raccourcis que les modules `state` ≠ `DISABLED` (et permis par le rôle) ; ordre et écran d'accueil selon `navigationPreset` (Caisse → caisse en premier ; Documents → documents en premier).
+2. Écran Paramètres › Mes modules (propriétaire) : un interrupteur par module `inPlan && ownerToggleable`, libellé `displayName` ; les modules `inPlan:false` renvoient vers « Mon plan » ; pas de bannière promotionnelle.
+3. Rafraîchir `GET /tenants/me/modules` à la connexion, au choix d'entreprise, au retour au premier plan (> 60 s), au retour du réseau, après un changement d'interrupteur et à toute réponse `MODULE_DISABLED_BY_OWNER` / `MODULE_INACTIVE`.
+4. Inscription : proposer « Caisse » ou « Documents » avec l'activité, envoyé dans `defaultSaleFlow`.
+5. Hors ligne : garder la dernière liste en cache ; ne pas mettre d'opérations en file pour un module désactivé.
+
+**Implémentation de référence :** `keevo/app/lib/core/entitlements/entitlements_provider.dart` (client de test Flutter : rafraîchissement de la liste).
+
+**Critères d'acceptation mobile :**
+- Given une entreprise existante, when l'app s'ouvre, then la facturation n'apparaît nulle part et « Mes modules » montre « Facturation » désactivée ; when le propriétaire l'active, then le menu Factures apparaît sans redémarrer.
+- Given une inscription en « Documents », when l'accueil s'affiche, then ni caisse ni stock ne sont visibles.
+- Given un employé, when le propriétaire désactive un module, then l'employé ne le voit plus au prochain rafraîchissement.
+- Mise en place : `curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"activated":true}' $API/api/v1/tenants/me/modules/invoicing/activation`.
+
+**Clé de suivi mobile :** `m19-13-profil-interface-visibilite`.
+
+## Dashboard super-admin (autre dépôt)
+
+**Statut :** API livrée (commit `__COMMIT__`).
+
+**Ce qui est fait côté API :** les modules activés au départ pour une nouvelle entreprise sont des règles en base, par parcours de vente (Caisse / Documents) et, si besoin, par secteur ; la règle la plus précise l'emporte, sans fusion. La vue des modules d'une entreprise indique aussi le choix du propriétaire.
+
+**À utiliser :**
+1. `GET /api/v1/admin/module-activation-rules` → liste `{saleFlow, saleFlowLabel, sectorType (null = règle par défaut), disabledModules:[{moduleId, displayName}], defaultSet, updatedAt}`.
+2. `PUT /api/v1/admin/module-activation-rules` corps `{saleFlow, sectorType, disabledModules:[ids]}` (trois clés obligatoires, `sectorType` null pour la règle par défaut) → 201 créée / 200 remplacée. 422 `MODULE_ACTIVATION_RULE_INVALID` avec la raison en français (module inconnu ou non désactivable, secteur inconnu ou vide, liste incomplète vis-à-vis des dépendances).
+3. `DELETE /api/v1/admin/module-activation-rules?saleFlow=&sectorType=` → 204 ; la règle par défaut d'un parcours ne se supprime pas (409).
+4. `GET /api/v1/admin/tenants/{tenantId}/modules` : champ ajouté `ownerActivated`.
+Code : `keevo/backend/src/main/java/com/keevo/admin/module/adapter/in/rest/ModuleActivationRulesAdminController.java`.
+
+**À implémenter côté dashboard :**
+1. Écran « Modules au démarrage » : une carte par parcours (Caisse, Documents) et par secteur, cases à cocher des modules désactivés au départ (libellés `displayName`), message d'erreur 422 affiché tel quel ; rappeler qu'une règle de secteur remplace la règle par défaut et ne touche pas les entreprises existantes.
+2. Fiche entreprise › Modules : afficher « Désactivé par le propriétaire » quand `ownerActivated:false`.
+
+**Critères d'acceptation dashboard :**
+- Given la règle Documents modifiée, when une entreprise s'inscrit en Documents, then exactement les modules cochés sont désactivés ; les entreprises existantes ne changent pas.
+
+**Clé de suivi dashboard :** `d19-13-profil-interface-visibilite`.

@@ -74,7 +74,10 @@ class BundlePostgresIntegrationTest extends FullContextIntegrationTest {
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
         adminToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, adminId, "public", "SUPER_ADMIN");
         ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
-        // a Free tenant: paid modules disabled by the plan, free modules enabled
+        // a Free tenant: paid modules disabled by the plan, free modules enabled. Story 19.13 (V50) grants invoicing
+        // to FREE: these tests keep the pre-19.13 offer (invoicing withheld) for the duration of each test
+        jdbc.update("UPDATE public.profile_modules SET granted = false WHERE plan_type = 'FREE' "
+                + "AND module_id = 'invoicing'");
         jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'FREE', status = 'ACTIVE', "
                 + "expires_at = NULL");
         jdbc.update("UPDATE public.tenants SET plan_type = 'FREE' WHERE id = ?", tenantId);
@@ -84,6 +87,8 @@ class BundlePostgresIntegrationTest extends FullContextIntegrationTest {
 
     @AfterEach
     void cleanUp() {
+        jdbc.update("UPDATE public.profile_modules SET granted = true WHERE plan_type = 'FREE' "
+                + "AND module_id = 'invoicing'");
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId); // test tenant only
         jdbc.update("DELETE FROM public.bundle_definitions WHERE id = ?", TEST_BUNDLE);
         TenantContext.clear();

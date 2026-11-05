@@ -1,5 +1,6 @@
 package com.keevo.identity.onboarding.adapter.in.web;
 
+import com.keevo.identity.api.NavigationPreset;
 import com.keevo.identity.api.TenantPreferencesView;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 
@@ -12,6 +13,8 @@ import java.time.Instant;
  * {@code report-config} is ENABLED; the GET returns the effective values (fixed defaults when it is DISABLED).
  * Story 19.12 — {@code defaultSaleFlow} (additive, last component): {@code POS} (« Caisse ») or {@code DOCUMENT}
  * (« Documents »), never null.
+ * Story 19.13 — {@code navigationPreset} (additive, last component): {@code CAISSE} or {@code DOCUMENT}, derived from
+ * {@code defaultSaleFlow} (interface profile), never null.
  */
 public record TenantPreferencesResponseDto(
     String sectorType,
@@ -30,7 +33,8 @@ public record TenantPreferencesResponseDto(
     boolean trendNotificationEnabled,
     boolean reportConfigEditable,
     boolean leaderboardVisibleToEmployees,
-    String defaultSaleFlow
+    String defaultSaleFlow,
+    String navigationPreset
 ) {
 
     /**
@@ -56,7 +60,8 @@ public record TenantPreferencesResponseDto(
             effective.trendNotificationEnabled(),
             reportConfigEditable,
             stored.leaderboardVisibleToEmployees(),
-            stored.defaultSaleFlow().name()
+            stored.defaultSaleFlow().name(),
+            NavigationPreset.of(stored.defaultSaleFlow()).name()
         );
     }
 

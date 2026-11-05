@@ -97,6 +97,33 @@ class DayClosureAutoSchedulerTest {
     }
 
     @Test
+    void scheduler_whenPosDisabledByOwner_closesNothing() {
+        // Story 19.13 — the till disabled in « Mes modules »: no automatic closure for that tenant, others unaffected
+        var off = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
+        var on = createTenant("kv_other", TenantStatus.ACTIVE);
+        com.keevo.shared.module.ModuleRegistry modules = org.mockito.Mockito.mock(
+                com.keevo.shared.module.ModuleRegistry.class);
+        when(modules.moduleState(TENANT_SCHEMA, "pos")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
+        when(modules.moduleState("kv_other", "pos")).thenReturn(com.keevo.shared.module.ModuleState.ENABLED);
+        scheduler = new DayClosureAutoScheduler(
+                IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), StoreApiTestSupport.queryPort(storeRepository),
+                dayClosureRepository, closeDayUseCase,
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
+                fixedClockAt(MONDAY_DATE, "20:05:00", WAT), modules);
+        when(tenantRepository.findAll()).thenReturn(List.of(off, on));
+        when(storeRepository.findAllActive()).thenReturn(List.of(createStore(STORE_ID, "Boutique Test")));
+        when(tenantPreferencesRepository.findByCurrentTenant())
+                .thenReturn(Optional.of(defaultEodPrefs("20:00:00", true)));
+        when(dayClosureRepository.existsByStoreIdAndDate(eq(STORE_ID), any(LocalDate.class))).thenReturn(false);
+
+        scheduler.runAutoClosure();
+
+        var commandCaptor = ArgumentCaptor.forClass(CloseDayCommand.class);
+        verify(closeDayUseCase).closeDay(commandCaptor.capture());
+        assertThat(commandCaptor.getValue().tenantId()).isEqualTo("kv_other");
+    }
+
+    @Test
     void scheduler_whenClosureExists_skipsTrigger() {
         var tenant = createTenant(TENANT_SCHEMA, TenantStatus.ACTIVE);
         var store = createStore(STORE_ID, "Boutique Test");

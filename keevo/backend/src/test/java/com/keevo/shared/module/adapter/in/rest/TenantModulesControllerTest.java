@@ -1,11 +1,16 @@
 package com.keevo.shared.module.adapter.in.rest;
 
+import com.keevo.identity.api.SaleFlow;
+import com.keevo.identity.api.TenantSaleFlowQueryPort;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.JwtAuthFilter;
 import com.keevo.shared.module.ModuleCategory;
 import com.keevo.shared.module.ModuleLifecycle;
 import com.keevo.shared.module.ModuleManifest;
 import com.keevo.shared.module.ModuleState;
+import com.keevo.shared.module.OwnerModuleActivation;
 import com.keevo.shared.module.TenantModuleStatus;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
@@ -23,13 +28,20 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,6 +56,8 @@ class TenantModulesControllerTest {
 
     @MockitoBean ModuleLifecycle lifecycle;
     @MockitoBean JwtAuthFilter jwtAuthFilter;
+    @MockitoBean OwnerModuleActivation ownerActivation;
+    @MockitoBean TenantSaleFlowQueryPort saleFlows;
 
     @AfterEach
     void clear() {
@@ -57,7 +71,120 @@ class TenantModulesControllerTest {
                 manifest("crm", "Clients et fournisseurs", ModuleCategory.BUSINESS, false),
                 manifest("invoicing", "Facturation", ModuleCategory.PREMIUM, false),
                 manifest("multi-store", "Multi-boutiques et transferts", ModuleCategory.PREMIUM, false),
-                manifest("pos", "Point de vente", ModuleCategory.BUSINESS, true)));
+                manifest("pos", "Point de vente", ModuleCategory.BUSINESS, true),
+                new ModuleManifest("store", "1.0.0", "Boutiques", ModuleCategory.BUSINESS, List.of("core"),
+                        List.of(), List.of(), List.of(), List.of(), List.of(), null, List.of(), List.of(),
+                        "module.store", true, ModuleManifest.noRolePermissions(), false)));
+    }
+
+    // ── Story 19.13 — interface profile ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("19.13 — list: inPlan / activated / ownerToggleable per module, meta.navigationPreset CAISSE by "
+            + "default (no preferences)")
+    void interfaceProfileList() throws Exception {
+        as("ROLE_EMPLOYEE");
+        when(lifecycle.tenantModules(SCHEMA)).thenReturn(List.of(
+                new ModuleLifecycle.TenantModuleView("invoicing", "Facturation", ModuleState.DISABLED,
+                        TenantModuleStatus.ACTIVE, null, null, "1", "PLAN", true, false),
+                new ModuleLifecycle.TenantModuleView("multi-store", "Multi-boutiques et transferts",
+                        ModuleState.DISABLED, null, null, null, null),
+                new ModuleLifecycle.TenantModuleView("pos", "Point de vente", ModuleState.ENABLED, null, null, null,
+                        null),
+                new ModuleLifecycle.TenantModuleView("store", "Boutiques", ModuleState.ENABLED, null, null, null,
+                        null)));
+
+        mockMvc.perform(get("/api/v1/tenants/me/modules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.navigationPreset").value("CAISSE"))
+                .andExpect(jsonPath("$.data[0].state").value("DISABLED"))
+                .andExpect(jsonPath("$.data[0].inPlan").value(true))
+                .andExpect(jsonPath("$.data[0].activated").value(false))
+                .andExpect(jsonPath("$.data[0].ownerToggleable").value(true))
+                .andExpect(jsonPath("$.data[1].inPlan").value(false))
+                .andExpect(jsonPath("$.data[1].activated").value(true))
+                .andExpect(jsonPath("$.data[2].inPlan").value(true))
+                .andExpect(jsonPath("$.data[2].activated").value(true))
+                .andExpect(jsonPath("$.data[3].ownerToggleable").value(false));
+    }
+
+    @Test
+    @DisplayName("19.13 — list: DOCUMENT sale flow → meta.navigationPreset DOCUMENT")
+    void navigationPresetDocument() throws Exception {
+        as("ROLE_OWNER");
+        when(saleFlows.find(SCHEMA)).thenReturn(Optional.of(
+                new TenantSaleFlowQueryPort.TenantSaleFlowView(SaleFlow.DOCUMENT, "CLOTHING")));
+        when(lifecycle.tenantModules(SCHEMA)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/tenants/me/modules"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meta.navigationPreset").value("DOCUMENT"));
+    }
+
+    @Test
+    @DisplayName("19.13 — PUT activation (OWNER) → the service is called, the module is returned as listed")
+    void ownerToggle() throws Exception {
+        as("ROLE_OWNER");
+        when(lifecycle.tenantModules(SCHEMA)).thenReturn(List.of(
+                new ModuleLifecycle.TenantModuleView("invoicing", "Facturation", ModuleState.DISABLED,
+                        TenantModuleStatus.ACTIVE, null, null, "1", "PLAN", true, false)));
+
+        mockMvc.perform(put("/api/v1/tenants/me/modules/invoicing/activation")
+                        .contentType("application/json").content("{\"activated\": false}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.moduleId").value("invoicing"))
+                .andExpect(jsonPath("$.data.state").value("DISABLED"))
+                .andExpect(jsonPath("$.data.activated").value(false))
+                .andExpect(jsonPath("$.data.inPlan").value(true));
+        verify(ownerActivation).setActivation(eq(SCHEMA), eq("invoicing"), eq(false), any());
+    }
+
+    @Test
+    @DisplayName("19.13 — PUT activation without a boolean 'activated' → 422 VALIDATION_ERROR, nothing called")
+    void ownerToggleBody() throws Exception {
+        as("ROLE_OWNER");
+        for (String body : List.of("{}", "{\"activated\": null}", "{\"activated\": \"yes\"}")) {
+            mockMvc.perform(put("/api/v1/tenants/me/modules/invoicing/activation")
+                            .contentType("application/json").content(body))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.error").value("Indiquez si le module est activé"));
+        }
+        verify(ownerActivation, never()).setActivation(anyString(), anyString(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("19.13 — PUT activation by MANAGER / EMPLOYEE → 403 FORBIDDEN, nothing called")
+    void nonOwnerToggle() throws Exception {
+        for (String role : List.of("ROLE_MANAGER", "ROLE_EMPLOYEE")) {
+            as(role);
+            mockMvc.perform(put("/api/v1/tenants/me/modules/invoicing/activation")
+                            .contentType("application/json").content("{\"activated\": true}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+        }
+        verify(ownerActivation, never()).setActivation(anyString(), anyString(), anyBoolean(), any());
+    }
+
+    @Test
+    @DisplayName("19.13 — PUT activation refused by the rules → 409 / 404 with the French message")
+    void ownerToggleRefused() throws Exception {
+        as("ROLE_OWNER");
+        when(ownerActivation.setActivation(eq(SCHEMA), eq("exports"), eq(true), any())).thenThrow(
+                DomainException.userFacing(ErrorCode.MODULE_NOT_IN_PLAN,
+                        "Ce module n'est pas compris dans votre plan : voyez Mon plan"));
+        when(ownerActivation.setActivation(eq(SCHEMA), eq("foo"), eq(true), any())).thenThrow(
+                new DomainException(ErrorCode.MODULE_NOT_FOUND, "Module introuvable"));
+
+        mockMvc.perform(put("/api/v1/tenants/me/modules/exports/activation")
+                        .contentType("application/json").content("{\"activated\": true}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("MODULE_NOT_IN_PLAN"))
+                .andExpect(jsonPath("$.error").value("Ce module n'est pas compris dans votre plan : voyez Mon plan"));
+        mockMvc.perform(put("/api/v1/tenants/me/modules/foo/activation")
+                        .contentType("application/json").content("{\"activated\": true}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("MODULE_NOT_FOUND"));
     }
 
     @Test

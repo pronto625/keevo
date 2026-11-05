@@ -29,3 +29,21 @@ table is added `NOT VALID` and validated in a guarded block (legacy rows never a
   the mapping against `public`); the tenant schemas still get it only from the module migration (Story 19.12, V49).
 - No `${` in a script: placeholders are off so Flyway runs exactly the text registration runs (a test enforces it).
 - Keyset pull indexes (`idx_*_sync_keyset`) are not created here: `SyncKeysetIndex` / `SyncKeysetIndexJob` own them.
+
+## Modules introduced after the go-live (Story 19.13, interface profile)
+
+A **new module** (a new `keevo/modules/<id>/module.json`) is new to every existing user: it must not appear in their
+menus until their owner enables it in *Paramètres › Mes modules*. Every such module therefore ships, in the same
+release, a **public** migration (`db/migration`) that owner-disables it for the existing tenants, set-based and
+idempotent:
+
+```sql
+INSERT INTO public.tenant_module_activation (tenant_id, module_id, activated, updated_at)
+SELECT t.id, '<module-id>', false, now() FROM public.tenants t
+ON CONFLICT (tenant_id, module_id) DO NOTHING;
+```
+
+Tenants created afterwards follow the initial activation rules (`public.module_activation_rule_sets`, editable by the
+super-admin). A module the owner must never disable declares `"ownerToggleable": false` in its manifest. Never write
+`tenant_module_activation` from `tenant_modules` code paths (plan sync, admin lifecycle, expiry job): the owner's choice
+is orthogonal to the entitlement.

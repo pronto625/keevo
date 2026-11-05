@@ -109,7 +109,7 @@ public final class ModuleManifestLoader {
             "requires", "enhances", "publishes", "consumes", "provides", "needs", "permissions", "routes");
     private static final Set<String> KNOWN_KEYS = Set.of("id", "version", "displayName", "category", "requires",
             "enhances", "publishes", "consumes", "provides", "needs", "extensionPoints", "permissions", "routes",
-            "entitlement", "free", "rolePermissions");
+            "entitlement", "free", "rolePermissions", "ownerToggleable");
     private static final Set<String> EXTENSION_POINT_KEYS = Set.of("declares", "fills");
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
@@ -322,13 +322,25 @@ public final class ModuleManifestLoader {
 
         Map<String, List<String>> rolePermissions = rolePermissions(root.get("rolePermissions"), at, problems);
 
+        // Story 19.13 — optional, default true: whether the owner may disable the module in « Mes modules »
+        boolean ownerToggleable = true;
+        JsonNode toggleNode = root.get("ownerToggleable");
+        if (toggleNode != null && !toggleNode.isNull()) {
+            if (toggleNode.isBoolean()) {
+                ownerToggleable = toggleNode.booleanValue();
+            } else {
+                problems.add(at + ": field 'ownerToggleable' must be a boolean");
+            }
+        }
+
         if (problems.size() > before) {
             return Optional.empty();
         }
         ModuleManifest manifest = new ModuleManifest(id, version, displayName, category,
                 lists.get("requires"), lists.get("enhances"), lists.get("publishes"), lists.get("consumes"),
                 lists.get("provides"), lists.get("needs"), extensionPoints, lists.get("permissions"),
-                lists.get("routes"), entitlement != null ? entitlement : "module." + id, free, rolePermissions);
+                lists.get("routes"), entitlement != null ? entitlement : "module." + id, free, rolePermissions,
+                ownerToggleable);
         return Optional.of(new LoadedModuleManifest(at, manifest, toJson(manifest)));
     }
 

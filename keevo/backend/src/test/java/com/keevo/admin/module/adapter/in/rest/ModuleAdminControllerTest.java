@@ -288,7 +288,24 @@ class ModuleAdminControllerTest {
                 .andExpect(jsonPath("$.data[0].state").value("READ_ONLY"))
                 .andExpect(jsonPath("$.data[0].status").value("ACTIVE"))
                 .andExpect(jsonPath("$.data[0].graceUntil").value("2026-11-05T10:00:00Z"))
-                .andExpect(jsonPath("$.data[0].provisionedVersion").value("1"));
+                .andExpect(jsonPath("$.data[0].provisionedVersion").value("1"))
+                .andExpect(jsonPath("$.data[0].ownerActivated").value(true));
+    }
+
+    @Test
+    @DisplayName("19.13 — GET /admin/tenants/{id}/modules → ownerActivated per module (owner choice in « Mes modules »)")
+    void ownerActivated() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(lifecycle.tenantModules(TENANT)).thenReturn(List.of(
+                new ModuleLifecycle.TenantModuleView("lcpaid", "Module payant", ModuleState.DISABLED,
+                        TenantModuleStatus.ACTIVE, null, null, "1", "PLAN", true, false),
+                new ModuleLifecycle.TenantModuleView("lcplain", "Module simple", ModuleState.ENABLED, null, null,
+                        null, null, null, true, true)));
+
+        mockMvc.perform(get("/api/v1/admin/tenants/{tenantId}/modules", TENANT))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[*].ownerActivated", org.hamcrest.Matchers.contains(false, true)))
+                .andExpect(jsonPath("$.data[0].state").value("DISABLED"));
     }
 
     @Test

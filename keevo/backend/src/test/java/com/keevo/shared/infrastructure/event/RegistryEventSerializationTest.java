@@ -84,6 +84,10 @@ class RegistryEventSerializationTest {
 
     static Map<Class<?>, Object> fixtures() {
         Map<Class<?>, Object> f = new LinkedHashMap<>();
+        // Story 19.13 — consumed after commit by OnboardingModuleRulesListener (initial module activation rules)
+        f.put(com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent.class,
+                new com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent(TENANT,
+                        com.keevo.shared.event.catalog.onboarding.SectorKind.CLOTHING, "Boutique Akwa", 6, B, T0));
         f.put(ProductCreatedEvent.class, new ProductCreatedEvent(A, "Riz 5kg", "RIZ-5", TENANT, B,
                 "EMPLOYEE", "Awa", "Akwa", T0));
         f.put(SaleManuallyValidatedEvent.class, new SaleManuallyValidatedEvent(A, B, "client fidèle",

@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Read port of the per-tenant module state ({@code public.tenant_modules}, spec-socle §2.2), used by the
@@ -39,16 +40,25 @@ public interface TenantModuleStatePort {
     }
 
     /**
-     * What the effective state needs about a known tenant: its {@code tenant_modules} rows and its plan.
+     * What the effective state needs about a known tenant: its {@code tenant_modules} rows, its plan and (Story
+     * 19.13) the modules its owner disabled.
      *
-     * @param rows module id → row (possibly empty)
-     * @param plan the tenant's subscription plan, {@link Plan#NONE} when it has none
+     * @param rows          module id → row (possibly empty)
+     * @param plan          the tenant's subscription plan, {@link Plan#NONE} when it has none
+     * @param ownerDisabled ids of the modules with an owner-activation row {@code activated = false}
+     *                      ({@code public.tenant_module_activation}); no row = activated
      */
-    record TenantRows(Map<String, Row> rows, Plan plan) {
+    record TenantRows(Map<String, Row> rows, Plan plan, Set<String> ownerDisabled) {
 
         public TenantRows {
             rows = Map.copyOf(rows);
             Objects.requireNonNull(plan, "plan");
+            ownerDisabled = ownerDisabled == null ? Set.of() : Set.copyOf(ownerDisabled);
+        }
+
+        /** No owner-disabled module. */
+        public TenantRows(Map<String, Row> rows, Plan plan) {
+            this(rows, plan, Set.of());
         }
     }
 

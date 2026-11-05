@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.module.ModuleScoped;
 import com.keevo.messaging.notification.application.strategy.AutoReportStrategy;
 import com.keevo.messaging.notification.application.strategy.ClosureReportStrategy;
 import com.keevo.messaging.notification.application.strategy.ManualReportStrategy;
@@ -47,6 +48,8 @@ import java.util.Optional;
  * Disabled by default; re-enable with keevo.reporting.legacy-listener=true.
  */
 @ConditionalOnProperty(name = "keevo.reporting.legacy-listener", havingValue = "true", matchIfMissing = false)
+// Story 19.13 — nothing runs for a tenant whose owner disabled « pos » (state DISABLED)
+@ModuleScoped("pos")
 @Component
 public class DayClosureWhatsAppListener {
 

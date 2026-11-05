@@ -78,6 +78,28 @@ class ModuleManifestLoaderTest {
     }
 
     @Test
+    @DisplayName("19.13 — ownerToggleable: absent → a business module can be toggled by the owner; false → not; a "
+            + "non-boolean value is a problem")
+    void ownerToggleable() {
+        List<LoadedModuleManifest> loaded = ModuleManifestLoader.load(withCore(
+                src("crm", module("crm", "[\"core\"]", ",\"free\":true")),
+                src("store", module("store", "[\"core\"]", ",\"free\":true,\"ownerToggleable\":false"))));
+        ModuleManifest crm = loaded.stream().map(LoadedModuleManifest::manifest).filter(m -> m.id().equals("crm"))
+                .findFirst().orElseThrow();
+        ModuleManifest store = loaded.stream().map(LoadedModuleManifest::manifest)
+                .filter(m -> m.id().equals("store")).findFirst().orElseThrow();
+        assertThat(crm.ownerToggleable()).isTrue();
+        assertThat(crm.ownerCanToggle()).isTrue();
+        assertThat(store.ownerCanToggle()).isFalse();
+        assertThat(loaded.stream().map(LoadedModuleManifest::manifest).filter(ModuleManifest::isCore)
+                .findFirst().orElseThrow().ownerCanToggle()).isFalse();
+        assertThat(warnings()).noneMatch(w -> w.contains("ownerToggleable"));
+
+        assertThat(problemsOf(withCore(src("crm", module("crm", "[\"core\"]", ",\"ownerToggleable\":\"no\"")))))
+                .anyMatch(p -> p.contains("field 'ownerToggleable' must be a boolean"));
+    }
+
+    @Test
     @DisplayName("valid set: parsed, sorted by id, defaults applied; stored JSON = validated manifest, unknown keys dropped + WARN")
     void validSet() {
         List<LoadedModuleManifest> loaded = ModuleManifestLoader.load(withCore(

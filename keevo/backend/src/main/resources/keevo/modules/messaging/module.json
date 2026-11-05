@@ -27,5 +27,6 @@
     "VIEWER": []
   },
   "entitlement": "module.messaging",
-  "free": true
+  "free": true,
+  "ownerToggleable": false
 }

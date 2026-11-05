@@ -433,18 +433,39 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("FREE tenant → no invoice and no invoicing table created; manual invoicing still answers 403")
+    @DisplayName("19.13 — FREE tenant at go-live (invoicing in the plan, owner-disabled by V50) → no invoice, no "
+            + "invoicing table, manual invoicing 403 MODULE_DISABLED_BY_OWNER; once the owner enables it, the next "
+            + "sale is invoiced")
     void freeTenant() throws Exception {
         dropInvoicingTables();
         plan("FREE", null);
+        // the V50 go-live backfill, for this tenant (created after the migration ran)
+        jdbc.update("INSERT INTO public.tenant_module_activation (tenant_id, module_id, activated, updated_at) "
+                + "SELECT t.id, 'invoicing', false, now() FROM public.tenants t WHERE t.id = ? "
+                + "ON CONFLICT (tenant_id, module_id) DO NOTHING", tenantId);
+        registry.evict(schema);
+        try {
+            UUID saleId = sell(1, 0, null, "CASH", null);
+            awaitBridgeCompleted(saleId);
 
-        UUID saleId = sell(1, 0, null, "CASH", null);
-        awaitBridgeCompleted(saleId);
+            assertThat(tables()).isEmpty();
+            MvcResult r = call(HttpMethod.GET, "/api/v1/invoices", null);
+            assertThat(r.getResponse().getStatus()).isEqualTo(403);
+            assertThat(body(r)).contains("MODULE_DISABLED_BY_OWNER")
+                    .contains("Ce module est désactivé : le propriétaire peut l'activer dans Paramètres › Mes modules");
 
-        assertThat(tables()).isEmpty();
-        MvcResult r = call(HttpMethod.GET, "/api/v1/invoices", null);
-        assertThat(r.getResponse().getStatus()).isEqualTo(403);
-        assertThat(body(r)).contains("MODULE_NOT_ENTITLED");
+            JsonNode enabled = data(call(HttpMethod.PUT, "/api/v1/tenants/me/modules/invoicing/activation",
+                    Map.of("activated", true)), 200);
+            assertThat(enabled.path("state").asText()).isEqualTo("ENABLED");
+            assertThat(enabled.path("inPlan").asBoolean()).isTrue();
+            assertThat(enabled.path("activated").asBoolean()).isTrue();
+
+            UUID invoiced = sell(1, 0, null, "CASH", null);
+            assertThat(awaitInvoice(invoiced).get("status")).isEqualTo("PAID");
+            assertThat(invoicesOf(saleId)).as("the sale made while disabled is not replayed").isEmpty();
+        } finally {
+            jdbc.update("DELETE FROM public.tenant_module_activation WHERE tenant_id = ?", tenantId);
+        }
     }
 
     @Test

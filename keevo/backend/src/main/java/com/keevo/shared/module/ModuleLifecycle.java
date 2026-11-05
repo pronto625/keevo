@@ -226,9 +226,20 @@ public interface ModuleLifecycle {
      * @param provisionedVersion stored provisioned version ({@code null}: none)
      * @param origin             who set the stored row: {@code PLAN} (the offer), {@code ADMIN} (a super-admin),
      *                           {@code SYSTEM} (the platform); {@code null}: no row (included by the free rule)
+     * @param inPlan             Story 19.13 — the plan includes the module (its state without the owner's choice is
+     *                           not DISABLED)
+     * @param ownerActivated     Story 19.13 — the owner's choice ({@code true} when they never disabled it)
      */
     record TenantModuleView(String moduleId, String displayName, ModuleState state, TenantModuleStatus status,
-                            Instant expiresAt, Instant graceUntil, String provisionedVersion, String origin) {
+                            Instant expiresAt, Instant graceUntil, String provisionedVersion, String origin,
+                            boolean inPlan, boolean ownerActivated) {
+
+        /** Pre-19.13 arity — no owner choice: in plan iff not DISABLED, activated. */
+        public TenantModuleView(String moduleId, String displayName, ModuleState state, TenantModuleStatus status,
+                                Instant expiresAt, Instant graceUntil, String provisionedVersion, String origin) {
+            this(moduleId, displayName, state, status, expiresAt, graceUntil, provisionedVersion, origin,
+                    state != ModuleState.DISABLED, true);
+        }
 
         public TenantModuleView(String moduleId, String displayName, ModuleState state, TenantModuleStatus status,
                                 Instant expiresAt, Instant graceUntil, String provisionedVersion) {

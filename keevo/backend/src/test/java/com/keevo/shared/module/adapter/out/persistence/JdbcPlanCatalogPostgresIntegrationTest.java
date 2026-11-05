@@ -263,7 +263,8 @@ class JdbcPlanCatalogPostgresIntegrationTest {
         assertThat(none.planType()).isEqualTo(PlanType.of("TEST_PAID"));
         assertThat(List.of(none.maxStores(), none.maxProducts(), none.maxEmployees())).containsExactly(1, 500, 1);
         assertThat(none.fallback()).isTrue();
-        assertThat(none.grants("invoicing")).isFalse();
+        assertThat(none.grants("exports")).isFalse();
+        assertThat(none.grants("invoicing")).as("19.13 (V50): FREE grants invoicing").isTrue();
 
         jdbc.update("INSERT INTO public.plan_profiles (plan_type, max_stores, max_products, max_employees) "
                 + "VALUES ('TEST_PAID', 3, NULL, 5)");

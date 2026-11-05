@@ -1019,6 +1019,8 @@
       "LEADERBOARD_SHARED_WITH_EMPLOYEES" : "Classement partagé avec les employés",
       "MODULE_ACTIVATED" : "Module activé",
       "MODULE_DEACTIVATED" : "Module désactivé",
+      "MODULE_DISABLED_BY_OWNER" : "Module désactivé par le propriétaire",
+      "MODULE_ENABLED_BY_OWNER" : "Module activé par le propriétaire",
       "ONBOARDING_COMPLETED" : "Configuration terminée",
       "PASSWORD_RESET" : "Mot de passe réinitialisé",
       "PASSWORD_RESET_REQUESTED" : "Réinitialisation demandée",

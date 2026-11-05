@@ -19,10 +19,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -42,10 +44,16 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
 
     private static final Logger log = LoggerFactory.getLogger(JdbcTenantModuleStateStore.class);
 
+    /**
+     * Story 19.13 — the owner-disabled modules ({@code public.tenant_module_activation}, PK prefix {@code tenant_id})
+     * come in the same statement, aggregated once per tenant by the lateral subquery (no extra round trip).
+     */
     static final String FIND_STATUSES_SQL = """
-            SELECT t.id AS tenant_id, t.code AS tenant_code,
+            SELECT t.id AS tenant_id, t.code AS tenant_code, od.ids AS owner_disabled,
                    tm.module_id, tm.status, tm.expires_at, tm.grace_until, tm.tier
             FROM public.tenants t
+            CROSS JOIN LATERAL (SELECT array_agg(a.module_id) AS ids FROM public.tenant_module_activation a
+                                WHERE a.tenant_id = t.id AND NOT a.activated) od
             LEFT JOIN public.tenant_modules tm ON tm.tenant_id = t.id
             WHERE t.schema_name = ? AND t.status <> 'DELETED'
             """;
@@ -114,10 +122,19 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
         Map<String, Row> rows = new LinkedHashMap<>();
         boolean[] tenantFound = {false};
         Object[] tenant = new Object[2];
+        Set<String> ownerDisabled = new HashSet<>();
         jdbc.query(FIND_STATUSES_SQL, rs -> {
             if (!tenantFound[0]) {
                 tenant[0] = rs.getObject("tenant_id", UUID.class);
                 tenant[1] = rs.getString("tenant_code");
+                java.sql.Array ids = rs.getArray("owner_disabled");
+                if (ids != null) {
+                    for (Object id : (Object[]) ids.getArray()) {
+                        if (id != null) {
+                            ownerDisabled.add(id.toString());
+                        }
+                    }
+                }
             }
             tenantFound[0] = true;
             String moduleId = rs.getString("module_id");
@@ -139,7 +156,8 @@ public class JdbcTenantModuleStateStore implements TenantModuleStatePort, Tenant
         if (!tenantFound[0]) {
             return Optional.empty();
         }
-        return Optional.of(new TenantRows(rows, readPlan(schema, (UUID) tenant[0], (String) tenant[1])));
+        return Optional.of(new TenantRows(rows, readPlan(schema, (UUID) tenant[0], (String) tenant[1]),
+                ownerDisabled));
     }
 
     /**

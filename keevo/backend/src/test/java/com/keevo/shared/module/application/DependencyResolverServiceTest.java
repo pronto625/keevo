@@ -440,13 +440,54 @@ class DependencyResolverServiceTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    // ── Story 19.13 — the resolver reads the entitlement, not the owner's choice ──────────────────────────
+
+    @Test
+    @DisplayName("19.13 — an owner-disabled but entitled dependency counts as met (not re-planned)")
+    void ownerDisabledDependencyIsMet() {
+        registry.activate("catalog", "inventory");
+        registry.ownerDisable("inventory");
+        ActivationPlan plan = resolver.planActivation(TENANT, "x");
+        assertThat(plan.moduleIds()).containsExactly("x");
+        assertThat(plan.alreadyActive()).containsExactly("catalog", "inventory");
+    }
+
+    @Test
+    @DisplayName("19.13 — an owner-disabled, in-plan dependent still blocks the deactivation of its requirement")
+    void ownerDisabledDependentBlocks() {
+        registry.activate("alpha", "beta", "gamma");
+        registry.ownerDisable("alpha");
+        DeactivationCheck check = resolver.checkDeactivation(TENANT, "beta");
+        assertThat(check.blocked()).isTrue();
+        assertThat(check.dependents()).containsExactly("alpha");
+    }
+
     /** Registry fake: core always active, plus the modules activated by the test. */
     private static final class FakeRegistry implements ModuleRegistry {
 
         private final ModuleCatalog catalog;
         private final Set<String> active = new TreeSet<>(Set.of(ModuleManifest.CORE_ID));
         private final Set<String> readOnly = new TreeSet<>();
+        /** Story 19.13 — modules the owner disabled: DISABLED in moduleStates, untouched in entitledStates. */
+        private final Set<String> ownerOff = new TreeSet<>();
         private int reads;
+
+        void ownerDisable(String... ids) {
+            ownerOff.addAll(List.of(ids));
+        }
+
+        private ModuleState entitledState(String moduleId) {
+            return active.contains(moduleId) ? ModuleState.ENABLED
+                    : readOnly.contains(moduleId) ? ModuleState.READ_ONLY : ModuleState.DISABLED;
+        }
+
+        @Override
+        public Map<String, ModuleState> entitledStates(String tenantSchema) {
+            reads++;
+            Map<String, ModuleState> states = new TreeMap<>();
+            catalog.manifests().forEach(m -> states.put(m.id(), entitledState(m.id())));
+            return states;
+        }
 
         FakeRegistry(ModuleCatalog catalog) {
             this.catalog = catalog;
@@ -476,6 +517,7 @@ class DependencyResolverServiceTest {
             reads++;
             Set<String> readable = new TreeSet<>(active);
             readable.addAll(readOnly);
+            readable.removeAll(ownerOff);
             return Set.copyOf(readable);
         }
 
@@ -491,8 +533,7 @@ class DependencyResolverServiceTest {
 
         @Override
         public ModuleState moduleState(String tenantSchema, String moduleId) {
-            return active.contains(moduleId) ? ModuleState.ENABLED
-                    : readOnly.contains(moduleId) ? ModuleState.READ_ONLY : ModuleState.DISABLED;
+            return ownerOff.contains(moduleId) ? ModuleState.DISABLED : entitledState(moduleId);
         }
 
         @Override

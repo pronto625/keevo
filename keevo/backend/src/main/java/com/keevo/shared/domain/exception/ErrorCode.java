@@ -141,6 +141,11 @@ public enum ErrorCode {
     BUNDLE_NOT_APPLICABLE,         // Story 16.2 — HTTP 422: the stored bundle holds a module no longer available; nothing written
     ADMIN_JOB_RUNNING,             // Story 16.4 — HTTP 409: a super-admin job of the same kind is already queued or running
     ADMIN_JOB_NOT_FOUND,           // Story 16.4 — HTTP 404: unknown super-admin job id (« Tâche introuvable »)
+    MODULE_DISABLED_BY_OWNER,      // Story 19.13 — HTTP 403: the module is in the plan but the owner disabled it
+    MODULE_NOT_IN_PLAN,            // Story 19.13 — HTTP 409: owner toggle of a module outside the plan (« Mon plan »)
+    MODULE_NOT_TOGGLEABLE,         // Story 19.13 — HTTP 409: owner toggle of a module that cannot be disabled
+    MODULE_REQUIREMENT_DISABLED,   // Story 19.13 — HTTP 409: owner activation while a required module is owner-disabled
+    MODULE_ACTIVATION_RULE_INVALID, // Story 19.13 — HTTP 422: invalid super-admin activation rule set; nothing saved
     // ── Sync Gate (Story 5.4) ─────────────────────────────────────────────
     SYNC_REQUIRED,                 // HTTP 423 — device has not synced for >7 days
     DEVICE_ID_MISMATCH,            // HTTP 403 — deviceId belongs to a different user (v1s-13-2)

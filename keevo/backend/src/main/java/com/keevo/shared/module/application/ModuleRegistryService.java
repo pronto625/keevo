@@ -103,7 +103,46 @@ public class ModuleRegistryService implements ModuleRegistry {
         ActiveModulesCache.Entry entry = lookup(tenantSchema);
         return effectiveStates(catalog.manifests(),
                 entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), entry.plan(), entry.profile(),
+                entry.ownerDisabled(), clock);
+    }
+
+    @Override
+    public Map<String, ModuleState> entitledStates(String tenantSchema) {
+        if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema)) {
+            return platformAdminStates(catalog.manifests());
+        }
+        ActiveModulesCache.Entry entry = lookup(tenantSchema);
+        return effectiveStates(catalog.manifests(),
+                entry.knownTenant() ? Optional.of(entry.rows()) : Optional.empty(), entry.plan(), entry.profile(),
                 clock);
+    }
+
+    /** One lookup: the module's entitlement state, then the owner layer on it. */
+    @Override
+    public boolean disabledByOwner(String tenantSchema, String moduleId) {
+        if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema) || moduleId == null) {
+            return false;
+        }
+        ActiveModulesCache.Entry entry = lookup(tenantSchema);
+        Optional<ModuleManifest> manifest = catalog.find(moduleId);
+        if (!entry.knownTenant() || manifest.isEmpty() || entry.ownerDisabled().isEmpty()) {
+            return false;
+        }
+        Set<String> ownerOff = ModuleStateRules.ownerOff(catalog.manifests(), entry.ownerDisabled());
+        if (!ownerOff.contains(moduleId)) {
+            return false;
+        }
+        ModuleState entitled = ModuleStateRules.stateOf(manifest.get(), Optional.of(entry.rows()), entry.plan(),
+                entry.profile(), clock.instant());
+        return entitled != ModuleState.DISABLED;
+    }
+
+    @Override
+    public Set<String> ownerDisabledModules(String tenantSchema) {
+        if (TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema)) {
+            return Set.of();
+        }
+        return lookup(tenantSchema).ownerDisabled();
     }
 
     /** The tenant's entry: from the request cache, else one query (cached for the rest of the request). */
@@ -118,7 +157,7 @@ public class ModuleRegistryService implements ModuleRegistry {
             log.debug("Module registry: no tenant registered for the given schema — only core is active");
         }
         ActiveModulesCache.Entry entry = found
-                .map(t -> new ActiveModulesCache.Entry(true, t.rows(), t.plan(), profileFor(t)))
+                .map(t -> new ActiveModulesCache.Entry(true, t.rows(), t.plan(), profileFor(t), t.ownerDisabled()))
                 .orElseGet(() -> new ActiveModulesCache.Entry(false, Map.of(), TenantModuleStatePort.Plan.NONE));
         cache.put(schema, entry);
         return entry;
@@ -179,11 +218,22 @@ public class ModuleRegistryService implements ModuleRegistry {
                                                     Optional<Map<String, TenantModuleStatePort.Row>> rows,
                                                     TenantModuleStatePort.Plan plan, PlanProfile profile,
                                                     Clock clock) {
+        return effectiveStates(installed, rows, plan, profile, Set.of(), clock);
+    }
+
+    /** Story 19.13 — same, then the owner layer ({@code ownerDisabled}: modules the owner disabled). */
+    static Map<String, ModuleState> effectiveStates(Collection<ModuleManifest> installed,
+                                                    Optional<Map<String, TenantModuleStatePort.Row>> rows,
+                                                    TenantModuleStatePort.Plan plan, PlanProfile profile,
+                                                    Set<String> ownerDisabled, Clock clock) {
         var now = clock.instant();
+        // the owner's choices propagated through requires (a module never runs on an owner-disabled requirement)
+        Set<String> ownerOff = ModuleStateRules.ownerOff(installed, ownerDisabled);
         Map<String, ModuleState> states = new LinkedHashMap<>();
         installed.stream()
                 .sorted(java.util.Comparator.comparing(ModuleManifest::id))
-                .forEach(m -> states.put(m.id(), ModuleStateRules.stateOf(m, rows, plan, profile, now)));
+                .forEach(m -> states.put(m.id(),
+                        ModuleStateRules.stateOf(m, rows, plan, profile, ownerOff, now)));
         return Collections.unmodifiableMap(states);
     }
 }

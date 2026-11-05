@@ -126,11 +126,20 @@ class TenantExtensionsFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("FREE tenant → empty")
+    @DisplayName("FREE tenant: invoicing in the plan since 19.13 (V50) → « Facturer »; owner-disabled (the go-live "
+            + "state of an existing tenant) → empty")
     void freeTenant() throws Exception {
         plan("FREE", null);
-        assertThat(slot(ownerToken).size()).isZero();
-        assertThat(slot(employeeToken).size()).isZero();
+        assertFacturer(slot(ownerToken));
+        jdbc.update("INSERT INTO public.tenant_module_activation (tenant_id, module_id, activated) "
+                + "VALUES (?, 'invoicing', false)", tenantId);
+        registry.evict(schema);
+        try {
+            assertThat(slot(ownerToken).size()).isZero();
+            assertThat(slot(employeeToken).size()).isZero();
+        } finally {
+            jdbc.update("DELETE FROM public.tenant_module_activation WHERE tenant_id = ?", tenantId);
+        }
     }
 
     @Test

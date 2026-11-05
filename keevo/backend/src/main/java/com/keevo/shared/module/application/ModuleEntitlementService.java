@@ -56,7 +56,7 @@ public class ModuleEntitlementService implements EntitlementService {
     @Override
     public void assertEnabled(String tenantSchema, String moduleId) {
         if (!isEnabled(tenantSchema, moduleId)) {
-            throw notEntitled();
+            throw disabled(tenantSchema, moduleId);
         }
     }
 
@@ -67,9 +67,25 @@ public class ModuleEntitlementService implements EntitlementService {
             }
             case READ_ONLY -> throw new DomainException(ErrorCode.MODULE_READ_ONLY,
                     "Module is read-only for the tenant (subscription expired, grace period)");
-            case DISABLED -> throw notEntitled();
+            case DISABLED -> throw disabled(tenantSchema, moduleId);
         }
     }
+
+    /**
+     * Story 19.13 — the refusal of a DISABLED module: {@code MODULE_DISABLED_BY_OWNER} when the plan includes it but
+     * the owner disabled it (the reason is asked of the registry only here, on a refusal), else
+     * {@code MODULE_NOT_ENTITLED}.
+     */
+    private DomainException disabled(String tenantSchema, String moduleId) {
+        if (!TenantSchema.PLATFORM_ADMIN_SCHEMA.equals(tenantSchema) && registry.disabledByOwner(tenantSchema, moduleId)) {
+            return DomainException.userFacing(ErrorCode.MODULE_DISABLED_BY_OWNER, DISABLED_BY_OWNER_MESSAGE);
+        }
+        return notEntitled();
+    }
+
+    /** French text of {@code MODULE_DISABLED_BY_OWNER}. */
+    static final String DISABLED_BY_OWNER_MESSAGE =
+            "Ce module est désactivé : le propriétaire peut l'activer dans Paramètres › Mes modules";
 
     @Override
     public Set<String> enabledModules(String tenantSchema) {

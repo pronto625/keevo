@@ -1681,6 +1681,8 @@ So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
 
 > **Routé depuis 19.13 (05/11/2026) :** - [ ] [Deferred-from: spec 19.13, 2026-11-05] Profil d'interface de l'owner importé : après `TenantSaleFlowCommandPort.set(schema, DOCUMENT)`, appeler `ModuleActivationRulesPort.applyInitialRules(schema)` (19.13 : désactive caisse, stock, inventaire, transferts selon les règles en base). Les fournisseurs font partie du module `crm` avec les clients et ne peuvent pas être désactivés seuls — décider ici comment les masquer à un owner Bref (sous-module ou masquage par le préréglage DOCUMENT) [keevo/resources/keevo/modules/crm/module.json] — à trancher avec l'import des clients.
 
+> **Routé depuis la revue 19.13 (05/11/2026) :** - [ ] [Deferred-from: revue 19.13, 2026-11-05] Les règles d'activation sont par parcours (DOCUMENT) et non par plan Bref : les autres modules compris dans le plan (ex. exports, rapports avancés) restent activés pour un owner importé. Décider ici la liste exacte des fonctions équivalentes à Bref selon son plan au moment de la migration, puis l'appliquer par un jeu de règles (secteur ou jeu dédié) ou par `OwnerModuleActivation` après `applyInitialRules` [keevo/backend/src/main/resources/db/migration/V50__module_owner_activation.sql] — à trancher avec la table de correspondance des plans Bref.
+
 **Acceptance Criteria:**
 
 **Given** `migration_batches` et `migration_records(target_table, target_id, source_table, source_id, checksum, note)` et le module `migration` (plateforme, SUPER_ADMIN)

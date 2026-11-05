@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.module.ModuleScoped;
 import com.keevo.commerce.api.SaleQueryPort;
 import com.keevo.commerce.api.SaleView;
 import com.keevo.shared.event.catalog.sale.SaleDraftProductsUpgradedEvent;
@@ -41,6 +42,8 @@ import java.util.stream.Collectors;
  * publication stays incomplete and is retried (the receipt is released; on a partial failure the retry may
  * repeat the channel that succeeded). Missing sale / owner phone / disabled channel → return normally.
  */
+// Story 19.13 — nothing runs for a tenant whose owner disabled « pos » (state DISABLED)
+@ModuleScoped("pos")
 @Component
 public class SaleDraftValidatedNotificationListener {
 
