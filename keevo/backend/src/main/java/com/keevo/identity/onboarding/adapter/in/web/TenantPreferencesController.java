@@ -2,6 +2,7 @@ package com.keevo.identity.onboarding.adapter.in.web;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.SaleFlow;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.port.in.GetEffectiveTenantPreferencesUseCase;
 import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
@@ -9,6 +10,7 @@ import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityC
 import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
+import com.keevo.identity.onboarding.domain.port.in.UpdateSaleFlowUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -21,6 +23,7 @@ import com.keevo.shared.module.RequiresEntitlement;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -41,19 +44,22 @@ public class TenantPreferencesController {
     private final SendTestReportUseCase sendTestReportUseCase;
     private final GetEffectiveTenantPreferencesUseCase effectivePreferences;
     private final UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase;
+    private final UpdateSaleFlowUseCase updateSaleFlowUseCase;
 
     public TenantPreferencesController(TenantPreferencesRepository tenantPreferencesRepository,
                                        JdbcTemplate jdbcTemplate,
                                        UpdateReportPreferencesUseCase updateReportPreferencesUseCase,
                                        SendTestReportUseCase sendTestReportUseCase,
                                        GetEffectiveTenantPreferencesUseCase effectivePreferences,
-                                       UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase) {
+                                       UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase,
+                                       UpdateSaleFlowUseCase updateSaleFlowUseCase) {
         this.tenantPreferencesRepository = tenantPreferencesRepository;
         this.jdbcTemplate = jdbcTemplate;
         this.updateReportPreferencesUseCase = updateReportPreferencesUseCase;
         this.sendTestReportUseCase = sendTestReportUseCase;
         this.effectivePreferences = effectivePreferences;
         this.updateLeaderboardVisibilityUseCase = updateLeaderboardVisibilityUseCase;
+        this.updateSaleFlowUseCase = updateSaleFlowUseCase;
     }
 
     /**
@@ -125,6 +131,30 @@ public class TenantPreferencesController {
 
         var saved = updateLeaderboardVisibilityUseCase.update(
                 new UpdateLeaderboardVisibilityCommand(request.visibleToEmployees()));
+        var effective = effectivePreferences.effective(TenantContext.requireCurrent(), saved);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(
+                TenantPreferencesResponseDto.effective(saved, effective.view(), effective.reportConfigEditable())));
+    }
+
+    /**
+     * Story 19.12 — the tenant's default sale flow, « Caisse » ({@code POS}) or « Documents » ({@code DOCUMENT}).
+     * OWNER only; a core preference, NOT gated by {@code report-config}. Audited before → after.
+     * PUT /api/v1/tenant/sale-flow {@code {"defaultSaleFlow": "POS"|"DOCUMENT"}} → the preferences as the GET returns
+     * them. Any other value (or none) → {@code VALIDATION_ERROR}.
+     */
+    @EntitlementExempt("core: préférences du commerce")
+    @PreAuthorize("hasRole('OWNER')")
+    @PutMapping("/sale-flow")
+    public ResponseEntity<ApiResponseWrapper<TenantPreferencesResponseDto>> updateSaleFlow(
+            @RequestBody(required = false) UpdateSaleFlowRequestDto request) {
+
+        requireAuthentication();
+        CurrentActor.requireOwner("OWNER role required");
+
+        SaleFlow flow = SaleFlow.fromCode(request == null ? null : request.defaultSaleFlow())
+                .orElseThrow(() -> DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                        "Parcours de vente inconnu : choisissez Caisse ou Documents"));
+        var saved = updateSaleFlowUseCase.update(flow);
         var effective = effectivePreferences.effective(TenantContext.requireCurrent(), saved);
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 TenantPreferencesResponseDto.effective(saved, effective.view(), effective.reportConfigEditable())));

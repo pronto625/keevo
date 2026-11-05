@@ -6,12 +6,14 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.store.api.CreateStoreWithIdInput;
 import com.keevo.store.api.StoreCommandPort;
+import com.keevo.store.api.StoreProfilePatch;
 import com.keevo.store.api.StoreQueryPort;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.UpdateStoreInput;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.store.domain.model.StoreFactory;
+import com.keevo.store.store.domain.model.StoreProfileRules;
 import com.keevo.store.store.domain.port.in.DeactivateStoreCommand;
 import com.keevo.store.store.domain.port.in.DeactivateStoreUseCase;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
@@ -85,6 +87,11 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
         return StoreFactory.validateName(name);
     }
 
+    @Override
+    public StoreProfilePatch normalizeProfile(StoreProfilePatch raw) {
+        return StoreProfileRules.normalize(raw);
+    }
+
     /**
      * Same lock key as {@code CreateStoreService}, then idempotency, plan limit, warehouse
      * uniqueness and insert — the order the CREATE_STORE sync handler used (v1s-13-13, v1s-16-6).
@@ -111,8 +118,8 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
         }
 
         Instant now = Instant.now();
-        storeRepository.save(new Store(in.storeId(), StoreFactory.validateName(in.name()), type,
-                in.address(), in.phone(), true, now, now));
+        storeRepository.save(StoreProfileRules.apply(new Store(in.storeId(), StoreFactory.validateName(in.name()),
+                type, in.address(), in.phone(), true, now, now), in.profile()));
         return true;
     }
 
@@ -120,7 +127,7 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
     public StoreView update(String tenantSchema, UpdateStoreInput in) {
         TenantContext.requireCurrent(tenantSchema);
         return StoreViews.of(updateStoreUseCase.execute(new UpdateStoreCommand(
-                in.storeId(), in.name(), in.address(), in.phone(), in.actorId())));
+                in.storeId(), in.name(), in.address(), in.phone(), in.actorId(), in.profile())));
     }
 
     @Override

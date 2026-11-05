@@ -4,6 +4,7 @@ import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.api.StoreCommandPort;
+import com.keevo.store.api.StoreProfilePatch;
 import com.keevo.store.api.StoreQueryPort;
 import com.keevo.store.api.UpdateStoreInput;
 import com.keevo.shared.application.port.sync.SyncOperation;
@@ -26,7 +27,8 @@ import java.util.UUID;
  * <p>v1s-13-8: state-based idempotency — a replayed DEACTIVATE on an inactive store, or an
  * UPDATE whose values already match the stored ones, is an APPLIED no-op (the use case is not
  * called, so no second domain event). A missing store still reaches the use case, which
- * throws STORE_NOT_FOUND.
+ * throws STORE_NOT_FOUND. Story 19.12: the optional Bref fields ({@code category}, {@code description}, {@code niu},
+ * {@code rccm}, {@code country}) — absent ⇒ unchanged — take part in that comparison.
  */
 @Component
 public class StoreSyncHandler extends AbstractSyncOperationHandler {
@@ -54,6 +56,13 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
         if (operation.payload().get("storeId") == null) {
             throw new IllegalArgumentException("Missing required field: storeId");
         }
+        if ("UPDATE_STORE".equals(operation.operationType())) {
+            StoreProfilePatch profile = StoreProfilePayload.read(operation.payload());
+            // 19.12: optional Bref fields — same rule as the REST endpoint (VALIDATION_ERROR → REJECTED)
+            if (!profile.isEmpty()) {
+                storeCommand.normalizeProfile(profile);
+            }
+        }
     }
 
     @Override
@@ -72,11 +81,14 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
                 String name = (String) p.get("name");
                 String address = (String) p.get("address");
                 String phone = (String) p.get("phone");
+                StoreProfilePatch profile = StoreProfilePayload.read(p);
                 if (current.isPresent()
                         && name != null
                         && Objects.equals(name.trim(), current.get().name())
                         && Objects.equals(address, current.get().address())
-                        && Objects.equals(phone, current.get().phone())) {
+                        && Objects.equals(phone, current.get().phone())
+                        && (profile.isEmpty()
+                            || StoreProfilePayload.matches(storeCommand.normalizeProfile(profile), current.get()))) {
                     yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                             storeId.toString(), null);
                 }
@@ -85,7 +97,8 @@ public class StoreSyncHandler extends AbstractSyncOperationHandler {
                         name,
                         address,
                         phone,
-                        actorId));
+                        actorId,
+                        profile));
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         store.id().toString(), null);
             }

@@ -1677,6 +1677,8 @@ As a **super-admin**,
 I want **importer l'identité, les boutiques et l'équipe d'un owner**,
 So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
 
+> **Routé depuis la revue 19.12 (05/11/2026) :** - [ ] [Deferred-from: revue 19.12, 2026-11-05] `default_sale_flow=DOCUMENT` s'écrit par `TenantSaleFlowCommandPort.set(schema, SaleFlow.DOCUMENT)` (identity.api, livré par 19.12, audité) ; les logos de boutiques passent par `StoreLogoUseCase` (port de stockage, nom de fichier unique, `logo_path`) — ne pas écrire ces colonnes en SQL direct.
+
 **Acceptance Criteria:**
 
 **Given** `migration_batches` et `migration_records(target_table, target_id, source_table, source_id, checksum, note)` et le module `migration` (plateforme, SUPER_ADMIN)

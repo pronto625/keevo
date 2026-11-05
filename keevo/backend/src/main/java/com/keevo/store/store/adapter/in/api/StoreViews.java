@@ -10,6 +10,7 @@ final class StoreViews {
 
     static StoreView of(Store s) {
         return new StoreView(s.id(), s.name(), s.type(), s.address(), s.phone(), s.isActive(),
-                s.createdAt(), s.updatedAt());
+                s.createdAt(), s.updatedAt(), s.category(), s.description(), s.niu(), s.rccm(), s.country(),
+                s.hasLogo());
     }
 }

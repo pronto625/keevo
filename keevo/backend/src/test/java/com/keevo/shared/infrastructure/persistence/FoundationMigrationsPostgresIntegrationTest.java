@@ -272,7 +272,7 @@ class FoundationMigrationsPostgresIntegrationTest {
 
         modules.ensureFoundation(schema); // boot upgrade / first request of an existing tenant
 
-        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("2");
+        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("3"); // 19.12: core V3 (sale flow) on top
         assertThat(planTypeChecks(schema)).isEmpty();
         assertThat(planTypeLength(schema)).isEqualTo(30);
         assertThat(jdbc.queryForObject("SELECT plan_type || '/' || expires_at FROM \"" + schema
@@ -325,6 +325,67 @@ class FoundationMigrationsPostgresIntegrationTest {
         modules.ensureFoundation(schema);
         assertThat(histories(schema)).isEqualTo(history);
         assertThat(shape(schema)).isEqualTo(shapeAfter);
+    }
+
+    @Test
+    @DisplayName("19.12 store V2 + core V3: a tenant built before 19.12 (store V1, core V2), with rows, gets the Bref "
+            + "store columns (country CM) and default_sale_flow POS with its named CHECK; rows kept; scripts re-run "
+            + "twice are no-ops")
+    void storeV2AndCoreV3() throws Exception {
+        String fresh = register("kv_fmsf1n", "KV-FMSF1N");
+        assertThat(storeBrefColumns(fresh)).containsExactly("category", "country", "description", "logo_path", "niu",
+                "rccm");
+        assertThat(saleFlowCheck(fresh)).containsExactly("tenant_preferences_default_sale_flow_check");
+
+        String schema = "kv_fmsf1o";
+        registerTenantRow(schema, "KV-FMSF1O");
+        List<FoundationScripts.Script> before1912 = FoundationScripts.fromClasspath().scripts().stream()
+                .filter(sc -> !("store".equals(sc.moduleId()) && !"1".equals(sc.version())))
+                .filter(sc -> !("core".equals(sc.moduleId()) && "3".equals(sc.version()))).toList();
+        new TenantSchemaProvisioner(dataSource, new FoundationScripts(before1912))
+                .provision(UUID.randomUUID().toString(), schema);
+        assertThat(storeBrefColumns(schema)).isEmpty();
+        insertOneRowPerTable(schema);
+        Map<String, String> checksumsBefore = checksums(schema);
+
+        modules.ensureFoundation(schema);
+
+        assertThat(migrations.currentVersion(schema, "store")).isEqualTo("2");
+        assertThat(migrations.currentVersion(schema, "core")).isEqualTo("3");
+        assertThat(storeBrefColumns(schema)).hasSize(6);
+        assertThat(jdbc.queryForList("SELECT country FROM \"" + schema + "\".stores", String.class))
+                .isNotEmpty().containsOnly("CM");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM \"" + schema + "\".stores WHERE category IS NOT NULL "
+                + "OR description IS NOT NULL OR logo_path IS NOT NULL OR niu IS NOT NULL OR rccm IS NOT NULL",
+                Integer.class)).isZero();
+        assertThat(jdbc.queryForList("SELECT default_sale_flow FROM \"" + schema + "\".tenant_preferences",
+                String.class)).isNotEmpty().containsOnly("POS");
+        assertThat(saleFlowCheck(schema)).containsExactly("tenant_preferences_default_sale_flow_check");
+        assertThat(checksums(schema).keySet()).isEqualTo(checksumsBefore.keySet());
+
+        Map<String, List<String>> shapeAfter = shape(schema);
+        List<String> history = histories(schema);
+        TenantFoundation.upgrade(dataSource, schema);
+        TenantFoundation.upgrade(dataSource, schema);
+        services();
+        modules.ensureFoundation(schema);
+        assertThat(histories(schema)).isEqualTo(history);
+        assertThat(shape(schema)).isEqualTo(shapeAfter);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> jdbc.update("UPDATE \"" + schema
+                + "\".tenant_preferences SET default_sale_flow = 'OTHER'"))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    private List<String> storeBrefColumns(String schema) {
+        return jdbc.queryForList("SELECT column_name FROM information_schema.columns WHERE table_schema = ? "
+                + "AND table_name = 'stores' AND column_name IN ('category', 'description', 'logo_path', 'niu', "
+                + "'rccm', 'country') ORDER BY column_name", String.class, schema);
+    }
+
+    private List<String> saleFlowCheck(String schema) {
+        return jdbc.queryForList("SELECT conname FROM pg_constraint WHERE conrelid = ?::regclass AND contype = 'c' "
+                + "AND conname = 'tenant_preferences_default_sale_flow_check' AND convalidated", String.class,
+                "\"" + schema + "\".tenant_preferences");
     }
 
     private List<String> notificationColumns(String schema) {

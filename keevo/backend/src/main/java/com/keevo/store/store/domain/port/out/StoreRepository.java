@@ -18,6 +18,9 @@ public interface StoreRepository {
 
     Optional<Store> findById(UUID storeId);
 
+    /** Story 19.12 — the store row locked ({@code FOR UPDATE}) until the transaction ends (logo changes). */
+    Optional<Store> findByIdForUpdate(UUID storeId);
+
     List<Store> findAll();
 
     List<Store> findAllActive();

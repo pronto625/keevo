@@ -10,6 +10,8 @@ import java.time.Instant;
  * Story 7.5 — added 9 reporting & stock-alert fields.
  * Story 17.8 — {@code reportConfigEditable} (additive, last component): {@code true} iff the paid module
  * {@code report-config} is ENABLED; the GET returns the effective values (fixed defaults when it is DISABLED).
+ * Story 19.12 — {@code defaultSaleFlow} (additive, last component): {@code POS} (« Caisse ») or {@code DOCUMENT}
+ * (« Documents »), never null.
  */
 public record TenantPreferencesResponseDto(
     String sectorType,
@@ -27,7 +29,8 @@ public record TenantPreferencesResponseDto(
     String stockAlertChannel,
     boolean trendNotificationEnabled,
     boolean reportConfigEditable,
-    boolean leaderboardVisibleToEmployees
+    boolean leaderboardVisibleToEmployees,
+    String defaultSaleFlow
 ) {
 
     /**
@@ -52,7 +55,8 @@ public record TenantPreferencesResponseDto(
             effective.stockAlertChannel() != null ? effective.stockAlertChannel().name() : "PUSH",
             effective.trendNotificationEnabled(),
             reportConfigEditable,
-            stored.leaderboardVisibleToEmployees()
+            stored.leaderboardVisibleToEmployees(),
+            stored.defaultSaleFlow().name()
         );
     }
 

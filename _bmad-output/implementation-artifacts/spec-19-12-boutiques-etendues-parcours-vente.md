@@ -2,14 +2,22 @@
 title: '19.12 — Extended stores (Bref fields, logo) and default sale flow preference'
 type: 'feature'
 created: '2026-11-05'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '31d9cd58fd76103a838ea597fa977277310e26be'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
   - '{project-root}/keevo/backend/src/main/resources/db/modules/README.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      Imported Bref tenants get DOCUMENT only once the 24.2 importer calls TenantSaleFlowCommandPort.
+    evidence: |-
+      The port is delivered and tested here; no importer exists yet. Routed to story 24.2 in epics-fusion-keevo-bref.md.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/identity/api/TenantSaleFlowCommandPort.java
+    severity: low
 ---
 
 <intent-contract>
@@ -102,6 +110,63 @@ deferred: []
 - Given the importer port, when it sets `DOCUMENT` for a tenant, then the owner sees `DOCUMENT` and can switch back to `POS`.
 - Given a tenant deletion, when tenant files are purged, then its store logos are deleted.
 
+## Spec Change Log
+
+- 2026-11-05 (implementation verify): `ddl-auto: validate` checks JPA entities against the public template tables, so the new JPA-mapped tenant columns made boot fail. Amended: a public migration `V49` MIRRORS the store V2 / core V3 columns on `public.stores` / `public.tenant_preferences` for boot validation only (tenants still get them from the module scripts); the "no public migration" rule of this spec is narrowed to "no public migration as the way tenants get the columns". Rejected alternative: `@Formula` read + native UPDATE (bypasses validation, splits writes). Also: `VALIDATION_ERROR` maps to HTTP 422 codebase-wide — the matrix's "400" reads as 422. KEEP: absent ⇒ unchanged partial update, shared `StoreProfileRules`, `ImageReencoder` extraction.
+- 2026-11-05 (live check): on a tenant that has not finished onboarding (no `tenant_preferences` row), `PUT /tenant/sale-flow` answered 500 `PREFERENCES_NOT_FOUND`, as `PUT /leaderboard-visibility` and `/report-preferences` already did (unmapped code). Fixed: `PREFERENCES_NOT_FOUND` → 404 in `GlobalExceptionHandler`, consistent with `GET /tenant/preferences` (404 before onboarding); controller test added. KEEP: the services still throw when the row is missing (no row creation outside onboarding).
+
+## Review Triage Log
+
+### 2026-11-05 — Review pass
+- verdicts: 41 findings — high 0, medium 9, low 18, false 6, maybe-false 0 (+8 descriptive intent-alignment observations, triaged below)
+- findings:
+  - Blind hunter:
+    - `[medium]` `[patch]` `save()` drops `defaultSaleFlow` (create path stores POS) — fixed: save writes it; update still never touches it; test added.
+    - `[medium]` `[patch]` Logo written before commit under a fixed name; rollback/concurrency corrupt or orphan files — fixed: unique file name + unique temp file, row FOR UPDATE, delete old after commit and new after rollback.
+    - `[medium]` `[patch]` `logoUrl` never changes on replace, no-cache without validators — fixed: one URL helper, `?v=` from the unique file name, 30-day private cache.
+    - `[low]` `[patch]` Post-normalization overflow reported as TOO_LARGE with a misleading message — fixed: new `STORE_LOGO_TOO_HEAVY` (422) like the company logo.
+    - `[low]` `[patch]` Upload buffered before the size check — fixed: `file.getSize()` check first.
+    - `[low]` `[patch]` Declared-type allowlist refuses `image/jpg` and types with parameters — fixed: parsed media type with an extended accepted set.
+    - `[low]` `[reject]` No endpoint exposes the French category labels — the app maps the 19 keys like every other enum; the mobile section carries the key→label table; adding API surface is not needed.
+    - `[low]` `[patch]` Country accepts any two letters — fixed: checked against `Locale.getISOCountries()`.
+    - `[low]` `[patch]` Category input is case-sensitive — fixed: trimmed and lower-cased.
+    - `[low]` `[patch]` Store audit leaves out name/address/phone before/after; a logo-only event reads as a name change — fixed: diff includes them; logo event carries only the logo change.
+    - `[low]` `[patch]` Sale-flow PUT `request == null` branch unreachable — fixed: `@RequestBody(required = false)`.
+    - `[low]` `[reject]` `TenantSaleFlowCommandAdapter` without `@Transactional` — the UPDATE is a single atomic statement, and audit writes are `REQUIRES_NEW` by codebase design (audit-on-attempt), so a wrapping transaction changes nothing.
+    - `[low]` `[patch]` Logo URL format duplicated in DTO and delta — grouped with the cache fix (one helper).
+    - `[low]` `[reject]` Profile normalized up to 3 times per sync op — O(1), no observable harm.
+  - Edge case hunter:
+    - `[medium]` `[patch]` Concurrent uploads of different formats: afterCommit deletes the committed file — grouped with the logo durability fix.
+    - `[medium]` `[patch]` Shared `.part` temp file — grouped with the logo durability fix.
+    - `[medium]` `[patch]` Rollback after a disk write leaves an orphan or overwritten logo — grouped with the logo durability fix.
+    - `[low]` `[patch]` `image/jpg` or a type with parameters refused — same as the blind-hunter finding.
+    - `[medium]` `[patch]` Full-column UPDATE from a stale entity can restore the old flow — fixed: `@DynamicUpdate` + conditional UPDATE for the flow.
+    - `[false]` `[reject]` Audit row lands in the wrong schema when the importer runs inside another schema's transaction — `AuditLogRepositoryAdapter.record` is `REQUIRES_NEW` and opens a new connection bound to the rebound `TenantContext`.
+    - `[false]` `[reject]` Null `tenantId` on the owner path — the controller always runs with a bound tenant (`TenantContext.requireCurrent`).
+    - `[low]` `[patch]` Missing body gets a parse error, not the French message — same as the blind-hunter finding.
+    - `[low]` `[patch]` Concurrent PUTs audit from a stale before — fixed: conditional UPDATE, audit only when one row changed.
+    - `[low]` `[patch]` Non-ISO country — same as the blind-hunter finding.
+  - Pattern / complexity:
+    - `[medium]` `[patch]` Logo not versioned, re-downloaded on every view — same as the blind-hunter finding.
+    - `[low]` `[patch]` Image work and cheap checks run after the DB read — fixed: checks and normalize before `find()`.
+    - `[low]` `[reject]` Triple normalization — same as the blind-hunter finding.
+    - `[low]` `[patch]` Sale flow: 2 SELECTs + 1 UPDATE with no lock — fixed: one conditional UPDATE.
+    - `[low]` `[patch]` `count(*)` used for an existence test — fixed: `EXISTS`.
+    - `[false]` `[reject]` Per-pixel transparency loop — pre-existing code moved unchanged, bounded at 600×600.
+    - `[false]` `[reject]` `TenantPreferences` constructor chain — no defect today; a builder can come the next time the record changes.
+  - Verification gap:
+    - `[medium]` `[patch]` Deactivate/reactivate never proven to keep the Bref fields — tests added with a fully filled store.
+    - `[medium]` `[patch]` Importer port "no preferences row" failure untested — test added (IllegalStateException, no audit).
+    - `[medium]` `[patch]` Same-format replace overwritten on rollback — grouped with the logo durability fix.
+  - Intent alignment:
+    - `[low]` `[defer]` Imported Bref tenant receives DOCUMENT only through the port; no importer calls it yet → routed to 24-2 (the importer must call `TenantSaleFlowCommandPort.set(schema, DOCUMENT)`).
+    - `[false]` `[reject]` Landing screen by flow — client behaviour (mobile section and 19.13), API-only repo.
+    - `[false]` `[reject]` Per-feature storage port instead of one shared port — consistent with product photos and company logo (Ports & Adapters); S3 is another adapter of the port.
+    - `[low]` `[reject]` `logoUrl` exposed instead of the raw `logo_path` — deliberate: never expose disk paths.
+    - `[low]` `[reject]` Flutter tolerance of extra fields untested — V1 parses by key (checked in `release/2.0.x` `remote_store_datasource.dart`); covered by the end-of-epic device test.
+    - `[low]` `[reject]` Sync push writes not covered by the "(OWNER)" wording — false concern: both handlers keep the OWNER-only guard (`StoreSyncHandler.java:71`, `CreateStoreSyncHandler.java:72`).
+    - `[low]` `[reject]` Extra work (audit, V49 mirror, purge, re-encoder) — required by project rules or by boot validation.
+
 ## Design Notes
 
 - **Patterns:** Ports & Adapters for the logo (domain port `StoreLogoStorage`, disk adapter; S3 = another adapter); a small domain **Value Object/validator** (`StoreCategory` enum + one rules helper) shared by REST and sync so the two entry points cannot diverge; **partial update by presence** (absent ⇒ keep) to stay V1-safe; extraction of a shared image re-encoder (DRY) instead of a third copy.
@@ -111,8 +176,91 @@ deferred: []
 ## Verification
 
 **Commands:**
-- `cd keevo/backend && ./mvnw -q -o test -Dtest='com/keevo/store/**/*Test*' -Dsurefire.failIfNoSpecifiedTests=false` -- green (then sync, identity, shared packages one at a time).
-- `./mvnw -q -o compile` -- no errors; ArchUnit/Modulith tests green (no store→identity dependency; shared image helper has no module dependency).
+- `cd keevo/backend && mvn -q -o test -Dtest='com/keevo/store/**/*Test*' -Dsurefire.failIfNoSpecifiedTests=false` -- green (then sync, identity, shared packages one at a time).
+- `mvn -q -o compile` -- no errors; ArchUnit/Modulith tests green (no store→identity dependency; shared image helper has no module dependency).
 
 **Manual checks:**
 - Local backend (WhatsApp noop, FCM off): curl PATCH/POST stores with new fields, logo PUT/GET/DELETE, `PUT /tenant/sale-flow`; `psql` shows columns on a dev tenant.
+
+## Auto Run Result
+
+Status: done
+
+**Summary.** Stores carry Bref's profile fields — `category` (19 keys, lower-cased), `description`, `niu`, `rccm`, `country` (ISO alpha-2, upper-cased, default `CM`) — through `POST/PATCH /stores` (absent ⇒ unchanged, V1 bodies keep the values), the store sync push (OWNER) and pull (with `logoUrl`), validated by one shared `StoreProfileRules`. Owners upload (PNG/JPEG ≤ 200 KB, re-encoded by the shared `ImageReencoder`), read (all roles, 30-day private cache, versioned URL) and delete a store logo behind a storage port (local disk, unique names, old file deleted after commit, new one after rollback, row locked). `tenant_preferences.default_sale_flow` (POS by default, DOCUMENT) is returned by `GET /tenant/preferences`, set by the owner via `PUT /tenant/sale-flow` (not gated by `report-config`, audited `SALE_FLOW_UPDATED` only when it changes) and by the 24.2 importer through `TenantSaleFlowCommandPort`.
+
+**Files.** New: tenant migrations store `V2`, core `V3`; public `V49` (template mirror for boot validation); `StoreCategory`, `StoreCountry`, `StoreLogoUrls`, `StoreProfilePatch`, `StoreProfileRules`, `StoreLogoController`/`Service`/`UseCase`, `StoreLogoStorage` + `LocalDiskStoreLogoStorage`, `StoreLogoNormalizer`, shared `ImageReencoder`, `SaleFlow`, `TenantSaleFlowCommandPort` + adapter, `UpdateSaleFlowService`/`UseCase`/`RequestDto`, `SaleFlowChangedEvent`, `StoreProfilePayload`, tests. Changed: store domain/persistence/REST DTOs, store sync handlers and delta provider, `TenantPreferences*`, `ImageIoCompanyLogoNormalizer`, error codes (`STORE_LOGO_*`), `GlobalExceptionHandler` (`PREFERENCES_NOT_FOUND` → 404), `AuditLabels`, `db/modules/README.md`, `docs/entitlements/endpoints.md`, export datasets contract.
+
+**Review.** 41 findings (5 layers): 0 high, 9 medium, 18 low, 6 false + 8 intent observations. Patched: all 9 medium (save path dropping the flow, logo write/rollback/concurrency, logo URL versioning, …) and the low ones listed in the triage log. Routed: 1 low → 24.2 (importer sets DOCUMENT). Rejected: reasons in the triage log.
+
+**Follow-up review: recommended (true)** — several medium patches on the logo path (file lifecycle around commit/rollback, row lock) are covered by unit and full-context tests but concurrent replace was not exercised live; the public `V49` mirror is a new pattern (rule added to `db/modules/README.md`).
+
+**Verification.** Full suite package by package: 5 738 tests, 0 failures (acceptance 4, admin 586, architecture 115, catalog 306, commerce 265, crm 158, feedback 52, identity 801, inventory 411, invoicing 179, messaging 357, reporting 422, shared 1 209, store 123, subscription 106, sync 644); after the 404 fix, `ReportPreferencesControllerTest`, `GlobalExceptionHandlerTest`, `UpdateSaleFlowServiceTest` green. Live `keevo_dev` (WhatsApp noop, FCM/Expo off), new tenant: store fields default `country:"CM"`; PATCH with `"Fashion"`/`"cm"` → `fashion`/`CM`; bad category / country `ZZ` → 422 in French; PATCH with the name only keeps the other fields; logo GET before upload → 404 `STORE_LOGO_NOT_FOUND`, PUT PNG → 200 with versioned `logoUrl`, GET → `image/png` `private, max-age=2592000`, text file → 422 `STORE_LOGO_INVALID`, DELETE → 200 then GET 404; sale flow: before onboarding 500 (fixed to 404, see change log), after onboarding GET `POS`, PUT `DOCUMENT` → 200, same PUT again → 200 and a single `SALE_FLOW_UPDATED` audit row; `psql` shows the columns and values on the tenant schema.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+
+### Ce qui est fait côté API
+- Une boutique porte maintenant, comme dans Bref : `category` (19 clés), `description`, `niu`, `rccm`, `country` (code pays à deux lettres, `CM` par défaut) et un logo (`logoUrl`).
+- Le tenant a un parcours de vente par défaut `defaultSaleFlow` : `POS` (« Caisse ») ou `DOCUMENT` (« Documents »). Tous les tenants Keevo existants sont en `POS` ; l'import Bref (24.2) mettra `DOCUMENT`.
+- Champs ajoutés uniquement : l'app V1 Flutter 2.0.1 continue de fonctionner, et un envoi sans ces champs ne les efface jamais.
+
+### À utiliser
+- **Lire les boutiques** : `GET /api/v1/stores` (OWNER) et le pull de synchro (entité `stores`). Chaque boutique contient en plus `category` (clé ou `null`), `description`, `niu`, `rccm`, `country` et `logoUrl` (`null` ou `/api/v1/stores/{id}/logo?v=…`).
+- **Créer / modifier** (OWNER) : `POST /api/v1/stores` et `PATCH /api/v1/stores/{id}`, plus les opérations de synchro `CREATE_STORE` / `UPDATE_STORE`, avec les mêmes clés optionnelles.
+  - Règle d'écriture : un champ absent ou `null` est laissé tel quel ; une chaîne vide efface `category`, `description`, `niu` ou `rccm` ; `country` ne peut pas être effacé.
+  - `category` : la clé en minuscules, une des 19 valeurs ci-dessous.
+  - `country` : code ISO à deux lettres (la casse est corrigée).
+  - Longueurs maximales : description 1000, NIU 30, RCCM 50.
+- **Logo** (`keevo/backend/src/main/java/com/keevo/store/store/adapter/in/rest/StoreLogoController.java`) :
+  - `PUT /api/v1/stores/{id}/logo` : OWNER, multipart, champ `file`, PNG ou JPEG de 200 Ko maximum. Renvoie la boutique avec un nouveau `logoUrl`.
+  - `GET` sur le `logoUrl` : tous les rôles ; l'image peut être mise en cache 30 jours, et l'URL change quand le logo change.
+  - `DELETE /api/v1/stores/{id}/logo` : OWNER. Renvoie la boutique avec `logoUrl: null`.
+- **Parcours de vente** :
+  - `GET /api/v1/tenant/preferences` contient `defaultSaleFlow`.
+  - `PUT /api/v1/tenant/sale-flow` (OWNER) avec `{"defaultSaleFlow":"POS"|"DOCUMENT"}` renvoie les préférences.
+- **Erreurs** (le message français vient de la réponse) :
+
+| Code | HTTP | Message | Réaction de l'app |
+|---|---|---|---|
+| `VALIDATION_ERROR` | 422 | « Catégorie de boutique inconnue », « Pays inconnu : indiquez le code du pays en deux lettres (par exemple CM) », « Le pays de la boutique est obligatoire », « Le NIU ne doit pas dépasser 30 caractères »… | afficher le message sous le champ |
+| `STORE_LOGO_INVALID` | 422 | « Format de logo non pris en charge (PNG ou JPEG) » | proposer une autre image |
+| `STORE_LOGO_TOO_LARGE` | 422 | « Le logo est trop lourd (200 Ko maximum) » | compresser avant l'envoi (600 px, JPEG ~80 %) |
+| `STORE_LOGO_TOO_HEAVY` | 422 | « Logo trop lourd après traitement : choisissez une image plus simple » | proposer une autre image |
+| `STORE_LOGO_NOT_FOUND` | 404 | « Cette boutique n'a pas de logo » | afficher l'initiale de la boutique |
+| `STORE_NOT_FOUND` | 404 | « Boutique introuvable » | revenir à la liste |
+| `PREFERENCES_NOT_FOUND` | 404 | « Préférences introuvables » (entreprise pas encore configurée) | terminer l'onboarding puis réessayer |
+| `FORBIDDEN` | 403 | — | n'afficher l'édition qu'au propriétaire |
+
+- **Catégories** (clé → libellé à afficher) :
+  - fashion → Mode et vêtements ; electronics → Électronique ; telecom → Téléphonie ; food → Alimentation ; restaurant → Restauration
+  - beauty → Beauté et cosmétiques ; sports → Sport et loisirs ; home → Maison et décoration ; furniture → Ameublement ; hardware → Quincaillerie
+  - automotive → Automobile ; agriculture → Agriculture ; stationery → Papeterie ; jewelry → Bijouterie ; events → Événementiel
+  - education → Éducation ; real_estate → Immobilier ; services → Services ; other → Autre
+
+### À implémenter côté mobile
+1. **Fiche boutique (propriétaire)** :
+   - catégorie : liste des 19 libellés, la clé envoyée ;
+   - description, NIU, RCCM ;
+   - pays : liste de pays, Cameroun par défaut ;
+   - logo : choisir, recadrer, compresser à 600 px avant l'envoi, puis remplacer ou supprimer.
+2. **Affichage du logo** partout où la boutique apparaît. Il est mis en cache par URL ; sans logo, on affiche l'initiale.
+3. **Hors ligne** : les champs texte passent par `CREATE_STORE` / `UPDATE_STORE`. Le logo n'est envoyé qu'en ligne ; sans réseau, afficher « Le logo sera envoyé au retour du réseau » et réessayer plus tard.
+4. **Paramètres › Parcours de vente** (propriétaire) : choix « Caisse » ou « Documents ». Il décide de l'écran d'arrivée ; la navigation complète relève de la 19.13.
+5. Ne jamais afficher une clé (`real_estate`, `POS`) : seulement les libellés français.
+
+### Implémentation de référence
+Aucune dans keevo/app (l'app Flutter ne sert qu'au test). Côté backend : `keevo/backend/src/main/java/com/keevo/store/store/domain/model/StoreProfileRules.java` (règles), `store/api/StoreCategory.java` (libellés), `identity/api/SaleFlow.java`.
+
+### Critères d'acceptation mobile / scénarios de test
+- Given un propriétaire connecté, When il choisit « Immobilier » et le pays « Côte d'Ivoire », Then la boutique se recharge avec ces libellés et `country: "CI"`.
+- Given une boutique avec logo, When le propriétaire envoie un nouveau logo, Then toutes les vues affichent le nouveau logo (nouvelle URL), sans vider le cache.
+- Given un vendeur, When il ouvre l'app, Then il voit le logo mais aucune action de modification.
+- Given « Documents » choisi, When l'app redémarre, Then elle arrive sur les documents.
+- Préparation (curl) :
+  - `PATCH $API/api/v1/stores/$ID` avec `{"name":"Ma boutique","category":"real_estate","country":"ci"}` ;
+  - `curl -X PUT -F file=@logo.png $API/api/v1/stores/$ID/logo` ;
+  - `curl -X PUT -d '{"defaultSaleFlow":"DOCUMENT"}' $API/api/v1/tenant/sale-flow`.
+
+### Clé de suivi mobile
+`m19-12-boutiques-etendues-parcours-vente`

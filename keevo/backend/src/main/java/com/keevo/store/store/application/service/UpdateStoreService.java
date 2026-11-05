@@ -5,6 +5,7 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.event.catalog.store.StoreUpdatedEvent;
 import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.model.StoreProfileRules;
 import com.keevo.store.store.domain.port.in.UpdateStoreCommand;
 import com.keevo.store.store.domain.port.in.UpdateStoreUseCase;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -17,7 +18,8 @@ import java.time.Instant;
 /**
  * UpdateStoreService — Updates store name, address, and phone. Type is immutable.
  *
- * <p>Story 3.1 — AC4.
+ * <p>Story 3.1 — AC4. Story 19.12 — and the Bref fields, partially: a field absent / null keeps its value (a V1
+ * body {@code {name, address, phone}} never loses them), see {@link StoreProfileRules}.
  */
 @Service
 public class UpdateStoreService implements UpdateStoreUseCase {
@@ -48,23 +50,18 @@ public class UpdateStoreService implements UpdateStoreUseCase {
                     "Le nom doit contenir entre 2 et 100 caractères");
         }
 
-        // Build updated store — preserve id, type, createdAt
-        Store updated = new Store(
-                existing.id(),
-                trimmedName,
-                existing.type(),      // type is IMMUTABLE
-                command.address(),
-                command.phone(),
-                existing.isActive(),
-                existing.createdAt(),
-                Instant.now()
-        );
+        // Build updated store — preserve id, type (IMMUTABLE), createdAt, logo; Bref fields patched by presence
+        Store updated = StoreProfileRules.apply(
+                existing.withContact(trimmedName, command.address(), command.phone(), Instant.now()),
+                command.profile());
 
         Store saved = storeRepository.save(updated);
 
+        StoreProfileRules.Changes changes = StoreProfileRules.changes(existing, saved);
         eventPublisher.publishEvent(new StoreUpdatedEvent(
                 saved.id(), saved.name(),
-                command.actorId(), TenantContext.getCurrentTenant(), Instant.now()));
+                command.actorId(), TenantContext.getCurrentTenant(), Instant.now(),
+                changes.before(), changes.after()));
 
         return saved;
     }

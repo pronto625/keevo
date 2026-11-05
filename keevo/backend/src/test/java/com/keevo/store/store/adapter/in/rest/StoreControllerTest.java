@@ -3,6 +3,8 @@ package com.keevo.store.store.adapter.in.rest;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.api.StoreCategory;
+import com.keevo.store.api.StoreProfilePatch;
 import com.keevo.store.api.StoreType;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import com.keevo.store.store.domain.port.in.*;
@@ -125,6 +127,78 @@ class StoreControllerTest {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.name").value("Updated Name"));
+    }
+
+    // ── Story 19.12 — Bref fields ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("19.12 — PATCH with a V1 body sends an empty profile (nothing changes); the response is additive")
+    void PATCH_v1Body_sendsNoProfile_responseHasBrefFields() throws Exception {
+        Store updated = new Store(storeId, "Updated Name", StoreType.STORE, "New Address", null, true,
+                Instant.now(), Instant.now(), StoreCategory.FOOD, null, storeId + "-19c0ffee.png", "M0123", null, "CM");
+        when(updateStoreUseCase.execute(any())).thenReturn(updated);
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Updated Name","address":"New Address","phone":null}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.category").value("food"))
+                .andExpect(jsonPath("$.data.niu").value("M0123"))
+                .andExpect(jsonPath("$.data.country").value("CM"))
+                .andExpect(jsonPath("$.data.logoUrl").value("/api/v1/stores/" + storeId + "/logo?v=19c0ffee"))
+                .andExpect(jsonPath("$.data.isActive").value(true));
+        verify(updateStoreUseCase).execute(new UpdateStoreCommand(storeId, "Updated Name", "New Address", null,
+                actorId, StoreProfilePatch.NONE));
+    }
+
+    @Test
+    @DisplayName("19.12 — PATCH carries the Bref fields raw to the use case")
+    void PATCH_brefFields_passedToUseCase() throws Exception {
+        when(updateStoreUseCase.execute(any())).thenReturn(sampleStore);
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Bo","category":"real_estate","country":"ci","niu":" M0123 ","description":""}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.logoUrl").doesNotExist());
+        verify(updateStoreUseCase).execute(new UpdateStoreCommand(storeId, "Bo", null, null, actorId,
+                new StoreProfilePatch("real_estate", "", " M0123 ", null, "ci")));
+    }
+
+    @Test
+    @DisplayName("19.12 — a bad Bref field answers VALIDATION_ERROR with its French message")
+    void PATCH_badCategory_validationError() throws Exception {
+        when(updateStoreUseCase.execute(any())).thenThrow(DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
+                "Catégorie de boutique inconnue"));
+
+        mockMvc.perform(patch("/api/v1/stores/" + storeId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Boutique","category":"Alimentation"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error").value("Catégorie de boutique inconnue"));
+    }
+
+    @Test
+    @DisplayName("19.12 — POST carries the optional Bref fields; omitted ⇒ empty profile")
+    void POST_brefFields_passedToUseCase() throws Exception {
+        when(createStoreUseCase.execute(any())).thenReturn(sampleStore);
+
+        mockMvc.perform(post("/api/v1/stores")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name":"Boutique","category":"food","rccm":"RC1"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.country").value("CM"));
+        verify(createStoreUseCase).execute(new CreateStoreCommand("Boutique", null, null, null, actorId,
+                new StoreProfilePatch("food", null, null, "RC1", null)));
     }
 
     @Test

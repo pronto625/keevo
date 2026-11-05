@@ -555,6 +555,53 @@ class AuditEventListenerTest {
             assertThat(after.get("name").asText()).isEqualTo("Boutique Centre");
         }
 
+        @Test
+        @DisplayName("19.12 StoreUpdated with Bref changes → valueBefore = old fields, valueAfter = name + new fields")
+        void storeUpdatedWithBrefChanges() throws Exception {
+            UUID storeId = UUID.randomUUID();
+            listener.on(new StoreUpdatedEvent(storeId, "Boutique Centre", actorId, "kv_abc123", Instant.now(),
+                    java.util.Map.of("category", "Alimentation"), java.util.Map.of("category", "Immobilier")));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(objectMapper.readTree(e.valueBefore()).get("category").asText()).isEqualTo("Alimentation");
+            var after = objectMapper.readTree(e.valueAfter());
+            assertThat(after.get("name").asText()).isEqualTo("Boutique Centre");
+            assertThat(after.get("category").asText()).isEqualTo("Immobilier");
+        }
+
+        @Test
+        @DisplayName("19.12 logo-only StoreUpdated → valueAfter holds only the logo change (no name)")
+        void storeLogoOnly() throws Exception {
+            listener.on(new StoreUpdatedEvent(UUID.randomUUID(), "Boutique Centre", actorId, "kv_abc123", Instant.now(),
+                    java.util.Map.of(), java.util.Map.of("logo", "Ajouté")));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.valueBefore()).isNull();
+            var after = objectMapper.readTree(e.valueAfter());
+            assertThat(after.size()).isEqualTo(1);
+            assertThat(after.get("logo").asText()).isEqualTo("Ajouté");
+            assertThat(e.entityLabel()).isEqualTo("Boutique Centre");
+        }
+
+        @Test
+        @DisplayName("19.12 SaleFlowChanged → SALE_FLOW_UPDATED, « Caisse » → « Documents », French labels")
+        void saleFlowChanged() throws Exception {
+            UUID prefsId = UUID.randomUUID();
+            listener.on(new com.keevo.shared.event.catalog.onboarding.SaleFlowChangedEvent(
+                    prefsId, "Caisse", "Documents", actorId, "kv_abc123", Instant.now()));
+
+            AuditPort.AuditEntry e = captureEntry();
+            assertThat(e.action()).isEqualTo("SALE_FLOW_UPDATED");
+            assertThat(e.entityType()).isEqualTo("Tenant");
+            assertThat(e.entityLabel()).isEqualTo("Parcours de vente");
+            assertThat(objectMapper.readTree(e.valueBefore()).get("defaultSaleFlow").asText()).isEqualTo("Caisse");
+            assertThat(objectMapper.readTree(e.valueAfter()).get("defaultSaleFlow").asText()).isEqualTo("Documents");
+            assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("SALE_FLOW_UPDATED"))
+                    .isEqualTo("Parcours de vente modifié");
+            assertThat(com.keevo.shared.infrastructure.export.AuditLabels.FIELDS.get("defaultSaleFlow"))
+                    .isEqualTo("Parcours de vente par défaut");
+        }
+
         // ── J7 / J10 — actions that used to leave no trace ──
 
         @Test

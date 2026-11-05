@@ -24,5 +24,8 @@ table is added `NOT VALID` and validated in a guarded block (legacy rows never a
   (`db/migration`): nothing copies public tables into tenant schemas any more.
 - A released script is never edited (`validateOnMigrate`: an edited script fails that module on every tenant
   until restored). A change is a new version, idempotent as well.
+- When a new tenant column is JPA-mapped, also mirror it on the public template table in a public migration
+  (`ALTER TABLE public.<table> ADD COLUMN IF NOT EXISTS …`), for boot validation only (`ddl-auto: validate` checks
+  the mapping against `public`); the tenant schemas still get it only from the module migration (Story 19.12, V49).
 - No `${` in a script: placeholders are off so Flyway runs exactly the text registration runs (a test enforces it).
 - Keyset pull indexes (`idx_*_sync_keyset`) are not created here: `SyncKeysetIndex` / `SyncKeysetIndexJob` own them.

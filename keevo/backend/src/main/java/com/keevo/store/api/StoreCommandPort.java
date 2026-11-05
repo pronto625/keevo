@@ -17,6 +17,15 @@ public interface StoreCommandPort {
     String validateName(String name);
 
     /**
+     * Validates the Bref fields of a store (Story 19.12 — the rule of the REST endpoints) and returns them
+     * normalized: {@code null} = unchanged, {@code ""} = cleared, other values trimmed, the category as its key, the
+     * country upper-cased.
+     *
+     * @throws com.keevo.shared.domain.exception.DomainException VALIDATION_ERROR (French message)
+     */
+    StoreProfilePatch normalizeProfile(StoreProfilePatch raw);
+
+    /**
      * Creates an active store under the id chosen on the device, idempotently. Takes the per-tenant
      * store-limit lock (same key as the REST creation, held until the caller's transaction ends),
      * then: id already present → no-op; else checks the plan's store limit

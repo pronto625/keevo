@@ -67,7 +67,7 @@ public class StoreController {
         CurrentActor.requireOwner("Only OWNER can manage stores");
         UUID actorId = CurrentActor.actorId();
         CreateStoreCommand command = new CreateStoreCommand(
-                request.name(), request.type(), request.address(), request.phone(), actorId);
+                request.name(), request.type(), request.address(), request.phone(), actorId, request.profile());
         Store store = createStoreUseCase.execute(command);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponseWrapper.ok(StoreResponseDto.fromDomain(store)));
@@ -85,7 +85,7 @@ public class StoreController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
-    @Operation(summary = "Update a store's name, address or phone")
+    @Operation(summary = "Update a store's name, address, phone and Bref fields (absent ⇒ unchanged)")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Store updated"),
             @ApiResponse(responseCode = "404", description = "Store not found")
@@ -98,7 +98,7 @@ public class StoreController {
         CurrentActor.requireOwner("Only OWNER can manage stores");
         UUID actorId = CurrentActor.actorId();
         UpdateStoreCommand command = new UpdateStoreCommand(
-                storeId, request.name(), request.address(), request.phone(), actorId);
+                storeId, request.name(), request.address(), request.phone(), actorId, request.profile());
         Store store = updateStoreUseCase.execute(command);
         return ResponseEntity.ok(ApiResponseWrapper.ok(StoreResponseDto.fromDomain(store)));
     }

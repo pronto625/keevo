@@ -369,4 +369,55 @@ class CreateStoreSyncHandlerTest {
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         verify(storeRepository).save(argThat(s -> "Shop".equals(s.name())));
     }
+
+    // ── Story 19.12 — Bref fields ─────────────────────────────────────────────
+
+    @Test
+    void handle_createStore_withBrefFields_savesThem() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.empty());
+        when(storeRepository.save(any())).thenReturn(sampleStore(storeId));
+        Subscription premiumPlan = samplePlan(PlanType.PREMIUM_TRIAL);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumPlan));
+        when(storeRepository.countActive()).thenReturn(0);
+
+        var op = new SyncOperation("op-19", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Boutique", "category", "telecom", "country", "td",
+                        "niu", " N1 "),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(storeRepository).save(argThat(s -> storeId.equals(s.id())
+                && s.category() == com.keevo.store.api.StoreCategory.TELECOM
+                && "TD".equals(s.country()) && "N1".equals(s.niu()) && s.description() == null));
+    }
+
+    @Test
+    void handle_createStore_badCategory_rejectedValidationError_nothingSaved() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-20", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Boutique", "category", "Alimentation"),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("VALIDATION_ERROR");
+        verify(storeRepository, never()).save(any());
+    }
+
+    @Test
+    void handle_createStore_nonStringBrefField_rejected() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-21", "CREATE_STORE", storeId.toString(),
+                Map.of("id", storeId.toString(), "name", "Boutique", "country", 237),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verify(storeRepository, never()).save(any());
+    }
 }

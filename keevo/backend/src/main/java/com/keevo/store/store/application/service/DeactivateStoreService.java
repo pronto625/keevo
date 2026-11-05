@@ -37,16 +37,7 @@ public class DeactivateStoreService implements DeactivateStoreUseCase {
                 .orElseThrow(() -> new DomainException(ErrorCode.STORE_NOT_FOUND,
                         "Boutique introuvable"));
 
-        Store deactivated = new Store(
-                existing.id(),
-                existing.name(),
-                existing.type(),
-                existing.address(),
-                existing.phone(),
-                false,               // is_active = false
-                existing.createdAt(),
-                Instant.now()
-        );
+        Store deactivated = existing.withActive(false, Instant.now());
 
         Store saved = storeRepository.save(deactivated);
 

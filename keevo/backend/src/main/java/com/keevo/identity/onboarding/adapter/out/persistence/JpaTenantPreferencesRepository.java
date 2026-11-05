@@ -1,6 +1,7 @@
 package com.keevo.identity.onboarding.adapter.out.persistence;
 
 import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.SaleFlow;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * JpaTenantPreferencesRepository — Persistence adapter for TenantPreferencesRepository port.
@@ -38,6 +40,7 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
             now
         );
         applyNewFields(entity, prefs);
+        entity.setDefaultSaleFlow(prefs.defaultSaleFlow().name()); // creation only: update() never writes it
         TenantPreferencesJpaEntity saved = jpaRepository.save(entity);
         return toDomain(saved);
     }
@@ -54,6 +57,12 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
         applyNewFields(entity, prefs);
 
         return toDomain(jpaRepository.save(entity));
+    }
+
+    /** Story 19.12 — the only write of {@code default_sale_flow} (the generic {@link #update} never touches it). */
+    @Override
+    public boolean updateDefaultSaleFlow(UUID id, SaleFlow flow) {
+        return jpaRepository.updateDefaultSaleFlow(id, flow.name()) == 1;
     }
 
     @Override
@@ -108,7 +117,8 @@ public class JpaTenantPreferencesRepository implements TenantPreferencesReposito
             ReportChannel.fromString(entity.getInventoryReportChannel()),
             StockAlertChannel.fromString(entity.getStockAlertChannel()),
             entity.isTrendNotificationEnabled(),
-            entity.isLeaderboardVisibleToEmployees()
+            entity.isLeaderboardVisibleToEmployees(),
+            SaleFlow.fromCode(entity.getDefaultSaleFlow()).orElse(SaleFlow.POS)
         );
     }
 }

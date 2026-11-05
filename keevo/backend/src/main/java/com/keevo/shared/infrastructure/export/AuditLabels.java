@@ -33,6 +33,7 @@ public final class AuditLabels {
             entry("REPORT_PREFERENCES_UPDATED", "Préférences des rapports modifiées"),
             entry("LEADERBOARD_SHARED_WITH_EMPLOYEES", "Classement partagé avec les employés"), // Story 17.2
             entry("LEADERBOARD_HIDDEN_FROM_EMPLOYEES", "Classement masqué aux employés"),      // Story 17.2
+            entry("SALE_FLOW_UPDATED", "Parcours de vente modifié"),                          // Story 19.12
             // Products
             entry("PRODUCT_CREATED", "Produit créé"),
             entry("PRODUCT_UPDATED", "Produit modifié"),
@@ -197,6 +198,7 @@ public final class AuditLabels {
             entry("to", "Au"),
             entry("mode", "Mode"),
             entry("phone", "Téléphone"),
+            entry("address", "Adresse"),                    // Story 19.12 — store address in the update diff
             entry("email", "E-mail"),
             entry("productCount", "Nombre de produits"),
             entry("productsAdded", "Produits ajoutés"),
@@ -227,6 +229,12 @@ public final class AuditLabels {
             entry("sentTo", "Envoyée au"),
             entry("designation", "Désignation"),
             entry("logo", "Logo"),
+            // Stores — Bref fields, default sale flow (Story 19.12)
+            entry("category", "Catégorie"),
+            entry("niu", "NIU"),
+            entry("rccm", "RCCM"),
+            entry("country", "Pays"),
+            entry("defaultSaleFlow", "Parcours de vente par défaut"),
             // Credit notes (Story 14.7)
             entry("creditNoteNumber", "Numéro d'avoir"));
 

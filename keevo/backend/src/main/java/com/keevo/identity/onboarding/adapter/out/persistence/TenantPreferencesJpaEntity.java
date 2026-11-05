@@ -1,6 +1,7 @@
 package com.keevo.identity.onboarding.adapter.out.persistence;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.Instant;
 import java.time.LocalTime;
@@ -16,6 +17,7 @@ import java.util.UUID;
  * Story 7.5 — added 9 report-preference columns.
  */
 @Entity
+@DynamicUpdate // Story 19.12 — an update writes only the changed columns (never a stale default_sale_flow)
 @Table(name = "tenant_preferences")
 public class TenantPreferencesJpaEntity {
 
@@ -78,6 +80,12 @@ public class TenantPreferencesJpaEntity {
     @Column(name = "leaderboard_visible_to_employees", nullable = false)
     private boolean leaderboardVisibleToEmployees = false;
 
+    // ── Story 19.12 — default sale flow (core V3), POS | DOCUMENT ─────────────
+
+    // Tenant column from core V3, mirrored on the public template table (V49) for boot validation.
+    @Column(name = "default_sale_flow", nullable = false, length = 10)
+    private String defaultSaleFlow = "POS";
+
     // ── JPA requires no-arg constructor ───────────────────────────────────────
     protected TenantPreferencesJpaEntity() {}
 
@@ -135,6 +143,9 @@ public class TenantPreferencesJpaEntity {
 
     public boolean isLeaderboardVisibleToEmployees() { return leaderboardVisibleToEmployees; }
     public void setLeaderboardVisibleToEmployees(boolean v) { this.leaderboardVisibleToEmployees = v; }
+
+    public String getDefaultSaleFlow() { return defaultSaleFlow; }
+    public void setDefaultSaleFlow(String v) { this.defaultSaleFlow = v; }
 
     public void setUpdatedAt(Instant v) { this.updatedAt = v; }
     public void setStockAlertEnabled(boolean v) { this.stockAlertEnabled = v; }

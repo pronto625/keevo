@@ -133,4 +133,28 @@ class ReactivateStoreServiceTest {
         verifyNoInteractions(planLimitGuard, eventPublisher);
         verify(storeRepository, never()).save(any());
     }
+
+    @Test
+    @DisplayName("19.12 — la réactivation garde tous les champs Bref et le logo")
+    void reactivate_keepsBrefFields() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(new Store(storeId, "Boutique", StoreType.STORE, "Yaoundé", "+237690000001", false,
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"),
+                com.keevo.store.api.StoreCategory.JEWELRY, "Bijoux", storeId + "-abc.png", "M0123", "RC1", "CI")));
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(subscription));
+        when(storeRepository.countActive()).thenReturn(1);
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store result = service.execute(new ReactivateStoreCommand(storeId, actorId));
+
+        assertThat(result.isActive()).isTrue();
+        assertThat(result.name()).isEqualTo("Boutique");
+        assertThat(result.address()).isEqualTo("Yaoundé");
+        assertThat(result.phone()).isEqualTo("+237690000001");
+        assertThat(result.category()).isEqualTo(com.keevo.store.api.StoreCategory.JEWELRY);
+        assertThat(result.description()).isEqualTo("Bijoux");
+        assertThat(result.logoPath()).isEqualTo(storeId + "-abc.png");
+        assertThat(result.niu()).isEqualTo("M0123");
+        assertThat(result.rccm()).isEqualTo("RC1");
+        assertThat(result.country()).isEqualTo("CI");
+    }
 }

@@ -70,7 +70,8 @@ public class CreateStoreService implements CreateStoreUseCase {
         }
 
         // 3. Create via factory (validates name, sets defaults)
-        Store store = StoreFactory.create(command.name(), command.type(), command.address(), command.phone());
+        Store store = StoreFactory.create(command.name(), command.type(), command.address(), command.phone(),
+                command.profile());
 
         // 4. Persist
         Store saved = storeRepository.save(store);

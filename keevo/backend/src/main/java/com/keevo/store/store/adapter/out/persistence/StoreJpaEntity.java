@@ -32,6 +32,30 @@ public class StoreJpaEntity extends JpaBaseEntity {
     @Column(name = "is_active", nullable = false)
     private boolean isActive;
 
+    // ── Story 19.12 — Bref fields (store module V2) ──────────────
+    // Tenant columns from store V2, mirrored on the public template table (V49) for boot validation.
+
+    /** {@link com.keevo.store.api.StoreCategory} key, nullable. */
+    @Column(name = "category", length = 30)
+    private String category;
+
+    @Column(name = "description", length = 1000)
+    private String description;
+
+    /** Stored logo file name ({@code <id>.png|jpg}), nullable. */
+    @Column(name = "logo_path", length = 255)
+    private String logoPath;
+
+    @Column(name = "niu", length = 30)
+    private String niu;
+
+    @Column(name = "rccm", length = 50)
+    private String rccm;
+
+    /** ISO alpha-2, column NOT NULL DEFAULT 'CM'. */
+    @Column(name = "country", nullable = false, length = 2)
+    private String country = "CM";
+
     // ── Getters / Setters ────────────────────────────────────────
 
     public String getName() { return name; }
@@ -48,6 +72,24 @@ public class StoreJpaEntity extends JpaBaseEntity {
 
     public boolean isActive() { return isActive; }
     public void setActive(boolean active) { isActive = active; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public String getLogoPath() { return logoPath; }
+    public void setLogoPath(String logoPath) { this.logoPath = logoPath; }
+
+    public String getNiu() { return niu; }
+    public void setNiu(String niu) { this.niu = niu; }
+
+    public String getRccm() { return rccm; }
+    public void setRccm(String rccm) { this.rccm = rccm; }
+
+    public String getCountry() { return country; }
+    public void setCountry(String country) { this.country = country; }
 
     // Expose setters for JpaBaseEntity protected fields (used by adapter)
     public void setId(java.util.UUID id) { super.setId(id); }

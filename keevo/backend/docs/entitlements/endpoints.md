@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 231 — gated: 112, exempt: 119.
+Handlers: 235 — gated: 115, exempt: 120.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -219,6 +219,9 @@ Handlers: 231 — gated: 112, exempt: 119.
 | POST | `/api/v1/stores` | `store` | WRITE | — |  | StoreController#createStore |
 | PATCH | `/api/v1/stores/{storeId}` | `store` | WRITE | — |  | StoreController#updateStore |
 | PATCH | `/api/v1/stores/{storeId}/deactivate` | `store` | WRITE | — |  | StoreController#deactivateStore |
+| DELETE | `/api/v1/stores/{storeId}/logo` | `store` | WRITE | — |  | StoreLogoController#delete |
+| GET | `/api/v1/stores/{storeId}/logo` | `store` | READ | — |  | StoreLogoController#logo |
+| PUT | `/api/v1/stores/{storeId}/logo` | `store` | WRITE | — |  | StoreLogoController#upload |
 | PATCH | `/api/v1/stores/{storeId}/reactivate` | `store` | WRITE | — |  | StoreController#reactivateStore |
 | GET | `/api/v1/subscription/me` | — | — | — | core: abonnement | SubscriptionController#getMySubscription |
 | GET | `/api/v1/suppliers` | `crm` | READ | — |  | SupplierController#listSuppliers |
@@ -234,6 +237,7 @@ Handlers: 231 — gated: 112, exempt: 119.
 | GET | `/api/v1/tenant/preferences` | — | — | — | core: préférences du commerce | TenantPreferencesController#getPreferences |
 | PUT | `/api/v1/tenant/report-preferences` | `report-config` | WRITE | — |  | TenantPreferencesController#updateReportPreferences |
 | POST | `/api/v1/tenant/report-test` | `report-config` | WRITE | — |  | TenantPreferencesController#sendTestReport |
+| PUT | `/api/v1/tenant/sale-flow` | — | — | — | core: préférences du commerce | TenantPreferencesController#updateSaleFlow |
 | GET | `/api/v1/tenant/stores` | `store` | READ | — |  | TenantPreferencesController#getStores |
 | GET | `/api/v1/tenants/me/extensions/{pointId}` | — | — | — | points d'extension du commerçant | TenantExtensionsController#extensions |
 | GET | `/api/v1/tenants/me/modules` | — | — | — | liste des modules du commerçant | TenantModulesController#modules |

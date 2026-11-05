@@ -430,7 +430,7 @@ development_status:
   19-9c-modeles-meta-messages-keevo: backlog  # 2026-11-04 découpage de la 19-9b — 1 item (liste et libellés à valider par l'utilisateur, approbation Meta)
   19-10-versions-minimales-app: backlog  # 2026-11-05 revue 19.5 — 1 item (VIEWER sur V1 : ventes hors ligne perdues)
   19-11-charge-nombre-tenants: backlog  # 2026-11-04 revue 19.9 — 1 item routé (rétention des notifications)
-  19-12-boutiques-etendues-parcours-vente: backlog
+  19-12-boutiques-etendues-parcours-vente: done  # 2026-11-05 revue 5 couches (41 constats, 9 moyens corrigés, 1 routé → 24.2), 5 738 tests verts, live keevo_dev OK (PREFERENCES_NOT_FOUND 500 → 404 corrigé) ; revue de suivi recommandée | build-auto (spec-19-12-boutiques-etendues-parcours-vente.md)
   19-13-profil-interface-visibilite: backlog  # 2026-11-03 FUS-UX6/UX7 : préréglage de navigation + modules nouveaux pour l'utilisateur désactivés par défaut, activables par l'owner dans Paramètres › Mes modules
   epic-19-retrospective: optional
 

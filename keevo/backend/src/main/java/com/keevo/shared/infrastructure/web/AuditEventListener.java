@@ -53,6 +53,7 @@ import com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierProductsChangedEvent;
 import com.keevo.shared.event.catalog.onboarding.LeaderboardVisibilityChangedEvent;
+import com.keevo.shared.event.catalog.onboarding.SaleFlowChangedEvent;
 import com.keevo.shared.event.catalog.onboarding.ReportPreferencesUpdatedEvent;
 import com.keevo.shared.event.catalog.store.StoreUpdatedEvent;
 import com.keevo.shared.event.catalog.employee.EmployeeUpdatedEvent;
@@ -467,11 +468,22 @@ public class AuditEventListener {
                 event.storeId(), event.name(), event.type(), event.tenantId(), event.actorId());
     }
 
-    /** The event carries no previous name, so {@code valueBefore} stays null. */
+    /**
+     * {@code valueBefore} / {@code valueAfter} hold the fields that changed (Story 19.12: name, address, phone, Bref
+     * fields — null when none did). An edit always carries {@code newName} / {@code name} in {@code valueAfter} (keys
+     * read by the shipped app); a logo-only event carries only the logo change.
+     */
     @EventListener
     public void on(StoreUpdatedEvent event) {
+        Map<String, Object> after;
+        if (event.after().containsKey("logo")) {
+            after = new LinkedHashMap<>(event.after());
+        } else {
+            after = new LinkedHashMap<>(map("newName", event.newName(), "name", event.newName()));
+            after.putAll(event.after());
+        }
         write(event.actorId(), event.tenantId(), "STORE_UPDATED", "Store", event.storeId(),
-                null, map("newName", event.newName(), "name", event.newName()),
+                event.before().isEmpty() ? null : event.before(), after,
                 event.storeId(), event.newName(), null, null);
         log.info("AUDIT: store_updated storeId={} newName={} tenantId={} actorId={}",
                 event.storeId(), event.newName(), event.tenantId(), event.actorId());
@@ -586,6 +598,32 @@ public class AuditEventListener {
         log.info("AUDIT: leaderboard_{} tenantId={} actorId={}",
                 event.visibleToEmployees() ? "shared_with_employees" : "hidden_from_employees",
                 event.tenantId(), event.actorId());
+    }
+
+    /**
+     * Story 19.12 — « Parcours de vente modifié », before → after in French (« Caisse » / « Documents »). A change made
+     * by the Bref importer may come without a bound tenant: the event's tenant is bound for the write and restored.
+     */
+    @EventListener
+    public void on(SaleFlowChangedEvent event) {
+        String previous = TenantContext.getCurrentTenant();
+        boolean bind = previous == null || !previous.equals(event.tenantId());
+        if (bind) {
+            TenantContext.setCurrentTenant(event.tenantId());
+        }
+        try {
+            write(event.actorId(), event.tenantId(), "SALE_FLOW_UPDATED", "Tenant", event.preferencesId(),
+                    event.beforeLabel() == null ? null : map("defaultSaleFlow", event.beforeLabel()),
+                    map("defaultSaleFlow", event.afterLabel()),
+                    null, "Parcours de vente", null, null);
+        } finally {
+            if (bind) {
+                if (previous == null) TenantContext.clear();
+                else TenantContext.setCurrentTenant(previous);
+            }
+        }
+        log.info("AUDIT: sale_flow_updated after={} tenantId={} actorId={}", event.afterLabel(), event.tenantId(),
+                event.actorId());
     }
 
     @EventListener

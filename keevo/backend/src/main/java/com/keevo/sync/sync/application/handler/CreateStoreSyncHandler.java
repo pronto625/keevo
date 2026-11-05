@@ -59,6 +59,11 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
         // v1s-13-8: same rule as the REST DTO / StoreFactory (2–100 chars once trimmed)
         // → DomainException VALIDATION_ERROR → REJECTED.
         storeCommand.validateName((String) p.get("name"));
+        // 19.12: optional Bref fields — same rule as the REST endpoint (VALIDATION_ERROR → REJECTED)
+        var profile = StoreProfilePayload.read(p);
+        if (!profile.isEmpty()) {
+            storeCommand.normalizeProfile(profile);
+        }
     }
 
     @Override
@@ -82,7 +87,8 @@ public class CreateStoreSyncHandler extends AbstractSyncOperationHandler {
                 (String) p.get("name"),
                 type,
                 (String) p.getOrDefault("address", null),
-                (String) p.getOrDefault("phone", null)));
+                (String) p.getOrDefault("phone", null),
+                StoreProfilePayload.read(p)));
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 storeId.toString(), null);
     }

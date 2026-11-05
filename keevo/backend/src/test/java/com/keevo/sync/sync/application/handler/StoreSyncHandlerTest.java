@@ -192,4 +192,66 @@ class StoreSyncHandlerTest {
         assertThat(result.status()).isEqualTo(SyncOperationStatus.APPLIED);
         verify(updateStoreUseCase).execute(any(UpdateStoreCommand.class));
     }
+
+    // ── Story 19.12 — Bref fields ─────────────────────────────────────────────
+
+    private Store brefStore(UUID id) {
+        return new Store(id, "Boutique", StoreType.STORE, "Rue 1", null, true, Instant.now(), Instant.now(),
+                com.keevo.store.api.StoreCategory.FOOD, null, null, "M1", null, "CM");
+    }
+
+    @Test
+    void handle_updateStore_badCategory_rejectedValidationError() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-b1", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "category", "Alimentation"),
+                Instant.now());
+
+        var result = handler.handle(op, ACTOR_ID, TENANT_ID);
+
+        assertThat(result.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(result.reason()).isEqualTo("VALIDATION_ERROR");
+        verifyNoInteractions(updateStoreUseCase);
+    }
+
+    @Test
+    void handle_updateStore_blankCountry_rejectedValidationError() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-b2", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "country", ""),
+                Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).reason()).isEqualTo("VALIDATION_ERROR");
+        verifyNoInteractions(updateStoreUseCase);
+    }
+
+    @Test
+    void handle_updateStore_brefFieldsReachTheUseCase() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(brefStore(storeId)));
+        when(updateStoreUseCase.execute(any())).thenReturn(brefStore(storeId));
+
+        var op = new SyncOperation("op-b3", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "address", "Rue 1",
+                        "category", "real_estate", "country", "ci"),
+                Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(updateStoreUseCase).execute(new UpdateStoreCommand(storeId, "Boutique", "Rue 1", null, ACTOR_ID,
+                new com.keevo.store.api.StoreProfilePatch("real_estate", null, null, null, "ci")));
+    }
+
+    @Test
+    void handle_updateStore_sameBrefValues_isAppliedNoOp() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(brefStore(storeId)));
+
+        var op = new SyncOperation("op-b4", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "address", "Rue 1",
+                        "category", "food", "niu", " M1 ", "country", "cm", "rccm", ""),
+                Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verifyNoInteractions(updateStoreUseCase);
+    }
 }

@@ -3,6 +3,7 @@ package com.keevo.identity.onboarding.domain.model;
 import com.keevo.identity.api.StockAlertChannel;
 
 import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.SaleFlow;
 import com.keevo.identity.api.TenantPreferencesView;
 
 import java.time.Instant;
@@ -37,8 +38,32 @@ public record TenantPreferences(
         // ── Story 8.1 — Trend notification preference ─────────────────────────
         boolean trendNotificationEnabled,   // default true
         // ── Story 17.2 — seller leaderboard shared with employees (advanced-reports) ──
-        boolean leaderboardVisibleToEmployees // default false
+        boolean leaderboardVisibleToEmployees, // default false
+        // ── Story 19.12 — default sale flow (written only by its own use case) ──
+        SaleFlow defaultSaleFlow              // default POS
 ) {
+
+    public TenantPreferences {
+        if (defaultSaleFlow == null) {
+            defaultSaleFlow = SaleFlow.POS;
+        }
+    }
+
+    /**
+     * Pre-19.12 arity — {@code defaultSaleFlow = POS}. Safe for an update: the generic repository update never writes
+     * the sale flow (it has its own use case).
+     */
+    public TenantPreferences(UUID id, SectorType sectorType, String eodReportTime, boolean stockAlertEnabled,
+                             Instant createdAt, boolean eodReportEnabled, ReportChannel eodReportChannel,
+                             boolean weeklyReportEnabled, int weeklyReportDay, String weeklyReportTime,
+                             ReportChannel weeklyReportChannel, boolean inventoryReportEnabled,
+                             ReportChannel inventoryReportChannel, StockAlertChannel stockAlertChannel,
+                             boolean trendNotificationEnabled, boolean leaderboardVisibleToEmployees) {
+        this(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled, eodReportChannel,
+                weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel, inventoryReportEnabled,
+                inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, leaderboardVisibleToEmployees,
+                SaleFlow.POS);
+    }
 
     /**
      * Pre-17.2 arity — {@code leaderboardVisibleToEmployees = false} (the column default). Production code that
@@ -52,14 +77,23 @@ public record TenantPreferences(
                              boolean trendNotificationEnabled) {
         this(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled, eodReportChannel,
                 weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel, inventoryReportEnabled,
-                inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, false);
+                inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, false, SaleFlow.POS);
     }
 
     /** The same preferences with the leaderboard visibility set (Story 17.2). */
     public TenantPreferences withLeaderboardVisibleToEmployees(boolean visible) {
         return new TenantPreferences(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled,
                 eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
-                inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, visible);
+                inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled, visible,
+                defaultSaleFlow);
+    }
+
+    /** The same preferences with the default sale flow set (Story 19.12). */
+    public TenantPreferences withDefaultSaleFlow(SaleFlow flow) {
+        return new TenantPreferences(id, sectorType, eodReportTime, stockAlertEnabled, createdAt, eodReportEnabled,
+                eodReportChannel, weeklyReportEnabled, weeklyReportDay, weeklyReportTime, weeklyReportChannel,
+                inventoryReportEnabled, inventoryReportChannel, stockAlertChannel, trendNotificationEnabled,
+                leaderboardVisibleToEmployees, flow);
     }
 
     /** The stored values as the published view (no Story 17.8 rule applied: see the effective-preferences use case). */
@@ -85,7 +119,8 @@ public record TenantPreferences(
             true, ReportChannel.WHATSAPP,
             StockAlertChannel.PUSH,
             true,
-            false
+            false,
+            SaleFlow.POS
         );
     }
 }

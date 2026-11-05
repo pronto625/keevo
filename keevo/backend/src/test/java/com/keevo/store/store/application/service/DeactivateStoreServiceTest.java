@@ -81,4 +81,26 @@ class DeactivateStoreServiceTest {
 
         verify(eventPublisher).publishEvent(any(Object.class));
     }
+
+    @Test
+    @DisplayName("19.12 — deactivation keeps every Bref field and the logo")
+    void deactivate_keepsBrefFields() {
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(new Store(storeId, "Boutique", StoreType.STORE, "Yaoundé", "+237690000001", true,
+                Instant.parse("2026-01-01T00:00:00Z"), Instant.parse("2026-01-01T00:00:00Z"),
+                com.keevo.store.api.StoreCategory.JEWELRY, "Bijoux", storeId + "-abc.png", "M0123", "RC1", "CI")));
+        when(storeRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Store result = deactivateStoreService.execute(new DeactivateStoreCommand(storeId, actorId));
+
+        assertThat(result.isActive()).isFalse();
+        assertThat(result.name()).isEqualTo("Boutique");
+        assertThat(result.address()).isEqualTo("Yaoundé");
+        assertThat(result.phone()).isEqualTo("+237690000001");
+        assertThat(result.category()).isEqualTo(com.keevo.store.api.StoreCategory.JEWELRY);
+        assertThat(result.description()).isEqualTo("Bijoux");
+        assertThat(result.logoPath()).isEqualTo(storeId + "-abc.png");
+        assertThat(result.niu()).isEqualTo("M0123");
+        assertThat(result.rccm()).isEqualTo("RC1");
+        assertThat(result.country()).isEqualTo("CI");
+    }
 }

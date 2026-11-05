@@ -1,5 +1,6 @@
 package com.keevo.store.store.adapter.out.persistence;
 
+import com.keevo.store.api.StoreCategory;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
 import com.keevo.store.store.domain.port.out.StoreRepository;
@@ -38,6 +39,11 @@ public class StoreRepositoryAdapter implements StoreRepository {
     }
 
     @Override
+    public Optional<Store> findByIdForUpdate(UUID storeId) {
+        return jpa.findByIdForUpdate(storeId).map(this::entityToDomain);
+    }
+
+    @Override
     public List<Store> findAll() {
         return jpa.findAll().stream().map(this::entityToDomain).toList();
     }
@@ -68,7 +74,13 @@ public class StoreRepositoryAdapter implements StoreRepository {
                 e.getPhone(),
                 e.isActive(),
                 e.getCreatedAt(),
-                e.getUpdatedAt()
+                e.getUpdatedAt(),
+                StoreCategory.fromKey(e.getCategory()).orElse(null), // an unknown key (newer list) reads as none
+                e.getDescription(),
+                e.getLogoPath(),
+                e.getNiu(),
+                e.getRccm(),
+                e.getCountry()
         );
     }
 
@@ -80,6 +92,12 @@ public class StoreRepositoryAdapter implements StoreRepository {
         e.setAddress(store.address());
         e.setPhone(store.phone());
         e.setActive(store.isActive());
+        e.setCategory(store.category() == null ? null : store.category().key());
+        e.setDescription(store.description());
+        e.setLogoPath(store.logoPath());
+        e.setNiu(store.niu());
+        e.setRccm(store.rccm());
+        e.setCountry(store.country());
         return e;
     }
 }

@@ -63,16 +63,7 @@ public class ReactivateStoreService implements ReactivateStoreUseCase {
                         "Aucun abonnement actif"));
         planLimit.checkStoreLimit(plan, storeRepository.countActive());
 
-        Store reactivated = new Store(
-                existing.id(),
-                existing.name(),
-                existing.type(),
-                existing.address(),
-                existing.phone(),
-                true,
-                existing.createdAt(),
-                Instant.now()
-        );
+        Store reactivated = existing.withActive(true, Instant.now());
         Store saved = storeRepository.save(reactivated);
 
         eventPublisher.publishEvent(new StoreReactivatedEvent(

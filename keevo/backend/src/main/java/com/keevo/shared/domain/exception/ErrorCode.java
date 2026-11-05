@@ -192,6 +192,11 @@ public enum ErrorCode {
     COMPANY_LOGO_TOO_LARGE,     // HTTP 422 — logo over keevo.company-logo.max-bytes
     COMPANY_LOGO_TOO_HEAVY,     // HTTP 422 — re-encoded logo still over 300 KB (inlined in every PDF)
     COMPANY_LOGO_NOT_FOUND,     // HTTP 404 — the company has no logo
+    // ── Store logo (Story 19.12) ──────────────────────────────────────────
+    STORE_LOGO_INVALID,         // HTTP 422 — not a PNG / JPEG image (or corrupt)
+    STORE_LOGO_TOO_LARGE,       // HTTP 422 — logo over keevo.store-logo.max-bytes
+    STORE_LOGO_TOO_HEAVY,       // HTTP 422 — re-encoded logo still over keevo.store-logo.max-bytes
+    STORE_LOGO_NOT_FOUND,       // HTTP 404 — the store has no logo
     // ── Notification inbox (Story 19.9) ───────────────────────────────────
     NOTIFICATION_NOT_FOUND,     // HTTP 404 — notification unknown or of another user
     // ── Generic ───────────────────────────────────────────────────

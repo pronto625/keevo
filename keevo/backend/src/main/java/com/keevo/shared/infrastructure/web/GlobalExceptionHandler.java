@@ -269,6 +269,8 @@ public class GlobalExceptionHandler {
                  "CREDIT_NOTE_NOT_FOUND",
                  "INVOICE_LINK_INVALID",
                  "COMPANY_LOGO_NOT_FOUND",
+                 "STORE_LOGO_NOT_FOUND",
+                 "PREFERENCES_NOT_FOUND",      // 19.12: tenant not onboarded yet (was an unmapped 500)
                  "NOTIFICATION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
@@ -331,6 +333,9 @@ public class GlobalExceptionHandler {
                  "COMPANY_LOGO_INVALID",
                  "COMPANY_LOGO_TOO_LARGE",
                  "COMPANY_LOGO_TOO_HEAVY",
+                 "STORE_LOGO_INVALID",
+                 "STORE_LOGO_TOO_LARGE",
+                 "STORE_LOGO_TOO_HEAVY",
                  "PLAN_PROFILE_INVALID",
                  "BUNDLE_INVALID",
                  "BUNDLE_NOT_APPLICABLE",

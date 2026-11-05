@@ -2,6 +2,7 @@ package com.keevo.identity.onboarding.adapter.in.web;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.api.ReportChannel;
+import com.keevo.identity.api.SaleFlow;
 import com.keevo.identity.onboarding.domain.model.SectorType;
 import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.onboarding.domain.model.TenantPreferences;
@@ -9,6 +10,7 @@ import com.keevo.identity.onboarding.domain.port.in.SendTestReportUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityCommand;
 import com.keevo.identity.onboarding.domain.port.in.UpdateLeaderboardVisibilityUseCase;
 import com.keevo.identity.onboarding.domain.port.in.UpdateReportPreferencesUseCase;
+import com.keevo.identity.onboarding.domain.port.in.UpdateSaleFlowUseCase;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.identity.onboarding.application.service.EffectiveTenantPreferencesService;
 import com.keevo.shared.module.EntitlementService;
@@ -58,6 +60,7 @@ class ReportPreferencesControllerTest {
     @Mock private SendTestReportUseCase sendTestReportUseCase;
     @Mock private EntitlementService entitlementService;
     @Mock private UpdateLeaderboardVisibilityUseCase updateLeaderboardVisibilityUseCase;
+    @Mock private UpdateSaleFlowUseCase updateSaleFlowUseCase;
 
     private TenantPreferencesController controller;
 
@@ -72,7 +75,7 @@ class ReportPreferencesControllerTest {
         controller = new TenantPreferencesController(tenantPreferencesRepository, jdbcTemplate,
                 updateReportPreferencesUseCase, sendTestReportUseCase,
                 new EffectiveTenantPreferencesService(entitlementService),
-                updateLeaderboardVisibilityUseCase);
+                updateLeaderboardVisibilityUseCase, updateSaleFlowUseCase);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -233,6 +236,81 @@ class ReportPreferencesControllerTest {
                 .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.error").value("Indiquez si le classement est partagé avec les employés"));
         verifyNoInteractions(updateLeaderboardVisibilityUseCase);
+    }
+
+    // ── Story 19.12 — default sale flow ───────────────────────────────────────
+
+    @Test
+    void GET_preferences_defaultSaleFlow_isPos_forAnExistingTenant() throws Exception {
+        authenticateAs("VIEWER");
+        storedTrialPrefs();
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.DISABLED);
+
+        mockMvc.perform(get("/api/v1/tenant/preferences"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultSaleFlow").value("POS"))
+                .andExpect(jsonPath("$.data.leaderboardVisibleToEmployees").value(false));
+    }
+
+    @Test
+    void PUT_saleFlow_owner_returns200_withPreferences_evenWhenReportConfigDisabled() throws Exception {
+        authenticateAs("OWNER");
+        when(updateSaleFlowUseCase.update(SaleFlow.DOCUMENT))
+                .thenReturn(trialPrefs().withDefaultSaleFlow(SaleFlow.DOCUMENT));
+        when(entitlementService.state(TENANT_ID, "report-config")).thenReturn(ModuleState.DISABLED);
+
+        mockMvc.perform(put("/api/v1/tenant/sale-flow")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"defaultSaleFlow\": \"DOCUMENT\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.defaultSaleFlow").value("DOCUMENT"))
+                .andExpect(jsonPath("$.data.reportConfigEditable").value(false));
+    }
+
+    @Test
+    void PUT_saleFlow_beforeOnboarding_noPreferencesRow_returns404_not500() throws Exception {
+        authenticateAs("OWNER");
+        when(updateSaleFlowUseCase.update(SaleFlow.DOCUMENT))
+                .thenThrow(new DomainException(ErrorCode.PREFERENCES_NOT_FOUND));
+
+        mockMvc.perform(put("/api/v1/tenant/sale-flow")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"defaultSaleFlow\": \"DOCUMENT\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.domainCode").value("PREFERENCES_NOT_FOUND"))
+                .andExpect(jsonPath("$.error").value("Préférences introuvables"));
+    }
+
+    @Test
+    void PUT_saleFlow_nonOwner_returns403_andWritesNothing() throws Exception {
+        for (String role : List.of("MANAGER", "EMPLOYEE", "VIEWER")) {
+            authenticateAs(role);
+            mockMvc.perform(put("/api/v1/tenant/sale-flow")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"defaultSaleFlow\": \"DOCUMENT\"}"))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.domainCode").value("FORBIDDEN"));
+        }
+        verifyNoInteractions(updateSaleFlowUseCase);
+    }
+
+    @Test
+    void PUT_saleFlow_unknownOrMissingValue_isValidationError_inFrench() throws Exception {
+        authenticateAs("OWNER");
+        for (String body : List.of("{\"defaultSaleFlow\": \"CAISSE\"}", "{\"defaultSaleFlow\": \"pos\"}",
+                "{\"defaultSaleFlow\": null}", "{}")) {
+            mockMvc.perform(put("/api/v1/tenant/sale-flow")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isUnprocessableEntity())
+                    .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                    .andExpect(jsonPath("$.error").value("Parcours de vente inconnu : choisissez Caisse ou Documents"));
+        }
+        mockMvc.perform(put("/api/v1/tenant/sale-flow").contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error").value("Parcours de vente inconnu : choisissez Caisse ou Documents"));
+        verifyNoInteractions(updateSaleFlowUseCase);
     }
 
     // ── PUT /api/v1/tenant/report-preferences ─────────────────────────────────

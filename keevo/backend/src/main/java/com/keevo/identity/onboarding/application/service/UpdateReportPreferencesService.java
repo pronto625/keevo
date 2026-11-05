@@ -70,7 +70,8 @@ public class UpdateReportPreferencesService implements UpdateReportPreferencesUs
             command.inventoryReportChannel(),
             command.stockAlertChannel(),
             newTrendNotificationEnabled,
-            existing.leaderboardVisibleToEmployees() // Story 17.2 — not a report field, kept as is
+            existing.leaderboardVisibleToEmployees(), // Story 17.2 — not a report field, kept as is
+            existing.defaultSaleFlow() // Story 19.12 — not a report field, kept as is
         );
 
         TenantPreferences saved = preferencesRepository.update(updated);

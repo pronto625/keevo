@@ -1,5 +1,6 @@
 package com.keevo.store.store.domain.model;
 
+import com.keevo.store.api.StoreProfilePatch;
 import com.keevo.store.api.StoreType;
 
 import com.keevo.shared.domain.exception.DomainException;
@@ -32,10 +33,19 @@ public class StoreFactory {
      * @throws DomainException VALIDATION_ERROR if name is invalid
      */
     public static Store create(String name, StoreType type, String address, String phone) {
+        return create(name, type, address, phone, StoreProfilePatch.NONE);
+    }
+
+    /**
+     * Same, with the Bref fields (Story 19.12): validated by {@link StoreProfileRules}; omitted ones are null,
+     * the country defaults to {@code CM}.
+     */
+    public static Store create(String name, StoreType type, String address, String phone, StoreProfilePatch profile) {
         String trimmed = validateName(name);
         StoreType resolvedType = type != null ? type : StoreType.STORE;
         Instant now = Instant.now();
-        return new Store(UUID.randomUUID(), trimmed, resolvedType, address, phone, true, now, now);
+        return StoreProfileRules.apply(
+                new Store(UUID.randomUUID(), trimmed, resolvedType, address, phone, true, now, now), profile);
     }
 
     /**
