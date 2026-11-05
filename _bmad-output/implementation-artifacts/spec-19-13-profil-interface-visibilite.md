@@ -202,7 +202,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commit 54aad8e1), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** chaque module compris dans le plan peut être activé ou désactivé par le propriétaire pour toute l'entreprise ; un module désactivé ne fait plus rien (écritures refusées, pas de notification, pas de tâche planifiée) ; ses données sont gardées. L'API indique aussi le préréglage de navigation : Caisse ou Documents. À la mise en prod, la facturation est désactivée pour toutes les entreprises existantes ; une entreprise qui démarre en « Documents » a la caisse, le stock, l'inventaire et les transferts désactivés, une entreprise en « Caisse » a la facturation désactivée (règles modifiables par le super-admin).
 
@@ -243,7 +243,7 @@ Status: done
 
 ## Dashboard super-admin (autre dépôt)
 
-**Statut :** API livrée (commit `__COMMIT__`).
+**Statut :** API livrée (commit 54aad8e1).
 
 **Ce qui est fait côté API :** les modules activés au départ pour une nouvelle entreprise sont des règles en base, par parcours de vente (Caisse / Documents) et, si besoin, par secteur ; la règle la plus précise l'emporte, sans fusion. La vue des modules d'une entreprise indique aussi le choix du propriétaire.
 

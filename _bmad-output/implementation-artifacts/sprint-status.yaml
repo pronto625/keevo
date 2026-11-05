@@ -358,6 +358,7 @@ development_status:
   m19-5-roles-manager-viewer-permissions: backlog  # API 54c53a82 — navigation selon memberRole, lecteur en lecture seule, « Mon équipe » du gérant, choix du rôle à l'ajout
   m19-6-multi-roles-multi-entreprises: backlog  # API 89e4782d — sélecteur d'entreprise avec rôle, ajout d'un compte existant (existingAccount), refus sur compte partagé
   m19-12-boutiques-etendues-parcours-vente: backlog  # API d601c9f4 — fiche boutique (catégorie, description, NIU, RCCM, pays), logo de boutique, choix Caisse / Documents dans les réglages
+  m19-13-profil-interface-visibilite: backlog  # API 54aad8e1 — navigation selon navigationPreset et modules activés, écran Paramètres › Mes modules (interrupteurs owner), choix Caisse / Documents à l'inscription
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -373,6 +374,7 @@ development_status:
   d19-7b-plans-fusion: backlog  # API 42783992 — « Activer une offre » (planCode, Team par défaut), refus 422 plan archivé / date, profils : membres par boutique, kind, archived
   d19-8-compteurs-usage-quotas: backlog  # API 2611efd3 — section « Quotas » de l'écran d'un plan (GET/PUT plan-profiles, quotas)
   d19-1-users-identifiants-multiples: backlog  # API 19-1 — liste des comptes : ownerPhone peut être "" (owner sans téléphone, à afficher « — ») ; rien d'autre
+  d19-13-profil-interface-visibilite: backlog  # API 54aad8e1 — écran « Modules au démarrage » (règles par parcours et secteur), « Désactivé par le propriétaire » sur la fiche entreprise
 
   # ─────────────────────────────────────────────────────────
   # Epic 17: Complétion Fonctionnelle & Gating Produit (Phase 7)
