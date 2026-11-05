@@ -198,7 +198,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commit d601c9f4), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 ### Ce qui est fait côté API
 - Une boutique porte maintenant, comme dans Bref : `category` (19 clés), `description`, `niu`, `rccm`, `country` (code pays à deux lettres, `CM` par défaut) et un logo (`logoUrl`).

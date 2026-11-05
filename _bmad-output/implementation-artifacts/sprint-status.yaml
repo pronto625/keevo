@@ -357,6 +357,7 @@ development_status:
   m19-4-login-username-membres: backlog  # API 0238c034 — écran identifiant + mot de passe, ajout de membre par identifiant, mot de passe temporaire affiché une fois
   m19-5-roles-manager-viewer-permissions: backlog  # API 54c53a82 — navigation selon memberRole, lecteur en lecture seule, « Mon équipe » du gérant, choix du rôle à l'ajout
   m19-6-multi-roles-multi-entreprises: backlog  # API 89e4782d — sélecteur d'entreprise avec rôle, ajout d'un compte existant (existingAccount), refus sur compte partagé
+  m19-12-boutiques-etendues-parcours-vente: backlog  # API d601c9f4 — fiche boutique (catégorie, description, NIU, RCCM, pays), logo de boutique, choix Caisse / Documents dans les réglages
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
