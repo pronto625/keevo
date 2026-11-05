@@ -25,8 +25,8 @@ Make the Keevo Spring Boot backend able to welcome a Bref Point user exactly as 
 - Story 19.9c: Meta templates for Keevo's WhatsApp messages
 - Story 19.10: Minimum app versions
 - Story 19.11: Handle a large number of tenants (R1)
-- Story 19.12: Extended stores and sale-path preference
-- Story 19.13: Interface profile — new modules disabled, can be enabled in settings
+- Story 19.12: Extended stores and sale-path preference — done
+- Story 19.13: Interface profile — modules new to the user disabled, can be enabled in settings
 
 ## Requirements & Constraints
 
@@ -41,6 +41,14 @@ Make the Keevo Spring Boot backend able to welcome a Bref Point user exactly as 
 - **Messaging:** configurable provider fallback; no secrets in logs; quota charged only after provider success, in a short transaction outside the HTTP call; fail-fast on missing secrets only for enabled channels. Keevo free-text WhatsApp messages (daily/weekly report, subscription reminders and changes, stock and sync-silence alerts, account deletion) must each get an approved Meta UTILITY template or move to push + inbox (19.9c; list and wording validated by the user, then submitted to Meta).
 - **Minimum versions (19.10):** a VIEWER (or MANAGER) on V1 2.0.1 sees a seller UI and loses offline sales rejected at sync — enforce a minimum version for these roles, or refuse their V1 login with a clear French message.
 - **Load (19.11):** with N schemas (measured tenants × 2): boot < 2 min, tenant provisioning < 5 s, one module migration on all schemas < 10 min; a missed target needs an architecture decision before epic 24. Includes notification inbox retention: set-based per-tenant purge (e.g. read > 90 days) and removal of a departed user's rows.
+- **Interface profile (19.13):**
+  - `GET /tenants/me/modules` and the preferences also return the interface profile: navigation preset (`CAISSE`/`DOCUMENT`, derived from `default_sale_flow`) and, for each module in the plan, activated or disabled by the owner. A disabled module appears in no menu, tab, home or shortcut and runs nothing (no scheduled job, no notification, writes refused as for an inactive module).
+  - Existing Keevo tenant at go-live (idempotent Flyway): only modules active in V1 are activated; every module new to it (enriched documents, expenses, finance, assistant, WhatsApp Business, campaigns…) is in the plan if entitled but disabled.
+  - Imported Bref owner (24.2): only functions equivalent to what they had in Bref (per their Bref plan at migration) are activated; POS, stock, transfers, inventory, suppliers are disabled.
+  - Owner toggles a plan module in *Paramètres › Mes modules*: tenant-wide, synced to devices, audited; disabling deletes no data (re-enabling recovers it); a module outside the plan is not activable there (belongs to *Mon plan*); employees additionally see only what their role allows.
+  - New post-merge tenant: initial activated modules follow the activity and sale path chosen at sign-up, via DB rules editable from the super-admin dashboard (nothing hard-coded).
+  - Routed from 19.8: grant `invoicing` to FREE (`profile_modules`), disabled by default for existing tenants like any new module (granting it earlier would show it in V1 apps of FREE tenants and turn every POS sale into an automatic invoice); the 300 documents/month quota is already enforced by 19.8; verify the sale → invoice bridge does not fire for an owner who has not enabled the module.
+  - Additive fields only on existing responses (V1 2.0.1 apps unchanged).
 - **Patterns & complexity (blocking in review):** each spec names its pattern and hot-path complexity; no N+1, set-based SQL, keyset pagination, indexes for new filters, batch jobs, single-statement atomic counters.
 - **No technical data in UI:** French labels, no UUIDs/raw codes. Backend only: each spec has a mobile section (and a dashboard section when it exposes super-admin API), tracked as `m19-*` / `d19-*` keys.
 
@@ -52,8 +60,8 @@ Make the Keevo Spring Boot backend able to welcome a Bref Point user exactly as 
 - **Plans:** plan code in a DB catalogue (with V1 compatibility code and kind, trial carried by `BUSINESS_TRIAL`); changes traced in `tenant_plan_events`.
 - **Usage counters:** one `UPDATE … WHERE used + n <= limit RETURNING used`, never read-then-write.
 - **App versions:** `public.app_versions(app_identity, platform, min_version, latest_version, store_url, message)`; unauthenticated `GET /api/v1/app-version/check?identity=&platform=&version=` → `{updateRequired, updateAvailable, storeUrl, message}`; dashboard edits audited.
-- **Stores:** add `category` (19 Bref values), `description`, `logo_path` (file-storage port, size/type checked), `niu`, `rccm`, `country` (default CM), all in the sync delta. `tenant_preferences.default_sale_flow ∈ {POS, DOCUMENT}`: POS for existing tenants, DOCUMENT for imported Bref owners, owner-editable.
-- **Interface profile:** entitlement (plan includes module) and owner activation are distinct; usable only when both. Owner deactivation reuses `DISABLED` with an owner origin, never purges data. `GET /tenants/me/modules` adds the navigation preset (`CAISSE`/`DOCUMENT`) and per-module activated/disabled state; a disabled module runs no jobs or notifications and its writes are refused. Initial activation rules for new tenants are DB data; the Flyway backfill is idempotent (V1 modules on, new ones off). `invoicing` is granted to FREE here, disabled for existing tenants; the sale → invoice bridge must not fire unless enabled.
+- **Stores (delivered by 19.12):** `category` (19 Bref values), `description`, `logo_path` (file-storage port, size/type checked), `niu`, `rccm`, `country` (default CM), all in the sync delta. `tenant_preferences.default_sale_flow ∈ {POS, DOCUMENT}`: POS for existing tenants, DOCUMENT for imported Bref owners, owner-editable. Writes go through `TenantSaleFlowCommandPort.set(schema, SaleFlow)` (identity.api, audited) and `StoreLogoUseCase` (storage port, unique file name, `logo_path`) — never direct SQL on these columns.
+- **Interface profile:** entitlement (plan includes module, 16-1/16-3/19.7) and owner activation (19.13) are distinct; a module is usable only when both. Owner deactivation reuses the module lifecycle `DISABLED` state with an owner origin, never purges data. Initial activation rules are DB data.
 - **Load:** core tenant DDL moves under per-module Flyway; `TenantSchemaSyncService` leaves the boot path.
 
 ## UX & Interaction Patterns
@@ -66,4 +74,4 @@ Make the Keevo Spring Boot backend able to welcome a Bref Point user exactly as 
 - 19.3b nonce verification pairs with the RN sign-in screens (23.1). 19.5b, 19.6b and 19.9c cannot be coded before the user's product decisions (19.9c also needs Meta approval).
 - 19.10 closes the V1 MANAGER/VIEWER gap opened by 19.5. 19.13 depends on 19.12 (`default_sale_flow`), 19.7 and 19.8 (documents quota).
 - Routed elsewhere: SMS packs and credit → 21.3; super-admin offer editing → 21.10; per-tenant WhatsApp Business and `bref_facture` → 21.5; identity collisions at import → 24.7.
-- Epic 20 needs 19.1, 19.5, 19.7, 19.8. Migration import (24.2) creates the interface profile and DOCUMENT preference; 19.11 load results gate epic 24. RN screens (22.3, 23.x) consume these endpoints.
+- Epic 20 needs 19.1, 19.5, 19.7, 19.8. Migration import (24.2) creates the interface profile and sets the DOCUMENT preference and store logos through 19.12's `TenantSaleFlowCommandPort` and `StoreLogoUseCase` (routed from the 19.12 review); 19.11 load results gate epic 24. RN screens (22.3, 23.x) consume these endpoints; RN navigation shows only activated modules of the interface profile (22.9, 23.10).
