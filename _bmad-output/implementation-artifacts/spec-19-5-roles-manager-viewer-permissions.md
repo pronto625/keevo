@@ -163,7 +163,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit de la story 19.5, voir `git log --grep "feat(19-5)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+**Statut :** API livrée (commit 54c53a82). Conventions : spec-16-11 ; synchro : spec-16-10.
 
 **Ce qui est fait côté API :** rôles gérant (MANAGER), vendeur (EMPLOYEE), lecteur (VIEWER) en plus du propriétaire ; le lecteur ne peut rien modifier ; le gérant gère l'équipe de sa boutique.
 
