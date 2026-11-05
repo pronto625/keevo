@@ -359,6 +359,7 @@ development_status:
   m19-6-multi-roles-multi-entreprises: backlog  # API 89e4782d — sélecteur d'entreprise avec rôle, ajout d'un compte existant (existingAccount), refus sur compte partagé
   m19-12-boutiques-etendues-parcours-vente: backlog  # API d601c9f4 — fiche boutique (catégorie, description, NIU, RCCM, pays), logo de boutique, choix Caisse / Documents dans les réglages
   m19-13-profil-interface-visibilite: backlog  # API 54aad8e1 — navigation selon navigationPreset et modules activés, écran Paramètres › Mes modules (interrupteurs owner), choix Caisse / Documents à l'inscription
+  m19-10-versions-minimales-app: backlog  # API 25b0eff8 — écran « Mise à jour requise » via app-version/check, en-tête X-App-Version sur toutes les requêtes
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -375,6 +376,7 @@ development_status:
   d19-8-compteurs-usage-quotas: backlog  # API 2611efd3 — section « Quotas » de l'écran d'un plan (GET/PUT plan-profiles, quotas)
   d19-1-users-identifiants-multiples: backlog  # API 19-1 — liste des comptes : ownerPhone peut être "" (owner sans téléphone, à afficher « — ») ; rien d'autre
   d19-13-profil-interface-visibilite: backlog  # API 54aad8e1 — écran « Modules au démarrage » (règles par parcours et secteur), « Désactivé par le propriétaire » sur la fiche entreprise
+  d19-10-versions-minimales-app: backlog  # API 25b0eff8 — écran « Versions des applications » (GET/PUT/DELETE admin/app-versions)
 
   # ─────────────────────────────────────────────────────────
   # Epic 17: Complétion Fonctionnelle & Gating Produit (Phase 7)

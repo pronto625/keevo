@@ -171,7 +171,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commit 25b0eff8), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** le super-admin fixe, par application et par plateforme, la version minimale et la dernière version ; l'app demande au démarrage si elle doit se mettre à jour. Les comptes gérant et lecteur sont refusés aux applications qui ne s'identifient pas (ancienne app Keevo V1).
 
@@ -195,7 +195,7 @@ Status: done
 
 ## Dashboard super-admin (autre dépôt)
 
-**Statut :** API livrée (commit `__COMMIT__`).
+**Statut :** API livrée (commit 25b0eff8).
 
 **Ce qui est fait côté API :** lecture et modification des versions d'app par application (`bref`, `keevo`…) et plateforme (`ios`, `android`, `web`), avec trace dans les journaux et l'auteur de la dernière modification.
 
