@@ -621,4 +621,33 @@ class AuthControllerTest {
                         .content("{\"identityToken\":\"\"}"))
                 .andExpect(status().isUnprocessableEntity());
     }
+
+    @Test
+    @DisplayName("19.5 — V1 vocabulary: login memberships and tokens show MANAGER/VIEWER as EMPLOYEE, memberRole real")
+    void storeMemberRoles_shownInV1Vocabulary() throws Exception {
+        when(authenticateUserUseCase.authenticate(any(AuthenticateUserCommand.class))).thenReturn(
+                new LoginSessionResult("login-tok", List.of(
+                        new UserMembershipInfo("KV-ABC123", "Boutique", "MANAGER", "kv_abc123"),
+                        new UserMembershipInfo("KV-DEF456", "Dépôt", "VIEWER", "kv_def456"),
+                        new UserMembershipInfo("KV-GHI789", "Siège", "OWNER", "kv_ghi789"))));
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequest("+22670000001", "SecurePass1!"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.memberships[0].role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.memberships[0].memberRole").value("MANAGER"))
+                .andExpect(jsonPath("$.memberships[1].role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.memberships[1].memberRole").value("VIEWER"))
+                .andExpect(jsonPath("$.memberships[2].role").value("OWNER"))
+                .andExpect(jsonPath("$.memberships[2].memberRole").value("OWNER"));
+
+        when(selectTenantUseCase.select(any(SelectTenantCommand.class))).thenReturn(new AuthTokens(
+                "access", "refresh", 86400L, UUID.randomUUID(), "kv_abc123", "MANAGER"));
+        mockMvc.perform(post("/api/v1/auth/select-tenant")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"loginToken\":\"login-tok\",\"tenantCode\":\"KV-ABC123\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.memberRole").value("MANAGER"));
+    }
 }

@@ -17,6 +17,11 @@
   },
   "permissions": [],
   "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.store",
   "free": true
 }

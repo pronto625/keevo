@@ -27,7 +27,7 @@ import java.util.UUID;
 @Tag(name = "Inventory", description = "Inventory session management")
 @RestController
 @RequestMapping("/api/v1/inventory/sessions")
-@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class InventorySessionController {
 
     private final CreateInventorySessionUseCase createSessionUseCase;

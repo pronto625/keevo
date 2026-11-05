@@ -58,7 +58,7 @@ public class TenantExtensionsController {
 
     @Operation(summary = "Contributions of the active modules to an extension point, for the caller",
             security = @SecurityRequirement(name = "bearerAuth"))
-    @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     @GetMapping("/extensions/{pointId}")
     public ResponseEntity<ApiResponseWrapper<List<ExtensionDto>>> extensions(@PathVariable String pointId) {
         if (pointId == null || !extensions.declaredPoints().contains(pointId)) {

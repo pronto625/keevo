@@ -123,7 +123,7 @@ public class SyncController {
 
     @EntitlementExempt("synchronisation (contrôle par opération)")
     @PostMapping("/push")
-    @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     @Operation(summary = "Push batch of offline operations", description = "Processes a batch of queued offline operations. Each operation is handled independently — partial success is possible.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Batch processed (check per-operation status in results)"),
@@ -169,7 +169,7 @@ public class SyncController {
         // Story v1s-18-6 — audit entries written while applying the batch carry source=SYNC and
         // this deviceId (listener runs synchronously on this thread; context restored in finally).
         SyncBatchResult result = AuditContext.runAsSync(deviceId, () -> syncUseCase.pushBatch(
-                new PushBatchCommand(actorId, tenantId, deviceId, operations)));
+                new PushBatchCommand(actorId, tenantId, deviceId, operations, CurrentActor.role())));
 
         // ── Record successful push timestamp ──────────────────────────────────
         boolean written = userSyncStateRepository.upsert(
@@ -181,7 +181,7 @@ public class SyncController {
 
     @EntitlementExempt("synchronisation (contrôle par opération)")
     @GetMapping("/pull")
-    @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     @Operation(summary = "Pull delta changes since timestamp",
             description = "Returns all entities modified after the given timestamp. " +
                     "Omit 'since' for full sync (first-time). " +
@@ -261,7 +261,7 @@ public class SyncController {
 
     @RequiresEntitlement(value = "sync", access = RequiresEntitlement.Access.READ)
     @GetMapping("/devices")
-    @PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     @Operation(summary = "List active devices for current tenant",
             description = "Returns all devices that have pushed sync data for this tenant.")
     @ApiResponses({

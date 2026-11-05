@@ -42,7 +42,8 @@ public class AuditLogExportDatasetProvider implements ExportDatasetProvider {
     private static final Set<String> CRITERIA = Set.of(CRITERION_USER_ID, CRITERION_ACTION,
             CRITERION_ENTITY_TYPE, CRITERION_ENTITY_ID, CRITERION_Q);
 
-    static final Map<String, String> ROLES = Map.of("OWNER", "Propriétaire", "EMPLOYEE", "Employé");
+    static final Map<String, String> ROLES = Map.of("OWNER", "Propriétaire", "MANAGER", "Gérant",
+            "EMPLOYEE", "Employé", "VIEWER", "Lecteur");
     static final Map<String, String> SOURCES = Map.of("ONLINE", "En ligne", "SYNC", "Synchronisé",
             "SYSTEM", "Système");
 

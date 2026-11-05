@@ -28,7 +28,7 @@ public record StockAdjustedEvent(
         UUID actorId,
         String notes,          // nullable
         String tenantId,
-        String actorRole,      // Story 14.10: "OWNER" or "EMPLOYEE"
+        String actorRole,      // Story 14.10/19.5: membership role — OWNER, MANAGER, EMPLOYEE or VIEWER
         String actorName,      // Story 14.10: display name for notification body
         String storeName,      // Story 14.10: resolved store name
         String productName,    // Story 14.10: resolved product name (for notification body)

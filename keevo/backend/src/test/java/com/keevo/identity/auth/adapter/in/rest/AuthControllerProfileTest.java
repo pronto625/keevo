@@ -89,4 +89,27 @@ class AuthControllerProfileTest {
                 .andExpect(jsonPath("$.firstName").value("Awa"))
                 .andExpect(jsonPath("$.lastName").value("Ndiaye"));
     }
+
+    @Test
+    @DisplayName("19.5 — a MANAGER's profile: role EMPLOYEE (V1), memberRole MANAGER, his store")
+    void managerProfile_v1Vocabulary() throws Exception {
+        UUID tenantId = UUID.randomUUID();
+        UUID store = UUID.randomUUID();
+        when(userRepository.findById(userId)).thenReturn(Optional.of(new User(userId, "+237690000009", "h",
+                Role.MANAGER, true, Instant.now())));
+        when(tenantRepository.findBySchemaName("kv_prof01")).thenReturn(Optional.of(new com.keevo.identity.auth.domain.model.Tenant(
+                tenantId, "KV-PROF01", "kv_prof01", "Boutique", com.keevo.identity.api.TenantStatus.ACTIVE,
+                com.keevo.identity.api.PlanType.FREE, Instant.now())));
+        when(membershipRepository.findByUserIdAndTenantId(userId, tenantId)).thenReturn(Optional.of(
+                com.keevo.identity.auth.domain.model.UserTenantMembership.create(userId, tenantId, "MANAGER")));
+        when(employeeRepository.findByUserId(userId)).thenReturn(Optional.of(new com.keevo.identity.employee.domain.model.Employee(
+                UUID.randomUUID(), userId, store, "Awa", "Kamga",
+                com.keevo.identity.employee.domain.model.EmployeeStatus.ACTIVE, false, Instant.now())));
+
+        mockMvc.perform(get("/api/v1/auth/profile"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("EMPLOYEE"))
+                .andExpect(jsonPath("$.memberRole").value("MANAGER"))
+                .andExpect(jsonPath("$.storeId").value(store.toString()));
+    }
 }

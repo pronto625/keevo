@@ -80,7 +80,7 @@ class EmployeeRoleResolverTest {
 
         assertThat(result).containsEntry(a, new EmployeeRoleResolver.Enrichment("OWNER", "+237690000001", null))
                 .containsEntry(b, new EmployeeRoleResolver.Enrichment("EMPLOYEE", "", "Awa.K"))
-                .containsEntry(c, new EmployeeRoleResolver.Enrichment("EMPLOYEE", "+237690000003", null));
+                .containsEntry(c, new EmployeeRoleResolver.Enrichment("EMPLOYEE", "+237690000003", null, false)); // 19.5: no membership
         verify(tenantRepository, times(1)).findBySchemaName("kv_test01");
         verify(userRepository, times(1)).findAllByIds(List.of(a, b, c));
         verify(membershipRepository, times(1)).findByTenantIdAndUserIdIn(tenantId, List.of(a, b, c));
@@ -109,7 +109,7 @@ class EmployeeRoleResolverTest {
         when(membershipRepository.findByTenantIdAndUserIdIn(any(), anyCollection())).thenReturn(List.of());
 
         assertThat(resolver.resolveAll(List.of(userId)).get(userId))
-                .isEqualTo(new EmployeeRoleResolver.Enrichment("EMPLOYEE", null, null));
+                .isEqualTo(new EmployeeRoleResolver.Enrichment("EMPLOYEE", null, null, false));
     }
 
     @Test

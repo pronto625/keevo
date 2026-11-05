@@ -10,6 +10,10 @@ public final class AdminLabels {
     public static final String OWNER = "Propriétaire";
     /** Employee without a stored name. */
     public static final String EMPLOYEE = "Employé";
+    /** Story 19.5 — manager without a stored name. */
+    public static final String MANAGER = "Gérant";
+    /** Story 19.5 — read-only member without a stored name. */
+    public static final String VIEWER = "Lecteur";
     /** Actor of an automatic (SYSTEM) audit event. */
     public static final String SYSTEM = "Système";
     /** User that cannot be resolved (not a member, schema unreadable). */

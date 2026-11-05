@@ -32,7 +32,7 @@ public class TutorialController {
 
     @Operation(summary = "List the French video tutorials (external links)")
     @GetMapping("/tutorials")
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     public ResponseEntity<ApiResponseWrapper<List<TutorialResponseDto>>> list() {
         return ResponseEntity.ok(ApiResponseWrapper.ok(listTutorialsUseCase.list().stream()
                 .map(TutorialResponseDto::fromDomain).toList()));

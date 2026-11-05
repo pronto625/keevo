@@ -215,4 +215,22 @@ class SessionTokenIssuerTest {
                 .isEqualTo(SessionTokenIssuer.hash(session.tokens().refreshToken()))
                 .isNotEqualTo(session.tokens().refreshToken());
     }
+
+    @Test
+    void storeMemberRoles_legacyRoleClaimInV1Vocabulary_storeLookedUp() {
+        // Story 19.5 — MANAGER and VIEWER are store members (store + password flag read) and show as EMPLOYEE to V1.
+        for (String role : java.util.List.of("MANAGER", "VIEWER")) {
+            UUID store = UUID.randomUUID();
+            onboardingDone(true);
+            when(jdbcTemplate.queryForMap(contains("employees"), eq(USER_ID))).thenReturn(Map.of(
+                    "store_id", store, "password_change_required", false));
+
+            var session = issuer.issue(USER_ID, tenant(TenantStatus.ACTIVE), role);
+
+            var claims = jwt.parseToken(session.tokens().accessToken());
+            assertThat(claims.get("role")).isEqualTo("EMPLOYEE");
+            assertThat(claims.get("storeId")).isEqualTo(store.toString());
+            assertThat(session.tokens().role()).isEqualTo(role); // the real role stays server-side
+        }
+    }
 }

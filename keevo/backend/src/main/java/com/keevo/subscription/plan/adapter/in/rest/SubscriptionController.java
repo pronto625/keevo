@@ -71,10 +71,10 @@ public class SubscriptionController {
      * @throws DomainException FORBIDDEN (403) if called by SUPER_ADMIN
      */
     private void requireTenantRole() {
-        if (!(CurrentActor.isOwner() || CurrentActor.isEmployee())) {
+        if (!(CurrentActor.isOwner() || CurrentActor.isStoreMember())) {
             // H2 fix: authenticated but wrong role → 403 FORBIDDEN, not 401 UNAUTHORIZED
             throw new DomainException(ErrorCode.FORBIDDEN,
-                    "This endpoint requires OWNER or EMPLOYEE role");
+                    "This endpoint requires a tenant member role (OWNER, MANAGER, EMPLOYEE or VIEWER)");
         }
     }
 }

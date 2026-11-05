@@ -23,6 +23,11 @@
     "/stock/transfers",
     "/reports/boutiques"
   ],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.multi-store",
   "free": false
 }

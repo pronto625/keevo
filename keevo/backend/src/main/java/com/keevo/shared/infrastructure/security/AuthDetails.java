@@ -14,7 +14,7 @@ import java.util.UUID;
  */
 public record AuthDetails(
         String firstName,   // nullable — employee first name from the database
-        UUID storeId,       // nullable — only for EMPLOYEE actors
+        UUID storeId,       // nullable — only for store members (EMPLOYEE, MANAGER, VIEWER — Story 19.5)
         UUID sessionId      // nullable — tokens issued before device sessions carry none
 ) {
     public AuthDetails(String firstName, UUID storeId) {

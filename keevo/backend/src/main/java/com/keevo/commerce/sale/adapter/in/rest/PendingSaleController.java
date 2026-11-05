@@ -46,11 +46,11 @@ public class PendingSaleController {
 
     @RequiresEntitlement(value = "pos", access = RequiresEntitlement.Access.READ)
     @GetMapping("/pending")
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     public ResponseEntity<ApiResponseWrapper<List<PendingSaleResponseDto>>> getPendingSales() {
         // Fails closed (FORBIDDEN) for an EMPLOYEE token without an assigned store.
         UUID assignedStoreId = CurrentActor.assignedStoreId();
-        boolean isEmployee = CurrentActor.isEmployee();
+        boolean isEmployee = CurrentActor.isStoreMember();
         var sales = (assignedStoreId != null)
                 ? getPendingSalesUseCase.getPendingSalesByStore(assignedStoreId)
                 : getPendingSalesUseCase.getPendingSales();
@@ -62,7 +62,7 @@ public class PendingSaleController {
 
     @RequiresEntitlement("pos")
     @PostMapping("/{id}/validate")
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> validateSale(
             @PathVariable UUID id,
             @Valid @RequestBody ValidateSaleRequestDto request) {

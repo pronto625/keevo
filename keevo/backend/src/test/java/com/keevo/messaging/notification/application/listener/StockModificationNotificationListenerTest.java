@@ -343,4 +343,19 @@ class StockModificationNotificationListenerTest {
 
         verify(whatsAppSender).sendReport(eq("+237600000001"), anyString());
     }
+
+    @Test
+    @DisplayName("19.5 — a MANAGER's stock entry notifies the owners like an EMPLOYEE's")
+    void managerEntersStock_notified() {
+        listener.onStockAdjusted(new StockAdjustedEvent(
+                PRODUCT_ID, null, STORE_ID, MovementKind.STOCK_ENTRY,
+                0, 10, 10, ACTOR_ID, "Livraison", TENANT_ID,
+                "MANAGER", "Loïc", "Boutique A", "Widget", NOW));
+        advancePastWindow();
+        listener.flushExpiredWindows();
+
+        ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo("EMPLOYEE_STOCK_MODIFIED");
+    }
 }

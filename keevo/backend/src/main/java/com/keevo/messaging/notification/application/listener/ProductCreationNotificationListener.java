@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.shared.event.catalog.product.CsvImportCompletedEvent;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -93,8 +94,8 @@ public class ProductCreationNotificationListener {
     @ModuleScoped("alerts") // Story 13.10a: owner alerts are a paid module (plan §6.1)
     @ApplicationModuleListener
     public void onProductCreated(ProductCreatedEvent event) {
-        if (!"EMPLOYEE".equals(event.actorRole())) {
-            log.debug("[PRODUCT-NOTIF] Skipping — actor is not EMPLOYEE (role={})", event.actorRole());
+        if (!MemberRoles.isStoreMember(event.actorRole())) {
+            log.debug("[PRODUCT-NOTIF] Skipping — actor is not a store member (role={})", event.actorRole());
             return;
         }
         try {

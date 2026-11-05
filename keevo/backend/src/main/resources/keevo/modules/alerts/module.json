@@ -18,6 +18,11 @@
   },
   "permissions": [],
   "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.alerts",
   "free": false
 }

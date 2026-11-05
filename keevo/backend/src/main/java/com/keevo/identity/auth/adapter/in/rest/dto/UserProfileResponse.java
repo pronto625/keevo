@@ -7,7 +7,8 @@ import java.util.UUID;
  *
  * <p>Story 16.11 — the source of role, store, first name, password-change flag, account status and
  * onboarding state for the apps (cached on the device for offline display only). Story 19.4 — {@code username}
- * (additive, null when the account has none).
+ * (additive, null when the account has none). Story 19.5 — {@code role} in the V1 vocabulary (MANAGER and VIEWER
+ * show as EMPLOYEE), the real role in the additive {@code memberRole}.
  */
 public record UserProfileResponse(
         UUID userId,
@@ -20,5 +21,6 @@ public record UserProfileResponse(
         boolean passwordChangeRequired,
         String tenantStatus,
         boolean onboardingCompleted,
-        String username
+        String username,
+        String memberRole
 ) {}

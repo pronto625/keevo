@@ -398,4 +398,18 @@ class ProductCreationNotificationListenerTest {
         org.assertj.core.api.Assertions.assertThat(
                 m.isAnnotationPresent(org.springframework.context.event.EventListener.class)).isFalse();
     }
+
+    @Test
+    @DisplayName("19.5 — a MANAGER creating an ACTIVE product notifies the owners like an EMPLOYEE")
+    void managerCreatesProduct_notified() {
+        listener.onProductCreated(new ProductCreatedEvent(
+                PRODUCT_ID, "Test Product", "KEV-001", TENANT_ID, ACTOR_ID,
+                "MANAGER", "Loïc", "Boutique A", NOW));
+        advancePastWindow();
+        listener.flushExpiredWindows();
+
+        ArgumentCaptor<NotificationPayload> captor = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(pushNotifier).notifyOwners(eq(TENANT_ID), captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo("EMPLOYEE_PRODUCT_CREATED");
+    }
 }

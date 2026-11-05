@@ -4,6 +4,7 @@ import com.keevo.shared.module.application.ModuleCatalog;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Story 13.2 — a module catalogue for registry tests, independent of the shipped manifests: {@code core} (core),
@@ -57,6 +58,16 @@ public final class TestModuleCatalogs {
         ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, category, List.of(ModuleManifest.CORE_ID),
                 List.of(), List.of(), List.of(), List.of(), List.of(), null, permissions, List.of(), "module." + id,
                 free);
+        return new LoadedModuleManifest("test:" + id, manifest, "{}");
+    }
+
+    /** Story 19.5 — a module manifest declaring {@code permissions} and its {@code rolePermissions} as given. */
+    public static LoadedModuleManifest withPermissions(String id, ModuleCategory category, boolean free,
+                                                       List<String> permissions,
+                                                       Map<String, List<String>> rolePermissions) {
+        ModuleManifest manifest = new ModuleManifest(id, "1.0.0", id, category, List.of(ModuleManifest.CORE_ID),
+                List.of(), List.of(), List.of(), List.of(), List.of(), null, permissions, List.of(), "module." + id,
+                free, rolePermissions);
         return new LoadedModuleManifest("test:" + id, manifest, "{}");
     }
 

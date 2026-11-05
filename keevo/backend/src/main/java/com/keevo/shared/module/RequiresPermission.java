@@ -10,7 +10,7 @@ import java.lang.annotation.Target;
  * Declarative permission gate (Story 14.1, spec-socle §9.2): a method — or every method of a type — runs only if the
  * authenticated user holds <b>every</b> listed permission. Permissions are declared by module manifests
  * ({@code module.json} {@code permissions}) and mapped to roles by the modules: {@code OWNER} holds every declared
- * permission, {@code EMPLOYEE} those of {@link KeevoModule#employeePermissions()}, {@code SUPER_ADMIN} none.
+ * permission, {@code MANAGER}/{@code EMPLOYEE}/{@code VIEWER} those of their manifest {@code rolePermissions} (Story 19.5), {@code SUPER_ADMIN} none.
  *
  * <p>Enforced through Spring method security ({@code shared.module.infrastructure.PermissionMethodSecurityConfig}):
  * after {@code @PreAuthorize} and before the entitlement aspect ({@link RequiresEntitlement}, order 1000), so a role

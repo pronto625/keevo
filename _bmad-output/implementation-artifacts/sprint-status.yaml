@@ -416,7 +416,8 @@ development_status:
   19-3-authenticators-google-apple: done  # 2026-11-05 revue 5 couches (31 constats, 12 corrigés, 5 routés → 19-6/24-7/19-3b/19-4), 5 411 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-3-authenticators-google-apple.md)
   19-3b-comptes-sociaux-gestion: backlog  # 2026-11-04 revue 19.3 — 3 items (nonce, lier/retirer, révocation Apple)
   19-4-login-username-membres: done  # 2026-11-05 revue 5 couches (24 constats, 15 corrigés dont 1 bug préexistant), 5 481 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-4-login-username-membres.md)
-  19-5-roles-manager-viewer-permissions: backlog
+  19-5-roles-manager-viewer-permissions: done  # 2026-11-05 revue 5 couches (27 constats, 20 corrigés, 2 routés → 19-5b/19-10), 5 582 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-5-roles-manager-viewer-permissions.md)
+  19-5b-droits-fins-gerant-lecteur: backlog  # 2026-11-05 revue 19.5 — 4 items (décisions produit : ventes de la boutique pour le gérant, lectures du lecteur, sessions appareils, plafond)
   19-6-multi-roles-multi-entreprises: backlog  # 2026-11-04 revues 19.2 + 19.3 — 2 items (create-company pour un employé, liaison sociale par memberships)
   19-7a-plans-en-donnees: done  # 2026-11-04 revue 5 couches (50 constats, 25 corrigés, 8 reportés → 19-7b/21-10), 5 058 tests verts, live keevo_dev OK ; revue de suivi recommandée (cache du catalogue) | 2026-11-03 build-auto (spec-19-7a-plans-en-donnees.md) | 2026-11-03 découpage de 19.7 : catalogue des plans en base, plus d'énumération ni de CHECK sur les codes, compatibilité V1 ; comportement identique
   19-7b-plans-fusion: done  # 2026-11-04 revue 5 couches (36 constats, 27 corrigés), 5 077 tests verts, live keevo_dev + Redmi OK ; revue de suivi recommandée | 2026-11-04 build-auto (spec-19-7b-plans-fusion.md) | 2026-11-03 découpage de 19.7 : FREE/PRO/TEAM/BUSINESS, PREMIUM→TEAM, FREE 1 employé, essai 1 mois (plan BUSINESS_TRIAL)
@@ -424,7 +425,7 @@ development_status:
   19-9-sms-email-notifications-persistantes: done  # 2026-11-04 revue 5 couches (37 constats, 22 corrigés, 3 reportés → 19-11/19-9b), 5 194 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-9-fournisseurs-sms-email-notifications.md)
   19-9b-canaux-bref-whatsapp-meta-web-push: done  # 2026-11-04 revue 5 couches (40 constats, 11 corrigés, 1 reporté → 21-5 ; 1 item découpé → 19-9c), 5 361 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-9b-canaux-bref-whatsapp-meta-web-push.md)
   19-9c-modeles-meta-messages-keevo: backlog  # 2026-11-04 découpage de la 19-9b — 1 item (liste et libellés à valider par l'utilisateur, approbation Meta)
-  19-10-versions-minimales-app: backlog
+  19-10-versions-minimales-app: backlog  # 2026-11-05 revue 19.5 — 1 item (VIEWER sur V1 : ventes hors ligne perdues)
   19-11-charge-nombre-tenants: backlog  # 2026-11-04 revue 19.9 — 1 item routé (rétention des notifications)
   19-12-boutiques-etendues-parcours-vente: backlog
   19-13-profil-interface-visibilite: backlog  # 2026-11-03 FUS-UX6/UX7 : préréglage de navigation + modules nouveaux pour l'utilisateur désactivés par défaut, activables par l'owner dans Paramètres › Mes modules

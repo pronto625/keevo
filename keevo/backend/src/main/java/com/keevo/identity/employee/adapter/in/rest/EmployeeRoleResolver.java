@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -51,8 +52,15 @@ public class EmployeeRoleResolver {
      *                    {@code null} for an existing account), {@code null} only when the user is unknown
      * @param username    username as typed, {@code null} when none or when it is the technical username of a social
      *                    account (never shown)
+     * @param member      Story 19.5 — whether a membership row exists in the current tenant ({@code role} is then
+     *                    the real one, not the {@code "EMPLOYEE"} default); team scoping refuses non-members
      */
-    public record Enrichment(String role, String phoneNumber, String username) {
+    public record Enrichment(String role, String phoneNumber, String username, boolean member) {
+
+        /** A member's enrichment (tests, callers that do not scope). */
+        public Enrichment(String role, String phoneNumber, String username) {
+            this(role, phoneNumber, username, true);
+        }
     }
 
     /**
@@ -78,9 +86,21 @@ public class EmployeeRoleResolver {
             result.put(userId, new Enrichment(
                     roles.getOrDefault(userId, "EMPLOYEE"),
                     user == null ? null : (user.getPhoneNumber() != null ? user.getPhoneNumber() : ""),
-                    user == null || Usernames.isTechnical(user.getUsername()) ? null : user.getUsername()));
+                    user == null || Usernames.isTechnical(user.getUsername()) ? null : user.getUsername(),
+                    roles.containsKey(userId)));
         }
         return result;
+    }
+
+    /**
+     * Story 19.5 — the membership role of a user in the current tenant, empty when there is no membership (no
+     * default: team scoping must fail closed).
+     */
+    public Optional<String> membershipRole(UUID userId) {
+        var tenant = tenantRepository.findBySchemaName(TenantContext.getCurrentTenant())
+                .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
+        return membershipRepository.findByUserIdAndTenantId(userId, tenant.getId())
+                .map(UserTenantMembership::getRole);
     }
 
     /**

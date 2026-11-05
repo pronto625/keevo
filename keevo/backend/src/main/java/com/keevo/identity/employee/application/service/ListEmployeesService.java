@@ -24,6 +24,8 @@ public class ListEmployeesService implements ListEmployeesUseCase {
     @Override
     @Transactional(readOnly = true)
     public List<Employee> execute(ListEmployeesQuery query) {
-        return employeeRepository.findAllOrderByStatusAndCreatedAt();
+        return query.storeId() == null
+                ? employeeRepository.findAllOrderByStatusAndCreatedAt()
+                : employeeRepository.findAllByStoreOrderByStatusAndCreatedAt(query.storeId());
     }
 }

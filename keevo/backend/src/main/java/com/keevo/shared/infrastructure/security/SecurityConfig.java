@@ -54,7 +54,7 @@ public class SecurityConfig {
 
     /** Public paths that bypass authentication entirely. */
     /** Single source of the JWT-free paths — {@link JwtAuthFilter} reads it too. */
-    static final String[] PUBLIC_PATHS = {
+    public static final String[] PUBLIC_PATHS = {
             "/actuator/health",
             // Story 11.2 — no JWT parsing; guarded by PrometheusScrapeAuthFilter (static bearer token)
             "/actuator/prometheus",
@@ -156,7 +156,11 @@ public class SecurityConfig {
                         UsernamePasswordAuthenticationFilter.class)
 
                 // ── JWT filter: runs before Spring's authentication filter ────
-                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+
+                // ── Story 19.5 — VIEWER write ban: same anchor, added after the JWT filter, so it runs right after
+                //    authentication (inside JwtAuthFilter's chain call, the actor known).
+                .addFilterBefore(new ViewerWriteGuardFilter(objectMapper), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }

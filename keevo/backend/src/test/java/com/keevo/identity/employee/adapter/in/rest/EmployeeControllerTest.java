@@ -5,6 +5,7 @@ import com.keevo.identity.employee.domain.model.Employee;
 import com.keevo.identity.employee.domain.model.EmployeeActivity;
 import com.keevo.identity.employee.domain.model.EmployeeStatus;
 import com.keevo.identity.employee.domain.port.in.*;
+import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
@@ -12,7 +13,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -49,8 +49,9 @@ class EmployeeControllerTest {
     @Mock SetEmployeePasswordUseCase setEmployeePasswordUseCase;
     @Mock EmployeeRoleResolver employeeRoleResolver;
     @Mock GetEmployeeActivityUseCase getEmployeeActivityUseCase;
+    @Mock EmployeeRepository employeeRepository;
 
-    @InjectMocks EmployeeController employeeController;
+    EmployeeController employeeController;
 
     MockMvc mockMvc;
     UUID actorId;
@@ -60,6 +61,10 @@ class EmployeeControllerTest {
 
     @BeforeEach
     void setUp() {
+        employeeController = new EmployeeController(createEmployeeUseCase, listEmployeesUseCase, reassignStoreUseCase,
+                deactivateEmployeeUseCase, reactivateEmployeeUseCase, regeneratePasswordUseCase, updateEmployeeUseCase,
+                changeEmployeeRoleUseCase, setEmployeePasswordUseCase, employeeRoleResolver, getEmployeeActivityUseCase,
+                new EmployeeTeamScope(employeeRepository, employeeRoleResolver));
         mockMvc = MockMvcBuilders.standaloneSetup(employeeController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

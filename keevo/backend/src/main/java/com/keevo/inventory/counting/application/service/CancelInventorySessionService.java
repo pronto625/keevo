@@ -1,5 +1,6 @@
 package com.keevo.inventory.counting.application.service;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.shared.event.catalog.counting.InventorySessionCancelledEvent;
 import com.keevo.inventory.counting.domain.model.InventorySession;
 import com.keevo.inventory.counting.domain.port.in.CancelInventorySessionCommand;
@@ -34,7 +35,7 @@ public class CancelInventorySessionService implements CancelInventorySessionUseC
                         "Session not found: " + command.sessionId()));
 
         // RBAC: EMPLOYEE can only cancel their own session
-        if ("EMPLOYEE".equals(command.actorRole())
+        if (MemberRoles.isStoreMember(command.actorRole())
                 && !session.getStartedBy().equals(command.actorId())) {
             throw new DomainException(ErrorCode.FORBIDDEN,
                     "Employees can only cancel their own sessions");

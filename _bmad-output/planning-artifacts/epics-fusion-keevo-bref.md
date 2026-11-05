@@ -538,6 +538,17 @@ So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/se
 **When** l'app Flutter actuelle reçoit un rôle MANAGER ou VIEWER
 **Then** elle ne plante pas (rôle inconnu traité comme EMPLOYEE en lecture) — test sur le parseur Flutter
 
+### Story 19.5b : Droits fins du gérant et du lecteur (décisions produit)
+
+> **Créée le 2026-11-05** (revue 19.5). La 19.5 applique la règle « jamais moins restreint qu'un vendeur » ; ces points demandent une décision produit avant d'être codés.
+
+- [ ] [Deferred-from: revue 19.5, 2026-11-05] MANAGER : voir les ventes, l'historique et les sessions d'inventaire de toute sa boutique (aujourd'hui seulement les siennes, comme un vendeur) et pouvoir annuler une session d'un de ses vendeurs [SaleHistoryController, GetSalesHistoryService, CancelInventorySessionService].
+- [ ] [Deferred-from: revue 19.5, 2026-11-05] VIEWER : lectures en POST (demandes d'export, aperçus) refusées par la règle « jamais d'écriture » ; et historique des ventes vide (il ne vend pas) — définir ce qu'un lecteur doit voir [ViewerWriteGuardFilter, SaleHistoryController].
+- [ ] [Deferred-from: revue 19.5, 2026-11-05] MANAGER : sessions d'appareils de ses vendeurs (`/employees/{id}/sessions`) toujours réservées au patron ; réactivation par le gérant d'un membre désactivé par le patron (alerte au patron ?) [DeviceSessionController, EmployeeTeamScope].
+- [ ] [Deferred-from: revue 19.5, 2026-11-05] MANAGER et VIEWER comptent dans le plafond d'employés du plan (`UserCountAdapter` compte toute ligne active) — confirmer la règle commerciale.
+
+**Critère provisoire :** **Given** les décisions validées par l'utilisateur **When** un gérant ou un lecteur utilise l'app **Then** il voit et fait exactement ce qui est décidé, testé par rôle.
+
 ### Story 19.6 : Une personne, plusieurs rôles dans plusieurs entreprises
 
 As a **commerçant qui utilise Keevo et Bref**,
@@ -675,6 +686,9 @@ So that **OTP, envoi de documents et notifications Bref fonctionnent dans Keevo*
 As a **super-admin**,
 I want **imposer une version minimale par plateforme et par identité d'app**,
 So that **je peux retirer Flutter et l'ancienne app Bref en temps voulu (FUS-FR31)**.
+
+**Éléments reportés routés vers 19.10 (revue 19.5, 2026-11-05) :**
+- [ ] [Deferred-from: revue 19.5, 2026-11-05] un VIEWER sur l'app V1 2.0.1 voit l'interface d'un vendeur (rôle affiché EMPLOYEE) ; ses ventes saisies hors ligne sont refusées à la synchro (REJECTED/FORBIDDEN, définitif) et donc perdues — imposer une version minimale aux comptes MANAGER/VIEWER, ou refuser leur connexion depuis V1 avec un message clair.
 
 **Acceptance Criteria:**
 

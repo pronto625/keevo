@@ -51,7 +51,7 @@ import java.util.UUID;
 @Tag(name = "Leaderboard", description = "Seller leaderboard (OWNER; EMPLOYEE when shared, anonymised)")
 @RestController
 @RequestMapping("/api/v1/reporting/leaderboard")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class LeaderboardController {
 
     /** Shop time zone — same as ProfitabilityController / JdbcProfitabilityRepository. */

@@ -1,7 +1,11 @@
 package com.keevo.shared.module;
 
+import com.keevo.identity.api.Role;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * A validated module manifest ({@code keevo/modules/<id>/module.json}, spec-socle §3). Production instances are only
@@ -29,6 +33,10 @@ import java.util.Objects;
  * @param routes          client routes contributed
  * @param entitlement     entitlement key ({@code module.<id>} by default)
  * @param free            part of the free offer
+ * @param rolePermissions Story 19.5 — the permissions granted per membership role ({@code MANAGER}, {@code EMPLOYEE},
+ *                        {@code VIEWER}; {@code OWNER} implicitly holds every permission): an immutable sorted copy,
+ *                        empty when the manifest declares none. Completeness and consistency are validated at boot by
+ *                        {@code ModulePermissions}.
  */
 public record ModuleManifest(
         String id,
@@ -45,7 +53,11 @@ public record ModuleManifest(
         List<String> permissions,
         List<String> routes,
         String entitlement,
-        boolean free) {
+        boolean free,
+        Map<String, List<String>> rolePermissions) {
+
+    /** Story 19.5 — the membership roles every manifest must declare in {@code rolePermissions}. */
+    public static final List<String> DECLARED_ROLES = Role.STORE_MEMBER_NAMES;
 
     /** Id of the mandatory core module, required by every other module. */
     public static final String CORE_ID = "core";
@@ -73,6 +85,36 @@ public record ModuleManifest(
         extensionPoints = extensionPoints == null ? ExtensionPoints.NONE : extensionPoints;
         permissions = immutable(permissions, "permissions", id);
         routes = immutable(routes, "routes", id);
+        TreeMap<String, List<String>> byRole = new TreeMap<>();
+        if (rolePermissions != null) {
+            for (Map.Entry<String, List<String>> entry : rolePermissions.entrySet()) {
+                if (entry.getKey() == null) {
+                    throw new IllegalArgumentException("Module '" + id + "': 'rolePermissions' has a null role");
+                }
+                byRole.put(entry.getKey(), immutable(entry.getValue(), "rolePermissions." + entry.getKey(), id));
+            }
+        }
+        rolePermissions = Collections.unmodifiableMap(byRole);
+    }
+
+    /**
+     * A manifest whose {@code rolePermissions} grants nothing to {@code MANAGER}, {@code EMPLOYEE} and {@code VIEWER}
+     * (explicit empty entries) — hand-built manifests (tests, tooling).
+     */
+    public ModuleManifest(String id, String version, String displayName, ModuleCategory category,
+                          List<String> requires, List<String> enhances, List<String> publishes,
+                          List<String> consumes, List<String> provides, List<String> needs,
+                          ExtensionPoints extensionPoints, List<String> permissions, List<String> routes,
+                          String entitlement, boolean free) {
+        this(id, version, displayName, category, requires, enhances, publishes, consumes, provides, needs,
+                extensionPoints, permissions, routes, entitlement, free, noRolePermissions());
+    }
+
+    /** Explicit empty entries for every {@link #DECLARED_ROLES declared role}. */
+    public static Map<String, List<String>> noRolePermissions() {
+        TreeMap<String, List<String>> none = new TreeMap<>();
+        DECLARED_ROLES.forEach(role -> none.put(role, List.of()));
+        return none;
     }
 
     /** An immutable copy; a null list or entry → {@link IllegalArgumentException} naming the field. */

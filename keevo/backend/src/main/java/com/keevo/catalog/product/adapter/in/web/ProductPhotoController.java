@@ -41,7 +41,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/products/{id}/photo")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class ProductPhotoController {
 
     /** Declared types accepted up front; the bytes themselves are checked by the normalizer. */

@@ -20,6 +20,11 @@
   "routes": [
     "/reports/equipe"
   ],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.advanced-reports",
   "free": false
 }

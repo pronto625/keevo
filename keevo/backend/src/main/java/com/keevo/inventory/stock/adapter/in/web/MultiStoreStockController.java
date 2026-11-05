@@ -35,7 +35,7 @@ import java.util.UUID;
 @Tag(name = "Multi-Store Stock", description = "Centralized multi-store stock overview")
 @RestController
 @RequestMapping("/api/v1/stock")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class MultiStoreStockController {
 
     private final GetMultiStoreOverviewUseCase     overviewUseCase;

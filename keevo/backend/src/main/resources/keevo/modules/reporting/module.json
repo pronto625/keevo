@@ -21,6 +21,11 @@
   },
   "permissions": [],
   "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.reporting",
   "free": true
 }

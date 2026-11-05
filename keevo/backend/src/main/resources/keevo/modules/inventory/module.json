@@ -20,6 +20,11 @@
   },
   "permissions": [],
   "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.inventory",
   "free": true
 }

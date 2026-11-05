@@ -189,4 +189,23 @@ class SaleHistoryControllerTest {
                 .andExpect(jsonPath("$.data.content[0].items[0].productName").value("Produit A"))
                 .andExpect(jsonPath("$.data.content[0].items[0].quantity").value(2));
     }
+
+    @Test
+    void GET_salesHistory_manager_forcedToOwnSales_likeAnEmployee() throws Exception {
+        // Story 19.5 — a MANAGER is a store member: an employeeId filter is ignored, his own sales only
+        mockJwt("MANAGER");
+        when(getSalesHistoryUseCase.getSalesHistory(any(SalesHistoryQuery.class)))
+                .thenReturn(new PageImpl<>(List.of(createSale())));
+
+        mockMvc.perform(get("/api/v1/sales/history")
+                        .header("Authorization", "Bearer fake-token")
+                        .param("storeId", storeId.toString())
+                        .param("employeeId", UUID.randomUUID().toString())
+                        .param("from", "2026-03-19")
+                        .param("to", "2026-03-19"))
+                .andExpect(status().isOk());
+
+        verify(getSalesHistoryUseCase).getSalesHistory(argThat(query ->
+                "MANAGER".equals(query.role()) && actorId.equals(query.employeeId())));
+    }
 }

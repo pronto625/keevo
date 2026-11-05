@@ -22,6 +22,11 @@
     "/inventory/counting/:sessionId",
     "/inventory/gap-report/:sessionId"
   ],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.counting",
   "free": false
 }

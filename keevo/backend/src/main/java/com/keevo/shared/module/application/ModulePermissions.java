@@ -1,5 +1,6 @@
 package com.keevo.shared.module.application;
 
+import com.keevo.identity.api.Role;
 import com.keevo.shared.module.KeevoModule;
 import com.keevo.shared.module.ModuleManifest;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -11,30 +12,41 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * Story 14.1 — the permissions of the installed modules and their role mapping (spec-socle §9.2):
+ * Story 14.1 / 19.5 — the permissions of the installed modules and their role mapping (spec-socle §9.2):
  * <ul>
  *   <li>{@code OWNER}: every permission declared by an installed manifest ({@code permissions});</li>
- *   <li>{@code EMPLOYEE}: the union of the modules' {@link KeevoModule#employeePermissions()};</li>
+ *   <li>{@code MANAGER}, {@code EMPLOYEE}, {@code VIEWER}: the union of the manifests' {@code rolePermissions} entry
+ *       for that role (Story 19.5, cross-checked with {@link KeevoModule#permissionsFor(Role)});</li>
  *   <li>{@code SUPER_ADMIN} (or any other role): none — the platform administrator is not a tenant user.</li>
  * </ul>
- * Validated at boot (fail-fast, one {@link IllegalStateException}): a module's employee permissions must be declared
- * by its own manifest, and a permission may be declared by one manifest only.
+ * Validated at boot (fail-fast, one {@link IllegalStateException}): a permission may be declared by one manifest only;
+ * every manifest declares an explicit entry (an empty array allowed) for each of {@code MANAGER}, {@code EMPLOYEE},
+ * {@code VIEWER} and no other role; a role lists only permissions of its own module; a {@code VIEWER} entry holds
+ * only read permissions (ending in {@value #READ_SUFFIX}); a module bean's code-side declaration, when it gives one,
+ * equals its manifest's. Cost O(modules × roles), once.
  */
 @Service
 @Lazy(false)
 public class ModulePermissions implements SmartInitializingSingleton {
 
-    public static final String ROLE_OWNER = "OWNER";
-    public static final String ROLE_EMPLOYEE = "EMPLOYEE";
+    public static final String ROLE_OWNER = Role.OWNER.name();
+
+    /** Story 19.5 — a VIEWER may only hold permissions ending with this suffix (read permissions). */
+    public static final String READ_SUFFIX = "_VIEW";
 
     private static final String ROLE_PREFIX = "ROLE_";
+
+    /** The roles whose permissions are declared per manifest ({@code OWNER} holds them all implicitly). */
+    private static final List<Role> DECLARED_ROLES = Role.STORE_MEMBERS;
 
     private final ModuleCatalog catalog;
     private final KeevoModuleDirectory modules;
@@ -45,7 +57,7 @@ public class ModulePermissions implements SmartInitializingSingleton {
         this.modules = modules;
     }
 
-    private record Mapping(Set<String> declared, Set<String> employee) {
+    private record Mapping(Set<String> declared, Map<Role, Set<String>> byRole) {
     }
 
     @Override
@@ -81,19 +93,34 @@ public class ModulePermissions implements SmartInitializingSingleton {
         return roles;
     }
 
+    /** The permissions held by one role: all for {@code OWNER}, the declared ones for the others, none otherwise. */
+    public Set<String> permissionsFor(Role role) {
+        if (role == null) {
+            return Set.of();
+        }
+        Mapping m = mapping();
+        if (role == Role.OWNER) {
+            return m.declared();
+        }
+        return m.byRole().getOrDefault(role, Set.of());
+    }
+
     /** The permissions held by a user with these roles (role names without the {@code ROLE_} prefix). */
     public Set<String> permissionsOf(Collection<String> roles) {
         if (roles == null || roles.isEmpty()) {
             return Set.of();
         }
-        Mapping m = mapping();
         if (roles.contains(ROLE_OWNER)) {
-            return m.declared();
+            return mapping().declared();
         }
-        if (roles.contains(ROLE_EMPLOYEE)) {
-            return m.employee();
+        if (roles.size() == 1) {
+            return permissionsFor(Role.parse(roles.iterator().next())); // the cached immutable set, no copy
         }
-        return Set.of();
+        Set<String> held = new TreeSet<>();
+        for (String name : roles) {
+            held.addAll(permissionsFor(Role.parse(name)));
+        }
+        return Collections.unmodifiableSet(held);
     }
 
     private Mapping mapping() {
@@ -112,6 +139,8 @@ public class ModulePermissions implements SmartInitializingSingleton {
     private Mapping build() {
         List<String> problems = new ArrayList<>();
         TreeMap<String, String> owner = new TreeMap<>();
+        Map<Role, Set<String>> byRole = new EnumMap<>(Role.class);
+        DECLARED_ROLES.forEach(role -> byRole.put(role, new TreeSet<>()));
         for (ModuleManifest manifest : catalog.manifests()) {
             for (String permission : manifest.permissions()) {
                 String previous = owner.putIfAbsent(permission, manifest.id());
@@ -120,27 +149,57 @@ public class ModulePermissions implements SmartInitializingSingleton {
                             + manifest.id() + "'");
                 }
             }
+            Map<String, List<String>> declaredByRole = manifest.rolePermissions();
+            for (String role : declaredByRole.keySet()) {
+                Role parsed = Role.parse(role);
+                if (parsed == null || !DECLARED_ROLES.contains(parsed)) {
+                    problems.add("module '" + manifest.id() + "' declares rolePermissions for '" + role
+                            + "' (only MANAGER, EMPLOYEE and VIEWER are declared; OWNER holds every permission)");
+                }
+            }
+            for (Role role : DECLARED_ROLES) {
+                List<String> granted = declaredByRole.get(role.name());
+                if (granted == null) {
+                    problems.add("module '" + manifest.id() + "' has no explicit rolePermissions entry for "
+                            + role.name() + " (an empty array grants nothing)");
+                    continue;
+                }
+                for (String permission : granted) {
+                    if (!manifest.permissions().contains(permission)) {
+                        problems.add("module '" + manifest.id() + "' grants '" + permission + "' to " + role.name()
+                                + " but its manifest does not declare it");
+                    } else if (role == Role.VIEWER && !permission.endsWith(READ_SUFFIX)) {
+                        problems.add("module '" + manifest.id() + "' grants the write permission '" + permission
+                                + "' to VIEWER (a VIEWER never writes)");
+                    } else {
+                        byRole.get(role).add(permission);
+                    }
+                }
+            }
         }
-        Set<String> employee = new TreeSet<>();
         for (KeevoModule module : modules.all()) {
-            Set<String> granted = module.employeePermissions();
-            if (granted == null) {
+            ModuleManifest manifest = catalog.find(module.id()).orElse(null);
+            if (manifest == null) {
                 continue;
             }
-            List<String> own = catalog.find(module.id()).map(ModuleManifest::permissions).orElse(List.of());
-            for (String permission : granted) {
-                if (!own.contains(permission)) {
-                    problems.add("module '" + module.id() + "' grants '" + permission + "' to EMPLOYEE but its "
-                            + "manifest does not declare it");
-                } else {
-                    employee.add(permission);
+            for (Role role : DECLARED_ROLES) {
+                Set<String> code = module.permissionsFor(role);
+                if (code == null) {
+                    continue;
+                }
+                Set<String> declared = new TreeSet<>(manifest.rolePermissions().getOrDefault(role.name(), List.of()));
+                if (!declared.equals(new TreeSet<>(code))) {
+                    problems.add("module '" + module.id() + "' grants " + new TreeSet<>(code) + " to " + role.name()
+                            + " in code but " + declared + " in its manifest");
                 }
             }
         }
         if (!problems.isEmpty()) {
             throw new IllegalStateException("Invalid module permissions: " + String.join("; ", problems));
         }
+        Map<Role, Set<String>> frozen = new EnumMap<>(Role.class);
+        byRole.forEach((role, set) -> frozen.put(role, Collections.unmodifiableSet(set)));
         return new Mapping(Collections.unmodifiableSet(new TreeSet<>(owner.keySet())),
-                Collections.unmodifiableSet(employee));
+                Collections.unmodifiableMap(frozen));
     }
 }

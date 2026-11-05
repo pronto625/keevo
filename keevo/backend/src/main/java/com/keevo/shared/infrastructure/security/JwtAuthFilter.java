@@ -1,6 +1,7 @@
 package com.keevo.shared.infrastructure.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.identity.api.Role;
 import com.keevo.shared.infrastructure.activity.UserActivityRecorder;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
@@ -271,9 +272,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 }
             }
 
-            // Story 3.5 — EMPLOYEE runtime guards, from the employee row of the access state.
+            // Story 3.5 — EMPLOYEE runtime guards, from the employee row of the access state (Story 19.5: every
+            // store member — EMPLOYEE, MANAGER, VIEWER — is pinned to its store like an EMPLOYEE).
             AccessState.EmployeeState employee = state.employee();
-            if ("EMPLOYEE".equals(role)) {
+            if (Role.isStoreMember(role)) {
                 if (employee == null || "INACTIVE".equals(employee.status())) {
                     writeError(response, "ACCOUNT_INACTIVE");
                     return;
@@ -299,7 +301,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             var auth = new UsernamePasswordAuthenticationToken(
                     userId, null,
                     List.of(new SimpleGrantedAuthority("ROLE_" + role)));
-            if ("EMPLOYEE".equals(role)) {
+            if (Role.isStoreMember(role)) {
                 auth.setDetails(new AuthDetails(employee.firstName(), employee.storeId(), sessionId));
             } else {
                 // Owner: first name of its employee row when it has one (promoted employee).

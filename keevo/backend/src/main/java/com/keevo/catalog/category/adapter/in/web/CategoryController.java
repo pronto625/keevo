@@ -35,7 +35,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/categories")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class CategoryController {
 
     private final CreateCategoryUseCase createCategoryUseCase;

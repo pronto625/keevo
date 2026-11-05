@@ -46,7 +46,7 @@ public final class TenantLastActivitySql {
                 + "    AND (a.source IS NULL OR a.source <> 'SYSTEM') "
                 + "    AND EXISTS (SELECT 1 FROM public.user_tenant_memberships m "
                 + "                WHERE m.user_id = a.user_id AND m.tenant_id = CAST(? AS uuid) "
-                + "                  AND m.role IN ('OWNER', 'EMPLOYEE')) "
+                + "                  AND m.role IN (" + MemberRolesSql.IN_LIST + ")) "
                 + "  ORDER BY a.occurred_at DESC LIMIT 1), "
                 + "(SELECT MAX(so.processed_at) FROM " + s + ".sync_operations_log so), "
                 + "(SELECT MAX(u.first_seen_at) FROM public.user_daily_activity u WHERE u.tenant_id = CAST(? AS uuid)))";

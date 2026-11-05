@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.service;
 
+import com.keevo.identity.api.Role;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
 import com.keevo.shared.application.port.sync.SyncOperationStatus;
@@ -165,6 +166,16 @@ public class SyncPushService implements SyncUseCase {
 
     @Override
     public SyncBatchResult pushBatch(PushBatchCommand command) {
+        // Story 19.5 — a VIEWER never writes: one role check per batch (role resolved by the push endpoint), every
+        // operation REJECTED/FORBIDDEN, no handler called, no log row written.
+        if (Role.VIEWER.name().equals(command.actorRole())) {
+            log.info("[Sync] Push of {} operation(s) by a VIEWER refused (read-only role)",
+                    command.operations().size());
+            return new SyncBatchResult(Instant.now(), command.operations().stream()
+                    .map(op -> new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null,
+                            ErrorCode.FORBIDDEN.name()))
+                    .toList());
+        }
         List<SyncOperation> sorted = dependencyOrder(command.operations());
 
         List<SyncOperationResult> results = new ArrayList<>();

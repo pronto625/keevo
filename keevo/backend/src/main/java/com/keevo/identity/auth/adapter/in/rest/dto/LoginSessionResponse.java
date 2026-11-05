@@ -26,13 +26,15 @@ public record LoginSessionResponse(
      *
      * @param tenantCode  public tenant code (e.g., "KV-ABC123")
      * @param tenantName  human-readable name (e.g., "Boutique Simon")
-     * @param role        user role in this tenant
+     * @param role        user role in this tenant, V1 vocabulary (MANAGER and VIEWER show as EMPLOYEE — Story 19.5)
      * @param schemaName  internal schema name (e.g., "kv_abc123")
+     * @param memberRole  Story 19.5 — the real membership role (OWNER | MANAGER | EMPLOYEE | VIEWER), additive
      */
     public record MembershipDto(
             String tenantCode,
             String tenantName,
             String role,
-            String schemaName
+            String schemaName,
+            String memberRole
     ) {}
 }

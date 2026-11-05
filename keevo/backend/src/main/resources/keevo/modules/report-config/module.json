@@ -20,6 +20,11 @@
   "routes": [
     "/settings/reports"
   ],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.report-config",
   "free": false
 }

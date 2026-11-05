@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.commerce.sale.adapter.in.rest.dto.RecordSaleRequestDto;
 import com.keevo.commerce.sale.adapter.in.rest.dto.RecordSaleResponseDto;
 import com.keevo.commerce.sale.domain.model.SaleFactory;
@@ -23,7 +24,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/sales")
-@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class SaleController {
 
     private final RecordSaleUseCase recordSaleUseCase;
@@ -43,7 +44,7 @@ public class SaleController {
         UUID jwtStoreId = CurrentActor.assignedStoreIdOrNull();
 
         // storeId guard: EMPLOYEE must sell only in their assigned store
-        if ("EMPLOYEE".equals(role) && jwtStoreId == null) {
+        if (MemberRoles.isStoreMember(role) && jwtStoreId == null) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Employee must have an assigned store");
         }
 

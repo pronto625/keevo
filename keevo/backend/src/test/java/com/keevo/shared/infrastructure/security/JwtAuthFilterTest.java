@@ -227,6 +227,36 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    @DisplayName("19.5 — MANAGER and VIEWER are pinned to their store like an EMPLOYEE (store in AuthDetails)")
+    void storeMembersPinnedToStore() throws Exception {
+        for (String role : java.util.List.of("MANAGER", "VIEWER")) {
+            UUID userId = UUID.randomUUID();
+            UUID store = UUID.randomUUID();
+            String token = jwt.generateAccessToken(userId, SCHEMA, null, null);
+            when(accessStates.get(userId, SCHEMA)).thenReturn(new AccessState(role, true, "ACTIVE", null,
+                    new AccessState.EmployeeState(store, "ACTIVE", false, "Awa"), Set.of()));
+
+            Authentication auth = authSeenByChain(request("GET", "/api/v1/products", token));
+
+            assertThat(authorities(auth)).containsExactly("ROLE_" + role);
+            assertThat(auth.getDetails()).isEqualTo(new AuthDetails("Awa", store, null));
+        }
+    }
+
+    @Test
+    @DisplayName("19.5 — a MANAGER / VIEWER without an active employee row → 401 ACCOUNT_INACTIVE (like an EMPLOYEE)")
+    void storeMemberWithoutEmployeeRowInactive() throws Exception {
+        for (String role : java.util.List.of("MANAGER", "VIEWER")) {
+            UUID userId = UUID.randomUUID();
+            String token = jwt.generateAccessToken(userId, SCHEMA, null, null);
+            when(accessStates.get(userId, SCHEMA)).thenReturn(new AccessState(role, true, "ACTIVE", null, null,
+                    Set.of()));
+            assertThat(run(request("GET", "/api/v1/products", token)).getContentAsString())
+                    .contains("ACCOUNT_INACTIVE");
+        }
+    }
+
+    @Test
     @DisplayName("16.11 — demoted manager: the next request carries the new role (403 is the controller's job)")
     void demotedRoleAppliesAtNextRequest() throws Exception {
         UUID userId = UUID.randomUUID();

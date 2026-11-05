@@ -23,7 +23,7 @@ public record ProductCreatedEvent(
         String productSku,
         String tenantId,
         UUID actorId,
-        String actorRole,   // Story 14.10: "OWNER" or "EMPLOYEE"
+        String actorRole,   // Story 14.10/19.5: membership role — OWNER, MANAGER, EMPLOYEE or VIEWER
         String actorName,   // Story 14.10: display name for notification body
         String storeName,   // Story 14.10: employee's assigned store name (nullable for OWNER)
         Instant occurredAt

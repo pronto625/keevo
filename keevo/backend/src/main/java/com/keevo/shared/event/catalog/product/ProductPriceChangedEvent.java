@@ -15,7 +15,7 @@ import java.util.UUID;
  *
  * @param oldPrice  catalogue price before the change, in XAF
  * @param newPrice  catalogue price after the change, in XAF
- * @param actorRole {@code "OWNER"} or {@code "EMPLOYEE"}
+ * @param actorRole the actor's membership role: {@code "OWNER"}, {@code "MANAGER"}, {@code "EMPLOYEE"} or {@code "VIEWER"}
  */
 public record ProductPriceChangedEvent(
         UUID productId,

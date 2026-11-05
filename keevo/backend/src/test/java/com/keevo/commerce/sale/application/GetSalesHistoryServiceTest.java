@@ -158,4 +158,17 @@ class GetSalesHistoryServiceTest {
                 PaymentMode.CASH, 5000, 0, SaleStatus.COMPLETED,
                 Instant.now(), Instant.now(), List.of(item));
     }
+
+    @Test
+    void getSalesHistory_asManager_filtersOnEmployeeId_likeAnEmployee() {
+        // Story 19.5 — MANAGER is a store member: own sales only
+        when(saleRepository.findByStoreIdAndEmployeeIdAndDateRange(
+                eq(STORE_ID), eq(EMPLOYEE_ID), eq(FROM), eq(TO), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(createSale(EMPLOYEE_ID))));
+
+        var result = service.getSalesHistory(new SalesHistoryQuery(STORE_ID, EMPLOYEE_ID, FROM, TO, "MANAGER", 0, 50));
+
+        assertThat(result.getContent()).hasSize(1);
+        verify(saleRepository, org.mockito.Mockito.never()).findByStoreIdAndDateRange(any(), any(), any(), any());
+    }
 }

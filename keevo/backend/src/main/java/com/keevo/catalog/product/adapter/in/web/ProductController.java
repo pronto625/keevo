@@ -35,7 +35,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/products")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class ProductController {
 
     private final CreateOrRestoreProductUseCase createOrRestoreProductUseCase; // 17.13: archived name → restored

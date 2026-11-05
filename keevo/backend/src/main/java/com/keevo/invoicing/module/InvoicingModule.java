@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import java.util.Set;
 
 /**
  * The {@code invoicing} module — « Facturation » (Story 14.1, first paid module built on the socle; MOD-FR7, MOD-FR17).
@@ -17,8 +16,9 @@ import java.util.Set;
  * only in the schemas of tenants that use the module (registration trial, activation, or first gated call), reached
  * through JDBC adapters — no JPA entity, nothing in {@code public}.
  *
- * <p>Permissions: {@code OWNER} holds all four; {@code EMPLOYEE} may view, create and issue / record payment
- * ({@link #employeePermissions()}); cancelling and the seller settings ({@code INVOICE_MANAGE}) are owner decisions.
+ * <p>Permissions, declared by the manifest ({@code rolePermissions}, Story 19.5): {@code OWNER} holds all
+ * four; {@code MANAGER} and {@code EMPLOYEE} may view, create and issue / record payment; {@code VIEWER} may only view;
+ * cancelling and the seller settings ({@code INVOICE_MANAGE}) are owner decisions.
  */
 @Component
 public class InvoicingModule implements KeevoModule {
@@ -35,11 +35,6 @@ public class InvoicingModule implements KeevoModule {
     @Override
     public String id() {
         return ID;
-    }
-
-    @Override
-    public Set<String> employeePermissions() {
-        return Set.of(INVOICE_VIEW, INVOICE_CREATE, INVOICE_SEND);
     }
 
     @Override

@@ -30,7 +30,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/day-closures")
-@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class DayClosureController {
 
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");

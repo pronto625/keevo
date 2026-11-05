@@ -21,8 +21,18 @@ import java.util.UUID;
  */
 public interface SyncUseCase {
 
+    /**
+     * @param actorRole Story 19.5 — the actor's real role (server-side access state), resolved by the push endpoint;
+     *                  a {@code VIEWER} batch is refused operation by operation. {@code null} for the legacy
+     *                  constructor (callers outside the HTTP endpoint).
+     */
     record PushBatchCommand(UUID actorId, String tenantId, String deviceId,
-                            List<SyncOperation> operations) {}
+                            List<SyncOperation> operations, String actorRole) {
+
+        public PushBatchCommand(UUID actorId, String tenantId, String deviceId, List<SyncOperation> operations) {
+            this(actorId, tenantId, deviceId, operations, null);
+        }
+    }
 
     SyncBatchResult pushBatch(PushBatchCommand command);
 

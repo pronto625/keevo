@@ -267,4 +267,37 @@ class CreateEmployeeServiceTest {
         assertThat(result.temporaryPassword()).isNotBlank();
         assertThat(result.temporaryPassword()).doesNotStartWith("$2a$");
     }
+
+    @Test
+    @DisplayName("19.5: a VIEWER member → VIEWER membership and global role; an OWNER role is refused before any write")
+    void execute_createsViewer_refusesOwner() {
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+        when(subscriptionRepository.findActivePlan()).thenReturn(Optional.of(premiumSubscription));
+        when(employeeCountPort.countActive(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new com.keevo.identity.employee.domain.port.out.EmployeeCountPort.ActiveCounts(0, 0));
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedpassword");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(tenantRepository.findBySchemaName(any())).thenReturn(Optional.of(
+                new Tenant(UUID.randomUUID(), "KV-TEST01", "kv_test01", TenantStatus.ACTIVE, PlanType.PREMIUM_TRIAL, Instant.now())));
+        when(membershipRepository.save(any(UserTenantMembership.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(employeeRepository.save(any(Employee.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        createEmployeeService.execute(new CreateEmployeeCommand(
+                actorId, "+237690000001", "Léa", "Lecteur", storeId, null, "VIEWER"));
+
+        org.mockito.ArgumentCaptor<UserTenantMembership> membership =
+                org.mockito.ArgumentCaptor.forClass(UserTenantMembership.class);
+        verify(membershipRepository).save(membership.capture());
+        org.assertj.core.api.Assertions.assertThat(membership.getValue().getRole()).isEqualTo("VIEWER");
+        org.mockito.ArgumentCaptor<User> user = org.mockito.ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(user.capture());
+        org.assertj.core.api.Assertions.assertThat(user.getValue().getRole())
+                .isEqualTo(com.keevo.identity.api.Role.VIEWER);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> createEmployeeService.execute(new CreateEmployeeCommand(
+                        actorId, "+237690000002", "Awa", "Owner", storeId, null, "OWNER")))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class)
+                .extracting("domainCode").isEqualTo("VALIDATION_FAILED");
+        verify(membershipRepository, times(1)).save(any(UserTenantMembership.class));
+    }
 }

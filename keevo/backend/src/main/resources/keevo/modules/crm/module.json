@@ -28,6 +28,11 @@
     "/suppliers/new",
     "/suppliers/:id"
   ],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.crm",
   "free": true
 }

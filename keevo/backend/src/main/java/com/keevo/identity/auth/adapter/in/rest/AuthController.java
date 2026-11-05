@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.adapter.in.rest;
 
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.adapter.in.rest.dto.AppleSignInDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.CreateCompanyRequestDto;
 import com.keevo.identity.auth.adapter.in.rest.dto.GoogleSignInDto;
@@ -584,7 +585,7 @@ public class AuthController {
         return new UserProfileResponse(
             data.userId(),
             data.phoneNumber(),
-            data.role(),
+            Role.v1Label(data.role()),
             data.firstName(),
             data.lastName(),
             data.storeId(),
@@ -592,14 +593,15 @@ public class AuthController {
             data.passwordChangeRequired(),
             data.tenantStatus(),
             data.onboardingCompleted(),
-            data.username()
+            data.username(),
+            data.role()
         );
     }
 
     private LoginSessionResponse toLoginSessionResponse(LoginSessionResult result) {
         List<LoginSessionResponse.MembershipDto> dtos = result.memberships().stream()
                 .map(m -> new LoginSessionResponse.MembershipDto(
-                        m.tenantCode(), m.tenantName(), m.role(), m.schemaName()))
+                        m.tenantCode(), m.tenantName(), Role.v1Label(m.role()), m.schemaName(), m.role()))
                 .toList();
         return new LoginSessionResponse(result.loginToken(), dtos);
     }
@@ -610,10 +612,11 @@ public class AuthController {
             tokens.refreshToken(),
             tokens.userId(),
             tokens.tenantId(),
-            tokens.role(),
+            Role.v1Label(tokens.role()),
             tokens.expiresIn(),
             tokens.storeId(),
-            tokens.passwordChangeRequired()
+            tokens.passwordChangeRequired(),
+            tokens.role()
         );
     }
 }

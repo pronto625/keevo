@@ -1,5 +1,6 @@
 package com.keevo.admin.tenant.application.service;
 
+import com.keevo.admin.MemberRolesSql;
 import com.keevo.admin.AdminLabels;
 import com.keevo.admin.TenantLastActivitySql;
 import com.keevo.shared.domain.PhoneNumbers;
@@ -141,7 +142,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                 + "COALESCE(owner.phone_number, '') AS owner_phone, "
                 + "(SELECT COUNT(DISTINCT m.user_id) "
                 + " FROM public.user_tenant_memberships m "
-                + " WHERE m.tenant_id = t.id AND m.role IN ('OWNER','EMPLOYEE')) AS employee_count "
+                + " WHERE m.tenant_id = t.id AND m.role IN (" + MemberRolesSql.IN_LIST + ")) AS employee_count "
                 + "FROM public.tenants t "
                 + "LEFT JOIN public.user_tenant_memberships m_owner "
                 + "    ON m_owner.tenant_id = t.id AND m_owner.role = 'OWNER' "
@@ -182,7 +183,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                 + "COALESCE(owner.phone_number, '') AS owner_phone, "
                 + "(SELECT COUNT(DISTINCT m.user_id) "
                 + " FROM public.user_tenant_memberships m "
-                + " WHERE m.tenant_id = t.id AND m.role IN ('OWNER','EMPLOYEE')) AS employee_count "
+                + " WHERE m.tenant_id = t.id AND m.role IN (" + MemberRolesSql.IN_LIST + ")) AS employee_count "
                 + "FROM public.tenants t "
                 + "LEFT JOIN public.user_tenant_memberships m_owner "
                 + "    ON m_owner.tenant_id = t.id AND m_owner.role = 'OWNER' "
@@ -521,7 +522,7 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
                 + "(SELECT MAX(d.activity_date) FROM public.user_daily_activity d "
                 + "  WHERE d.user_id = m.user_id AND d.tenant_id = m.tenant_id) AS last_day "
                 + "FROM public.user_tenant_memberships m "
-                + "WHERE m.tenant_id = ? AND m.role IN ('OWNER','EMPLOYEE')",
+                + "WHERE m.tenant_id = ? AND m.role IN (" + MemberRolesSql.IN_LIST + ")",
                 (rs, row) -> {
                     java.sql.Date day = rs.getDate("last_day");
                     String uid = rs.getString("user_id");
@@ -561,10 +562,16 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         return out;
     }
 
-    /** Stored name, else « Propriétaire » for an owner, « Employé » for an employee. */
+    /** Stored name, else the role label: « Propriétaire », « Gérant », « Lecteur », otherwise « Employé ». */
     static String memberName(String fullName, String role) {
         if (fullName != null && !fullName.isBlank()) return fullName.trim();
-        return "OWNER".equals(role) ? AdminLabels.OWNER : AdminLabels.EMPLOYEE;
+        if (role == null) return AdminLabels.EMPLOYEE;
+        return switch (role) {
+            case "OWNER" -> AdminLabels.OWNER;
+            case "MANAGER" -> AdminLabels.MANAGER;
+            case "VIEWER" -> AdminLabels.VIEWER;
+            default -> AdminLabels.EMPLOYEE;
+        };
     }
 
     /** Audit actor: « Système » for a SYSTEM event, else the employee name, « Propriétaire », or unknown. */

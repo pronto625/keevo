@@ -26,7 +26,7 @@ class TenantLastActivitySqlTest {
                 .contains("a.source <> 'SYSTEM'")
                 // only the tenant's own users count (no Super Admin / outsider write)
                 .contains("public.user_tenant_memberships")
-                .contains("m.role IN ('OWNER', 'EMPLOYEE')");
+                .contains("m.role IN ('OWNER','MANAGER','EMPLOYEE','VIEWER')"); // Story 19.5: every membership role (from Role)
     }
 
     @Test

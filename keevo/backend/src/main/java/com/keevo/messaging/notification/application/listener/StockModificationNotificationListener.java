@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.shared.event.catalog.stock.MovementKind;
 import com.keevo.shared.event.catalog.stock.StockAdjustedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -93,8 +94,8 @@ public class StockModificationNotificationListener {
     @ApplicationModuleListener
     public void onStockAdjusted(StockAdjustedEvent event) {
         // Skip if not EMPLOYEE
-        if (!"EMPLOYEE".equals(event.actorRole())) {
-            log.debug("[STOCK-NOTIF] Skipping — actor is not EMPLOYEE (role={})", event.actorRole());
+        if (!MemberRoles.isStoreMember(event.actorRole())) {
+            log.debug("[STOCK-NOTIF] Skipping — actor is not a store member (role={})", event.actorRole());
             return;
         }
         // Skip SALE and TRANSFER movements (D2)

@@ -65,6 +65,11 @@ public class GetEmployeeActivityService implements GetEmployeeActivityUseCase {
         return compute(employeeRepository.findAllOrderByStatusAndCreatedAt());
     }
 
+    @Override
+    public List<EmployeeActivity> forStore(UUID storeId) {
+        return compute(employeeRepository.findAllByStoreOrderByStatusAndCreatedAt(storeId));
+    }
+
     private List<EmployeeActivity> compute(List<Employee> employees) {
         if (employees.isEmpty()) {
             return List.of();

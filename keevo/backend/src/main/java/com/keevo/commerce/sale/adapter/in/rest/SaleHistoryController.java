@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.adapter.in.rest;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.commerce.sale.adapter.in.rest.dto.*;
 import com.keevo.commerce.sale.domain.model.Sale;
@@ -28,7 +29,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/sales/history")
-@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class SaleHistoryController {
 
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
@@ -79,7 +80,7 @@ public class SaleHistoryController {
         String role = CurrentActor.role();
 
         // Security: EMPLOYEE can only see their own sales
-        UUID effectiveEmployeeId = "EMPLOYEE".equals(role) ? actorId : employeeId;
+        UUID effectiveEmployeeId = MemberRoles.isStoreMember(role) ? actorId : employeeId;
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "occurredAt"));
 

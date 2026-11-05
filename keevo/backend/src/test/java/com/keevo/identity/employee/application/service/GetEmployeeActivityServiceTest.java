@@ -202,4 +202,19 @@ class GetEmployeeActivityServiceTest {
         assertThat(service.forAll()).isEmpty();
         verifyNoInteractions(activityRepository);
     }
+
+    @Test
+    @DisplayName("19.5 forStore: only the store's rows (store query), one bulk activity read, never the tenant-wide list")
+    void forStore_readsTheStoreOnly() {
+        UUID store = UUID.randomUUID();
+        Employee a = employee(EmployeeStatus.ACTIVE, NOW.minus(Duration.ofDays(30)));
+        when(employeeRepository.findAllByStoreOrderByStatusAndCreatedAt(store)).thenReturn(List.of(a));
+        stubRaw(a, null);
+
+        List<EmployeeActivity> result = service.forStore(store);
+
+        assertThat(result).extracting(EmployeeActivity::employeeId).containsExactly(a.getId());
+        verify(activityRepository).findRawActivity(eq(List.of(a.getUserId())), any(), any(), any(), eq("kv_test"));
+        org.mockito.Mockito.verify(employeeRepository, org.mockito.Mockito.never()).findAllOrderByStatusAndCreatedAt();
+    }
 }

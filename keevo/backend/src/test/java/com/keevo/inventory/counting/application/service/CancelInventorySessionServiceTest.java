@@ -129,4 +129,16 @@ class CancelInventorySessionServiceTest {
         verify(eventPublisher).publishEvent(captor.capture());
         assertThat(captor.getValue().actorId()).isEqualTo(OWNER_ID);
     }
+
+    @Test
+    void cancel_manager_cannotCancelOthersSession() {
+        // Story 19.5 — MANAGER is restricted like an EMPLOYEE
+        var session = createActiveSession(OWNER_ID);
+        when(sessionRepository.findById(any())).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> service.execute(
+                new CancelInventorySessionCommand(SESSION_ID, EMPLOYEE_ID, "MANAGER")))
+                .isInstanceOf(DomainException.class)
+                .satisfies(ex -> assertThat(((DomainException) ex).getDomainCode()).isEqualTo("FORBIDDEN"));
+    }
 }

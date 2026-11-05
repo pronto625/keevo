@@ -1,5 +1,6 @@
 package com.keevo.identity.employee.application.service;
 
+import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.Usernames;
@@ -92,6 +93,11 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
             phone = PhoneNumbers.normalize(rawPhone);
         }
         String username = rawUsername != null ? Usernames.requireValid(rawUsername) : null;
+        // Story 19.5 — a member is created as EMPLOYEE (default), MANAGER or VIEWER; owners only by role change.
+        Role role = command.role() == null || command.role().isBlank() ? Role.EMPLOYEE : Role.parse(command.role());
+        if (role == null || !role.isStoreMember()) {
+            throw new DomainException(ErrorCode.VALIDATION_FAILED, "role must be MANAGER, EMPLOYEE or VIEWER");
+        }
 
         // 1. Check identifier uniqueness (friendly pre-check; the unique indexes stay the source of truth)
         if (phone != null && userRepository.existsByPhoneNumber(phone)) {
@@ -120,6 +126,9 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
 
         // 4. Create user in public.users
         User newUser = User.newEmployee(phone, username, hash);
+        if (role != Role.EMPLOYEE) {
+            newUser = newUser.withRole(role); // global role kept in step with the membership, as on a role change
+        }
         newUser = username == null ? userRepository.save(newUser) : insertWithUsername(newUser);
 
         // 5. Create membership in public.user_tenant_memberships
@@ -127,7 +136,7 @@ public class CreateEmployeeService implements CreateEmployeeUseCase {
         var tenant = tenantRepository.findBySchemaName(schemaName)
                 .orElseThrow(() -> new DomainException(ErrorCode.TENANT_NOT_FOUND));
         membershipRepository.save(
-                UserTenantMembership.create(newUser.getId(), tenant.getId(), "EMPLOYEE"));
+                UserTenantMembership.create(newUser.getId(), tenant.getId(), role.name()));
 
         // 6. Create employee in kv_xxx.employees
         Employee employee = Employee.create(

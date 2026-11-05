@@ -26,7 +26,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * ChangeEmployeeRoleService — Changes an employee's role within a tenant.
+ * ChangeEmployeeRoleService — Changes an employee's role within a tenant (Story 19.5: OWNER, MANAGER, EMPLOYEE,
+ * VIEWER).
  * Enforces anti-lockout: cannot change own role, cannot demote last active owner.
  * Also synchronizes the global {@code public.users.role} to prevent stale JWT roles
  * on refresh/password-change (see "Régression critique" in story 14.11).
@@ -36,7 +37,10 @@ import java.util.Set;
 @Service
 public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
 
-    private static final Set<String> VALID_ROLES = Set.of("OWNER", "EMPLOYEE");
+    static final String STORE_REQUIRED_MESSAGE = "Affectez d'abord ce membre à une boutique";
+
+    /** Story 19.5 — the membership roles an owner may assign. */
+    private static final Set<String> VALID_ROLES = Set.copyOf(Role.MEMBERSHIP_ROLE_NAMES);
 
     private final EmployeeRepository employeeRepository;
     private final UserRepository userRepository;
@@ -71,7 +75,7 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
         // 0. Validate role
         if (command.newRole() == null || !VALID_ROLES.contains(command.newRole())) {
             throw new DomainException(ErrorCode.VALIDATION_FAILED,
-                    "role must be OWNER or EMPLOYEE");
+                    "role must be OWNER, MANAGER, EMPLOYEE or VIEWER");
         }
 
         // 1. Load employee
@@ -81,6 +85,12 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
         // 2. Self-demotion check (compare userId, not employeeId)
         if (employee.getUserId().equals(command.actorId())) {
             throw new DomainException(ErrorCode.CANNOT_CHANGE_OWN_ROLE);
+        }
+
+        // 2b. Story 19.5 — a store member (MANAGER, EMPLOYEE, VIEWER) is pinned to a store: a member without store
+        // (e.g. a former owner) would be refused everywhere, so he must be assigned to a store first.
+        if (Role.isStoreMember(command.newRole()) && employee.getStoreId() == null) {
+            throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, STORE_REQUIRED_MESSAGE);
         }
 
         // 3. Resolve tenantId from schema
@@ -99,8 +109,8 @@ public class ChangeEmployeeRoleService implements ChangeEmployeeRoleUseCase {
             return;
         }
 
-        // 5. Anti-lockout: cannot demote last active owner
-        if ("OWNER".equals(previousRole) && "EMPLOYEE".equals(command.newRole())) {
+        // 5. Anti-lockout: cannot demote last active owner (Story 19.5: OWNER → any other role)
+        if (Role.OWNER.name().equals(previousRole)) {
             // Story 13.9: two owners demoting each other concurrently — serialise per tenant so
             // the second count sees the first demotion (committed before the lock is released).
             transactionLock.lock("owners:" + tenantSchema);

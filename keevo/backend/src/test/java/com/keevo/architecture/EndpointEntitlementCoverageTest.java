@@ -286,8 +286,10 @@ class EndpointEntitlementCoverageTest {
                 .append("`WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`. ")
                 .append("Exempt handlers state why. ")
                 .append("A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: ")
-                .append("missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `EMPLOYEE` those its module grants, ")
-                .append("`SUPER_ADMIN` none.\n\n");
+                .append("missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` ")
+                .append("those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. ")
+                .append("A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers ")
+                .append("403 `FORBIDDEN` (Story 19.5).\n\n");
         long gated = endpoints.stream().filter(e -> !e.module().isEmpty()).count();
         sb.append("Handlers: ").append(endpoints.size()).append(" — gated: ").append(gated)
                 .append(", exempt: ").append(endpoints.size() - gated).append(".\n\n");

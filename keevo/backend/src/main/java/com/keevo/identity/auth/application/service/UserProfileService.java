@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.identity.api.Role;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.Usernames;
@@ -82,7 +83,7 @@ public class UserProfileService implements GetUserProfileUseCase {
 
         if (employeeOpt.isPresent()) {
             Employee emp = employeeOpt.get();
-            boolean employeeRole = "EMPLOYEE".equals(role);
+            boolean employeeRole = Role.isStoreMember(role); // Story 19.5: EMPLOYEE, MANAGER, VIEWER
             String storeName = employeeRole && emp.getStoreId() != null
                     ? storeQuery.findById(TenantContext.getCurrentTenant(), emp.getStoreId())
                             .map(s -> s.name()).orElse(null)

@@ -4,6 +4,7 @@ import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.identity.employee.adapter.in.rest.dto.*;
 import com.keevo.identity.employee.domain.model.CreateEmployeeResult;
 import com.keevo.identity.employee.domain.model.Employee;
+import com.keevo.identity.employee.domain.model.EmployeeActivity;
 import com.keevo.identity.employee.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -27,7 +28,9 @@ import java.util.stream.Collectors;
 /**
  * EmployeeController — REST adapter for employee management (Story 3.5).
  *
- * <p>All endpoints require JWT authentication (OWNER only).
+ * <p>All endpoints require JWT authentication. OWNER on every member; Story 19.5 — a MANAGER lists, creates and
+ * manages the {@code EMPLOYEE}/{@code VIEWER} members of his own store ({@link EmployeeTeamScope}); role change and
+ * store reassignment stay OWNER-only.
  */
 @Tag(name = "Employees", description = "Employee management")
 @EntitlementExempt("core: employés (plafond du plan)")
@@ -46,6 +49,7 @@ public class EmployeeController {
     private final SetEmployeePasswordUseCase setEmployeePasswordUseCase;
     private final EmployeeRoleResolver employeeRoleResolver;
     private final GetEmployeeActivityUseCase getEmployeeActivityUseCase;
+    private final EmployeeTeamScope teamScope;
 
     public EmployeeController(CreateEmployeeUseCase createEmployeeUseCase,
                                ListEmployeesUseCase listEmployeesUseCase,
@@ -57,7 +61,8 @@ public class EmployeeController {
                                ChangeEmployeeRoleUseCase changeEmployeeRoleUseCase,
                                SetEmployeePasswordUseCase setEmployeePasswordUseCase,
                                EmployeeRoleResolver employeeRoleResolver,
-                               GetEmployeeActivityUseCase getEmployeeActivityUseCase) {
+                               GetEmployeeActivityUseCase getEmployeeActivityUseCase,
+                               EmployeeTeamScope teamScope) {
         this.createEmployeeUseCase = createEmployeeUseCase;
         this.listEmployeesUseCase = listEmployeesUseCase;
         this.reassignStoreUseCase = reassignStoreUseCase;
@@ -69,6 +74,7 @@ public class EmployeeController {
         this.setEmployeePasswordUseCase = setEmployeePasswordUseCase;
         this.employeeRoleResolver = employeeRoleResolver;
         this.getEmployeeActivityUseCase = getEmployeeActivityUseCase;
+        this.teamScope = teamScope;
     }
 
     @Operation(summary = "Create a new employee",
@@ -87,11 +93,11 @@ public class EmployeeController {
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> createEmployee(
             @Valid @RequestBody CreateEmployeeRequestDto request) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireCreatable(request.storeId(), request.role());
         UUID actorId = CurrentActor.actorId();
         CreateEmployeeCommand command = new CreateEmployeeCommand(
                 actorId, request.phoneNumber(), request.firstName(),
-                request.lastName(), request.storeId(), request.username());
+                request.lastName(), request.storeId(), request.username(), request.role());
         CreateEmployeeResult result = createEmployeeUseCase.execute(command);
         TempPasswordResponseDto dto = new TempPasswordResponseDto(
                 toDto(result.employee()),
@@ -104,9 +110,16 @@ public class EmployeeController {
     @ApiResponse(responseCode = "200", description = "Employee list returned")
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<EmployeeResponseDto>>> listEmployees() {
-        CurrentActor.requireOwner("OWNER role required");
+        UUID scope = teamScope.listScope();
         UUID actorId = CurrentActor.actorId();
-        List<EmployeeResponseDto> dtos = toDtos(listEmployeesUseCase.execute(new ListEmployeesQuery(actorId)));
+        List<Employee> employees = listEmployeesUseCase.execute(new ListEmployeesQuery(actorId, scope));
+        Map<UUID, EmployeeRoleResolver.Enrichment> enrichment = enrich(employees);
+        if (scope != null) { // MANAGER: his EMPLOYEE/VIEWER members and himself, filtered with the bulk enrichment
+            employees = employees.stream()
+                    .filter(e -> teamScope.isVisibleTeamMember(e.getUserId(), enrichment.get(e.getUserId())))
+                    .toList();
+        }
+        List<EmployeeResponseDto> dtos = toDtos(employees, enrichment);
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
 
@@ -135,7 +148,7 @@ public class EmployeeController {
     @PatchMapping("/{employeeId}/deactivate")
     public ResponseEntity<ApiResponseWrapper<Void>> deactivateEmployee(
             @PathVariable UUID employeeId) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireManageable(employeeId);
         UUID actorId = CurrentActor.actorId();
         deactivateEmployeeUseCase.execute(new DeactivateEmployeeCommand(actorId, employeeId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
@@ -149,7 +162,7 @@ public class EmployeeController {
     @PatchMapping("/{employeeId}/reactivate")
     public ResponseEntity<ApiResponseWrapper<Void>> reactivateEmployee(
             @PathVariable UUID employeeId) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireManageable(employeeId);
         UUID actorId = CurrentActor.actorId();
         reactivateEmployeeUseCase.execute(new ReactivateEmployeeCommand(actorId, employeeId));
         return ResponseEntity.ok(ApiResponseWrapper.ok(null));
@@ -163,7 +176,7 @@ public class EmployeeController {
     @PostMapping("/{employeeId}/regenerate-password")
     public ResponseEntity<ApiResponseWrapper<TempPasswordResponseDto>> regeneratePassword(
             @PathVariable UUID employeeId) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireManageable(employeeId);
         UUID actorId = CurrentActor.actorId();
         CreateEmployeeResult result = regeneratePasswordUseCase.execute(
                 new RegeneratePasswordCommand(actorId, employeeId));
@@ -186,7 +199,8 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<EmployeeResponseDto>> updateEmployee(
             @PathVariable UUID employeeId,
             @Valid @RequestBody UpdateEmployeeRequestDto request) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireManageable(employeeId);
+        teamScope.requireNoStoreChange(request.storeId());
         if (!request.hasAtLeastOneField()) {
             throw new DomainException(ErrorCode.VALIDATION_FAILED,
                     "At least one field must be provided for update");
@@ -200,7 +214,7 @@ public class EmployeeController {
                 toDto(updated)));
     }
 
-    @Operation(summary = "Change employee role (OWNER ↔ EMPLOYEE)")
+    @Operation(summary = "Change a member's role (OWNER, MANAGER, EMPLOYEE, VIEWER) — OWNER only")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "Role changed"),
             @ApiResponse(responseCode = "403", description = "Not an OWNER, or anti-lockout guard"),
@@ -228,7 +242,7 @@ public class EmployeeController {
     public ResponseEntity<ApiResponseWrapper<Void>> setPassword(
             @PathVariable UUID employeeId,
             @Valid @RequestBody SetPasswordRequestDto request) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireManageable(employeeId);
         UUID actorId = CurrentActor.actorId();
         setEmployeePasswordUseCase.execute(
                 new SetEmployeePasswordCommand(actorId, employeeId, request.newPassword()));
@@ -244,8 +258,17 @@ public class EmployeeController {
     })
     @GetMapping("/activity")
     public ResponseEntity<ApiResponseWrapper<List<EmployeeActivityResponseDto>>> listActivity() {
-        CurrentActor.requireOwner("OWNER role required");
-        List<EmployeeActivityResponseDto> dtos = getEmployeeActivityUseCase.forAll().stream()
+        UUID scope = teamScope.listScope();
+        List<EmployeeActivity> activity = scope == null ? getEmployeeActivityUseCase.forAll()
+                : getEmployeeActivityUseCase.forStore(scope);
+        if (scope != null && !activity.isEmpty()) { // MANAGER: same visibility as his team list, one bulk call
+            Map<UUID, EmployeeRoleResolver.Enrichment> enrichment = employeeRoleResolver.resolveAll(activity.stream()
+                    .map(EmployeeActivity::userId).collect(Collectors.toCollection(LinkedHashSet::new)));
+            activity = activity.stream()
+                    .filter(x -> teamScope.isVisibleTeamMember(x.userId(), enrichment.get(x.userId())))
+                    .toList();
+        }
+        List<EmployeeActivityResponseDto> dtos = activity.stream()
                 .map(EmployeeActivityResponseDto::fromDomain).toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(dtos));
     }
@@ -259,7 +282,7 @@ public class EmployeeController {
     @GetMapping("/{employeeId}/activity")
     public ResponseEntity<ApiResponseWrapper<EmployeeActivityResponseDto>> getActivity(
             @PathVariable UUID employeeId) {
-        CurrentActor.requireOwner("OWNER role required");
+        teamScope.requireManageable(employeeId);
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 EmployeeActivityResponseDto.fromDomain(getEmployeeActivityUseCase.forEmployee(employeeId))));
     }
@@ -273,8 +296,19 @@ public class EmployeeController {
     }
 
     private List<EmployeeResponseDto> toDtos(List<Employee> employees) {
-        Map<UUID, EmployeeRoleResolver.Enrichment> enrichment = employeeRoleResolver.resolveAll(
+        return toDtos(employees, enrich(employees));
+    }
+
+    private Map<UUID, EmployeeRoleResolver.Enrichment> enrich(List<Employee> employees) {
+        if (employees.isEmpty()) {
+            return Map.of();
+        }
+        return employeeRoleResolver.resolveAll(
                 employees.stream().map(Employee::getUserId).collect(Collectors.toCollection(LinkedHashSet::new)));
+    }
+
+    private List<EmployeeResponseDto> toDtos(List<Employee> employees,
+                                             Map<UUID, EmployeeRoleResolver.Enrichment> enrichment) {
         return employees.stream().map(e -> {
             EmployeeRoleResolver.Enrichment x = enrichment.get(e.getUserId());
             return EmployeeResponseDto.fromDomain(e, x.role(), x.phoneNumber(), x.username());

@@ -24,6 +24,12 @@ public interface EmployeeRepository {
 
     List<Employee> findAllOrderByStatusAndCreatedAt();
 
+    /**
+     * Story 19.5 — every employee row of one store (any status), same order as
+     * {@link #findAllOrderByStatusAndCreatedAt()}: a MANAGER's team, one query on {@code idx_employees_store_id}.
+     */
+    List<Employee> findAllByStoreOrderByStatusAndCreatedAt(UUID storeId);
+
     Employee updateStoreId(UUID employeeId, UUID newStoreId);
 
     Employee updateStatus(UUID employeeId, EmployeeStatus status);

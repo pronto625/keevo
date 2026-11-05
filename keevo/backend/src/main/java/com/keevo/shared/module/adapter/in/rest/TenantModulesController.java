@@ -68,7 +68,7 @@ public class TenantModulesController {
     @GetMapping("/modules")
     public ResponseEntity<ApiResponseWrapper<List<TenantModuleDto>>> modules() {
         boolean owner = CurrentActor.isOwner();
-        if (!owner && !CurrentActor.isEmployee()) {
+        if (!owner && !CurrentActor.isStoreMember()) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Modules are restricted to the tenant's users");
         }
         String schema = TenantSchema.validate(TenantContext.getCurrentTenant());

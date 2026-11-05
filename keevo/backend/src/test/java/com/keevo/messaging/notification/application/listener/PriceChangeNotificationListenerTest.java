@@ -258,4 +258,12 @@ class PriceChangeNotificationListenerTest {
         assertThat(PriceChangeNotificationListener.formatXaf(1500)).isEqualTo("1 500 FCFA");
         assertThat(PriceChangeNotificationListener.formatXaf(1250000)).isEqualTo("1 250 000 FCFA");
     }
+
+    @Test
+    @DisplayName("19.5 — a MANAGER's catalogue edit notifies the owners like an EMPLOYEE's")
+    void managerCatalogueEditNotified() {
+        listener.onProductPriceChanged(catalogue(EMPLOYEE_USER, "MANAGER", 1500, 1200));
+        flushAfterWindow();
+        assertThat(pushed().type()).isEqualTo("EMPLOYEE_PRICE_CHANGED");
+    }
 }

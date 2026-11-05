@@ -26,7 +26,7 @@ import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/inventory/sessions/{sessionId}")
-@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class InventoryCountController {
 
     private final GetCountingProductsUseCase getCountingProductsUseCase;

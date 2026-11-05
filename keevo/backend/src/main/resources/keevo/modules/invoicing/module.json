@@ -46,6 +46,11 @@
     "/invoicing/:id",
     "/invoicing/:id/edit"
   ],
+  "rolePermissions": {
+    "MANAGER": ["INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND"],
+    "EMPLOYEE": ["INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND"],
+    "VIEWER": ["INVOICE_VIEW"]
+  },
   "entitlement": "module.invoicing",
   "free": false
 }

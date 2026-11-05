@@ -2,7 +2,6 @@ package com.keevo.admin.notification.adapter.in.rest;
 
 import com.keevo.admin.notification.adapter.in.rest.dto.AnnouncementDto;
 import com.keevo.admin.notification.domain.port.in.ListAnnouncementsUseCase;
-import com.keevo.identity.api.Role;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -37,7 +36,7 @@ public class AnnouncementController {
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<AnnouncementDto>>> list(
             @RequestParam(required = false) String since) {
-        if (!CurrentActor.hasRole(Role.OWNER) && !CurrentActor.hasRole(Role.EMPLOYEE)) {
+        if (!CurrentActor.isOwner() && !CurrentActor.isStoreMember()) {
             throw new DomainException(ErrorCode.FORBIDDEN, "Merchant users only");
         }
         String schema = TenantContext.getCurrentTenant();

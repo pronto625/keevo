@@ -974,7 +974,9 @@
     },
     "audit_log.actorRole" : {
       "EMPLOYEE" : "Employé",
-      "OWNER" : "Propriétaire"
+      "MANAGER" : "Gérant",
+      "OWNER" : "Propriétaire",
+      "VIEWER" : "Lecteur"
     },
     "audit_log.source" : {
       "ONLINE" : "En ligne",
@@ -1220,6 +1222,7 @@
       "TRANSFER_IN" : "Transfert (entrée)",
       "TRANSFER_OUT" : "Transfert (sortie)",
       "VALIDATED" : "Validé",
+      "VIEWER" : "Lecteur",
       "WAREHOUSE" : "Entrepôt"
     },
     "context" : {

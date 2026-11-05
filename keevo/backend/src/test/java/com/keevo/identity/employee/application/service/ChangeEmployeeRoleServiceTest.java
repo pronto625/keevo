@@ -282,4 +282,87 @@ class ChangeEmployeeRoleServiceTest {
 
         verifyNoInteractions(transactionLock);
     }
+
+    @Test
+    @DisplayName("19.5: owner sets an EMPLOYEE to VIEWER → membership and global role updated, sessions revoked")
+    void setsViewer() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName(tenantSchema)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(employeeUserId, tenantId))
+                .thenReturn(Optional.of(UserTenantMembership.create(employeeUserId, tenantId, "EMPLOYEE")));
+        when(userRepository.findById(employeeUserId)).thenReturn(Optional.of(employeeUser));
+        when(userRepository.save(any(User.class))).thenReturn(employeeUser);
+
+        service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "VIEWER"));
+
+        verify(membershipRepository).updateRole(employeeUserId, tenantId, "VIEWER");
+        ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(saved.capture());
+        assertThat(saved.getValue().getRole()).isEqualTo(Role.VIEWER);
+        verify(refreshTokenRepository).revokeAllByUserId(employeeUserId);
+        verify(tokenRevocationPort).revokeAllSessions(employeeUserId, tenantSchema);
+        verify(transactionLock, never()).lock(any());
+    }
+
+    @Test
+    @DisplayName("19.5: owner sets an EMPLOYEE to MANAGER → updated")
+    void setsManager() {
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+        when(tenantRepository.findBySchemaName(tenantSchema)).thenReturn(Optional.of(tenant));
+        when(membershipRepository.findByUserIdAndTenantId(employeeUserId, tenantId))
+                .thenReturn(Optional.of(UserTenantMembership.create(employeeUserId, tenantId, "EMPLOYEE")));
+        when(userRepository.findById(employeeUserId)).thenReturn(Optional.of(employeeUser));
+        when(userRepository.save(any(User.class))).thenReturn(employeeUser);
+
+        service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "MANAGER"));
+
+        verify(membershipRepository).updateRole(employeeUserId, tenantId, "MANAGER");
+    }
+
+    @Test
+    @DisplayName("19.5: the last owner cannot become MANAGER or VIEWER (last-owner guard covers OWNER → any role)")
+    void lastOwnerToAnyRoleRejected() {
+        for (String target : List.of("MANAGER", "VIEWER")) {
+            when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(employee));
+            when(tenantRepository.findBySchemaName(tenantSchema)).thenReturn(Optional.of(tenant));
+            when(membershipRepository.findByUserIdAndTenantId(employeeUserId, tenantId))
+                    .thenReturn(Optional.of(UserTenantMembership.create(employeeUserId, tenantId, "OWNER")));
+            when(userRepository.findOwnersByTenantSchemaName(tenantSchema)).thenReturn(List.of(employeeUser));
+
+            assertThatThrownBy(() -> service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, target)))
+                    .isInstanceOf(DomainException.class)
+                    .extracting("domainCode")
+                    .isEqualTo(ErrorCode.CANNOT_DEMOTE_LAST_OWNER.name());
+        }
+        verify(membershipRepository, never()).updateRole(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("19.5: an unknown role → VALIDATION_FAILED")
+    void unknownRoleRejected() {
+        assertThatThrownBy(() -> service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, "SUPER_ADMIN")))
+                .isInstanceOf(DomainException.class)
+                .extracting("domainCode")
+                .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+    }
+
+    @Test
+    @DisplayName("19.5: a member without store cannot become MANAGER/EMPLOYEE/VIEWER → VALIDATION_FAILED, nothing written")
+    void storeMemberRoleWithoutStoreRejected() {
+        // employees.store_id is NOT NULL today (the domain refuses null too): the guard is defensive, exercised
+        // with a stub of a row whose store reference is missing.
+        Employee storeless = mock(Employee.class);
+        lenient().when(storeless.getUserId()).thenReturn(employeeUserId);
+        when(storeless.getStoreId()).thenReturn(null);
+        when(employeeRepository.findById(employeeId)).thenReturn(Optional.of(storeless));
+        for (String target : List.of("MANAGER", "EMPLOYEE", "VIEWER")) {
+            assertThatThrownBy(() -> service.execute(new ChangeEmployeeRoleCommand(actorId, employeeId, target)))
+                    .isInstanceOf(DomainException.class)
+                    .hasMessageContaining("Affectez d'abord ce membre à une boutique")
+                    .extracting("domainCode")
+                    .isEqualTo(ErrorCode.VALIDATION_FAILED.name());
+        }
+        verify(membershipRepository, never()).updateRole(any(), any(), any());
+        verify(userRepository, never()).save(any());
+    }
 }

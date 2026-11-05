@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.application.service;
 
+import com.keevo.identity.api.Role;
 import com.keevo.identity.auth.domain.model.AuthTokens;
 import com.keevo.identity.auth.domain.model.DeviceInfo;
 import com.keevo.identity.auth.domain.model.RefreshToken;
@@ -60,7 +61,8 @@ public class SessionTokenIssuer {
      * indicative legacy claims while {@code keevo.jwt.legacy-claims} is on) and a refresh token in
      * device session {@code sessionId} (a new session when null). The refresh token lives
      * {@code refresh-token-expiry-days} from now (365, sliding: every renewal issues a new one), or
-     * {@code super-admin-refresh-expiry-hours} (12) for the super-admin.
+     * {@code super-admin-refresh-expiry-hours} (12) for the super-admin. Story 19.5 — the legacy {@code role} claim
+     * is in the V1 vocabulary (MANAGER and VIEWER show as EMPLOYEE); V2 reads the real role from the profile.
      */
     public IssuedSession issue(UUID userId, Tenant tenant, String role, UUID sessionId, DeviceInfo device) {
         // Story 11.4 AC7: throws before the schema reaches any SQL (employee lookup, onboarding probe).
@@ -71,7 +73,7 @@ public class SessionTokenIssuer {
 
         UUID storeId = null;
         boolean passwordChangeRequired = false;
-        if ("EMPLOYEE".equals(role)) {
+        if (Role.isStoreMember(role)) { // Story 19.5: EMPLOYEE, MANAGER, VIEWER
             try {
                 Map<String, Object> row = jdbcTemplate.queryForMap(
                         "SELECT store_id, password_change_required FROM \""
@@ -85,7 +87,7 @@ public class SessionTokenIssuer {
 
         UUID sid = sessionId != null ? sessionId : UUID.randomUUID();
         JwtTokenProvider.LegacyClaims legacy = jwtProperties.isLegacyClaims()
-                ? new JwtTokenProvider.LegacyClaims(role, tenant.getStatus().name(), storeId,
+                ? new JwtTokenProvider.LegacyClaims(Role.v1Label(role), tenant.getStatus().name(), storeId,
                         passwordChangeRequired, platformAdmin || onboardingCompleted(schema))
                 : null;
         String accessToken = jwtTokenProvider.generateAccessToken(userId, schema, sid, legacy);

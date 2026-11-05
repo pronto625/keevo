@@ -50,7 +50,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/products/{productId}")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class StockController {
 
     private final GetCurrentStockUseCase getCurrentStockUseCase;

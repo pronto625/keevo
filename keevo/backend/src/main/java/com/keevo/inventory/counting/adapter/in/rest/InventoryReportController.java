@@ -28,7 +28,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/inventory/sessions/{sessionId}")
-@PreAuthorize("hasAnyRole('OWNER','EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 @Tag(name = "Inventory Report", description = "Inventory gap report generation and export")
 public class InventoryReportController {
 

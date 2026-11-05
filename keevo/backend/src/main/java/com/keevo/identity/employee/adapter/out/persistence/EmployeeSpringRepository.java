@@ -16,6 +16,9 @@ public interface EmployeeSpringRepository extends JpaRepository<EmployeeJpaEntit
 
     List<EmployeeJpaEntity> findAllByOrderByStatusAscCreatedAtAsc();
 
+    /** Story 19.5 — a MANAGER's team. */
+    List<EmployeeJpaEntity> findAllByStoreIdOrderByStatusAscCreatedAtAsc(UUID storeId);
+
     /** HF-2 AC2: find employees assigned to a specific store for notification routing. */
     List<EmployeeJpaEntity> findByStoreIdAndStatus(UUID storeId, String status);
 }

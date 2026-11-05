@@ -109,7 +109,7 @@ public final class ModuleManifestLoader {
             "requires", "enhances", "publishes", "consumes", "provides", "needs", "permissions", "routes");
     private static final Set<String> KNOWN_KEYS = Set.of("id", "version", "displayName", "category", "requires",
             "enhances", "publishes", "consumes", "provides", "needs", "extensionPoints", "permissions", "routes",
-            "entitlement", "free");
+            "entitlement", "free", "rolePermissions");
     private static final Set<String> EXTENSION_POINT_KEYS = Set.of("declares", "fills");
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
@@ -320,13 +320,15 @@ public final class ModuleManifestLoader {
             }
         }
 
+        Map<String, List<String>> rolePermissions = rolePermissions(root.get("rolePermissions"), at, problems);
+
         if (problems.size() > before) {
             return Optional.empty();
         }
         ModuleManifest manifest = new ModuleManifest(id, version, displayName, category,
                 lists.get("requires"), lists.get("enhances"), lists.get("publishes"), lists.get("consumes"),
                 lists.get("provides"), lists.get("needs"), extensionPoints, lists.get("permissions"),
-                lists.get("routes"), entitlement != null ? entitlement : "module." + id, free);
+                lists.get("routes"), entitlement != null ? entitlement : "module." + id, free, rolePermissions);
         return Optional.of(new LoadedModuleManifest(at, manifest, toJson(manifest)));
     }
 
@@ -406,6 +408,26 @@ public final class ModuleManifestLoader {
                 stringArray(node.get("fills"), "'extensionPoints.fills'", at, problems));
     }
 
+    /**
+     * Story 19.5 — {@code rolePermissions}: an object {@code {"<ROLE>": ["PERMISSION", …]}}; absent → empty (the
+     * completeness and consistency rules are checked at boot by {@code ModulePermissions}).
+     */
+    private static Map<String, List<String>> rolePermissions(JsonNode node, String at, List<String> problems) {
+        Map<String, List<String>> byRole = new LinkedHashMap<>();
+        if (node == null || node.isNull()) {
+            return byRole;
+        }
+        if (!node.isObject()) {
+            problems.add(at + ": field 'rolePermissions' must be an object {\"<ROLE>\": [permissions]}");
+            return byRole;
+        }
+        for (Iterator<String> names = node.fieldNames(); names.hasNext(); ) {
+            String role = names.next();
+            byRole.put(role, stringArray(node.get(role), "'rolePermissions." + role + "'", at, problems));
+        }
+        return byRole;
+    }
+
     /** The validated manifest, every default applied, in a stable key order (the {@code manifest} JSONB cache). */
     static String toJson(ModuleManifest m) {
         ObjectNode root = MAPPER.createObjectNode();
@@ -426,6 +448,8 @@ public final class ModuleManifestLoader {
         array(root, "routes", m.routes());
         root.put("entitlement", m.entitlement());
         root.put("free", m.free());
+        ObjectNode rolePermissions = root.putObject("rolePermissions");
+        m.rolePermissions().forEach((role, permissions) -> array(rolePermissions, role, permissions));
         return root.toString();
     }
 

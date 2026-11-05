@@ -122,10 +122,10 @@ class CurrentActorTest {
     @Test
     void assignedStoreId_employeeWithoutStore_failsClosed() {
         auth(USER, AuthDetails.owner("Awa"), "EMPLOYEE");
-        assertForbidden(CurrentActor::assignedStoreId, "EMPLOYEE token missing assigned store");
+        assertForbidden(CurrentActor::assignedStoreId, "Store member token missing assigned store");
 
         auth(USER, null, "EMPLOYEE");
-        assertForbidden(CurrentActor::assignedStoreId, "EMPLOYEE token missing assigned store");
+        assertForbidden(CurrentActor::assignedStoreId, "Store member token missing assigned store");
     }
 
     @Test
@@ -165,5 +165,25 @@ class CurrentActorTest {
         SecurityContextHolder.clearContext();
         assertThat(CurrentActor.actorLabel()).isEqualTo("Un utilisateur");
         assertThat(List.of(CurrentActor.actorLabel())).doesNotContain(USER.toString());
+    }
+
+    @Test
+    void storeMembers_realRole_scopedToStore_neverOwner() {
+        // Story 19.5 — MANAGER and VIEWER: real role, store-scoped like an EMPLOYEE, never owner privileges.
+        for (String role : List.of("MANAGER", "VIEWER")) {
+            auth(USER, new AuthDetails("Awa", STORE, null), role);
+            assertThat(CurrentActor.role()).isEqualTo(role);
+            assertThat(CurrentActor.isStoreMember()).isTrue();
+            assertThat(CurrentActor.isOwner()).isFalse();
+            assertThat(CurrentActor.assignedStoreId()).isEqualTo(STORE);
+            assertForbidden(() -> CurrentActor.requireOwner("owner only"), "owner only");
+
+            auth(USER, new AuthDetails("Awa", null, null), role);
+            assertForbidden(CurrentActor::assignedStoreId, "Store member token missing assigned store");
+        }
+        assertThat(CurrentActor.fallbackLabel("VIEWER")).isEqualTo("Un lecteur");
+        assertThat(CurrentActor.fallbackLabel("MANAGER")).isEqualTo("Un gérant");
+        auth(USER, new AuthDetails(null, STORE, null), "MANAGER");
+        assertThat(CurrentActor.actorLabel()).isEqualTo("Un gérant");
     }
 }

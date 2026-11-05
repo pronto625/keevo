@@ -1,5 +1,7 @@
 package com.keevo.shared.module;
 
+import com.keevo.identity.api.Role;
+
 import java.util.Optional;
 import java.util.Set;
 
@@ -39,13 +41,15 @@ public interface KeevoModule {
     }
 
     /**
-     * Story 14.1 — the permissions of this module (manifest {@code permissions}) granted to an {@code EMPLOYEE}.
-     * The role mapping of a module's permissions is declared by the module: {@code OWNER} holds every permission of
-     * every module, {@code EMPLOYEE} only those returned here, {@code SUPER_ADMIN} none (it is not a tenant user).
-     * Must be a subset of the manifest's {@code permissions} (checked at boot). Default: none.
+     * Story 14.1 / 19.5 — the code-side view of the permissions this module grants to a membership role
+     * ({@code MANAGER}, {@code EMPLOYEE}, {@code VIEWER}). The declaration itself lives in the manifest
+     * ({@code rolePermissions}, one explicit entry per role); a module that also states it in code returns the same set
+     * here — checked at boot by {@code ModulePermissions}, which fails on any difference. {@code null} (the default):
+     * no code-side statement, the manifest alone applies. {@code OWNER} holds every permission of every module,
+     * {@code SUPER_ADMIN} none (it is not a tenant user).
      */
-    default Set<String> employeePermissions() {
-        return Set.of();
+    default Set<String> permissionsFor(Role role) {
+        return null;
     }
 
     /** Registers the capabilities listed in the manifest {@code provides}. Called once at boot. */

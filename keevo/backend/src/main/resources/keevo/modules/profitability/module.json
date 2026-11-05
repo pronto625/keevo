@@ -21,6 +21,11 @@
     "/reports/rentabilite",
     "/reports/rentabilite/:productId"
   ],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
   "entitlement": "module.profitability",
   "free": false
 }

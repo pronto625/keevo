@@ -18,6 +18,6 @@ public record CsvImportCompletedEvent(
         String  tenantId,
         UUID    actorId,
         String  actorName,  // display name — for notification body
-        String  actorRole,  // "OWNER" or "EMPLOYEE"
+        String  actorRole,  // membership role — OWNER, MANAGER, EMPLOYEE or VIEWER (Story 19.5)
         Instant occurredAt
 ) implements DomainEvent {}

@@ -2,13 +2,24 @@
 title: '19.5 — Membership roles MANAGER and VIEWER, permissions per role, VIEWER never writes'
 type: 'feature'
 created: '2026-11-05'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '49eca1b6771fb504f15b6bc9bce8c6e96b1396c2'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-19-context.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      MANAGER/VIEWER read scope and manager team extras need product decisions.
+    evidence: |-
+      Store-wide sales for MANAGER, POST reads for VIEWER, device sessions, owner-deactivated reactivation, plan cap counting. Routed to new key 19-5b.
+    severity: medium
+  - summary: >-
+      VIEWER on the V1 app loses offline sales (REJECTED is final).
+    evidence: |-
+      V1 shows VIEWER as EMPLOYEE. Routed to 19.10 (minimum version or refuse V1 login for MANAGER/VIEWER).
+    severity: medium
 ---
 
 <intent-contract>
@@ -88,6 +99,37 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-05 — Review pass
+- verdicts: 27 findings — high 0, medium 7, low 19, false 1, maybe-false 0 (grouped rows list every reviewer finding they cover)
+- findings:
+  - `[medium]` `[patch]` (patterns 1, blind 3) SyncPushService reads CurrentActor in the application layer — role carried by PushBatchCommand; misleading « stay pushable » comment fixed.
+  - `[medium]` `[patch]` (patterns 2, blind 5, blind 6) declared roles and the store-member set written 3 times — derived from Role; CurrentActor/MemberRoles delegate.
+  - `[low]` `[patch]` (patterns 3) permissionsOf allocates a TreeSet per check — cached set returned for a single role.
+  - `[low]` `[patch]` (patterns 4) Role.parse scans values() — static map.
+  - `[low]` `[reject]` (patterns 5) requireManageable reloads the target row — O(1), 3 keyed lookups.
+  - `[low]` `[reject]` (patterns 6) shared.domain → identity.api dependency — the module-level link already exists (CurrentActor, ModulePermissions); MemberRoles now only delegates.
+  - `[medium]` `[patch]` (patterns note, edge 1) MANAGER list/activity returns OWNER and peer MANAGER rows of his store — filtered to EMPLOYEE/VIEWER (+ himself) via the bulk resolver.
+  - `[medium]` `[patch]` (patterns note, blind 11, edge 2) requireManageable fails open on a missing membership (defaults to EMPLOYEE) — membership read directly, missing → FORBIDDEN.
+  - `[low]` `[reject]` (intent 1) Flutter-side parser test — V1 is frozen; the server never sends MANAGER/VIEWER in V1 fields (role vs memberRole), tested server-side.
+  - `[low]` `[reject]` (intent 2) MANAGER identical to EMPLOYEE in manifests — only invoicing has permissions; team management is a behavioural rule (EmployeeTeamScope).
+  - `[medium]` `[patch]` (intent 3, blind 1) allow-list wildcards would open future writes to VIEWER and the test skips them — exact self-service list pinned against the endpoint scan.
+  - `[false]` `[reject]` (intent 4) no migration — role columns in public are unconstrained varchar; existing memberships untouched by construction; the tenant users CHECK is never written.
+  - `[low]` `[patch]` (vg 1) MANAGER store filtering only tested through mocks — ListEmployeesServiceTest + forStore case.
+  - `[low]` `[patch]` (vg 2) no MANAGER case for sales history / cancel inventory — tests added.
+  - `[low]` `[patch]` (vg 3) no MANAGER-actor case for owner notification listeners — tests added.
+  - `[low]` `[patch]` (vg 4, blind 7) admin role lists hard-coded in SQL — one constant derived from Role.
+  - `[low]` `[patch]` (vg other, edge 5) admin member list labels MANAGER/VIEWER « Employé » — « Gérant » / « Lecteur ».
+  - `[low]` `[patch]` (blind 2) filter matches raw getRequestURI — path within application.
+  - `[medium]` `[patch]` (blind 4) VIEWER on V1 sees seller UI and loses offline sales (REJECTED is final) — routed to 19.10 (minimum version / refuse V1 login for MANAGER/VIEWER); comment corrected.
+  - `[medium]` `[patch]` (blind 8) MANAGER/VIEWER only see their own sales; MANAGER cannot cancel his sellers' sessions — spec rule « never less restricted than EMPLOYEE »; product decision routed to new key 19-5b.
+  - `[low]` `[patch]` (blind 9, blind 10) MANAGER excluded from device sessions; can reactivate an owner-deactivated member — routed to 19-5b (product decisions).
+  - `[low]` `[reject]` (blind 12) authorisation only in the REST adapter — same pattern as the existing owner checks; no other inbound adapter calls these use cases.
+  - `[low]` `[patch]` (blind 13) stale « EMPLOYEE » messages, javadocs and fallback labels — updated.
+  - `[low]` `[patch]` (blind 14) EmployeeTeamScope dead branch / unused parameter / misleading message — cleaned; plan cap counting MANAGER/VIEWER routed to 19-5b; phone change by a MANAGER rejected (owner can do the same, uniqueness enforced).
+  - `[low]` `[reject]` (edge 3) TOCTOU between scope check and use case — owner promotion racing a manager action is rare; the next request is checked again.
+  - `[low]` `[patch]` (edge 4) role change to a store role for a member without store — VALIDATION_FAILED « Affectez d'abord ce membre à une boutique ».
+  - `[low]` `[patch]` (edge 6) multi-verb/ANY handlers only tested on the first verb — every write verb exercised.
+
 ## Design Notes
 
 **Patterns.** Role as a value with behaviour (`isStoreMember`, `v1Label`) instead of scattered string compares; declarative per-role permissions in manifests validated at boot (fail-fast, Specification-like rule set); a single Intercepting Filter for the VIEWER write ban (one place instead of 116 endpoints, with an explicit allow-list), and a guard at the sync dispatch for the same rule; Adapter at the API edge for V1 role vocabulary (`role` vs `memberRole`).
@@ -104,3 +146,45 @@ deferred: []
 
 **Manual checks:**
 - Local backend: owner sets a member to VIEWER → member's POST /products 403, GET /products 200; set to MANAGER → GET /employees shows his store only; `/auth/profile` shows `role:"EMPLOYEE"`, `memberRole:"MANAGER"`.
+
+## Auto Run Result
+
+Status: done
+
+**Summary.** Membership roles OWNER, MANAGER, EMPLOYEE, VIEWER (`Role` single source: `isStoreMember`, `v1Label`, static `parse`). Every « non-owner » restriction now applies to all store members; `@PreAuthorize` lists open reads to the four roles. Per-role permissions declared explicitly in all 18 manifests (`rolePermissions`), validated at boot (missing role, unknown permission, VIEWER write permission → startup failure); `permissionsFor(Role)` replaces `employeePermissions()`. VIEWER never writes: `ViewerWriteGuardFilter` (403 `FORBIDDEN`) with an exact, pinned self-service allow-list of 11 endpoints; sync push answers every VIEWER operation `REJECTED/FORBIDDEN` (role carried by the command). MANAGER: team management of his store (EMPLOYEE/VIEWER only, no role change or store move, fails closed on missing membership), store-filtered list in one query. Members can be created with a role. Role change accepts the four roles with the last-owner guard. V1 apps see MANAGER/VIEWER as `EMPLOYEE` in every `role` field (JWT legacy claim included) and the real role in the additive `memberRole`. Admin labels « Gérant »/« Lecteur »; export contract regenerated.
+
+**Files.** New: `ViewerWriteGuardFilter`, `EmployeeTeamScope`, `shared/domain/MemberRoles`, `admin/MemberRolesSql`, tests (`RoleTest`, `ViewerWriteGuardFilterTest`, `ViewerAllowListPinTest`, `ViewerNeverWritesFullContextTest`, `EmployeeControllerManagerTest`, `SyncPushServiceViewerTest`, `ListEmployeesServiceTest`). Changed: `Role`, `KeevoModule`, `ModuleManifest`(+loader), `ModulePermissions`, 18 `module.json`, `JwtAuthFilter`, `CurrentActor`, `SecurityConfig`, `SessionTokenIssuer`, `UserProfileService`, auth/employee DTOs (`memberRole`), `EmployeeController`, employee services (list/activity by store, create with role, role change), sales/inventory/messaging/reporting/admin call sites, `SyncUseCase`/`SyncController`/`SyncPushService`, `keevo/contracts/export-datasets.json`.
+
+**Review.** 27 entries (5 layers): 0 high, 7 medium, 19 low, 1 false. Patched in code: 5 medium (sync role via command, single role source, MANAGER list filtering, fail-closed membership, exact pinned allow-list) and 15 low. Routed: 2 medium → new key 19-5b (product decisions: MANAGER store-wide sales/inventory, VIEWER reads by POST, device sessions, owner-deactivated reactivation, plan cap) and 19.10 (VIEWER on V1 loses offline sales). Rejected: 6, reasons in the triage log.
+
+**Follow-up review: recommended (true)** — 5 medium code patches; unverified risk: role behaviour of the ≈75 reclassified call sites is covered by targeted cases, not by a per-role run of every business flow.
+
+**Verification.** Targeted classes green (≈650 then 451 + full-context VIEWER 74 cases after patches). Full suite package by package: 5 582 tests, 0 failures after regenerating `keevo/contracts/export-datasets.json` (new audit role labels). Live `keevo_dev`: owner creates a VIEWER (`role:EMPLOYEE`, `memberRole:VIEWER`), VIEWER logs in by username, GET /products 200, POST /categories 403 `FORBIDDEN`, profile `EMPLOYEE`/`VIEWER`, PATCH /notifications/read-all 204.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée (commit de la story 19.5, voir `git log --grep "feat(19-5)"`). Conventions : spec-16-11 ; synchro : spec-16-10.
+
+**Ce qui est fait côté API :** rôles gérant (MANAGER), vendeur (EMPLOYEE), lecteur (VIEWER) en plus du propriétaire ; le lecteur ne peut rien modifier ; le gérant gère l'équipe de sa boutique.
+
+**À utiliser :**
+1. Rôle réel : lire `memberRole` (`OWNER|MANAGER|EMPLOYEE|VIEWER|SUPER_ADMIN`) dans `/auth/profile`, les memberships de connexion et les employés ; `role` reste au vocabulaire V1 (MANAGER/VIEWER → `EMPLOYEE`), ne pas s'en servir.
+2. `POST /api/v1/employees` accepte `role` (`EMPLOYEE` par défaut, `MANAGER`, `VIEWER`) ; `PATCH /api/v1/employees/{id}/role` accepte les quatre rôles (propriétaire seulement). Erreurs : 403 `FORBIDDEN` « Vous n'avez pas les droits nécessaires » ; 422 `VALIDATION_FAILED` (rôle inconnu, membre sans boutique : « Affectez d'abord ce membre à une boutique ») ; erreur du dernier propriétaire inchangée.
+3. Lecteur : toute écriture → 403 `FORBIDDEN` ; synchro : chaque opération revient `REJECTED` avec la raison `FORBIDDEN`. Permises : changer son mot de passe, ses sessions, son jeton push, Web Push, marquer les notifications lues, envoyer un avis.
+4. Gérant : `GET /employees` ne renvoie que les vendeurs et lecteurs de sa boutique (et lui-même) ; il peut en créer (EMPLOYEE/VIEWER, sa boutique), les modifier, désactiver, réactiver, réinitialiser leur mot de passe ; pas de changement de rôle ni de boutique.
+
+Code backend : `keevo/backend/src/main/java/com/keevo/shared/infrastructure/security/ViewerWriteGuardFilter.java`, `identity/employee/adapter/in/rest/EmployeeTeamScope.java`, `identity/api/Role.java`.
+
+**À implémenter côté mobile :**
+1. Navigation et actions selon `memberRole` : lecteur = écrans en lecture seule (aucun bouton de création, vente, ajustement) ; gérant = écrans vendeur + « Mon équipe » limité à sa boutique ; libellés « Propriétaire », « Gérant », « Vendeur », « Lecteur ».
+2. Ne jamais mettre en file d'attente hors ligne une écriture d'un lecteur (elle serait refusée à la synchro).
+3. Formulaire d'ajout de membre : choix du rôle (propriétaire : les trois ; gérant : vendeur ou lecteur).
+4. Afficher les messages d'erreur de l'API tels quels.
+
+**Critères d'acceptation mobile / scénarios de test :**
+- Given un lecteur connecté, Then aucun bouton d'écriture n'est visible et une tentative forcée renvoie « Vous n'avez pas les droits nécessaires ».
+- Given un gérant, When il ouvre « Mon équipe », Then il ne voit que les membres de sa boutique et peut ajouter un vendeur.
+- Mise en place : créer un membre avec `"role":"VIEWER"` via `POST /api/v1/employees` puis se connecter avec son identifiant.
+
+**Clé de suivi mobile :** `m19-5-roles-manager-viewer-permissions`.
+

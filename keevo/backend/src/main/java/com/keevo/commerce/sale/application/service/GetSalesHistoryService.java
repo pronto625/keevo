@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.commerce.sale.domain.model.Sale;
 import com.keevo.commerce.sale.domain.port.in.GetSalesHistoryUseCase;
 import com.keevo.commerce.sale.domain.port.out.SaleRepository;
@@ -31,7 +32,7 @@ public class GetSalesHistoryService implements GetSalesHistoryUseCase {
         var pageable = PageRequest.of(query.page(), query.size(),
                 Sort.by(Sort.Direction.DESC, "occurredAt"));
 
-        if ("EMPLOYEE".equals(query.role())) {
+        if (MemberRoles.isStoreMember(query.role())) {
             // EMPLOYEE always sees only their own sales
             // The employeeId in query should be their JWT actorId (forced by controller)
             return saleRepository.findByStoreIdAndEmployeeIdAndDateRange(

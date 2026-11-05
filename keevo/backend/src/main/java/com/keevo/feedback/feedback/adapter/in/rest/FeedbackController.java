@@ -34,7 +34,7 @@ public class FeedbackController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     public ResponseEntity<ApiResponseWrapper<Map<String, String>>> submit(
             @Valid @RequestBody SubmitFeedbackRequest request) {
 

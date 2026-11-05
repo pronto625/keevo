@@ -1,5 +1,6 @@
 package com.keevo.messaging.notification.application.listener;
 
+import com.keevo.shared.domain.MemberRoles;
 import com.keevo.identity.api.EmployeeQueryPort;
 import com.keevo.identity.api.EmployeeView;
 import com.keevo.identity.api.OwnerRecipientResolver;
@@ -101,8 +102,8 @@ public class PriceChangeNotificationListener {
     @ModuleScoped("alerts")
     @ApplicationModuleListener
     public void onProductPriceChanged(ProductPriceChangedEvent event) {
-        if (!"EMPLOYEE".equals(event.actorRole())) {
-            log.debug("[PRICE-NOTIF] Skipping catalogue change — actor is not EMPLOYEE (role={})", event.actorRole());
+        if (!MemberRoles.isStoreMember(event.actorRole())) {
+            log.debug("[PRICE-NOTIF] Skipping catalogue change — actor is not a store member (role={})", event.actorRole());
             return;
         }
         if (event.oldPrice() == event.newPrice()) {

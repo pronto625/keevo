@@ -16,4 +16,7 @@ public interface GetEmployeeActivityUseCase {
 
     /** Activity of every employee row of the current tenant (same order as the employee list). */
     List<EmployeeActivity> forAll();
+
+    /** Story 19.5 — activity of every employee row of one store (a MANAGER's team), same order. */
+    List<EmployeeActivity> forStore(UUID storeId);
 }

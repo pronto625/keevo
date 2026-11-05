@@ -89,7 +89,9 @@ class PermissionGatingSliceTest {
         ModuleCatalog moduleCatalog() {
             return new ModuleCatalog(List.of(TestModuleCatalogs.loaded("core", ModuleCategory.CORE, true),
                     TestModuleCatalogs.withPermissions("invoicing", ModuleCategory.PREMIUM, false,
-                            List.of("INVOICE_VIEW", "INVOICE_MANAGE"))));
+                            List.of("INVOICE_VIEW", "INVOICE_MANAGE"),
+                            Map.of("MANAGER", List.of("INVOICE_VIEW"), "EMPLOYEE", List.of("INVOICE_VIEW"),
+                                    "VIEWER", List.of("INVOICE_VIEW")))));
         }
 
         @Bean
@@ -114,8 +116,8 @@ class PermissionGatingSliceTest {
                 }
 
                 @Override
-                public Set<String> employeePermissions() {
-                    return Set.of("INVOICE_VIEW");
+                public Set<String> permissionsFor(com.keevo.identity.api.Role role) {
+                    return role == com.keevo.identity.api.Role.EMPLOYEE ? Set.of("INVOICE_VIEW") : null;
                 }
             };
             return new ModulePermissions(catalog, KeevoModuleDirectory.of(catalog, List.of(invoicing)));

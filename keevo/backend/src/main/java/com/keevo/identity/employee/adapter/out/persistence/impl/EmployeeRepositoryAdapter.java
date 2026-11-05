@@ -62,6 +62,12 @@ public class EmployeeRepositoryAdapter implements EmployeeRepository {
     }
 
     @Override
+    public List<Employee> findAllByStoreOrderByStatusAndCreatedAt(UUID storeId) {
+        return jpa.findAllByStoreIdOrderByStatusAscCreatedAtAsc(storeId).stream()
+                .map(this::entityToDomain).toList();
+    }
+
+    @Override
     public Employee updateStoreId(UUID employeeId, UUID newStoreId) {
         EmployeeJpaEntity entity = findEntityOrThrow(employeeId);
         entity.setStoreId(newStoreId);

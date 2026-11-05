@@ -9,10 +9,13 @@ import java.util.UUID;
  * @param refreshToken             Opaque secure random token for token rotation (default 30 days)
  * @param userId                   UUID of the authenticated user
  * @param tenantId                 Tenant schema name (kv_xxxxxx) for client routing
- * @param role                     User role (OWNER | EMPLOYEE)
+ * @param role                     User role in the V1 vocabulary (OWNER | EMPLOYEE; MANAGER and VIEWER show as
+ *                                 EMPLOYEE — Story 19.5)
  * @param expiresIn                Access token lifetime in seconds
  * @param storeId                  Assigned store UUID (null for OWNER) — Story 3.5
  * @param passwordChangeRequired   True if employee must change password — Story 3.5
+ * @param memberRole               Story 19.5 — the real membership role (OWNER | MANAGER | EMPLOYEE | VIEWER |
+ *                                 SUPER_ADMIN), additive
  */
 public record LoginResponse(
     String accessToken,
@@ -22,5 +25,6 @@ public record LoginResponse(
     String role,
     long   expiresIn,
     String storeId,
-    boolean passwordChangeRequired
+    boolean passwordChangeRequired,
+    String memberRole
 ) {}

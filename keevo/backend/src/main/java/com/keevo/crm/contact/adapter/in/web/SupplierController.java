@@ -23,7 +23,7 @@ import java.util.UUID;
  */
 @RestController
 @RequestMapping("/api/v1/suppliers")
-@PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+@PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
 public class SupplierController {
 
     private final CreateSupplierUseCase createSupplierUseCase;

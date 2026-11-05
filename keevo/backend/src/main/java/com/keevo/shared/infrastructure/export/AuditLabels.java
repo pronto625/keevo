@@ -256,6 +256,7 @@ public final class AuditLabels {
             entry("OWNER", "Propriétaire"),
             entry("EMPLOYEE", "Employé"),
             entry("MANAGER", "Gérant"),
+            entry("VIEWER", "Lecteur"),
             entry("STORE", "Boutique"),
             entry("WAREHOUSE", "Entrepôt"),
             entry("FULL", "Complet"),

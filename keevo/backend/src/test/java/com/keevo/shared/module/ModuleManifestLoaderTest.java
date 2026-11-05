@@ -110,7 +110,26 @@ class ModuleManifestLoaderTest {
         assertThat(loaded.get(0).json()).isEqualTo("{\"id\":\"catalog\",\"version\":\"1.0.0\",\"displayName\":"
                 + "\"Module catalog\",\"category\":\"business\",\"requires\":[\"core\"],\"enhances\":[],\"publishes\":[],"
                 + "\"consumes\":[],\"provides\":[],\"needs\":[],\"extensionPoints\":{\"declares\":[],\"fills\":[]},"
-                + "\"permissions\":[],\"routes\":[],\"entitlement\":\"module.catalog\",\"free\":true}");
+                + "\"permissions\":[],\"routes\":[],\"entitlement\":\"module.catalog\",\"free\":true,"
+                + "\"rolePermissions\":{}}");
+    }
+
+    @Test
+    @DisplayName("19.5 — rolePermissions: parsed per role, sorted, serialised; a malformed entry is a problem")
+    void rolePermissions() {
+        List<LoadedModuleManifest> loaded = ModuleManifestLoader.load(withCore(src("inv", module("inv", "[\"core\"]",
+                ",\"permissions\":[\"X_VIEW\",\"X_EDIT\"],"
+                        + "\"rolePermissions\":{\"VIEWER\":[\"X_VIEW\"],\"EMPLOYEE\":[\"X_VIEW\",\"X_EDIT\"],\"MANAGER\":[]}"))));
+        ModuleManifest core = loaded.get(1).manifest();
+        assertThat(core.rolePermissions()).containsOnlyKeys("EMPLOYEE", "MANAGER", "VIEWER");
+        assertThat(core.rolePermissions().get("EMPLOYEE")).containsExactly("X_VIEW", "X_EDIT");
+        assertThat(core.rolePermissions().get("MANAGER")).isEmpty();
+        assertThat(loaded.get(1).json()).endsWith(
+                "\"rolePermissions\":{\"EMPLOYEE\":[\"X_VIEW\",\"X_EDIT\"],\"MANAGER\":[],\"VIEWER\":[\"X_VIEW\"]}}");
+
+        assertThat(problemsOf(withCore(src("inv", module("inv", "[\"core\"]",
+                ",\"rolePermissions\":{\"VIEWER\":\"X_VIEW\"}")))))
+                .anySatisfy(p -> assertThat(p).contains("rolePermissions.VIEWER"));
     }
 
     @Test

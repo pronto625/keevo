@@ -56,7 +56,7 @@ public class CompanyController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     public ResponseEntity<ApiResponseWrapper<CompanyProfileDto>> get() {
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 CompanyProfileDto.from(service.get(TenantContext.getCurrentTenant()))));
@@ -72,7 +72,7 @@ public class CompanyController {
     }
 
     @GetMapping("/logo")
-    @PreAuthorize("hasAnyRole('OWNER', 'EMPLOYEE')")
+    @PreAuthorize("hasAnyRole('OWNER','MANAGER','EMPLOYEE','VIEWER')")
     public ResponseEntity<byte[]> logo() {
         Logo logo = service.readLogo(TenantContext.getCurrentTenant());
         return ResponseEntity.ok()
