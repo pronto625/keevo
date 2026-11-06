@@ -145,7 +145,7 @@ Cost: unchanged per invoice (O(lines)); no extra query on list/pull (new columns
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur `refonte/modulaire` (commit à reporter ici une fois poussé). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée sur `refonte/modulaire` / `develop`, commit `3ef5e1d6`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** une facture ou un devis accepte une remise, des frais de livraison, son propre taux de TVA ou une exonération totale, une date d'échéance, les coordonnées complètes du client (RCCM, email, contact, site web) et, par ligne, le produit du catalogue et une référence. Le calcul est celui de Bref quand les prix sont saisis hors taxe (TVA arrondie une seule fois sur le document, livraison hors TVA) ; avec des prix TTC (mode Keevo par défaut), le résultat est inchangé sans remise ni livraison, et la remise réduit la TVA au prorata. Le taux par défaut est celui du pays de la plus ancienne boutique active (CM 19,25 %, SN/CI/BJ/ML/BF/TG/GN/GA 18 %, CD/KE 16 %, GH 15 %, NG 7,5 % ; un autre pays garde 19,25 %). Une facture émise dont l'échéance est dépassée et qui n'est pas entièrement payée passe « En retard » au traitement du matin (comme une échéance de 20.4).
 
