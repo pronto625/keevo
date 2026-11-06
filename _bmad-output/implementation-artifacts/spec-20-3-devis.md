@@ -142,7 +142,7 @@ Cost: convert = 1 locked read + 1 quota upsert + 1 counter upsert + invoice inse
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur `refonte/modulaire` / `develop` (commit de la story 20-3). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée sur `refonte/modulaire` / `develop`, commit `62b28275`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** un devis est un document à part entière : on le crée, on le modifie, on l'annule ou on le valide en facture. Il n'a jamais de numéro légal et ne consomme pas le quota de documents. Sa validation crée une nouvelle facture émise (prochain numéro `FAC-…`, date du jour, quota consommé) et relie les deux documents ; valider deux fois un devis rend la même facture. Toute modification peut transmettre la date de dernière modification connue : si le document a changé entre-temps (autre appareil, autre utilisateur), la modification est refusée.
 
