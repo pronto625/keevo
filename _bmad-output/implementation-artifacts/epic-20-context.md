@@ -9,7 +9,7 @@ Make everything a Bref merchant does day to day (quotes, invoices with payments 
 ## Stories
 
 - Story 20.1: Catalogue étendu — produits sans stock, clé, code-barres, fusion (done)
-- Story 20.2: CRM étendu, clients par établissement (ADR-08)
+- Story 20.2: CRM étendu, clients par établissement (ADR-08) (done)
 - Story 20.3: Devis (`kind = QUOTE`)
 - Story 20.4: Encaissements — acompte, paiements partiels, échéancier, retard
 - Story 20.5: Remise, livraison, TVA par facture, échéance, données client
@@ -37,6 +37,7 @@ Make everything a Bref merchant does day to day (quotes, invoices with payments 
 - **Public links:** HMAC-signed, lifetime configurable per tenant (30 d Keevo, 90 d imported), rotatable; old Bref links (`legacy_public_token`, `BRF-` reference) keep working.
 - **Super-admin API (20.13):** every Bref admin route has a delivered, tested Keevo equivalent or a written abandonment decision by the user; platform indicators cover Keevo tenants and migrated owners without double counting.
 - **Acceptance (20.12):** an end-to-end Bref day (OTP login → store → quote → conversion → deposit → schedule → overdue → payment → SMS send → expense → finance summary → public link) on a DOCUMENT/PRO tenant, plus the symmetric Keevo POS scenario staying green.
+- **Client lookup at scale (routed to 20.6 from the 20.2 review):** client list and search are still unbounded and use `LIKE '%q%'` without a trigram index; when client lookup by phone/name starts serving document derivation, add keyset pagination and a `pg_trgm` index.
 - **Patterns and complexity (blocking in review):** state the chosen design pattern and hot-path complexity in each spec; no N+1, set-based SQL, keyset pagination (never OFFSET on growing tables), indexes for every new filter/join/sort (e.g. `clients(store_id, phone_normalized)`), batch operations.
 - **No technical data in UI/exports:** French labels only, no UUIDs or raw codes.
 
@@ -57,5 +58,6 @@ Make everything a Bref merchant does day to day (quotes, invoices with payments 
 
 - Depends on epic 19: 19.1 (identity), 19.5/19.5b (MANAGER/VIEWER roles and fine rights — the product-merge permission question from the 20.1 review is routed there), 19.7 (plans as data), 19.8 (quotas), 19.9 (SMS/email providers), 19.12 (store fields, sale-flow preference), 19.13 (new modules disabled by default, `invoicing` granted to FREE but owner-activated).
 - 20.3 → 20.4 (payments on converted invoices); 20.5 feeds 20.4/20.9 amounts; 20.1 + 20.2 → 20.6; 20.7 public link → 20.8 sending; 20.9 → 20.11 (CA HT) and 20.13 (platform KPIs); 20.10 → 20.11; 20.12 closes the epic after all others; G1 requires 20.12, 20.13 and epic 21.
+- Already delivered and to build on: 20.1 (product key, barcode lookup `GET /products/lookup`, merge with `merged_into_id` redirect transmitted in pull) and 20.2 (Bref client fields, per-establishment list with owner sharing, `DUPLICATE_PHONE` warning, marketing consent via REST and sync). Open question routed to 19.5b: whether product merge is restricted to owner/manager. Routed to 22.5: pull tombstone when a client leaves an establishment's scope.
 - Downstream: 21.6 campaigns use consent and per-establishment targets (20.2); 23.x RN screens consume these APIs and shared contracts; 24.3/24.4 import uses product keys, per-establishment clients, a dedicated invoicing import port (no counter consumption, no bridge events) and legacy references/tokens.
 - Mobile work is done in the Bref repo by another developer: each spec carries a mobile section, tracked as separate `m20-x` keys in sprint status.
