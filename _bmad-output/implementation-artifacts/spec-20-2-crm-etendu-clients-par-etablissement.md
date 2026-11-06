@@ -2,15 +2,30 @@
 title: '20-2 Extended CRM — Bref client fields, clients per store (ADR-08), duplicate-phone warning, marketing consent'
 type: 'feature'
 created: '2026-11-06'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: 'a8b348a452982bcc038f2c8e76cb4798225550ed'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-20-1-catalogue-sans-stock-cle-fusion.md'
   - '{project-root}/keevo/backend/src/main/resources/db/modules/README.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      A client moved by the OWNER to another store stays on the old store's devices (no removal row in the pull).
+    evidence: |-
+      ClientDeltaProvider filters on the current visible set over updated_at; a row leaving the set is simply not sent. Routed to 22-5-pull-delta-fusion.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/ClientDeltaProvider.java
+    severity: medium
+  - summary: >-
+      Client list and search are unbounded and use LIKE without a trigram index (pre-existing).
+    evidence: |-
+      findAllScoped / searchScoped keep the pre-20.2 shape. Routed to 20-6.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSpringRepository.java
+    severity: low
 ---
 
 <intent-contract>
@@ -88,7 +103,25 @@ All backend paths under `keevo/backend/src/main/`.
 - Events/audit/labels (consent given/withdrawn, French labels), export dataset + `export-datasets.json`, `docs/entitlements/endpoints.md` regenerated (new endpoints carry `@RequiresEntitlement("crm")`).
 - `ClientPhoneBackfillJob` (crm, bootstrap) -- marker `crm-client-phone-normalized-backfill`, one set-based statement per tenant (`UPDATE clients SET phone_normalized = <normalized phone> WHERE phone_normalized IS NULL`, normalization done in SQL only if identical to the Java helper for stored E.164 phones — otherwise keyset batches of 500 in Java), per-tenant failure logged and retried next boot.
 - Tests: unit (visibility helper, phone helper incl. InvoicePhones parity, consent rules, store assignment), controller/use-case tests for every matrix row, sync handler + pull provider tests (restricted/sharing/unrestricted), Postgres integration for migrations + backfill + pull SQL, architecture tests green.
-- Spec final section `## Mobile (React Native — dépôt AI/bref)` and sprint key `m20-2` (done at finalize).
+- Spec final section `## Auto Run Result
+
+Status: done
+
+**Change:** Bref client fields (type, NIU, RCCM, address, contact, website, birth date), clients per store (ADR-08: store assigned by the server, one visibility rule for REST, sync writes and the scoped pull, owner "all stores" and `?storeId`, per-store sharing `stores.share_clients`), `DUPLICATE_PHONE` warning on create plus `GET /clients/duplicates`, marketing consent (`PUT /clients/{id}/marketing-consent`, sync `SET_CLIENT_MARKETING_CONSENT`, withdrawal always wins, client STOP never overridden, eligibility port for 21.6), one E.164 phone normalization shared with invoicing, `phone_normalized` backfill job, pull re-seed when a device's visible store set changes, store-move audit.
+
+**Files (main groups):** crm module V2, store module V3, public V53 + V54 (`user_sync_state.last_scope_client_stores`); crm domain/application/REST/sync/export/backfill (`ClientVisibility`, `ClientProfileRules`, `ClientStoreScope`, `ClientFinder`, `SetClientMarketingConsentUseCase`, `FindDuplicateClientsUseCase`, `ClientPhoneBackfillJob`, `RequestScopedClientVisibleStores`); store `StoreClientSharing` + `shareClients`; sync `ClientDeltaProvider` scoped, `SyncPushService` scope fingerprint, LWW for consent; `PhoneNumbers.toE164`; audit labels and export contract; `ClientCommandPort.createWithId` removed (unused); Flutter test client audit/export mirror, 2.0.25+97.
+
+**Review:** 33 triage rows (43 reviewer findings): 20 patched (medium: visible-set reseed, consent LWW with withdrawal always applied, consent lost update, per-batch store reads, eligibility query + DB test, createWithId removal, store-move audit, owner pre-check across stores, export test, store sync test; low: member of inactive store, unknown storeId filter 400, regex parity, legacy ClientView phone, eligibility parity), 2 deferred (client moved out of a store stays on old devices → 22-5; unbounded client list/search → 20-6), 11 rejected with reasons in the triage log.
+
+**Follow-up review recommended:** true — 2+ medium entries patched; named risk: the new pull scope fingerprint (cursor format, V54 column, reseed trigger) and the consent conflict rule are new sync behaviour exercised by unit and full-context tests but not yet by a real device.
+
+**Verification:**
+- Full backend suite package by package: 6,084 tests; 1 failure (`TenantSchemaInterpolationGuardTest`, a request-attribute cache key flagged as SQL) fixed by a reviewed allowlist entry, test re-run green.
+- Live on keevo_dev (WhatsApp noop, FCM/Expo off): V54 applied, 364 tenants checked 0 failed; owner list with unknown storeId → 400; create (store assigned, E.164, COMPANY) → 201; same-store duplicate → 201 + `DUPLICATE_PHONE`; owner pre-check without store → matches; consent → PATCH keeps consent (eligible) → withdrawal → not eligible. Earlier implementer pass: full curl matrix incl. employee scope, sharing, sync pull.
+
+**Residual risks:** the two deferred items; RN app must apply the 16-13 purge on a sharing-triggered reseed (documented in the Mobile section).
+
+## Mobile (React Native — dépôt AI/bref)` and sprint key `m20-2` (done at finalize).
 
 **Acceptance Criteria:**
 - Given an EMPLOYEE of store A on the REST API, when they create, list, read, update, archive or set consent on clients, then every rule of the I/O matrix holds and the response bodies are supersets of today's.
@@ -111,3 +144,34 @@ Reconciliations: "store_id obligatoire pour les nouvelles fiches" is enforced by
 - `cd keevo/backend && mvn -o -q test -Dtest='com/keevo/store/**/*Test*,com/keevo/sync/**/*Test*,com/keevo/architecture/**/*Test*'` -- expected: pass
 - Full suite package by package (`run-pkgs-wait.sh`) -- expected: 0 failures
 - Live: local backend on keevo_dev (`--keevo.whatsapp.provider=noop --keevo.fcm.enabled=false --keevo.push.expo.enabled=false`), curl the matrix with an owner and an employee of a test tenant -- expected: as documented.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée sur `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+
+**Ce qui est fait côté API :** chaque nouveau client appartient à une boutique ; un employé ne voit que les clients de sa boutique (plus ceux des boutiques qui partagent leurs clients avec la sienne, et les anciens clients sans boutique) ; le propriétaire voit tout et peut filtrer par boutique. Créer un client dont le numéro existe déjà dans la même boutique fonctionne mais renvoie un avertissement. La fiche client porte les champs Bref et l'accord marketing (donné / retiré, par qui) ; un « STOP » du client l'emporte toujours.
+
+**À utiliser :**
+1. Champs ajoutés aux clients (REST `GET/POST/PATCH /api/v1/clients`, `GET /api/v1/clients/{id}`, synchro `CREATE_CLIENT` / `UPDATE_CLIENT`, pull `clients`) : `clientType` (`PERSON` | `COMPANY`), `niu` (≤ 50), `rccm` (≤ 50), `address` (≤ 255), `contactName` (≤ 120), `website` (≤ 200), `birthDate` (`AAAA-MM-JJ`, pas dans le futur) — absent = inchangé, chaîne vide = effacé ; `storeId` (création : l'employé n'envoie rien ou sa propre boutique ; le propriétaire choisit une boutique active, sinon la plus ancienne ; modification : propriétaire seulement). Lecture seule : `phoneNormalized` (E.164), `marketingConsentAt`, `marketingConsentBy`, `marketingOptOutAt`, `marketingEligible`. Le téléphone peut être saisi `699001122`, `+237 6 99 00 11 22` ou `00237…` : il est stocké en `+237699001122`.
+2. Liste : `GET /api/v1/clients?search=&includeArchived=&storeId=` (`storeId` : propriétaire seulement, « clients vus depuis cette boutique » ; sans lui = toutes les boutiques).
+3. Doublon : la création répond 201 avec `meta.warnings = [{code: "DUPLICATE_PHONE", existingClient: {id, name, phone, storeId}}]` ; en synchro `APPLIED` avec `reason = "DUPLICATE_PHONE"` et `conflictData.existingClientId`. Vérification avant validation : `GET /api/v1/clients/duplicates?phone=…&storeId=…` → liste (vide si aucun ; l'employé vérifie toujours sa boutique).
+4. Accord marketing : `PUT /api/v1/clients/{id}/marketing-consent` `{"consent": true|false}` → client à jour ; synchro `SET_CLIENT_MARKETING_CONSENT` `{clientId, consent}`. Lecteur : 403.
+5. Boutiques : `shareClients` (booléen) dans `GET/PATCH /api/v1/stores/{id}` (propriétaire), synchro `UPDATE_STORE` et pull `stores`.
+   Quand le partage change (une boutique active ou désactive `shareClients`, une boutique qui partage est désactivée ou réactivée), le pull suivant d'un employé concerné répond `reseed: true` depuis le début : l'app applique la même règle de purge que pour un changement de boutique (spec-16-13) — elle vide ses clients locaux puis reçoit exactement les clients désormais visibles.
+6. `GET /api/v1/clients/duplicates` sans `storeId` par le propriétaire : doublons de toutes ses boutiques. Le propriétaire qui change un client de boutique laisse une trace dans l'historique (« Client changé de boutique »).
+7. Erreurs : client d'une autre boutique → 404 `CLIENT_NOT_FOUND` (synchro `REJECTED CLIENT_NOT_FOUND`) ; employé qui force une autre boutique → 403 `FORBIDDEN` (synchro `REJECTED FORBIDDEN`) ; boutique inconnue ou désactivée (propriétaire, création ou filtre `?storeId=`) → 400 `VALIDATION_ERROR` ; employé d'une boutique désactivée qui crée un client → 403 ; champ trop long / date invalide → 422 `VALIDATION_ERROR` avec le message français.
+Code : `keevo/backend/src/main/java/com/keevo/crm/contact/adapter/in/web/ClientController.java`, `CreateClientUseCase.java`, `ClientStoreScope.java`, `ClientProfileRules.java`, `SetClientMarketingConsentUseCase.java`, `sync/.../ClientDeltaProvider.java`.
+
+**À implémenter côté mobile :**
+1. Fiche client : type (Particulier / Entreprise), NIU, RCCM, adresse, personne à contacter, site web, date de naissance ; interrupteur « Accepte les offres WhatsApp » (désactivé avec la mention « Le client s'est désinscrit » quand `marketingOptOutAt` est renseigné).
+2. Avant de valider une création : appeler `duplicates` (en ligne) ou chercher localement par `phoneNormalized` dans la boutique ; afficher « Un client avec ce numéro existe déjà : X » avec « Ouvrir sa fiche » / « Créer quand même ». Après une création, afficher l'avertissement si `meta.warnings` ou `reason = DUPLICATE_PHONE` revient.
+3. Propriétaire : sélecteur « Toutes mes boutiques / Boutique X » sur la liste des clients ; réglage « Partager les clients avec les autres boutiques » dans la fiche boutique.
+4. Aucune donnée technique à l'écran (ni identifiants, ni codes).
+
+**Critères d'acceptation mobile :**
+- Given un employé de la boutique A, when il ouvre la liste des clients, then il ne voit que les clients de A (et des boutiques partageant avec A) et les anciens clients.
+- Given un client existant `+237699001122` dans A, when l'employé crée `699001122`, then l'app l'avertit et la création reste possible.
+- Given un accord retiré, when la liste des clients éligibles aux campagnes est calculée, then le client n'y figure plus.
+- Mise en place : `curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"consent":true}' $API/api/v1/clients/<id>/marketing-consent`.
+
+**Clé de suivi mobile :** `m20-2-crm-etendu-clients-par-etablissement`.

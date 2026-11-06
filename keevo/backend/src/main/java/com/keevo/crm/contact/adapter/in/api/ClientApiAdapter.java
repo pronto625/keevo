@@ -3,22 +3,25 @@ package com.keevo.crm.contact.adapter.in.api;
 import com.keevo.crm.api.ClientCommandPort;
 import com.keevo.crm.api.ClientQueryPort;
 import com.keevo.crm.api.ClientView;
-import com.keevo.crm.api.CreateClientInput;
 import com.keevo.crm.api.UpdateClientInput;
+import com.keevo.crm.contact.application.service.ClientAccess;
 import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
 import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
 import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
-import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
-import java.time.Instant;
+import java.util.Collection;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * Implements the published client ports by delegating to the crm use cases and repository
  * (Story 12.2a). No transaction of its own: delegates keep theirs, or join the caller's.
+ *
+ * <p>Story 20.2 — a system-level API (other modules): no actor visibility rule. No creation entry point: every
+ * client is created through {@code CreateClientUseCase} (store, duplicate probe).
  */
 @Component
 class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
@@ -45,30 +48,28 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
     }
 
     @Override
-    public ClientView createWithId(String tenantSchema, CreateClientInput in) {
+    public Set<UUID> marketingEligible(String tenantSchema, Collection<UUID> clientIds) {
         TenantContext.requireCurrent(tenantSchema);
-        Instant now = Instant.now();
-        Client client = new Client(in.id(), in.name(), in.phone(), in.email(), in.notes(),
-                false, now, now);
-        return ContactViews.of(clientRepository.save(client));
+        return clientRepository.findMarketingEligible(clientIds);
     }
 
     @Override
     public ClientView update(String tenantSchema, UpdateClientInput in) {
         TenantContext.requireCurrent(tenantSchema);
         return ContactViews.of(updateClient.execute(new UpdateClientUseCase.UpdateClientCommand(
-                in.clientId(), in.name(), in.phone(), in.email(), in.notes(), in.actorId())));
+                in.clientId(), in.name(), in.phone(), in.email(), in.notes(), in.actorId(), in.profile(), null,
+                ClientAccess.SYSTEM, tenantSchema)));
     }
 
     @Override
     public void archive(String tenantSchema, UUID clientId, UUID actorId) {
         TenantContext.requireCurrent(tenantSchema);
-        archiveClient.execute(clientId, actorId, tenantSchema);
+        archiveClient.execute(clientId, actorId, tenantSchema, ClientAccess.SYSTEM);
     }
 
     @Override
     public void unarchive(String tenantSchema, UUID clientId, UUID actorId) {
         TenantContext.requireCurrent(tenantSchema);
-        unarchiveClient.execute(clientId, actorId, tenantSchema);
+        unarchiveClient.execute(clientId, actorId, tenantSchema, ClientAccess.SYSTEM);
     }
 }

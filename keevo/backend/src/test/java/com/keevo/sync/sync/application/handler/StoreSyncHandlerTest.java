@@ -254,4 +254,45 @@ class StoreSyncHandlerTest {
         assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
         verifyNoInteractions(updateStoreUseCase);
     }
+
+    // ── Story 20.2 — shareClients ─────────────────────────────────────────────
+
+    @Test
+    void handle_updateStore_shareClientsOnANonSharingStore_callsUseCaseWithIt() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(brefStore(storeId)));
+        when(updateStoreUseCase.execute(any())).thenReturn(brefStore(storeId).withShareClients(true));
+
+        var op = new SyncOperation("op-s1", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "address", "Rue 1", "shareClients", true),
+                Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verify(updateStoreUseCase).execute(new UpdateStoreCommand(storeId, "Boutique", "Rue 1", null, ACTOR_ID,
+                new com.keevo.store.api.StoreProfilePatch(null, null, null, null, null, true)));
+    }
+
+    @Test
+    void handle_updateStore_sameShareClients_isAppliedNoOp() {
+        var storeId = UUID.randomUUID();
+        when(storeRepository.findById(storeId)).thenReturn(Optional.of(brefStore(storeId).withShareClients(true)));
+
+        var op = new SyncOperation("op-s2", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "address", "Rue 1", "shareClients", true),
+                Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.APPLIED);
+        verifyNoInteractions(updateStoreUseCase);
+    }
+
+    @Test
+    void handle_updateStore_nonBooleanShareClients_rejected() {
+        var storeId = UUID.randomUUID();
+        var op = new SyncOperation("op-s3", "UPDATE_STORE", storeId.toString(),
+                Map.of("storeId", storeId.toString(), "name", "Boutique", "shareClients", "yes"),
+                Instant.now());
+
+        assertThat(handler.handle(op, ACTOR_ID, TENANT_ID).status()).isEqualTo(SyncOperationStatus.REJECTED);
+        verifyNoInteractions(updateStoreUseCase);
+    }
 }

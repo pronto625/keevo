@@ -20,6 +20,7 @@ public class ConflictStrategyRegistry {
             "CREATE_PRODUCT", "PRODUCT_CREATE", "PRODUCT_UPDATE", "UPDATE_PRODUCT",
             "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT",
             "UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT",
+            "SET_CLIENT_MARKETING_CONSENT", // Story 20.2 — a withdrawal always applies (LastWriteWinsStrategy)
             "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER", "UNARCHIVE_SUPPLIER",
             "CREATE_STORE", "UPDATE_STORE", "DEACTIVATE_STORE",
             "RENAME_CATEGORY", "TOGGLE_CATEGORY",

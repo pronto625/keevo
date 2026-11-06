@@ -11,3 +11,6 @@ com/keevo/admin/revenue/adapter/in/rest/ChurnCsvWriter.java :: return "keevo-chu
 
 # Not executed SQL — strips the schema qualifier from a pg_get_indexdef string for comparison.
 com/keevo/shared/infrastructure/persistence/SyncKeysetIndexJob.java :: return definition.replace(" ON " + schema + ".", " ON ")   # string comparison only
+
+# Not SQL — request-attribute cache key (Story 20.2).
+com/keevo/crm/contact/adapter/out/store/RequestScopedClientVisibleStores.java :: String key = ATTRIBUTE_PREFIX + tenantSchema + "." + storeId;   # request-attribute key, never executed

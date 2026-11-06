@@ -640,6 +640,8 @@ class LocalExportReader {
           agg[r.read<String>('id')]?.$3,
           r.readNullable<bool>('archived'),
           r.read<DateTime>('created_at'),
+          // Story 20.2 — not stored on the device by this test client
+          null, null, null, null, null, null, null, null, null, null, null,
         ],
     ];
   }

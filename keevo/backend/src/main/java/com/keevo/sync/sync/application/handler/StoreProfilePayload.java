@@ -8,7 +8,7 @@ import java.util.Objects;
 
 /**
  * The optional Bref fields of a CREATE_STORE / UPDATE_STORE payload (Story 19.12): {@code category},
- * {@code description}, {@code niu}, {@code rccm}, {@code country}. Absent or null ⇒ unchanged (a V1 app sends none).
+ * {@code description}, {@code niu}, {@code rccm}, {@code country}; {@code shareClients} (Story 20.2, boolean). Absent or null ⇒ unchanged (a V1 app sends none).
  * A non-string value → {@link IllegalArgumentException} (REJECTED); the values themselves are validated by the store
  * module ({@code StoreCommandPort#normalizeProfile}, the REST rule) → {@code VALIDATION_ERROR} (REJECTED).
  */
@@ -23,7 +23,8 @@ final class StoreProfilePayload {
                 string(payload, "description"),
                 string(payload, "niu"),
                 string(payload, "rccm"),
-                string(payload, "country"));
+                string(payload, "country"),
+                bool(payload, "shareClients"));
     }
 
     /** Whether a normalized patch ({@code null} = unchanged, {@code ""} = clear) changes nothing on {@code current}. */
@@ -32,11 +33,21 @@ final class StoreProfilePayload {
                 && same(normalized.description(), current.description())
                 && same(normalized.niu(), current.niu())
                 && same(normalized.rccm(), current.rccm())
-                && same(normalized.country(), current.country());
+                && same(normalized.country(), current.country())
+                && (normalized.shareClients() == null || normalized.shareClients() == current.shareClients());
     }
 
     private static boolean same(String patched, String current) {
         return patched == null || Objects.equals(patched.isEmpty() ? null : patched, current);
+    }
+
+    /** Story 20.2 — {@code shareClients}: a JSON boolean or absent. */
+    private static Boolean bool(Map<String, Object> payload, String key) {
+        Object value = payload.get(key);
+        if (value == null || value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        throw new IllegalArgumentException("Invalid field: " + key);
     }
 
     private static String string(Map<String, Object> payload, String key) {

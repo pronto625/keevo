@@ -352,7 +352,7 @@ class FoundationMigrationsPostgresIntegrationTest {
 
         modules.ensureFoundation(schema);
 
-        assertThat(migrations.currentVersion(schema, "store")).isEqualTo("2");
+        assertThat(migrations.currentVersion(schema, "store")).isEqualTo("3"); // 20.2: store V3 (share_clients)
         assertThat(migrations.currentVersion(schema, "core")).isEqualTo("3");
         assertThat(storeBrefColumns(schema)).hasSize(6);
         assertThat(jdbc.queryForList("SELECT country FROM \"" + schema + "\".stores", String.class))

@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 245 — gated: 117, exempt: 128.
+Handlers: 247 — gated: 119, exempt: 128.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -115,9 +115,11 @@ Handlers: 245 — gated: 117, exempt: 128.
 | GET | `/api/v1/categories/{parentId}/subcategories` | `catalog` | READ | — |  | CategoryController#getSubcategories |
 | GET | `/api/v1/clients` | `crm` | READ | — |  | ClientController#listClients |
 | POST | `/api/v1/clients` | `crm` | WRITE | — |  | ClientController#createClient |
+| GET | `/api/v1/clients/duplicates` | `crm` | READ | — |  | ClientController#findDuplicates |
 | DELETE | `/api/v1/clients/{id}` | `crm` | WRITE | — |  | ClientController#archiveClient |
 | GET | `/api/v1/clients/{id}` | `crm` | READ | — |  | ClientController#getClientProfile |
 | PATCH | `/api/v1/clients/{id}` | `crm` | WRITE | — |  | ClientController#updateClient |
+| PUT | `/api/v1/clients/{id}/marketing-consent` | `crm` | WRITE | — |  | ClientController#setMarketingConsent |
 | GET | `/api/v1/credit-notes/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | CreditNoteController#get |
 | GET | `/api/v1/credit-notes/{id}/pdf` | `invoicing` | READ | `INVOICE_VIEW` |  | CreditNoteController#pdf |
 | GET | `/api/v1/dashboard/summary` | `reporting` | READ | — |  | DashboardController#getSummary |

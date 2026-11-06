@@ -30,7 +30,21 @@ class UnarchiveClientUseCaseTest {
 
     @Mock ClientRepository clientRepository;
     @Mock ApplicationEventPublisher eventPublisher;
-    @InjectMocks UnarchiveClientUseCase useCase;
+    @Mock com.keevo.store.api.StoreQueryPort storeQuery;
+
+    private com.keevo.crm.contact.application.service.ClientStoreScope storeScope() {
+        return new com.keevo.crm.contact.application.service.ClientStoreScope(storeQuery);
+    }
+
+    private ClientFinder finder() {
+        return new ClientFinder(clientRepository, storeScope());
+    }
+    UnarchiveClientUseCase useCase;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        useCase = new UnarchiveClientUseCase(clientRepository, finder(), eventPublisher);
+    }
 
     private static final Instant NOW = Instant.now();
 
@@ -41,7 +55,7 @@ class UnarchiveClientUseCaseTest {
         UUID actorId = UUID.randomUUID();
         when(clientRepository.findById(id)).thenReturn(Optional.of(client(id, true)));
 
-        useCase.execute(id, actorId, "tenant-xyz");
+        useCase.execute(id, actorId, "tenant-xyz", com.keevo.crm.contact.application.service.ClientAccess.SYSTEM);
 
         verify(clientRepository).unarchive(id);
         ArgumentCaptor<ClientUnarchivedEvent> captor = ArgumentCaptor.forClass(ClientUnarchivedEvent.class);
@@ -58,7 +72,7 @@ class UnarchiveClientUseCaseTest {
         UUID id = UUID.randomUUID();
         when(clientRepository.findById(id)).thenReturn(Optional.of(client(id, false)));
 
-        useCase.execute(id, UUID.randomUUID(), "t");
+        useCase.execute(id, UUID.randomUUID(), "t", com.keevo.crm.contact.application.service.ClientAccess.SYSTEM);
 
         verify(clientRepository, never()).unarchive(any());
         verify(eventPublisher, never()).publishEvent(any());
@@ -70,7 +84,7 @@ class UnarchiveClientUseCaseTest {
         UUID id = UUID.randomUUID();
         when(clientRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> useCase.execute(id, UUID.randomUUID(), "t"))
+        assertThatThrownBy(() -> useCase.execute(id, UUID.randomUUID(), "t", com.keevo.crm.contact.application.service.ClientAccess.SYSTEM))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("CLIENT_NOT_FOUND");
     }

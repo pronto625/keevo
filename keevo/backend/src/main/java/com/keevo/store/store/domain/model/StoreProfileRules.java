@@ -55,7 +55,8 @@ public final class StoreProfileRules {
                         "La description ne doit pas dépasser " + MAX_DESCRIPTION + " caractères"),
                 bounded(raw.niu(), MAX_NIU, "Le NIU ne doit pas dépasser " + MAX_NIU + " caractères"),
                 bounded(raw.rccm(), MAX_RCCM, "Le RCCM ne doit pas dépasser " + MAX_RCCM + " caractères"),
-                country(raw.country()));
+                country(raw.country()),
+                raw.shareClients());
     }
 
     /** The store with a raw patch applied (validated here). An empty patch returns the same store. */
@@ -64,12 +65,13 @@ public final class StoreProfileRules {
         if (p.isEmpty()) {
             return store;
         }
-        return store.withProfile(
+        Store profiled = store.withProfile(
                 p.category() == null ? store.category() : StoreCategory.fromKey(p.category()).orElse(null),
                 pick(p.description(), store.description()),
                 pick(p.niu(), store.niu()),
                 pick(p.rccm(), store.rccm()),
                 p.country() == null ? store.country() : p.country());
+        return p.shareClients() == null ? profiled : profiled.withShareClients(p.shareClients());
     }
 
     /** What changed between two versions of a store, as audit values (category as its French label, never a key). */
@@ -91,6 +93,7 @@ public final class StoreProfileRules {
         diff("niu", before.niu(), after.niu(), b, a);
         diff("rccm", before.rccm(), after.rccm(), b, a);
         diff("country", before.country(), after.country(), b, a);
+        diff("shareClients", before.shareClients(), after.shareClients(), b, a); // Story 20.2
         return new Changes(b, a);
     }
 

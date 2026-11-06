@@ -85,4 +85,9 @@ class ConflictStrategyRegistryTest {
     void resolve_unknownType_returnsAppendOnlyStrategy() {
         assertThat(registry.resolve("TOTALLY_UNKNOWN")).isSameAs(appendOnlyStrategy);
     }
+
+    @org.junit.jupiter.api.Test
+    void story202_consentIsLastWriteWins() {
+        assertThat(registry.resolve("SET_CLIENT_MARKETING_CONSENT")).isSameAs(lastWriteWinsStrategy);
+    }
 }

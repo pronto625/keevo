@@ -30,7 +30,14 @@ class CreateClientUseCaseTest {
 
     @Mock ClientRepository clientRepository;
     @Mock ApplicationEventPublisher eventPublisher;
-    @InjectMocks CreateClientUseCase useCase;
+    @Mock com.keevo.store.api.StoreQueryPort storeQuery;
+    CreateClientUseCase useCase;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        useCase = new CreateClientUseCase(clientRepository, eventPublisher,
+                new com.keevo.crm.contact.application.service.ClientStoreScope(storeQuery));
+    }
 
     @Test
     @DisplayName("valid command creates client, saves, and publishes ClientCreatedEvent")
@@ -49,7 +56,7 @@ class CreateClientUseCaseTest {
                     c.notes(), c.archived(), now, now);
         });
 
-        Client result = useCase.execute(command);
+        Client result = useCase.execute(command).client();
 
         assertThat(result.id()).isEqualTo(savedId);
         assertThat(result.name()).isEqualTo("Alice Dupont");

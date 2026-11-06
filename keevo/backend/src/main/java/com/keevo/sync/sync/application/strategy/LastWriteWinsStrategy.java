@@ -56,6 +56,12 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
 
     private record Target(LwwEntity entity, String payloadKey) {}
 
+    /**
+     * Story 20.2 — a consent given ({@code consent = true}) older than the client's last change is superseded like
+     * UPDATE_CLIENT; a withdrawal ({@code consent = false}) always applies, however late it arrives.
+     */
+    static final String SET_CLIENT_MARKETING_CONSENT = "SET_CLIENT_MARKETING_CONSENT";
+
     private static final Map<String, Target> TARGETS = Map.ofEntries(
             Map.entry("UPDATE_PRODUCT", new Target(LwwEntity.PRODUCT, "productId")),
             Map.entry("PRODUCT_UPDATE", new Target(LwwEntity.PRODUCT, "productId")),
@@ -64,6 +70,7 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
             Map.entry("UPDATE_CLIENT", new Target(LwwEntity.CLIENT, "clientId")),
             Map.entry("ARCHIVE_CLIENT", new Target(LwwEntity.CLIENT, "clientId")),
             Map.entry("UNARCHIVE_CLIENT", new Target(LwwEntity.CLIENT, "clientId")),
+            Map.entry(SET_CLIENT_MARKETING_CONSENT, new Target(LwwEntity.CLIENT, "clientId")),
             Map.entry("UPDATE_SUPPLIER", new Target(LwwEntity.SUPPLIER, "supplierId")),
             Map.entry("ARCHIVE_SUPPLIER", new Target(LwwEntity.SUPPLIER, "supplierId")),
             Map.entry("UNARCHIVE_SUPPLIER", new Target(LwwEntity.SUPPLIER, "supplierId")),
@@ -101,6 +108,10 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
     public PreApplyCheck beforeApply(SyncOperation operation, String deviceId, String tenantId) {
         Target target = TARGETS.get(operation.operationType());
         if (target == null) return PreApplyCheck.NONE;
+        if (SET_CLIENT_MARKETING_CONSENT.equals(operation.operationType())
+                && Boolean.FALSE.equals(operation.payload().get("consent"))) {
+            return PreApplyCheck.NONE; // a withdrawal is never superseded
+        }
         if (OWNER_ONLY.contains(operation.operationType()) && !CurrentActor.isOwner()) return PreApplyCheck.NONE;
         UUID id = entityId(operation, target);
         if (id == null) return PreApplyCheck.NONE;

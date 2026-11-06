@@ -18,6 +18,8 @@ import com.keevo.shared.event.catalog.category.CategoryRenamedEvent;
 import com.keevo.shared.event.catalog.contact.ClientArchivedEvent;
 import com.keevo.shared.event.catalog.contact.ClientUnarchivedEvent;
 import com.keevo.shared.event.catalog.contact.ClientCreatedEvent;
+import com.keevo.shared.event.catalog.contact.ClientMarketingConsentChangedEvent;
+import com.keevo.shared.event.catalog.contact.ClientStoreChangedEvent;
 import com.keevo.shared.event.catalog.invoicing.CreditNoteIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
@@ -386,6 +388,27 @@ public class AuditEventListener {
                 map("archived", true), map("name", event.name(), "archived", false),
                 null, event.name(), null, null);
         log.info("AUDIT: client_unarchived clientId={} tenantId={} actorId={}",
+                event.clientId(), event.tenantId(), event.actorId());
+    }
+
+    /** Story 20.2 — consent to marketing messages recorded or withdrawn by the team (REST or sync). */
+    @EventListener
+    public void on(ClientMarketingConsentChangedEvent event) {
+        String action = event.consent() ? "CLIENT_MARKETING_CONSENT_GIVEN" : "CLIENT_MARKETING_CONSENT_WITHDRAWN";
+        write(event.actorId(), event.tenantId(), action, "Client", event.clientId(),
+                map("marketingConsent", !event.consent()), map("name", event.name(), "marketingConsent", event.consent()),
+                event.storeId(), event.name(), null, null);
+        log.info("AUDIT: client_marketing_consent clientId={} consent={} tenantId={} actorId={}",
+                event.clientId(), event.consent(), event.tenantId(), event.actorId());
+    }
+
+    /** Story 20.2 — the owner moved a client to another store (store names only, never ids). */
+    @EventListener
+    public void on(ClientStoreChangedEvent event) {
+        write(event.actorId(), event.tenantId(), "CLIENT_STORE_CHANGED", "Client", event.clientId(),
+                map("storeName", event.fromStoreName()), map("name", event.name(), "storeName", event.toStoreName()),
+                event.toStoreId(), event.name(), null, null);
+        log.info("AUDIT: client_store_changed clientId={} tenantId={} actorId={}",
                 event.clientId(), event.tenantId(), event.actorId());
     }
 

@@ -476,4 +476,87 @@ class SyncPullServiceTest {
         assertThat(SyncPushService.PullCursor.decode(owner.encode()).scope())
                 .isEqualTo(new SyncPushService.ScopeKey(false, null));
     }
+
+    // ── Story 20.2 — client visible stores fingerprint ───────────────────────────────────────────────
+
+    private com.keevo.store.api.StoreQueryPort sharing(java.util.Set<UUID> visible) {
+        var storeQuery = mock(com.keevo.store.api.StoreQueryPort.class);
+        when(storeQuery.clientVisibleStoreIds(TENANT_ID, STORE_A)).thenReturn(visible);
+        service.setStoreQuery(storeQuery);
+        return storeQuery;
+    }
+
+    private static com.keevo.sync.sync.domain.model.UserSyncState storedWithClients(java.util.Set<UUID> visible) {
+        return new com.keevo.sync.sync.domain.model.UserSyncState(DEVICE, ACTOR_ID, TENANT_ID, null, null,
+                Instant.now(), true, STORE_A, true, SyncPushService.ScopeKey.fingerprint(visible));
+    }
+
+    @Test
+    void story202_sharingTurnedOn_nextPullReseedsWithTheOtherStoresClients() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        var visible = java.util.Set.of(STORE_A, STORE_B);
+        var storeQuery = sharing(visible);
+        when(userSyncStateRepository.findByDeviceId(DEVICE))
+                .thenReturn(java.util.Optional.of(storedWithClients(java.util.Set.of(STORE_A))));
+        var scopeCaptor = org.mockito.ArgumentCaptor.forClass(com.keevo.shared.application.port.sync.PullScope.class);
+        when(productProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(Instant.EPOCH), isNull(), anyInt(), scopeCaptor.capture()))
+                .thenReturn(page(List.of(Map.of("id", "client-of-B"))));
+
+        var result = service.pull(employeePull(STORE_A, since, null));
+
+        assertThat(result.reseed()).isTrue();
+        assertThat(result.entities().get("clients")).hasSize(1);
+        // resolved once, carried to the clients provider
+        assertThat(scopeCaptor.getValue().clientStoreIds()).isEqualTo(visible);
+        verify(storeQuery, times(1)).clientVisibleStoreIds(TENANT_ID, STORE_A);
+        verify(userSyncStateRepository).rememberPullScope(DEVICE, ACTOR_ID, true, STORE_A,
+                SyncPushService.ScopeKey.fingerprint(visible));
+    }
+
+    @Test
+    void story202_sharingUnchanged_incrementalPull_nothingWritten() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        sharing(java.util.Set.of(STORE_A, STORE_B));
+        when(userSyncStateRepository.findByDeviceId(DEVICE))
+                .thenReturn(java.util.Optional.of(storedWithClients(java.util.Set.of(STORE_B, STORE_A))));
+        when(productProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+
+        var result = service.pull(employeePull(STORE_A, since, null));
+
+        assertThat(result.reseed()).isFalse();
+        verify(userSyncStateRepository, never()).rememberPullScope(any(), any(), anyBoolean(), any(), any());
+        verify(userSyncStateRepository, never()).rememberPullScope(any(), any(), anyBoolean(), any());
+    }
+
+    @Test
+    void story202_fingerprintNotKnownYet_isNotAChange_butIsRemembered() {
+        var since = Instant.parse("2026-03-20T10:00:00Z");
+        var visible = java.util.Set.of(STORE_A);
+        sharing(visible);
+        when(userSyncStateRepository.findByDeviceId(DEVICE)).thenReturn(java.util.Optional.of(stored(STORE_A, true)));
+        when(productProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+        when(clientProvider.queryDeltaPage(eq(since), isNull(), anyInt(), any())).thenReturn(page(List.of()));
+
+        var result = service.pull(employeePull(STORE_A, since, null));
+
+        assertThat(result.reseed()).isFalse();
+        verify(userSyncStateRepository).rememberPullScope(DEVICE, ACTOR_ID, true, STORE_A,
+                SyncPushService.ScopeKey.fingerprint(visible));
+    }
+
+    @Test
+    void story202_cursorCarriesTheFingerprint_ownerHasNone() {
+        var key = new SyncPushService.ScopeKey(true, STORE_A, SyncPushService.ScopeKey.fingerprint(java.util.Set.of(STORE_A)));
+        var cursor = new SyncPushService.PullCursor(Instant.parse("2026-03-20T10:00:00Z"), false, false, true, key,
+                new java.util.HashMap<>());
+        assertThat(SyncPushService.PullCursor.decode(cursor.encode()).scope()).isEqualTo(key);
+        assertThat(SyncPushService.ScopeKey.of(com.keevo.shared.application.port.sync.PullScope.unrestricted(ACTOR_ID)
+                .withClientStoreIds(java.util.Set.of(STORE_A))).clientStores()).isNull();
+        // a cursor from before 20.2 (no fingerprint) is the same scope
+        assertThat(new SyncPushService.ScopeKey(true, STORE_A).sameAs(key)).isTrue();
+        assertThat(key.sameAs(new SyncPushService.ScopeKey(true, STORE_A,
+                SyncPushService.ScopeKey.fingerprint(java.util.Set.of(STORE_A, STORE_B))))).isFalse();
+    }
 }

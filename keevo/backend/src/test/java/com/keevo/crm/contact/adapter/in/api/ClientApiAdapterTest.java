@@ -1,7 +1,6 @@
 package com.keevo.crm.contact.adapter.in.api;
 
 import com.keevo.crm.api.ClientView;
-import com.keevo.crm.api.CreateClientInput;
 import com.keevo.crm.api.UpdateClientInput;
 import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
 import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
@@ -72,30 +71,6 @@ class ClientApiAdapterTest {
     }
 
     @Test
-    void createWithId_savesANonArchivedClientWithTheGivenId() {
-        when(clientRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        ClientView view = adapter.createWithId(TenantContext.getCurrentTenant(), new CreateClientInput(ID, "Alice", "+237690000001", "a@b.cm", "VIP"));
-
-        var captor = ArgumentCaptor.forClass(Client.class);
-        verify(clientRepository).save(captor.capture());
-        Client saved = captor.getValue();
-        assertThat(saved.id()).isEqualTo(ID);
-        assertThat(saved.archived()).isFalse();
-        assertThat(saved.createdAt()).isNotNull().isEqualTo(saved.updatedAt());
-        assertThat(view).isEqualTo(new ClientView(ID, "Alice", "+237690000001", "a@b.cm", "VIP", false,
-                saved.createdAt(), saved.updatedAt()));
-    }
-
-    @Test
-    void createWithId_invalidPhone_isValidationError_andNothingIsSaved() {
-        assertThatThrownBy(() -> adapter.createWithId(TenantContext.getCurrentTenant(), new CreateClientInput(ID, "Bob", "invalid", null, null)))
-                .isInstanceOf(DomainException.class)
-                .satisfies(ex -> assertThat(((DomainException) ex).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
-        verify(clientRepository, never()).save(any());
-    }
-
-    @Test
     void update_mapsOntoTheUseCaseCommand() {
         when(updateClient.execute(any())).thenReturn(
                 new Client(ID, "Alice B", "+237690000002", null, "n", false, T0, T0));
@@ -103,7 +78,8 @@ class ClientApiAdapterTest {
         ClientView view = adapter.update(TenantContext.getCurrentTenant(), new UpdateClientInput(ID, "Alice B", "+237690000002", null, "n", ACTOR));
 
         verify(updateClient).execute(new UpdateClientUseCase.UpdateClientCommand(
-                ID, "Alice B", "+237690000002", null, "n", ACTOR));
+                ID, "Alice B", "+237690000002", null, "n", ACTOR, com.keevo.crm.api.ClientProfileInput.NONE, null,
+                com.keevo.crm.contact.application.service.ClientAccess.SYSTEM, TENANT));
         assertThat(view.name()).isEqualTo("Alice B");
     }
 
@@ -112,8 +88,16 @@ class ClientApiAdapterTest {
         adapter.archive(TENANT, ID, ACTOR);
         adapter.unarchive(TENANT, ID, ACTOR);
 
-        verify(archiveClient).execute(ID, ACTOR, TENANT);
-        verify(unarchiveClient).execute(ID, ACTOR, TENANT);
+        verify(archiveClient).execute(ID, ACTOR, TENANT, com.keevo.crm.contact.application.service.ClientAccess.SYSTEM);
+        verify(unarchiveClient).execute(ID, ACTOR, TENANT, com.keevo.crm.contact.application.service.ClientAccess.SYSTEM);
+    }
+
+    @Test
+    void marketingEligible_delegatesToOneRepositoryQuery_20_2() {
+        UUID other = UUID.randomUUID();
+        when(clientRepository.findMarketingEligible(java.util.List.of(ID, other))).thenReturn(java.util.Set.of(ID));
+
+        assertThat(adapter.marketingEligible(TENANT, java.util.List.of(ID, other))).containsExactly(ID);
     }
 
     // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast

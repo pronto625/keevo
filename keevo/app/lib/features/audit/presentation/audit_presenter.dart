@@ -273,6 +273,18 @@ class AuditPresenter {
         Icons.person_off_outlined, AuditCategory.contact),
     'CLIENT_UNARCHIVED': AuditActionInfo('Client désarchivé',
         'désarchivé le client', Icons.person_outline, AuditCategory.contact),
+    // Story 20.2 — marketing consent recorded / withdrawn by the team
+    'CLIENT_MARKETING_CONSENT_GIVEN': AuditActionInfo('Accord marketing donné',
+        'enregistré l\'accord marketing du client', Icons.campaign_outlined,
+        AuditCategory.contact),
+    'CLIENT_MARKETING_CONSENT_WITHDRAWN': AuditActionInfo(
+        'Accord marketing retiré',
+        'retiré l\'accord marketing du client',
+        Icons.notifications_off_outlined,
+        AuditCategory.contact),
+    'CLIENT_STORE_CHANGED': AuditActionInfo('Client changé de boutique',
+        'changé de boutique le client', Icons.swap_horiz_rounded,
+        AuditCategory.contact),
     'SUPPLIER_CREATED': AuditActionInfo(
         'Fournisseur créé',
         'créé le fournisseur',

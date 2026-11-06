@@ -96,10 +96,19 @@ class ClientTest {
         }
 
         @Test
-        @DisplayName("phone without leading + throws VALIDATION_ERROR")
+        @DisplayName("phone that cannot be normalized to E.164 throws VALIDATION_ERROR")
         void should_throw_on_phone_without_plus() {
             assertThrows(DomainException.class,
-                    () -> new Client(ID, "Alice", "0022670000001", null, null, false, NOW, NOW));
+                    () -> new Client(ID, "Alice", "06-12", null, null, false, NOW, NOW));
+        }
+
+        @Test
+        @DisplayName("Story 20.2 — typed forms are stored in E.164: 00 → +, 9 local digits → +237, separators dropped")
+        void typed_forms_are_stored_in_e164() {
+            assertEquals("+22670000001", new Client(ID, "A", "0022670000001", null, null, false, NOW, NOW).phone());
+            assertEquals("+237699001122", new Client(ID, "A", "699001122", null, null, false, NOW, NOW).phone());
+            assertEquals("+237699001122",
+                    new Client(ID, "A", "+237 6 99 00 11 22", null, null, false, NOW, NOW).phoneNormalized());
         }
 
         @Test

@@ -56,6 +56,10 @@ public class StoreJpaEntity extends JpaBaseEntity {
     @Column(name = "country", nullable = false, length = 2)
     private String country = "CM";
 
+    /** Story 20.2 — store V3, column NOT NULL DEFAULT false (mirrored on public by V53). */
+    @Column(name = "share_clients", nullable = false)
+    private boolean shareClients;
+
     // ── Getters / Setters ────────────────────────────────────────
 
     public String getName() { return name; }
@@ -90,6 +94,9 @@ public class StoreJpaEntity extends JpaBaseEntity {
 
     public String getCountry() { return country; }
     public void setCountry(String country) { this.country = country; }
+
+    public boolean isShareClients() { return shareClients; }
+    public void setShareClients(boolean shareClients) { this.shareClients = shareClients; }
 
     // Expose setters for JpaBaseEntity protected fields (used by adapter)
     public void setId(java.util.UUID id) { super.setId(id); }

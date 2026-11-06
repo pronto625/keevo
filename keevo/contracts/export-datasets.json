@@ -661,6 +661,61 @@
           "key" : "createdAt",
           "label" : "Créé le",
           "type" : "DATETIME"
+        },
+        {
+          "key" : "clientType",
+          "label" : "Type de client",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "niu",
+          "label" : "NIU",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "rccm",
+          "label" : "RCCM",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "address",
+          "label" : "Adresse",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "contactName",
+          "label" : "Personne à contacter",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "website",
+          "label" : "Site web",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "birthDate",
+          "label" : "Date de naissance",
+          "type" : "DATE"
+        },
+        {
+          "key" : "store",
+          "label" : "Boutique",
+          "type" : "TEXT"
+        },
+        {
+          "key" : "marketingConsent",
+          "label" : "Accord marketing",
+          "type" : "BOOLEAN"
+        },
+        {
+          "key" : "marketingConsentAt",
+          "label" : "Accord marketing le",
+          "type" : "DATETIME"
+        },
+        {
+          "key" : "marketingOptOutAt",
+          "label" : "Désinscrit le",
+          "type" : "DATETIME"
         }
       ]
     },
@@ -911,6 +966,10 @@
       "ACTIVE" : "Actif",
       "DRAFT" : "Brouillon"
     },
+    "clients.clientType" : {
+      "COMPANY" : "Entreprise",
+      "PERSON" : "Particulier"
+    },
     "stores.type" : {
       "STORE" : "Boutique",
       "WAREHOUSE" : "Entrepôt"
@@ -992,6 +1051,9 @@
       "CATEGORY_RENAMED" : "Catégorie renommée",
       "CLIENT_ARCHIVED" : "Client archivé",
       "CLIENT_CREATED" : "Client créé",
+      "CLIENT_MARKETING_CONSENT_GIVEN" : "Accord marketing donné",
+      "CLIENT_MARKETING_CONSENT_WITHDRAWN" : "Accord marketing retiré",
+      "CLIENT_STORE_CHANGED" : "Client changé de boutique",
       "CLIENT_UNARCHIVED" : "Client désarchivé",
       "COMPANY_PROFILE_UPDATED" : "Identité de l'entreprise modifiée",
       "CREDIT_NOTE_ISSUED" : "Avoir émis",
@@ -1136,6 +1198,7 @@
       "lastName" : "Nom de famille",
       "logo" : "Logo",
       "lowStockThreshold" : "Seuil d'alerte",
+      "marketingConsent" : "Accord marketing",
       "mergedInto" : "Fusionné avec",
       "mode" : "Mode",
       "module" : "Module",
@@ -1168,6 +1231,7 @@
       "sellingPrice" : "Prix de vente",
       "sentTo" : "Envoyée au",
       "sessions" : "Sessions fermées",
+      "shareClients" : "Partage des clients",
       "sku" : "Référence",
       "status" : "Statut",
       "statut" : "Statut",

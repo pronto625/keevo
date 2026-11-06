@@ -623,12 +623,38 @@ public class SyncPushService implements SyncUseCase {
      */
     static final java.time.Duration PULL_CURSOR_MARGIN = java.time.Duration.ofSeconds(30);
 
+    /** Story 20.2 — optional: resolves a restricted pull's client visible stores once per pull. */
+    private com.keevo.store.api.StoreQueryPort storeQuery;
+
+    @Autowired(required = false)
+    void setStoreQuery(com.keevo.store.api.StoreQueryPort storeQuery) {
+        this.storeQuery = storeQuery;
+    }
+
+    /**
+     * Story 20.2 — a restricted pull's client visible stores (ADR-08), read once per pull and carried by the scope to
+     * the clients provider; {@code null} for an unrestricted pull, or when unresolvable (the provider then resolves it
+     * itself and the scope carries no fingerprint).
+     */
+    private PullScope withClientStores(PullScope scope, String tenantId) {
+        if (scope == null || !scope.restricted() || storeQuery == null) return scope;
+        if (scope.storeId() == null) return scope.withClientStoreIds(java.util.Set.of());
+        try {
+            return scope.withClientStoreIds(storeQuery.clientVisibleStoreIds(tenantId, scope.storeId()));
+        } catch (RuntimeException e) {
+            log.warn("[Sync] Client visible stores unreadable ({}) — no sharing fingerprint for this pull",
+                    e.getClass().getSimpleName());
+            return scope;
+        }
+    }
+
     @Override
     public SyncPullResult pull(PullCommand command) {
-        ScopeKey scope = ScopeKey.of(command.scope());
+        PullScope pullScope = withClientStores(command.scope(), command.tenantId());
+        ScopeKey scope = ScopeKey.of(pullScope);
         PullCursor state = PullCursor.decode(command.cursor());
         boolean restart = false;
-        if (state != null && state.scope() != null && !state.scope().equals(scope)) {
+        if (state != null && state.scope() != null && !state.scope().sameAs(scope)) {
             // Story 16.13 — the actor's scope changed between two pages of this pull (employee reassigned): the
             // keyset positions belong to the old scope, so the pull restarts from the beginning as a re-seed.
             log.info("[Sync] Pull scope changed during a paged pull — pull restarted from the beginning (reseed)");
@@ -670,7 +696,7 @@ public class SyncPushService implements SyncUseCase {
                 DeltaEntityProvider.Position after = state.positions().get(key);
                 try {
                     DeltaEntityProvider.Page page = readOnlyTx.execute(status ->
-                            provider.queryDeltaPage(since, after, DeltaEntityProvider.PAGE_SIZE, command.scope()));
+                            provider.queryDeltaPage(since, after, DeltaEntityProvider.PAGE_SIZE, pullScope));
                     if (page != null && page.rows() != null) rows = page.rows();
                     if (page != null && page.hasMore()) state.positions().put(key, page.next());
                     else state.positions().put(key, PullCursor.DONE);
@@ -711,10 +737,39 @@ public class SyncPushService implements SyncUseCase {
                 hasMore, hasMore ? state.encode() : null, command.scope(), state.reseed());
     }
 
-    /** Story 16.13 — the part of a pull scope that decides what the device holds: restricted + store. */
-    record ScopeKey(boolean restricted, UUID storeId) {
+    /**
+     * Story 16.13 — the part of a pull scope that decides what the device holds: restricted + store. Story 20.2 —
+     * plus {@code clientStores}: a fingerprint of a restricted pull's client visible stores (sorted ids, SHA-256 hex),
+     * {@code null} when unrestricted or unknown; a known-and-different fingerprint re-seeds like a scope change (a
+     * store started / stopped sharing its clients, a sharing store was (de)activated).
+     */
+    record ScopeKey(boolean restricted, UUID storeId, String clientStores) {
+        ScopeKey(boolean restricted, UUID storeId) {
+            this(restricted, storeId, null);
+        }
+
         static ScopeKey of(PullScope scope) {
-            return new ScopeKey(scope.restricted(), scope.storeId());
+            return new ScopeKey(scope.restricted(), scope.storeId(),
+                    scope.restricted() ? fingerprint(scope.clientStoreIds()) : null);
+        }
+
+        /** Same restricted + store, and same fingerprint when both are known. */
+        boolean sameAs(ScopeKey other) {
+            return other != null && restricted == other.restricted && Objects.equals(storeId, other.storeId)
+                    && (clientStores == null || other.clientStores == null
+                        || clientStores.equals(other.clientStores));
+        }
+
+        static String fingerprint(java.util.Set<UUID> ids) {
+            if (ids == null) return null;
+            String joined = ids.stream().map(UUID::toString).sorted().collect(java.util.stream.Collectors.joining(","));
+            try {
+                byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+                        .digest(joined.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                return java.util.HexFormat.of().formatHex(hash);
+            } catch (java.security.NoSuchAlgorithmException e) {
+                throw new IllegalStateException(e);
+            }
         }
     }
 
@@ -736,7 +791,7 @@ public class SyncPushService implements SyncUseCase {
     }
 
     private static ScopeKey storedScope(UserSyncState stored) {
-        return new ScopeKey(stored.lastScopeRestricted(), stored.lastScopeStoreId());
+        return new ScopeKey(stored.lastScopeRestricted(), stored.lastScopeStoreId(), stored.lastScopeClientStores());
     }
 
     /**
@@ -748,7 +803,7 @@ public class SyncPushService implements SyncUseCase {
         if (!ownRow(stored, command) || !stored.get().lastScopeKnown()) {
             return false;
         }
-        boolean changed = !storedScope(stored.get()).equals(scope);
+        boolean changed = !storedScope(stored.get()).sameAs(scope);
         if (changed) {
             log.info("[Sync] Pull scope of the device changed since its last pull — pull answered from the "
                     + "beginning (reseed)");
@@ -764,13 +819,19 @@ public class SyncPushService implements SyncUseCase {
         if (stored.isEmpty()) return true; // unreadable or not registered yet: the guarded update decides
         return ownRow(stored, command)
                 && (!stored.get().lastScopeKnown() || !storedScope(stored.get()).equals(scope));
+        // Story 20.2: equals (not sameAs) — a newly known or changed client-stores fingerprint is written too
     }
 
     /** Story 16.13 — remembers the scope of the device's completed pull; never fails the pull. */
     private void rememberScope(PullCommand command, ScopeKey scope) {
         try {
-            userSyncStateRepository.rememberPullScope(command.deviceId(), command.actorId(),
-                    scope.restricted(), scope.storeId());
+            if (scope.clientStores() == null) {
+                userSyncStateRepository.rememberPullScope(command.deviceId(), command.actorId(),
+                        scope.restricted(), scope.storeId());
+            } else {
+                userSyncStateRepository.rememberPullScope(command.deviceId(), command.actorId(),
+                        scope.restricted(), scope.storeId(), scope.clientStores());
+            }
         } catch (RuntimeException e) {
             log.warn("[Sync] Device pull scope not saved ({}) — next pull compares with the previous one",
                     e.getClass().getSimpleName());
@@ -820,6 +881,7 @@ public class SyncPushService implements SyncUseCase {
             if (scope != null) {
                 sb.append('|').append(scope.restricted() ? '1' : '0').append('|')
                         .append(scope.storeId() != null ? scope.storeId().toString() : "-");
+                if (scope.clientStores() != null) sb.append('|').append(scope.clientStores()); // Story 20.2
             }
             positions.forEach((key, pos) -> {
                 sb.append('\n').append(key).append('=');
@@ -842,8 +904,9 @@ public class SyncPushService implements SyncUseCase {
                 boolean failed = flags.startsWith("1");
                 boolean reseed = flags.length() > 1 && flags.charAt(1) == '1';
                 boolean remember = flags.length() <= 2 || flags.charAt(2) == '1';
-                ScopeKey scope = header.length == 3
-                        ? new ScopeKey("1".equals(header[1]), "-".equals(header[2]) ? null : UUID.fromString(header[2]))
+                ScopeKey scope = header.length >= 3
+                        ? new ScopeKey("1".equals(header[1]), "-".equals(header[2]) ? null : UUID.fromString(header[2]),
+                                header.length >= 4 ? header[3] : null)
                         : null;
                 Map<String, DeltaEntityProvider.Position> positions = new HashMap<>();
                 for (int i = 2; i < lines.length; i++) {

@@ -89,10 +89,16 @@ class SyncKeysetIndexesMatchProvidersTest {
         when(query.setParameter(anyString(), any())).thenReturn(query);
         when(query.setMaxResults(anyInt())).thenReturn(query);
         when(query.getResultList()).thenReturn(List.of());
-        Constructor<?> ctor = type.getDeclaredConstructor(EntityManager.class);
+        // Story 20.2 — a provider may take other collaborators (e.g. ClientDeltaProvider's StoreQueryPort): mocked
+        Constructor<?> ctor = type.getDeclaredConstructors()[0];
         ctor.setAccessible(true);
+        Object[] args = new Object[ctor.getParameterCount()];
+        for (int i = 0; i < args.length; i++) {
+            Class<?> param = ctor.getParameterTypes()[i];
+            args[i] = param == EntityManager.class ? em : mock(param);
+        }
         // Story 16.13 — the scope is an argument of the page query (providers read no security context).
-        ((DeltaEntityProvider) ctor.newInstance(em)).queryDeltaPage(Instant.parse("2026-10-01T00:00:00Z"), null, 50, scope);
+        ((DeltaEntityProvider) ctor.newInstance(args)).queryDeltaPage(Instant.parse("2026-10-01T00:00:00Z"), null, 50, scope);
         ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
         verify(em, atLeastOnce()).createNativeQuery(sql.capture());
         return sql.getAllValues().get(0);

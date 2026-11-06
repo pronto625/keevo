@@ -27,7 +27,8 @@ public record StoreResponseDto(
         String logoUrl,
         String niu,
         String rccm,
-        String country
+        String country,
+        boolean shareClients // Story 20.2
 ) {
     public static StoreResponseDto fromDomain(Store store) {
         return new StoreResponseDto(
@@ -44,7 +45,8 @@ public record StoreResponseDto(
                 logoUrl(store),
                 store.niu(),
                 store.rccm(),
-                store.country()
+                store.country(),
+                store.shareClients()
         );
     }
 

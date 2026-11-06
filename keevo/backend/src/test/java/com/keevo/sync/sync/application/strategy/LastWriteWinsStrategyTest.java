@@ -101,6 +101,40 @@ class LastWriteWinsStrategyTest {
                 new UserSyncState(DEVICE, UUID.randomUUID(), TENANT, null, at, at)));
     }
 
+    // ── Story 20.2 — SET_CLIENT_MARKETING_CONSENT ─────────────────────────────
+
+    private static SyncOperation consent(boolean consent, Instant ts) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("clientId", ID.toString());
+        payload.put("consent", consent);
+        return new SyncOperation("op-new", "SET_CLIENT_MARKETING_CONSENT", ID.toString(), payload, ts);
+    }
+
+    @Test
+    void staleConsentGiven_isSupersededLikeUpdateClient() {
+        entityUpdatedAt(LwwEntity.CLIENT, T2);
+
+        PreApplyCheck check = strategy.beforeApply(consent(true, T1), DEVICE, TENANT);
+
+        assertThat(check.isSuperseded()).isTrue();
+        assertThat(check.superseded().conflictData()).containsEntry("entityType", "CLIENT");
+    }
+
+    @Test
+    void newerConsentGiven_applies() {
+        entityUpdatedAt(LwwEntity.CLIENT, T1);
+
+        assertThat(strategy.beforeApply(consent(true, T3), DEVICE, TENANT).isSuperseded()).isFalse();
+    }
+
+    @Test
+    void staleWithdrawal_alwaysApplies_neverReadsTheClient() {
+        PreApplyCheck check = strategy.beforeApply(consent(false, T1), DEVICE, TENANT);
+
+        assertThat(check).isEqualTo(PreApplyCheck.NONE);
+        org.mockito.Mockito.verify(entityLastModified, org.mockito.Mockito.never()).findUpdatedAt(any(), any());
+    }
+
     // ── Superseded (incoming older than the current state) ────────────────────
 
     @ParameterizedTest(name = "{0} older than the entity → superseded")

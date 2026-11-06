@@ -149,7 +149,7 @@ class StoreScopedDeltaProvidersTest {
                 new Case("stockLevels", StockLevelDeltaProvider::new, null),
                 new Case("products", ProductDeltaProvider::new, null),
                 new Case("categories", CategoryDeltaProvider::new, null),
-                new Case("clients", ClientDeltaProvider::new, null),
+                // clients: store-scoped since Story 20.2 (ClientDeltaProviderTest)
                 new Case("suppliers", SupplierDeltaProvider::new, null));
     }
 

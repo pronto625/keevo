@@ -54,6 +54,9 @@ public final class AuditLabels {
             entry("CLIENT_CREATED", "Client créé"),
             entry("CLIENT_ARCHIVED", "Client archivé"),
             entry("CLIENT_UNARCHIVED", "Client désarchivé"),
+            entry("CLIENT_MARKETING_CONSENT_GIVEN", "Accord marketing donné"),      // Story 20.2
+            entry("CLIENT_MARKETING_CONSENT_WITHDRAWN", "Accord marketing retiré"), // Story 20.2
+            entry("CLIENT_STORE_CHANGED", "Client changé de boutique"),            // Story 20.2
             entry("SUPPLIER_CREATED", "Fournisseur créé"),
             entry("SUPPLIER_ARCHIVED", "Fournisseur archivé"),
             entry("SUPPLIER_UPDATED", "Fournisseur modifié"),
@@ -196,6 +199,8 @@ public final class AuditLabels {
             entry("description", "Description"),
             entry("barcode", "Code-barres"),
             entry("mergedInto", "Fusionné avec"),                       // Story 20.1
+            entry("marketingConsent", "Accord marketing"),              // Story 20.2
+            entry("shareClients", "Partage des clients"),               // Story 20.2 — store update diff
             entry("unit", "Unité"),
             entry("format", "Format"),
             entry("rowCount", "Nombre de lignes"),

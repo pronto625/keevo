@@ -3,6 +3,8 @@ package com.keevo.crm.contact.adapter.in.api;
 import com.keevo.crm.api.ClientView;
 import com.keevo.crm.api.SupplierView;
 import com.keevo.crm.contact.domain.entity.Client;
+import com.keevo.crm.contact.domain.entity.ClientProfile;
+import com.keevo.crm.contact.domain.entity.MarketingConsent;
 import com.keevo.crm.contact.domain.entity.Supplier;
 
 import java.util.List;
@@ -14,8 +16,13 @@ final class ContactViews {
     private ContactViews() {}
 
     static ClientView of(Client c) {
+        ClientProfile p = c.profile();
+        MarketingConsent m = c.consent();
         return new ClientView(c.id(), c.name(), c.phone(), c.email(), c.notes(), c.archived(),
-                c.createdAt(), c.updatedAt());
+                c.createdAt(), c.updatedAt(),
+                p.type() == null ? null : p.type().name(), p.niu(), p.rccm(), p.address(), p.contactName(),
+                p.website(), p.birthDate(), c.storeId(), c.phoneNormalized(),
+                m.consentAt(), m.optOutAt(), m.consentBy(), c.marketingEligible());
     }
 
     /** {@code productIds} is passed through as-is (null stays null, like the former crm web DTO). */

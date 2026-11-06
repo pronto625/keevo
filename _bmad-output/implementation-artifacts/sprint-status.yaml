@@ -442,11 +442,11 @@ development_status:
 
   epic-20: backlog  # P1b Modules métier Bref
   20-1-catalogue-sans-stock-cle-fusion: done  # 2026-11-06 revue 5 couches (50 constats, 6 moyens corrigés, 1 routé → 19-5b), 5 965 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-20-1-catalogue-sans-stock-cle-fusion.md)
-  20-2-crm-etendu-consentement: backlog
+  20-2-crm-etendu-consentement: done  # 2026-11-06 build-auto (spec-20-2-crm-etendu-clients-par-etablissement) — revue 5 couches, 20 corrigés, 2 routés (22-5, 20-6), 6 084 tests verts, contrôle live keevo_dev OK
   20-3-devis: backlog
   20-4-encaissements-echeancier-retard: backlog
   20-5-remise-livraison-tva-echeance: backlog
-  20-6-derivation-catalogue-crm: backlog
+  20-6-derivation-catalogue-crm: backlog  # 2026-11-06 revue 20-2 — 1 item (liste et recherche clients non paginées, LIKE sans index trigramme)
   20-7-modeles-signatures-liens-publics: backlog
   20-8-envoi-sms-email: backlog
   20-9-reporting-multi-source: backlog
@@ -474,7 +474,7 @@ development_status:
   22-2-stockage-chiffre-schema: backlog
   22-3-auth-sessions-tenant-picker: backlog
   22-4-file-operations-push: backlog
-  22-5-pull-delta-fusion: backlog
+  22-5-pull-delta-fusion: backlog  # 2026-11-06 revue 20-2 — 1 item (retrait d un client sorti du périmètre de l établissement : marqueur de suppression dans le pull)
   22-6-rejet-quarantaine-journal: backlog
   22-7-gate-7-jours: backlog
   22-8-entitlements-modules-routes: backlog

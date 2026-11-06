@@ -360,6 +360,23 @@ const localExportCatalog = <LocalExportDataset>[
           'lastPurchaseAt', 'Dernier achat', LocalColumnType.datetime),
       LocalExportColumn('archived', 'Archivé', LocalColumnType.boolean),
       LocalExportColumn('createdAt', 'Créé le', LocalColumnType.datetime),
+      // Story 20.2 — Bref fields, store, marketing consent (server export)
+      LocalExportColumn('clientType', 'Type de client', LocalColumnType.text),
+      LocalExportColumn('niu', 'NIU', LocalColumnType.text),
+      LocalExportColumn('rccm', 'RCCM', LocalColumnType.text),
+      LocalExportColumn('address', 'Adresse', LocalColumnType.text),
+      LocalExportColumn(
+          'contactName', 'Personne à contacter', LocalColumnType.text),
+      LocalExportColumn('website', 'Site web', LocalColumnType.text),
+      LocalExportColumn(
+          'birthDate', 'Date de naissance', LocalColumnType.date),
+      LocalExportColumn('store', 'Boutique', LocalColumnType.text),
+      LocalExportColumn(
+          'marketingConsent', 'Accord marketing', LocalColumnType.boolean),
+      LocalExportColumn('marketingConsentAt', 'Accord marketing le',
+          LocalColumnType.datetime),
+      LocalExportColumn(
+          'marketingOptOutAt', 'Désinscrit le', LocalColumnType.datetime),
     ],
   ),
   LocalExportDataset(
@@ -452,6 +469,10 @@ const exportLabels = <String, Map<String, String>>{
   'products.status': {
     'ACTIVE': 'Actif',
     'DRAFT': 'Brouillon',
+  },
+  'clients.clientType': {
+    'COMPANY': 'Entreprise',
+    'PERSON': 'Particulier',
   },
   'stores.type': {
     'STORE': 'Boutique',

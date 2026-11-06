@@ -31,7 +31,21 @@ class ArchiveClientUseCaseTest {
 
     @Mock ClientRepository clientRepository;
     @Mock ApplicationEventPublisher eventPublisher;
-    @InjectMocks ArchiveClientUseCase useCase;
+    @Mock com.keevo.store.api.StoreQueryPort storeQuery;
+
+    private com.keevo.crm.contact.application.service.ClientStoreScope storeScope() {
+        return new com.keevo.crm.contact.application.service.ClientStoreScope(storeQuery);
+    }
+
+    private ClientFinder finder() {
+        return new ClientFinder(clientRepository, storeScope());
+    }
+    ArchiveClientUseCase useCase;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        useCase = new ArchiveClientUseCase(clientRepository, finder(), eventPublisher);
+    }
 
     private static final Instant NOW = Instant.now();
 
@@ -44,7 +58,7 @@ class ArchiveClientUseCaseTest {
         Client client = new Client(clientId, "Alice", "+22670000001", null, null, false, NOW, NOW);
         when(clientRepository.findById(clientId)).thenReturn(Optional.of(client));
 
-        useCase.execute(clientId, actorId, tenant);
+        useCase.execute(clientId, actorId, tenant, com.keevo.crm.contact.application.service.ClientAccess.SYSTEM);
 
         verify(clientRepository).archive(clientId);
         ArgumentCaptor<ClientArchivedEvent> captor = ArgumentCaptor.forClass(ClientArchivedEvent.class);
@@ -61,7 +75,7 @@ class ArchiveClientUseCaseTest {
         UUID clientId = UUID.randomUUID();
         when(clientRepository.findById(clientId)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> useCase.execute(clientId, UUID.randomUUID(), "t"))
+        assertThatThrownBy(() -> useCase.execute(clientId, UUID.randomUUID(), "t", com.keevo.crm.contact.application.service.ClientAccess.SYSTEM))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("CLIENT_NOT_FOUND");
     }

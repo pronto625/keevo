@@ -919,6 +919,8 @@ So that **je retrouve le comportement Bref sans saisie préalable (FUS-FR16)**.
 **When** la facture est émise
 **Then** aucune dérivation n'a lieu et la facture reste valide (autonomie du module)
 
+- [ ] [Deferred-from: review 20-2, 2026-11-06] Client list and search are unbounded and use `LIKE '%q%'` without a trigram index (pre-existing shape kept by 20.2) [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSpringRepository.java findAllScoped/searchScoped] — keyset pagination + `pg_trgm` index when client lookup by phone/name serves document derivation
+
 ### Story 20.7 : Modèles de rendu, signatures, liens publics
 
 As a **commerçant**,
@@ -1282,6 +1284,8 @@ So that **mes données sont cohérentes partout**.
 **Given** un appareil réinstallé
 **When** le curseur est absent
 **Then** un full pull complet est fait avec indicateur de progression
+
+- [ ] [Deferred-from: review 20-2, 2026-11-06] A client moved by the owner to another store stays on the old store's devices: the pull sends no removal row for a record leaving the actor's visible set [keevo/backend/src/main/java/com/keevo/sync/sync/application/provider/ClientDeltaProvider.java] — removal markers in the pull, or a reseed trigger on store moves, with the app purging the record
 
 ### Story 22.6 : Politique de rejet, quarantaine, journal
 

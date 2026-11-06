@@ -1,15 +1,15 @@
 package com.keevo.crm.contact.adapter.in.sync;
 
-import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
-import com.keevo.crm.api.ClientCommandPort;
+import com.keevo.crm.contact.adapter.in.CurrentClientAccess;
+import com.keevo.crm.contact.application.usecase.CreateClientUseCase;
 import com.keevo.crm.api.ClientQueryPort;
-import com.keevo.crm.api.ClientView;
-import com.keevo.crm.api.CreateClientInput;
+import com.keevo.shared.application.port.sync.AbstractSyncOperationHandler;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
 import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import org.springframework.stereotype.Component;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -20,20 +20,22 @@ import java.util.UUID;
  * <p>Idempotent: if a client with the same UUID already exists the operation is
  * returned as APPLIED without creating a duplicate.
  *
- * <p>Bypasses {@code CreateClientUseCase} intentionally — the use case generates
- * its own {@code UUID.randomUUID()}, which would discard the client-assigned UUID
- * needed for offline-first idempotency.
+ * <p>Story 20.2 — same rules as the REST create ({@link CreateClientUseCase}, without its audit event as before):
+ * Bref fields, store assignment (a store member's own store; another {@code storeId} → REJECTED {@code FORBIDDEN};
+ * an OWNER's unknown store → REJECTED {@code VALIDATION_ERROR}). Same phone in the same store → still
+ * {@code APPLIED}, with {@code reason = DUPLICATE_PHONE} and {@code conflictData.existingClientId} (oldest match).
  */
 @Component
 public class CreateClientSyncHandler extends AbstractSyncOperationHandler {
 
-    // 12.2a: crm reached only through its public API.
-    private final ClientQueryPort clientQuery;
-    private final ClientCommandPort clientCommand;
+    static final String DUPLICATE_PHONE = "DUPLICATE_PHONE";
 
-    public CreateClientSyncHandler(ClientQueryPort clientQuery, ClientCommandPort clientCommand) {
+    private final ClientQueryPort clientQuery;
+    private final CreateClientUseCase createClient;
+
+    public CreateClientSyncHandler(ClientQueryPort clientQuery, CreateClientUseCase createClient) {
         this.clientQuery = clientQuery;
-        this.clientCommand = clientCommand;
+        this.createClient = createClient;
     }
 
     @Override
@@ -69,13 +71,25 @@ public class CreateClientSyncHandler extends AbstractSyncOperationHandler {
                     clientId.toString(), null);
         }
 
-        ClientView saved = clientCommand.createWithId(tenantId, new CreateClientInput(
+        var result = createClient.execute(new CreateClientUseCase.CreateClientCommand(
                 clientId,
                 (String) p.get("name"),
                 (String) p.get("phone"),
                 (String) p.getOrDefault("email", null),
-                (String) p.getOrDefault("notes", null)));
-        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
-                saved.id().toString(), null);
+                (String) p.getOrDefault("notes", null),
+                ClientSyncPayloads.profile(p),
+                ClientSyncPayloads.storeId(p),
+                CurrentClientAccess.get(),
+                actorId,
+                tenantId,
+                false));
+        String savedId = result.client().id().toString();
+        if (result.duplicates().isEmpty()) {
+            return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED, savedId, null);
+        }
+        Map<String, Object> conflictData = new LinkedHashMap<>();
+        conflictData.put("existingClientId", result.duplicates().get(0).id().toString());
+        return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED, savedId,
+                DUPLICATE_PHONE, conflictData);
     }
 }

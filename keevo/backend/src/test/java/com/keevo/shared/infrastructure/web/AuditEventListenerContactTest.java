@@ -158,4 +158,37 @@ class AuditEventListenerContactTest {
                 "{\"productCount\":2}",
                 "{\"productCount\":3,\"productsAdded\":2,\"productsRemoved\":1}"));
     }
+
+    // ── Story 20.2 — consent and store change ─────────────────────────────────
+
+    @Test
+    @DisplayName("consent given / withdrawn and store change: audited with French labels, store names, no ids")
+    void story202_consentAndStoreChange() {
+        UUID storeB = UUID.randomUUID();
+        listener.on(new com.keevo.shared.event.catalog.contact.ClientMarketingConsentChangedEvent(
+                CLIENT_ID, "Alice", true, storeB, ACTOR_ID, TENANT, NOW));
+        listener.on(new com.keevo.shared.event.catalog.contact.ClientMarketingConsentChangedEvent(
+                CLIENT_ID, "Alice", false, storeB, ACTOR_ID, TENANT, NOW));
+        listener.on(new com.keevo.shared.event.catalog.contact.ClientStoreChangedEvent(
+                CLIENT_ID, "Alice", "Boutique A", "Boutique B", storeB, ACTOR_ID, TENANT, NOW));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(AuditPort.AuditEntry.class);
+        org.mockito.Mockito.verify(auditPort, org.mockito.Mockito.times(3)).record(captor.capture());
+        var entries = captor.getAllValues();
+        org.assertj.core.api.Assertions.assertThat(entries).extracting(AuditPort.AuditEntry::action).containsExactly(
+                "CLIENT_MARKETING_CONSENT_GIVEN", "CLIENT_MARKETING_CONSENT_WITHDRAWN", "CLIENT_STORE_CHANGED");
+        var move = entries.get(2);
+        org.assertj.core.api.Assertions.assertThat(move.valueBefore()).contains("Boutique A")
+                .doesNotContain(storeB.toString());
+        org.assertj.core.api.Assertions.assertThat(move.valueAfter()).contains("Boutique B")
+                .doesNotContain(storeB.toString());
+        for (String action : java.util.List.of("CLIENT_MARKETING_CONSENT_GIVEN", "CLIENT_MARKETING_CONSENT_WITHDRAWN",
+                "CLIENT_STORE_CHANGED")) {
+            org.assertj.core.api.Assertions.assertThat(
+                    com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get(action)).as(action).isNotBlank();
+        }
+        org.assertj.core.api.Assertions.assertThat(
+                com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("CLIENT_STORE_CHANGED"))
+                .isEqualTo("Client changé de boutique");
+    }
 }

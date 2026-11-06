@@ -8,14 +8,6 @@ import java.util.UUID;
  */
 public interface ClientCommandPort {
 
-    /**
-     * Persists a client with a caller-assigned id, without the audit event of the REST create
-     * (offline-first sync create).
-     *
-     * @throws com.keevo.shared.domain.exception.DomainException VALIDATION_ERROR on invalid fields
-     */
-    ClientView createWithId(String tenantSchema, CreateClientInput input);
-
     ClientView update(String tenantSchema, UpdateClientInput input);
 
     void archive(String tenantSchema, UUID clientId, UUID actorId);

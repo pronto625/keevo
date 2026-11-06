@@ -171,7 +171,18 @@ class ExportDatasetCatalogTest {
                 totalSpent:Total des achats:AMOUNT_XAF
                 lastPurchaseAt:Dernier achat:DATETIME
                 archived:Archivé:BOOLEAN
-                createdAt:Créé le:DATETIME""");
+                createdAt:Créé le:DATETIME
+                clientType:Type de client:TEXT
+                niu:NIU:TEXT
+                rccm:RCCM:TEXT
+                address:Adresse:TEXT
+                contactName:Personne à contacter:TEXT
+                website:Site web:TEXT
+                birthDate:Date de naissance:DATE
+                store:Boutique:TEXT
+                marketingConsent:Accord marketing:BOOLEAN
+                marketingConsentAt:Accord marketing le:DATETIME
+                marketingOptOutAt:Désinscrit le:DATETIME""");
         GOLDEN.put("suppliers", """
                 Fournisseurs | store=false | period=false | criteria=
                 name:Nom:TEXT

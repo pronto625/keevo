@@ -13,7 +13,9 @@ import java.util.UUID;
  *
  * <p>Story 16.13 — {@code lastScopeRestricted}/{@code lastScopeStoreId}/{@code lastScopeKnown}: the scope of the
  * device's last completed pull (restricted = employee; null store = unrestricted or employee without a store). Unknown until the device completes
- * a pull; a later pull whose scope differs is answered from the beginning (re-seed).
+ * a pull; a later pull whose scope differs is answered from the beginning (re-seed). Story 20.2 —
+ * {@code lastScopeClientStores}: fingerprint of the client visible stores of that pull (restricted only), null when
+ * unknown.
  */
 public record UserSyncState(
         String deviceId,
@@ -24,8 +26,17 @@ public record UserSyncState(
         Instant updatedAt,
         boolean lastScopeRestricted,
         UUID lastScopeStoreId,
-        boolean lastScopeKnown
+        boolean lastScopeKnown,
+        String lastScopeClientStores
 ) {
+    /** Pre-20.2 arity — no client-stores fingerprint. */
+    public UserSyncState(String deviceId, UUID userId, String tenantId, Instant lastPushAt, Instant lastPullAt,
+                         Instant updatedAt, boolean lastScopeRestricted, UUID lastScopeStoreId,
+                         boolean lastScopeKnown) {
+        this(deviceId, userId, tenantId, lastPushAt, lastPullAt, updatedAt, lastScopeRestricted, lastScopeStoreId,
+                lastScopeKnown, null);
+    }
+
     /**
      * Without the remembered pull scope (Story 16.13): {@code lastScopeKnown = false}.
      */

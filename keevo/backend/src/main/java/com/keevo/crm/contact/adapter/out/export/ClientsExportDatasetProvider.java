@@ -10,21 +10,31 @@ import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
+import static com.keevo.shared.infrastructure.export.ExportValues.frLabel;
 import static com.keevo.shared.infrastructure.export.ExportValues.str;
 import static com.keevo.shared.infrastructure.export.ExportValues.toBool;
 import static com.keevo.shared.infrastructure.export.ExportValues.toInstant;
+import static com.keevo.shared.infrastructure.export.ExportValues.toLocalDate;
 import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
 
 /**
  * Export dataset {@code clients} (« Clients ») — Story v1s-18-2. Reference dataset, not
  * store-scoped (no store or period filter); archived clients included. Purchases = COMPLETED
  * sales of the client. Keyset {@code (created_at, id)}.
+ *
+ * <p>Story 20.2 — Bref fields (type as its French label), the store by name (never its id, « Toutes les boutiques »
+ * is never written: a legacy client without store has an empty cell), the marketing consent as Oui/Non + date and the
+ * client's own opt-out date.
  */
 @Component
 public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
 
     static final String KEY = "clients";
+
+    /** Story 20.2 — French label of {@code clients.client_type}. */
+    static final Map<String, String> TYPES = Map.of("PERSON", "Particulier", "COMPANY", "Entreprise");
 
     private static final List<ExportColumn> COLUMNS = List.of(
             new ExportColumn("name", "Nom", ExportColumnType.TEXT),
@@ -35,7 +45,19 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
             new ExportColumn("totalSpent", "Total des achats", ExportColumnType.AMOUNT_XAF),
             new ExportColumn("lastPurchaseAt", "Dernier achat", ExportColumnType.DATETIME),
             new ExportColumn("archived", "Archivé", ExportColumnType.BOOLEAN),
-            new ExportColumn("createdAt", "Créé le", ExportColumnType.DATETIME));
+            new ExportColumn("createdAt", "Créé le", ExportColumnType.DATETIME),
+            // Story 20.2
+            new ExportColumn("clientType", "Type de client", ExportColumnType.TEXT),
+            new ExportColumn("niu", "NIU", ExportColumnType.TEXT),
+            new ExportColumn("rccm", "RCCM", ExportColumnType.TEXT),
+            new ExportColumn("address", "Adresse", ExportColumnType.TEXT),
+            new ExportColumn("contactName", "Personne à contacter", ExportColumnType.TEXT),
+            new ExportColumn("website", "Site web", ExportColumnType.TEXT),
+            new ExportColumn("birthDate", "Date de naissance", ExportColumnType.DATE),
+            new ExportColumn("store", "Boutique", ExportColumnType.TEXT),
+            new ExportColumn("marketingConsent", "Accord marketing", ExportColumnType.BOOLEAN),
+            new ExportColumn("marketingConsentAt", "Accord marketing le", ExportColumnType.DATETIME),
+            new ExportColumn("marketingOptOutAt", "Désinscrit le", ExportColumnType.DATETIME));
 
     private static final List<Key> KEYSET = List.of(
             new Key("c.created_at", KeyType.TIMESTAMP),
@@ -53,7 +75,9 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
     @Override
     protected String selectList(ExportFilter filter) {
         return "c.name, c.phone, c.email, c.notes, agg.sales_count, agg.total_spent,"
-                + " agg.last_purchase, c.archived, c.created_at";
+                + " agg.last_purchase, c.archived, c.created_at,"
+                + " c.client_type, c.niu, c.rccm, c.address, c.contact_name, c.website, c.birth_date, st.name,"
+                + " c.marketing_consent_at, c.marketing_opt_out_at";
     }
 
     @Override
@@ -61,7 +85,8 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
         return "clients c LEFT JOIN LATERAL (SELECT COUNT(*) AS sales_count,"
                 + " COALESCE(SUM(s.total_amount), 0) AS total_spent,"
                 + " MAX(COALESCE(s.occurred_at, s.created_at)) AS last_purchase"
-                + " FROM sales s WHERE s.client_id = c.id AND s.status = 'COMPLETED') agg ON TRUE";
+                + " FROM sales s WHERE s.client_id = c.id AND s.status = 'COMPLETED') agg ON TRUE"
+                + " LEFT JOIN stores st ON st.id = c.store_id";
     }
 
     @Override
@@ -72,6 +97,8 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
     @Override
     protected List<Object> mapRow(Object[] r) {
         return Arrays.asList(str(r[0]), str(r[1]), str(r[2]), str(r[3]), toLong(r[4]), toLong(r[5]),
-                toInstant(r[6]), toBool(r[7]), toInstant(r[8]));
+                toInstant(r[6]), toBool(r[7]), toInstant(r[8]),
+                frLabel(TYPES, r[9]), str(r[10]), str(r[11]), str(r[12]), str(r[13]), str(r[14]),
+                toLocalDate(r[15]), str(r[16]), r[17] != null, toInstant(r[17]), toInstant(r[18]));
     }
 }

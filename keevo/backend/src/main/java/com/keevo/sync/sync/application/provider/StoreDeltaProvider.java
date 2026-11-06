@@ -36,7 +36,7 @@ public class StoreDeltaProvider implements DeltaEntityProvider {
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
                 "id, name, address, phone, type, is_active, created_at, updated_at,"
-                        + " category, description, logo_path, niu, rccm, country",
+                        + " category, description, logo_path, niu, rccm, country, share_clients",
                 "stores", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
@@ -58,6 +58,7 @@ public class StoreDeltaProvider implements DeltaEntityProvider {
         map.put("niu", str(row[11]));
         map.put("rccm", str(row[12]));
         map.put("country", str(row[13]));
+        map.put("shareClients", Boolean.TRUE.equals(row[14])); // Story 20.2 (ADR-08)
         return map;
     }
 

@@ -12,6 +12,7 @@ import com.keevo.store.api.StoreType;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.UpdateStoreInput;
 import com.keevo.store.store.domain.model.Store;
+import com.keevo.store.store.domain.model.StoreClientSharing;
 import com.keevo.store.store.domain.model.StoreFactory;
 import com.keevo.store.store.domain.model.StoreProfileRules;
 import com.keevo.store.store.domain.port.in.DeactivateStoreCommand;
@@ -26,6 +27,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -78,6 +80,15 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
     public int countActive(String tenantSchema) {
         TenantContext.requireCurrent(tenantSchema);
         return storeRepository.countActive();
+    }
+
+    @Override
+    public Set<UUID> clientVisibleStoreIds(String tenantSchema, UUID storeId) {
+        TenantContext.requireCurrent(tenantSchema);
+        if (storeId == null) {
+            return Set.of();
+        }
+        return StoreClientSharing.visibleStoreIds(storeId, storeRepository.findAllActive());
     }
 
     // ── StoreCommandPort ──────────────────────────────────────────────────────

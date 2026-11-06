@@ -80,7 +80,8 @@ public class StoreRepositoryAdapter implements StoreRepository {
                 e.getLogoPath(),
                 e.getNiu(),
                 e.getRccm(),
-                e.getCountry()
+                e.getCountry(),
+                e.isShareClients()
         );
     }
 
@@ -98,6 +99,7 @@ public class StoreRepositoryAdapter implements StoreRepository {
         e.setNiu(store.niu());
         e.setRccm(store.rccm());
         e.setCountry(store.country());
+        e.setShareClients(store.shareClients());
         return e;
     }
 }

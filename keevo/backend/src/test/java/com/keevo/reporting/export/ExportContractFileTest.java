@@ -61,6 +61,8 @@ class ExportContractFileTest {
     static {
         LABEL_FIELDS.put("products.status",
                 new String[]{"com.keevo.catalog.product.adapter.out.export.ProductsExportDatasetProvider", "STATUS"});
+        LABEL_FIELDS.put("clients.clientType", // Story 20.2
+                new String[]{"com.keevo.crm.contact.adapter.out.export.ClientsExportDatasetProvider", "TYPES"});
         LABEL_FIELDS.put("stores.type",
                 new String[]{"com.keevo.store.store.adapter.out.export.StoresExportDatasetProvider", "TYPES"});
         LABEL_FIELDS.put("stock_movements.type",

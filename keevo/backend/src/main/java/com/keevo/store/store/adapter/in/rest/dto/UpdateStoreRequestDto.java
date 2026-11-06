@@ -20,14 +20,21 @@ public record UpdateStoreRequestDto(
         String description,
         String niu,
         String rccm,
-        String country
+        String country,
+        Boolean shareClients // Story 20.2 — absent ⇒ unchanged
 ) {
     /** Pre-19.12 arity. */
     public UpdateStoreRequestDto(String name, String address, String phone) {
-        this(name, address, phone, null, null, null, null, null);
+        this(name, address, phone, null, null, null, null, null, null);
+    }
+
+    /** Pre-20.2 arity. */
+    public UpdateStoreRequestDto(String name, String address, String phone, String category, String description,
+                                 String niu, String rccm, String country) {
+        this(name, address, phone, category, description, niu, rccm, country, null);
     }
 
     public StoreProfilePatch profile() {
-        return new StoreProfilePatch(category, description, niu, rccm, country);
+        return new StoreProfilePatch(category, description, niu, rccm, country, shareClients);
     }
 }

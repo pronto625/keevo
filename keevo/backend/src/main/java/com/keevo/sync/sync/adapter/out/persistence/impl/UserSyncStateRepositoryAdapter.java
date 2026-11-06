@@ -25,7 +25,7 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
 
     private static final String FIND_BY_DEVICE =
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at, "
-                    + "last_scope_restricted, last_scope_store_id, last_scope_known "
+                    + "last_scope_restricted, last_scope_store_id, last_scope_known, last_scope_client_stores "
                     + "FROM public.user_sync_state WHERE device_id = ?";
 
     /**
@@ -53,12 +53,12 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
 
     private static final String FIND_ALL_BY_TENANT =
             "SELECT device_id, user_id, tenant_id, last_push_at, last_pull_at, updated_at, "
-                    + "last_scope_restricted, last_scope_store_id, last_scope_known "
+                    + "last_scope_restricted, last_scope_store_id, last_scope_known, last_scope_client_stores "
                     + "FROM public.user_sync_state WHERE tenant_id = ? ORDER BY updated_at DESC";
 
     private static final String REMEMBER_PULL_SCOPE =
             "UPDATE public.user_sync_state SET last_scope_restricted = ?, last_scope_store_id = ?, "
-                    + "last_scope_known = TRUE "
+                    + "last_scope_known = TRUE, last_scope_client_stores = ? "
                     + "WHERE device_id = ? AND user_id = ?";
 
     private final JdbcTemplate jdbcTemplate;
@@ -85,7 +85,13 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
 
     @Override
     public boolean rememberPullScope(String deviceId, UUID userId, boolean restricted, UUID storeId) {
-        return jdbcTemplate.update(REMEMBER_PULL_SCOPE, restricted, storeId, deviceId, userId) > 0;
+        return rememberPullScope(deviceId, userId, restricted, storeId, null);
+    }
+
+    @Override
+    public boolean rememberPullScope(String deviceId, UUID userId, boolean restricted, UUID storeId,
+                                     String clientStores) {
+        return jdbcTemplate.update(REMEMBER_PULL_SCOPE, restricted, storeId, clientStores, deviceId, userId) > 0;
     }
 
     @Override
@@ -104,7 +110,8 @@ public class UserSyncStateRepositoryAdapter implements UserSyncStateRepository {
                 rs.getBoolean("last_scope_restricted"),
                 rs.getString("last_scope_store_id") != null
                         ? UUID.fromString(rs.getString("last_scope_store_id")) : null,
-                rs.getBoolean("last_scope_known"));
+                rs.getBoolean("last_scope_known"),
+                rs.getString("last_scope_client_stores"));
     }
 
     private static Instant toInstant(ResultSet rs, String column) throws SQLException {

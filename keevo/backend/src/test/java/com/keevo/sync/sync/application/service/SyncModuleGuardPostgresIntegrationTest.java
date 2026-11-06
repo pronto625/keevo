@@ -436,6 +436,7 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 "ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT", "PROMOTE_PRODUCT", "CREATE_CATEGORY", "TOGGLE_CATEGORY",
                 "RENAME_CATEGORY"));
         put.apply("crm").accept(List.of("CREATE_CLIENT", "UPDATE_CLIENT", "ARCHIVE_CLIENT", "UNARCHIVE_CLIENT",
+                "SET_CLIENT_MARKETING_CONSENT", // Story 20.2
                 "CREATE_SUPPLIER", "UPDATE_SUPPLIER", "ARCHIVE_SUPPLIER", "UNARCHIVE_SUPPLIER"));
         put.apply("store").accept(List.of("CREATE_STORE", "UPDATE_STORE", "DEACTIVATE_STORE"));
         put.apply("inventory").accept(List.of("STOCK_ADJUST", "RECORD_STOCK_ENTRY",

@@ -28,7 +28,22 @@ import static org.mockito.Mockito.when;
 class UpdateClientUseCaseTest {
 
     @Mock ClientRepository clientRepository;
-    @InjectMocks UpdateClientUseCase useCase;
+    @Mock com.keevo.store.api.StoreQueryPort storeQuery;
+
+    private com.keevo.crm.contact.application.service.ClientStoreScope storeScope() {
+        return new com.keevo.crm.contact.application.service.ClientStoreScope(storeQuery);
+    }
+
+    private ClientFinder finder() {
+        return new ClientFinder(clientRepository, storeScope());
+    }
+    UpdateClientUseCase useCase;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        useCase = new UpdateClientUseCase(clientRepository, finder(), storeScope(),
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
+    }
 
     private static final Instant NOW = Instant.now();
 

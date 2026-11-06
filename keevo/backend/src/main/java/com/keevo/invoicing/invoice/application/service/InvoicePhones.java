@@ -4,18 +4,14 @@ import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 
-import java.util.regex.Pattern;
-
 /**
- * WhatsApp number of an invoice's client (Story 14.2): canonical E.164 ({@link PhoneNumbers#normalize}), a 9-digit
+ * WhatsApp number of an invoice's client (Story 14.2): canonical E.164 ({@link PhoneNumbers#toE164}), a 9-digit
  * Cameroonian number typed without its country code gets {@code +237} ({@code 677 00 01 11} → {@code +237677000111}),
  * and a masked form for audit / API (« +237 6•• ••• 111 »).
  */
 public final class InvoicePhones {
 
-    static final String CAMEROON = "+237";
-    private static final Pattern LOCAL_CM = Pattern.compile("^[0-9]{9}$");
-    private static final Pattern E164 = Pattern.compile("^\\+[1-9][0-9]{7,14}$");
+    static final String CAMEROON = PhoneNumbers.CAMEROON;
     private static final char DOT = '•';
 
     private InvoicePhones() {
@@ -29,18 +25,8 @@ public final class InvoicePhones {
         if (raw == null || raw.isBlank()) {
             throw new DomainException(ErrorCode.INVOICE_PHONE_REQUIRED, "No WhatsApp number");
         }
-        String cleaned = raw.strip().replaceAll("[\\s\\-.()]", "");
-        String phone;
-        if (cleaned.startsWith("+")) {
-            phone = cleaned;
-        } else if (cleaned.startsWith("00")) {
-            phone = "+" + cleaned.substring(2);
-        } else if (LOCAL_CM.matcher(cleaned).matches()) {
-            phone = CAMEROON + cleaned;
-        } else {
-            phone = PhoneNumbers.normalize(cleaned);
-        }
-        if (!E164.matcher(phone).matches()) {
+        String phone = PhoneNumbers.toE164(raw, CAMEROON); // Story 20.2: one normalization shared with the crm
+        if (phone == null) {
             throw new DomainException(ErrorCode.INVOICE_PHONE_INVALID, "Invalid WhatsApp number");
         }
         return phone;

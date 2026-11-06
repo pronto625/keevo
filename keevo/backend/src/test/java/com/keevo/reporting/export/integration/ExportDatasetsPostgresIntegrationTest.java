@@ -140,6 +140,11 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
         UUID client = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "clients (id, name, phone, archived) VALUES (?, ?, '690000001', FALSE), "
                 + "(?, ?, '690000002', TRUE)", client, tag + "-Client", UUID.randomUUID(), tag + "-OldClient");
+        // Story 20.2 — Bref fields, store, consent and opt-out of the first client
+        jdbc.update("UPDATE " + q + "clients SET client_type = 'COMPANY', niu = 'M0123', rccm = 'RC/DLA/1', "
+                + "address = 'Akwa', contact_name = 'Awa', website = 'https://x.cm', birth_date = DATE '1990-05-04', "
+                + "store_id = ?, marketing_consent_at = TIMESTAMPTZ '2026-03-10 10:00:00+00', "
+                + "marketing_opt_out_at = TIMESTAMPTZ '2026-03-12 10:00:00+00' WHERE id = ?", s1, client);
 
         // P1@S2 falls under the product threshold (5); P2@S1 has its own threshold (7, product: 0)
         jdbc.update("INSERT INTO " + q + "stock_levels (id, product_id, store_id, quantity, minimum_threshold) VALUES "
@@ -412,7 +417,12 @@ class ExportDatasetsPostgresIntegrationTest extends FullContextIntegrationTest {
                 .contains("\nAwa;" + a.tag() + "-Emp;" + empPhone + ";" + a.tag() + "-S1;Actif;");
         assertThat(String.join("\n", all.get("clients")))
                 .contains(a.tag() + "-Client;690000001;;;1;1500;15/03/2026 11:00:00;Non")
-                .contains(a.tag() + "-OldClient;690000002;;;0;0;;Oui");
+                .contains(a.tag() + "-OldClient;690000002;;;0;0;;Oui")
+                // Story 20.2 — the 11 new columns: type label, Bref fields, birth date, store NAME, consent Oui + dates
+                .contains(";Entreprise;M0123;RC/DLA/1;Akwa;Awa;https://x.cm;04/05/1990;" + a.tag()
+                        + "-S1;Oui;10/03/2026 11:00:00;12/03/2026 11:00:00")
+                // a legacy client: empty Bref cells, no store, consent Non
+                .containsPattern(a.tag() + "-OldClient;690000002;;;0;0;;Oui;[^;]*;;;;;;;;;Non;;");
         assertThat(String.join("\n", all.get("stock_movements")))
                 .contains(";Vente;10;-1;9;Awa " + a.tag() + "-Emp;", ";Annulation de vente;");
         assertThat(String.join("\n", all.get("stock_transfers")))

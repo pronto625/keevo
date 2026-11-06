@@ -49,6 +49,9 @@ public interface UserSyncStateRepository {
      */
     boolean rememberPullScope(String deviceId, UUID userId, boolean restricted, UUID storeId);
 
+    /** Story 20.2 — same, with the fingerprint of the pull's client visible stores ({@code null} = none). */
+    boolean rememberPullScope(String deviceId, UUID userId, boolean restricted, UUID storeId, String clientStores);
+
     /**
      * Returns all device sync states for the given tenant.
      * Story 5.5 — AC4.

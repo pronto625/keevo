@@ -140,15 +140,15 @@ class CrmMigrationPostgresIntegrationTest {
 
         ProvisioningResult result = provisioner.provision(A, "crm");
 
-        assertThat(result.migrationsApplied()).isEqualTo(1);
-        assertThat(result.toVersion()).isEqualTo("1");
-        assertThat(history(A)).containsExactly("0:BASELINE:true", "1:SQL:true");
+        assertThat(result.migrationsApplied()).isEqualTo(2);
+        assertThat(result.toVersion()).isEqualTo("2");
+        assertThat(history(A)).containsExactly("0:BASELINE:true", "1:SQL:true", "2:SQL:true");
         List<String> after = snapshot(A, null);
         assertThat(withoutHistory(after)).isEqualTo(before);
         assertThat(after).contains("table flyway_history_crm");
         assertThat(jdbc.queryForList("SELECT * FROM \"" + A + "\".clients")).isEqualTo(clientsBefore);
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'crm'", String.class, IDS.get(A))).isEqualTo("1");
+                + "AND module_id = 'crm'", String.class, IDS.get(A))).isEqualTo("2");
         assertThat(snapshot(B, null)).noneMatch(line -> line.contains("flyway_history_crm")); // others untouched
 
         ProvisioningResult again = provisioner.provision(A, "crm");
@@ -157,7 +157,7 @@ class CrmMigrationPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("16.12 tenant baselined at 1 by 13.9: history kept, nothing re-run")
+    @DisplayName("16.12 tenant baselined at 1 by 13.9: history kept, V1 not re-run; 20.2 V2 applied (idempotent, shape unchanged)")
     void baselinedTenantKept() {
         // a 13.9 adoption: history baselined at 1 without running V1
         Flyway.configure().dataSource(dataSource).schemas(A).defaultSchema(A).table("flyway_history_crm")
@@ -167,10 +167,10 @@ class CrmMigrationPostgresIntegrationTest {
 
         ProvisioningResult result = provisioner.provision(A, "crm");
 
-        assertThat(result.migrationsApplied()).isZero();
-        assertThat(result.toVersion()).isEqualTo("1");
-        assertThat(history(A)).containsExactly("1:BASELINE:true");
-        assertThat(snapshot(A, null)).isEqualTo(before);
+        assertThat(result.migrationsApplied()).isEqualTo(1);
+        assertThat(result.toVersion()).isEqualTo("2");
+        assertThat(history(A)).containsExactly("1:BASELINE:true", "2:SQL:true");
+        assertThat(withoutHistory(snapshot(A, null))).isEqualTo(withoutHistory(before));
     }
 
     @Test
@@ -198,7 +198,7 @@ class CrmMigrationPostgresIntegrationTest {
                 .filter(line -> !line.contains("product_suppliers_product_id_fkey")).toList();
         assertThat(withoutHistory(snapshot(C, null))).isEqualTo(expected);
         assertThat(jdbc.queryForList("SELECT * FROM \"" + C + "\".clients")).isEqualTo(rowsBefore);
-        assertThat(history(C)).containsExactly("0:BASELINE:true", "1:SQL:true");
+        assertThat(history(C)).containsExactly("0:BASELINE:true", "1:SQL:true", "2:SQL:true");
     }
 
     @Test
@@ -211,8 +211,8 @@ class CrmMigrationPostgresIntegrationTest {
 
         ProvisioningResult result = provisioner.provision(B, "crm");
 
-        assertThat(result.migrationsApplied()).isEqualTo(1);
-        assertThat(history(B)).containsExactly("0:BASELINE:true", "1:SQL:true");
+        assertThat(result.migrationsApplied()).isEqualTo(2);
+        assertThat(history(B)).containsExactly("0:BASELINE:true", "1:SQL:true", "2:SQL:true");
         List<String> expected = reference.stream()
                 .filter(line -> !line.contains("_sync_keyset")).toList(); // owned by the sync keyset index job
         assertThat(snapshot(B, CRM_TABLES)).isEqualTo(expected);

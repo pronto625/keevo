@@ -28,7 +28,21 @@ class GetClientProfileUseCaseTest {
 
     @Mock ClientRepository clientRepository;
     @Mock ClientSalesStatsPort statsPort;
-    @InjectMocks GetClientProfileUseCase useCase;
+    @Mock com.keevo.store.api.StoreQueryPort storeQuery;
+
+    private com.keevo.crm.contact.application.service.ClientStoreScope storeScope() {
+        return new com.keevo.crm.contact.application.service.ClientStoreScope(storeQuery);
+    }
+
+    private ClientFinder finder() {
+        return new ClientFinder(clientRepository, storeScope());
+    }
+    GetClientProfileUseCase useCase;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setUp() {
+        useCase = new GetClientProfileUseCase(finder(), statsPort);
+    }
 
     private static final Instant NOW = Instant.now();
 
@@ -41,7 +55,7 @@ class GetClientProfileUseCaseTest {
         when(statsPort.countSalesByClient(id)).thenReturn(5L);
         when(statsPort.totalSpentByClient(id)).thenReturn(150_000L);
 
-        var result = useCase.execute(id);
+        var result = useCase.execute(id, com.keevo.crm.contact.application.service.ClientAccess.SYSTEM, "kv_t");
 
         assertThat(result.client()).isEqualTo(client);
         assertThat(result.purchaseCount()).isEqualTo(5L);
@@ -54,7 +68,7 @@ class GetClientProfileUseCaseTest {
         UUID id = UUID.randomUUID();
         when(clientRepository.findById(id)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> useCase.execute(id))
+        assertThatThrownBy(() -> useCase.execute(id, com.keevo.crm.contact.application.service.ClientAccess.SYSTEM, "kv_t"))
                 .isInstanceOf(DomainException.class)
                 .hasMessageContaining("CLIENT_NOT_FOUND");
     }
