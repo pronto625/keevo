@@ -147,7 +147,7 @@ Reconciliations: "store_id obligatoire pour les nouvelles fiches" is enforced by
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée sur `refonte/modulaire` / `develop`, commit `b2387df8`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** chaque nouveau client appartient à une boutique ; un employé ne voit que les clients de sa boutique (plus ceux des boutiques qui partagent leurs clients avec la sienne, et les anciens clients sans boutique) ; le propriétaire voit tout et peut filtrer par boutique. Créer un client dont le numéro existe déjà dans la même boutique fonctionne mais renvoie un avertissement. La fiche client porte les champs Bref et l'accord marketing (donné / retiré, par qui) ; un « STOP » du client l'emporte toujours.
 
