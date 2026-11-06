@@ -1615,6 +1615,8 @@ So that **mes droits RGPD sont respectés (MOD-FR20, FR91)**.
 
 ### Story 16.7 : Go-live progressif (canary) + runbook
 
+> **Routé depuis le test appareil fin d'épic 19 (06/11/2026) :** - [ ] [Deferred-from: test appareil épic 19, 2026-11-06] L'app Flutter V1 ne connaît pas `trackStock` (17.12) : un produit « sans suivi de stock » y apparaît en « Rupture » et ne peut pas être vendu. À prendre en compte dans le plan de retrait de la V1 (entreprises mixtes : owner sur la nouvelle app, vendeurs sur la V1) [keevo/app/lib/features/pos/presentation/provider/record_sale_notifier.dart] — preuve : `implementation-artifacts/test-appareil-fin-epic-19-2026-11-06.md`.
+
 > **Routé depuis la revue 19.10 (05/11/2026) :** - [ ] [Deferred-from: revue 19.10, 2026-11-05] Retrait de la V1 Flutter : la V1 2.0.1 n'appelle pas `/api/v1/app-version/check` et n'envoie aucune version, donc `public.app_versions` ne peut pas la forcer à se mettre à jour. Au moment du retrait, décider d'étendre le refus des clients sans `X-App-Version` (`LegacyClients`, 19.10, aujourd'hui limité à MANAGER/VIEWER) à tous les rôles, et prévenir les owners avant [keevo/backend/src/main/java/com/keevo/identity/auth/domain/model/LegacyClients.java].
 
 As a **exploitant**,
