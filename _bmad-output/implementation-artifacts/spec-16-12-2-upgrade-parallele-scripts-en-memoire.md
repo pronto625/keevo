@@ -2,14 +2,22 @@
 title: '16-12 (2) Parallel boot upgrade safe from the packaged jar — module scripts read once, served to Flyway from memory'
 type: 'bugfix'
 created: '2026-11-06'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: '41288a1216c65059d3d1f8f3731c8a9bde1639f9'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-16-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-16-12-conversion-ddl-tenant-modules.md'
 warnings: []
-deferred: []
+deferred:
+  - summary: >-
+      Each Flyway.configure() may still read META-INF/services from the nested jar via ServiceLoader, concurrently across parallel runs.
+    evidence: |-
+      Edge-case review claim (medium confidence). Not observed: 4 packaged-jar runs x 362 schemas at parallelism 4 gave 0 failures. Settled by the go-live dry-run on the prod image (16-7), watching for Stream closed / Zip file closed.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/shared/module/adapter/out/persistence/FlywayModuleMigrations.java (migrate)
+    severity: medium (unverified)
 ---
 
 <intent-contract>
@@ -88,3 +96,27 @@ Checksum: Flyway's checksum is computed from the `Reader` lines of the resource,
 - `cd keevo/backend && mvn -o -q test -Dtest='ModuleProvisionerPostgresIntegrationTest,FoundationMigrationsPostgresIntegrationTest,ModuleLifecyclePostgresIntegrationTest'` -- expected: pass
 - Full suite package by package with `run-pkgs-wait.sh` -- expected: 0 failures
 - `fuser -k 4500/tcp; keevo/backend/scripts/load/measure-tenants.sh --parallelism 4` three times -- expected: `0 failed` in each upgrade summary
+
+## Auto Run Result
+
+Status: done
+
+**Change:** module migration scripts are read from the classpath once per (root, module) per JVM under a cache-wide lock (one jar read at a time, failures never cached) and served to every Flyway run through an in-memory `ResourceProvider` plus an empty Java-migration `ClassProvider`; `hasMigrations` / `latestVersion` read the same cache. No Flyway run touches the jar any more; parallelism default stays 4.
+
+**Files:**
+- `keevo/backend/src/main/java/com/keevo/shared/module/adapter/out/persistence/ModuleScriptCache.java` — new: read-once cache, strict UTF-8, relative path kept, script outside its location fails loudly.
+- `keevo/backend/src/main/java/com/keevo/shared/module/adapter/out/persistence/InMemoryModuleResourceProvider.java` — new: Flyway `ResourceProvider` over the cache, `NO_JAVA_MIGRATIONS`.
+- `keevo/backend/src/main/java/com/keevo/shared/module/adapter/out/persistence/FlywayModuleMigrations.java` — `migrate()` uses the providers (unreadable scripts → `ModuleProvisioningException` `SCRIPTS/…`), `hasMigrations` / `latestVersion` on the cache, test seam with a cache.
+- `keevo/backend/src/test/java/com/keevo/shared/module/adapter/out/persistence/ModuleScriptCacheTest.java` — new, 9 tests.
+- `keevo/backend/src/test/java/com/keevo/shared/module/adapter/out/persistence/FlywayModuleMigrationsInMemoryPostgresIntegrationTest.java` — new, 6 tests (classpath histories validate both ways, misnamed, next root, parallel, own cold cache read once, duplicate version across roots).
+- `_bmad-output/planning-artifacts/research/fusion-mesures/rapport-charge-tenants-2026-11-05.md` — post-fix runs (Constat 1 fixed).
+
+**Review:** 28 findings — 13 patched (3 medium entries grouped into 2: regression test through the cache seam, duplicate-version test; low: relative-path fallback now throws, `SCRIPTS/` failure code + test, parallel test timeout and provbatch checks, javadoc), 1 deferred (Flyway plugin `ServiceLoader` per run, medium unverified → routed to 16-7 dry-run), 14 rejected with reasons in the triage log.
+
+**Follow-up review recommended:** true — 2 medium entries patched; named risk: the nested-jar surface (Spring Boot `jar:nested:` URLs, per-run plugin loading) is covered only by the manual harness, not by an automated test.
+
+**Verification:**
+- Full backend suite package by package: 5,980 tests, 0 failures, 0 errors.
+- Packaged jar, parallelism 4, 363-schema clone: 4 runs before the review patches and 1 after: first boot 362 checked / 0 failed (no checksum mismatch), migration `messaging` 362/362 in 3.6–4.7 s, 0 failed; registrations 0 HTTP errors.
+
+**Residual risks:** single `pg_dump` still fails with out of shared memory (routed to 10-8 already); the deferred plugin-loading item above.

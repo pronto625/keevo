@@ -12,16 +12,11 @@ import org.flywaydb.core.api.MigrationState;
 import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
-import org.springframework.core.io.support.ResourcePatternResolver;
 import org.springframework.jdbc.datasource.AbstractDriverBasedDataSource;
 import org.springframework.jdbc.datasource.SmartDataSource;
 import org.springframework.stereotype.Component;
 
 import javax.sql.DataSource;
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -32,7 +27,7 @@ import java.util.regex.Pattern;
 /**
  * Programmatic Flyway per (tenant schema, module) — Story 13.4, spec-socle §2.3. One {@link Flyway} instance per
  * call: {@code schemas}/{@code defaultSchema} = the tenant schema, history table {@code flyway_history_<id>}
- * ({@code -} → {@code _}), locations {@code classpath:db/modules/<id>}, {@code baselineOnMigrate},
+ * ({@code -} → {@code _}), scripts of {@code classpath:db/modules/<id>}, {@code baselineOnMigrate},
  * {@code createSchemas(false)}, {@code validateMigrationNaming(true)} (a misnamed script beside valid ones fails
  * instead of being silently ignored), Flyway default placeholders only.
  *
@@ -61,6 +56,11 @@ import java.util.regex.Pattern;
  * schema), then this class re-applies them after commit and records the history. Placeholder replacement is off so
  * that Flyway executes exactly the text registration executes.
  *
+ * <p><b>Scripts read once (Story 16.12 (2)).</b> The module scripts come from {@link ModuleScriptCache} (read from
+ * the classpath once per JVM and module) through {@link InMemoryModuleResourceProvider} and an empty Java migration
+ * provider: Flyway never scans the classpath, so parallel runs from the packaged jar never share a jar handle (the
+ * cause of the {@code Stream closed} / {@code Zip file closed} failures of the parallel boot upgrade).
+ *
  * <p>Concurrency: Flyway's lock on the history table serialises concurrent runs on the same (schema, module); each
  * migration runs in its own transaction (PostgreSQL DDL is transactional), so a failed script leaves the previous
  * version in place — the failure reports the highest version applied so far.
@@ -83,7 +83,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
 
     private final DataSource dataSource;
     private final List<String> roots;
-    private final ResourcePatternResolver resources;
+    private final ModuleScriptCache scripts;
     private final int poolSize;
     private volatile HikariDataSource migrationPool;
 
@@ -95,7 +95,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
     public FlywayModuleMigrations(DataSource dataSource,
                                   @org.springframework.beans.factory.annotation.Value(
                                           "${keevo.tenant-schema.upgrade-parallelism:4}") int parallelism) {
-        this(dataSource, List.of(DEFAULT_ROOT), Math.max(1, parallelism) + 1);
+        this(dataSource, List.of(DEFAULT_ROOT), Math.max(1, parallelism) + 1, ModuleScriptCache.CLASSPATH);
     }
 
     /**
@@ -103,16 +103,21 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
      * e.g. a "next release" root that adds {@code V3}).
      */
     public FlywayModuleMigrations(DataSource dataSource, List<String> roots) {
-        this(dataSource, roots, 5);
+        this(dataSource, roots, 5, ModuleScriptCache.CLASSPATH);
     }
 
-    private FlywayModuleMigrations(DataSource dataSource, List<String> roots, int poolSize) {
+    /** Test seam: the script cache (its own resolver). */
+    FlywayModuleMigrations(DataSource dataSource, List<String> roots, ModuleScriptCache scripts) {
+        this(dataSource, roots, 5, scripts);
+    }
+
+    private FlywayModuleMigrations(DataSource dataSource, List<String> roots, int poolSize, ModuleScriptCache scripts) {
         if (roots.isEmpty()) {
             throw new IllegalArgumentException("At least one migration root is required");
         }
         this.dataSource = dataSource;
         this.roots = List.copyOf(roots);
-        this.resources = new PathMatchingResourcePatternResolver(FlywayModuleMigrations.class.getClassLoader());
+        this.scripts = scripts;
         this.poolSize = poolSize;
     }
 
@@ -145,23 +150,17 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
     }
 
     /**
-     * Whether a Flyway-named script exists in the module's location (recursively, every classpath entry — what
-     * Flyway's {@code classpath:} location scans). Misnamed files do not count: a folder holding only misnamed files
+     * Whether a Flyway-named script exists in the module's location, read from the in-memory
+     * {@link ModuleScriptCache} (filled once per root and module, the same scripts Flyway is given; no classpath scan
+     * per call). Misnamed files do not count: a folder holding only misnamed files
      * is a module without migrations (no-op); a misnamed file beside valid ones fails at migration time.
      */
     @Override
     public boolean hasMigrations(String moduleId) {
         String id = validateModuleId(moduleId);
-        for (String root : roots) {
-            try {
-                for (Resource resource : resources.getResources("classpath*:" + root + "/" + id + "/**/*.sql")) {
-                    String name = resource.getFilename();
-                    if (resource.exists() && name != null && FLYWAY_SCRIPT.matcher(name).matches()) {
-                        return true;
-                    }
-                }
-            } catch (IOException e) {
-                throw new UncheckedIOException("Cannot scan the migrations of a module", e);
+        for (ModuleScriptCache.ModuleScript script : scripts.scripts(roots, id)) {
+            if (FLYWAY_SCRIPT.matcher(script.filename()).matches()) {
+                return true;
             }
         }
         return false;
@@ -175,20 +174,13 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
     public String latestVersion(String moduleId) {
         String id = validateModuleId(moduleId);
         MigrationVersion highest = null;
-        for (String root : roots) {
-            try {
-                for (Resource resource : resources.getResources("classpath*:" + root + "/" + id + "/**/*.sql")) {
-                    String name = resource.getFilename();
-                    java.util.regex.Matcher m = name == null ? null : VERSIONED_SCRIPT.matcher(name);
-                    if (m != null && m.matches()) {
-                        MigrationVersion version = MigrationVersion.fromVersion(m.group(1).replace('_', '.'));
-                        if (highest == null || version.compareTo(highest) > 0) {
-                            highest = version;
-                        }
-                    }
+        for (ModuleScriptCache.ModuleScript script : scripts.scripts(roots, id)) {
+            java.util.regex.Matcher m = VERSIONED_SCRIPT.matcher(script.filename());
+            if (m.matches()) {
+                MigrationVersion version = MigrationVersion.fromVersion(m.group(1).replace('_', '.'));
+                if (highest == null || version.compareTo(highest) > 0) {
+                    highest = version;
                 }
-            } catch (IOException e) {
-                throw new UncheckedIOException("Cannot scan the migrations of a module", e);
             }
         }
         return highest == null ? null : highest.getVersion();
@@ -367,13 +359,20 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
     public Outcome migrate(String tenantSchema, String moduleId) {
         String schema = TenantSchema.validate(tenantSchema);
         String table = historyTable(moduleId);
-        String[] locations = roots.stream().map(root -> "classpath:" + root + "/" + moduleId).toArray(String[]::new);
+        // Story 16.12 (2): in-memory scripts, no classpath scanner (no jar access per run)
+        InMemoryModuleResourceProvider moduleScripts;
+        try {
+            moduleScripts = new InMemoryModuleResourceProvider(scripts.scripts(roots, moduleId));
+        } catch (RuntimeException e) { // unreadable scripts: a provisioning failure, as a Flyway scan failure was
+            throw new ModuleProvisioningException(moduleId, schema, "SCRIPTS/" + failureCode(e), null, e);
+        }
         Flyway flyway = Flyway.configure()
                 .dataSource(dedicatedDataSource())
                 .schemas(schema)
                 .defaultSchema(schema)
                 .table(table)
-                .locations(locations)
+                .resourceProvider(moduleScripts)
+                .javaMigrationClassProvider(InMemoryModuleResourceProvider.NO_JAVA_MIGRATIONS)
                 .baselineOnMigrate(true)
                 .baselineVersion("0")
                 .createSchemas(false)

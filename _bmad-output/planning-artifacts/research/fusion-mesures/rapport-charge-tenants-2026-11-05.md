@@ -116,6 +116,28 @@ Ce seuil est **calculé avec les réglages locaux** (64 × 100). Il doit être r
 - **Restauration** : ≈ 2 min à N, ≈ 15 min à 373 tenants ; à intégrer à la procédure de reprise.
 - Mesure à rejouer sur staging (même harnais) : routée vers la story 17-9.
 
+## Correctif 16-12 — passes du 2026-11-06
+
+Correctif livré par `spec-16-12-2-upgrade-parallele-scripts-en-memoire.md` : les scripts de module sont lus une seule
+fois depuis le classpath (`ModuleScriptCache`, une lecture à la fois sous verrou) et chaque exécution Flyway les reçoit
+par un `resourceProvider` en mémoire, sans parcours du classpath : plus aucune lecture du jar pendant la migration
+parallèle. Même harnais, même clone de `keevo_dev` (363 schémas vivants, 362 avec historique), **jar empaqueté,
+parallélisme 4**, migration du dernier script `messaging` sur tous les schémas.
+
+| Passe | Premier démarrage (historiques écrits par l'ancien code) | Démarrage à chaud | Migration d'un module | Inscriptions (médiane, 10) |
+|---|---|---|---|---|
+| 1 (verrou par module) | 362 vérifiés, 0 rejoué, **0 échec** | 0 échec | 362 / 362, **0 échec**, 3,6 s | 3,19 s, 0 erreur HTTP |
+| 2 (version finale) | 362 vérifiés, 0 rejoué, **0 échec** | 0 échec | 362 / 362, **0 échec**, 4,7 s | 3,28 s, 0 erreur HTTP |
+| 3 (version finale) | 362 vérifiés, 0 rejoué, **0 échec** | 0 échec | 362 / 362, **0 échec**, 4,1 s | 3,22 s, 0 erreur HTTP |
+| 4 (version finale) | 362 vérifiés, 0 rejoué, **0 échec** | 0 échec | 362 / 362, **0 échec**, 3,7 s | 2,74 s, 0 erreur HTTP |
+
+- Aucune occurrence de `Validate failed`, `Stream closed`, `Zip file closed`, `NoClassDefFoundError` ou
+  `ClassNotFoundException` dans les journaux des quatre passes : les sommes de contrôle des historiques existants sont
+  inchangées, et l'application répond normalement après la migration (inscriptions sans erreur).
+- La durée de migration reste celle du parallélisme 4 (3,6 à 4,7 s pour 362 tenants, contre 9,8 s en parallélisme 1).
+- Le constat 1 est **levé** ; le parallélisme par défaut reste 4. Les constats 2 (premier démarrage) et 3 (sauvegarde)
+  sont inchangés (sauvegarde en un seul `pg_dump` toujours KO avec 64 × 100 verrous, lots de 100 schémas OK).
+
 ---
 
 - Harnais : `keevo/backend/scripts/load/measure-tenants.sh` (README à côté), tests de garde
