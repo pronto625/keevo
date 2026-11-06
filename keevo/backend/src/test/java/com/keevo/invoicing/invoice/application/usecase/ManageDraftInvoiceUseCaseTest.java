@@ -208,4 +208,31 @@ class ManageDraftInvoiceUseCaseTest {
         verify(invoices, never()).updateDraft(any());
         assertThat(useCase.update(id, content, TENANT).kind()).isEqualTo(InvoiceKind.QUOTE);
     }
+
+    @Test
+    @DisplayName("Story 20.5 — a due date before today (WAT) is refused at draft and quote save; today is accepted")
+    void pastDueDate() {
+        ManageDraftInvoiceUseCase.DraftContent past = new ManageDraftInvoiceUseCase.DraftContent(client,
+                content.lines(), null, null, new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(0, 0, null,
+                false, java.time.LocalDate.of(2026, 10, 30)));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.create(null, past, null, TENANT))
+                .isInstanceOfSatisfying(com.keevo.shared.domain.exception.DomainException.class, e -> assertThat(
+                        e.getDetails()).containsEntry("reason", "La date d'échéance ne peut pas être passée"));
+        ManageDraftInvoiceUseCase.DraftContent pastQuote = new ManageDraftInvoiceUseCase.DraftContent(client,
+                content.lines(), com.keevo.invoicing.invoice.domain.model.InvoiceKind.QUOTE, null,
+                past.terms());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.create(null, pastQuote, null, TENANT))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class);
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(existing()));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.update(id, past, TENANT))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class);
+        verify(invoices, never()).insert(any());
+        verify(invoices, never()).updateDraft(any());
+
+        ManageDraftInvoiceUseCase.DraftContent today = new ManageDraftInvoiceUseCase.DraftContent(client,
+                content.lines(), null, null, new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(0, 0, null,
+                false, java.time.LocalDate.of(2026, 10, 31)));
+        assertThat(useCase.create(null, today, null, TENANT).terms().dueDate())
+                .isEqualTo(java.time.LocalDate.of(2026, 10, 31));
+    }
 }

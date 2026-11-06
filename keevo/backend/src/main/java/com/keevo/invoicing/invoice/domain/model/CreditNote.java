@@ -29,6 +29,11 @@ import java.util.UUID;
  *       rounding drift: the credit notes of a line always add up to the line); otherwise the amounts are computed like
  *       the invoice line — same unit price, treatment and VAT snapshot of the invoice, HALF_UP to the franc.</li>
  * </ul>
+ *
+ * <p>Story 20.5 — on an invoice with a discount or a delivery fee, the line amounts no longer add up to the document:
+ * only a <b>full</b> credit note is accepted (every line, its whole quantity, nothing credited before) and it credits
+ * exactly the invoice's totals ({@link #creditedTotals}); a partial one → 409 {@code INVOICE_INVALID_TRANSITION}
+ * « Avoir partiel impossible sur une facture avec remise ou livraison : établissez un avoir total ».
  */
 public record CreditNote(
         UUID id,
@@ -90,6 +95,10 @@ public record CreditNote(
         if (remaining.values().stream().noneMatch(r -> r.quantity().signum() > 0)) {
             throw fullyCredited();
         }
+        if (invoice.terms().hasAdjustments() && !coversEverything(invoice, credited, selection)) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, PARTIAL_ON_ADJUSTED,
+                    Map.of("status", "avec remise ou livraison"));
+        }
         List<CreditNoteLine> lines = new ArrayList<>();
         if (selection == null) {
             for (InvoiceLine line : invoice.lines()) {
@@ -135,18 +144,96 @@ public record CreditNote(
             numbered.add(new CreditNoteLine(position++, l.invoicePosition(), l.description(), l.quantity(),
                     l.unitPrice(), l.treatment(), l.vatRate(), l.totalHt(), l.totalVat(), l.totalTtc()));
         }
-        if (totals(numbered).totalTtc() == 0) {
+        if (creditedTotals(invoice, credited, numbered).totalTtc() == 0) {
             // a credit note of 0 F would consume a number of the gapless series for nothing
             throw invalid("le montant de l'avoir serait nul");
         }
         return List.copyOf(numbered);
     }
 
-    /** The issued credit note (number allocated by the caller in the same transaction). */
+    /** The issued credit note (number allocated by the caller in the same transaction), nothing credited before. */
     public static CreditNote issue(UUID id, String number, Invoice invoice, String reason, List<CreditNoteLine> lines,
                                    UUID createdBy, Instant now, String sourceEvent) {
+        return issue(id, number, invoice, reason, List.of(), lines, createdBy, now, sourceEvent);
+    }
+
+    /**
+     * The issued credit note; {@code credited} = the lines of the credit notes already issued on the invoice (Story
+     * 20.5: they decide what a credit note closing an invoice with document-level totals credits).
+     */
+    public static CreditNote issue(UUID id, String number, Invoice invoice, String reason,
+                                   List<CreditNoteLine> credited, List<CreditNoteLine> lines, UUID createdBy,
+                                   Instant now, String sourceEvent) {
         return new CreditNote(id, number, invoice.id(), invoice.number(), requireReason(reason), lines,
-                totals(lines), now, createdBy, sourceEvent);
+                creditedTotals(invoice, credited, lines), now, createdBy, sourceEvent);
+    }
+
+    /** Story 20.5 — the French refusal of a partial credit note on an invoice with a discount or a delivery fee. */
+    public static final String PARTIAL_ON_ADJUSTED =
+            "Avoir partiel impossible sur une facture avec remise ou livraison : établissez un avoir total";
+
+    /**
+     * Story 20.5 — whether the invoice's totals are document-level rather than the sums of its lines: a discount or a
+     * delivery fee, or prices without VAT (VAT rounded once on the document).
+     */
+    public static boolean documentLevelTotals(Invoice invoice) {
+        return invoice.terms().hasAdjustments() || !invoice.pricesIncludeVat();
+    }
+
+    /**
+     * Story 20.5 — the totals a credit note of {@code lines} on {@code invoice} credits, {@code credited} being the lines
+     * of the credit notes issued before: the sums of its lines, except on an invoice with document-level totals
+     * ({@link #documentLevelTotals}) for the credit note that leaves nothing to credit — the first and only one credits
+     * exactly the invoice's totals, a last one exactly what remains (the invoice's totals minus the previous credit
+     * notes), so the credit notes of an invoice always add up to it.
+     */
+    public static InvoiceTotals creditedTotals(Invoice invoice, List<CreditNoteLine> credited,
+                                               List<CreditNoteLine> lines) {
+        List<CreditNoteLine> before = credited == null ? List.of() : credited;
+        if (!documentLevelTotals(invoice)) {
+            return totals(lines);
+        }
+        List<CreditNoteLine> after = new ArrayList<>(before);
+        after.addAll(lines);
+        if (!fullyCredited(invoice, after)) {
+            return totals(lines);
+        }
+        if (before.isEmpty()) {
+            return invoice.totals();
+        }
+        InvoiceTotals t = invoice.totals();
+        InvoiceTotals done = totals(before);
+        long ht = Math.max(0, t.totalHt() - done.totalHt());
+        long vat = Math.max(0, t.totalVat() - done.totalVat());
+        long ttc = Math.max(0, t.totalTtc() - done.totalTtc());
+        return new InvoiceTotals(ht, vat, ttc, ht, 0, 0);
+    }
+
+    /** Story 20.5 — nothing credited yet and the selection ({@code null} = full) takes every line in full. */
+    private static boolean coversEverything(Invoice invoice, List<CreditNoteLine> credited,
+                                            List<CreditNoteSelection> selection) {
+        if (credited != null && !credited.isEmpty()) {
+            return false;
+        }
+        if (selection == null) {
+            return true;
+        }
+        Map<Integer, BigDecimal> asked = new HashMap<>();
+        for (CreditNoteSelection s : selection) {
+            if (s.quantity() == null || asked.put(s.position(), s.quantity()) != null) {
+                return false;
+            }
+        }
+        if (asked.size() != invoice.lines().size()) {
+            return false;
+        }
+        for (InvoiceLine line : invoice.lines()) {
+            BigDecimal q = asked.get(line.position());
+            if (q == null || q.compareTo(line.quantity()) != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Sums of the lines. */
@@ -164,6 +251,11 @@ public record CreditNote(
 
     /** The TTC amount still to credit on {@code invoice} after {@code credited} (0 = nothing a credit note can take). */
     public static long remainingTtc(Invoice invoice, List<CreditNoteLine> credited) {
+        if (documentLevelTotals(invoice)) { // Story 20.5 — what the document owes minus what was credited
+            return fullyCredited(invoice, credited) ? 0
+                    : Math.max(0, invoice.totals().totalTtc() - totals(credited == null ? List.of() : credited)
+                    .totalTtc());
+        }
         return remaining(invoice, credited == null ? List.of() : credited).values().stream()
                 .filter(r -> r.quantity().signum() > 0).mapToLong(Remaining::ttc).sum();
     }

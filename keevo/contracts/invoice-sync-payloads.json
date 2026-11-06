@@ -195,5 +195,91 @@
         "method": "Espèces"
       }
     }
+  ],
+  "termsDescription": "Story 20.5 — document terms on CREATE_INVOICE / UPDATE_INVOICE (invoice or quote), queued by the Bref React Native app (the Flutter V1 test client does not send them; absent = no discount, no delivery, the seller's rate, no due date). discountAmount: whole XAF ≥ 0, ≤ the subtotal; deliveryFee: whole XAF ≥ 0, outside VAT, added to totalTtc; vatRate: the document's own rate (percent 0–100, 2 decimals; absent/null = the seller's); vatExempt: true = no VAT on the document (« Exonéré de TVA »); dueDate: yyyy-MM-dd, never before the issue date once issued. client gains rccm (≤ 50), email (≤ 255, valid), contactName (≤ 120), website (≤ 200); a line gains productId (catalogue product, optional, not checked) and reference (≤ 100). UPDATE_INVOICE replaces the whole content: a field left out is reset. Refused (REJECTED VALIDATION_ERROR): discount above the subtotal, rate outside 0–100, negative amounts, invalid email. Totals: see invoice-calculation-cases.json.",
+  "termsInvoiceId": "e2b7c4d1-8a6f-4f3e-b5c9-7d1a0e4f6b28",
+  "termsOperations": [
+    {
+      "name": "createWithTerms",
+      "operationType": "CREATE_INVOICE",
+      "payload": {
+        "id": "e2b7c4d1-8a6f-4f3e-b5c9-7d1a0e4f6b28",
+        "client": {
+          "id": null,
+          "name": "Société Ndolo",
+          "phone": "+237690000002",
+          "niu": "P098765432109Z",
+          "address": "Bonapriso, Douala",
+          "rccm": "RC/DLA/2021/A/77",
+          "email": "compta@ndolo.cm",
+          "contactName": "M. Ndolo",
+          "website": "ndolo.cm"
+        },
+        "lines": [
+          {
+            "description": "Sac de riz 25 kg",
+            "quantity": 2,
+            "unitPrice": 150000,
+            "vatTreatment": "STANDARD",
+            "productId": "0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f",
+            "reference": "RIZ-25"
+          },
+          {
+            "description": "Savon",
+            "quantity": 1,
+            "unitPrice": 17700,
+            "vatTreatment": "STANDARD",
+            "productId": null,
+            "reference": null
+          }
+        ],
+        "discountAmount": 2500,
+        "deliveryFee": 2000,
+        "vatRate": null,
+        "vatExempt": false,
+        "dueDate": "2026-12-06"
+      }
+    },
+    {
+      "name": "updateExemptOwnRate",
+      "operationType": "UPDATE_INVOICE",
+      "payload": {
+        "invoiceId": "e2b7c4d1-8a6f-4f3e-b5c9-7d1a0e4f6b28",
+        "client": {
+          "id": null,
+          "name": "Société Ndolo",
+          "phone": "+237690000002",
+          "niu": "P098765432109Z",
+          "address": "Bonapriso, Douala",
+          "rccm": "RC/DLA/2021/A/77",
+          "email": "compta@ndolo.cm",
+          "contactName": "M. Ndolo",
+          "website": "ndolo.cm"
+        },
+        "lines": [
+          {
+            "description": "Sac de riz 25 kg",
+            "quantity": 2,
+            "unitPrice": 150000,
+            "vatTreatment": "STANDARD",
+            "productId": "0c9d8e7f-6a5b-4c3d-9e2f-1a0b9c8d7e6f",
+            "reference": "RIZ-25"
+          },
+          {
+            "description": "Savon",
+            "quantity": 1,
+            "unitPrice": 17700,
+            "vatTreatment": "STANDARD",
+            "productId": null,
+            "reference": null
+          }
+        ],
+        "discountAmount": 0,
+        "deliveryFee": 1500,
+        "vatRate": 18,
+        "vatExempt": true,
+        "dueDate": null
+      }
+    }
   ]
 }

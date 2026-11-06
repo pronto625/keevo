@@ -2,7 +2,10 @@
 <!--
   « Facture » (Story 14.2, MOD-FR17) - A4, French. Content of CGI art. 150 (5): seller identity (name, address,
   NIU, RCCM), number and date, client identity, lines (nature, quantity, unit price, VAT rate or mention, HT, VAT,
-  TTC), totals in XAF, « TVA non applicable » when the seller is not VAT-registered. Versioned with the code; data
+  TTC), totals in XAF, « TVA non applicable » when the seller is not VAT-registered. Story 20.5: due date, client
+  RCCM / contact / email / website, line references; Sous-total / Remise / Livraison rows only on a document with
+  a discount, a delivery fee or an exemption (« Exonéré de TVA »); with prices without VAT the lines show HT and rate
+  only (VAT computed once on the document). Versioned with the code; data
   only through th:text (escaped), never th:utext. No identifier other than the invoice number is printed.
 -->
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
@@ -65,6 +68,7 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
     <td class="doc">
       <div class="title" th:text="${title}">FACTURE</div>
       <div class="line" th:text="${'Date : ' + issueDate}">Date</div>
+      <div class="line" th:if="${dueDate != null}" th:text="${'Échéance : ' + dueDate}">Échéance</div>
     </td>
   </tr>
 </table>
@@ -75,6 +79,10 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
   <div class="line" th:if="${clientNiu != null}" th:text="${'NIU : ' + clientNiu}">NIU</div>
   <div class="line" th:if="${clientAddress != null}" th:text="${clientAddress}">Adresse</div>
   <div class="line" th:if="${clientPhone != null}" th:text="${'Tél. : ' + clientPhone}">Téléphone</div>
+  <div class="line" th:if="${clientRccm != null}" th:text="${'RCCM : ' + clientRccm}">RCCM</div>
+  <div class="line" th:if="${clientContact != null}" th:text="${'Contact : ' + clientContact}">Contact</div>
+  <div class="line" th:if="${clientEmail != null}" th:text="${'Email : ' + clientEmail}">Email</div>
+  <div class="line" th:if="${clientWebsite != null}" th:text="${'Site web : ' + clientWebsite}">Site web</div>
 </div>
 
 <table class="items">
@@ -85,27 +93,31 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
       <th class="num" th:text="${unitPriceLabel}">Prix unitaire</th>
       <th class="num">Taux TVA</th>
       <th class="num">Montant HT</th>
-      <th class="num">TVA</th>
-      <th class="num">Montant TTC</th>
+      <th class="num" th:if="${lineTaxColumns}">TVA</th>
+      <th class="num" th:if="${lineTaxColumns}">Montant TTC</th>
     </tr>
   </thead>
   <tbody>
     <tr th:each="l : ${lines}">
-      <td th:text="${l.description()}">Article</td>
+      <td><span th:text="${l.description()}">Article</span><div class="note" th:if="${l.reference() != null}"
+          th:text="${'Réf. : ' + l.reference()}">Référence</div></td>
       <td class="num" th:text="${l.quantity()}">1</td>
       <td class="num" th:text="${l.unitPrice()}">0</td>
       <td class="num" th:text="${l.vat()}">0 %</td>
       <td class="num" th:text="${l.totalHt()}">0</td>
-      <td class="num" th:text="${l.totalVat()}">0</td>
-      <td class="num" th:text="${l.totalTtc()}">0</td>
+      <td class="num" th:if="${lineTaxColumns}" th:text="${l.totalVat()}">0</td>
+      <td class="num" th:if="${lineTaxColumns}" th:text="${l.totalTtc()}">0</td>
     </tr>
   </tbody>
 </table>
 <div class="note">Montants en francs CFA (XAF)</div>
 
 <table class="totals">
+  <tr th:if="${subtotal != null}"><td th:text="${subtotalLabel}">Sous-total</td><td class="num" th:text="${subtotal}">0 XAF</td></tr>
+  <tr th:if="${discount != null}"><td>Remise</td><td class="num" th:text="${discount}">0 XAF</td></tr>
   <tr><td>Total HT</td><td class="num" th:text="${totalHt}">0 XAF</td></tr>
   <tr><td>Total TVA</td><td class="num" th:text="${totalVat}">0 XAF</td></tr>
+  <tr th:if="${deliveryFee != null}"><td>Livraison</td><td class="num" th:text="${deliveryFee}">0 XAF</td></tr>
   <tr class="grand"><td>Total TTC</td><td class="num" th:text="${totalTtc}">0 XAF</td></tr>
 </table>
 <div class="mention" th:if="${vatMention != null}" th:text="${vatMention}">TVA non applicable</div>

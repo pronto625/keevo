@@ -6,6 +6,7 @@ import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.CapabilityRegistry;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -126,5 +127,34 @@ class InvoiceClientResolverTest {
         var suggestions = resolver.suggest("mir", 20, TENANT);
         assertThat(suggestions.crmAvailable()).isFalse();
         assertThat(suggestions.clients()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Story 20.5 — crm on: RCCM / email filled from the CRM when not typed; contact / website as typed")
+    void crmOn_brefFields() {
+        crmOn();
+        when(crm.find(TENANT, ID)).thenReturn(Optional.of(new ClientSummary(ID, "Mireille", "+237690000011", false,
+                "RC/DLA/2020/B/9", "mireille@exemple.cm")));
+        ClientInfo resolved = resolver.resolve(new ClientInfo(ID, "Mireille", null, null, null, null, null,
+                "M. Ndolo", "ndolo.cm"), TENANT);
+        assertThat(resolved).isEqualTo(new ClientInfo(ID, "Mireille", null, null, "+237690000011",
+                "RC/DLA/2020/B/9", "mireille@exemple.cm", "M. Ndolo", "ndolo.cm"));
+
+        ClientInfo typed = resolver.resolve(new ClientInfo(ID, "Mireille", null, null, null, "RC/TYPED",
+                "typed@exemple.cm", null, null), TENANT);
+        assertThat(typed.rccm()).isEqualTo("RC/TYPED");
+        assertThat(typed.email()).isEqualTo("typed@exemple.cm");
+        assertThat(typed.contactName()).isNull();
+        assertThat(typed.website()).isNull();
+    }
+
+    @Test
+    @DisplayName("Story 20.5 — crm off: the four Bref fields kept as typed (link dropped)")
+    void crmOff_brefFieldsKept() {
+        crmOff();
+        ClientInfo resolved = resolver.resolve(new ClientInfo(ID, "Awa", null, null, null, "RC/1", "awa@exemple.cm",
+                "Awa", "awa.cm"), TENANT);
+        assertThat(resolved).isEqualTo(new ClientInfo(null, "Awa", null, null, null, "RC/1", "awa@exemple.cm",
+                "Awa", "awa.cm"));
     }
 }

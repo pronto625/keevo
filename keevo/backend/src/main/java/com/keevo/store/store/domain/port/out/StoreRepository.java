@@ -27,6 +27,9 @@ public interface StoreRepository {
 
     int countActive();
 
+    /** Story 20.5 — the country of the oldest active store (empty when there is none). One row read. */
+    Optional<String> oldestActiveCountry();
+
     /** Returns true if any store with type=WAREHOUSE exists for the current tenant. */
     boolean existsWarehouse();
 }

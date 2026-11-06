@@ -70,9 +70,21 @@ public final class PaymentStateCalculator {
 
     /** The state of an issued invoice owing {@code amountDue}, with {@code rows}, on {@code today}. */
     public static PaymentState state(long amountDue, List<InvoicePayment> rows, LocalDate today) {
+        return state(amountDue, rows, today, null);
+    }
+
+    /**
+     * Story 20.5 — same, with the invoice's own due date ({@code null} = none): an invoice not fully paid whose due date
+     * is before today is late too.
+     */
+    public static PaymentState state(long amountDue, List<InvoicePayment> rows, LocalDate today,
+                                     LocalDate invoiceDueDate) {
         long paid = amountPaid(rows);
         if (paid >= amountDue) {
             return PaymentState.PAID;
+        }
+        if (invoiceDueDate != null && invoiceDueDate.isBefore(today)) {
+            return PaymentState.OVERDUE;
         }
         for (InvoicePayment p : rows) {
             if (p.isOverdue(today)) {
@@ -90,7 +102,13 @@ public final class PaymentStateCalculator {
      */
     public static PaymentState afterChange(long amountDue, List<InvoicePayment> rows, LocalDate today,
                                            PaymentState stored) {
-        PaymentState computed = state(amountDue, rows, today);
+        return afterChange(amountDue, rows, today, stored, null);
+    }
+
+    /** Story 20.5 — same, with the invoice's own due date ({@code null} = none). */
+    public static PaymentState afterChange(long amountDue, List<InvoicePayment> rows, LocalDate today,
+                                           PaymentState stored, LocalDate invoiceDueDate) {
+        PaymentState computed = state(amountDue, rows, today, invoiceDueDate);
         if (computed == PaymentState.OVERDUE && stored != PaymentState.OVERDUE) {
             return amountPaid(rows) > 0 ? PaymentState.PARTIAL : PaymentState.UNPAID;
         }
@@ -160,7 +178,8 @@ public final class PaymentStateCalculator {
         }
         PaymentState state = stored;
         if (state == null) {
-            state = payments.isEmpty() ? PaymentState.UNPAID : afterChange(due, payments, today, null);
+            state = payments.isEmpty() ? PaymentState.UNPAID
+                    : afterChange(due, payments, today, null, invoice.terms().dueDate());
         }
         return new Collection(state, amountPaid(payments), due, payments);
     }

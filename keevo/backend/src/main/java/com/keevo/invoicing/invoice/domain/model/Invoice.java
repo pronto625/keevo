@@ -52,12 +52,28 @@ public record Invoice(
         InvoiceKind kind,
         UUID convertedInvoiceId,
         Instant convertedAt,
-        UUID sourceQuoteId) {
+        UUID sourceQuoteId,
+        InvoiceTerms terms) {
 
     public Invoice {
         lines = lines == null ? List.of() : List.copyOf(lines);
         delivery = delivery == null ? InvoiceDelivery.NONE : delivery;
         kind = kind == null ? InvoiceKind.INVOICE : kind;
+        terms = terms == null ? InvoiceTerms.NONE : terms;
+    }
+
+    /** Story 20.3 shape: no document terms (Story 20.5 — no discount, no delivery, the seller's rate, no due date). */
+    public Invoice(UUID id, String number, InvoiceStatus status, LocalDate issueDate, ClientInfo client,
+                   SellerSnapshot seller, boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                   String vatMention, List<InvoiceLine> lines, InvoiceTotals totals, Instant issuedAt, Instant paidAt,
+                   String paymentMethod, Instant cancelledAt, String cancellationReason, UUID createdBy,
+                   Instant createdAt, Instant updatedAt, InvoiceDelivery delivery, UUID sourceSaleId,
+                   Instant supersededAt, InvoiceKind kind, UUID convertedInvoiceId, Instant convertedAt,
+                   UUID sourceQuoteId) {
+        this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
+                lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
+                updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId,
+                InvoiceTerms.NONE);
     }
 
     /** Story 14.7 shape: an invoice ({@link InvoiceKind#INVOICE}), not a quote nor converted from one (Story 20.3). */
@@ -112,19 +128,37 @@ public record Invoice(
     /** A new draft computed with the seller's current settings. */
     public static Invoice draft(UUID id, ClientInfo client, List<LineInput> lines, InvoicingSettings settings,
                                 UUID createdBy, Instant now) {
-        requireClient(client);
-        List<InvoiceLine> computed = VatCalculator.lines(lines, settings.vatRegistered(), settings.vatRate(),
-                settings.pricesIncludeVat());
-        return new Invoice(id, null, InvoiceStatus.DRAFT, null, client, null, settings.vatRegistered(),
-                settings.vatRate(), settings.pricesIncludeVat(), VatCalculator.vatMention(settings.vatRegistered()),
-                computed, VatCalculator.totals(computed), null, null, null, null, null, createdBy, now, now);
+        return draft(id, client, lines, InvoiceTerms.NONE, settings, createdBy, now);
     }
 
-    /** The draft with a new client and lines, recomputed with the current settings. */
+    /**
+     * Story 20.5 — a new draft with its document terms (discount, delivery, own VAT rate or exemption, due date),
+     * computed with the seller's current settings ({@link VatCalculator#compute}).
+     */
+    public static Invoice draft(UUID id, ClientInfo client, List<LineInput> lines, InvoiceTerms terms,
+                                InvoicingSettings settings, UUID createdBy, Instant now) {
+        requireClient(client);
+        InvoiceTerms t = terms == null ? InvoiceTerms.NONE : terms;
+        BigDecimal rate = t.effectiveRate(settings.vatRate());
+        VatCalculator.Computation computed = VatCalculator.compute(lines, settings.vatRegistered(), rate,
+                settings.pricesIncludeVat(), t.discount(), t.deliveryFee());
+        return new Invoice(id, null, InvoiceStatus.DRAFT, null, client, null, settings.vatRegistered(), rate,
+                settings.pricesIncludeVat(), VatCalculator.vatMention(settings.vatRegistered(), t.vatExempt()),
+                computed.lines(), computed.totals(), null, null, null, null, null, createdBy, now, now,
+                InvoiceDelivery.NONE, null, null, InvoiceKind.INVOICE, null, null, null, t);
+    }
+
+    /** The draft with a new client and lines, recomputed with the current settings (Story 20.5: no terms). */
     public Invoice withDraftContent(ClientInfo newClient, List<LineInput> newLines, InvoicingSettings settings,
                                     Instant now) {
+        return withDraftContent(newClient, newLines, InvoiceTerms.NONE, settings, now);
+    }
+
+    /** The draft with a new client, lines and document terms (Story 20.5), recomputed with the current settings. */
+    public Invoice withDraftContent(ClientInfo newClient, List<LineInput> newLines, InvoiceTerms newTerms,
+                                    InvoicingSettings settings, Instant now) {
         assertEditable();
-        Invoice recomputed = draft(id, newClient, newLines, settings, createdBy, createdAt)
+        Invoice recomputed = draft(id, newClient, newLines, newTerms, settings, createdBy, createdAt)
                 .as(kind, sourceQuoteId);
         return (sourceSaleId == null ? recomputed : recomputed.fromSale(sourceSaleId)).touched(now);
     }
@@ -151,7 +185,13 @@ public record Invoice(
     /** A new quote ({@code DRAFT}, no number), computed with the seller's current settings like a draft invoice. */
     public static Invoice quote(UUID id, ClientInfo client, List<LineInput> lines, InvoicingSettings settings,
                                 UUID createdBy, Instant now) {
-        return draft(id, client, lines, settings, createdBy, now).as(InvoiceKind.QUOTE, null);
+        return quote(id, client, lines, InvoiceTerms.NONE, settings, createdBy, now);
+    }
+
+    /** Story 20.5 — a new quote with its document terms. */
+    public static Invoice quote(UUID id, ClientInfo client, List<LineInput> lines, InvoiceTerms terms,
+                                InvoicingSettings settings, UUID createdBy, Instant now) {
+        return draft(id, client, lines, terms, settings, createdBy, now).as(InvoiceKind.QUOTE, null);
     }
 
     public boolean isQuote() {
@@ -204,9 +244,8 @@ public record Invoice(
      */
     public Invoice conversionDraft(UUID invoiceId, InvoicingSettings settings, UUID actorId, Instant now) {
         assertConvertible();
-        List<LineInput> inputs = lines.stream()
-                .map(l -> new LineInput(l.description(), l.quantity(), l.unitPrice(), l.treatment())).toList();
-        return draft(invoiceId, client, inputs, settings, actorId, now).as(InvoiceKind.INVOICE, id);
+        List<LineInput> inputs = lines.stream().map(LineInput::of).toList();
+        return draft(invoiceId, client, inputs, terms, settings, actorId, now).as(InvoiceKind.INVOICE, id);
     }
 
     /** DRAFT quote → CONVERTED, linked to the invoice {@code invoiceId} created from it. */
@@ -216,7 +255,7 @@ public record Invoice(
         }
         return new Invoice(id, null, InvoiceStatus.CONVERTED, null, client, null, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, null, null, null, null, null, createdBy, createdAt, now,
-                delivery, sourceSaleId, supersededAt, kind, invoiceId, now, sourceQuoteId);
+                delivery, sourceSaleId, supersededAt, kind, invoiceId, now, sourceQuoteId, terms);
     }
 
     private DomainException quoteInvalidTransition() {
@@ -230,7 +269,7 @@ public record Invoice(
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
                 createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, newKind, convertedInvoiceId,
-                convertedAt, quoteId);
+                convertedAt, quoteId, terms);
     }
 
     /**
@@ -273,14 +312,16 @@ public record Invoice(
      */
     public Invoice issue(String invoiceNumber, LocalDate date, InvoicingSettings settings, Instant now) {
         assertIssuable(settings);
-        List<LineInput> inputs = lines.stream()
-                .map(l -> new LineInput(l.description(), l.quantity(), l.unitPrice(), l.treatment())).toList();
-        List<InvoiceLine> computed = VatCalculator.lines(inputs, settings.vatRegistered(), settings.vatRate(),
-                settings.pricesIncludeVat());
+        terms.assertDueDateFrom(date); // Story 20.5 — before the number is used (the caller rolls it back)
+        List<LineInput> inputs = lines.stream().map(LineInput::of).toList();
+        BigDecimal rate = terms.effectiveRate(settings.vatRate());
+        VatCalculator.Computation computed = VatCalculator.compute(inputs, settings.vatRegistered(), rate,
+                settings.pricesIncludeVat(), terms.discount(), terms.deliveryFee());
         return new Invoice(id, invoiceNumber, InvoiceStatus.ISSUED, date, client, SellerSnapshot.of(settings),
-                settings.vatRegistered(), settings.vatRate(), settings.pricesIncludeVat(),
-                VatCalculator.vatMention(settings.vatRegistered()), computed, VatCalculator.totals(computed), now,
-                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                settings.vatRegistered(), rate, settings.pricesIncludeVat(),
+                VatCalculator.vatMention(settings.vatRegistered(), terms.vatExempt()), computed.lines(),
+                computed.totals(), now,
+                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     /**
@@ -339,7 +380,7 @@ public record Invoice(
         assertCollectable();
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt, InvoicingSettings.trimToNull(method),
-                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     private static DomainException invalidPaymentDate(String reason) {
@@ -387,7 +428,7 @@ public record Invoice(
         String why = requireCancellationReason(reason);
         return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
-                now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     /** Story 20.3 — DRAFT quote → CANCELLED (reason required, no number ever). */
@@ -398,7 +439,7 @@ public record Invoice(
         String why = requireCancellationReason(reason);
         return new Invoice(id, null, InvoiceStatus.CANCELLED, null, client, null, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, null, null, null, now, why, createdBy, createdAt, now,
-                delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     private static String requireCancellationReason(String reason) {
@@ -454,7 +495,7 @@ public record Invoice(
     private Invoice touched(Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     /**
@@ -465,7 +506,7 @@ public record Invoice(
         assertEditable();
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
@@ -475,7 +516,7 @@ public record Invoice(
         }
         return new Invoice(id, number, status, issueDate, client, seller.withIdentityFlags(nameFromDisplayName,
                 hasLogo), vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt,
-                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     /**
@@ -502,7 +543,7 @@ public record Invoice(
     public Invoice recordSending(String phone, Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
     }
 
     private DomainException invalidTransition() {

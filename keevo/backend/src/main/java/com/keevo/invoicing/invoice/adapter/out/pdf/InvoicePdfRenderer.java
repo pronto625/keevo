@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.adapter.out.pdf;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
+import com.keevo.invoicing.invoice.domain.model.InvoiceTotals;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 import com.keevo.invoicing.invoice.domain.model.SellerSnapshot;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceDocumentRenderer;
@@ -40,7 +41,13 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
 
     /** One printed line: every cell already formatted. */
     public record LineView(String description, String quantity, String unitPrice, String vat, String totalHt,
-                           String totalVat, String totalTtc) {
+                           String totalVat, String totalTtc, String reference) {
+
+        /** Pre-20.5 shape: no reference. */
+        public LineView(String description, String quantity, String unitPrice, String vat, String totalHt,
+                        String totalVat, String totalTtc) {
+            this(description, quantity, unitPrice, vat, totalHt, totalVat, totalTtc, null);
+        }
     }
 
     @Override
@@ -74,18 +81,35 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
         v.put("clientNiu", text(c.niu()));
         v.put("clientAddress", text(c.address()));
         v.put("clientPhone", text(c.phone()));
+        // Story 20.5 — client data copied on the document, when present
+        v.put("clientRccm", text(c.rccm()));
+        v.put("clientEmail", text(c.email()));
+        v.put("clientContact", text(c.contactName()));
+        v.put("clientWebsite", text(c.website()));
+        v.put("dueDate", invoice.terms().dueDate() == null ? null : PdfFormats.date(invoice.terms().dueDate()));
 
         v.put("unitPriceLabel", invoice.pricesIncludeVat() ? "Prix unitaire TTC" : "Prix unitaire HT");
         List<LineView> lines = new ArrayList<>();
         for (InvoiceLine l : invoice.lines()) {
             lines.add(new LineView(text(l.description()), quantity(l.quantity()), PdfFormats.integer(l.unitPrice()),
                     vat(l), PdfFormats.integer(l.totalHt()), PdfFormats.integer(l.totalVat()),
-                    PdfFormats.integer(l.totalTtc())));
+                    PdfFormats.integer(l.totalTtc()), text(l.reference())));
         }
         v.put("lines", lines);
-        v.put("totalHt", PdfFormats.xaf(invoice.totals().totalHt()));
-        v.put("totalVat", PdfFormats.xaf(invoice.totals().totalVat()));
-        v.put("totalTtc", PdfFormats.xaf(invoice.totals().totalTtc()));
+        // Story 20.5 — with prices without VAT the VAT is computed once on the document: the lines show HT and rate
+        // only (per-line VAT / TTC could not add up to the document's totals)
+        v.put("lineTaxColumns", invoice.pricesIncludeVat());
+        InvoiceTotals t = invoice.totals();
+        // Story 20.5 — Sous-total, Remise, Livraison only on a document with a discount, a delivery fee or an
+        // exemption: any other invoice prints exactly as before (Total HT, Total TVA, Total TTC)
+        boolean breakdown = invoice.terms().hasAdjustments() || invoice.terms().vatExempt();
+        v.put("subtotalLabel", invoice.pricesIncludeVat() ? "Sous-total TTC" : "Sous-total HT");
+        v.put("subtotal", breakdown ? PdfFormats.xaf(t.subtotal()) : null);
+        v.put("discount", t.discount() > 0 ? "-" + PdfFormats.xaf(t.discount()) : null);
+        v.put("deliveryFee", t.delivery() > 0 ? PdfFormats.xaf(t.delivery()) : null);
+        v.put("totalHt", PdfFormats.xaf(t.totalHt()));
+        v.put("totalVat", PdfFormats.xaf(t.totalVat()));
+        v.put("totalTtc", PdfFormats.xaf(t.totalTtc()));
         v.put("vatMention", text(invoice.vatMention()));
 
         v.put("stamp", stamp(invoice));

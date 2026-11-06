@@ -59,6 +59,12 @@ public class StoreRepositoryAdapter implements StoreRepository {
     }
 
     @Override
+    public Optional<String> oldestActiveCountry() {
+        return jpa.findActiveCountriesOldestFirst(org.springframework.data.domain.PageRequest.of(0, 1)).stream()
+                .findFirst();
+    }
+
+    @Override
     public boolean existsWarehouse() {
         return jpa.existsByType(StoreType.WAREHOUSE);
     }

@@ -10,6 +10,13 @@ import java.util.UUID;
  * @param name     the display name
  * @param phone    the phone number (E.164)
  * @param archived whether the client is archived
+ * @param rccm     Story 20.5 — the client's RCCM (20.2 profile field), nullable
+ * @param email    Story 20.5 — the client's email, nullable
  */
-public record ClientSummary(UUID id, String name, String phone, boolean archived) {
+public record ClientSummary(UUID id, String name, String phone, boolean archived, String rccm, String email) {
+
+    /** Pre-20.5 shape: no RCCM, no email. */
+    public ClientSummary(UUID id, String name, String phone, boolean archived) {
+        this(id, name, phone, archived, null, null);
+    }
 }

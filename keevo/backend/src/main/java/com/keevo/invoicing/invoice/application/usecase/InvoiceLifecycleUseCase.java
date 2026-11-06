@@ -86,7 +86,8 @@ public class InvoiceLifecycleUseCase {
 
     private Invoice issue(UUID id, UUID actorId, String tenantId, boolean pricesIncludeVat, boolean counted) {
         Invoice draft = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        InvoicingSettings found = settings.find().orElseGet(InvoicingSettings::defaults);
+        InvoicingSettings found = settings.find()
+                .orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
         InvoicingSettings stored = pricesIncludeVat ? withPricesIncludingVat(found) : found;
         // Story 14.2 — no legal name typed: the company display name (designation › shop name) is printed instead
         // (non-blocking; the invoice carries a compliance warning).
@@ -97,6 +98,7 @@ public class InvoiceLifecycleUseCase {
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
         draft.assertIssuable(seller); // throws the precise error before any number is allocated
+        draft.terms().assertDueDateFrom(today); // Story 20.5 — a due date never precedes the issue date
         if (counted) { // 19.8: before numbering, same transaction — a refusal keeps the draft and the sequence
             quotas.assertAndIncrementForSchema(tenantId, UsageMetric.DOCUMENTS, 1);
         }

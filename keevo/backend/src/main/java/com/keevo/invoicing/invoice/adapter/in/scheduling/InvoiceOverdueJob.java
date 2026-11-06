@@ -30,10 +30,12 @@ import java.util.Set;
  * Story 20.4 — the daily overdue job of invoices (FUS-FR20), at 07:00 Douala time by default
  * ({@code keevo.invoice-overdue.cron}). Template Method over the live tenants ({@link PlanModuleRowStore#liveTenants()},
  * as {@code NotificationRetentionJob}): a tenant without the {@code invoice_payments} table (module never used, or not
- * migrated to V10 yet — it has no instalment) or whose {@code invoicing} is not ENABLED (off, or read-only) is
+ * migrated to V10 yet — it has no instalment; Story 20.5: or below V11, without invoice due dates) or whose
+ * {@code invoicing} is not ENABLED (off, or read-only) is
  * skipped; per tenant, in its own transaction, ONE set-based UPDATE moves the active ISSUED invoices holding an unpaid
- * instalment due before today (Africa/Douala) to {@code OVERDUE} — only those not already OVERDUE nor PAID, so a later
- * run finds nothing new — and,
+ * instalment due before today (Africa/Douala) — or, Story 20.5, past their own due date with less received than due
+ * (total TTC − credit notes) — to {@code OVERDUE}; only those not already OVERDUE nor PAID, so a later run finds
+ * nothing new — and,
  * when some moved, ONE {@link InvoicesOverdueEvent} is published (the owner notification is sent by the messaging side
  * after the commit). A tenant whose transaction fails is logged and counted, the others proceed. One summary line per
  * run.

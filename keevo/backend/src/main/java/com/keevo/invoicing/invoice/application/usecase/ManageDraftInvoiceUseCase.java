@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.application.usecase;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
+import com.keevo.invoicing.invoice.domain.model.InvoiceTerms;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
 import com.keevo.invoicing.invoice.domain.model.LineInput;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository;
@@ -58,11 +59,22 @@ public class ManageDraftInvoiceUseCase {
     }
 
     /**
-     * The draft's content: client and lines. Story 20.3: {@code kind} = what a creation makes ({@code null} =
+     * The draft's content: client and lines; Story 20.5 — {@code terms} (discount, delivery, own VAT rate or
+     * exemption, due date; {@code null} = none: a V1 body). Story 20.3: {@code kind} = what a creation makes ({@code null} =
      * {@code INVOICE}); on an edit, {@code null} = unchanged and another kind than the document's → 409; {@code expectedUpdatedAt} = the edit's
      * optimistic check (the {@code updatedAt} the editor last saw; {@code null} = no check; ignored by a creation).
      */
-    public record DraftContent(ClientInfo client, List<LineInput> lines, InvoiceKind kind, Instant expectedUpdatedAt) {
+    public record DraftContent(ClientInfo client, List<LineInput> lines, InvoiceKind kind, Instant expectedUpdatedAt,
+                               InvoiceTerms terms) {
+
+        public DraftContent {
+            terms = terms == null ? InvoiceTerms.NONE : terms;
+        }
+
+        /** Pre-20.5 shape: no document terms (no discount, no delivery, the seller's rate, no due date). */
+        public DraftContent(ClientInfo client, List<LineInput> lines, InvoiceKind kind, Instant expectedUpdatedAt) {
+            this(client, lines, kind, expectedUpdatedAt, InvoiceTerms.NONE);
+        }
 
         public DraftContent(ClientInfo client, List<LineInput> lines) {
             this(client, lines, null, null);
@@ -89,13 +101,15 @@ public class ManageDraftInvoiceUseCase {
                 return existing.get();
             }
         }
+        assertDueDateNotPast(content);
         ClientInfo client = clients.resolve(content.client(), tenantId);
         Instant now = now();
         UUID invoiceId = id != null ? id : UUID.randomUUID();
         boolean quote = content.kind() == InvoiceKind.QUOTE;
         Invoice draft = valid(() -> quote
-                ? Invoice.quote(invoiceId, client, content.lines(), currentSettings(), actorId, now)
-                : Invoice.draft(invoiceId, client, content.lines(), currentSettings(), actorId, now));
+                ? Invoice.quote(invoiceId, client, content.lines(), content.terms(), currentSettings(), actorId, now)
+                : Invoice.draft(invoiceId, client, content.lines(), content.terms(), currentSettings(), actorId,
+                now));
         if (id != null) {
             // the same creation sent concurrently (online retry + queued operation): the first one wins, no PK error
             if (!invoices.insertIfAbsent(draft)) {
@@ -127,9 +141,10 @@ public class ManageDraftInvoiceUseCase {
         current.assertEditable();
         assertSameKind(current, content.kind());
         assertFresh(current, content.expectedUpdatedAt());
+        assertDueDateNotPast(content);
         ClientInfo client = clients.resolve(content.client(), tenantId, current.client().clientId());
-        Invoice updated = valid(() -> current.withDraftContent(client, content.lines(), currentSettings(),
-                now()));
+        Invoice updated = valid(() -> current.withDraftContent(client, content.lines(), content.terms(),
+                currentSettings(), now()));
         assertInstalmentsFit(updated);
         invoices.updateDraft(updated);
         return updated;
@@ -149,6 +164,16 @@ public class ManageDraftInvoiceUseCase {
                     + XafAmounts.group(committed) + " FCFA) dépassent le nouveau total de la facture ("
                     + XafAmounts.group(updated.totals().totalTtc()) + " FCFA) : réduisez-les d'abord",
                     Map.of("remaining", XafAmounts.group(updated.totals().totalTtc())));
+        }
+    }
+
+    /** Story 20.5 — a draft or a quote never gets a due date already passed (today in Africa/Douala is fine). */
+    private void assertDueDateNotPast(DraftContent content) {
+        java.time.LocalDate due = content.terms().dueDate();
+        if (due != null && due.isBefore(java.time.LocalDate.ofInstant(clock.instant(),
+                com.keevo.shared.domain.time.KeevoZones.WAT))) {
+            throw new DomainException(ErrorCode.VALIDATION_ERROR, "Due date in the past",
+                    Map.of("reason", "La date d'échéance ne peut pas être passée"));
         }
     }
 
@@ -202,7 +227,7 @@ public class ManageDraftInvoiceUseCase {
     }
 
     private InvoicingSettings currentSettings() {
-        return settings.find().orElseGet(InvoicingSettings::defaults);
+        return settings.find().orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
     }
 
     /** Domain value errors (amount overflow, bad quantity) → 422 with a French reason. */

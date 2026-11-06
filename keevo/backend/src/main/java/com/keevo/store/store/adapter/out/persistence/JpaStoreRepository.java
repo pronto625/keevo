@@ -23,6 +23,11 @@ public interface JpaStoreRepository extends JpaRepository<StoreJpaEntity, UUID> 
 
     boolean existsByType(StoreType type);
 
+    /** Story 20.5 — the countries of the active stores, oldest store first (callers take the first one). */
+    @Query("SELECT s.country FROM StoreJpaEntity s WHERE s.isActive = true ORDER BY s.createdAt ASC NULLS LAST, "
+            + "s.id ASC")
+    List<String> findActiveCountriesOldestFirst(org.springframework.data.domain.Pageable page);
+
     /** Story 19.12 — {@code SELECT … FOR UPDATE} of one store (serialises logo changes of that store). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM StoreJpaEntity s WHERE s.id = :id")

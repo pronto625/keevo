@@ -90,4 +90,34 @@ class CreditNotePdfRendererTest {
         assertThat(text).contains("AVOIR N° AV-2026-000002", "Sac de riz 25 kg", "−11 925 XAF")
                 .doesNotContain("Livraison");
     }
+
+    @Test
+    @DisplayName("Story 20.5 — credit note of an invoice with discount and delivery: Sous-total, Remise, TVA, "
+            + "Livraison, Total add up")
+    void adjustedInvoice() throws IOException {
+        InvoicingSettings ht = new InvoicingSettings("Tech Centre SARL", "Rue Joss", null, null, null, true,
+                new BigDecimal("19.25"), false, null, null);
+        Invoice invoice = Invoice.draft(UUID.randomUUID(), CLIENT, List.of(
+                        new LineInput("Sac de riz", new BigDecimal("2"), 150_000, VatTreatment.STANDARD),
+                        new LineInput("Savon", BigDecimal.ONE, 17_700, VatTreatment.STANDARD)),
+                        new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(2_500, 2_000, null, false, null),
+                        ht, null, T0)
+                .issue("FAC-2026-000006", LocalDate.of(2026, 10, 30), ht, T1);
+        CreditNote note = CreditNote.issue(UUID.randomUUID(), "AV-2026-000003", invoice, "Retour",
+                CreditNote.creditLines(invoice, List.of(), null), null, T2, null);
+
+        String text = text(renderer.render(note, invoice, null));
+
+        assertThat(text).contains("Sous-total HT", "−317 700 XAF", "Remise", "2 500 XAF", "Total HT",
+                "−315 200 XAF", "Total TVA", "−60 676 XAF", "Livraison", "−2 000 XAF", "Total TTC", "−377 876 XAF");
+    }
+
+    @Test
+    @DisplayName("Story 20.5 — credit note of a plain invoice: no Sous-total / Remise / Livraison row")
+    void plainInvoiceNoBreakdown() throws IOException {
+        Invoice invoice = paid();
+        CreditNote note = CreditNote.issue(UUID.randomUUID(), "AV-2026-000004", invoice, "Retour",
+                CreditNote.creditLines(invoice, List.of(), null), null, T2, null);
+        assertThat(text(renderer.render(note, invoice, null))).doesNotContain("Sous-total", "Remise");
+    }
 }

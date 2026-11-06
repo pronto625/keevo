@@ -127,7 +127,7 @@ public class InvoiceSaleUseCase {
         ClientInfo client = SaleInvoiceMapper.client(clients.saleClient(clientId, tenant));
         Instant now = clock.instant();
         InvoicingSettings vatIncluded = InvoiceLifecycleUseCase.withPricesIncludingVat(
-                settings.find().orElseGet(InvoicingSettings::defaults));
+                settings.find().orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate())));
         Invoice draft;
         try {
             draft = ManageDraftInvoiceUseCase.valid(() -> Invoice.draft(UUID.randomUUID(), client, lines,

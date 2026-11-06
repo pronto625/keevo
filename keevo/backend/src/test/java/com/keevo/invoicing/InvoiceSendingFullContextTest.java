@@ -447,9 +447,14 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
                 + "DROP COLUMN send_count, DROP COLUMN seller_name_from_display, DROP COLUMN seller_has_logo, "
                 + "DROP COLUMN source_sale_id, DROP COLUMN superseded_at, DROP COLUMN deleted_at, DROP COLUMN kind, "
                 + "DROP COLUMN converted_invoice_id, DROP COLUMN converted_at, DROP COLUMN source_quote_id, "
-                + "DROP COLUMN payment_state");
+                + "DROP COLUMN payment_state, DROP COLUMN discount_amount, DROP COLUMN delivery_fee, DROP COLUMN subtotal, "
+                + "DROP COLUMN vat_rate_override, "
+                + "DROP COLUMN vat_exempt, DROP COLUMN due_date, DROP COLUMN client_rccm, DROP COLUMN client_email, "
+                + "DROP COLUMN client_contact_name, DROP COLUMN client_website");
+        jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_sync_keyset");
-        jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5', '6', '7', '8', '9', '10')");
+        jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5', '6', '7', '8', '9', '10', "
+                + "'11', '12')");
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, seller_legal_name, "
                 + "vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, issued_at) VALUES "

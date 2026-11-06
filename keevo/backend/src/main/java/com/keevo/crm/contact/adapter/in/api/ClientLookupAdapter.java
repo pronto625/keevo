@@ -69,6 +69,7 @@ public final class ClientLookupAdapter implements ClientLookupPort {
     }
 
     private static ClientSummary summary(Client c) {
-        return new ClientSummary(c.id(), c.name(), c.phone(), c.archived());
+        return new ClientSummary(c.id(), c.name(), c.phone(), c.archived(),
+                c.profile() == null ? null : c.profile().rccm(), c.email());
     }
 }

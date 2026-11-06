@@ -37,6 +37,12 @@ import java.util.UUID;
  * {@code amountPaid} (sum of the payments received), {@code amountDue} ({@code totalTtc − creditedTtc});
  * {@code payments} = payments received and scheduled instalments, oldest first ({@code legacy}: the single payment of an
  * invoice paid before 20.4, without id).
+ *
+ * <p>Story 20.5 (additive): {@code subtotal} (Σ lines as entered — HT or TTC per {@code pricesIncludeVat} — before the
+ * discount), {@code discountAmount}, {@code deliveryFee} (included in {@code totalTtc}, outside VAT), {@code vatRate} =
+ * the rate applied (0 when exempt), {@code vatRateOverride} = the rate requested for the document ({@code null} = the
+ * seller's), {@code vatExempt}, {@code dueDate}; client {@code rccm}, {@code email}, {@code contactName},
+ * {@code website}; line {@code productId}, {@code reference}. {@code totalTtc = totalHt + totalVat + deliveryFee}.
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -79,7 +85,13 @@ public record InvoiceResponseDto(
         String paymentStateLabel,
         long amountPaid,
         long amountDue,
-        List<Payment> payments) {
+        List<Payment> payments,
+        long subtotal,
+        long discountAmount,
+        long deliveryFee,
+        BigDecimal vatRateOverride,
+        boolean vatExempt,
+        LocalDate dueDate) {
 
     /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
     public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
@@ -90,7 +102,8 @@ public record InvoiceResponseDto(
     public record CreditNote(UUID id, String number, Instant issuedAt, long totalTtc, String reason) {
     }
 
-    public record Client(UUID id, String name, String niu, String address, String phone) {
+    public record Client(UUID id, String name, String niu, String address, String phone, String rccm, String email,
+                         String contactName, String website) {
     }
 
     public record Seller(String legalName, String address, String phone, String niu, String rccm,
@@ -98,7 +111,8 @@ public record InvoiceResponseDto(
     }
 
     public record Line(int position, String description, BigDecimal quantity, long unitPrice, String vatTreatment,
-                       BigDecimal vatRate, String vatMention, long totalHt, long totalVat, long totalTtc) {
+                       BigDecimal vatRate, String vatMention, long totalHt, long totalVat, long totalTtc,
+                       UUID productId, String reference) {
     }
 
     /**
@@ -118,7 +132,8 @@ public record InvoiceResponseDto(
         SellerSnapshot s = i.seller();
         return new InvoiceResponseDto(i.id(), i.number(), i.status().name(), i.status().label(i.kind()),
                 i.issueDate(),
-                new Client(c.clientId(), c.name(), c.niu(), c.address(), c.phone()),
+                new Client(c.clientId(), c.name(), c.niu(), c.address(), c.phone(), c.rccm(), c.email(),
+                        c.contactName(), c.website()),
                 s == null ? null : new Seller(s.legalName(), s.address(), s.phone(), s.niu(), s.rccm(),
                         s.paymentDetails(), s.footer()),
                 i.vatRegistered(), i.vatRate(), i.pricesIncludeVat(), i.vatMention(),
@@ -131,11 +146,13 @@ public record InvoiceResponseDto(
                 i.convertedInvoiceId(), i.convertedAt(), i.sourceQuoteId(),
                 paid.state() == null ? null : paid.state().name(), paid.stateLabel(), paid.amountPaid(),
                 paid.amountDue(), paid.payments().stream().map(p -> new Payment(p.id(), p.amount(), p.dueDate(),
-                        p.paidAt(), p.method(), p.note(), p.legacy())).toList());
+                        p.paidAt(), p.method(), p.note(), p.legacy())).toList(),
+                i.totals().subtotal(), i.totals().discount(), i.totals().delivery(), i.terms().vatRate(),
+                i.terms().vatExempt(), i.terms().dueDate());
     }
 
     private static Line line(InvoiceLine l) {
         return new Line(l.position(), l.description(), l.quantity(), l.unitPrice(), l.treatment().name(), l.vatRate(),
-                l.vatMention(), l.totalHt(), l.totalVat(), l.totalTtc());
+                l.vatMention(), l.totalHt(), l.totalVat(), l.totalTtc(), l.productId(), l.reference());
     }
 }

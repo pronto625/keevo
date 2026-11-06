@@ -250,4 +250,24 @@ class ConvertQuoteUseCaseTest {
         verify(invoices, never()).insertConversion(any());
         verifyNoInteractions(lifecycle);
     }
+
+    @Test
+    @DisplayName("Story 20.5 — quote with a due date already passed: 409 French, nothing inserted, no number")
+    void pastDueDate() {
+        Invoice quote = Invoice.quote(quoteId, client, List.of(new LineInput("Riz", BigDecimal.ONE, 11_925,
+                        VatTreatment.STANDARD)),
+                new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(0, 0, null, false,
+                        LocalDate.of(2026, 11, 5)), SELLER, ACTOR, NOW.minusSeconds(3600));
+        when(invoices.findByIdForUpdate(quoteId)).thenReturn(Optional.of(quote));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.convert(quoteId, invoiceId, ACTOR, TENANT))
+                .isInstanceOfSatisfying(com.keevo.shared.domain.exception.DomainException.class, e -> {
+                    assertThat(e.getErrorCode())
+                            .isEqualTo(com.keevo.shared.domain.exception.ErrorCode.INVOICE_INVALID_TRANSITION);
+                    assertThat(e.getUserMessage())
+                            .isEqualTo("La date d'échéance de ce devis est passée : modifiez-la avant de le convertir.");
+                });
+        verify(invoices, org.mockito.Mockito.never()).insertConversion(any());
+        org.mockito.Mockito.verifyNoInteractions(lifecycle);
+    }
 }

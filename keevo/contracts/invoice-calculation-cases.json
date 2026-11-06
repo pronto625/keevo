@@ -1,0 +1,1643 @@
+{
+  "description": "Story 20.5 — calculation cases of invoice / quote totals (remise, livraison, TVA par document ou exonération), reusable by the Bref React Native app (FUS-NFR8). Run by the backend through the served path (Invoice.draft → VatCalculator.compute; test InvoiceCalculationCasesTest). Amounts in XAF francs (integers). mode HT = prices without VAT (pricesIncludeVat false): Bref's formula — line HT = HALF_UP(quantity × unitPrice); subtotal = Σ line HT; net = subtotal − discount; VAT = HALF_UP(net × (Σ HT of STANDARD lines / subtotal) × rate / 100) once on the document; totalHt = net; totalTtc = net + VAT + delivery. mode TTC = prices VAT included (Keevo default, POS): line TTC = HALF_UP(quantity × unitPrice), line HT = HALF_UP(TTC × 100 / (100 + rate)), line VAT = TTC − HT; subtotal = Σ line TTC; without discount VAT = Σ line VAT, with a discount VAT = HALF_UP(Σ line VAT × (subtotal − discount) / subtotal); totalHt = subtotal − discount − VAT; totalTtc = subtotal − discount + delivery. rate = 0 when vatExempt, for EXEMPT / STATE_BORNE lines and when the seller is not VAT-registered; vatRate = the document's rate (percent; the seller's when no own rate). discount ≤ subtotal (else 422). Sources: bref-dump = every document of a local Bref database copy (amounts only; Bref « sans TVA » ⇒ vatExempt), bref-formula = Bref's own code (invoice.service.ts create, utils/line-total.ts) run on varied inputs, keevo-ttc / keevo-ht = the Keevo modes Bref does not have.",
+  "countryRates": {
+    "CM": "19.25",
+    "SN": "18",
+    "CI": "18",
+    "BJ": "18",
+    "ML": "18",
+    "BF": "18",
+    "TG": "18",
+    "GN": "18",
+    "GA": "18",
+    "CD": "16",
+    "KE": "16",
+    "GH": "15",
+    "NG": "7.5"
+  },
+  "cases": [
+    {
+      "id": "bref-dump-01",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 3500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 150000
+        },
+        {
+          "quantity": "2.5",
+          "unitPrice": 100
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 163750,
+        "totalHt": 163750,
+        "totalVat": 0,
+        "totalTtc": 163750
+      }
+    },
+    {
+      "id": "bref-dump-02",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 100
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 100,
+        "totalHt": 100,
+        "totalVat": 0,
+        "totalTtc": 100
+      }
+    },
+    {
+      "id": "bref-dump-03",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "8.2",
+          "unitPrice": 100
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 820,
+        "totalHt": 820,
+        "totalVat": 0,
+        "totalTtc": 820
+      }
+    },
+    {
+      "id": "bref-dump-04",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "2",
+          "unitPrice": 3500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 600
+        },
+        {
+          "quantity": "2",
+          "unitPrice": 150000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 100
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 2500,
+      "delivery": 2000,
+      "expected": {
+        "subtotal": 317700,
+        "totalHt": 315200,
+        "totalVat": 60676,
+        "totalTtc": 377876
+      }
+    },
+    {
+      "id": "bref-dump-05",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "200",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "50",
+          "unitPrice": 3500
+        }
+      ],
+      "discount": 235000,
+      "delivery": 2500,
+      "expected": {
+        "subtotal": 1175000,
+        "totalHt": 940000,
+        "totalVat": 0,
+        "totalTtc": 942500
+      }
+    },
+    {
+      "id": "bref-dump-06",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 600
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 5600,
+        "totalHt": 5600,
+        "totalVat": 0,
+        "totalTtc": 5600
+      }
+    },
+    {
+      "id": "bref-dump-07",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 3500
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 8500,
+        "totalHt": 8500,
+        "totalVat": 0,
+        "totalTtc": 8500
+      }
+    },
+    {
+      "id": "bref-dump-08",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 10000,
+        "totalHt": 10000,
+        "totalVat": 0,
+        "totalTtc": 10000
+      }
+    },
+    {
+      "id": "bref-dump-09",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "4",
+          "unitPrice": 3500
+        },
+        {
+          "quantity": "3",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 5800,
+      "delivery": 1000,
+      "expected": {
+        "subtotal": 29000,
+        "totalHt": 23200,
+        "totalVat": 0,
+        "totalTtc": 24200
+      }
+    },
+    {
+      "id": "bref-dump-10",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "5",
+          "unitPrice": 3500
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 17500,
+        "totalHt": 17500,
+        "totalVat": 0,
+        "totalTtc": 17500
+      }
+    },
+    {
+      "id": "bref-dump-11",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 600
+        }
+      ],
+      "discount": 12,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 600,
+        "totalHt": 588,
+        "totalVat": 0,
+        "totalTtc": 588
+      }
+    },
+    {
+      "id": "bref-dump-12",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 600
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 5600,
+        "totalHt": 5600,
+        "totalVat": 0,
+        "totalTtc": 5600
+      }
+    },
+    {
+      "id": "bref-dump-13",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "7",
+          "unitPrice": 3500
+        }
+      ],
+      "discount": 850,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 34500,
+        "totalHt": 33650,
+        "totalVat": 0,
+        "totalTtc": 33650
+      }
+    },
+    {
+      "id": "bref-dump-14",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 600
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 1200,
+        "totalHt": 1200,
+        "totalVat": 0,
+        "totalTtc": 1200
+      }
+    },
+    {
+      "id": "bref-dump-15",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 600
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 600,
+        "totalHt": 600,
+        "totalVat": 0,
+        "totalTtc": 600
+      }
+    },
+    {
+      "id": "bref-dump-16",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 3500
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 8500,
+        "totalHt": 8500,
+        "totalVat": 0,
+        "totalTtc": 8500
+      }
+    },
+    {
+      "id": "bref-dump-17",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "10",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "1000",
+          "unitPrice": 100
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 150000
+        }
+      ],
+      "discount": 15000,
+      "delivery": 2500,
+      "expected": {
+        "subtotal": 300000,
+        "totalHt": 285000,
+        "totalVat": 54863,
+        "totalTtc": 342363
+      }
+    },
+    {
+      "id": "bref-dump-18",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 100
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 100,
+        "totalHt": 100,
+        "totalVat": 0,
+        "totalTtc": 100
+      }
+    },
+    {
+      "id": "bref-dump-19",
+      "source": "bref-dump",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "10",
+          "unitPrice": 600
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 6000,
+        "totalHt": 6000,
+        "totalVat": 0,
+        "totalTtc": 6000
+      }
+    },
+    {
+      "id": "bref-half-up-1",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 300000
+        }
+      ],
+      "discount": 15000,
+      "delivery": 2500,
+      "expected": {
+        "subtotal": 300000,
+        "totalHt": 285000,
+        "totalVat": 54863,
+        "totalTtc": 342363
+      }
+    },
+    {
+      "id": "bref-half-up-2",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 200
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 200,
+        "totalHt": 200,
+        "totalVat": 39,
+        "totalTtc": 239
+      }
+    },
+    {
+      "id": "bref-half-up-3",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "3",
+          "unitPrice": 1000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 1000
+        }
+      ],
+      "discount": 1800,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 4000,
+        "totalHt": 2200,
+        "totalVat": 424,
+        "totalTtc": 2624
+      }
+    },
+    {
+      "id": "bref-half-up-4",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "SN",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 25
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 25,
+        "totalHt": 25,
+        "totalVat": 5,
+        "totalTtc": 30
+      }
+    },
+    {
+      "id": "bref-half-up-5",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "NG",
+      "vatRegistered": true,
+      "vatRate": "7.5",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 10
+        }
+      ],
+      "discount": 0,
+      "delivery": 500,
+      "expected": {
+        "subtotal": 20,
+        "totalHt": 20,
+        "totalVat": 2,
+        "totalTtc": 522
+      }
+    },
+    {
+      "id": "bref-half-up-6",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "GH",
+      "vatRegistered": true,
+      "vatRate": "15",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 10
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 10,
+        "totalHt": 10,
+        "totalVat": 2,
+        "totalTtc": 12
+      }
+    },
+    {
+      "id": "bref-country-cm",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 6025,
+        "totalTtc": 38825
+      }
+    },
+    {
+      "id": "bref-country-sn",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "SN",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-ci",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CI",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-bj",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "BJ",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-ml",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "ML",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-bf",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "BF",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-tg",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "TG",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-gn",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "GN",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-ga",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "GA",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5634,
+        "totalTtc": 38434
+      }
+    },
+    {
+      "id": "bref-country-cd",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CD",
+      "vatRegistered": true,
+      "vatRate": "16",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5008,
+        "totalTtc": 37808
+      }
+    },
+    {
+      "id": "bref-country-ke",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "KE",
+      "vatRegistered": true,
+      "vatRate": "16",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 5008,
+        "totalTtc": 37808
+      }
+    },
+    {
+      "id": "bref-country-gh",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "GH",
+      "vatRegistered": true,
+      "vatRate": "15",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 4695,
+        "totalTtc": 37495
+      }
+    },
+    {
+      "id": "bref-country-ng",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "NG",
+      "vatRegistered": true,
+      "vatRate": "7.5",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 2348,
+        "totalTtc": 35148
+      }
+    },
+    {
+      "id": "bref-country-fr",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "FR",
+      "vatRegistered": true,
+      "vatRate": "0",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 12500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 7300
+        }
+      ],
+      "discount": 1000,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 32300,
+        "totalHt": 31300,
+        "totalVat": 0,
+        "totalTtc": 32800
+      }
+    },
+    {
+      "id": "bref-discount-all",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 5000,
+      "delivery": 1000,
+      "expected": {
+        "subtotal": 5000,
+        "totalHt": 0,
+        "totalVat": 0,
+        "totalTtc": 1000
+      }
+    },
+    {
+      "id": "bref-exempt",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "4",
+          "unitPrice": 3500
+        },
+        {
+          "quantity": "3",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 5800,
+      "delivery": 1000,
+      "expected": {
+        "subtotal": 29000,
+        "totalHt": 23200,
+        "totalVat": 0,
+        "totalTtc": 24200
+      }
+    },
+    {
+      "id": "bref-decimal-qty",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2.5",
+          "unitPrice": 100
+        },
+        {
+          "quantity": "1.333",
+          "unitPrice": 999
+        },
+        {
+          "quantity": "0.125",
+          "unitPrice": 8
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 1583,
+        "totalHt": 1583,
+        "totalVat": 305,
+        "totalTtc": 1888
+      }
+    },
+    {
+      "id": "bref-decimal-qty-discount",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "SN",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "12.75",
+          "unitPrice": 1990
+        },
+        {
+          "quantity": "3.5",
+          "unitPrice": 415
+        }
+      ],
+      "discount": 2000,
+      "delivery": 750,
+      "expected": {
+        "subtotal": 26826,
+        "totalHt": 24826,
+        "totalVat": 4469,
+        "totalTtc": 30045
+      }
+    },
+    {
+      "id": "bref-big",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "200",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "50",
+          "unitPrice": 3500
+        }
+      ],
+      "discount": 235000,
+      "delivery": 2500,
+      "expected": {
+        "subtotal": 1175000,
+        "totalHt": 940000,
+        "totalVat": 180950,
+        "totalTtc": 1123450
+      }
+    },
+    {
+      "id": "bref-own-rate-18-on-cm",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 100000
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 100000,
+        "totalHt": 100000,
+        "totalVat": 18000,
+        "totalTtc": 118000
+      }
+    },
+    {
+      "id": "bref-own-rate-0",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "0",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 100000
+        }
+      ],
+      "discount": 10000,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 100000,
+        "totalHt": 90000,
+        "totalVat": 0,
+        "totalTtc": 90000
+      }
+    },
+    {
+      "id": "bref-delivery-only",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 17500
+        }
+      ],
+      "discount": 0,
+      "delivery": 2000,
+      "expected": {
+        "subtotal": 17500,
+        "totalHt": 17500,
+        "totalVat": 3369,
+        "totalTtc": 22869
+      }
+    },
+    {
+      "id": "bref-many-lines",
+      "source": "bref-formula",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        },
+        {
+          "quantity": "2",
+          "unitPrice": 3500
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 600
+        },
+        {
+          "quantity": "2",
+          "unitPrice": 150000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 100
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 2500,
+      "delivery": 2000,
+      "expected": {
+        "subtotal": 317700,
+        "totalHt": 315200,
+        "totalVat": 60676,
+        "totalTtc": 377876
+      }
+    },
+    {
+      "id": "ttc-default-1",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 11925
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 11925,
+        "totalHt": 10000,
+        "totalVat": 1925,
+        "totalTtc": 11925
+      }
+    },
+    {
+      "id": "ttc-default-2",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "3",
+          "unitPrice": 1500
+        },
+        {
+          "quantity": "2",
+          "unitPrice": 2750
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 10000,
+        "totalHt": 8386,
+        "totalVat": 1614,
+        "totalTtc": 10000
+      }
+    },
+    {
+      "id": "ttc-default-mixed",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 11925
+        },
+        {
+          "quantity": "2",
+          "unitPrice": 500,
+          "treatment": "EXEMPT"
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 1000,
+          "treatment": "STATE_BORNE"
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 13925,
+        "totalHt": 12000,
+        "totalVat": 1925,
+        "totalTtc": 13925
+      }
+    },
+    {
+      "id": "ttc-discount",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 119250
+        }
+      ],
+      "discount": 19250,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 119250,
+        "totalHt": 83857,
+        "totalVat": 16143,
+        "totalTtc": 100000
+      }
+    },
+    {
+      "id": "ttc-discount-delivery",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 59625
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 1000,
+          "treatment": "EXEMPT"
+        }
+      ],
+      "discount": 5000,
+      "delivery": 2500,
+      "expected": {
+        "subtotal": 120250,
+        "totalHt": 96800,
+        "totalVat": 18450,
+        "totalTtc": 117750
+      }
+    },
+    {
+      "id": "ttc-delivery-only",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 11925
+        }
+      ],
+      "discount": 0,
+      "delivery": 1500,
+      "expected": {
+        "subtotal": 11925,
+        "totalHt": 10000,
+        "totalVat": 1925,
+        "totalTtc": 13425
+      }
+    },
+    {
+      "id": "ttc-exempt",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": true,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 11925
+        }
+      ],
+      "discount": 1000,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 11925,
+        "totalHt": 10925,
+        "totalVat": 0,
+        "totalTtc": 10925
+      }
+    },
+    {
+      "id": "ttc-not-registered",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": false,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 11925
+        }
+      ],
+      "discount": 925,
+      "delivery": 500,
+      "expected": {
+        "subtotal": 11925,
+        "totalHt": 11000,
+        "totalVat": 0,
+        "totalTtc": 11500
+      }
+    },
+    {
+      "id": "ttc-own-rate-18",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "18",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 11800
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 11800,
+        "totalHt": 10000,
+        "totalVat": 1800,
+        "totalTtc": 11800
+      }
+    },
+    {
+      "id": "ttc-decimal-qty",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1.5",
+          "unitPrice": 7999
+        },
+        {
+          "quantity": "0.333",
+          "unitPrice": 1200
+        }
+      ],
+      "discount": 1234,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 12399,
+        "totalHt": 9362,
+        "totalVat": 1803,
+        "totalTtc": 11165
+      }
+    },
+    {
+      "id": "ttc-discount-all",
+      "source": "keevo-ttc",
+      "mode": "TTC",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 5000,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 5000,
+        "totalHt": 0,
+        "totalVat": 0,
+        "totalTtc": 0
+      }
+    },
+    {
+      "id": "ht-mixed-treatments",
+      "source": "keevo-ht",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 10000
+        },
+        {
+          "quantity": "1",
+          "unitPrice": 10000,
+          "treatment": "EXEMPT"
+        }
+      ],
+      "discount": 2000,
+      "delivery": 1000,
+      "expected": {
+        "subtotal": 20000,
+        "totalHt": 18000,
+        "totalVat": 1733,
+        "totalTtc": 20733
+      }
+    },
+    {
+      "id": "ht-not-registered",
+      "source": "keevo-ht",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": false,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "2",
+          "unitPrice": 5000
+        }
+      ],
+      "discount": 500,
+      "delivery": 250,
+      "expected": {
+        "subtotal": 10000,
+        "totalHt": 9500,
+        "totalVat": 0,
+        "totalTtc": 9750
+      }
+    },
+    {
+      "id": "ht-state-borne-only",
+      "source": "keevo-ht",
+      "mode": "HT",
+      "country": "CM",
+      "vatRegistered": true,
+      "vatRate": "19.25",
+      "vatExempt": false,
+      "lines": [
+        {
+          "quantity": "1",
+          "unitPrice": 8000,
+          "treatment": "STATE_BORNE"
+        }
+      ],
+      "discount": 0,
+      "delivery": 0,
+      "expected": {
+        "subtotal": 8000,
+        "totalHt": 8000,
+        "totalVat": 0,
+        "totalTtc": 8000
+      }
+    }
+  ]
+}

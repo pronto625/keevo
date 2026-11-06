@@ -32,7 +32,7 @@ public class InvoicingSettingsUseCase {
     /** The saved profile, or the defaults when the owner never saved one. */
     @Transactional(readOnly = true)
     public InvoicingSettings current() {
-        return settings.find().orElseGet(InvoicingSettings::defaults);
+        return settings.find().orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
     }
 
     @Transactional

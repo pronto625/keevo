@@ -171,6 +171,9 @@ class InvoicingPaymentsMigrationPostgresIntegrationTest {
         Instant before = jdbc.queryForObject("SELECT updated_at FROM \"" + SCHEMA + "\".invoices WHERE id = ?",
                 java.sql.Timestamp.class, late).toInstant();
 
+        // Story 20.5 — the job's statement needs the invoice due dates (V11, index V12)
+        script("V11__invoice_discount_delivery_vat_due.sql");
+        script("V12__invoices_due_date_index.sql");
         TenantContext.setCurrentTenant(SCHEMA);
         InvoicePaymentRepository repository = new JdbcInvoicePaymentRepository(jdbc);
         Instant now = Instant.now().plusSeconds(60);

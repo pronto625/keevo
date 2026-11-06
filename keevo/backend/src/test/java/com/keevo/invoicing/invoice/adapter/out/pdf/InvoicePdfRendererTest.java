@@ -153,4 +153,41 @@ class InvoicePdfRendererTest {
         assertThat(hasImage(render(issued(), new Logo(png.toByteArray(), "image/png")))).isTrue();
         assertThat(hasImage(render(issued(), null))).isFalse();
     }
+
+    @Test
+    @DisplayName("Story 20.5 — a plain TTC invoice prints as before 20.5: no Sous-total, « Total TVA » kept, line VAT/TTC")
+    void plainInvoiceUnchanged() throws IOException {
+        String text = text(render(issued(), null));
+        assertThat(text).contains("Total HT", "25 000 XAF", "Total TVA", "3 850 XAF", "Total TTC", "28 850 XAF",
+                "Montant TTC", "23 850");
+        assertThat(text).doesNotContain("Sous-total", "Remise", "Échéance");
+        InvoicingSettings notRegistered = new InvoicingSettings("Boutique Awa", null, null, null, null, false,
+                null, true, null, null);
+        Invoice zeroVat = Invoice.draft(UUID.randomUUID(), CLIENT, LINES, notRegistered, null, T0)
+                .issue("FAC-2026-000002", LocalDate.of(2026, 10, 30), notRegistered, T1);
+        assertThat(text(renderer.render(zeroVat, zeroVat.seller(), null))).contains("Total TVA", "0 XAF");
+    }
+
+    @Test
+    @DisplayName("Story 20.5 — HT invoice with discount and delivery: Sous-total, Remise, Total TVA, Livraison, "
+            + "Échéance, references; lines show HT and rate only")
+    void adjustedHtInvoice() throws IOException {
+        InvoicingSettings ht = new InvoicingSettings("Tech Centre SARL", "Rue Joss", null, null, null, true,
+                new BigDecimal("19.25"), false, null, null);
+        ClientInfo client = new ClientInfo(null, "Société Ndolo", null, null, null, "RC/DLA/2021/A/77",
+                "compta@ndolo.cm", "M. Ndolo", "ndolo.cm");
+        List<LineInput> lines = List.of(
+                new LineInput("Sac de riz", new BigDecimal("2"), 150_000, VatTreatment.STANDARD, null, "RIZ-25"),
+                new LineInput("Savon", BigDecimal.ONE, 17_700, VatTreatment.STANDARD));
+        Invoice invoice = Invoice.draft(UUID.randomUUID(), client, lines,
+                        new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(2_500, 2_000, null, false,
+                                LocalDate.of(2026, 11, 30)), ht, null, T0)
+                .issue("FAC-2026-000003", LocalDate.of(2026, 10, 30), ht, T1);
+        String text = text(renderer.render(invoice, invoice.seller(), null));
+        assertThat(text).contains("Sous-total HT", "317 700 XAF", "Remise", "-2 500 XAF", "Total HT", "315 200 XAF",
+                "Total TVA", "60 676 XAF", "Livraison", "2 000 XAF", "Total TTC", "377 876 XAF",
+                "Échéance : 30/11/2026", "RCCM : RC/DLA/2021/A/77", "Contact : M. Ndolo", "Email : compta@ndolo.cm",
+                "Site web : ndolo.cm", "Réf. : RIZ-25", "Montant HT");
+        assertThat(text).doesNotContain("Montant TTC");
+    }
 }

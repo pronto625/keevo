@@ -79,6 +79,9 @@ public interface InvoicePaymentRepository {
      */
     List<String> markOverdue(LocalDate today, Instant now);
 
-    /** The tenant schemas holding {@code invoice_payments} (catalogue query; the others have nothing to mark). */
+    /**
+     * The tenant schemas holding {@code invoice_payments} and, Story 20.5, {@code invoices.due_date} (invoicing V11+;
+     * catalogue query) — the others are skipped by the overdue job.
+     */
     java.util.Set<String> schemasWithPayments();
 }

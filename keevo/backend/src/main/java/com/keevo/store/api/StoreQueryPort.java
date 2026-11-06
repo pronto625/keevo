@@ -16,6 +16,12 @@ public interface StoreQueryPort {
     int countActive(String tenantSchema);
 
     /**
+     * Story 20.5 — the country (ISO 3166-1 alpha-2) of the tenant's oldest active store, empty when it has none: the
+     * seller's country of the invoicing module. One row read.
+     */
+    Optional<String> oldestActiveStoreCountry(String tenantSchema);
+
+    /**
      * Story 20.2 (ADR-08) — the stores whose clients a member of {@code storeId} sees: the store itself, or — when it
      * shares its clients — every active store sharing them; empty when the store is unknown or inactive. One query.
      */

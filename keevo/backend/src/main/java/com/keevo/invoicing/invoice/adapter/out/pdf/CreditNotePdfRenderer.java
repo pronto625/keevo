@@ -4,6 +4,7 @@ import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.CreditNote;
 import com.keevo.invoicing.invoice.domain.model.CreditNoteLine;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
+import com.keevo.invoicing.invoice.domain.model.InvoiceTotals;
 import com.keevo.invoicing.invoice.domain.model.SellerSnapshot;
 import com.keevo.invoicing.invoice.domain.port.out.CreditNoteDocumentRenderer;
 import com.keevo.shared.capability.business.CompanyIdentity.Logo;
@@ -76,6 +77,15 @@ public class CreditNotePdfRenderer implements CreditNoteDocumentRenderer {
         v.put("totalHt", negative(PdfFormats.xaf(note.totals().totalHt()), note.totals().totalHt()));
         v.put("totalVat", negative(PdfFormats.xaf(note.totals().totalVat()), note.totals().totalVat()));
         v.put("totalTtc", negative(PdfFormats.xaf(note.totals().totalTtc()), note.totals().totalTtc()));
+        // Story 20.5 — a credit note of an invoice with a discount or a delivery fee (always a full one): the same
+        // breakdown as the invoice, so HT + TVA + Livraison add up to the TTC printed
+        boolean adjusted = invoice.terms().hasAdjustments();
+        InvoiceTotals t = invoice.totals();
+        v.put("subtotalLabel", invoice.pricesIncludeVat() ? "Sous-total TTC" : "Sous-total HT");
+        v.put("subtotal", adjusted ? negative(PdfFormats.xaf(t.subtotal()), t.subtotal()) : null);
+        v.put("discount", adjusted && t.discount() > 0 ? PdfFormats.xaf(t.discount()) : null);
+        v.put("deliveryFee", adjusted && t.delivery() > 0 ? negative(PdfFormats.xaf(t.delivery()), t.delivery())
+                : null);
         v.put("vatMention", text(invoice.vatMention()));
         return v;
     }

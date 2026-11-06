@@ -64,14 +64,14 @@ public class InvoiceClientResolver {
             if (crm.isEmpty()) {
                 // Degraded mode: the CRM cannot vouch for a new id — keep the typed text, and the stored link only.
                 UUID kept = typed.clientId().equals(storedClientId) ? storedClientId : null;
-                resolved = new ClientInfo(kept, typed.name(), typed.niu(), typed.address(), typed.phone());
+                resolved = typed.resolved(kept, typed.name(), typed.phone());
             } else {
                 ClientSummary known = crm.get().find(tenantSchema, typed.clientId())
                         .orElseThrow(() -> new DomainException(ErrorCode.CLIENT_NOT_FOUND, "Unknown CRM client"));
-                resolved = new ClientInfo(known.id(),
+                resolved = typed.resolved(known.id(),
                         typed.name() != null ? typed.name() : known.name(),
-                        typed.niu(), typed.address(),
-                        typed.phone() != null ? typed.phone() : known.phone());
+                        typed.phone() != null ? typed.phone() : known.phone())
+                        .withCrmDetails(known.rccm(), known.email()); // Story 20.5
             }
         }
         if (resolved == null || resolved.name() == null) {

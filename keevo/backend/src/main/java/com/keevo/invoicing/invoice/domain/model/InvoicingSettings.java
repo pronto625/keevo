@@ -45,7 +45,16 @@ public record InvoicingSettings(
 
     /** Before the owner fills the profile: nothing known, not VAT-registered, 19.25 %, prices VAT included. */
     public static InvoicingSettings defaults() {
-        return new InvoicingSettings(null, null, null, null, null, false, DEFAULT_VAT_RATE, true, null, null);
+        return defaults(DEFAULT_VAT_RATE);
+    }
+
+    /**
+     * Story 20.5 — the same with the standard rate of the seller's country ({@code com.keevo.shared.domain.VatRates},
+     * the country of the tenant's oldest active store); {@code null} → 19.25 %.
+     */
+    public static InvoicingSettings defaults(BigDecimal countryRate) {
+        return new InvoicingSettings(null, null, null, null, null, false,
+                countryRate == null ? DEFAULT_VAT_RATE : countryRate, true, null, null);
     }
 
     static String trimToNull(String value) {

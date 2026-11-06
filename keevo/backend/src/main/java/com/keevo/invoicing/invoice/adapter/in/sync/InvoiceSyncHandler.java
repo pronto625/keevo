@@ -211,7 +211,11 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
         return parseUuid(payload.get("invoiceId"));
     }
 
-    /** The draft content; a line the domain refuses (quantity, amount) → {@code VALIDATION_ERROR}. */
+    /**
+     * The draft content; a line the domain refuses (quantity, amount) → {@code VALIDATION_ERROR}. Story 20.5: the
+     * document terms and line references are validated by the request's constraints first ({@link #read}); a domain
+     * refusal ({@code DomainException VALIDATION_ERROR}, French reason) passes through as the rejection.
+     */
     private static ManageDraftInvoiceUseCase.DraftContent content(InvoiceRequestDto request) {
         try {
             return request.toDraftContent();

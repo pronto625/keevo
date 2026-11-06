@@ -160,6 +160,35 @@ class InvoiceSyncHandlerTest {
     }
 
     @Test
+    @DisplayName("Story 20.5 — CREATE_INVOICE with vatRate 101 / 18.125, a negative discount or a 101-character "
+            + "reference: REJECTED VALIDATION_ERROR, use case not called")
+    @SuppressWarnings("unchecked")
+    void termsInvalid() {
+        for (Object rate : List.of(101, 18.125)) {
+            Map<String, Object> p = content();
+            p.put("id", invoiceId.toString());
+            p.put("vatRate", rate);
+            SyncOperationResult r = handler.handle(op("CREATE_INVOICE", p), ACTOR, TENANT);
+            assertThat(r.status()).as("vatRate %s", rate).isEqualTo(SyncOperationStatus.REJECTED);
+            assertThat(r.reason()).isEqualTo("VALIDATION_ERROR");
+        }
+        Map<String, Object> negative = content();
+        negative.put("id", invoiceId.toString());
+        negative.put("discountAmount", -1);
+        assertThat(handler.handle(op("CREATE_INVOICE", negative), ACTOR, TENANT).reason())
+                .isEqualTo("VALIDATION_ERROR");
+        Map<String, Object> longRef = content();
+        longRef.put("id", invoiceId.toString());
+        Map<String, Object> line = new LinkedHashMap<>(((List<Map<String, Object>>) longRef.get("lines")).get(0));
+        line.put("reference", "R".repeat(101));
+        longRef.put("lines", List.of(line));
+        SyncOperationResult r = handler.handle(op("CREATE_INVOICE", longRef), ACTOR, TENANT);
+        assertThat(r.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(r.reason()).isEqualTo("VALIDATION_ERROR");
+        verifyNoInteractions(drafts);
+    }
+
+    @Test
     @DisplayName("UPDATE_INVOICE replaces the draft content of the invoice named by invoiceId")
     void update() {
         when(drafts.update(eq(invoiceId), any(), eq(TENANT))).thenReturn(invoice());
@@ -327,6 +356,30 @@ class InvoiceSyncHandlerTest {
                 null, "Deuxième versement"));
         verify(payments).settle(id, UUID.fromString("c8e1f5a2-6d4b-4c39-8a7e-2f9b0d3e5c61"),
                 LocalDate.parse("2026-11-06"), "Espèces", ACTOR, TENANT);
+
+        // Story 20.5 — the document terms of the Bref app on CREATE_INVOICE / UPDATE_INVOICE
+        UUID termsId = UUID.fromString(contract.path("termsInvoiceId").asText());
+        when(drafts.create(eq(termsId), any(), eq(ACTOR), eq(TENANT))).thenReturn(any);
+        when(drafts.update(eq(termsId), any(), eq(TENANT))).thenReturn(any);
+        for (com.fasterxml.jackson.databind.JsonNode op : contract.path("termsOperations")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = objectMapper.convertValue(op.path("payload"), Map.class);
+            SyncOperationResult r = handler.handle(op(op.path("operationType").asText(), payload), ACTOR, TENANT);
+            assertThat(r.status()).as("%s: %s", op.path("name").asText(), r.reason())
+                    .isEqualTo(SyncOperationStatus.APPLIED);
+        }
+        ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> withTerms =
+                ArgumentCaptor.forClass(ManageDraftInvoiceUseCase.DraftContent.class);
+        verify(drafts).create(eq(termsId), withTerms.capture(), eq(ACTOR), eq(TENANT));
+        assertThat(withTerms.getValue().terms()).isEqualTo(new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(
+                2_500, 2_000, null, false, LocalDate.parse("2026-12-06")));
+        assertThat(withTerms.getValue().client().rccm()).isEqualTo("RC/DLA/2021/A/77");
+        assertThat(withTerms.getValue().client().contactName()).isEqualTo("M. Ndolo");
+        assertThat(withTerms.getValue().lines().get(0).reference()).isEqualTo("RIZ-25");
+        assertThat(withTerms.getValue().lines().get(0).productId()).isNotNull();
+        verify(drafts).update(eq(termsId), withTerms.capture(), eq(TENANT));
+        assertThat(withTerms.getValue().terms()).isEqualTo(new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(
+                0, 1_500, new java.math.BigDecimal("18.00"), true, null));
 
         assertThat(types).isEqualTo(handler.supportedTypes());
         ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> content =

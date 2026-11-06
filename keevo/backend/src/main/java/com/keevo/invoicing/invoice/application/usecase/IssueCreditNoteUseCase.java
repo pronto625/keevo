@@ -66,14 +66,15 @@ public class IssueCreditNoteUseCase {
     public CreditNote issue(Invoice invoice, String reason, List<CreditNoteSelection> selection, UUID actorId,
                             String tenantId, String sourceEvent) {
         String why = CreditNote.requireReason(reason);
-        List<CreditNoteLine> lines = CreditNote.creditLines(invoice, creditNotes.linesOfInvoice(invoice.id()),
+        List<CreditNoteLine> credited = creditNotes.linesOfInvoice(invoice.id());
+        List<CreditNoteLine> lines = CreditNote.creditLines(invoice, credited,
                 selection); // every refusal happens here, before a number is allocated
         // Story 20.4 — never more received than owed after it; instalments trimmed to the new amount due
-        payments.beforeCredit(invoice, CreditNote.totals(lines).totalTtc());
+        payments.beforeCredit(invoice, CreditNote.creditedTotals(invoice, credited, lines).totalTtc());
         Instant now = clock.instant();
         int year = LocalDate.ofInstant(now, KeevoZones.WAT).getYear();
         CreditNote note = CreditNote.issue(UUID.randomUUID(), CreditNote.number(year, creditNotes.nextNumber(year)),
-                invoice, why, lines, actorId, now, sourceEvent);
+                invoice, why, credited, lines, actorId, now, sourceEvent);
         creditNotes.insert(note);
         payments.refreshAfterCredit(invoice, actorId, tenantId); // Story 20.4: the amount due dropped
         events.publishEvent(new CreditNoteIssuedEvent(note.id(), note.number(), invoice.id(), invoice.number(),

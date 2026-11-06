@@ -146,22 +146,39 @@ public class JdbcInvoicePaymentRepository implements InvoicePaymentRepository {
 
     @Override
     public List<String> markOverdue(LocalDate today, Instant now) {
-        // set-based, driven by the partial index of unpaid instalments (idx_invoice_payments_unpaid_due)
-        List<String> numbers = jdbc.queryForList("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                        + " SET payment_state = 'OVERDUE', updated_at = GREATEST(updated_at, ?) "
-                        + "WHERE id IN (SELECT invoice_id FROM " + InvoicingTables.qualified(InvoicingTables.PAYMENTS)
-                        + " WHERE paid_at IS NULL AND due_date < ?) "
-                        + "AND kind = 'INVOICE' AND status = 'ISSUED' AND deleted_at IS NULL AND superseded_at IS NULL "
-                        + "AND payment_state IS DISTINCT FROM 'OVERDUE' AND payment_state IS DISTINCT FROM 'PAID' "
-                        + "RETURNING number",
-                String.class, ts(now), Date.valueOf(today));
+        // set-based: the candidates are the union of two index-driven scans — unpaid instalments past due
+        // (idx_invoice_payments_unpaid_due) and, Story 20.5, active issued invoices past their own due date
+        // (idx_invoices_issued_due_date_active, V12) with less received than due (total TTC − credit notes) — then one
+        // UPDATE joined on them. Only tenants at invoicing V11+ get here (schemasWithPayments).
+        String invoices = InvoicingTables.qualified(InvoicingTables.INVOICES);
+        String payments = InvoicingTables.qualified(InvoicingTables.PAYMENTS);
+        List<String> numbers = jdbc.queryForList("WITH cand AS ("
+                        + "SELECT invoice_id AS id FROM " + payments + " WHERE paid_at IS NULL AND due_date < ? "
+                        + "UNION "
+                        + "SELECT d.id FROM " + invoices + " d WHERE d.kind = 'INVOICE' AND d.status = 'ISSUED' "
+                        + "AND d.due_date < ? AND d.deleted_at IS NULL AND d.superseded_at IS NULL "
+                        + "AND d.total_ttc - COALESCE((SELECT SUM(c.total_ttc) FROM "
+                        + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " c WHERE c.invoice_id = d.id), 0)"
+                        + " > COALESCE((SELECT SUM(p.amount) FROM " + payments
+                        + " p WHERE p.invoice_id = d.id AND p.paid_at IS NOT NULL), 0)) "
+                        + "UPDATE " + invoices + " i SET payment_state = 'OVERDUE', "
+                        + "updated_at = GREATEST(i.updated_at, ?) FROM cand WHERE i.id = cand.id "
+                        + "AND i.kind = 'INVOICE' AND i.status = 'ISSUED' AND i.deleted_at IS NULL "
+                        + "AND i.superseded_at IS NULL "
+                        + "AND i.payment_state IS DISTINCT FROM 'OVERDUE' AND i.payment_state IS DISTINCT FROM 'PAID' "
+                        + "RETURNING i.number",
+                String.class, Date.valueOf(today), Date.valueOf(today), ts(now));
         return numbers.stream().sorted().toList(); // the numbering order, for a stable message
     }
 
     @Override
     public Set<String> schemasWithPayments() {
-        return new HashSet<>(jdbc.queryForList("SELECT schemaname FROM pg_catalog.pg_tables "
-                + "WHERE tablename = 'invoice_payments' AND schemaname ~ '^kv_'", String.class));
+        // Story 20.5 — one catalogue query for every tenant: invoice_payments (V10) and invoices.due_date (V11); a tenant
+        // below V11 (migrated lazily on its next invoicing call) is skipped like one without invoice_payments
+        return new HashSet<>(jdbc.queryForList("SELECT t.schemaname FROM pg_catalog.pg_tables t "
+                + "WHERE t.tablename = 'invoice_payments' AND t.schemaname ~ '^kv_' AND EXISTS (SELECT 1 FROM "
+                + "information_schema.columns col WHERE col.table_schema = t.schemaname AND col.table_name = 'invoices' "
+                + "AND col.column_name = 'due_date')", String.class));
     }
 
     private static InvoicePayment payment(ResultSet rs) throws SQLException {

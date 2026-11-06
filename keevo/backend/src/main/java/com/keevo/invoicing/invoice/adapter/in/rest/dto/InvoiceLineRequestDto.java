@@ -10,11 +10,13 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 /**
  * A free invoice line (Story 14.1): unit price in francs (VAT included or excluded per the seller settings);
  * {@code vatTreatment} {@code STANDARD} (default), {@code EXEMPT} (« Exonérée ») or {@code STATE_BORNE}
- * (« Prise en charge État »).
+ * (« Prise en charge État »). Story 20.5: {@code productId} (the catalogue product, optional, not checked against the
+ * catalogue) and {@code reference} (optional, ≤ 100).
  */
 public record InvoiceLineRequestDto(
         @NotBlank(message = "La désignation de la ligne est requise")
@@ -29,5 +31,13 @@ public record InvoiceLineRequestDto(
         @Max(value = 1_000_000_000_000L, message = "Le prix unitaire est trop élevé")
         Long unitPrice,
         @Pattern(regexp = "STANDARD|EXEMPT|STATE_BORNE", message = "Le traitement de TVA de la ligne est invalide")
-        String vatTreatment) {
+        String vatTreatment,
+        UUID productId,
+        @Size(max = 100, message = "La référence de la ligne ne doit pas dépasser 100 caractères")
+        String reference) {
+
+    /** Pre-20.5 shape: no product, no reference. */
+    public InvoiceLineRequestDto(String description, BigDecimal quantity, Long unitPrice, String vatTreatment) {
+        this(description, quantity, unitPrice, vatTreatment, null, null);
+    }
 }

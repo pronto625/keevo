@@ -64,6 +64,10 @@ public class ConvertQuoteUseCase {
     public static final String VAT_SETTINGS_CHANGED = "Les réglages de TVA ont changé depuis ce devis : "
             + "enregistrez-le à nouveau pour mettre à jour les montants, puis convertissez-le.";
 
+    /** Story 20.5 — the French refusal of a conversion whose quote carries a due date already passed. */
+    public static final String QUOTE_DUE_DATE_PASSED =
+            "La date d'échéance de ce devis est passée : modifiez-la avant de le convertir.";
+
     @Transactional
     public Conversion convert(UUID quoteId, UUID invoiceId, UUID actorId, String tenantId) {
         return convert(quoteId, invoiceId, null, actorId, tenantId);
@@ -83,9 +87,17 @@ public class ConvertQuoteUseCase {
         }
         quote.assertConvertible(); // kind, status, completeness — before any write, number or quota
         ManageDraftInvoiceUseCase.assertFresh(quote, expectedUpdatedAt);
+        // Story 20.5 — the invoice is issued today: a due date already passed would be refused at issue
+        java.time.LocalDate dueDate = quote.terms().dueDate();
+        if (dueDate != null && dueDate.isBefore(java.time.LocalDate.ofInstant(clock.instant(),
+                com.keevo.shared.domain.time.KeevoZones.WAT))) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, QUOTE_DUE_DATE_PASSED,
+                    Map.of("status", "devis"));
+        }
         UUID newId = invoiceId != null ? invoiceId : UUID.randomUUID();
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
-        InvoicingSettings current = settings.find().orElseGet(InvoicingSettings::defaults);
+        InvoicingSettings current = settings.find()
+                .orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
         Invoice draft = ManageDraftInvoiceUseCase.valid(() -> quote.conversionDraft(newId, current, actorId, now));
         if (!draft.totals().equals(quote.totals())) {
             // the client accepted the quote's amounts: never issue other ones silently

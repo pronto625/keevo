@@ -2,23 +2,45 @@ package com.keevo.invoicing.invoice.adapter.out.persistence;
 
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
+import com.keevo.shared.domain.VatRates;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
+import com.keevo.store.api.StoreCountry;
+import com.keevo.store.api.StoreQueryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/** {@link InvoicingSettingsRepository} on the module-owned single-row table {@code invoicing_settings} (Story 14.1). */
+/**
+ * {@link InvoicingSettingsRepository} on the module-owned single-row table {@code invoicing_settings} (Story 14.1).
+ * Story 20.5: the seller's country is the one of the tenant's oldest active store, read through the store module's
+ * published port ({@code store :: api}).
+ */
 @Component
 public class JdbcInvoicingSettingsRepository implements InvoicingSettingsRepository {
 
     private final JdbcTemplate jdbc;
+    private final StoreQueryPort stores;
 
-    public JdbcInvoicingSettingsRepository(JdbcTemplate jdbc) {
+    public JdbcInvoicingSettingsRepository(JdbcTemplate jdbc, StoreQueryPort stores) {
         this.jdbc = jdbc;
+        this.stores = stores;
+    }
+
+    @Override
+    public BigDecimal countryVatRate() {
+        String tenant = TenantContext.getCurrentTenant();
+        if (!TenantSchema.isValid(tenant)) {
+            return null;
+        }
+        return VatRates.forCountry(stores.oldestActiveStoreCountry(tenant).orElse(StoreCountry.DEFAULT))
+                .orElse(null);
     }
 
     @Override

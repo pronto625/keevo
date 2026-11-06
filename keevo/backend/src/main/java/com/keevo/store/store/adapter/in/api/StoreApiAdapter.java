@@ -83,6 +83,12 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
     }
 
     @Override
+    public Optional<String> oldestActiveStoreCountry(String tenantSchema) {
+        TenantContext.requireCurrent(tenantSchema);
+        return storeRepository.oldestActiveCountry();
+    }
+
+    @Override
     public Set<UUID> clientVisibleStoreIds(String tenantSchema, UUID storeId) {
         TenantContext.requireCurrent(tenantSchema);
         if (storeId == null) {

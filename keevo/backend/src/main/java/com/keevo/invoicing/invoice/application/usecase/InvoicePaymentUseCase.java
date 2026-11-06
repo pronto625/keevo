@@ -243,7 +243,8 @@ public class InvoicePaymentUseCase {
         List<InvoicePayment> rows = payments.findByInvoice(invoice.id());
         PaymentState state = rows.isEmpty() && invoice.status() == InvoiceStatus.PAID ? PaymentState.PAID
                 : PaymentStateCalculator.afterChange(amountDue(invoice), rows,
-                        LocalDate.ofInstant(now, KeevoZones.WAT), payments.storedState(invoice.id()));
+                        LocalDate.ofInstant(now, KeevoZones.WAT), payments.storedState(invoice.id()),
+                        invoice.terms().dueDate());
         payments.storeState(invoice.id(), state, now);
     }
 
@@ -271,7 +272,7 @@ public class InvoicePaymentUseCase {
         }
         // becoming overdue is the daily job's transition (with its owner notification), never a payment's
         PaymentState state = PaymentStateCalculator.afterChange(due, rows, LocalDate.ofInstant(now, KeevoZones.WAT),
-                payments.storedState(invoice.id()));
+                payments.storedState(invoice.id()), invoice.terms().dueDate());
         if (state == PaymentState.PAID && invoice.status() == InvoiceStatus.ISSUED) {
             var latest = rows.stream().filter(InvoicePayment::isPaid)
                     .max(Comparator.comparing(InvoicePayment::paidAt));

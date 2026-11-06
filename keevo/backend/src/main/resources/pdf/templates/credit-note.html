@@ -107,8 +107,11 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
 <div class="note">Montants en francs CFA (XAF)</div>
 
 <table class="totals">
+  <tr th:if="${subtotal != null}"><td th:text="${subtotalLabel}">Sous-total</td><td class="num" th:text="${subtotal}">0 XAF</td></tr>
+  <tr th:if="${discount != null}"><td>Remise</td><td class="num" th:text="${discount}">0 XAF</td></tr>
   <tr><td>Total HT</td><td class="num" th:text="${totalHt}">0 XAF</td></tr>
   <tr><td>Total TVA</td><td class="num" th:text="${totalVat}">0 XAF</td></tr>
+  <tr th:if="${deliveryFee != null}"><td>Livraison</td><td class="num" th:text="${deliveryFee}">0 XAF</td></tr>
   <tr class="grand"><td>Total TTC</td><td class="num" th:text="${totalTtc}">0 XAF</td></tr>
 </table>
 <div class="mention" th:if="${vatMention != null}" th:text="${vatMention}">TVA non applicable</div>

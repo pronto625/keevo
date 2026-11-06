@@ -91,7 +91,8 @@ public class InvoiceDocumentUseCase {
         if (invoice.seller() != null) {
             return invoice.seller();
         }
-        InvoicingSettings current = settings.find().orElseGet(InvoicingSettings::defaults);
+        InvoicingSettings current = settings.find()
+                .orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
         boolean fromDisplay = current.legalName() == null;
         InvoicingSettings printed = fromDisplay
                 ? InvoiceLifecycleUseCase.withLegalName(current, companyIdentity.displayName(tenantSchema)) : current;

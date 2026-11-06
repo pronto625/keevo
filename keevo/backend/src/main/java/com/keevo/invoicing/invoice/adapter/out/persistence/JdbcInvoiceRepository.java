@@ -6,6 +6,7 @@ import com.keevo.invoicing.invoice.domain.model.InvoiceDelivery;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
+import com.keevo.invoicing.invoice.domain.model.InvoiceTerms;
 import com.keevo.invoicing.invoice.domain.model.InvoiceTotals;
 import com.keevo.invoicing.invoice.domain.model.SellerSnapshot;
 import com.keevo.invoicing.invoice.domain.model.VatTreatment;
@@ -39,7 +40,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             + "seller_payment_details, seller_footer, vat_registered, vat_rate, prices_include_vat, vat_mention, "
             + "total_ht, total_vat, total_ttc, issued_at, paid_at, payment_method, cancelled_at, cancellation_reason, "
             + "created_by, created_at, updated_at, last_sent_at, last_sent_to, send_count, seller_name_from_display, "
-            + "seller_has_logo, source_sale_id, kind, source_quote_id";
+            + "seller_has_logo, source_sale_id, kind, source_quote_id, "
+            // Story 20.5 (V11)
+            + "discount_amount, delivery_fee, subtotal, vat_rate_override, vat_exempt, due_date, client_rccm, "
+            + "client_email, client_contact_name, client_website";
     /** Placeholders of {@link #COLUMNS} in an INSERT. */
     private static final String PLACEHOLDERS = String.join(", ",
             java.util.Collections.nCopies(COLUMNS.split(",").length, "?"));
@@ -166,13 +170,15 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     public void updateDraft(Invoice draft) {
         ClientInfo c = draft.client();
         InvoiceTotals t = draft.totals();
+        InvoiceTerms terms = draft.terms();
         expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " SET client_id = ?, "
                         + "client_name = ?, client_niu = ?, client_address = ?, client_phone = ?, vat_registered = ?, "
                         + "vat_rate = ?, prices_include_vat = ?, vat_mention = ?, total_ht = ?, total_vat = ?, "
-                        + "total_ttc = ?, updated_at = ? WHERE id = ? AND status = 'DRAFT'",
+                        + "total_ttc = ?, updated_at = ?, " + TERMS_SET + " WHERE id = ? AND status = 'DRAFT'",
                 c.clientId(), c.name(), c.niu(), c.address(), c.phone(), draft.vatRegistered(), draft.vatRate(),
                 draft.pricesIncludeVat(), draft.vatMention(), t.totalHt(), t.totalVat(), t.totalTtc(),
-                ts(draft.updatedAt()), draft.id()), "draft update");
+                ts(draft.updatedAt()), t.discount(), t.delivery(), t.subtotal(), terms.vatRate(), terms.vatExempt(),
+                date(terms.dueDate()), c.rccm(), c.email(), c.contactName(), c.website(), draft.id()), "draft update");
         replaceLines(draft);
     }
 
@@ -185,12 +191,13 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                         + "seller_phone = ?, seller_niu = ?, seller_rccm = ?, seller_payment_details = ?, "
                         + "seller_footer = ?, vat_registered = ?, vat_rate = ?, prices_include_vat = ?, "
                         + "vat_mention = ?, total_ht = ?, total_vat = ?, total_ttc = ?, issued_at = ?, updated_at = ?, "
-                        + "seller_name_from_display = ?, seller_has_logo = ? "
+                        + "seller_name_from_display = ?, seller_has_logo = ?, subtotal = ? "
                         + "WHERE id = ? AND status = 'DRAFT' AND kind = 'INVOICE'",
                 issued.number(), Date.valueOf(issued.issueDate()), s.legalName(), s.address(), s.phone(), s.niu(),
                 s.rccm(), s.paymentDetails(), s.footer(), issued.vatRegistered(), issued.vatRate(),
                 issued.pricesIncludeVat(), issued.vatMention(), t.totalHt(), t.totalVat(), t.totalTtc(),
-                ts(issued.issuedAt()), ts(issued.updatedAt()), s.nameFromDisplayName(), s.hasLogo(), issued.id()),
+                ts(issued.issuedAt()), ts(issued.updatedAt()), s.nameFromDisplayName(), s.hasLogo(), t.subtotal(),
+                issued.id()),
                 "issue");
         // lines are recomputed with the settings of the issue, then frozen
         replaceLines(issued);
@@ -231,6 +238,11 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 ts(sent.delivery().lastSentAt()), sent.delivery().lastSentTo(), ts(sent.delivery().lastSentAt()),
                 sent.id()), "sending");
     }
+
+    /** Story 20.5 — the document terms and copied client fields written by a draft edit (V11 columns). */
+    private static final String TERMS_SET = "discount_amount = ?, delivery_fee = ?, subtotal = ?, "
+            + "vat_rate_override = ?, vat_exempt = ?, due_date = ?, client_rccm = ?, client_email = ?, "
+            + "client_contact_name = ?, client_website = ?";
 
     /** Only for a DRAFT edit or the issue itself: an issued invoice's lines are never rewritten. */
     private void replaceLines(Invoice invoice) {
@@ -365,11 +377,12 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         for (InvoiceLine line : invoice.lines()) {
             batch.add(new Object[]{UUID.randomUUID(), invoice.id(), line.position(), line.description(),
                     line.quantity(), line.unitPrice(), line.treatment().name(), line.vatRate(), line.totalHt(),
-                    line.totalVat(), line.totalTtc()});
+                    line.totalVat(), line.totalTtc(), line.productId(), line.reference()});
         }
         if (!batch.isEmpty()) {
             jdbc.batchUpdate("INSERT INTO " + table + " (id, invoice_id, position, description, quantity, unit_price, "
-                    + "vat_treatment, vat_rate, total_ht, total_vat, total_ttc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    + "vat_treatment, vat_rate, total_ht, total_vat, total_ttc, product_id, reference) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     batch);
         }
     }
@@ -377,7 +390,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     private Map<UUID, List<InvoiceLine>> lines(List<UUID> invoiceIds) {
         Map<UUID, List<InvoiceLine>> byInvoice = new LinkedHashMap<>();
         jdbc.query("SELECT invoice_id, position, description, quantity, unit_price, vat_treatment, vat_rate, total_ht, "
-                        + "total_vat, total_ttc FROM " + InvoicingTables.qualified(InvoicingTables.ITEMS)
+                        + "total_vat, total_ttc, product_id, reference FROM " + InvoicingTables.qualified(InvoicingTables.ITEMS)
                         + " WHERE invoice_id IN (" + String.join(", ", java.util.Collections.nCopies(invoiceIds.size(), "?"))
                         + ") ORDER BY invoice_id, position",
                 rs -> {
@@ -385,7 +398,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                             .add(new InvoiceLine(rs.getInt("position"), rs.getString("description"),
                                     rs.getBigDecimal("quantity"), rs.getLong("unit_price"),
                                     VatTreatment.valueOf(rs.getString("vat_treatment")), rs.getBigDecimal("vat_rate"),
-                                    rs.getLong("total_ht"), rs.getLong("total_vat"), rs.getLong("total_ttc")));
+                                    rs.getLong("total_ht"), rs.getLong("total_vat"), rs.getLong("total_ttc"),
+                                    rs.getObject("product_id", UUID.class), rs.getString("reference")));
                 },
                 invoiceIds.toArray());
         return byInvoice;
@@ -406,7 +420,13 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 i.createdBy(), ts(i.createdAt()), ts(i.updatedAt()),
                 ts(i.delivery().lastSentAt()), i.delivery().lastSentTo(), i.delivery().sendCount(),
                 s != null && s.nameFromDisplayName(), s != null && s.hasLogo(), i.sourceSaleId(), i.kind().name(),
-                i.sourceQuoteId()};
+                i.sourceQuoteId(),
+                i.totals().discount(), i.totals().delivery(), i.totals().subtotal(), i.terms().vatRate(),
+                i.terms().vatExempt(), date(i.terms().dueDate()), c.rccm(), c.email(), c.contactName(), c.website()};
+    }
+
+    private static Date date(java.time.LocalDate day) {
+        return day == null ? null : Date.valueOf(day);
     }
 
     private static Timestamp ts(Instant instant) {
@@ -426,7 +446,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                     i.vatRate(), i.pricesIncludeVat(), i.vatMention(), lines, i.totals(), i.issuedAt(), i.paidAt(),
                     i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdBy(), i.createdAt(),
                     i.updatedAt(), i.delivery(), i.sourceSaleId(), i.supersededAt(), i.kind(), i.convertedInvoiceId(),
-                    i.convertedAt(), i.sourceQuoteId());
+                    i.convertedAt(), i.sourceQuoteId(), i.terms());
         }
     }
 
@@ -442,20 +462,34 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 rs.getString("seller_niu"), rs.getString("seller_rccm"), rs.getString("seller_payment_details"),
                 rs.getString("seller_footer"), rs.getBoolean("seller_name_from_display"),
                 rs.getBoolean("seller_has_logo"));
+        // Story 20.5 — a row written before V11 has no subtotal: the sum of its lines as entered (no discount then)
+        boolean pricesIncludeVat = rs.getBoolean("prices_include_vat");
+        long totalHt = rs.getLong("total_ht");
+        long totalVat = rs.getLong("total_vat");
+        long totalTtc = rs.getLong("total_ttc");
+        long discount = rs.getLong("discount_amount");
+        long deliveryFee = rs.getLong("delivery_fee");
+        long storedSubtotal = rs.getLong("subtotal");
+        long subtotal = rs.wasNull() ? (pricesIncludeVat ? totalTtc : totalHt) : storedSubtotal;
+        Date due = rs.getDate("due_date");
+        InvoiceTerms terms = new InvoiceTerms(discount, deliveryFee, rs.getBigDecimal("vat_rate_override"),
+                rs.getBoolean("vat_exempt"), due == null ? null : due.toLocalDate());
         Invoice invoice = new Invoice(id, rs.getString("number"), status,
                 issueDate == null ? null : issueDate.toLocalDate(),
                 new ClientInfo(rs.getObject("client_id", UUID.class), rs.getString("client_name"),
-                        rs.getString("client_niu"), rs.getString("client_address"), rs.getString("client_phone")),
+                        rs.getString("client_niu"), rs.getString("client_address"), rs.getString("client_phone"),
+                        rs.getString("client_rccm"), rs.getString("client_email"),
+                        rs.getString("client_contact_name"), rs.getString("client_website")),
                 seller, rs.getBoolean("vat_registered"), rs.getBigDecimal("vat_rate"),
-                rs.getBoolean("prices_include_vat"), rs.getString("vat_mention"), List.of(),
-                new InvoiceTotals(rs.getLong("total_ht"), rs.getLong("total_vat"), rs.getLong("total_ttc")),
+                pricesIncludeVat, rs.getString("vat_mention"), List.of(),
+                new InvoiceTotals(totalHt, totalVat, totalTtc, subtotal, discount, deliveryFee),
                 instant(rs, "issued_at"), instant(rs, "paid_at"), rs.getString("payment_method"),
                 instant(rs, "cancelled_at"), rs.getString("cancellation_reason"),
                 rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
                 new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
                 rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"), kind,
                 rs.getObject("converted_invoice_id", UUID.class), instant(rs, "converted_at"),
-                rs.getObject("source_quote_id", UUID.class));
+                rs.getObject("source_quote_id", UUID.class), terms);
         return new Row(id, invoice);
     }
 
