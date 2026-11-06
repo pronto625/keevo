@@ -11,6 +11,9 @@ import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.ConvertQuoteRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
+import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceClientSuggestionsDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceResponseDto;
@@ -55,6 +58,7 @@ import java.util.UUID;
  * ({@code @RequiresPermission}, evaluated first): view → {@code INVOICE_VIEW}; create / edit / delete a draft →
  * {@code INVOICE_CREATE}; issue / record the payment → {@code INVOICE_SEND}; cancel → {@code INVOICE_MANAGE} (owner).
  * Story 14.3: CRM client suggestions ({@code GET /clients}, {@code INVOICE_CREATE}) and CRM link of the client.
+ * Story 20.3: quotes ({@code kind QUOTE}) share these endpoints; {@code POST /{id}/convert} ({@code INVOICE_SEND}).
  */
 @RestController
 @RequestMapping("/api/v1/invoices")
@@ -77,12 +81,15 @@ public class InvoiceController {
     private final SendInvoiceUseCase sending;
     private final PublicBaseUrl publicBaseUrl;
     private final InvoiceClientResolver clients;
+    private final ConvertQuoteUseCase conversions;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
                              InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
-                             PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients) {
+                             PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients,
+                             ConvertQuoteUseCase conversions) {
         this.clients = clients;
+        this.conversions = conversions;
         this.drafts = drafts;
         this.lifecycle = lifecycle;
         this.queries = queries;
@@ -111,11 +118,14 @@ public class InvoiceController {
      * {@code search} = part of the number or of the client name (case-insensitive, trimmed, at most
      * {@value #MAX_SEARCH_LENGTH} characters); {@code from} / {@code to} = issue date range ({@code yyyy-MM-dd},
      * Africa/Douala calendar day, inclusive, {@code from <= to}) — drafts, not issued yet, are left out by a range.
+     * Story 20.3: {@code kind} = {@code INVOICE} (absent: the V1 list, invoices only), {@code QUOTE} (quotes only) or
+     * {@code ALL} (both); anything else → 400.
      */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<InvoiceResponseDto>>> list(
+            @RequestParam(required = false) String kind,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String saleId,
             @RequestParam(required = false) String search,
@@ -143,7 +153,8 @@ public class InvoiceController {
                     "La date de début doit précéder la date de fin");
         }
         InvoiceRepository.Page result = queries.list(
-                new InvoiceRepository.Filter(parseStatus(status), parseSaleId(saleId), text, from, to), page, size);
+                new InvoiceRepository.Filter(parseStatus(status), parseSaleId(saleId), text, from, to,
+                        parseKind(kind)), page, size);
         InvoicingSettings current = settings.current();
         var credits = queries.credits(result.items());
         List<InvoiceResponseDto> items = result.items().stream()
@@ -176,7 +187,10 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(queries.get(id))));
     }
 
-    /** PUT /api/v1/invoices/{id} — replaces the content of a draft. */
+    /**
+     * PUT /api/v1/invoices/{id} — replaces the content of a draft (invoice or quote). Story 20.3:
+     * {@code expectedUpdatedAt} (optional) = the {@code updatedAt} last read; changed since → 409 {@code OPTIMISTIC_LOCK}.
+     */
     @RequiresPermission(InvoicingModule.INVOICE_CREATE)
     @RequiresEntitlement(InvoicingModule.ID)
     @PutMapping("/{id}")
@@ -232,6 +246,23 @@ public class InvoiceController {
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(cancelled)));
     }
 
+    /**
+     * POST /api/v1/invoices/{quoteId}/convert {@code {invoiceId?, expectedUpdatedAt?}} — Story 20.3: the DRAFT quote becomes a new issued
+     * invoice (DOCUMENTS quota, next {@code FAC-} number, issue date today); 201 with the invoice. Already converted →
+     * 200 with the same invoice (idempotent). Same rights as the issue.
+     */
+    @RequiresPermission(InvoicingModule.INVOICE_SEND)
+    @RequiresEntitlement(InvoicingModule.ID)
+    @PostMapping("/{id}/convert")
+    public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> convert(
+            @PathVariable UUID id, @RequestBody(required = false) ConvertQuoteRequestDto request) {
+        ConvertQuoteUseCase.Conversion conversion = conversions.convert(id,
+                request == null ? null : request.invoiceId(), request == null ? null : request.expectedUpdatedAt(),
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        return ResponseEntity.status(conversion.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .body(ApiResponseWrapper.ok(dto(conversion.invoice())));
+    }
+
     /** GET /api/v1/invoices/{id}/pdf — Story 14.2: the invoice as an A4 PDF, rendered on demand. */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
@@ -285,6 +316,23 @@ public class InvoiceController {
             return InvoiceStatus.valueOf(status.strip().toUpperCase(java.util.Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new InvalidRequestParameterException("status", "unknown invoice status");
+        }
+    }
+
+    /** Story 20.3 — absent → invoices only (V1 list); {@code ALL} → {@code null} (both kinds). */
+    static InvoiceKind parseKind(String kind) {
+        if (kind == null || kind.isBlank()) {
+            return InvoiceKind.INVOICE;
+        }
+        String value = kind.strip().toUpperCase(java.util.Locale.ROOT);
+        if ("ALL".equals(value)) {
+            return null;
+        }
+        try {
+            return InvoiceKind.valueOf(value);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestParameterException("kind", "unknown document kind",
+                    "Le type de document doit être INVOICE, QUOTE ou ALL");
         }
     }
 

@@ -81,6 +81,7 @@ public record CreditNote(
      */
     public static List<CreditNoteLine> creditLines(Invoice invoice, List<CreditNoteLine> credited,
                                                    List<CreditNoteSelection> selection) {
+        invoice.assertInvoice(); // Story 20.3 — a quote is never credited
         if (invoice.status() != InvoiceStatus.ISSUED && invoice.status() != InvoiceStatus.PAID) {
             throw new DomainException(ErrorCode.INVOICE_INVALID_TRANSITION, "Credit note not allowed",
                     Map.of("status", invoice.status().label().toLowerCase(java.util.Locale.FRENCH)));

@@ -2,13 +2,17 @@ package com.keevo.invoicing.invoice.adapter.in.rest.dto;
 
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase.DraftContent;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
+import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.LineInput;
 import com.keevo.invoicing.invoice.domain.model.VatTreatment;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -17,6 +21,11 @@ import java.util.UUID;
  * again with the same id returns the invoice already created (offline-first app: the same id is used by the online
  * call and by the queued {@code CREATE_INVOICE} sync operation). Also the payload of the {@code CREATE_INVOICE} /
  * {@code UPDATE_INVOICE} sync operations, validated with the same rules.
+ *
+ * <p>Story 20.3 (additive, V1 bodies unchanged): {@code kind} = {@code INVOICE} (absent on a creation) or
+ * {@code QUOTE}; absent on an edit = unchanged, another kind than the document's → 409; {@code expectedUpdatedAt} =
+ * the {@code updatedAt} the editor last saw (edit only,
+ * optional): the row changed since → 409 {@code OPTIMISTIC_LOCK}.
  */
 public record InvoiceRequestDto(
         UUID id,
@@ -24,7 +33,15 @@ public record InvoiceRequestDto(
         @Valid
         InvoiceClientDto client,
         @Size(max = 200, message = "Une facture compte au plus 200 lignes")
-        List<@Valid @NotNull(message = "Ligne vide") InvoiceLineRequestDto> lines) {
+        List<@Valid @NotNull(message = "Ligne vide") InvoiceLineRequestDto> lines,
+        @Pattern(regexp = "(?i)INVOICE|QUOTE", message = "Le type de document doit être INVOICE (facture) ou QUOTE (devis)")
+        String kind,
+        Instant expectedUpdatedAt) {
+
+    /** A V1 body: an invoice, no edit check. */
+    public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines) {
+        this(id, client, lines, null, null);
+    }
 
     /** The client and lines as the use cases take them ({@code STANDARD} VAT when the line names none). */
     public DraftContent toDraftContent() {
@@ -33,6 +50,8 @@ public record InvoiceRequestDto(
         List<LineInput> inputs = requested.stream().map(l -> new LineInput(l.description(), l.quantity(),
                 l.unitPrice(), l.vatTreatment() == null ? VatTreatment.STANDARD
                 : VatTreatment.valueOf(l.vatTreatment()))).toList();
-        return new DraftContent(info, inputs);
+        // one rule with @Pattern: absent, or INVOICE / QUOTE in any case (nothing else, no padding)
+        InvoiceKind documentKind = kind == null ? null : InvoiceKind.valueOf(kind.toUpperCase(Locale.ROOT));
+        return new DraftContent(info, inputs, documentKind, expectedUpdatedAt);
     }
 }

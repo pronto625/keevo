@@ -19,6 +19,11 @@ import java.util.UUID;
  * once more, snapshots the seller and freezes everything with its number and issue date. Transitions: DRAFT →
  * ISSUED → PAID, ISSUED → CANCELLED (reason kept); anything else is refused ({@code INVOICE_NOT_EDITABLE} for a change
  * of an issued invoice, {@code INVOICE_INVALID_TRANSITION} otherwise).
+ *
+ * <p>Story 20.3 — {@link #kind}: a {@code QUOTE} is created and edited like a draft but is never issued, paid, sent nor
+ * credited (« Un devis doit être converti en facture »); it ends {@code CONVERTED} (linked to a new invoice issued
+ * from it, {@code convertedInvoiceId}) or {@code CANCELLED} (no number). An invoice created by a conversion carries
+ * {@code sourceQuoteId}.
  */
 public record Invoice(
         UUID id,
@@ -43,11 +48,28 @@ public record Invoice(
         Instant updatedAt,
         InvoiceDelivery delivery,
         UUID sourceSaleId,
-        Instant supersededAt) {
+        Instant supersededAt,
+        InvoiceKind kind,
+        UUID convertedInvoiceId,
+        Instant convertedAt,
+        UUID sourceQuoteId) {
 
     public Invoice {
         lines = lines == null ? List.of() : List.copyOf(lines);
         delivery = delivery == null ? InvoiceDelivery.NONE : delivery;
+        kind = kind == null ? InvoiceKind.INVOICE : kind;
+    }
+
+    /** Story 14.7 shape: an invoice ({@link InvoiceKind#INVOICE}), not a quote nor converted from one (Story 20.3). */
+    public Invoice(UUID id, String number, InvoiceStatus status, LocalDate issueDate, ClientInfo client,
+                   SellerSnapshot seller, boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                   String vatMention, List<InvoiceLine> lines, InvoiceTotals totals, Instant issuedAt, Instant paidAt,
+                   String paymentMethod, Instant cancelledAt, String cancellationReason, UUID createdBy,
+                   Instant createdAt, Instant updatedAt, InvoiceDelivery delivery, UUID sourceSaleId,
+                   Instant supersededAt) {
+        this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
+                lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
+                updatedAt, delivery, sourceSaleId, supersededAt, InvoiceKind.INVOICE, null, null, null);
     }
 
     /** Story 14.4 shape: not superseded (Story 14.7). */
@@ -102,15 +124,113 @@ public record Invoice(
     public Invoice withDraftContent(ClientInfo newClient, List<LineInput> newLines, InvoicingSettings settings,
                                     Instant now) {
         assertEditable();
-        Invoice recomputed = draft(id, newClient, newLines, settings, createdBy, createdAt);
+        Invoice recomputed = draft(id, newClient, newLines, settings, createdBy, createdAt)
+                .as(kind, sourceQuoteId);
         return (sourceSaleId == null ? recomputed : recomputed.fromSale(sourceSaleId)).touched(now);
     }
 
-    /** Refuses any change of a non-draft invoice. */
+    /**
+     * Refuses any change of a non-draft invoice. Story 20.3: a converted or cancelled quote is not editable either
+     * ({@code INVOICE_NOT_EDITABLE}, with a quote wording).
+     */
     public void assertEditable() {
         if (status != InvoiceStatus.DRAFT) {
+            if (isQuote()) {
+                throw DomainException.userFacing(ErrorCode.INVOICE_NOT_EDITABLE,
+                        "Ce devis a été converti ou annulé : il ne peut plus être modifié ni supprimé");
+            }
             throw new DomainException(ErrorCode.INVOICE_NOT_EDITABLE, "Only a draft invoice can be changed");
         }
+    }
+
+    // ── Story 20.3 — quotes ─────────────────────────────────────────────────────────────────────────────────
+
+    /** French message of every invoice-only action attempted on a quote (issue, pay, send, credit note). */
+    public static final String QUOTE_MUST_BE_CONVERTED = "Un devis doit être converti en facture";
+
+    /** A new quote ({@code DRAFT}, no number), computed with the seller's current settings like a draft invoice. */
+    public static Invoice quote(UUID id, ClientInfo client, List<LineInput> lines, InvoicingSettings settings,
+                                UUID createdBy, Instant now) {
+        return draft(id, client, lines, settings, createdBy, now).as(InvoiceKind.QUOTE, null);
+    }
+
+    public boolean isQuote() {
+        return kind == InvoiceKind.QUOTE;
+    }
+
+    /** The display reference of a quote ({@code DV-XXXXXXXX}); {@code null} for an invoice. */
+    public String quoteReference() {
+        return isQuote() ? InvoiceKind.quoteReference(id) : null;
+    }
+
+    /** Refuses an invoice-only action on a quote → {@code INVOICE_INVALID_TRANSITION} « Un devis doit être converti… ». */
+    public void assertInvoice() {
+        if (isQuote()) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, QUOTE_MUST_BE_CONVERTED,
+                    Map.of("status", "devis"));
+        }
+    }
+
+    /**
+     * Refuses a conversion: an invoice is never converted, a quote only from {@code DRAFT} (a converted quote is
+     * answered by the caller with its invoice, before this check) → {@code INVOICE_INVALID_TRANSITION}; an incomplete
+     * quote (no line, no client name) → {@code INVOICE_NOT_ISSUABLE} « Ce devis est incomplet : … », before any number.
+     */
+    public void assertConvertible() {
+        if (!isQuote()) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION,
+                    "Seul un devis peut être converti en facture", Map.of("status", status.label(kind)));
+        }
+        if (status != InvoiceStatus.DRAFT) {
+            throw quoteInvalidTransition();
+        }
+        List<String> missing = new ArrayList<>();
+        if (lines.isEmpty()) {
+            missing.add("ajoutez au moins une ligne");
+        }
+        if (client == null || client.name() == null) {
+            missing.add("indiquez le nom du client");
+        }
+        if (!missing.isEmpty()) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_NOT_ISSUABLE,
+                    "Ce devis est incomplet : " + String.join(", ", missing),
+                    Map.of("reason", String.join(", ", missing)));
+        }
+    }
+
+    /**
+     * The new invoice draft of the conversion: {@code invoiceId}, the quote's client and lines, recomputed with the
+     * current settings, linked to the quote ({@code sourceQuoteId}). Issued right after by the regular issue path.
+     */
+    public Invoice conversionDraft(UUID invoiceId, InvoicingSettings settings, UUID actorId, Instant now) {
+        assertConvertible();
+        List<LineInput> inputs = lines.stream()
+                .map(l -> new LineInput(l.description(), l.quantity(), l.unitPrice(), l.treatment())).toList();
+        return draft(invoiceId, client, inputs, settings, actorId, now).as(InvoiceKind.INVOICE, id);
+    }
+
+    /** DRAFT quote → CONVERTED, linked to the invoice {@code invoiceId} created from it. */
+    public Invoice converted(UUID invoiceId, Instant now) {
+        if (!isQuote() || status != InvoiceStatus.DRAFT) {
+            assertConvertible();
+        }
+        return new Invoice(id, null, InvoiceStatus.CONVERTED, null, client, null, vatRegistered, vatRate,
+                pricesIncludeVat, vatMention, lines, totals, null, null, null, null, null, createdBy, createdAt, now,
+                delivery, sourceSaleId, supersededAt, kind, invoiceId, now, sourceQuoteId);
+    }
+
+    private DomainException quoteInvalidTransition() {
+        return DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION,
+                "Cette action n'est pas possible pour un devis " + status.label(kind).toLowerCase(java.util.Locale.FRENCH),
+                Map.of("status", status.label(kind).toLowerCase(java.util.Locale.FRENCH)));
+    }
+
+    /** The same document as {@code newKind}, converted from {@code quoteId} ({@code null}: not a conversion). */
+    private Invoice as(InvoiceKind newKind, UUID quoteId) {
+        return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
+                vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
+                createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, newKind, convertedInvoiceId,
+                convertedAt, quoteId);
     }
 
     /**
@@ -136,6 +256,7 @@ public record Invoice(
      * {@code INVOICE_NOT_ISSUABLE} with the French reasons. Checked before a number is allocated.
      */
     public void assertIssuable(InvoicingSettings settings) {
+        assertInvoice();
         if (status != InvoiceStatus.DRAFT) {
             throw invalidTransition();
         }
@@ -159,7 +280,7 @@ public record Invoice(
         return new Invoice(id, invoiceNumber, InvoiceStatus.ISSUED, date, client, SellerSnapshot.of(settings),
                 settings.vatRegistered(), settings.vatRate(), settings.pricesIncludeVat(),
                 VatCalculator.vatMention(settings.vatRegistered()), computed, VatCalculator.totals(computed), now,
-                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
+                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
     /** ISSUED → PAID, paid now. */
@@ -175,6 +296,7 @@ public record Invoice(
      * today, or before the issue date.
      */
     public Invoice pay(String method, LocalDate paidOn, Instant now) {
+        assertInvoice();
         if (status != InvoiceStatus.ISSUED) {
             throw invalidTransition();
         }
@@ -196,7 +318,7 @@ public record Invoice(
         }
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt, InvoicingSettings.trimToNull(method),
-                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
+                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
     private static DomainException invalidPaymentDate(String reason) {
@@ -214,6 +336,9 @@ public record Invoice(
      * more ({@code INVOICE_INVALID_TRANSITION}): its remaining part is credited by another credit note.
      */
     public Invoice cancel(String reason, Instant now, boolean hasCreditNotes) {
+        if (isQuote()) {
+            return cancelQuote(reason, now);
+        }
         if (status != InvoiceStatus.ISSUED) {
             throw invalidTransition();
         }
@@ -221,14 +346,30 @@ public record Invoice(
             throw new DomainException(ErrorCode.INVOICE_INVALID_TRANSITION, "Invoice has credit notes",
                     Map.of("status", "ayant déjà un avoir"));
         }
+        String why = requireCancellationReason(reason);
+        return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
+                pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
+                now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+    }
+
+    /** Story 20.3 — DRAFT quote → CANCELLED (reason required, no number ever). */
+    private Invoice cancelQuote(String reason, Instant now) {
+        if (status != InvoiceStatus.DRAFT) {
+            throw quoteInvalidTransition();
+        }
+        String why = requireCancellationReason(reason);
+        return new Invoice(id, null, InvoiceStatus.CANCELLED, null, client, null, vatRegistered, vatRate,
+                pricesIncludeVat, vatMention, lines, totals, null, null, null, now, why, createdBy, createdAt, now,
+                delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
+    }
+
+    private static String requireCancellationReason(String reason) {
         String why = InvoicingSettings.trimToNull(reason);
         if (why == null) {
             throw new DomainException(ErrorCode.VALIDATION_ERROR, "A cancellation reason is required",
                     Map.of("reason", "Le motif d'annulation est requis"));
         }
-        return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
-                pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
-                now, delivery, sourceSaleId, supersededAt);
+        return why;
     }
 
     /**
@@ -275,7 +416,7 @@ public record Invoice(
     private Invoice touched(Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt);
+                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
     /**
@@ -286,7 +427,7 @@ public record Invoice(
         assertEditable();
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt);
+                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
     /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
@@ -296,7 +437,7 @@ public record Invoice(
         }
         return new Invoice(id, number, status, issueDate, client, seller.withIdentityFlags(nameFromDisplayName,
                 hasLogo), vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt,
-                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt);
+                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
     /**
@@ -304,6 +445,7 @@ public record Invoice(
      * a cancelled invoice must not reach the client as if it were due → {@code INVOICE_INVALID_TRANSITION}.
      */
     public void assertSendable() {
+        assertInvoice();
         if (status != InvoiceStatus.ISSUED && status != InvoiceStatus.PAID) {
             throw invalidTransition();
         }
@@ -322,10 +464,13 @@ public record Invoice(
     public Invoice recordSending(String phone, Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt);
+                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
     private DomainException invalidTransition() {
+        if (isQuote()) {
+            return quoteInvalidTransition();
+        }
         return new DomainException(ErrorCode.INVOICE_INVALID_TRANSITION, "Transition not allowed",
                 Map.of("status", status.label().toLowerCase(java.util.Locale.FRENCH)));
     }

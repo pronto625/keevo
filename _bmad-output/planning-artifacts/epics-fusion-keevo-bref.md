@@ -551,6 +551,8 @@ So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/se
 
 **Critère provisoire :** **Given** les décisions validées par l'utilisateur **When** un gérant ou un lecteur utilise l'app **Then** il voit et fait exactement ce qui est décidé, testé par rôle.
 
+- [ ] [Deferred-from: review 20-3, 2026-11-06] Who may end a quote: delete needs INVOICE_CREATE while cancel needs INVOICE_MANAGE (owner), so an employee can delete but not cancel with a reason [InvoicingModule permissions] — decide the permission for cancelling a never-numbered quote
+
 ### Story 19.6 : Une personne, plusieurs rôles dans plusieurs entreprises
 
 As a **commerçant qui utilise Keevo et Bref**,
@@ -941,6 +943,8 @@ So that **mes documents ont la même allure qu'avant (FUS-FR21, FR22, FR23)**.
 **When** une facture importée est ouverte par un ancien lien Bref redirigé
 **Then** elle s'affiche ; la référence `BRF-` apparaît sur le PDF à côté du numéro légal s'il existe
 
+- [ ] [Deferred-from: review 20-3, 2026-11-06] A quote cannot be sent to the client: `Invoice.assertSendable` refuses quotes [keevo/backend/src/main/java/com/keevo/invoicing/invoice/domain/model/Invoice.java] — allow the public link / WhatsApp sending of a quote (PDF « DEVIS DV-… » already exists)
+
 ### Story 20.8 : Envoi des documents par SMS et email
 
 As a **commerçant**,
@@ -1022,6 +1026,8 @@ So that **P1b est déclaré terminé sur une preuve, pas sur une liste de ticket
 **Then** chaque étape réussit, les quotas sont décomptés, le CA et le résultat sont exacts ; le scénario symétrique Keevo (caisse → facture auto → clôture) reste vert
 
 ---
+
+- [ ] [Deferred-from: review 20-3, 2026-11-06] A quote whose converted invoice is later cancelled stays CONVERTED with no way forward [ConvertQuoteUseCase, uq_invoices_source_quote] — check what Bref offers (duplicate the quote or re-quote) and decide during the acceptance run
 
 ## Epic 21 : Monétisation en libre-service et engagement (P1b)
 

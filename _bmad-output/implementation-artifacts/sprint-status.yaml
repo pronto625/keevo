@@ -362,6 +362,7 @@ development_status:
   m19-10-versions-minimales-app: backlog  # API 25b0eff8 — écran « Mise à jour requise » via app-version/check, en-tête X-App-Version sur toutes les requêtes
   m20-1-catalogue-sans-stock-cle-fusion: backlog  # API 808fa41e — champ référence/code-barres, scan via products/lookup, écran « Fusionner avec… », produits fusionnés retirés au pull (mergedIntoId)
   m20-2-crm-etendu-clients-par-etablissement: backlog  # API b2387df8 — champs Bref des fiches clients, liste par établissement (partage), avertissement DUPLICATE_PHONE + pré-contrôle, consentement marketing (REST + SET_CLIENT_MARKETING_CONSENT), re-seed quand le partage change (purge 16-13)
+  m20-3-devis: backlog  # API 20-3 — devis (kind QUOTE, DV-…), liste ?kind=QUOTE|ALL, validation POST /invoices/{id}/convert + CONVERT_QUOTE (idempotent), expectedUpdatedAt → 409 OPTIMISTIC_LOCK, PDF « DEVIS »
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -426,7 +427,7 @@ development_status:
   19-3b-comptes-sociaux-gestion: backlog  # 2026-11-04 revue 19.3 — 3 items (nonce, lier/retirer, révocation Apple)
   19-4-login-username-membres: done  # 2026-11-05 revue 5 couches (24 constats, 15 corrigés dont 1 bug préexistant), 5 481 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-4-login-username-membres.md)
   19-5-roles-manager-viewer-permissions: done  # 2026-11-05 revue 5 couches (27 constats, 20 corrigés, 2 routés → 19-5b/19-10), 5 582 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-5-roles-manager-viewer-permissions.md)
-  19-5b-droits-fins-gerant-lecteur: backlog  # 2026-11-06 revue 20.1 — +1 item (qui peut fusionner des produits : vendeur aujourd'hui, comme l'archivage) | 2026-11-05 revue 19.5 — 4 items (décisions produit : ventes de la boutique pour le gérant, lectures du lecteur, sessions appareils, plafond)
+  19-5b-droits-fins-gerant-lecteur: backlog  # 2026-11-06 revue 20-3 — +1 item (fin d un devis : suppression = INVOICE_CREATE, annulation = INVOICE_MANAGE) | 2026-11-06 revue 20.1 — +1 item (qui peut fusionner des produits : vendeur aujourd'hui, comme l'archivage) | 2026-11-05 revue 19.5 — 4 items (décisions produit : ventes de la boutique pour le gérant, lectures du lecteur, sessions appareils, plafond)
   19-6-multi-roles-multi-entreprises: done  # 2026-11-05 revue 5 couches (27 constats dont 2 graves, 19 corrigés, 3 routés → 19-6b), items routés 19.2/19.3 traités, 5 651 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-6-multi-roles-multi-entreprises.md)
   19-6b-compte-existant-consentement: backlog  # 2026-11-05 revue 19.6 — 3 items (consentement, confidentialité, récupération ; décisions produit)
   19-7a-plans-en-donnees: done  # 2026-11-04 revue 5 couches (50 constats, 25 corrigés, 8 reportés → 19-7b/21-10), 5 058 tests verts, live keevo_dev OK ; revue de suivi recommandée (cache du catalogue) | 2026-11-03 build-auto (spec-19-7a-plans-en-donnees.md) | 2026-11-03 découpage de 19.7 : catalogue des plans en base, plus d'énumération ni de CHECK sur les codes, compatibilité V1 ; comportement identique
@@ -444,17 +445,17 @@ development_status:
   epic-20: backlog  # P1b Modules métier Bref
   20-1-catalogue-sans-stock-cle-fusion: done  # 2026-11-06 revue 5 couches (50 constats, 6 moyens corrigés, 1 routé → 19-5b), 5 965 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-20-1-catalogue-sans-stock-cle-fusion.md)
   20-2-crm-etendu-consentement: done  # 2026-11-06 build-auto (spec-20-2-crm-etendu-clients-par-etablissement) — revue 5 couches, 20 corrigés, 2 routés (22-5, 20-6), 6 084 tests verts, contrôle live keevo_dev OK
-  20-3-devis: backlog
+  20-3-devis: done  # 2026-11-06 build-auto (spec-20-3-devis) — revue 5 couches, 18 corrigés, 3 routés (19-5b, 20-12, 20-7), 6 131 tests verts, contrôle live keevo_dev OK
   20-4-encaissements-echeancier-retard: backlog
   20-5-remise-livraison-tva-echeance: backlog
   20-6-derivation-catalogue-crm: backlog  # 2026-11-06 revue 20-2 — 1 item (liste et recherche clients non paginées, LIKE sans index trigramme)
-  20-7-modeles-signatures-liens-publics: backlog
+  20-7-modeles-signatures-liens-publics: backlog  # 2026-11-06 revue 20-3 — 1 item (envoi d un devis au client : lien public / WhatsApp)
   20-8-envoi-sms-email: backlog
   20-9-reporting-multi-source: backlog
   20-10-module-expenses: backlog
   20-11-module-finance: backlog
   20-13-api-super-admin-heritee-bref: backlog  # 2026-11-01 décision utilisateur — l'API Keevo absorbe toute l'API Bref, partie dashboard comprise (FUS-FR38)
-  20-12-acceptation-parcours-bref: backlog
+  20-12-acceptation-parcours-bref: backlog  # 2026-11-06 revue 20-3 — 1 item (que faire d un devis dont la facture convertie est annulée : dupliquer / re-devis, selon Bref)
   epic-20-retrospective: optional
 
   epic-21: backlog  # P1b Monétisation & engagement

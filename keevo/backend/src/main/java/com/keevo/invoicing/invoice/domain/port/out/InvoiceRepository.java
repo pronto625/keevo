@@ -1,6 +1,7 @@
 package com.keevo.invoicing.invoice.domain.port.out;
 
 import com.keevo.invoicing.invoice.domain.model.Invoice;
+import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 
 import java.util.List;
@@ -31,6 +32,15 @@ public interface InvoiceRepository {
      */
     boolean insertIfAbsent(Invoice invoice);
 
+    /**
+     * Story 20.3 — inserts the invoice of a quote conversion unless its id is taken or an invoice already comes from
+     * the same quote (unique {@code source_quote_id}): false, nothing written, the caller's transaction intact.
+     */
+    boolean insertConversion(Invoice invoice);
+
+    /** Story 20.3 — the invoice created from the quote {@code quoteId}, if any. */
+    Optional<Invoice> findBySourceQuote(UUID quoteId);
+
     /** Story 14.4 — whether an invoice was already created from the sale {@code saleId} (POS → Invoicing bridge). */
     boolean existsBySourceSale(UUID saleId);
 
@@ -58,8 +68,17 @@ public interface InvoiceRepository {
     /** ISSUED → PAID: status, {@code paid_at}, payment method, {@code updated_at} only. */
     void markPaid(Invoice paid);
 
-    /** ISSUED → CANCELLED: status, {@code cancelled_at}, reason, {@code updated_at} only. */
+    /**
+     * ISSUED → CANCELLED: status, {@code cancelled_at}, reason, {@code updated_at} only. Story 20.3: also a DRAFT
+     * quote → CANCELLED (no number).
+     */
     void markCancelled(Invoice cancelled);
+
+    /**
+     * Story 20.3 — DRAFT quote → CONVERTED: status, {@code converted_invoice_id}, {@code converted_at},
+     * {@code updated_at} only (status-guarded, the row is locked by the caller).
+     */
+    void markConverted(Invoice convertedQuote);
 
     /**
      * Story 14.2 — records one WhatsApp sending already delivered: {@code last_sent_at}, {@code last_sent_to},
@@ -80,10 +99,18 @@ public interface InvoiceRepository {
      * Criteria of the invoice list, each one optional ({@code null} = not filtered): {@code status}; {@code saleId} =
      * only the active invoice created from that sale (Story 14.5 — at most one); Story 15.5: {@code search} = part of the number or of the client name,
      * case-insensitive, already trimmed; {@code from} / {@code to} = issue date range, inclusive (a draft has no issue
-     * date: excluded as soon as one bound is given).
+     * date: excluded as soon as one bound is given). Story 20.3: {@code kind} = invoices or quotes only ({@code null}
+     * = both); a quote's date for {@code from} / {@code to} is its creation day (Africa/Douala) and {@code search} also
+     * matches its reference {@code DV-XXXXXXXX}.
      */
     record Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
-                  java.time.LocalDate to) {
+                  java.time.LocalDate to, InvoiceKind kind) {
+
+        /** Before Story 20.3: invoices only (the lists V1 apps know never show a quote). */
+        public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
+                      java.time.LocalDate to) {
+            this(status, saleId, search, from, to, InvoiceKind.INVOICE);
+        }
     }
 
     /**

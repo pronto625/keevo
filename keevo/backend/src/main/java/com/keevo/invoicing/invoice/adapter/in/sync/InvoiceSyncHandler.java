@@ -2,8 +2,10 @@ package com.keevo.invoicing.invoice.adapter.in.sync;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.ConvertQuoteRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.PayInvoiceRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -38,6 +40,10 @@ import java.util.UUID;
  *   <li>{@code PAY_INVOICE} {@code {invoiceId, paymentMethod?, paidAt?}} — {@code paidAt} = the day the client paid
  *       ({@code yyyy-MM-dd}, today when absent), same bounds as {@code POST /pay};</li>
  *   <li>{@code CANCEL_INVOICE} {@code {invoiceId, reason}} (owner).</li>
+ *   <li>Story 20.3 — {@code CONVERT_QUOTE} {@code {quoteId, invoiceId?, expectedUpdatedAt?}} (entity = the quote): the quote becomes a new issued invoice
+ *       ({@code invoiceId} = the id chosen on the device); replayed, the same invoice ({@code serverEntityId} = the
+ *       invoice id). {@code CREATE_INVOICE} takes {@code kind} ({@code QUOTE} = a quote); {@code UPDATE_INVOICE} takes
+ *       {@code expectedUpdatedAt} (stale → {@code REJECTED OPTIMISTIC_LOCK}).</li>
  * </ul>
  * Payloads are validated with the REST request DTOs (same French messages, {@code VALIDATION_ERROR}); permissions are
  * those of the matching endpoint ({@code @RequiresPermission} is not applied to sync handlers, so it is checked here
@@ -55,6 +61,8 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     public static final String ISSUE = "ISSUE_INVOICE";
     public static final String PAY = "PAY_INVOICE";
     public static final String CANCEL = "CANCEL_INVOICE";
+    /** Story 20.3 — {@code {quoteId, invoiceId}}: the quote becomes a new issued invoice (idempotent). */
+    public static final String CONVERT_QUOTE = "CONVERT_QUOTE";
 
     /** The permission of each operation: the one of its REST endpoint. */
     private static final Map<String, String> PERMISSIONS = Map.of(
@@ -62,10 +70,12 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             UPDATE, InvoicingModule.INVOICE_CREATE,
             ISSUE, InvoicingModule.INVOICE_SEND,
             PAY, InvoicingModule.INVOICE_SEND,
-            CANCEL, InvoicingModule.INVOICE_MANAGE);
+            CANCEL, InvoicingModule.INVOICE_MANAGE,
+            CONVERT_QUOTE, InvoicingModule.INVOICE_SEND);
 
     private final ManageDraftInvoiceUseCase drafts;
     private final InvoiceLifecycleUseCase lifecycle;
+    private final ConvertQuoteUseCase conversions;
     private final ModuleProvisioner provisioner;
     private final ModulePermissions permissions;
     private final ObjectMapper objectMapper;
@@ -73,8 +83,9 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
 
     public InvoiceSyncHandler(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                               ModuleProvisioner provisioner, ModulePermissions permissions,
-                              ObjectMapper objectMapper, Validator validator) {
+                              ObjectMapper objectMapper, Validator validator, ConvertQuoteUseCase conversions) {
         this.drafts = drafts;
+        this.conversions = conversions;
         this.lifecycle = lifecycle;
         this.provisioner = provisioner;
         this.permissions = permissions;
@@ -95,9 +106,22 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     @Override
     protected void validate(SyncOperation operation) {
         Map<String, Object> p = operation.payload();
-        String idField = CREATE.equals(operation.operationType()) ? "id" : "invoiceId";
+        String idField = switch (operation.operationType()) {
+            case CREATE -> "id";
+            case CONVERT_QUOTE -> "quoteId";
+            default -> "invoiceId";
+        };
         if (parseUuid(p.get(idField)) == null) {
             throw new IllegalArgumentException("Missing required field: " + idField);
+        }
+        if (CONVERT_QUOTE.equals(operation.operationType())) {
+            // the operation's entity is the quote (as every invoice operation names its invoice)
+            if (operation.entityId() != null && !parseUuid(p.get("quoteId")).equals(parseUuid(operation.entityId()))) {
+                throw new IllegalArgumentException("entityId does not match quoteId");
+            }
+            if (p.get("invoiceId") != null && parseUuid(p.get("invoiceId")) == null) {
+                throw new IllegalArgumentException("Invalid field: invoiceId");
+            }
         }
     }
 
@@ -125,6 +149,11 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             case CANCEL -> {
                 CancelInvoiceRequestDto request = read(p, CancelInvoiceRequestDto.class);
                 yield lifecycle.cancel(invoiceId(p), request.reason(), actorId, tenantId);
+            }
+            case CONVERT_QUOTE -> {
+                ConvertQuoteRequestDto request = read(p, ConvertQuoteRequestDto.class);
+                yield conversions.convert(parseUuid(p.get("quoteId")), request.invoiceId(),
+                        request.expectedUpdatedAt(), actorId, tenantId).invoice();
             }
             default -> null;
         };

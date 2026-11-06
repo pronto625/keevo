@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 247 — gated: 119, exempt: 128.
+Handlers: 248 — gated: 120, exempt: 128.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -169,6 +169,7 @@ Handlers: 247 — gated: 119, exempt: 128.
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
 | PUT | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#update |
 | POST | `/api/v1/invoices/{id}/cancel` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoiceController#cancel |
+| POST | `/api/v1/invoices/{id}/convert` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#convert |
 | POST | `/api/v1/invoices/{id}/credit-notes` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | CreditNoteController#create |
 | POST | `/api/v1/invoices/{id}/issue` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#issue |
 | POST | `/api/v1/invoices/{id}/pay` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#pay |

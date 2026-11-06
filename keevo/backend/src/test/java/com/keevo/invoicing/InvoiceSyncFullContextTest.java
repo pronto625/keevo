@@ -501,7 +501,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
         try {
             jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_sync_keyset");
             jdbc.execute("ALTER TABLE " + q + "invoices DROP COLUMN deleted_at");
-            jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('6', '7')");
+            jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('6', '7', '8', '9')");
             UUID issued = UUID.randomUUID();
             jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, "
                     + "seller_legal_name, vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, "
@@ -519,7 +519,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             assertThat(rows).filteredOn(n -> n.path("id").asText().equals(issued.toString()))
                     .singleElement().satisfies(n -> assertThat(n.path("number").asText()).isEqualTo("FAC-2026-000042"));
             assertThat(jdbc.queryForObject("SELECT MAX(version::int) FROM " + q + "flyway_history_invoicing "
-                    + "WHERE success", Integer.class)).isEqualTo(7);
+                    + "WHERE success", Integer.class)).isEqualTo(9);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? "
                     + "AND table_name = 'invoices' AND column_name = 'deleted_at'", Integer.class, old)).isEqualTo(1);
         } finally {

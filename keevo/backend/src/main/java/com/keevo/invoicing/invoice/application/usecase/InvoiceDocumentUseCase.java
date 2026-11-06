@@ -99,6 +99,9 @@ public class InvoiceDocumentUseCase {
     }
 
     static String filename(Invoice invoice) {
+        if (invoice.isQuote()) { // Story 20.3
+            return "devis-".concat(invoice.quoteReference()).concat(".pdf");
+        }
         return invoice.status() == InvoiceStatus.DRAFT || invoice.number() == null
                 ? "brouillon.pdf" : invoice.number().concat(".pdf");
     }

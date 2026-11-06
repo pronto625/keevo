@@ -423,6 +423,14 @@ class AuditPresenter {
     // Credit notes (Story 14.7)
     'CREDIT_NOTE_ISSUED': AuditActionInfo('Avoir émis', 'émis l\'avoir',
         Icons.receipt_long_outlined, AuditCategory.sale),
+    // Quotes (Story 20.3)
+    'QUOTE_CREATED': AuditActionInfo('Devis créé', 'créé le devis',
+        Icons.request_quote_outlined, AuditCategory.sale),
+    'QUOTE_CONVERTED': AuditActionInfo('Devis converti en facture',
+        'converti en facture le devis', Icons.receipt_long_outlined,
+        AuditCategory.sale),
+    'QUOTE_CANCELLED': AuditActionInfo('Devis annulé', 'annulé le devis',
+        Icons.request_quote_outlined, AuditCategory.sale),
     'COMPANY_PROFILE_UPDATED': AuditActionInfo(
         'Identité de l\'entreprise modifiée',
         'modifié l\'identité de l\'entreprise',

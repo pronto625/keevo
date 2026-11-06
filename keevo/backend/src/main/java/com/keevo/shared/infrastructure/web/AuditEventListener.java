@@ -22,6 +22,9 @@ import com.keevo.shared.event.catalog.contact.ClientMarketingConsentChangedEvent
 import com.keevo.shared.event.catalog.contact.ClientStoreChangedEvent;
 import com.keevo.shared.event.catalog.invoicing.CreditNoteIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
+import com.keevo.shared.event.catalog.invoicing.QuoteCancelledEvent;
+import com.keevo.shared.event.catalog.invoicing.QuoteConvertedEvent;
+import com.keevo.shared.event.catalog.invoicing.QuoteCreatedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
@@ -968,6 +971,36 @@ public class AuditEventListener {
                 null, event.number(), map("reason", event.reason()), null);
         log.info("AUDIT: invoice_cancelled number={} tenantId={} actorId={}", event.number(), event.tenantId(),
                 event.actorId());
+    }
+
+    // ── Quotes (Story 20.3) — label = the quote reference DV-XXXXXXXX (never a UUID) ──────────────────────
+
+    @EventListener
+    public void on(QuoteCreatedEvent event) {
+        write(event.actorId(), event.tenantId(), "QUOTE_CREATED", "Quote", event.quoteId(),
+                null, map("quoteReference", event.reference(), "clientName", event.clientName(),
+                        "totalAmount", event.totalTtc()),
+                null, event.reference(), map("detail", "pour " + event.clientName()), null);
+        log.info("AUDIT: quote_created tenantId={} actorId={}", event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(QuoteConvertedEvent event) {
+        write(event.actorId(), event.tenantId(), "QUOTE_CONVERTED", "Quote", event.quoteId(),
+                null, map("quoteReference", event.reference(), "invoiceNumber", event.invoiceNumber(),
+                        "clientName", event.clientName(), "totalAmount", event.totalTtc()),
+                null, event.reference(), map("detail", "Devis converti en facture " + event.invoiceNumber()), null);
+        log.info("AUDIT: quote_converted number={} tenantId={} actorId={}", event.invoiceNumber(), event.tenantId(),
+                event.actorId());
+    }
+
+    @EventListener
+    public void on(QuoteCancelledEvent event) {
+        write(event.actorId(), event.tenantId(), "QUOTE_CANCELLED", "Quote", event.quoteId(),
+                null, map("quoteReference", event.reference(), "clientName", event.clientName(),
+                        "totalAmount", event.totalTtc()),
+                null, event.reference(), map("reason", event.reason()), null);
+        log.info("AUDIT: quote_cancelled tenantId={} actorId={}", event.tenantId(), event.actorId());
     }
 
     /** Story 14.7 — label = the credit note number, detail « sur la facture FAC-… » (never a UUID). */

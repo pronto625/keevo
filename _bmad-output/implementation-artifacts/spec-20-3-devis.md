@@ -2,14 +2,30 @@
 title: '20-3 Quotes (kind = QUOTE) — create, edit with conflict check, cancel, convert to an issued invoice'
 type: 'feature'
 created: '2026-11-06'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: 'bc57e665dd82a31eabc37fd8717c85a7bc097639'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-20-2-crm-etendu-clients-par-etablissement.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      Who may end a quote: delete needs INVOICE_CREATE while cancel needs INVOICE_MANAGE.
+    evidence: |-
+      Product decision on roles. Routed to 19-5b.
+    severity: low
+  - summary: >-
+      No way forward once the invoice converted from a quote is cancelled (re-quote or duplicate).
+    evidence: |-
+      New feature, not in FUS-FR18. Routed to 20-12.
+    severity: low
+  - summary: >-
+      A quote cannot be sent to the client (WhatsApp, link, SMS, email).
+    evidence: |-
+      assertSendable refuses quotes. Sending belongs to 20-7 (public links) and 20-8 (SMS/email). Routed to 20-7.
+    severity: medium
 ---
 
 <intent-contract>
@@ -85,7 +101,25 @@ Paths under `keevo/backend/src/main/`; `R` = `resources/db/modules/invoicing`, `
 - Sync -- `kind` on CREATE_INVOICE, `expectedUpdatedAt` on UPDATE_INVOICE, `CONVERT_QUOTE` (permission as ISSUE), contract file entries + test.
 - Events/audit/labels + export contract + Flutter test-client mirror (bump `pubspec.yaml` if changed).
 - Tests: unit (domain rules, quote reference), use-case (each matrix row), REST controller, sync handler (incl. replay), Postgres integration (V8 on an existing schema with ISSUED/CANCELLED invoices: constraints still enforced for invoices, quotes allowed; gapless numbering across a conversion and an ordinary issue; concurrent double conversion → one invoice).
-- Spec section `## Mobile (React Native — dépôt AI/bref)` and sprint key `m20-3-devis` (finalize).
+- Spec section `## Auto Run Result
+
+Status: done
+
+**Change:** quotes as `kind = QUOTE` on `invoices` (invoicing V8 + V9 list index): create, edit with optional `expectedUpdatedAt` (409 French), cancel without number, convert into a NEW issued invoice through the existing issue path (DOCUMENTS quota, gapless `FAC-` number, `issue_date` = conversion day WAT) with links both ways, idempotent and race-safe (row lock + `ON CONFLICT DO NOTHING` + unique `source_quote_id`), refused when VAT settings changed since the quote or when the quote is incomplete; display reference `DV-XXXXXXXX` (computed, searchable); lists `?kind=` (default invoices only, `QUOTE`, `ALL`), quote date filter on creation day; PDF « DEVIS DV-… »; audit QUOTE_CREATED/CONVERTED/CANCELLED; sync `CONVERT_QUOTE`, `kind` / `expectedUpdatedAt` on existing ops, contract `quoteOperations`.
+
+**Files (main):** `db/modules/invoicing/V8__invoices_kind_quote.sql`, `V9__invoices_kind_list_index.sql`; invoicing domain (`InvoiceKind`, `InvoiceStatus.CONVERTED`, `Invoice` quote rules), `JdbcInvoiceRepository`, `ManageDraftInvoiceUseCase`, new `ConvertQuoteUseCase`, `InvoiceLifecycleUseCase` (quote cancel), `InvoiceController` + DTOs, `InvoiceSyncHandler`, `InvoicePdfRenderer`, audit listener/labels, `keevo/contracts/invoice-sync-payloads.json`, `export-datasets.json`, `docs/entitlements/endpoints.md`; Flutter test client audit mirror 2.0.26+98.
+
+**Review:** 31 triage rows (40 reviewer findings): 18 patched (medium: list index V9, conversion race → idempotent, VAT-changed refusal, optimistic check on convert, DV- search, quote date filter, other invoice readers guarded + test, V1 sync actions on quotes tested, cancel-quote event test; low: kind mismatch 409, one kind rule, CONVERT_QUOTE validation, French optimistic-lock message, incomplete-quote wording), 3 deferred (quote end permissions → 19-5b, cancelled converted invoice → 20-12, sending a quote → 20-7), 10 rejected with reasons in the triage log.
+
+**Follow-up review recommended:** true — several medium entries patched; named risk: the conversion path now has three outcomes on the same insert (created, replay via source_quote conflict, taken id) and a VAT-drift refusal, covered by unit and full-context tests but new.
+
+**Verification:**
+- Full backend suite package by package: 6,131 tests, 0 failures.
+- Live on keevo_dev (WhatsApp noop, FCM/Expo off), test tenant with invoicing activated for the check then deactivated again: quote created `DV-DF466E29` without number; `?kind=QUOTE&search=DV-DF466E` → 1, default list → 0; convert with stale `expectedUpdatedAt` → 409 French; convert → 201 `FAC-2026-000002` ISSUED dated 2026-11-06; replay → 200; quote CONVERTED with link. Implementer's earlier live pass: PDF `devis-DV-….pdf`, issue on a quote refused.
+
+**Residual risks:** V8/V9 apply lazily per tenant on first invoicing call (upgrade tested on V1–V7 data, not yet on real prod copies); V1 apps receive quotes in the pull as DRAFT rows (refused server-side if acted on).
+
+## Mobile (React Native — dépôt AI/bref)` and sprint key `m20-3-devis` (finalize).
 
 **Acceptance Criteria:**
 - Given a tenant with the invoicing module active, when the matrix scenarios run over REST and sync, then every row holds and responses are supersets of today's.
@@ -105,3 +139,35 @@ Cost: convert = 1 locked read + 1 quota upsert + 1 counter upsert + invoice inse
 - `cd keevo/backend && mvn -o -q test -Dtest='com/keevo/reporting/export/**/*Test*,com/keevo/sync/**/*Test*,com/keevo/architecture/**/*Test*'` -- expected: pass
 - Full suite package by package (`run-pkgs-wait.sh`) -- expected: 0 failures
 - Live: local backend on keevo_dev with WhatsApp noop, FCM/Expo off; curl create/edit/convert/pdf on a test tenant with invoicing activated -- expected: as in the AC.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée sur `refonte/modulaire` / `develop` (commit de la story 20-3). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+
+**Ce qui est fait côté API :** un devis est un document à part entière : on le crée, on le modifie, on l'annule ou on le valide en facture. Il n'a jamais de numéro légal et ne consomme pas le quota de documents. Sa validation crée une nouvelle facture émise (prochain numéro `FAC-…`, date du jour, quota consommé) et relie les deux documents ; valider deux fois un devis rend la même facture. Toute modification peut transmettre la date de dernière modification connue : si le document a changé entre-temps (autre appareil, autre utilisateur), la modification est refusée.
+
+**À utiliser :**
+1. Créer un devis : `POST /api/v1/invoices` avec `"kind": "QUOTE"` en plus du corps habituel (`id` facultatif choisi par l'appareil, `client`, `lines`) ; synchro `CREATE_INVOICE` avec `kind: "QUOTE"`. Sans `kind` : une facture, comme aujourd'hui.
+2. Champs ajoutés à chaque document (REST, pull `invoices`) : `kind` (`INVOICE` | `QUOTE`), `quoteReference` (référence d'affichage `DV-XXXXXXXX`, seulement pour un devis), `convertedInvoiceId` et `convertedAt` (devis validé), `sourceQuoteId` (sur la facture issue d'un devis). Statuts d'un devis : `DRAFT` (en cours, modifiable), `CONVERTED` (« Converti »), `CANCELLED` (« Annulé »).
+3. Listes : `GET /api/v1/invoices` = factures seulement (inchangé) ; `?kind=QUOTE` = devis seulement ; `?kind=ALL` = tout ; autre valeur → 400. Les autres filtres s'appliquent aussi : pour un devis, `from`/`to` portent sur son jour de création et `search` trouve aussi sa référence `DV-…`.
+4. Modifier : `PUT /api/v1/invoices/{id}` (synchro `UPDATE_INVOICE`) avec `expectedUpdatedAt` facultatif = le `updatedAt` reçu en dernier (tel quel). Document modifié depuis → 409 `OPTIMISTIC_LOCK` (synchro `REJECTED OPTIMISTIC_LOCK`), rien n'est écrit : recharger le document et proposer de refaire la modification.
+5. Valider en facture : `POST /api/v1/invoices/{quoteId}/convert` avec corps facultatif `{"invoiceId": "<uuid choisi par l'appareil>", "expectedUpdatedAt": "<updatedAt du devis>"}` → 201 et la facture émise ; déjà validé → 200 et la même facture. Synchro `CONVERT_QUOTE` `{quoteId, invoiceId, expectedUpdatedAt?}` (entityId de l'opération = le devis) → `serverEntityId` = l'id de la facture. Devis modifié depuis → 409 `OPTIMISTIC_LOCK`. Mêmes droits que l'émission (employé autorisé, lecteur non).
+6. Annuler un devis : `POST /api/v1/invoices/{id}/cancel` `{"reason": "…"}` (propriétaire, motif obligatoire ≤ 500) ; synchro `CANCEL_INVOICE`. Supprimer un devis en cours : `DELETE /api/v1/invoices/{id}` comme un brouillon.
+7. PDF : `GET /api/v1/invoices/{id}/pdf` → « DEVIS DV-XXXXXXXX », mention « Devis — en attente de validation », fichier `devis-DV-XXXXXXXX.pdf`. Un devis ne s'envoie pas (WhatsApp/lien) dans cette version.
+8. Erreurs : émettre, encaisser, envoyer ou faire un avoir sur un devis → 409 `INVOICE_INVALID_TRANSITION` « Un devis doit être converti en facture » ; valider ou annuler un devis déjà validé/annulé → 409 `INVOICE_INVALID_TRANSITION` ; modifier un devis validé/annulé → 409 `INVOICE_NOT_EDITABLE` ; quota de documents épuisé à la validation → 403 `QUOTA_EXCEEDED` (le devis reste en cours, aucun numéro pris) ; devis incomplet (sans ligne ou sans nom de client) → 422 `INVOICE_NOT_ISSUABLE` « Ce devis est incomplet : … » ; réglages de TVA changés depuis le devis → 409 `INVOICE_INVALID_TRANSITION` (enregistrer le devis à nouveau, puis le valider) ; `kind` différent de celui du document (création renvoyée ou modification) → 409 `INVOICE_INVALID_TRANSITION` ; motif d'annulation manquant → 422 `VALIDATION_ERROR` ; `invoiceId` déjà utilisé par un autre document → 422 `VALIDATION_ERROR`.
+Contrat de synchro : `keevo/contracts/invoice-sync-payloads.json` (`quoteOperations`). Code : `keevo/backend/src/main/java/com/keevo/invoicing/invoice/adapter/in/rest/InvoiceController.java`, `ConvertQuoteUseCase.java`, `ManageDraftInvoiceUseCase.java`, `adapter/in/sync/InvoiceSyncHandler.java`.
+
+**À implémenter côté mobile :**
+1. Écran « Nouveau devis » (même saisie qu'une facture) et liste « Devis » (`kind=QUOTE`) avec la référence `DV-…`, le client, le total et le statut en français.
+2. Sur un devis en cours : « Modifier », « Valider en facture » (confirmation : « Une facture numérotée sera émise »), « Annuler » (motif), « Télécharger le PDF ». Après validation, ouvrir la facture obtenue ; sur un devis validé, lien « Voir la facture ».
+3. Hors ligne : générer l'`invoiceId` sur l'appareil et mettre `CONVERT_QUOTE` en file ; afficher la facture en attente de numéro jusqu'à la synchro.
+4. Envoyer `expectedUpdatedAt` à chaque modification ; sur `OPTIMISTIC_LOCK`, message « Ce devis a été modifié ailleurs, rechargez-le ».
+5. Aucune donnée technique à l'écran (ni identifiants, ni codes).
+
+**Critères d'acceptation mobile :**
+- Given un devis en cours, when l'utilisateur le valide, then une facture numérotée `FAC-…` datée du jour s'ouvre et le devis passe « Converti ».
+- Given deux appareils qui modifient le même devis, when le second enregistre, then il est prévenu et rien n'est écrasé.
+- Given le quota de documents épuisé, when l'utilisateur valide un devis, then le message de quota s'affiche et le devis reste modifiable.
+- Mise en place : `curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"kind":"QUOTE","client":{"name":"Awa"},"lines":[{"description":"Riz","quantity":1,"unitPrice":10000}]}' $API/api/v1/invoices`.
+
+**Clé de suivi mobile :** `m20-3-devis`.

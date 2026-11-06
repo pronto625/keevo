@@ -11,7 +11,10 @@ import com.keevo.shared.infrastructure.pdf.PdfDocumentFactory;
 import com.keevo.shared.infrastructure.pdf.PdfFormats;
 import org.springframework.stereotype.Component;
 
+import com.keevo.shared.domain.time.KeevoZones;
+
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,7 +24,8 @@ import java.util.Map;
  * The invoice PDF (Story 14.2, MOD-FR17): {@code pdf/templates/invoice.html} filled through the core
  * {@link PdfDocumentFactory} (A4, French, Liberation Sans). Every value is pre-formatted here (amounts grouped,
  * XAF, dates dd/MM/yyyy) and written by the template with escaped {@code th:text} only; no identifier other than the
- * invoice number is ever printed.
+ * invoice number is ever printed. Story 20.3: a quote prints « DEVIS DV-XXXXXXXX », its creation date, no legal
+ * number, and the mention « Devis — en attente de validation » while it waits for its conversion.
  */
 @Component
 public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
@@ -56,8 +60,14 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
         v.put("footer", text(seller == null ? null : seller.footer()));
 
         boolean draft = invoice.status() == InvoiceStatus.DRAFT;
-        v.put("title", draft ? "FACTURE — BROUILLON" : "FACTURE N° " + text(invoice.number()));
-        v.put("issueDate", draft ? "Non émise" : PdfFormats.date(invoice.issueDate()));
+        if (invoice.isQuote()) {
+            // Story 20.3 — a quote: its display reference, never a legal number nor an issue date
+            v.put("title", "DEVIS " + invoice.quoteReference());
+            v.put("issueDate", PdfFormats.date(LocalDate.ofInstant(invoice.createdAt(), KeevoZones.WAT)));
+        } else {
+            v.put("title", draft ? "FACTURE — BROUILLON" : "FACTURE N° " + text(invoice.number()));
+            v.put("issueDate", draft ? "Non émise" : PdfFormats.date(invoice.issueDate()));
+        }
 
         ClientInfo c = invoice.client();
         v.put("clientName", text(c.name()));
@@ -84,20 +94,31 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
                 ? "Motif : " + reason : null);
         v.put("paymentMethod", invoice.status() == InvoiceStatus.PAID && invoice.paymentMethod() != null
                 ? "Mode de paiement : " + text(invoice.paymentMethod()) : null);
-        v.put("stampClass", switch (invoice.status()) {
-            case PAID -> "stamp paid";
-            case CANCELLED, DRAFT -> "stamp void";
-            case ISSUED -> "stamp";
-        });
+        v.put("stampClass", invoice.isQuote() && invoice.status() == InvoiceStatus.DRAFT ? "stamp"
+                : switch (invoice.status()) {
+                    case PAID -> "stamp paid";
+                    case CANCELLED, DRAFT -> "stamp void";
+                    case ISSUED, CONVERTED -> "stamp";
+                });
         return v;
     }
 
+    /** Story 20.3 — the mention printed on a quote waiting for its conversion. */
+    static final String QUOTE_PENDING = "Devis — en attente de validation";
+
     static String stamp(Invoice invoice) {
+        if (invoice.isQuote()) {
+            return switch (invoice.status()) {
+                case CANCELLED -> "DEVIS ANNULÉ";
+                case CONVERTED -> "DEVIS CONVERTI EN FACTURE";
+                default -> QUOTE_PENDING;
+            };
+        }
         return switch (invoice.status()) {
             case DRAFT -> "BROUILLON — sans valeur";
             case CANCELLED -> "ANNULÉE";
             case PAID -> "PAYÉE le " + PdfFormats.date(invoice.paidAt());
-            case ISSUED -> null;
+            case ISSUED, CONVERTED -> null;
         };
     }
 

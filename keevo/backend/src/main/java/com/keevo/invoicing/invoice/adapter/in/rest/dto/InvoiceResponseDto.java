@@ -25,6 +25,11 @@ import java.util.UUID;
  * {@code fullyCredited} = nothing remains to credit (every line quantity credited — the rule that refuses a further
  * credit note); the status is unchanged. {@code supersededAt}: when a sale correction replaced this automatic invoice
  * by a new one ({@code null} while active).
+ *
+ * <p>Story 20.3 (additive): {@code kind} ({@code INVOICE} | {@code QUOTE}); {@code quoteReference} = the display
+ * reference of a quote ({@code DV-XXXXXXXX}, {@code null} for an invoice); {@code convertedInvoiceId} /
+ * {@code convertedAt} = the invoice a converted quote became; {@code sourceQuoteId} = on that invoice, the quote it
+ * comes from.
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -57,7 +62,12 @@ public record InvoiceResponseDto(
         long creditedTtc,
         boolean fullyCredited,
         List<CreditNote> creditNotes,
-        Instant supersededAt) {
+        Instant supersededAt,
+        String kind,
+        String quoteReference,
+        UUID convertedInvoiceId,
+        Instant convertedAt,
+        UUID sourceQuoteId) {
 
     /** Story 14.7 — a credit note issued on the invoice. */
     public record CreditNote(UUID id, String number, Instant issuedAt, long totalTtc, String reason) {
@@ -92,7 +102,8 @@ public record InvoiceResponseDto(
         long credited = notes.stream().mapToLong(CreditNote::totalTtc).sum();
         ClientInfo c = i.client();
         SellerSnapshot s = i.seller();
-        return new InvoiceResponseDto(i.id(), i.number(), i.status().name(), i.status().label(), i.issueDate(),
+        return new InvoiceResponseDto(i.id(), i.number(), i.status().name(), i.status().label(i.kind()),
+                i.issueDate(),
                 new Client(c.clientId(), c.name(), c.niu(), c.address(), c.phone()),
                 s == null ? null : new Seller(s.legalName(), s.address(), s.phone(), s.niu(), s.rccm(),
                         s.paymentDetails(), s.footer()),
@@ -102,7 +113,8 @@ public record InvoiceResponseDto(
                 i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdAt(), i.updatedAt(),
                 i.complianceWarnings(currentSettings), i.delivery().lastSentAt(),
                 InvoicePhones.mask(i.delivery().lastSentTo()), i.delivery().sendCount(), i.sourceSaleId(),
-                credited, fullyCredited, notes, i.supersededAt());
+                credited, fullyCredited, notes, i.supersededAt(), i.kind().name(), i.quoteReference(),
+                i.convertedInvoiceId(), i.convertedAt(), i.sourceQuoteId());
     }
 
     private static Line line(InvoiceLine l) {

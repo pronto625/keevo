@@ -10,6 +10,7 @@ import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
+import com.keevo.shared.event.catalog.invoicing.QuoteCancelledEvent;
 import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.capability.entitlement.UsageMetric;
 import com.keevo.shared.capability.entitlement.UsageQuotaPort;
@@ -31,6 +32,11 @@ import java.util.UUID;
  * {@code DOCUMENTS} unit of the plan's quota, in the same transaction, before numbering: a refusal
  * ({@code QUOTA_EXCEEDED}) leaves the draft a draft and allocates no number. The automatic invoice of a POS sale
  * ({@link #issue(UUID, UUID, String, boolean)}) is never counted, nor blocked.
+ *
+ * <p>Story 20.3 — a quote is never issued nor paid ({@code INVOICE_INVALID_TRANSITION}, « Un devis doit être converti
+ * en facture »); {@link #cancel} also cancels a DRAFT quote (no number). The conversion of a quote
+ * ({@link ConvertQuoteUseCase}) issues its new invoice through {@link #issue(UUID, UUID, String)}: same quota, same
+ * numbering, same events.
  */
 @Service
 public class InvoiceLifecycleUseCase {
@@ -138,6 +144,12 @@ public class InvoiceLifecycleUseCase {
         Invoice cancelled = issued.cancel(reason, now,
                 issued.status() == InvoiceStatus.ISSUED && creditNotes.existsForInvoice(id));
         invoices.markCancelled(cancelled);
+        if (cancelled.isQuote()) { // Story 20.3 — a DRAFT quote, never numbered
+            events.publishEvent(new QuoteCancelledEvent(cancelled.id(), cancelled.quoteReference(),
+                    cancelled.client().name(), cancelled.totals().totalTtc(), cancelled.cancellationReason(), actorId,
+                    tenantId, now));
+            return cancelled;
+        }
         events.publishEvent(new InvoiceCancelledEvent(cancelled.id(), cancelled.number(), cancelled.client().name(),
                 cancelled.totals().totalTtc(), cancelled.cancellationReason(), actorId, tenantId, now));
         return cancelled;

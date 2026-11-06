@@ -106,6 +106,22 @@ class InvoicePdfRendererTest {
     }
 
     @Test
+    @DisplayName("Story 20.3 quote: « DEVIS DV-XXXXXXXX », « Devis — en attente de validation », no FAC- number, no "
+            + "UUID; converted / cancelled quotes say so")
+    void quote() throws IOException {
+        UUID id = UUID.fromString("ab12cd34-5678-4abc-8def-0123456789ab");
+        Invoice quote = Invoice.quote(id, CLIENT, LINES, SELLER, UUID.randomUUID(), T0);
+        String text = text(render(quote, null));
+        assertThat(text).contains("DEVIS DV-AB12CD34", "Devis — en attente de validation", "Date : 30/10/2026",
+                "Société Ndolo", "Total TTC", "28 850 XAF");
+        assertThat(text).doesNotContain("FACTURE", "FAC-", "BROUILLON", "Non émise");
+        assertThat(UUID_PATTERN.matcher(text).find()).as("no UUID in the PDF").isFalse();
+        assertThat(text(render(quote.converted(UUID.randomUUID(), T1), null))).contains("DEVIS CONVERTI EN FACTURE");
+        assertThat(text(render(quote.cancel("Le client a renoncé", T1), null)))
+                .contains("DEVIS ANNULÉ", "Motif : Le client a renoncé");
+    }
+
+    @Test
     @DisplayName("cancelled without a stored reason: no « Motif : null » line")
     void cancelledWithoutReason() throws IOException {
         Invoice c = issued().cancel("x", T1);

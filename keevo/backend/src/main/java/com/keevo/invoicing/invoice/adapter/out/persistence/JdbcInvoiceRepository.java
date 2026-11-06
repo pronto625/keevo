@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.adapter.out.persistence;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceDelivery;
+import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
 import com.keevo.invoicing.invoice.domain.model.InvoiceTotals;
@@ -38,15 +39,31 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             + "seller_payment_details, seller_footer, vat_registered, vat_rate, prices_include_vat, vat_mention, "
             + "total_ht, total_vat, total_ttc, issued_at, paid_at, payment_method, cancelled_at, cancellation_reason, "
             + "created_by, created_at, updated_at, last_sent_at, last_sent_to, send_count, seller_name_from_display, "
-            + "seller_has_logo, source_sale_id";
-    /** Story 14.7 — read only: set by {@link #markSuperseded}, never inserted. */
-    private static final String SELECT_COLUMNS = COLUMNS + ", superseded_at";
+            + "seller_has_logo, source_sale_id, kind, source_quote_id";
+    /** Placeholders of {@link #COLUMNS} in an INSERT. */
+    private static final String PLACEHOLDERS = String.join(", ",
+            java.util.Collections.nCopies(COLUMNS.split(",").length, "?"));
+    /**
+     * Story 14.7 — read only: set by {@link #markSuperseded}, never inserted. Story 20.3: the conversion link of a
+     * quote, set by {@link #markConverted}.
+     */
+    private static final String SELECT_COLUMNS = COLUMNS + ", superseded_at, converted_invoice_id, converted_at";
 
     private final JdbcTemplate jdbc;
 
     public JdbcInvoiceRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
+
+    /** Story 20.3 — the display reference of a quote, computed in SQL like {@code InvoiceKind.quoteReference}. */
+    private static final String QUOTE_REFERENCE = "('DV-' || upper(left(CAST(id AS text), 8)))";
+
+    /**
+     * Story 20.3 — the date of the list's {@code from} / {@code to} range: an invoice's issue date; a quote (never
+     * issued) its creation day in Africa/Douala.
+     */
+    private static final String LIST_DATE =
+            "(CASE WHEN kind = 'QUOTE' THEN CAST(created_at AT TIME ZONE 'Africa/Douala' AS date) ELSE issue_date END)";
 
     /** Story 15.5b — a soft-deleted draft is invisible to every read but {@link #findAnyById} and the delta. */
     private static final String LIVE = " AND deleted_at IS NULL";
@@ -78,7 +95,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     @Override
     public boolean existsBySourceSale(UUID saleId) {
         Boolean exists = jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM "
-                + InvoicingTables.qualified(InvoicingTables.INVOICES) + " WHERE source_sale_id = ?)", Boolean.class,
+                + InvoicingTables.qualified(InvoicingTables.INVOICES) + " WHERE source_sale_id = ? AND kind = 'INVOICE')",
+                Boolean.class,
                 saleId);
         return Boolean.TRUE.equals(exists);
     }
@@ -86,7 +104,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     @Override
     public Optional<Invoice> findActiveBySourceSaleForUpdate(UUID saleId) {
         List<UUID> ids = jdbc.queryForList("SELECT id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                + " WHERE source_sale_id = ? AND superseded_at IS NULL FOR UPDATE", UUID.class, saleId);
+                + " WHERE source_sale_id = ? AND superseded_at IS NULL AND kind = 'INVOICE' FOR UPDATE", UUID.class,
+                saleId);
         return ids.isEmpty() ? Optional.empty() : findById(ids.get(0));
     }
 
@@ -100,22 +119,40 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
 
     @Override
     public void insert(Invoice invoice) {
-        jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS + ") VALUES "
-                + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                values(invoice));
+        jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS + ") VALUES ("
+                + PLACEHOLDERS + ")", values(invoice));
         insertLines(invoice);
     }
 
     @Override
     public boolean insertIfAbsent(Invoice invoice) {
         int inserted = jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS
-                + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-                + "?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING", values(invoice));
+                + ") VALUES (" + PLACEHOLDERS + ") ON CONFLICT (id) DO NOTHING", values(invoice));
         if (inserted == 0) {
             return false;
         }
         insertLines(invoice);
         return true;
+    }
+
+    @Override
+    public boolean insertConversion(Invoice invoice) {
+        // no conflict target: a taken id AND a quote already converted (uq_invoices_source_quote) both answer false,
+        // inside the caller's transaction (never a duplicate-key error that would abort it)
+        int inserted = jdbc.update("INSERT INTO " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " (" + COLUMNS
+                + ") VALUES (" + PLACEHOLDERS + ") ON CONFLICT DO NOTHING", values(invoice));
+        if (inserted == 0) {
+            return false;
+        }
+        insertLines(invoice);
+        return true;
+    }
+
+    @Override
+    public Optional<Invoice> findBySourceQuote(UUID quoteId) {
+        List<UUID> ids = jdbc.queryForList("SELECT id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                + " WHERE source_quote_id = ?", UUID.class, quoteId);
+        return ids.isEmpty() ? Optional.empty() : findById(ids.get(0));
     }
 
     @Override
@@ -142,7 +179,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                         + "seller_footer = ?, vat_registered = ?, vat_rate = ?, prices_include_vat = ?, "
                         + "vat_mention = ?, total_ht = ?, total_vat = ?, total_ttc = ?, issued_at = ?, updated_at = ?, "
                         + "seller_name_from_display = ?, seller_has_logo = ? "
-                        + "WHERE id = ? AND status = 'DRAFT'",
+                        + "WHERE id = ? AND status = 'DRAFT' AND kind = 'INVOICE'",
                 issued.number(), Date.valueOf(issued.issueDate()), s.legalName(), s.address(), s.phone(), s.niu(),
                 s.rccm(), s.paymentDetails(), s.footer(), issued.vatRegistered(), issued.vatRate(),
                 issued.pricesIncludeVat(), issued.vatMention(), t.totalHt(), t.totalVat(), t.totalTtc(),
@@ -155,7 +192,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     @Override
     public void markPaid(Invoice paid) {
         expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES) + " SET status = 'PAID', "
-                        + "paid_at = ?, payment_method = ?, updated_at = ? WHERE id = ? AND status = 'ISSUED'",
+                        + "paid_at = ?, payment_method = ?, updated_at = ? WHERE id = ? AND status = 'ISSUED' "
+                        + "AND kind = 'INVOICE'",
                 ts(paid.paidAt()), paid.paymentMethod(), ts(paid.updatedAt()), paid.id()), "payment");
     }
 
@@ -163,9 +201,18 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     public void markCancelled(Invoice cancelled) {
         expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
                         + " SET status = 'CANCELLED', cancelled_at = ?, cancellation_reason = ?, updated_at = ? "
-                        + "WHERE id = ? AND status = 'ISSUED'",
+                        + "WHERE id = ? AND ((kind = 'INVOICE' AND status = 'ISSUED') "
+                        + "OR (kind = 'QUOTE' AND status = 'DRAFT'))",
                 ts(cancelled.cancelledAt()), cancelled.cancellationReason(), ts(cancelled.updatedAt()),
                 cancelled.id()), "cancellation");
+    }
+
+    @Override
+    public void markConverted(Invoice quote) {
+        expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                        + " SET status = 'CONVERTED', converted_invoice_id = ?, converted_at = ?, updated_at = ? "
+                        + "WHERE id = ? AND kind = 'QUOTE' AND status = 'DRAFT'",
+                quote.convertedInvoiceId(), ts(quote.convertedAt()), ts(quote.updatedAt()), quote.id()), "conversion");
     }
 
     @Override
@@ -204,6 +251,11 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
         List<String> conditions = new ArrayList<>();
         List<Object> filter = new ArrayList<>();
+        if (criteria.kind() != null) {
+            // Story 20.3 — idx_invoices_kind_status_created
+            conditions.add("kind = ?");
+            filter.add(criteria.kind().name());
+        }
         if (criteria.status() != null) {
             conditions.add("status = ?");
             filter.add(criteria.status().name());
@@ -213,18 +265,21 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             filter.add(criteria.saleId());
         }
         if (criteria.search() != null && !criteria.search().isEmpty()) {
-            // Story 15.5 — number or client name, case-insensitive; LIKE wildcards typed by the user are literal
-            conditions.add("(number ILIKE ? ESCAPE '\\' OR client_name ILIKE ? ESCAPE '\\')");
+            // Story 15.5 — number or client name, case-insensitive; LIKE wildcards typed by the user are literal.
+            // Story 20.3 — or the reference of a quote (DV- + the first 8 characters of its id, never stored)
+            conditions.add("(number ILIKE ? ESCAPE '\\' OR client_name ILIKE ? ESCAPE '\\' OR (kind = 'QUOTE' AND "
+                    + QUOTE_REFERENCE + " ILIKE ? ESCAPE '\\'))");
             String pattern = "%" + escapeLike(criteria.search()) + "%";
+            filter.add(pattern);
             filter.add(pattern);
             filter.add(pattern);
         }
         if (criteria.from() != null) {
-            conditions.add("issue_date >= ?");
+            conditions.add(LIST_DATE + " >= ?");
             filter.add(Date.valueOf(criteria.from()));
         }
         if (criteria.to() != null) {
-            conditions.add("issue_date <= ?");
+            conditions.add(LIST_DATE + " <= ?");
             filter.add(Date.valueOf(criteria.to()));
         }
         conditions.add("deleted_at IS NULL");
@@ -336,7 +391,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 ts(i.issuedAt()), ts(i.paidAt()), i.paymentMethod(), ts(i.cancelledAt()), i.cancellationReason(),
                 i.createdBy(), ts(i.createdAt()), ts(i.updatedAt()),
                 ts(i.delivery().lastSentAt()), i.delivery().lastSentTo(), i.delivery().sendCount(),
-                s != null && s.nameFromDisplayName(), s != null && s.hasLogo(), i.sourceSaleId()};
+                s != null && s.nameFromDisplayName(), s != null && s.hasLogo(), i.sourceSaleId(), i.kind().name(),
+                i.sourceQuoteId()};
     }
 
     private static Timestamp ts(Instant instant) {
@@ -355,15 +411,19 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             return new Invoice(i.id(), i.number(), i.status(), i.issueDate(), i.client(), i.seller(), i.vatRegistered(),
                     i.vatRate(), i.pricesIncludeVat(), i.vatMention(), lines, i.totals(), i.issuedAt(), i.paidAt(),
                     i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdBy(), i.createdAt(),
-                    i.updatedAt(), i.delivery(), i.sourceSaleId(), i.supersededAt());
+                    i.updatedAt(), i.delivery(), i.sourceSaleId(), i.supersededAt(), i.kind(), i.convertedInvoiceId(),
+                    i.convertedAt(), i.sourceQuoteId());
         }
     }
 
     private static Row row(ResultSet rs) throws SQLException {
         UUID id = rs.getObject("id", UUID.class);
         InvoiceStatus status = InvoiceStatus.valueOf(rs.getString("status"));
+        String kindName = rs.getString("kind");
+        InvoiceKind kind = kindName == null ? InvoiceKind.INVOICE : InvoiceKind.valueOf(kindName);
         Date issueDate = rs.getDate("issue_date");
-        SellerSnapshot seller = status == InvoiceStatus.DRAFT ? null : new SellerSnapshot(
+        // a draft and a quote (whatever its status) have no seller snapshot
+        SellerSnapshot seller = status == InvoiceStatus.DRAFT || kind == InvoiceKind.QUOTE ? null : new SellerSnapshot(
                 rs.getString("seller_legal_name"), rs.getString("seller_address"), rs.getString("seller_phone"),
                 rs.getString("seller_niu"), rs.getString("seller_rccm"), rs.getString("seller_payment_details"),
                 rs.getString("seller_footer"), rs.getBoolean("seller_name_from_display"),
@@ -379,7 +439,9 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 instant(rs, "cancelled_at"), rs.getString("cancellation_reason"),
                 rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
                 new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
-                rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"));
+                rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"), kind,
+                rs.getObject("converted_invoice_id", UUID.class), instant(rs, "converted_at"),
+                rs.getObject("source_quote_id", UUID.class));
         return new Row(id, invoice);
     }
 

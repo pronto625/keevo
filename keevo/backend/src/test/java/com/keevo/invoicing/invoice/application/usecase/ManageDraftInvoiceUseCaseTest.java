@@ -2,6 +2,10 @@ package com.keevo.invoicing.invoice.application.usecase;
 
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
+import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
+import com.keevo.shared.event.catalog.invoicing.QuoteCreatedEvent;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
 import com.keevo.invoicing.invoice.domain.model.LineInput;
 import com.keevo.invoicing.invoice.domain.model.VatTreatment;
@@ -89,5 +93,95 @@ class ManageDraftInvoiceUseCaseTest {
         assertThat(useCase.create(id, content, null, TENANT).id()).isEqualTo(id);
         verify(events).publishEvent(any(Object.class));
         verify(invoices, never()).insert(any());
+    }
+
+    // ── Story 20.3 — quotes and the optimistic edit check ─────────────────────────────────────────────────────
+
+    private ManageDraftInvoiceUseCase.DraftContent quoteContent(Instant expected) {
+        return new ManageDraftInvoiceUseCase.DraftContent(client, content.lines(), InvoiceKind.QUOTE, expected);
+    }
+
+    @Test
+    @DisplayName("kind QUOTE: a quote is inserted (no number) and QuoteCreatedEvent published, not InvoiceCreatedEvent")
+    void createQuote() {
+        when(invoices.findAnyById(id)).thenReturn(Optional.empty());
+        when(invoices.insertIfAbsent(any())).thenReturn(true);
+
+        Invoice quote = useCase.create(id, quoteContent(null), null, TENANT);
+
+        assertThat(quote.kind()).isEqualTo(InvoiceKind.QUOTE);
+        assertThat(quote.number()).isNull();
+        verify(events).publishEvent(org.mockito.ArgumentMatchers.isA(QuoteCreatedEvent.class));
+        verify(events, never()).publishEvent(org.mockito.ArgumentMatchers.isA(InvoiceCreatedEvent.class));
+    }
+
+    @Test
+    @DisplayName("edit with a stale expectedUpdatedAt → OPTIMISTIC_LOCK, nothing written")
+    void staleEdit() {
+        Invoice stored = Invoice.quote(id, client, content.lines(), InvoicingSettings.defaults(), null,
+                Instant.parse("2026-10-31T08:00:00.123456Z"));
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(stored));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.update(id,
+                        quoteContent(Instant.parse("2026-10-31T08:00:00.123457Z")), TENANT))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> {
+                    assertThat(((DomainException) e).getDomainCode()).isEqualTo("OPTIMISTIC_LOCK");
+                    assertThat(((DomainException) e).getUserMessage()).isEqualTo(
+                            "Ce document a été modifié entre-temps : rechargez-le avant de l'enregistrer.");
+                });
+        verify(invoices, never()).updateDraft(any());
+    }
+
+    @Test
+    @DisplayName("edit with the matching expectedUpdatedAt (microsecond precision) or none → applied, kind kept")
+    void freshEdit() {
+        Instant seen = Instant.parse("2026-10-31T08:00:00.123456Z");
+        Invoice stored = Invoice.quote(id, client, content.lines(), InvoicingSettings.defaults(), null, seen);
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(stored));
+        when(clients.resolve(any(), eq(TENANT), any())).thenReturn(client);
+
+        Invoice updated = useCase.update(id, quoteContent(seen.plusNanos(400)), TENANT); // same microsecond
+        assertThat(updated.kind()).isEqualTo(InvoiceKind.QUOTE);
+        assertThat(updated.updatedAt()).isEqualTo(NOW);
+        useCase.update(id, content, TENANT);
+        verify(invoices, org.mockito.Mockito.times(2)).updateDraft(any());
+    }
+
+    @Test
+    @DisplayName("an issued invoice stays non-editable (INVOICE_NOT_EDITABLE), with or without a check")
+    void issuedNotEditable() {
+        Invoice issued = existing().issue("FAC-2026-000001", java.time.LocalDate.of(2026, 10, 31),
+                new InvoicingSettings("Awa", null, null, null, null, false, new BigDecimal("19.25"), true, null, null),
+                NOW);
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(issued));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.update(id, content, TENANT))
+                .satisfies(e -> assertThat(((DomainException) e).getDomainCode()).isEqualTo("INVOICE_NOT_EDITABLE"));
+        verify(invoices, never()).updateDraft(any());
+    }
+
+    @Test
+    @DisplayName("kind mismatch: a creation replay of another kind, or a PUT naming another kind → 409 in French; "
+            + "a PUT without kind keeps the document's")
+    void kindMismatch() {
+        Invoice invoice = existing();
+        when(invoices.findAnyById(id)).thenReturn(Optional.of(invoice));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.create(id, quoteContent(null), null, TENANT))
+                .satisfies(e -> {
+                    assertThat(((DomainException) e).getDomainCode()).isEqualTo("INVOICE_INVALID_TRANSITION");
+                    assertThat(((DomainException) e).getUserMessage()).contains("facture");
+                });
+        assertThat(useCase.create(id, content, null, TENANT)).isSameAs(invoice); // V1 replay: same kind
+
+        Invoice quote = Invoice.quote(id, client, content.lines(), InvoicingSettings.defaults(), null, NOW);
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(quote));
+        when(clients.resolve(any(), eq(TENANT), any())).thenReturn(client);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.update(id,
+                        new ManageDraftInvoiceUseCase.DraftContent(client, content.lines(), InvoiceKind.INVOICE, null),
+                        TENANT))
+                .satisfies(e -> assertThat(((DomainException) e).getDomainCode())
+                        .isEqualTo("INVOICE_INVALID_TRANSITION"));
+        verify(invoices, never()).updateDraft(any());
+        assertThat(useCase.update(id, content, TENANT).kind()).isEqualTo(InvoiceKind.QUOTE);
     }
 }

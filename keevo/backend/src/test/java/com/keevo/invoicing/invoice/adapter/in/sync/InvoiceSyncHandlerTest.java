@@ -2,7 +2,9 @@ package com.keevo.invoicing.invoice.adapter.in.sync;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
+import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -57,6 +59,7 @@ class InvoiceSyncHandlerTest {
 
     private final ManageDraftInvoiceUseCase drafts = mock(ManageDraftInvoiceUseCase.class);
     private final InvoiceLifecycleUseCase lifecycle = mock(InvoiceLifecycleUseCase.class);
+    private final ConvertQuoteUseCase conversions = mock(ConvertQuoteUseCase.class);
     private final ModuleProvisioner provisioner = mock(ModuleProvisioner.class);
     private final ModulePermissions permissions = mock(ModulePermissions.class);
     private final ObjectMapper objectMapper = JsonMapper.builder().findAndAddModules()
@@ -68,7 +71,8 @@ class InvoiceSyncHandlerTest {
 
     @BeforeEach
     void setUp() {
-        handler = new InvoiceSyncHandler(drafts, lifecycle, provisioner, permissions, objectMapper, validator);
+        handler = new InvoiceSyncHandler(drafts, lifecycle, provisioner, permissions, objectMapper, validator,
+                conversions);
         as("OWNER", ALL);
     }
 
@@ -106,10 +110,10 @@ class InvoiceSyncHandlerTest {
     }
 
     @Test
-    @DisplayName("five operation types, owned by the invoicing module")
+    @DisplayName("six operation types (Story 20.3: CONVERT_QUOTE), owned by the invoicing module")
     void contract() {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder("CREATE_INVOICE", "UPDATE_INVOICE",
-                "ISSUE_INVOICE", "PAY_INVOICE", "CANCEL_INVOICE");
+                "ISSUE_INVOICE", "PAY_INVOICE", "CANCEL_INVOICE", "CONVERT_QUOTE");
         assertThat(handler.moduleId()).isEqualTo("invoicing");
     }
 
@@ -266,6 +270,35 @@ class InvoiceSyncHandlerTest {
                     .isEqualTo(SyncOperationStatus.APPLIED);
         }
 
+        // Story 20.3 — the quote operations of the Bref app
+        UUID quoteId = UUID.fromString(contract.path("quoteId").asText());
+        UUID newInvoiceId = UUID.fromString(contract.path("convertedInvoiceId").asText());
+        when(drafts.create(eq(quoteId), any(), eq(ACTOR), eq(TENANT))).thenReturn(any);
+        when(drafts.update(eq(quoteId), any(), eq(TENANT))).thenReturn(any);
+        when(lifecycle.cancel(eq(quoteId), any(), eq(ACTOR), eq(TENANT))).thenReturn(any);
+        Instant convertSeen = Instant.parse("2026-11-06T09:20:00.654321Z");
+        when(conversions.convert(quoteId, newInvoiceId, convertSeen, ACTOR, TENANT))
+                .thenReturn(new ConvertQuoteUseCase.Conversion(any, any, true));
+        for (com.fasterxml.jackson.databind.JsonNode op : contract.path("quoteOperations")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = objectMapper.convertValue(op.path("payload"), Map.class);
+            String type = op.path("operationType").asText();
+            types.add(type);
+            SyncOperationResult r = handler.handle(op(type, payload), ACTOR, TENANT);
+            assertThat(r.status()).as("%s: %s", op.path("name").asText(), r.reason())
+                    .isEqualTo(SyncOperationStatus.APPLIED);
+        }
+        ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> quote =
+                ArgumentCaptor.forClass(ManageDraftInvoiceUseCase.DraftContent.class);
+        verify(drafts).create(eq(quoteId), quote.capture(), eq(ACTOR), eq(TENANT));
+        assertThat(quote.getValue().kind()).isEqualTo(InvoiceKind.QUOTE);
+        ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> checked =
+                ArgumentCaptor.forClass(ManageDraftInvoiceUseCase.DraftContent.class);
+        verify(drafts).update(eq(quoteId), checked.capture(), eq(TENANT));
+        assertThat(checked.getValue().expectedUpdatedAt()).isEqualTo(Instant.parse("2026-11-06T09:15:30.123456Z"));
+        verify(conversions).convert(quoteId, newInvoiceId, convertSeen, ACTOR, TENANT);
+        verify(lifecycle).cancel(quoteId, "Le client a renoncé", ACTOR, TENANT);
+
         assertThat(types).isEqualTo(handler.supportedTypes());
         ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> content =
                 ArgumentCaptor.forClass(ManageDraftInvoiceUseCase.DraftContent.class);
@@ -276,5 +309,65 @@ class InvoiceSyncHandlerTest {
         verify(lifecycle).pay(id, "Espèces", null, ACTOR, TENANT);
         verify(lifecycle).pay(id, "Mobile Money", LocalDate.parse("2026-10-25"), ACTOR, TENANT);
         verify(lifecycle).cancel(id, "Erreur de client", ACTOR, TENANT);
+    }
+
+    @Test
+    @DisplayName("CONVERT_QUOTE: the new invoice id is the result (replay → the same invoice); employee allowed")
+    void convertQuote() {
+        UUID quoteId = UUID.randomUUID();
+        as("EMPLOYEE", EMPLOYEE);
+        when(conversions.convert(quoteId, invoiceId, null, ACTOR, TENANT))
+                .thenReturn(new ConvertQuoteUseCase.Conversion(invoice(), invoice(), true))
+                .thenReturn(new ConvertQuoteUseCase.Conversion(invoice(), invoice(), false));
+        Map<String, Object> p = Map.of("quoteId", quoteId.toString(), "invoiceId", invoiceId.toString());
+
+        SyncOperationResult first = handler.handle(op("CONVERT_QUOTE", p), ACTOR, TENANT);
+        SyncOperationResult replay = handler.handle(op("CONVERT_QUOTE", p), ACTOR, TENANT);
+
+        assertThat(first.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(first.serverEntityId()).isEqualTo(invoiceId.toString());
+        assertThat(replay.status()).isEqualTo(SyncOperationStatus.APPLIED);
+        assertThat(replay.serverEntityId()).isEqualTo(invoiceId.toString());
+        verify(provisioner, org.mockito.Mockito.atLeastOnce()).ensureProvisioned(TENANT, "invoicing");
+    }
+
+    @Test
+    @DisplayName("CONVERT_QUOTE: no quoteId or an unreadable invoiceId → REJECTED, nothing converted; viewer → FORBIDDEN")
+    void convertQuoteInvalid() {
+        assertThat(handler.handle(op("CONVERT_QUOTE", Map.of("invoiceId", invoiceId.toString())), ACTOR, TENANT)
+                .status()).isEqualTo(SyncOperationStatus.REJECTED);
+        SyncOperationResult badId = handler.handle(op("CONVERT_QUOTE", Map.of("quoteId",
+                UUID.randomUUID().toString(), "invoiceId", "pas-un-id")), ACTOR, TENANT);
+        assertThat(badId.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(badId.reason()).contains("invoiceId");
+        // the operation's entity must be the quote
+        SyncOperationResult otherEntity = handler.handle(new SyncOperation(UUID.randomUUID().toString(),
+                "CONVERT_QUOTE", UUID.randomUUID().toString(), Map.of("quoteId", UUID.randomUUID().toString()),
+                Instant.now()), ACTOR, TENANT);
+        assertThat(otherEntity.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(otherEntity.reason()).contains("entityId");
+        as("VIEWER", Set.of("INVOICE_VIEW"));
+        assertThat(handler.handle(op("CONVERT_QUOTE", Map.of("quoteId", UUID.randomUUID().toString())), ACTOR,
+                TENANT).reason()).isEqualTo("FORBIDDEN");
+        verifyNoInteractions(conversions);
+    }
+
+    @Test
+    @DisplayName("CONVERT_QUOTE over quota / stale UPDATE_INVOICE: REJECTED with the domain code")
+    void convertQuoteRefused() {
+        UUID quoteId = UUID.randomUUID();
+        when(conversions.convert(eq(quoteId), any(), any(), eq(ACTOR), eq(TENANT)))
+                .thenThrow(new DomainException(ErrorCode.QUOTA_EXCEEDED, "quota"));
+        assertThat(handler.handle(op("CONVERT_QUOTE", Map.of("quoteId", quoteId.toString())), ACTOR, TENANT)
+                .reason()).isEqualTo("QUOTA_EXCEEDED");
+
+        when(drafts.update(eq(invoiceId), any(), eq(TENANT)))
+                .thenThrow(new DomainException(ErrorCode.OPTIMISTIC_LOCK, "stale"));
+        Map<String, Object> p = content();
+        p.put("invoiceId", invoiceId.toString());
+        p.put("expectedUpdatedAt", "2026-11-06T09:00:00Z");
+        SyncOperationResult r = handler.handle(op("UPDATE_INVOICE", p), ACTOR, TENANT);
+        assertThat(r.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(r.reason()).isEqualTo("OPTIMISTIC_LOCK");
     }
 }

@@ -112,6 +112,10 @@ public final class AuditLabels {
             entry("INVOICE_SENT", "Facture envoyée"),
             // Credit notes (Story 14.7)
             entry("CREDIT_NOTE_ISSUED", "Avoir émis"),
+            // Quotes (Story 20.3)
+            entry("QUOTE_CREATED", "Devis créé"),
+            entry("QUOTE_CONVERTED", "Devis converti en facture"),
+            entry("QUOTE_CANCELLED", "Devis annulé"),
             entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
@@ -136,7 +140,8 @@ public final class AuditLabels {
             entry("Module", "Module"),
             entry("Invoice", "Facture"),
             entry("InvoicingSettings", "Paramètres de facturation"),
-            entry("CreditNote", "Avoir"));
+            entry("CreditNote", "Avoir"),
+            entry("Quote", "Devis"));
 
     /** French label of each before/after field key. */
     public static final Map<String, String> FIELDS = Map.ofEntries(
@@ -233,6 +238,7 @@ public final class AuditLabels {
             entry("donnees", "Données"),
             // Invoicing (Story 14.1)
             entry("invoiceNumber", "Numéro de facture"),
+            entry("quoteReference", "Référence du devis"),
             entry("clientName", "Client"),
             entry("paymentMethod", "Mode de paiement"),
             // Invoice sending, company identity (Story 14.2)

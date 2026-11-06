@@ -90,5 +90,73 @@
         "reason": "Erreur de client"
       }
     }
+  ],
+  "quoteDescription": "Story 20.3 — quote (« devis ») operations, queued by the Bref React Native app (the Flutter V1 test client does not queue them) and read by InvoiceSyncHandler (backend test). A quote is created with CREATE_INVOICE kind QUOTE, edited with UPDATE_INVOICE (optional expectedUpdatedAt: the updatedAt last pulled; stale → REJECTED OPTIMISTIC_LOCK), converted with CONVERT_QUOTE (invoiceId = the id chosen on the device for the new invoice; optional expectedUpdatedAt as for an edit; serverEntityId = that invoice) and cancelled with CANCEL_INVOICE.",
+  "quoteId": "9b1e4c7a-2f3d-4e8b-a6c5-1d7f0e2b3c48",
+  "convertedInvoiceId": "5d2a8f61-7c4e-4b1a-8e93-6f0b2c1d9a57",
+  "quoteOperations": [
+    {
+      "name": "createQuote",
+      "operationType": "CREATE_INVOICE",
+      "payload": {
+        "id": "9b1e4c7a-2f3d-4e8b-a6c5-1d7f0e2b3c48",
+        "kind": "QUOTE",
+        "client": {
+          "id": null,
+          "name": "Awa Traoré",
+          "phone": "+237690000001",
+          "niu": null,
+          "address": null
+        },
+        "lines": [
+          {
+            "description": "Sac de riz 25 kg",
+            "quantity": 2,
+            "unitPrice": 11925,
+            "vatTreatment": "STANDARD"
+          }
+        ]
+      }
+    },
+    {
+      "name": "updateQuoteChecked",
+      "operationType": "UPDATE_INVOICE",
+      "payload": {
+        "invoiceId": "9b1e4c7a-2f3d-4e8b-a6c5-1d7f0e2b3c48",
+        "expectedUpdatedAt": "2026-11-06T09:15:30.123456Z",
+        "client": {
+          "id": null,
+          "name": "Awa Traoré",
+          "phone": "+237690000001",
+          "niu": null,
+          "address": null
+        },
+        "lines": [
+          {
+            "description": "Sac de riz 25 kg",
+            "quantity": 2,
+            "unitPrice": 11925,
+            "vatTreatment": "STANDARD"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convertQuote",
+      "operationType": "CONVERT_QUOTE",
+      "payload": {
+        "quoteId": "9b1e4c7a-2f3d-4e8b-a6c5-1d7f0e2b3c48",
+        "invoiceId": "5d2a8f61-7c4e-4b1a-8e93-6f0b2c1d9a57",
+        "expectedUpdatedAt": "2026-11-06T09:20:00.654321Z"
+      }
+    },
+    {
+      "name": "cancelQuote",
+      "operationType": "CANCEL_INVOICE",
+      "payload": {
+        "invoiceId": "9b1e4c7a-2f3d-4e8b-a6c5-1d7f0e2b3c48",
+        "reason": "Le client a renoncé"
+      }
+    }
   ]
 }
