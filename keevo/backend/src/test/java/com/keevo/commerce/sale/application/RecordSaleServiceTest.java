@@ -47,6 +47,7 @@ class RecordSaleServiceTest {
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private CapabilityRegistry capabilities;
     @Mock private ClientLookupPort clientLookup;
+    @Mock private com.keevo.catalog.api.ProductQueryPort productQuery; // Story 20.1
 
     private RecordSaleService service;
 
@@ -60,7 +61,7 @@ class RecordSaleServiceTest {
         TenantContext.setCurrentTenant("kv_abc123");
         service = new RecordSaleService(
                 saleRepository, stockQuery, stockCommand,
-                eventPublisher, new ObjectMapper(), capabilities);
+                eventPublisher, new ObjectMapper(), capabilities, productQuery);
     }
 
     @AfterEach
@@ -96,6 +97,36 @@ class RecordSaleServiceTest {
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         assertThat(eventCaptor.getValue().getSaleId()).isEqualTo(SALE_ID);
         assertThat(eventCaptor.getValue().getTotalAmount()).isEqualTo(3000);
+    }
+
+    // Story 20.1 — a REST sale line on a merged product is recorded on its merge target (one query for all lines)
+    @Test
+    void recordSale_mergedProduct_lineLandsOnTheTarget() {
+        UUID target = UUID.randomUUID();
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        when(productQuery.resolveMergedTargets(eq(TenantContext.getCurrentTenant()), eq(List.of(PRODUCT_ID))))
+                .thenReturn(java.util.Map.of(PRODUCT_ID, target));
+        when(stockQuery.availableQuantity(TenantContext.getCurrentTenant(), target, null, STORE_ID)).thenReturn(10);
+
+        service.recordSale(new RecordSaleCommand(SALE_ID, ACTOR_ID, STORE_ID, null, PaymentMode.CASH, null, 0,
+                List.of(new SaleItemCommand(null, PRODUCT_ID, UUID.randomUUID(), "Produit A", 1500, 1500, 2))));
+
+        verify(stockCommand).recordMovement(any(), argThat(m -> java.util.Objects.equals(m.productId(), target)
+                && m.variantId() == null)); // a variant of the merged product is dropped
+        verify(stockQuery, never()).availableQuantity(any(), eq(PRODUCT_ID), any(), any());
+        verify(productQuery, times(1)).resolveMergedTargets(any(), any());
+    }
+
+    // Story 20.1 — a sync-originated sale was redirected once per batch by the push: no query again
+    @Test
+    void recordSale_mergesAlreadyResolved_noMergeQuery() {
+        when(saleRepository.existsById(SALE_ID)).thenReturn(false);
+        service.recordSale(new RecordSaleCommand(SALE_ID, ACTOR_ID, STORE_ID, null, PaymentMode.CASH, null, 0,
+                null, List.of(new SaleItemCommand(null, PRODUCT_ID, null, "Produit A", 1500, 1500, 2)),
+                null, true, true));
+
+        verifyNoInteractions(productQuery);
+        verify(saleRepository).save(any());
     }
 
     @Test

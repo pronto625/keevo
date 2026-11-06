@@ -3,6 +3,7 @@ package com.keevo.catalog.product.application.usecase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.product.domain.service.ProductKeys;
 import com.keevo.shared.event.catalog.product.ProductActivatedEvent;
 import com.keevo.shared.event.catalog.product.ProductPriceChangedEvent;
 import com.keevo.shared.event.catalog.product.ProductUpdatedEvent;
@@ -80,15 +81,24 @@ public class UpdateProductUseCase {
         Integer stockQuantity,
         UUID    actorId,
         String  actorRole,    // "OWNER" or "EMPLOYEE" — Story 2.4 draft promotion guard
-        Boolean trackStock    // Story 17.12 — null keeps the current setting; a change is OWNER-only + audited
+        Boolean trackStock,   // Story 17.12 — null keeps the current setting; a change is OWNER-only + audited
+        String  barcode       // Story 20.1 — null keeps it; blank clears it; > 100 chars → 422
     ) {
+        /** Without the barcode (unchanged) — Story 17.12 shape. */
+        public UpdateProductDto(UUID id, String name, String description, String sku, UUID categoryId,
+                                Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
+                                UUID actorId, String actorRole, Boolean trackStock) {
+            this(id, name, description, sku, categoryId, price, buyPrice, transportCost, stockQuantity,
+                    actorId, actorRole, trackStock, null);
+        }
+
         // v1s-12-10: the 10-arg constructor defaulting actorRole to "OWNER" was removed
         // (fail open — any caller skipped the draft guard). Callers pass the real role.
 
         /** Story 17.12 — the edit carries nothing but the stock-tracking setting. */
         public boolean onlyTrackStock() {
             return name == null && description == null && sku == null && categoryId == null && price == null
-                    && buyPrice == null && transportCost == null && stockQuantity == null;
+                    && buyPrice == null && transportCost == null && stockQuantity == null && barcode == null;
         }
 
         /** Without the stock-tracking setting (unchanged). */
@@ -106,6 +116,7 @@ public class UpdateProductUseCase {
         var existing = productRepository.findById(dto.id())
             .orElseThrow(() -> new DomainException(ErrorCode.PRODUCT_NOT_FOUND,
                     "Product not found: " + dto.id()));
+        ProductKeys.cleanBarcode(dto.barcode()); // Story 20.1 — 422 before anything is written
 
         // Story 17.12: a tracking change goes through the single tracking path (owner, inventory gate, conditional
         // update, one « Suivi du stock … » audit). Absent or same value = unchanged (V1 clients never send it).
@@ -139,6 +150,9 @@ public class UpdateProductUseCase {
             checkProductLimit();
         }
 
+        // Story 20.1: absent barcode = unchanged, blank = cleared (validated before anything is written)
+        String resolvedBarcode = dto.barcode() == null ? existing.getBarcode() : ProductKeys.cleanBarcode(dto.barcode());
+
         // Resolve SKU: keep existing if not provided
         String resolvedSku = (dto.sku() != null) ? dto.sku() : existing.getSku();
 
@@ -170,6 +184,12 @@ public class UpdateProductUseCase {
             resolvedStatus,
             existing.getMinimumThreshold(),
             existing.isTrackStock(),
+            resolvedBarcode,
+            // Story 20.1 — the key is recomputed only when the name or the barcode changes
+            resolvedName.equals(existing.getName()) && java.util.Objects.equals(resolvedBarcode, existing.getBarcode())
+                    ? existing.getProductKey() : ProductKeys.key(resolvedName, resolvedBarcode),
+            dto.price() != null || existing.isPriceManual(),   // Story 20.1 — a price typed by a person
+            existing.getMergedIntoId(),
             existing.getCreatedAt(),
             Instant.now() // updatedAt refreshed
         );
@@ -232,6 +252,7 @@ public class UpdateProductUseCase {
             map.put("description", product.getDescription());
             map.put("sku", product.getSku());
             map.put("categoryId", product.getCategoryId());
+            map.put("barcode", product.getBarcode());
             map.put("archived", product.getArchived());
             map.put("status", product.getStatus());
             map.put("createdAt", product.getCreatedAt());

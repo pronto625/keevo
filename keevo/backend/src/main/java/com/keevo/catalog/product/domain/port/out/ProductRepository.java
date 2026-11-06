@@ -120,4 +120,24 @@ public interface ProductRepository {
      * @return {@code true} when this call changed it
      */
     boolean updateTrackStock(UUID id, boolean tracked, java.time.Instant updatedAt);
+
+    // ── Story 20.1 — merge, redirection, barcode lookup ─────────────────────────────────────────
+
+    /** The products of these ids, locked for update in id order (missing ids are absent). */
+    List<Product> lockForMerge(java.util.Collection<UUID> ids);
+
+    /** Archives the source and points it at the target ({@code updated_at} bumped). */
+    void markMerged(UUID sourceId, UUID targetId, java.time.Instant now);
+
+    /** Re-points every product merged into {@code fromId} to {@code toId}; returns how many moved. */
+    int repointMerged(UUID fromId, UUID toId, java.time.Instant now);
+
+    /** Sets the barcode (and its recomputed key) of a product. */
+    void updateBarcode(UUID id, String barcode, String productKey, java.time.Instant now);
+
+    /** merged id → target id, for the given ids that were merged (one query). */
+    Map<UUID, UUID> findMergeTargets(java.util.Collection<UUID> ids);
+
+    /** Products whose barcode is {@code code} or whose key is {@code key}, direct and visible ones first. */
+    List<Product> findByBarcodeOrKey(String code, String key, int limit);
 }

@@ -9,6 +9,7 @@ import com.keevo.catalog.api.UpdateProductInput;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.CreateDraftProductUseCase;
 import com.keevo.catalog.product.application.usecase.CreateProductUseCase;
+import com.keevo.catalog.product.application.usecase.MergeProductsUseCase;
 import com.keevo.catalog.product.application.usecase.SetProductStockTrackingUseCase;
 import com.keevo.catalog.product.application.usecase.UnarchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
@@ -42,6 +43,7 @@ class ProductCommandAdapter implements ProductCommandPort {
     private final ProductRepository productRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final SetProductStockTrackingUseCase setStockTracking;
+    private final MergeProductsUseCase mergeProducts;
 
     ProductCommandAdapter(CreateProductUseCase createProduct,
                           UpdateProductUseCase updateProduct,
@@ -50,8 +52,10 @@ class ProductCommandAdapter implements ProductCommandPort {
                           CreateDraftProductUseCase createDraftProduct,
                           ProductRepository productRepository,
                           ApplicationEventPublisher eventPublisher,
-                          SetProductStockTrackingUseCase setStockTracking) {
+                          SetProductStockTrackingUseCase setStockTracking,
+                          MergeProductsUseCase mergeProducts) {
         this.setStockTracking = setStockTracking;
+        this.mergeProducts = mergeProducts;
         this.createProduct = createProduct;
         this.updateProduct = updateProduct;
         this.archiveProduct = archiveProduct;
@@ -67,7 +71,7 @@ class ProductCommandAdapter implements ProductCommandPort {
         Product created = createProduct.execute(new CreateProductUseCase.CreateProductDto(
                 in.name(), in.description(), in.sku(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(), in.stockQuantity(),
-                in.actorId(), 0, null, null, null, null, in.id(), in.trackStock()));
+                in.actorId(), 0, null, null, null, null, in.id(), in.trackStock(), in.barcode()));
         return ProductViews.of(created);
     }
 
@@ -77,7 +81,7 @@ class ProductCommandAdapter implements ProductCommandPort {
         Product updated = updateProduct.execute(new UpdateProductUseCase.UpdateProductDto(
                 in.productId(), in.name(), in.description(), in.sku(), in.categoryId(),
                 in.price(), in.buyPrice(), in.transportCost(), in.stockQuantity(),
-                in.actorId(), in.actorRole(), in.trackStock()));
+                in.actorId(), in.actorRole(), in.trackStock(), in.barcode()));
         return ProductViews.of(updated);
     }
 
@@ -123,7 +127,9 @@ class ProductCommandAdapter implements ProductCommandPort {
                 in.id(), in.name(), null, in.sku(),
                 in.categoryId(), in.price(), 0, 0,
                 0, false, ProductStatus.ACTIVE,
-                0, in.createdAt(), in.createdAt());
+                0, true, null,
+                in.price() > 0, // Story 20.1 — manual only when a price was typed
+                null, in.createdAt(), in.createdAt());
         Product saved = productRepository.save(product);
         // 12.2b: the catalog owns and publishes its product-created event (same payload as before)
         eventPublisher.publishEvent(new ProductCreatedEvent(
@@ -150,5 +156,11 @@ class ProductCommandAdapter implements ProductCommandPort {
         TenantContext.requireCurrent(tenantSchema);
         var result = setStockTracking.execute(productId, tracked, actorId, actorRole);
         return new com.keevo.catalog.api.StockTrackingUpdate(ProductViews.of(result.product()), result.changed());
+    }
+
+    @Override
+    public ProductView merge(String tenantSchema, UUID sourceId, UUID targetId, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return ProductViews.of(mergeProducts.execute(sourceId, targetId, actorId));
     }
 }

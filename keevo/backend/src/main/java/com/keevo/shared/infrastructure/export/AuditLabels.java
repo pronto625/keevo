@@ -41,6 +41,7 @@ public final class AuditLabels {
             entry("PRODUCT_ARCHIVED", "Produit archivé"),
             entry("PRODUCT_UNARCHIVED", "Produit désarchivé"),
             entry("PRODUCT_ACTIVATED", "Produit activé"),
+            entry("PRODUCT_MERGED", "Produit fusionné"),                 // Story 20.1
             entry("PRICE_OVERRIDDEN", "Prix modifié en caisse"),
             // Stock
             entry("STOCK_ADJUSTED", "Mouvement de stock"),
@@ -194,6 +195,7 @@ public final class AuditLabels {
             entry("tenantCode", "Code du compte"),
             entry("description", "Description"),
             entry("barcode", "Code-barres"),
+            entry("mergedInto", "Fusionné avec"),                       // Story 20.1
             entry("unit", "Unité"),
             entry("format", "Format"),
             entry("rowCount", "Nombre de lignes"),

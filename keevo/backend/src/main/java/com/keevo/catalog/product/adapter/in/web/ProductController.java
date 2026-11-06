@@ -12,6 +12,9 @@ import com.keevo.catalog.product.application.usecase.CreateOrRestoreProductUseCa
 import com.keevo.catalog.product.application.usecase.UpdateProductUseCase;
 import com.keevo.catalog.product.application.usecase.ArchiveProductUseCase;
 import com.keevo.catalog.product.application.usecase.GetProductPricingUseCase;
+import com.keevo.catalog.product.application.usecase.LookupProductByBarcodeUseCase;
+import com.keevo.catalog.product.application.usecase.MergeProductsUseCase;
+import com.keevo.catalog.product.adapter.in.web.dto.MergeProductRequestDto;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.shared.infrastructure.security.AuthDetails;
@@ -45,6 +48,8 @@ public class ProductController {
     private final GetProductPricingUseCase getProductPricingUseCase;
     private final SupplierQueryPort supplierQueryPort; // 12.2a: crm through its public API
     private final StoreQueryPort storeQuery; // Story 14.10: resolve store names
+    private final LookupProductByBarcodeUseCase lookupByBarcode; // Story 20.1
+    private final MergeProductsUseCase mergeProducts;            // Story 20.1
 
     public ProductController(CreateOrRestoreProductUseCase createOrRestoreProductUseCase,
                            UpdateProductUseCase updateProductUseCase,
@@ -52,7 +57,11 @@ public class ProductController {
                            ProductRepository productRepository,
                            GetProductPricingUseCase getProductPricingUseCase,
                            SupplierQueryPort supplierQueryPort,
-                           StoreQueryPort storeQuery) {
+                           StoreQueryPort storeQuery,
+                           LookupProductByBarcodeUseCase lookupByBarcode,
+                           MergeProductsUseCase mergeProducts) {
+        this.lookupByBarcode = lookupByBarcode;
+        this.mergeProducts = mergeProducts;
         this.createOrRestoreProductUseCase = createOrRestoreProductUseCase;
         this.updateProductUseCase = updateProductUseCase;
         this.archiveProductUseCase = archiveProductUseCase;
@@ -96,7 +105,8 @@ public class ProductController {
                 actorName,
                 storeName,
                 null, // clientId — online direct creation always generates the id server-side
-                request.trackStock() // Story 17.12 — null → tracked
+                request.trackStock(), // Story 17.12 — null → tracked
+                request.barcode()     // Story 20.1 — null / blank → none
         );
         
         // Story 17.13: a name held by an ARCHIVED product restores it (limit-checked, existing fields kept) → 200
@@ -128,6 +138,31 @@ public class ProductController {
                 .toList();
         
         return ResponseEntity.ok(ApiResponseWrapper.ok(response));
+    }
+
+    /**
+     * Story 20.1 — the visible product a barcode / reference stands for (merged products redirect to their target).
+     * GET /api/v1/products/lookup?barcode=… — the literal path wins over {@code /{id}}.
+     * 404 PRODUCT_NOT_FOUND « Aucun produit avec ce code »; blank code → 422.
+     */
+    @RequiresEntitlement(value = "catalog", access = RequiresEntitlement.Access.READ)
+    @GetMapping("/lookup")
+    public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> lookupByBarcode(
+            @RequestParam(name = "barcode", required = false) String barcode) {
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(lookupByBarcode.execute(barcode))));
+    }
+
+    /**
+     * Story 20.1 — merges the path product AWAY into {@code targetId} (Bref convention): the path product is archived
+     * and redirected, the answer is the target. Same roles as the archive (a VIEWER is refused by the write guard).
+     * POST /api/v1/products/{id}/merge
+     */
+    @RequiresEntitlement("catalog")
+    @PostMapping("/{id}/merge")
+    public ResponseEntity<ApiResponseWrapper<ProductResponseDto>> mergeProduct(
+            @PathVariable UUID id, @Valid @RequestBody MergeProductRequestDto request) {
+        Product target = mergeProducts.execute(id, request.targetId(), CurrentActor.actorId());
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ProductResponseDto.fromDomain(target)));
     }
 
     /**
@@ -170,7 +205,8 @@ public class ProductController {
                 request.stockQuantity(),
                 actorId,
                 CurrentActor.role(),  // v1s-12-10: real role → Story 2.4 draft guard (FORBIDDEN → 403)
-                request.trackStock()  // Story 17.12 — null → unchanged; a change is OWNER-only
+                request.trackStock(), // Story 17.12 — null → unchanged; a change is OWNER-only
+                request.barcode()     // Story 20.1 — null → unchanged; blank → cleared
         );
         
         // Domain errors (404 PRODUCT_NOT_FOUND, 422 VALIDATION_ERROR) go through the global

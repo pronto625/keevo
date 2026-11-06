@@ -34,7 +34,7 @@ public class ProductDeltaProvider implements DeltaEntityProvider {
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
         var page = DeltaPageQuery.fetch(em,
-                "id, name, price, buy_price, transport_cost, sku, category_id, description, photo_url, archived, status, stock_quantity, created_at, updated_at, minimum_threshold, track_stock",
+                "id, name, price, buy_price, transport_cost, sku, category_id, description, photo_url, archived, status, stock_quantity, created_at, updated_at, minimum_threshold, track_stock, barcode, product_key, price_manual, merged_into_id",
                 "products", CURSOR, since, after, limit);
         return new Page(page.rows().stream().map(this::mapRow).toList(), page.next());
     }
@@ -60,6 +60,12 @@ public class ProductDeltaProvider implements DeltaEntityProvider {
         map.put("minimumThreshold", row.length > 14 ? DeltaValues.num(row[14]) : 0);
         // Story 17.12 — per-product stock tracking (false: sold without stock); a missing value means tracked.
         map.put("trackStock", row.length > 15 ? !Boolean.FALSE.equals(row[15]) : Boolean.TRUE);
+        // Story 20.1 — additive: reference / barcode, dedup key, manual price, merge target (the device redirects a
+        // merged product to its target; null when not merged)
+        map.put("barcode", row.length > 16 ? str(row[16]) : null);
+        map.put("productKey", row.length > 17 ? str(row[17]) : null);
+        map.put("priceManual", row.length > 18 ? Boolean.TRUE.equals(row[18]) : Boolean.FALSE);
+        map.put("mergedIntoId", row.length > 19 ? str(row[19]) : null);
         return map;
     }
 

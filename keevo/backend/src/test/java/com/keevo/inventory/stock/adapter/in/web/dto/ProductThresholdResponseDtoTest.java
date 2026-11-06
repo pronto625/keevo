@@ -37,4 +37,20 @@ class ProductThresholdResponseDtoTest {
             assertThat(actual).isEqualTo(expected);
         }
     }
+
+    @Test
+    void json_isIdenticalToTheCatalogProductPayload_withTheStory20_1Fields() throws Exception {
+        Product product = new Product(UUID.randomUUID(), "Savon", null, "KEV-SAVON1", null,
+                500, 0, 0, 0, true, ProductStatus.ACTIVE, 0, true, "6111234567890", false, UUID.randomUUID(),
+                Instant.parse("2026-01-01T08:00:00Z"), Instant.parse("2026-02-01T08:00:00Z"));
+
+        String expected = mapper.writeValueAsString(ProductResponseDto.fromDomain(product));
+        String actual = mapper.writeValueAsString(ProductThresholdResponseDto.from(CatalogProductApiTestSupport.view(product)));
+
+        assertThat(actual).isEqualTo(expected)
+                .contains("\"barcode\":\"6111234567890\"")
+                .contains("\"productKey\":\"bc:6111234567890\"")
+                .contains("\"priceManual\":false")
+                .contains("\"mergedIntoId\":\"" + product.getMergedIntoId() + "\"");
+    }
 }

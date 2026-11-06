@@ -516,7 +516,9 @@ const exportLabels = <String, Map<String, String>>{
   },
   'audit_log.actorRole': {
     'EMPLOYEE': 'Employé',
+    'MANAGER': 'Gérant',
     'OWNER': 'Propriétaire',
+    'VIEWER': 'Lecteur',
   },
   'audit_log.source': {
     'ONLINE': 'En ligne',

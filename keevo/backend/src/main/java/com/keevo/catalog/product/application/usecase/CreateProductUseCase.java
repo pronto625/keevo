@@ -3,6 +3,7 @@ package com.keevo.catalog.product.application.usecase;
 import com.keevo.catalog.product.domain.entity.Product;
 import com.keevo.catalog.product.domain.entity.ProductStatus;
 import com.keevo.catalog.product.domain.port.out.ProductRepository;
+import com.keevo.catalog.product.domain.service.ProductKeys;
 import com.keevo.shared.event.catalog.product.ProductCreatedEvent;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.domain.exception.DomainException;
@@ -76,8 +77,19 @@ public class CreateProductUseCase {
                        // than the one kept on the device, so any operation created in the same
                        // offline session that references the product by its local id (stock entry,
                        // sale, inventory count) fails with PRODUCT_NOT_FOUND once pushed.
-        Boolean trackStock  // Story 17.12 — null (V1 clients, CSV without the column) → tracked
+        Boolean trackStock,  // Story 17.12 — null (V1 clients, CSV without the column) → tracked
+        String barcode       // Story 20.1 — free reference or barcode; null / blank → none, > 100 chars → 422
     ) {
+        /** Without the barcode (Story 17.12 shape). */
+        public CreateProductDto(
+                String name, String description, String sku, UUID categoryId,
+                Integer price, Integer buyPrice, Integer transportCost,
+                Integer stockQuantity, UUID actorId, Integer minimumThreshold, String status,
+                String actorRole, String actorName, String storeName, UUID clientId, Boolean trackStock) {
+            this(name, description, sku, categoryId, price, buyPrice, transportCost,
+                 stockQuantity, actorId, minimumThreshold, status, actorRole, actorName, storeName, clientId,
+                 trackStock, null);
+        }
         /** Without the stock-tracking setting (tracked). */
         public CreateProductDto(
                 String name, String description, String sku, UUID categoryId,
@@ -131,6 +143,7 @@ public class CreateProductUseCase {
 
         // Validate input
         validateInput(dto);
+        String barcode = ProductKeys.cleanBarcode(dto.barcode()); // Story 20.1 — 422 over 100 characters
 
         // Story 17.12: creating a product without stock tracking is OWNER-only. The REST path passes the real role;
         // the sync handler checks the role itself (its input carries none) and the CSV import is OWNER-only.
@@ -175,6 +188,9 @@ public class CreateProductUseCase {
             "DRAFT".equalsIgnoreCase(dto.status()) ? ProductStatus.DRAFT : ProductStatus.ACTIVE,
             dto.minimumThreshold() != null ? dto.minimumThreshold() : 0,
             tracked, // Story 17.12 — default tracked
+            barcode, // Story 20.1 — the product key is derived from the name and this barcode
+            dto.price() != null, // Story 20.1 — a price typed by a person (REST, sync, CSV)
+            null, // not merged
             now, // createdAt
             now  // updatedAt
         );

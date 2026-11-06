@@ -171,6 +171,8 @@ public final class ErrorMessages {
             Map.entry("INVENTORY_COUNT_PRODUCT_NOT_IN_SCOPE", "Ce produit ne fait pas partie de cet inventaire"),
             Map.entry("TRANSFER_NOT_FOUND", "Transfert introuvable"),
             Map.entry("TRANSFER_INVALID_STATUS", "Ce transfert n'est plus en cours"),
+            Map.entry("PRODUCT_MERGE_INVALID", "Ces produits ne peuvent pas être fusionnés"),
+            Map.entry("PRODUCT_MERGED", "Ce produit a été fusionné avec un autre produit"),
             Map.entry("TRANSFER_IN_TRANSIT", "Un transfert de ce produit est en cours : réceptionnez-le avant de désactiver le suivi du stock"),
             Map.entry("REPORT_NOT_FOUND", "Rapport introuvable"),
             Map.entry("REPORT_ALREADY_SENT", "Ce rapport a déjà été envoyé"),

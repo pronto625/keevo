@@ -28,6 +28,6 @@ public final class CatalogProductApiTestSupport {
     /** The real command adapter, wired for {@code register}/{@code changeMinimumThreshold} only. */
     public static ProductCommandPort repositoryCommandPort(ProductRepository productRepository,
                                                            ApplicationEventPublisher eventPublisher) {
-        return new ProductCommandAdapter(null, null, null, null, null, productRepository, eventPublisher, null);
+        return new ProductCommandAdapter(null, null, null, null, null, productRepository, eventPublisher, null, null);
     }
 }

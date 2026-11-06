@@ -35,5 +35,9 @@ public record UpdateProductRequestDto(
 
         /// Story 17.12 — optional stock tracking; absent → unchanged. A change is OWNER-only (403 otherwise),
         /// audited, and never takes a starting quantity (use PUT /api/v1/products/{id}/stock-tracking for that).
-        Boolean trackStock
+        Boolean trackStock,
+
+        /// Story 20.1 — optional free reference or barcode (absent → none / unchanged; blank → cleared). Its length
+        /// (≤ 100 once trimmed, else 422) is checked by the use case (ProductKeys.cleanBarcode), not on the raw value.
+        String barcode
 ) {}

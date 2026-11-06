@@ -540,6 +540,8 @@ So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/se
 
 ### Story 19.5b : Droits fins du gérant et du lecteur (décisions produit)
 
+> **Routé depuis la revue 20.1 (06/11/2026) :** - [ ] [Deferred-from: revue 20.1, 2026-11-06] La fusion de produits (`POST /api/v1/products/{id}/merge`) est irréversible mais ouverte aux mêmes rôles que l'archivage, vendeur compris. Décider si elle est réservée au propriétaire (et au gérant) [keevo/backend/src/main/java/com/keevo/catalog/product/adapter/in/web/ProductController.java].
+
 > **Créée le 2026-11-05** (revue 19.5). La 19.5 applique la règle « jamais moins restreint qu'un vendeur » ; ces points demandent une décision produit avant d'être codés.
 
 - [ ] [Deferred-from: revue 19.5, 2026-11-05] MANAGER : voir les ventes, l'historique et les sessions d'inventaire de toute sa boutique (aujourd'hui seulement les siennes, comme un vendeur) et pouvoir annuler une session d'un de ses vendeurs [SaleHistoryController, GetSalesHistoryService, CancelInventorySessionService].

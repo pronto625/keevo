@@ -313,6 +313,8 @@ public class GlobalExceptionHandler {
                  "MODULE_BACKFILL_RUNNING",
                  "ADMIN_JOB_RUNNING",
                  "TRANSFER_IN_TRANSIT",
+                 "PRODUCT_MERGE_INVALID",
+                 "PRODUCT_MERGED",
                  "INVOICE_NOT_EDITABLE",
                  "INVOICE_INVALID_TRANSITION",
                  "PUSH_ENDPOINT_OWNED",

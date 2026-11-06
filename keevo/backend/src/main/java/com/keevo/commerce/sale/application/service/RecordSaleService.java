@@ -1,5 +1,6 @@
 package com.keevo.commerce.sale.application.service;
 
+import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.crm.api.ClientLookupPort;
 import com.keevo.inventory.api.StockCommandPort;
 import com.keevo.inventory.api.StockMovementInput;
@@ -53,14 +54,17 @@ public class RecordSaleService implements RecordSaleUseCase {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final CapabilityRegistry capabilities;
+    private final ProductQueryPort productQuery; // Story 20.1 — merged products redirect to their target
 
     public RecordSaleService(SaleRepository saleRepository,
                              StockQueryPort stockQuery,
                              StockCommandPort stockCommand,
                              ApplicationEventPublisher eventPublisher,
                              ObjectMapper objectMapper,
-                             CapabilityRegistry capabilities) {
+                             CapabilityRegistry capabilities,
+                             ProductQueryPort productQuery) {
         this.capabilities = capabilities;
+        this.productQuery = productQuery;
         this.saleRepository = saleRepository;
         this.stockQuery = stockQuery;
         this.stockCommand = stockCommand;
@@ -75,7 +79,7 @@ public class RecordSaleService implements RecordSaleUseCase {
         if (saleRepository.existsById(recorded.saleId())) {
             return;
         }
-        RecordSaleCommand command = withCheckedClient(recorded, tenantSchema);
+        RecordSaleCommand command = withMergeTargets(withCheckedClient(recorded, tenantSchema), tenantSchema);
 
         SaleStatus effectiveStatus = command.requestedStatus() != null
                 ? command.requestedStatus() : SaleStatus.COMPLETED;
@@ -185,6 +189,31 @@ public class RecordSaleService implements RecordSaleUseCase {
         }
         log.warn("[sale] crm module off for tenant {}: sale recorded without its client", tenantSchema);
         return command.withoutClient();
+    }
+
+    /**
+     * Story 20.1 — a line on a merged product is recorded on its merge target (one query for all the lines; chains
+     * are flat, one hop). The line keeps its name snapshot and drops its variant (a variant of the merged product is
+     * never one of the target). Sync pushes are redirected once per batch upstream ({@code mergesResolved}: no query).
+     */
+    private RecordSaleCommand withMergeTargets(RecordSaleCommand command, String tenantSchema) {
+        if (productQuery == null || command.mergesResolved() || command.items() == null || command.items().isEmpty()) {
+            return command;
+        }
+        var ids = command.items().stream().map(RecordSaleUseCase.SaleItemCommand::productId)
+                .filter(java.util.Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return command;
+        java.util.Map<UUID, UUID> targets = productQuery.resolveMergedTargets(tenantSchema, ids);
+        if (targets == null || targets.isEmpty()) return command;
+        var items = command.items().stream()
+                .map(i -> targets.containsKey(i.productId())
+                        ? new RecordSaleUseCase.SaleItemCommand(i.itemId(), targets.get(i.productId()), null,
+                                i.productName(), i.catalogueUnitPrice(), i.appliedUnitPrice(), i.quantity())
+                        : i)
+                .toList();
+        return new RecordSaleCommand(command.saleId(), command.actorId(), command.storeId(), command.clientId(),
+                command.paymentMode(), command.mobileMoneyRef(), command.discountAmount(), command.requestedStatus(),
+                items, command.occurredAt(), command.allowNegativeStock(), command.mergesResolved());
     }
 
     private int getAvailableStock(String tenantSchema, UUID productId, UUID variantId, UUID storeId) {

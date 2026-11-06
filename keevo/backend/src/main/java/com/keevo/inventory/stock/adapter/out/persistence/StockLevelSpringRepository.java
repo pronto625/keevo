@@ -1,7 +1,9 @@
 package com.keevo.inventory.stock.adapter.out.persistence;
 
 import com.keevo.inventory.stock.adapter.out.persistence.entity.StockLevelJpaEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -30,4 +32,9 @@ public interface StockLevelSpringRepository extends JpaRepository<StockLevelJpaE
 
     @Query("SELECT s FROM StockLevelJpaEntity s WHERE s.storeId = :storeId")
     List<StockLevelJpaEntity> findAllByStoreId(@Param("storeId") UUID storeId);
+
+    /** Story 20.1 — merge guard: every level of the product, locked FOR UPDATE (uq_stock_level leads with product_id). */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT s FROM StockLevelJpaEntity s WHERE s.productId = :productId ORDER BY s.id")
+    List<StockLevelJpaEntity> lockAllByProduct(@Param("productId") UUID productId);
 }

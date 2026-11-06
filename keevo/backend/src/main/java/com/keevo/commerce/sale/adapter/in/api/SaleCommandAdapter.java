@@ -43,7 +43,8 @@ class SaleCommandAdapter implements SaleCommandPort {
         recordSaleUseCase.recordSale(new RecordSaleCommand(
                 in.saleId(), in.actorId(), in.storeId(), in.clientId(),
                 SaleViews.toPaymentMode(in.paymentMode()), in.mobileMoneyRef(), in.discountAmount(),
-                SaleViews.toSaleStatus(in.requestedStatus()), items, in.occurredAt(), in.allowNegativeStock()));
+                SaleViews.toSaleStatus(in.requestedStatus()), items, in.occurredAt(), in.allowNegativeStock(),
+                in.mergesResolved()));
     }
 
     @Override

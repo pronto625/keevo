@@ -42,6 +42,13 @@ public class StockLevelRepositoryAdapter implements StockLevelRepository {
 
     @Override
     @Transactional
+    public boolean lockAndHasNonZeroStock(UUID productId) {
+        return springRepository.lockAllByProduct(productId).stream()
+                .anyMatch(level -> level.getQuantity() != null && level.getQuantity() != 0);
+    }
+
+    @Override
+    @Transactional
     public StockLevel save(StockLevel level) {
         var entity = toJpaEntity(level);
         var saved = springRepository.save(entity);

@@ -58,4 +58,15 @@ public interface ProductCommandPort {
      *         MODULE_NOT_ENTITLED (inventory DISABLED), TRANSFER_IN_TRANSIT (disable with a transfer in transit)
      */
     StockTrackingUpdate setStockTracking(String tenantSchema, UUID productId, boolean tracked, UUID actorId, String actorRole);
+
+    /**
+     * Story 20.1 — merges {@code sourceId} into {@code targetId} (owner command, one transaction, both rows locked):
+     * the source is archived and redirected, products merged into it follow, the target inherits its barcode when it
+     * has none; history is untouched. Audited « Produit fusionné ».
+     *
+     * @return the target product
+     * @throws com.keevo.shared.domain.exception.DomainException VALIDATION_ERROR (same product), PRODUCT_NOT_FOUND,
+     *         PRODUCT_MERGE_INVALID (already merged, archived target, source holding stock)
+     */
+    ProductView merge(String tenantSchema, UUID sourceId, UUID targetId, UUID actorId);
 }

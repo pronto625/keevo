@@ -1,13 +1,17 @@
 package com.keevo.catalog.product.adapter.out.persistence;
 
 import com.keevo.catalog.product.adapter.out.persistence.entity.ProductJpaEntity;
+import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -71,4 +75,42 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
             + "WHERE p.id = :id AND p.trackStock <> :tracked")
     int updateTrackStockIfDifferent(@Param("id") UUID id, @Param("tracked") boolean tracked,
                                     @Param("updatedAt") Instant updatedAt);
+
+    // ── Story 20.1 — merge, redirection, barcode lookup ─────────────────────────────────────────
+
+    /** Both merge rows, locked ({@code FOR UPDATE}) in id order: two crossed merges cannot deadlock. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM ProductJpaEntity p WHERE p.id IN :ids ORDER BY p.id")
+    List<ProductJpaEntity> lockAllByIdsOrdered(@Param("ids") Collection<UUID> ids);
+
+    /** The merged source: archived, pointing at its target, bumped for the pull. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ProductJpaEntity p SET p.archived = true, p.mergedIntoId = :targetId, p.updatedAt = :now "
+            + "WHERE p.id = :sourceId")
+    int markMerged(@Param("sourceId") UUID sourceId, @Param("targetId") UUID targetId, @Param("now") Instant now);
+
+    /** Products merged into {@code fromId} now point at {@code toId}: chains stay flat (one hop). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ProductJpaEntity p SET p.mergedIntoId = :toId, p.updatedAt = :now WHERE p.mergedIntoId = :fromId")
+    int repointMerged(@Param("fromId") UUID fromId, @Param("toId") UUID toId, @Param("now") Instant now);
+
+    /** Sets the barcode and its recomputed key (merge: the target inherits the source barcode). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE ProductJpaEntity p SET p.barcode = :barcode, p.productKey = :productKey, p.updatedAt = :now "
+            + "WHERE p.id = :id")
+    int updateBarcode(@Param("id") UUID id, @Param("barcode") String barcode,
+                      @Param("productKey") String productKey, @Param("now") Instant now);
+
+    /** (id, merged_into_id) of the given products that were merged — one indexed query for a whole batch. */
+    @Query("SELECT p.id, p.mergedIntoId FROM ProductJpaEntity p WHERE p.id IN :ids AND p.mergedIntoId IS NOT NULL")
+    List<Object[]> findMergeTargets(@Param("ids") Collection<UUID> ids);
+
+    /**
+     * Products carrying this code as barcode or as barcode key ({@code bc:<code>}), merged ones included: direct
+     * (not merged) and visible ones first. Served by the partial indexes idx_products_barcode / idx_products_product_key.
+     */
+    @Query("SELECT p FROM ProductJpaEntity p WHERE p.barcode = :code OR p.productKey = :key "
+            + "ORDER BY CASE WHEN p.mergedIntoId IS NULL THEN 0 ELSE 1 END, p.archived, p.updatedAt DESC")
+    List<ProductJpaEntity> findByBarcodeOrKey(@Param("code") String code, @Param("key") String key,
+                                              Pageable page);
 }

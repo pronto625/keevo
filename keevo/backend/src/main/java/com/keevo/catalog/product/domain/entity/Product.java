@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.domain.entity;
 
+import com.keevo.catalog.product.domain.service.ProductKeys;
 import com.keevo.shared.domain.model.Money;
 
 import java.util.UUID;
@@ -18,6 +19,8 @@ import java.util.regex.Pattern;
  * - status default ACTIVE
  * - minimumThreshold non-negative integer (Story 2.3)
  * - trackStock default true (Story 17.12): false = sold without stock (no check, no movement)
+ * - barcode nullable, productKey derived from name + barcode (Story 20.1, {@link ProductKeys}), priceManual
+ *   (true: price typed by a person), mergedIntoId (the product this one was merged into; written by the merge only)
  */
 public class Product {
     private static final Pattern SKU_PATTERN = Pattern.compile("^KEV-[A-Z0-9]{6}$");
@@ -35,6 +38,10 @@ public class Product {
     private final ProductStatus status;
     private final int minimumThreshold; // Story 2.3 — stock alert threshold
     private final boolean trackStock; // Story 17.12 — per-product stock tracking (default true)
+    private final String barcode;      // Story 20.1 — free reference or barcode, null = none
+    private final String productKey;   // Story 20.1 — ProductKeys.key(name, barcode), computed when they change
+    private final boolean priceManual; // Story 20.1 — price typed by a person (false: automatic creation)
+    private final UUID mergedIntoId;   // Story 20.1 — merge target, null when not merged
     private final Instant createdAt;
     private final Instant updatedAt;
 
@@ -61,11 +68,40 @@ public class Product {
     }
 
     /**
-     * Full constructor with trackStock (Story 17.12) — {@code null} means tracked.
+     * Constructor with trackStock (Story 17.12) — {@code null} means tracked. No barcode, price typed by a person,
+     * not merged (Story 20.1 defaults).
      */
     public Product(UUID id, String name, String description, String sku,
                   UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
                   Boolean archived, ProductStatus status, Integer minimumThreshold, Boolean trackStock,
+                  Instant createdAt, Instant updatedAt) {
+        this(id, name, description, sku, categoryId, price, buyPrice, transportCost, stockQuantity,
+             archived, status, minimumThreshold, trackStock, null, true, null, createdAt, updatedAt);
+    }
+
+    /**
+     * Full constructor for a new or renamed / re-coded product (Story 20.1): {@code barcode} trimmed, blank → none; the
+     * product key is computed from the name and the barcode ({@link ProductKeys#key}).
+     */
+    public Product(UUID id, String name, String description, String sku,
+                  UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
+                  Boolean archived, ProductStatus status, Integer minimumThreshold, Boolean trackStock,
+                  String barcode, boolean priceManual, UUID mergedIntoId,
+                  Instant createdAt, Instant updatedAt) {
+        this(id, name, description, sku, categoryId, price, buyPrice, transportCost, stockQuantity,
+             archived, status, minimumThreshold, trackStock, barcode, ProductKeys.key(name, barcode),
+             priceManual, mergedIntoId, createdAt, updatedAt);
+    }
+
+    /**
+     * Rehydration constructor (Story 20.1): the stored {@code productKey} is kept as is (no NFD / regex on every read;
+     * {@code null} for a row the backfill has not keyed yet). Callers that change the name or the barcode use the
+     * constructor above, which recomputes it.
+     */
+    public Product(UUID id, String name, String description, String sku,
+                  UUID categoryId, Integer price, Integer buyPrice, Integer transportCost, Integer stockQuantity,
+                  Boolean archived, ProductStatus status, Integer minimumThreshold, Boolean trackStock,
+                  String barcode, String productKey, boolean priceManual, UUID mergedIntoId,
                   Instant createdAt, Instant updatedAt) {
         // Validate name
         if (name == null || name.trim().isEmpty()) {
@@ -103,6 +139,10 @@ public class Product {
         this.status = status != null ? status : ProductStatus.ACTIVE;
         this.minimumThreshold = minimumThreshold != null ? minimumThreshold : 0;
         this.trackStock = trackStock == null || trackStock;
+        this.barcode = barcode == null || barcode.isBlank() ? null : barcode.trim();
+        this.productKey = productKey;
+        this.priceManual = priceManual;
+        this.mergedIntoId = mergedIntoId;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
@@ -131,6 +171,16 @@ public class Product {
     public int getMinimumThreshold() { return minimumThreshold; }
     /** Story 17.12 — whether the product's stock is tracked (false: sold without stock). */
     public boolean isTrackStock() { return trackStock; }
+    /** Story 20.1 — free reference or barcode, {@code null} when none. */
+    public String getBarcode() { return barcode; }
+    /** Story 20.1 — deduplication key ({@code bc:…} / {@code nm:…}), derived from the name and the barcode. */
+    public String getProductKey() { return productKey; }
+    /** Story 20.1 — true when the price was typed by a person. */
+    public boolean isPriceManual() { return priceManual; }
+    /** Story 20.1 — the product this one was merged into, {@code null} when not merged. */
+    public UUID getMergedIntoId() { return mergedIntoId; }
+    /** Story 20.1 — merged into another product (archived, redirected). */
+    public boolean isMerged() { return mergedIntoId != null; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
 
@@ -141,7 +191,8 @@ public class Product {
     public Product withMinimumThreshold(int newThreshold) {
         return new Product(id, name, description, sku, categoryId,
             getPriceValue(), getBuyPriceValue(), getTransportCostValue(), stockQuantity,
-            archived, status, newThreshold, trackStock, createdAt, Instant.now());
+            archived, status, newThreshold, trackStock, barcode, productKey, priceManual, mergedIntoId, createdAt,
+            Instant.now());
     }
 
     /**
@@ -151,7 +202,8 @@ public class Product {
     public Product withTrackStock(boolean tracked) {
         return new Product(id, name, description, sku, categoryId,
             getPriceValue(), getBuyPriceValue(), getTransportCostValue(), stockQuantity,
-            archived, status, minimumThreshold, tracked, createdAt, Instant.now());
+            archived, status, minimumThreshold, tracked, barcode, productKey, priceManual, mergedIntoId, createdAt,
+            Instant.now());
     }
 
     @Override

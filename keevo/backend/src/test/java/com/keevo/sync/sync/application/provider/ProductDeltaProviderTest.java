@@ -114,4 +114,28 @@ class ProductDeltaProviderTest {
         assertThat(map.get("minimumThreshold")).isEqualTo(7);
         verify(em).createNativeQuery(contains("minimum_threshold"));
     }
+
+    @Test
+    void queryDelta_story20_1_mapsBarcodeKeyManualPriceAndMergeTarget() {
+        when(em.createNativeQuery(contains("merged_into_id"))).thenReturn(query);
+        when(query.setParameter(eq("since"), any())).thenReturn(query);
+        when(query.setMaxResults(anyInt())).thenReturn(query);
+        UUID id = UUID.randomUUID();
+        UUID target = UUID.randomUUID();
+        Object[] row = {id, "Savon", 500, 0, 0, "KEV-SAVON1", null, null, null, true, "ACTIVE", 0,
+                Timestamp.from(Instant.now()), Timestamp.from(Instant.now()), 0, true,
+                "6111234567890", "bc:6111234567890", true, target};
+        Object[] legacy = {UUID.randomUUID(), "Riz", 500, 0, 0, "KEV-RIZ001", null, null, null, false, "ACTIVE", 0,
+                Timestamp.from(Instant.now()), Timestamp.from(Instant.now())};
+        when(query.getResultList()).thenReturn(List.of(row, legacy));
+
+        var result = provider.queryDelta(Instant.EPOCH);
+
+        assertThat(result.get(0)).containsEntry("barcode", "6111234567890")
+                .containsEntry("productKey", "bc:6111234567890")
+                .containsEntry("priceManual", true)
+                .containsEntry("mergedIntoId", target.toString());
+        assertThat(result.get(1)).containsEntry("barcode", null).containsEntry("mergedIntoId", null)
+                .containsEntry("priceManual", false);
+    }
 }

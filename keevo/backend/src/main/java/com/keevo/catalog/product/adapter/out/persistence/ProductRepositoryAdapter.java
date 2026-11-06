@@ -132,6 +132,43 @@ public class ProductRepositoryAdapter implements ProductRepository {
         return springRepository.updateTrackStockIfDifferent(id, tracked, updatedAt) > 0;
     }
 
+    // ── Story 20.1 ───────────────────────────────────────────────────────────────
+
+    @Override
+    public List<Product> lockForMerge(java.util.Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return List.of();
+        return springRepository.lockAllByIdsOrdered(ids).stream().map(this::toDomain).toList();
+    }
+
+    @Override
+    public void markMerged(UUID sourceId, UUID targetId, Instant now) {
+        springRepository.markMerged(sourceId, targetId, now);
+    }
+
+    @Override
+    public int repointMerged(UUID fromId, UUID toId, Instant now) {
+        return springRepository.repointMerged(fromId, toId, now);
+    }
+
+    @Override
+    public void updateBarcode(UUID id, String barcode, String productKey, Instant now) {
+        springRepository.updateBarcode(id, barcode, productKey, now);
+    }
+
+    @Override
+    public Map<UUID, UUID> findMergeTargets(java.util.Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) return Map.of();
+        return springRepository.findMergeTargets(ids).stream()
+                .collect(Collectors.toMap(row -> (UUID) row[0], row -> (UUID) row[1], (a, b) -> a));
+    }
+
+    @Override
+    public List<Product> findByBarcodeOrKey(String code, String key, int limit) {
+        return springRepository.findByBarcodeOrKey(code, key,
+                        org.springframework.data.domain.PageRequest.of(0, limit))
+                .stream().map(this::toDomain).toList();
+    }
+
     // ── Conversion methods ─────────────────────────────────────────────────────
 
     private ProductJpaEntity toJpaEntity(Product product) {
@@ -153,6 +190,10 @@ public class ProductRepositoryAdapter implements ProductRepository {
             product.getUpdatedAt()
         );
         entity.setTrackStock(product.isTrackStock()); // Story 17.12
+        entity.setBarcode(product.getBarcode());         // Story 20.1
+        entity.setProductKey(product.getProductKey());   // Story 20.1 — computed when name / barcode change
+        entity.setPriceManual(product.isPriceManual());  // Story 20.1
+        // mergedIntoId: not insertable/updatable through a save (merge only)
         return entity;
     }
 
@@ -171,6 +212,10 @@ public class ProductRepositoryAdapter implements ProductRepository {
             entity.getStatus(),
             entity.getMinimumThreshold(),
             entity.getTrackStock(), // Story 17.12 — null (legacy row) → tracked
+            entity.getBarcode(),
+            entity.getProductKey(), // stored key, not recomputed on read
+            Boolean.TRUE.equals(entity.getPriceManual()),
+            entity.getMergedIntoId(),
             entity.getCreatedAt(),
             entity.getUpdatedAt()
         );

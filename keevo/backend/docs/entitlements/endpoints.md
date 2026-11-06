@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 243 — gated: 115, exempt: 128.
+Handlers: 245 — gated: 117, exempt: 128.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -187,9 +187,11 @@ Handlers: 243 — gated: 115, exempt: 128.
 | GET | `/api/v1/products/drafts/count` | `messaging` | READ | — |  | PendingDraftsCountController#getPendingDraftsCount |
 | POST | `/api/v1/products/import` | `catalog` | WRITE | — |  | ProductImportController#importCsv |
 | GET | `/api/v1/products/import/template` | `catalog` | READ | — |  | ProductImportController#downloadTemplate |
+| GET | `/api/v1/products/lookup` | `catalog` | READ | — |  | ProductController#lookupByBarcode |
 | GET | `/api/v1/products/{id}` | `catalog` | READ | — |  | ProductController#getProduct |
 | PATCH | `/api/v1/products/{id}` | `catalog` | WRITE | — |  | ProductController#updateProduct |
 | PATCH | `/api/v1/products/{id}/archive` | `catalog` | WRITE | — |  | ProductController#archiveProduct |
+| POST | `/api/v1/products/{id}/merge` | `catalog` | WRITE | — |  | ProductController#mergeProduct |
 | DELETE | `/api/v1/products/{id}/photo` | `catalog` | WRITE | — |  | ProductPhotoController#delete |
 | GET | `/api/v1/products/{id}/photo` | `catalog` | READ | — |  | ProductPhotoController#read |
 | POST | `/api/v1/products/{id}/photo` | `catalog` | WRITE | — |  | ProductPhotoController#upload |

@@ -50,6 +50,21 @@ public class ProductJpaEntity {
     @Column(name = "track_stock", nullable = false)
     private Boolean trackStock = true;
 
+    // Story 20.1 — catalog V2 (barcode, product key, manual price, merge target)
+    @Column(name = "barcode", length = 100)
+    private String barcode;
+
+    @Column(name = "product_key", length = 250)
+    private String productKey;
+
+    @Column(name = "price_manual", nullable = false)
+    private Boolean priceManual = false;
+
+    // Written only by the merge (ProductSpringRepository.markMerged / repointMerged): a product save must never
+    // clear or move it.
+    @Column(name = "merged_into_id", columnDefinition = "UUID", insertable = false, updatable = false)
+    private UUID mergedIntoId;
+
     // Written only by the photo endpoint (ProductSpringRepository.updatePhotoUrl): a product
     // edit (save of a domain Product, which carries no photo) must never wipe it.
     @Column(name = "photo_url", length = 500, updatable = false)
@@ -124,6 +139,18 @@ public class ProductJpaEntity {
 
     public Boolean getTrackStock() { return trackStock; }
     public void setTrackStock(Boolean trackStock) { this.trackStock = trackStock; }
+
+    public String getBarcode() { return barcode; }
+    public void setBarcode(String barcode) { this.barcode = barcode; }
+
+    public String getProductKey() { return productKey; }
+    public void setProductKey(String productKey) { this.productKey = productKey; }
+
+    public Boolean getPriceManual() { return priceManual; }
+    public void setPriceManual(Boolean priceManual) { this.priceManual = priceManual; }
+
+    public UUID getMergedIntoId() { return mergedIntoId; }
+    public void setMergedIntoId(UUID mergedIntoId) { this.mergedIntoId = mergedIntoId; }
 
     public Integer getMinimumThreshold() { return minimumThreshold; }
     public void setMinimumThreshold(Integer minimumThreshold) { this.minimumThreshold = minimumThreshold; }

@@ -219,6 +219,9 @@ class AuditPresenter {
         AuditCategory.product),
     'PRODUCT_ARCHIVED': AuditActionInfo('Produit archivé', 'archivé le produit',
         Icons.archive_outlined, AuditCategory.product),
+    // Story 20.1 — product merged into another one
+    'PRODUCT_MERGED': AuditActionInfo('Produit fusionné', 'fusionné le produit',
+        Icons.merge_type_rounded, AuditCategory.product),
     'PRODUCT_ACTIVATED': AuditActionInfo('Produit activé', 'activé le produit',
         Icons.check_circle_outline_rounded, AuditCategory.product),
     'PRODUCT_UNARCHIVED': AuditActionInfo(
@@ -432,6 +435,15 @@ class AuditPresenter {
         'désactivé le module',
         Icons.extension_off_outlined,
         AuditCategory.account),
+    // Story 19.13 — modules switched by the owner (« Mes modules »)
+    'MODULE_ENABLED_BY_OWNER': AuditActionInfo('Module activé par le propriétaire',
+        'activé le module', Icons.extension_outlined, AuditCategory.account),
+    'MODULE_DISABLED_BY_OWNER': AuditActionInfo('Module désactivé par le propriétaire',
+        'désactivé le module', Icons.extension_off_outlined, AuditCategory.account),
+    // Story 19.12 — default sale flow
+    'SALE_FLOW_UPDATED': AuditActionInfo('Parcours de vente modifié',
+        'modifié le parcours de vente', Icons.tune_rounded, AuditCategory.account,
+        takesObject: false),
   };
 
   /// Code → title of every catalogue action; equals the contract

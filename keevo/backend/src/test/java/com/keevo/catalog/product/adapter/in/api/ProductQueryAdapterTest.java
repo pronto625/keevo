@@ -60,7 +60,8 @@ class ProductQueryAdapterTest {
         when(productRepository.findById(ID)).thenReturn(Optional.of(product(false, ProductStatus.DRAFT)));
 
         assertThat(adapter.findById(TenantContext.getCurrentTenant(), ID)).contains(new ProductView(ID, "Robe Wax", "coton", "KEV-ROBE01",
-                CATEGORY, 5000, 3000, 200, 7, false, ProductState.DRAFT, 4, CREATED, UPDATED));
+                CATEGORY, 5000, 3000, 200, 7, false, ProductState.DRAFT, 4, CREATED, UPDATED,
+                true, null, "nm:robe wax", true, null)); // Story 20.1 — key derived from the name
     }
 
     @Test

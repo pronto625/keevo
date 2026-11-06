@@ -24,9 +24,19 @@ public interface RecordSaleUseCase {
             SaleStatus requestedStatus, // Story 4.3 — null or PENDING_VALIDATION
             List<SaleItemCommand> items,
             Instant occurredAt,    // nullable — when the sale was made (offline push); null → now
-            boolean allowNegativeStock // sync push only: an offline sale already happened, apply it
+            boolean allowNegativeStock, // sync push only: an offline sale already happened, apply it
                                        // even if the server stock is short (reported as STOCK_NEGATIVE)
+            boolean mergesResolved     // Story 20.1 — product ids already redirected to merge targets (sync push)
     ) {
+        /** Without the merge flag: merged products are resolved by the sale. */
+        public RecordSaleCommand(UUID saleId, UUID actorId, UUID storeId, UUID clientId,
+                                 PaymentMode paymentMode, String mobileMoneyRef, int discountAmount,
+                                 SaleStatus requestedStatus, List<SaleItemCommand> items, Instant occurredAt,
+                                 boolean allowNegativeStock) {
+            this(saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef, discountAmount, requestedStatus,
+                    items, occurredAt, allowNegativeStock, false);
+        }
+
         /** Online constructor: sale happens now, stock must be available. */
         public RecordSaleCommand(UUID saleId, UUID actorId, UUID storeId, UUID clientId,
                                  PaymentMode paymentMode, String mobileMoneyRef, int discountAmount,
@@ -38,7 +48,7 @@ public interface RecordSaleUseCase {
         /** Story 14.3 — the same sale without its client (crm off: the client cannot be vouched for). */
         public RecordSaleCommand withoutClient() {
             return new RecordSaleCommand(saleId, actorId, storeId, null, paymentMode, mobileMoneyRef,
-                    discountAmount, requestedStatus, items, occurredAt, allowNegativeStock);
+                    discountAmount, requestedStatus, items, occurredAt, allowNegativeStock, mergesResolved);
         }
 
         /** Backward-compatible constructor: requestedStatus defaults to null (→ COMPLETED). */

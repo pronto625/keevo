@@ -44,5 +44,9 @@ public record CreateProductRequestDto(
         String status,
 
         /// Story 17.12 — optional stock tracking; absent → tracked.
-        Boolean trackStock
+        Boolean trackStock,
+
+        /// Story 20.1 — optional free reference or barcode (absent → none / unchanged; blank → cleared). Its length
+        /// (≤ 100 once trimmed, else 422) is checked by the use case (ProductKeys.cleanBarcode), not on the raw value.
+        String barcode
 ) {}

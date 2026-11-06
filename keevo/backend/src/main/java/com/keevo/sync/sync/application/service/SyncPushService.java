@@ -1,5 +1,6 @@
 package com.keevo.sync.sync.application.service;
 
+import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.identity.api.Role;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
@@ -23,6 +24,7 @@ import com.keevo.sync.sync.domain.port.out.UserSyncStateRepository;
 import com.keevo.sync.sync.domain.model.UserSyncState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -50,7 +52,10 @@ public class SyncPushService implements SyncUseCase {
     private final SyncErrorLogRepository syncErrorLogRepository;
     private final ModuleRegistry moduleRegistry;
     private final UserSyncStateRepository userSyncStateRepository;
+    /** Story 20.1 — merge redirection of pushed product ids ({@code null}: none, unit tests). */
+    private final ProductQueryPort productQuery;
 
+    /** Without the merge redirection (Story 20.1) — unit tests. */
     public SyncPushService(SyncOperationHandlerRegistry handlerRegistry,
                            SyncOperationsLogRepository logRepository,
                            ApplicationEventPublisher eventPublisher,
@@ -61,6 +66,24 @@ public class SyncPushService implements SyncUseCase {
                            SyncErrorLogRepository syncErrorLogRepository,
                            ModuleRegistry moduleRegistry,
                            UserSyncStateRepository userSyncStateRepository) {
+        this(handlerRegistry, logRepository, eventPublisher, transactionManager, deltaProviders,
+                conflictStrategyRegistry, conflictsLogRepository, syncErrorLogRepository, moduleRegistry,
+                userSyncStateRepository, null);
+    }
+
+    @Autowired
+    public SyncPushService(SyncOperationHandlerRegistry handlerRegistry,
+                           SyncOperationsLogRepository logRepository,
+                           ApplicationEventPublisher eventPublisher,
+                           PlatformTransactionManager transactionManager,
+                           List<DeltaEntityProvider> deltaProviders,
+                           ConflictStrategyRegistry conflictStrategyRegistry,
+                           SyncConflictsLogRepository conflictsLogRepository,
+                           SyncErrorLogRepository syncErrorLogRepository,
+                           ModuleRegistry moduleRegistry,
+                           UserSyncStateRepository userSyncStateRepository,
+                           ProductQueryPort productQuery) {
+        this.productQuery = productQuery;
         this.handlerRegistry = handlerRegistry;
         this.logRepository = logRepository;
         this.eventPublisher = eventPublisher;
@@ -181,6 +204,8 @@ public class SyncPushService implements SyncUseCase {
         List<SyncOperationResult> results = new ArrayList<>();
         // Story 12.7 — one registry read per batch (request-cached as well), not one per operation.
         ModuleGate moduleGate = sorted.isEmpty() ? ModuleGate.NONE : readModuleGate(command);
+        // Story 20.1 — one read per batch: the merge targets of every product id the batch references
+        Map<String, String> productMerges = readProductMerges(command, sorted);
 
         for (SyncOperation operation : sorted) {
             // Each operation runs in its own transaction — one failure does NOT roll back others (AC3)
@@ -190,7 +215,7 @@ public class SyncPushService implements SyncUseCase {
             var handlerOutcome = new java.util.concurrent.atomic.AtomicReference<SyncOperationResult>();
             try {
                 result = transactionTemplate.execute(status -> {
-                    SyncOperationResult opResult = processOperation(operation, command, moduleGate);
+                    SyncOperationResult opResult = processOperation(operation, command, moduleGate, productMerges);
                     handlerOutcome.set(opResult);
 
                     // Skip saving the log entry for DUPLICATE operations — the entry already exists
@@ -292,19 +317,94 @@ public class SyncPushService implements SyncUseCase {
     }
 
     /**
-     * A CREATE_PRODUCT whose name already existed was merged into the existing product (see
-     * ProductSyncHandler). Operations queued offline against the device's local product id
-     * (stock entries, sales, counts...) must target that existing product: rewrite every
-     * {@code productId} in the payload whose id was merged.
+     * Operation types whose {@code productId} is never redirected to a merge target (Story 20.1): archiving or
+     * restoring a merged product must act on that product (archive = no-op, restore = {@code PRODUCT_MERGED}),
+     * never on the product it was merged into.
      */
-    private SyncOperation redirectMergedProductIds(SyncOperation operation) {
+    private static final Set<String> NO_MERGE_REDIRECT = Set.of("ARCHIVE_PRODUCT", "UNARCHIVE_PRODUCT");
+
+    /** Product edits whose identity fields belong to the merged product, not to its target. */
+    private static final Set<String> PRODUCT_EDITS = Set.of("UPDATE_PRODUCT", "PROMOTE_PRODUCT");
+
+    /** Fields of a redirected product edit that describe the merged product itself: never applied to the target. */
+    private static final List<String> MERGED_IDENTITY_FIELDS = List.of("name", "sku", "barcode", "trackStock");
+
+    /**
+     * Story 20.1 — merged product id → merge target id for every product id referenced by the batch (and the targets
+     * of their name-merge aliases known when the batch starts), read once per batch: one alias query plus one
+     * {@code products.merged_into_id} query, whatever the number of operations. A failed read never blocks the push
+     * (the operations then land on the merged product itself, as before 20.1).
+     */
+    private Map<String, String> readProductMerges(PushBatchCommand command, List<SyncOperation> operations) {
+        if (productQuery == null || operations.isEmpty()) return Map.of();
+        Set<String> candidates = new HashSet<>();
+        operations.forEach(op -> collectProductIds(op.payload(), candidates));
+        if (candidates.isEmpty()) return Map.of();
+        try {
+            Map<String, String> result = transactionTemplate.execute(status -> {
+                Set<String> ids = new HashSet<>(candidates);
+                ids.addAll(logRepository.findMergedProductTargets(candidates).values());
+                List<UUID> uuids = ids.stream().map(SyncPushService::uuidOrNull).filter(Objects::nonNull).toList();
+                if (uuids.isEmpty()) return Map.<String, String>of();
+                Map<String, String> merges = new HashMap<>();
+                productQuery.resolveMergedTargets(command.tenantId(), uuids)
+                        .forEach((from, to) -> merges.put(from.toString(), to.toString()));
+                return merges;
+            });
+            return result != null ? result : Map.of();
+        } catch (RuntimeException e) {
+            log.warn("[Sync] Merged products of the batch could not be read — no merge redirection ({})",
+                    e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private static UUID uuidOrNull(String value) {
+        try {
+            return UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Rewrites every {@code productId} of the payload that no longer stands for itself:
+     * <ul>
+     *   <li>a CREATE_PRODUCT whose name already existed was merged into the existing product (see
+     *   ProductSyncHandler): operations queued offline against the device's local product id (stock entries, sales,
+     *   counts...) target that existing product (alias read per operation, so an alias recorded earlier in the same
+     *   batch is followed);</li>
+     *   <li>Story 20.1 — a product merged by its owner ({@code products.merged_into_id}, read once per batch): the
+     *   operation lands on the merge target, except archive / restore ({@link #NO_MERGE_REDIRECT}). A redirected
+     *   product edit drops the merged product's name, SKU, barcode and stock-tracking setting
+     *   ({@link #MERGED_IDENTITY_FIELDS}: they still describe it, applied to the target they would collide with it or
+     *   overwrite the target's own); a redirected sale line drops its {@code variantId} (a variant of the merged
+     *   product, never of the target).</li>
+     * </ul>
+     */
+    private SyncOperation redirectMergedProductIds(SyncOperation operation, Map<String, String> productMerges) {
         Set<String> candidates = new HashSet<>();
         collectProductIds(operation.payload(), candidates);
         if (candidates.isEmpty()) return operation;
-        Map<String, String> targets = logRepository.findMergedProductTargets(candidates);
+        Map<String, String> aliases = logRepository.findMergedProductTargets(candidates);
+        boolean followMerges = !productMerges.isEmpty() && !NO_MERGE_REDIRECT.contains(operation.operationType());
+        Map<String, String> targets = new HashMap<>();
+        Set<String> mergeRedirected = new HashSet<>();
+        for (String id : candidates) {
+            String target = aliases.getOrDefault(id, id);
+            if (followMerges && productMerges.containsKey(target)) {
+                target = productMerges.get(target);
+                mergeRedirected.add(id);
+            }
+            if (!target.equals(id)) targets.put(id, target);
+        }
         if (targets.isEmpty()) return operation;
         @SuppressWarnings("unchecked")
-        Map<String, Object> rewritten = (Map<String, Object>) rewriteProductIds(operation.payload(), targets);
+        Map<String, Object> rewritten = (Map<String, Object>) rewriteProductIds(operation.payload(), targets, mergeRedirected);
+        if (PRODUCT_EDITS.contains(operation.operationType())
+                && operation.payload().get("productId") instanceof String edited && mergeRedirected.contains(edited)) {
+            MERGED_IDENTITY_FIELDS.forEach(rewritten::remove);
+        }
         return new SyncOperation(operation.operationId(), operation.operationType(),
                 operation.entityId(), rewritten, operation.clientTimestamp());
     }
@@ -320,7 +420,7 @@ public class SyncPushService implements SyncUseCase {
         }
     }
 
-    private Object rewriteProductIds(Object node, Map<String, String> targets) {
+    private Object rewriteProductIds(Object node, Map<String, String> targets, Set<String> mergeRedirected) {
         if (node instanceof Map<?, ?> map) {
             Map<String, Object> copy = new LinkedHashMap<>();
             map.forEach((k, v) -> {
@@ -328,13 +428,17 @@ public class SyncPushService implements SyncUseCase {
                 if ("productId".equals(key) && v instanceof String s && targets.containsKey(s)) {
                     copy.put(key, targets.get(s));
                 } else {
-                    copy.put(key, rewriteProductIds(v, targets));
+                    copy.put(key, rewriteProductIds(v, targets, mergeRedirected));
                 }
             });
+            // Story 20.1 — a variant of the merged product is never a variant of the target
+            if (map.get("productId") instanceof String s && mergeRedirected.contains(s)) {
+                copy.remove("variantId");
+            }
             return copy;
         }
         if (node instanceof List<?> list) {
-            return list.stream().map(v -> rewriteProductIds(v, targets)).toList();
+            return list.stream().map(v -> rewriteProductIds(v, targets, mergeRedirected)).toList();
         }
         return node;
     }
@@ -374,7 +478,7 @@ public class SyncPushService implements SyncUseCase {
     }
 
     private SyncOperationResult processOperation(SyncOperation originalOperation, PushBatchCommand command,
-                                                 ModuleGate moduleGate) {
+                                                 ModuleGate moduleGate, Map<String, String> productMerges) {
         // A previously REJECTED op is processed again; saving its new outcome
         // below overwrites the log row (assigned id → merge).
         if (logRepository.isSettled(originalOperation.operationId())
@@ -393,7 +497,7 @@ public class SyncPushService implements SyncUseCase {
         if (refused != null) {
             return refused;
         }
-        SyncOperation operation = redirectMergedProductIds(originalOperation);
+        SyncOperation operation = redirectMergedProductIds(originalOperation, productMerges);
 
         // Last-write-wins: an operation older than the entity's current state is not applied.
         ConflictResolutionStrategy strategy = conflictStrategyRegistry.resolve(operation.operationType());

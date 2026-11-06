@@ -25,6 +25,10 @@ final class ProductViews {
                 product.getMinimumThreshold(),
                 product.getCreatedAt(),
                 product.getUpdatedAt(),
-                product.isTrackStock());
+                product.isTrackStock(),
+                product.getBarcode(),
+                product.getProductKey(),
+                product.isPriceManual(),
+                product.getMergedIntoId());
     }
 }

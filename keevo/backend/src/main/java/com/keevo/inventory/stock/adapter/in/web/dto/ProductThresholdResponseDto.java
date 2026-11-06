@@ -27,13 +27,18 @@ public record ProductThresholdResponseDto(
         int minimumThreshold,
         Instant createdAt,
         Instant updatedAt,
-        boolean trackStock      // Story 17.12 — same payload as the catalog product
+        boolean trackStock,     // Story 17.12 — same payload as the catalog product
+        String barcode,         // Story 20.1 — same payload as the catalog product
+        String productKey,
+        boolean priceManual,
+        UUID mergedIntoId
 ) {
     public static ProductThresholdResponseDto from(ProductView p) {
         return new ProductThresholdResponseDto(
                 p.id(), p.name(), p.description(), p.sku(), p.categoryId(),
                 p.price(), p.buyPrice(), p.transportCost(), p.stockQuantity(),
                 p.archived(), p.status(), p.minimumThreshold(),
-                p.createdAt(), p.updatedAt(), p.trackStock());
+                p.createdAt(), p.updatedAt(), p.trackStock(),
+                p.barcode(), p.productKey(), p.priceManual(), p.mergedIntoId());
     }
 }

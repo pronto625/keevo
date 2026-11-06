@@ -28,6 +28,10 @@ public record ProductResponseDto(
         Instant createdAt,
         Instant updatedAt,
         boolean trackStock,     // Story 17.12 — false: sold without stock
+        String barcode,         // Story 20.1 — free reference or barcode, null = none
+        String productKey,      // Story 20.1 — deduplication key (bc:… / nm:…)
+        boolean priceManual,    // Story 20.1 — price typed by a person
+        UUID mergedIntoId,      // Story 20.1 — merge target, null when not merged
         // Story 17.13 — only on a creation that restored the archived product of that name; absent otherwise
         @JsonInclude(JsonInclude.Include.NON_NULL) Boolean restored
 ) {
@@ -56,6 +60,10 @@ public record ProductResponseDto(
                 product.getCreatedAt(),
                 product.getUpdatedAt(),
                 product.isTrackStock(),
+                product.getBarcode(),
+                product.getProductKey(),
+                product.isPriceManual(),
+                product.getMergedIntoId(),
                 restored
         );
     }

@@ -58,6 +58,8 @@ public enum ErrorCode {
     PRODUCT_PHOTO_TOO_LARGE,     // HTTP 413 — product photo over keevo.product-photo.max-bytes
     PRODUCT_PHOTO_INVALID,       // HTTP 415 — not a JPEG / PNG / WebP image (or corrupt)
     PRODUCT_PHOTO_NOT_FOUND,     // HTTP 404 — the product has no photo
+    PRODUCT_MERGE_INVALID,       // HTTP 409 — Story 20.1: merge refused (already merged, archived target, stock left)
+    PRODUCT_MERGED,              // HTTP 409 — Story 20.1: the product was merged into another (unarchive refused)
     // ── Inventory ─────────────────────────────────────────────────
     INSUFFICIENT_STOCK,
     STOCK_NOT_FOUND,

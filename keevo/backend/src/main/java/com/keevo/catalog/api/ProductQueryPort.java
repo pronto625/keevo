@@ -1,5 +1,6 @@
 package com.keevo.catalog.api;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -38,4 +39,16 @@ public interface ProductQueryPort {
      * exist. Loads the product through the catalog's product repository.
      */
     Optional<String> findStatusName(String tenantSchema, UUID productId);
+
+    /**
+     * Story 20.1 — the product an id now stands for: its merge target when it was merged, else the id itself (unknown
+     * ids included). One hop is enough: merge chains are kept flat.
+     */
+    UUID resolveMerged(String tenantSchema, UUID productId);
+
+    /**
+     * Story 20.1 — set-based {@link #resolveMerged}: merged id → target id for the given ids that were merged (others
+     * absent). One query whatever the number of ids.
+     */
+    Map<UUID, UUID> resolveMergedTargets(String tenantSchema, Collection<UUID> productIds);
 }

@@ -55,6 +55,8 @@ public class CreateOrRestoreProductUseCase {
      *   the OWNER → 403 {@code FORBIDDEN} (17.12).</li>
      *   <li>DRAFT creation ({@code status: DRAFT}, same rule as the sync {@code CREATE_DRAFT_PRODUCT}): E restored
      *   when allowed; refused (limit, or untracked E for a non-owner) → E returned unchanged ({@code merged}).</li>
+     *   <li>Story 20.1 — E merged into T: T answered as is ({@code merged}, E stays archived); T archived itself →
+     *   the rules above apply to T.</li>
      *   <li>E restored concurrently meanwhile (unarchive no-op): a draft gets E as merged, an active creation falls
      *   through to the normal creation (409 for the now-visible name).</li>
      * </ul>
@@ -64,6 +66,13 @@ public class CreateOrRestoreProductUseCase {
         transactionLock.lock("product-limit:" + TenantContext.getCurrentTenant());
         if (dto.name() != null && !dto.name().isBlank()) {
             var existing = productRepository.findByName(dto.name());
+            // Story 20.1: a merged product is never resurrected — its name answers with the merge target
+            if (existing.isPresent() && existing.get().isMerged()) {
+                existing = productRepository.findById(existing.get().getMergedIntoId());
+                if (existing.isPresent() && !Boolean.TRUE.equals(existing.get().getArchived())) {
+                    return new Outcome(existing.get(), false, true);
+                }
+            }
             if (existing.isPresent() && Boolean.TRUE.equals(existing.get().getArchived())) {
                 Product archived = existing.get();
                 boolean draft = "DRAFT".equalsIgnoreCase(dto.status());

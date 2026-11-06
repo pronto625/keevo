@@ -49,6 +49,7 @@ import com.keevo.shared.event.catalog.store.StoreDeactivatedEvent;
 import com.keevo.shared.event.catalog.store.StoreReactivatedEvent;
 import com.keevo.shared.event.catalog.product.ProductStockTrackingChangedEvent;
 import com.keevo.shared.event.catalog.product.ProductUnarchivedEvent;
+import com.keevo.shared.event.catalog.product.ProductMergedEvent;
 import com.keevo.shared.event.catalog.product.ProductPhotoUpdatedEvent;
 import com.keevo.shared.event.catalog.stock.StockThresholdChangedEvent;
 import com.keevo.shared.event.catalog.contact.SupplierUpdatedEvent;
@@ -266,6 +267,18 @@ public class AuditEventListener {
                 null, event.productName(), null, null);
         log.info("AUDIT: product_unarchived productId={} productName={} tenantId={} actorId={}",
                 event.productId(), event.productName(), event.tenantId(), event.actorId());
+    }
+
+    /** Story 20.1 — « Produit fusionné »: both names, never an id (the merged product is the audited entity). */
+    @EventListener
+    public void on(ProductMergedEvent event) {
+        write(event.actorId(), event.tenantId(), "PRODUCT_MERGED", "Product", event.sourceProductId(),
+                null,
+                map("productName", event.sourceProductName(), "mergedInto", event.targetProductName(),
+                        "archived", true),
+                null, event.sourceProductName(), null, null);
+        log.info("AUDIT: product_merged sourceId={} targetId={} tenantId={} actorId={}",
+                event.sourceProductId(), event.targetProductId(), event.tenantId(), event.actorId());
     }
 
     /** Story 17.12 — « Suivi du stock activé / désactivé » (French labels only, no technical value). */

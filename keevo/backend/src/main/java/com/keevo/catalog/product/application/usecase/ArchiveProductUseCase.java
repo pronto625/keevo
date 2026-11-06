@@ -38,6 +38,11 @@ public class ArchiveProductUseCase {
         var product = productRepository.findById(dto.productId())
             .orElseThrow(() -> new IllegalArgumentException("Product not found: " + dto.productId()));
 
+        // Story 20.1: a merged product is already archived — nothing to do, no audit (its target stays visible)
+        if (product.isMerged()) {
+            return;
+        }
+
         // Archive product (soft delete)
         productRepository.archive(dto.productId());
         

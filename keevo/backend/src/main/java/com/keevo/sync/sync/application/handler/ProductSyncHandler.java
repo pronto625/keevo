@@ -81,7 +81,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         optionalIntegralInt(p.get("transportCost"), "transportCost"),
                         optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
                         actorId,
-                        trackStock));  // 17.12: absent (V1) → tracked
+                        trackStock,  // 17.12: absent (V1) → tracked
+                        optionalString(p.get("barcode"), "barcode")));  // 20.1: absent → none
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.id().toString(), null);
             }
@@ -99,7 +100,8 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
                         optionalIntegralInt(p.get("stockQuantity"), "stockQuantity"),
                         actorId,
                         actorRole(),  // v1s-12-10: real role → Story 2.4 draft guard fires for EMPLOYEE
-                        optionalBoolean(p.get("trackStock"), "trackStock")));  // 17.12: absent → unchanged; change OWNER-only
+                        optionalBoolean(p.get("trackStock"), "trackStock"),  // 17.12: absent → unchanged; change OWNER-only
+                        optionalString(p.get("barcode"), "barcode")));  // 20.1: absent → unchanged, blank → cleared
                 yield new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                         product.id().toString(), null);
             }
@@ -187,6 +189,7 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
      *   so the queued sale is never lost.</li>
      * </ul>
      * The marker is set only when a restore really happened (a concurrent restore makes the unarchive a no-op).
+     * Story 20.1 — E merged into T: the creation lands on T (the rules above apply to T), E stays archived.
      */
     private SyncOperationResult mergeIntoExistingByName(SyncOperation operation, String name, UUID clientId,
                                                          String tenantId, UUID actorId, boolean draftCreation) {
@@ -194,6 +197,11 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
         var existing = productQuery.findByName(tenantId, name);
         if (existing.isEmpty() || existing.get().id().equals(clientId)) return null;
         var target = existing.get();
+        // Story 20.1: a merged product is never resurrected — the name lands on its merge target (one hop)
+        if (target.mergedIntoId() != null) {
+            var mergeTarget = productQuery.findById(tenantId, target.mergedIntoId());
+            if (mergeTarget.isPresent()) target = mergeTarget.get();
+        }
         String targetId = target.id().toString();
         if (target.archived()) {
             boolean ownerOnly = !target.trackStock() && !isOwnerRole();
@@ -217,6 +225,27 @@ public class ProductSyncHandler extends AbstractSyncOperationHandler {
 
     private static Map<String, Object> restoredMarker(com.keevo.catalog.api.ProductView restored) {
         return restored.status() == com.keevo.catalog.api.ProductState.DRAFT ? RESTORED_DRAFT_MARKER : RESTORED_MARKER;
+    }
+
+    /**
+     * Story 20.1 — a merged product is never restored: the unarchive use case refuses it with
+     * {@code PRODUCT_MERGE_INVALID} (409 on REST); the device gets {@code PRODUCT_MERGED}. (Archiving a merged product is
+     * a no-op in the use case.)
+     */
+    @Override
+    protected SyncOperationResult mapDomainException(SyncOperation op, DomainException e) {
+        if ("UNARCHIVE_PRODUCT".equals(op.operationType()) && e.getErrorCode() == ErrorCode.PRODUCT_MERGE_INVALID) {
+            return new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null,
+                    ErrorCode.PRODUCT_MERGED.name());
+        }
+        return super.mapDomainException(op, e);
+    }
+
+    /** Story 20.1 — an optional JSON string; anything else is rejected ({@code Invalid <field>: …}). */
+    static String optionalString(Object raw, String field) {
+        if (raw == null) return null;
+        if (raw instanceof String str) return str;
+        throw new IllegalArgumentException("Invalid " + field + ": must be a string");
     }
 
     /** Story 17.12 — an optional JSON boolean; anything else is rejected ({@code Invalid <field>: …}). */

@@ -6,6 +6,7 @@ import com.keevo.catalog.product.domain.port.out.ProductRepository;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -76,5 +77,18 @@ class ProductQueryAdapter implements ProductQueryPort {
     public Optional<String> findStatusName(String tenantSchema, UUID productId) {
         TenantContext.requireCurrent(tenantSchema);
         return productRepository.findById(productId).map(product -> product.getStatus().name());
+    }
+
+    @Override
+    public UUID resolveMerged(String tenantSchema, UUID productId) {
+        TenantContext.requireCurrent(tenantSchema);
+        if (productId == null) return null;
+        return productRepository.findMergeTargets(List.of(productId)).getOrDefault(productId, productId);
+    }
+
+    @Override
+    public Map<UUID, UUID> resolveMergedTargets(String tenantSchema, Collection<UUID> productIds) {
+        TenantContext.requireCurrent(tenantSchema);
+        return productRepository.findMergeTargets(productIds);
     }
 }

@@ -2,14 +2,22 @@
 title: '20.1 — Extended catalogue: products without stock (non-regression), barcode, product key, manual price, merge, barcode lookup'
 type: 'feature'
 created: '2026-11-06'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: 'f2cfd0c070aee28d11e7a9f2244cae31551f793f'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/keevo/backend/src/main/resources/db/modules/README.md'
 warnings: [oversized]
-deferred: []
+deferred:
+  - summary: >-
+      Product merge is irreversible but open to the same roles as archive (EMPLOYEE included).
+    evidence: |-
+      Specified as « roles that may archive »; fine-grained manager/employee rights are the pending product decisions of 19-5b. Routed there.
+    location: >-
+      keevo/backend/src/main/java/com/keevo/catalog/product/adapter/in/web/ProductController.java
+    severity: medium
 ---
 
 <intent-contract>
@@ -95,6 +103,66 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-06 — Review pass
+- verdicts: 50 findings — high 0, medium 9, low 33, false 8, maybe-false 0 (intent-alignment observations included)
+- findings:
+  - Patterns/complexity (FUS-NFR11):
+    - `[medium]` `[patch]` barcode lookup: one `findById` per merged candidate (≤ 21 queries) — resolve all targets in one query (≤ 2 queries total).
+    - `[medium]` `[patch]` `Product` recomputes the key on every rehydration (lists, exports) — rehydrate the stored `product_key`; compute only on create and on name/barcode change.
+    - `[low]` `[patch]` `RecordSaleService` re-resolves merges for every synced sale although the batch already redirected them — skip resolution for sync-originated commands.
+    - `[low]` `[patch]` `ProductSyncHandler` archive/unarchive pre-query per operation duplicating use-case guards — drop the pre-checks; map the use case's merged refusal to `REJECTED PRODUCT_MERGED`.
+    - `[low]` `[reject]` `OR product_key = 'bc:'||code` redundant today — kept per spec for imported keys (24.3); one indexed BitmapOr on a lookup.
+    - `[low]` `[patch]` backfill: one transaction per tenant for all pages — commit per page, `lock_timeout` set.
+    - `[medium]` `[patch]` merge stock guard reads `stock_levels` unlocked — lock the source's stock rows `FOR UPDATE` in the merge transaction (grouped with the in-transit entry).
+  - Blind hunter:
+    - `[low]` `[reject]` unarchive refusal code differs REST (`PRODUCT_MERGE_INVALID`) vs sync (`PRODUCT_MERGED`) — as specified (REST 409 `PRODUCT_MERGE_INVALID`, sync `REJECTED PRODUCT_MERGED`).
+    - `[medium]` `[patch]` backfill's blanket `UPDATE … SET price_manual = true WHERE price_manual = false` flips products created after deploy without a price (and reruns while a tenant fails) — drop it; the per-row key backfill already sets `price_manual = true` on pre-existing rows only.
+    - `[low]` `[reject]` devices do not re-pull backfilled `productKey`/`priceManual` — not used by apps yet; stated in the mobile section.
+    - `[low]` `[patch]` drafts / quick-add default `priceManual = true` without a price — set it explicitly (price > 0 ⇒ true).
+    - `[medium]` `[patch]` redirected offline `UPDATE_PRODUCT`/`PROMOTE_PRODUCT` keeps `barcode` and `trackStock` of the merged product (overwrites the target's barcode or tracking) — drop `barcode` and `trackStock` too.
+    - `[medium]` `[defer]` merge open to EMPLOYEE (same as archive, as specified) although irreversible — fine-grained role rights are the pending product decisions of 19-5b → routed there.
+    - `[medium]` `[patch]` merge guard ignores transfers in transit — refuse when the source has an IN_TRANSIT transfer (same check as the tracking switch).
+    - `[low]` `[reject]` REST stock/transfer/count endpoints do not redirect merged ids — merged products are archived and hidden; only stale clients call them; spec scope is sales + sync.
+    - `[medium]` `[patch]` redirected sale lines keep the source `variantId` — drop the variant on a merge redirection (REST and sync).
+    - `[low]` `[reject]` supplier links/thresholds stay on the source — data kept, history intact; re-linking is a manual owner action.
+    - `[medium]` `[patch]` lookup N+1 — grouped with the patterns entry; several products sharing a code → most recent visible one (non-unique by design, documented).
+    - `[low]` `[patch]` per-operation sync pre-queries — grouped with the patterns entry.
+    - `[low]` `[patch]` backfill locks — grouped. Missing tests (crossed merges, refusals) — patched below; audit only on the source row — `[low]` `[reject]` both names are in the details; endpoints.md/spec outside the diff — `[false]` `[reject]` excluded on purpose, committed with the change.
+  - Edge case hunter:
+    - `[medium]` `[patch]` unlocked stock check — grouped. `[medium]` `[patch]` transfers in transit — grouped.
+    - `[low]` `[reject]` an update that read the source before a concurrent merge can write `archived=false` — narrow race; `merged_into_id` is not writable by JPA so redirection still holds; accepted.
+    - `[medium]` `[patch]` variantId on REST and sync redirections — grouped.
+    - `[medium]` `[patch]` redirected edits overwrite target barcode/tracking — grouped.
+    - `[low]` `[reject]` non-canonical UUID text in payloads — clients send canonical UUIDs (existing alias redirection has the same contract).
+    - `[low]` `[reject]` merge committed during a batch — window of one batch; next push lands on the target.
+    - `[low]` `[reject]` merge target missing (drifted tenant without FK) in restore paths — FK present on every normal tenant; drifted copies cannot be merged into.
+    - `[low]` `[reject]` CreateOrRestore with missing target — same.
+    - `[low]` `[reject]` code mismatch — as specified (see above).
+    - `[medium]` `[patch]` backfill flips new products — grouped.
+    - `[low]` `[reject]` tenant without V2 columns keeps the job failing — V2 is a foundation script applied at boot before the job.
+    - `[low]` `[patch]` key longer than 250 after NFD expansion — truncate to 250.
+    - `[low]` `[patch]` REST `@Size` on the raw barcode before trim — rely on `ProductKeys.cleanBarcode`.
+    - `[medium]` `[defer]` merge open to EMPLOYEE — grouped (→ 19-5b).
+    - `[low]` `[reject]` `UNARCHIVE_PRODUCT` on a merged product rejected vs « no operation rejected » — the spec's explicit rule refuses resurrecting a merged product; a stale (pre-merge) unarchive is accepted as a no-op.
+    - `[false]` `[reject]` NBSP-only names keep a null key — a blank name is refused at creation (`@NotBlank` + domain trim check); no such row.
+    - `[false]` `[reject]` (duplicate) endpoints.md not in the diff — generated file, committed.
+  - Verification gap:
+    - `[low]` `[patch]` PATCH with `trackStock` + valid barcode untested — add the case.
+    - `[low]` `[patch]` re-creating a merged name whose target was later archived untested (REST and sync) — add both cases.
+    - `[low]` `[patch]` threshold DTO JSON test never uses non-default 20.1 values — use the full constructor.
+    - `[low]` `[reject]` backfill rerun flips prices — grouped with the medium entry (patched).
+    - `[low]` `[patch]` drafts `priceManual` — grouped.
+    - `[false]` `[reject]` unused `ProductCommandPort.merge` — kept as the module's public command for 24.3; covered by the use-case tests.
+  - Intent alignment (descriptive):
+    - `[false]` `[reject]` « mouvement INITIAL » / zero quantity — epic note 2026-11-01: (a)/(b) are 17.12 non-regression (Design Notes).
+    - `[false]` `[reject]` threshold/export/inventory clauses not re-tested here — pinned by 17.12's `StockTrackingFullContextTest`.
+    - `[false]` `[reject]` Bref `track_stock=false` defaults at import/derivation not exercised — owned by 24.3 / 20.6.
+    - `[low]` `[reject]` `GET /products/{id}` not redirected — returns `mergedIntoId`; clients follow it (mobile section).
+    - `[low]` `[reject]` pull field name unverified against apps — V1 ignores unknown keys; RN contract in the mobile section.
+    - `[false]` `[reject]` merge not key-driven — the AC only needs the key to exist; auto-merge is excluded.
+    - `[low]` `[reject]` lookup returns 404 for an archived (unmerged) product — an archived product is not sellable; intended.
+    - `[low]` `[patch]` Flutter test client export contract test will fail on `PRODUCT_MERGED`/`mergedInto` — sync the test client's mirror (as in 17-2) with a pubspec bump.
+
 ## Design Notes
 
 **Pattern.** Domain service `ProductKeys` (pure function, ported from Bref with its examples as tests); merge = Command in one transaction with pessimistic locks in id order (no deadlock) and a flat redirection map (`merged_into_id` re-pointing keeps every lookup one hop); redirection centralised in one resolver used by REST and by the existing sync push choke point.
@@ -110,3 +178,43 @@ deferred: []
 
 **Manual checks:**
 - Local backend (WhatsApp noop, FCM/Expo off): create with barcode, lookup, merge, lookup of the merged barcode returns the target, sync pull shows `mergedIntoId`.
+
+## Auto Run Result
+
+Status: done
+
+**Summary.** Products gain `barcode` (free reference or barcode, ≤ 100), `product_key` (Bref rules: `bc:<barcode>` for 8–14 digits, else `nm:<normalised name>`), `price_manual` and `merged_into_id` (catalog V2, public mirror V52). The key is computed on create and on name/barcode change and rehydrated from the column otherwise; a one-shot job keyed existing rows (`price_manual=true` for them). New `GET /api/v1/products/lookup?barcode=` (≤ 2 queries, follows the merge) and `POST /api/v1/products/{id}/merge` `{targetId}`: both rows locked in id order, source stock rows locked, refused when the source holds stock or a transfer in transit, already merged or archived target; the source is archived and redirected, chains stay flat, the target inherits the barcode, audited « Produit fusionné ». Every later reference to the merged product lands on the target: REST sales and sync push (one query per batch; redirected lines drop the variant, redirected edits drop name/SKU/barcode/tracking), re-creation by name; unarchive of a merged product refused. Untracked-product rules of 17.12 re-asserted (no stock check, movement or level row; starting stock recorded as « Stock de départ »). The Flutter test client's export/audit mirror was synced (2.0.24+96).
+
+**Files.** New: catalog `V2__products_bref_fields.sql`, `V52__public_templates_products_bref_fields.sql`, `ProductKeys`, `MergeProductsUseCase`, `LookupProductByBarcodeUseCase`, `ProductKeyBackfillJob`, `ProductMergedEvent`, `ProductStockPresence` (catalog api) + inventory `CatalogStockPresenceAdapter`, tests (`ProductKeysTest`, `MergeProductsUseCaseTest`, `LookupProductByBarcodeUseCaseTest`, `ProductBrefFieldsUseCasesTest`, `ProductControllerBrefTest`, `ProductSyncHandlerBrefTest`, `SyncPushServiceMergeRedirectTest`, `CatalogueBrefFullContextTest`, `ProductKeyBackfillJobPostgresTest`, `MergeProductsConcurrencyPostgresTest`). Changed: `Product`, JPA entity/repositories/adapters, `ProductQueryPort`/`ProductCommandPort`/`ProductView`, `ProductController` + DTOs, `CreateOrRestoreProductUseCase`, `UpdateProductUseCase`, `UnarchiveProductUseCase`, `ArchiveProductUseCase`, `CreateDraftProductUseCase`, `ProductSyncHandler`, `SyncPushService`, `ProductDeltaProvider`, `RecordSaleService` (+ input/command flag), `SaleSyncHandler`, `ProductThresholdResponseDto`, `StockLevelRepository`, error codes, audit labels, `export-datasets.json`, tenant-shape fixture, `docs/entitlements/endpoints.md`; `keevo/app` audit/export mirror + version.
+
+**Review.** 50 findings (5 layers): 0 high, 9 medium, 33 low, 8 false. Patched: 6 medium entries (backfill no longer flips new products; redirected edits keep the target's barcode/tracking; redirected lines drop the variant; merge stock guard locked + transfers in transit; lookup ≤ 2 queries; key rehydrated instead of recomputed) and 10 low. Deferred: 1 medium → 19-5b (who may merge). Rejected: 33 (reasons in the triage log).
+
+**Follow-up review: recommended (true)** — 6 medium patches; unverified risk: concurrent stock writers vs. the merge lock (row lock on `stock_levels` covers existing rows only; a first stock entry racing a merge is not covered) and the sync redirection rules for partially merged batches.
+
+**Verification.** Full suite package by package: 5 965 tests, 0 failures. Flutter test client: `local_export_contract_test.dart` + audit tests green. keevo_dev: catalog V2 history rows removed and V2 re-applied on 362 tenants, 0 failed (the first V2 version had been applied during the device test). Live (WhatsApp noop, FCM/Expo off): create with barcode → `bc:6111234567890`, without → `nm:creme brulee maison 20`, `priceManual: true`; 101-character barcode → 422; lookup → product, unknown → 404 « Aucun produit avec ce code »; merge self → 422, A→B → 200 (B gets the barcode), lookup of A's barcode → B, merge again → 409, merge of a product holding stock → 409 « Ce produit a encore du stock… »; re-creating A's name → answered with B, A stays archived; audit `PRODUCT_MERGED`; sync pull of A → `archived: true, mergedIntoId: B`.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+
+**Ce qui est fait côté API :** un produit peut porter une référence ou un code-barres ; on retrouve un produit en scannant son code ; deux produits en double peuvent être fusionnés : le doublon disparaît du catalogue, ses ventes passées restent, et tout ce qui le visait encore (ventes hors ligne comprises) va sur le produit gardé.
+
+**À utiliser :**
+1. Champs ajoutés aux produits (REST `GET/POST/PATCH /api/v1/products`, synchro `CREATE_PRODUCT`/`UPDATE_PRODUCT`, pull `products`) : `barcode` (texte ≤ 100, facultatif ; absent = inchangé, vide = effacé), `productKey` (lecture seule), `priceManual` (lecture seule), `mergedIntoId` (lecture seule, présent sur un produit fusionné). Erreur 422 `VALIDATION_ERROR` « La référence ou le code-barres ne doit pas dépasser 100 caractères ».
+2. Scan : `GET /api/v1/products/lookup?barcode=<code>` → le produit à vendre (déjà redirigé si le code appartenait à un produit fusionné) ; 404 `PRODUCT_NOT_FOUND` « Aucun produit avec ce code » ; 422 si le code est vide.
+3. Fusion : `POST /api/v1/products/{id}/merge` corps `{"targetId":"<produit gardé>"}` (`{id}` = le doublon) → 200 avec le produit gardé. Erreurs : 422 (même produit), 404 (produit inconnu), 409 `PRODUCT_MERGE_INVALID` avec le message (doublon déjà fusionné, produit gardé archivé, « Ce produit a encore du stock : mettez-le à zéro avant de le fusionner », « Ce produit a un transfert en cours : terminez-le avant de le fusionner »). Lecteur : 403.
+4. Restaurer un produit fusionné : REST 409 `PRODUCT_MERGE_INVALID` « Ce produit a été fusionné avec « X » » ; synchro `REJECTED` `PRODUCT_MERGED`.
+Code : `keevo/backend/src/main/java/com/keevo/catalog/product/adapter/in/web/ProductController.java`, `MergeProductsUseCase.java`, `LookupProductByBarcodeUseCase.java`, `ProductKeys.java`.
+
+**À implémenter côté mobile :**
+1. Champ « Référence ou code-barres » dans la fiche produit ; scan à la caisse via `lookup` (hors ligne : chercher d'abord dans le catalogue local par `barcode`).
+2. Écran « Fusionner avec… » depuis la fiche d'un produit (choisir le produit gardé, confirmation expliquant que l'opération est définitive).
+3. Au pull, un produit avec `mergedIntoId` : le retirer des listes et rediriger localement toute référence (panier en cours, raccourcis) vers `mergedIntoId`. Les opérations déjà en file peuvent garder l'ancien identifiant : le serveur les redirige.
+4. Aucune donnée technique à l'écran (ni `productKey`, ni identifiants).
+
+**Critères d'acceptation mobile :**
+- Given deux produits en double, when l'owner fusionne A dans B, then A disparaît du catalogue après synchro et scanner le code de A ouvre B.
+- Given une vente hors ligne de A faite avant la synchro, when elle remonte, then elle est enregistrée sur B.
+- Mise en place : `curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"targetId":"<B>"}' $API/api/v1/products/<A>/merge`.
+
+**Clé de suivi mobile :** `m20-1-catalogue-sans-stock-cle-fusion`.

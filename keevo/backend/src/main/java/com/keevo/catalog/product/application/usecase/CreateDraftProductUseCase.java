@@ -133,6 +133,10 @@ public class CreateDraftProductUseCase {
                 false,
                 ProductStatus.DRAFT,
                 0,    // minimumThreshold — set at promotion or via UpdateProductUseCase
+                true, // tracked
+                null, // no barcode
+                command.price() != null && command.price() > 0, // Story 20.1 — manual only when a price was typed
+                null, // not merged
                 now,
                 now
         );

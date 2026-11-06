@@ -86,6 +86,12 @@ public class UnarchiveProductUseCase {
         if (!Boolean.TRUE.equals(product.getArchived())) {
             return false;
         }
+        // Story 20.1: a merged product stays archived — its history lives on through its merge target
+        if (product.isMerged()) {
+            String with = productRepository.findById(product.getMergedIntoId())
+                    .map(t -> "« " + t.getName() + " »").orElse("un autre produit");
+            throw DomainException.userFacing(ErrorCode.PRODUCT_MERGE_INVALID, "Ce produit a été fusionné avec " + with);
+        }
 
         if (product.getStatus() == ProductStatus.ACTIVE) {
             var plan = tenantPlanQuery.findCurrentPlan(tenantId)

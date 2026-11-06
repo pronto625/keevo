@@ -19,6 +19,8 @@ import java.util.UUID;
  * @param occurredAt         when the sale was made (offline push) — null → now
  * @param allowNegativeStock true only for an offline sale that already happened: applied even if
  *                           the server stock is short instead of failing with {@code INSUFFICIENT_STOCK}
+ * @param mergesResolved     Story 20.1 — the product ids were already redirected to their merge targets (the sync
+ *                           push resolves them once per batch): the sale does not resolve them again
  */
 public record RecordSaleInput(
         UUID saleId,
@@ -31,8 +33,17 @@ public record RecordSaleInput(
         SaleState requestedStatus,
         List<SaleLineInput> items,
         Instant occurredAt,
-        boolean allowNegativeStock
+        boolean allowNegativeStock,
+        boolean mergesResolved
 ) {
+    /** Without the merge flag: the sale resolves merged products itself. */
+    public RecordSaleInput(UUID saleId, UUID actorId, UUID storeId, UUID clientId, SalePaymentMode paymentMode,
+                           String mobileMoneyRef, int discountAmount, SaleState requestedStatus,
+                           List<SaleLineInput> items, Instant occurredAt, boolean allowNegativeStock) {
+        this(saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef, discountAmount, requestedStatus, items,
+                occurredAt, allowNegativeStock, false);
+    }
+
     public RecordSaleInput {
         if (saleId == null || storeId == null) {
             throw new DomainException(ErrorCode.VALIDATION_ERROR, "Sale id and store id are required");

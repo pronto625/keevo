@@ -28,4 +28,10 @@ public interface StockLevelRepository {
 
     /** Find all stock levels for a store (used by inventory counting). */
     List<StockLevel> findAllByStoreId(UUID storeId);
+
+    /**
+     * Story 20.1 — locks every stock level of the product ({@code FOR UPDATE}, caller's transaction) and answers whether
+     * one of them is non-zero (one query; a product has one level per store).
+     */
+    boolean lockAndHasNonZeroStock(UUID productId);
 }

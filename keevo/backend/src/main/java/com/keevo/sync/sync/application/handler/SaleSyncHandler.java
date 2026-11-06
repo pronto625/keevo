@@ -97,7 +97,8 @@ public class SaleSyncHandler extends AbstractSyncOperationHandler {
                 saleId, actorId, storeId, clientId, paymentMode, mobileMoneyRef,
                 discountAmount, requestedStatus, saleItems,
                 resolveClientTime(p.get("occurredAt"), operation.clientTimestamp()),
-                true));
+                true,
+                true)); // 20.1: product ids already redirected to their merge targets by the push (once per batch)
 
         // Notify owner when sale contained originally-draft products.
         @SuppressWarnings("unchecked")
