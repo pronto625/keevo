@@ -101,7 +101,7 @@ class InvoicePdfRendererTest {
         assertThat(draft).contains("FACTURE — BROUILLON", "BROUILLON — sans valeur", "Non émise");
         String cancelled = text(render(issued().cancel("Erreur de client", T1), null));
         assertThat(cancelled).contains("ANNULÉE", "Motif : Erreur de client", "FAC-2026-000001");
-        String paid = text(render(issued().pay("Mobile Money", Instant.parse("2026-11-02T10:00:00Z")), null));
+        String paid = text(render(issued().markedPaid(Instant.parse("2026-11-02T10:00:00Z"), "Mobile Money", Instant.parse("2026-11-02T10:00:00Z")), null));
         assertThat(paid).contains("PAYÉE le 02/11/2026", "Mode de paiement : Mobile Money");
     }
 

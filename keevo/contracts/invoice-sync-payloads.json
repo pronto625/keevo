@@ -158,5 +158,42 @@
         "reason": "Le client a renoncé"
       }
     }
+  ],
+  "paymentDescription": "Story 20.4 — collection operations (acompte, paiements partiels, échéancier), queued by the Bref React Native app (the Flutter V1 test client does not queue them; it keeps PAY_INVOICE, which now settles the whole invoice) and read by InvoiceSyncHandler (backend test). ADD_INVOICE_PAYMENT: paymentId chosen on the device, amount in XAF francs, exactly one of paidAt (a payment received, yyyy-MM-dd, issued invoice only) or dueDate (a scheduled instalment, draft or issued invoice); replayed with the same content → APPLIED without a second row, same paymentId with another content → REJECTED VALIDATION_ERROR, above what remains due → REJECTED OVERPAYMENT. SETTLE_INVOICE_PAYMENT: the instalment paymentId is paid on paidAt (today when absent), method replaces its own when given; already paid → APPLIED unchanged. serverEntityId = the invoice id.",
+  "paymentOperations": [
+    {
+      "name": "addDeposit",
+      "operationType": "ADD_INVOICE_PAYMENT",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "paymentId": "7a4c2e19-3b5d-4f60-9e81-0c2d4b6f8a13",
+        "amount": 30000,
+        "paidAt": "2026-11-06",
+        "method": "Mobile Money",
+        "note": "Acompte"
+      }
+    },
+    {
+      "name": "scheduleInstalment",
+      "operationType": "ADD_INVOICE_PAYMENT",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "paymentId": "c8e1f5a2-6d4b-4c39-8a7e-2f9b0d3e5c61",
+        "amount": 20000,
+        "dueDate": "2026-12-15",
+        "method": null,
+        "note": "Deuxième versement"
+      }
+    },
+    {
+      "name": "settleInstalment",
+      "operationType": "SETTLE_INVOICE_PAYMENT",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "paymentId": "c8e1f5a2-6d4b-4c39-8a7e-2f9b0d3e5c61",
+        "paidAt": "2026-11-06",
+        "method": "Espèces"
+      }
+    }
   ]
 }

@@ -18,6 +18,8 @@ final class InvoicingTables {
     static final String CREDIT_NOTE_ITEMS = "credit_note_items";
     static final String CREDIT_NOTE_COUNTERS = "credit_note_counters";
     static final String SALE_STATES = "sale_invoice_states";
+    /** Story 20.4 — payments received and scheduled instalments. */
+    static final String PAYMENTS = "invoice_payments";
 
     private InvoicingTables() {
     }

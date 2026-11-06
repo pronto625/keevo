@@ -76,7 +76,7 @@ class InvoiceQuoteTest {
         for (Runnable action : List.<Runnable>of(
                 () -> q.issue("FAC-2026-000001", LocalDate.of(2026, 11, 6), SELLER, T1),
                 () -> q.assertIssuable(SELLER),
-                () -> q.pay("Espèces", T1),
+                () -> q.markedPaid(T1, "Espèces", T1),
                 q::assertSendable,
                 () -> CreditNote.creditLines(q, List.of(), null))) {
             assertThatThrownBy(action::run).isInstanceOf(DomainException.class).satisfies(e -> {

@@ -7,6 +7,7 @@ import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
+import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.module.InvoicingModule;
 import com.keevo.shared.application.port.sync.DeltaEntityProvider;
@@ -87,10 +88,14 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
                 .toList();
         Map<java.util.UUID, InvoiceQueryUseCase.Credits> credits = live.isEmpty() ? Map.of() : queries.credits(live);
         InvoicingSettings current = live.isEmpty() ? null : settings.current();
+        // Story 20.4 — payments and states of the page: one batched query
+        Map<java.util.UUID, PaymentStateCalculator.Collection> collections =
+                live.isEmpty() ? Map.of() : queries.collections(live, credits);
         List<Map<String, Object>> rows = page.stream().map(d -> d.deleted() ? tombstone(d.invoice())
                 : objectMapper.convertValue(InvoiceResponseDto.fromDomain(d.invoice(), current,
                         credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).notes(),
-                        credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).fullyCredited()),
+                        credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).fullyCredited(),
+                        collections.get(d.invoice().id())),
                 ROW)).toList();
         Invoice last = page.get(page.size() - 1).invoice();
         return new Page(rows, more ? new Position(last.updatedAt(), last.id().toString()) : null);

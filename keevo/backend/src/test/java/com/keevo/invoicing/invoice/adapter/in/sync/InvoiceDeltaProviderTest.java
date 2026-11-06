@@ -54,6 +54,16 @@ class InvoiceDeltaProviderTest {
         when(invoices.tablesExist()).thenReturn(true);
         when(settings.current()).thenReturn(InvoicingSettings.defaults());
         when(queries.credits(any())).thenReturn(Map.of());
+        // Story 20.4 — the collection of each invoice of the page (here: no payment row)
+        when(queries.collections(any(), any())).thenAnswer(a -> {
+            Map<UUID, com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator.Collection> out =
+                    new java.util.HashMap<>();
+            for (Invoice i : a.<java.util.Collection<Invoice>>getArgument(0)) {
+                out.put(i.id(), com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator.view(i, 0, null,
+                        List.of(), java.time.LocalDate.parse("2026-11-06")));
+            }
+            return out;
+        });
     }
 
     private static Invoice draft(Instant updatedAt) {

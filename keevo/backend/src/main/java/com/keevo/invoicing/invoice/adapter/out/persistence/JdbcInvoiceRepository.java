@@ -65,6 +65,13 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     private static final String LIST_DATE =
             "(CASE WHEN kind = 'QUOTE' THEN CAST(created_at AT TIME ZONE 'Africa/Douala' AS date) ELSE issue_date END)";
 
+    /**
+     * Story 20.4 — the collection state of an issued / paid invoice as listed: the stored one, else PAID for status PAID
+     * and UNPAID for ISSUED (legacy rows). Same expression as the index idx_invoices_payment_state_list (V10).
+     */
+    static final String PAYMENT_STATE =
+            "COALESCE(payment_state, CASE status WHEN 'PAID' THEN 'PAID' ELSE 'UNPAID' END)";
+
     /** Story 15.5b — a soft-deleted draft is invisible to every read but {@link #findAnyById} and the delta. */
     private static final String LIVE = " AND deleted_at IS NULL";
 
@@ -259,6 +266,13 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         if (criteria.status() != null) {
             conditions.add("status = ?");
             filter.add(criteria.status().name());
+        }
+        if (criteria.paymentState() != null) {
+            // Story 20.4 — stored state, or read through the status when never computed; one expression served by the
+            // ordered index idx_invoices_payment_state_list (V10)
+            conditions.add("kind = 'INVOICE' AND status IN ('ISSUED', 'PAID') AND superseded_at IS NULL AND "
+                    + PAYMENT_STATE + " = ?");
+            filter.add(criteria.paymentState().name());
         }
         if (criteria.saleId() != null) {
             conditions.add("source_sale_id = ? AND superseded_at IS NULL");

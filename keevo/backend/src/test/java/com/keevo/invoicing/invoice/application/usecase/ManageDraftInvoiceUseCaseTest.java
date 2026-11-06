@@ -43,6 +43,8 @@ class ManageDraftInvoiceUseCaseTest {
     private final InvoicingSettingsRepository settings = mock(InvoicingSettingsRepository.class);
     private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
     private final InvoiceClientResolver clients = mock(InvoiceClientResolver.class);
+    private final com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository payments =
+            mock(com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository.class);
     private ManageDraftInvoiceUseCase useCase;
 
     private final UUID id = UUID.randomUUID();
@@ -52,7 +54,8 @@ class ManageDraftInvoiceUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new ManageDraftInvoiceUseCase(invoices, settings, events, Clock.fixed(NOW, ZoneOffset.UTC), clients);
+        useCase = new ManageDraftInvoiceUseCase(invoices, settings, events, Clock.fixed(NOW, ZoneOffset.UTC), clients,
+                payments);
         when(settings.find()).thenReturn(Optional.empty());
         when(clients.resolve(any(), eq(TENANT))).thenReturn(client);
     }
@@ -93,6 +96,27 @@ class ManageDraftInvoiceUseCaseTest {
         assertThat(useCase.create(id, content, null, TENANT).id()).isEqualTo(id);
         verify(events).publishEvent(any(Object.class));
         verify(invoices, never()).insert(any());
+    }
+
+    @Test
+    @DisplayName("20.4 — a draft edited below its scheduled instalments → 409 OVERPAYMENT, nothing written")
+    void editBelowInstalments() {
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(existing()));
+        when(clients.resolve(any(), eq(TENANT), any())).thenReturn(client);
+        when(payments.findByInvoice(id)).thenReturn(List.of(com.keevo.invoicing.invoice.domain.model.InvoicePayment
+                .scheduled(UUID.randomUUID(), id, 1_500, java.time.LocalDate.parse("2026-12-01"), null, null)));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.update(id, content, TENANT))
+                .isInstanceOfSatisfying(com.keevo.shared.domain.exception.DomainException.class, e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(com.keevo.shared.domain.exception.ErrorCode.OVERPAYMENT);
+                    assertThat(e.getUserMessage()).startsWith("Les échéances programmées (1\u202F500 FCFA) dépassent");
+                });
+        verify(invoices, never()).updateDraft(any());
+
+        when(payments.findByInvoice(id)).thenReturn(List.of(com.keevo.invoicing.invoice.domain.model.InvoicePayment
+                .scheduled(UUID.randomUUID(), id, 1_000, java.time.LocalDate.parse("2026-12-01"), null, null)));
+        useCase.update(id, content, TENANT);
+        verify(invoices).updateDraft(any());
     }
 
     // ── Story 20.3 — quotes and the optimistic edit check ─────────────────────────────────────────────────────

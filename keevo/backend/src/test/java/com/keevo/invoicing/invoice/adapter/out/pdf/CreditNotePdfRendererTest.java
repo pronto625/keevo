@@ -46,7 +46,7 @@ class CreditNotePdfRendererTest {
 
     private static Invoice paid() {
         return Invoice.draft(UUID.randomUUID(), CLIENT, LINES, SELLER, null, T0)
-                .issue("FAC-2026-000005", LocalDate.of(2026, 10, 30), SELLER, T1).pay("Espèces", T1);
+                .issue("FAC-2026-000005", LocalDate.of(2026, 10, 30), SELLER, T1).markedPaid(T1, "Espèces", T1);
     }
 
     private static String text(byte[] pdf) throws IOException {

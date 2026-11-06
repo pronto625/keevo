@@ -133,6 +133,7 @@ public final class ErrorMessages {
             Map.entry("INVOICE_INVALID_TRANSITION",  "Cette action n'est pas possible pour une facture {status}"),
             Map.entry("INVOICE_NOT_ISSUABLE",        "La facture ne peut pas être émise : {reason}"),
             Map.entry("INVOICE_PAYMENT_DATE_INVALID", "Date de paiement invalide : {reason}"),
+            Map.entry("OVERPAYMENT",                 "Le montant dépasse ce qui reste dû sur la facture (reste dû : {remaining} FCFA)"),
             Map.entry("INVOICE_PHONE_REQUIRED",      "Indiquez le numéro WhatsApp du client"),
             Map.entry("INVOICE_PHONE_INVALID",       "Le numéro WhatsApp du client n'est pas valide"),
             Map.entry("INVOICE_LINK_INVALID",        "Ce lien de facture n'est pas valide"),

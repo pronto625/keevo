@@ -283,23 +283,35 @@ public record Invoice(
                 null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
     }
 
-    /** ISSUED → PAID, paid now. */
-    public Invoice pay(String method, Instant now) {
-        return pay(method, null, now);
-    }
-
     /**
-     * ISSUED → PAID. Story 15.5: {@code paidOn} = the day the client paid (calendar day in Africa/Douala), for a payment
-     * recorded later; {@code null} or today = paid {@code now}; an earlier day = paid at noon of that day (a time that
-     * shows the same day in any time zone of the region), or at the issue time when the invoice was issued that day
-     * after noon. Refused ({@code INVOICE_PAYMENT_DATE_INVALID}): a day after
-     * today, or before the issue date.
+     * Story 20.4 — refuses to record a payment received: an invoice (not a quote) {@code ISSUED} only →
+     * {@code INVOICE_INVALID_TRANSITION} otherwise.
      */
-    public Invoice pay(String method, LocalDate paidOn, Instant now) {
+    public void assertCollectable() {
         assertInvoice();
         if (status != InvoiceStatus.ISSUED) {
             throw invalidTransition();
         }
+    }
+
+    /**
+     * Story 20.4 — refuses to schedule an instalment: an invoice (not a quote) {@code DRAFT} or {@code ISSUED} only →
+     * {@code INVOICE_INVALID_TRANSITION} otherwise.
+     */
+    public void assertSchedulable() {
+        assertInvoice();
+        if (status != InvoiceStatus.DRAFT && status != InvoiceStatus.ISSUED) {
+            throw invalidTransition();
+        }
+    }
+
+    /**
+     * Story 15.5 / 20.4 — when a payment made on {@code paidOn} (calendar day in Africa/Douala) is recorded at
+     * {@code now}: {@code null} or today = {@code now}; an earlier day = noon of that day (a time that shows the same
+     * day in any time zone of the region), or the issue time when the invoice was issued that day after noon. Refused
+     * ({@code INVOICE_PAYMENT_DATE_INVALID}): a day after today, or before the issue date.
+     */
+    public Instant paymentInstant(LocalDate paidOn, Instant now) {
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
         Instant paidAt = now;
         if (paidOn != null && !paidOn.equals(today)) {
@@ -316,6 +328,15 @@ public record Invoice(
                 paidAt = issuedAt;
             }
         }
+        return paidAt;
+    }
+
+    /**
+     * Story 20.4 — ISSUED → PAID once fully paid: {@code paidAt} / {@code method} = those of the latest payment (the
+     * V1 fields {@code paidAt} / {@code paymentMethod} keep their meaning).
+     */
+    public Invoice markedPaid(Instant paidAt, String method, Instant now) {
+        assertCollectable();
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt, InvoicingSettings.trimToNull(method),
                 null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId);
@@ -336,6 +357,19 @@ public record Invoice(
      * more ({@code INVOICE_INVALID_TRANSITION}): its remaining part is credited by another credit note.
      */
     public Invoice cancel(String reason, Instant now, boolean hasCreditNotes) {
+        return cancel(reason, now, hasCreditNotes, false);
+    }
+
+    /** French refusal of the cancellation of an invoice with payments received (Story 20.4). */
+    public static final String PAYMENTS_RECORDED =
+            "Des paiements sont enregistrés sur cette facture : établissez un avoir";
+
+    /**
+     * Story 20.4 — same, and an ISSUED invoice with at least one payment received ({@code hasPayments}) cannot be
+     * cancelled ({@code INVOICE_INVALID_TRANSITION} « Des paiements sont enregistrés sur cette facture : établissez un
+     * avoir »).
+     */
+    public Invoice cancel(String reason, Instant now, boolean hasCreditNotes, boolean hasPayments) {
         if (isQuote()) {
             return cancelQuote(reason, now);
         }
@@ -345,6 +379,10 @@ public record Invoice(
         if (hasCreditNotes) {
             throw new DomainException(ErrorCode.INVOICE_INVALID_TRANSITION, "Invoice has credit notes",
                     Map.of("status", "ayant déjà un avoir"));
+        }
+        if (hasPayments) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, PAYMENTS_RECORDED,
+                    Map.of("status", "ayant des paiements"));
         }
         String why = requireCancellationReason(reason);
         return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,

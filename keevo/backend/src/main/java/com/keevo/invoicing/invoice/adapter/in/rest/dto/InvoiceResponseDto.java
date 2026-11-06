@@ -5,6 +5,7 @@ import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
+import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
 import com.keevo.invoicing.invoice.domain.model.SellerSnapshot;
 import com.keevo.invoicing.invoice.domain.port.out.CreditNoteRepository;
 
@@ -30,6 +31,12 @@ import java.util.UUID;
  * reference of a quote ({@code DV-XXXXXXXX}, {@code null} for an invoice); {@code convertedInvoiceId} /
  * {@code convertedAt} = the invoice a converted quote became; {@code sourceQuoteId} = on that invoice, the quote it
  * comes from.
+ *
+ * <p>Story 20.4 (additive): {@code paymentState} ({@code UNPAID} | {@code PARTIAL} | {@code PAID} | {@code OVERDUE},
+ * {@code null} for a draft, a cancelled invoice or a quote) and its French {@code paymentStateLabel};
+ * {@code amountPaid} (sum of the payments received), {@code amountDue} ({@code totalTtc − creditedTtc});
+ * {@code payments} = payments received and scheduled instalments, oldest first ({@code legacy}: the single payment of an
+ * invoice paid before 20.4, without id).
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -67,7 +74,17 @@ public record InvoiceResponseDto(
         String quoteReference,
         UUID convertedInvoiceId,
         Instant convertedAt,
-        UUID sourceQuoteId) {
+        UUID sourceQuoteId,
+        String paymentState,
+        String paymentStateLabel,
+        long amountPaid,
+        long amountDue,
+        List<Payment> payments) {
+
+    /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
+    public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
+                          boolean legacy) {
+    }
 
     /** Story 14.7 — a credit note issued on the invoice. */
     public record CreditNote(UUID id, String number, Instant issuedAt, long totalTtc, String reason) {
@@ -84,22 +101,19 @@ public record InvoiceResponseDto(
                        BigDecimal vatRate, String vatMention, long totalHt, long totalVat, long totalTtc) {
     }
 
-    /** @param currentSettings the seller's current settings (warnings of a draft); ignored once issued */
-    public static InvoiceResponseDto fromDomain(Invoice i, InvoicingSettings currentSettings) {
-        return fromDomain(i, currentSettings, List.of(), false);
-    }
-
     /**
      * @param currentSettings the seller's current settings (warnings of a draft); ignored once issued
      * @param creditNotes     the credit notes of the invoice (Story 14.7), oldest first
      * @param fullyCredited   nothing remains to credit on the invoice (domain predicate)
+     * @param collection      Story 20.4 — the invoice's collection ({@code InvoiceQueryUseCase#collections}), required
      */
     public static InvoiceResponseDto fromDomain(Invoice i, InvoicingSettings currentSettings,
                                                 List<CreditNoteRepository.Summary> creditNotes,
-                                                boolean fullyCredited) {
+                                                boolean fullyCredited, PaymentStateCalculator.Collection collection) {
         List<CreditNote> notes = creditNotes == null ? List.of() : creditNotes.stream()
                 .map(c -> new CreditNote(c.id(), c.number(), c.issuedAt(), c.totalTtc(), c.reason())).toList();
         long credited = notes.stream().mapToLong(CreditNote::totalTtc).sum();
+        PaymentStateCalculator.Collection paid = java.util.Objects.requireNonNull(collection, "collection");
         ClientInfo c = i.client();
         SellerSnapshot s = i.seller();
         return new InvoiceResponseDto(i.id(), i.number(), i.status().name(), i.status().label(i.kind()),
@@ -114,7 +128,10 @@ public record InvoiceResponseDto(
                 i.complianceWarnings(currentSettings), i.delivery().lastSentAt(),
                 InvoicePhones.mask(i.delivery().lastSentTo()), i.delivery().sendCount(), i.sourceSaleId(),
                 credited, fullyCredited, notes, i.supersededAt(), i.kind().name(), i.quoteReference(),
-                i.convertedInvoiceId(), i.convertedAt(), i.sourceQuoteId());
+                i.convertedInvoiceId(), i.convertedAt(), i.sourceQuoteId(),
+                paid.state() == null ? null : paid.state().name(), paid.stateLabel(), paid.amountPaid(),
+                paid.amountDue(), paid.payments().stream().map(p -> new Payment(p.id(), p.amount(), p.dueDate(),
+                        p.paidAt(), p.method(), p.note(), p.legacy())).toList());
     }
 
     private static Line line(InvoiceLine l) {

@@ -50,7 +50,7 @@ class InvoicingMigrationPostgresIntegrationTest {
     private static final String B = "kv_invb02";
     private static final Map<String, UUID> IDS = Map.of(A, UUID.randomUUID(), B, UUID.randomUUID());
     private static final List<String> TABLES = List.of("credit_note_counters", "credit_note_items",
-            "credit_notes", "invoice_counters", "invoice_items", "invoices", "invoicing_settings",
+            "credit_notes", "invoice_counters", "invoice_items", "invoice_payments", "invoices", "invoicing_settings",
             "sale_invoice_states");
 
     private static DataSource dataSource;
@@ -117,18 +117,18 @@ class InvoicingMigrationPostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("trial tenant without row: tables + history V1..V9 (20.3), no tenant_modules row; re-provision is a no-op")
+    @DisplayName("trial tenant without row: tables + history V1..V10 (20.4), no tenant_modules row; re-provision is a no-op")
     void trialTenantNoRow() {
         assertThat(tables(A)).isEmpty();
         assertThat(migrations.currentVersion(A, "invoicing")).isNull();
-        assertThat(migrations.latestVersion("invoicing")).isEqualTo("9");
+        assertThat(migrations.latestVersion("invoicing")).isEqualTo("10");
 
         ProvisioningResult result = provisioner.provision(A, "invoicing");
 
-        assertThat(result.migrationsApplied()).isEqualTo(9);
-        assertThat(result.toVersion()).isEqualTo("9");
+        assertThat(result.migrationsApplied()).isEqualTo(10);
+        assertThat(result.toVersion()).isEqualTo("10");
         assertThat(tables(A)).containsExactlyElementsOf(TABLES);
-        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("9");
+        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("10");
         // Story 15.5b — the keyset index of the invoices sync pull, as SyncKeysetIndexJob expects it
         assertThat(jdbc.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname = ? AND indexname = ?",
                 String.class, A, "idx_invoices_sync_keyset"))
@@ -147,7 +147,7 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM')", IDS.get(A));
         provisioner.provision(A, "invoicing");
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("9");
+                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("10");
     }
 
     @Test

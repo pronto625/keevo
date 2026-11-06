@@ -24,6 +24,7 @@ import com.keevo.shared.event.catalog.invoicing.CreditNoteIssuedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.QuoteCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.QuoteConvertedEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoicePaymentRecordedEvent;
 import com.keevo.shared.event.catalog.invoicing.QuoteCreatedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCreatedEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
@@ -971,6 +972,38 @@ public class AuditEventListener {
                 null, event.number(), map("reason", event.reason()), null);
         log.info("AUDIT: invoice_cancelled number={} tenantId={} actorId={}", event.number(), event.tenantId(),
                 event.actorId());
+    }
+
+    /**
+     * Story 20.4 — a payment received, an instalment scheduled or settled. Label = the invoice number (« brouillon de
+     * X » for an instalment scheduled on a draft), detail « 30 000 FCFA reçus le 06/11/2026 » / « 50 000 FCFA à régler
+     * le 30/11/2026 » / « 50 000 FCFA réglés le 06/11/2026 » (never a UUID).
+     */
+    @EventListener
+    public void on(InvoicePaymentRecordedEvent event) {
+        String action = switch (event.kind()) {
+            case RECEIVED -> "INVOICE_PAYMENT_RECEIVED";
+            case SCHEDULED -> "INVOICE_INSTALMENT_SCHEDULED";
+            case SETTLED -> "INVOICE_INSTALMENT_SETTLED";
+        };
+        String amount = com.keevo.shared.domain.XafAmounts.group(event.amount()) + " FCFA";
+        String detail = switch (event.kind()) {
+            case SCHEDULED -> amount + " à régler le " + (event.dueDate() == null ? "" : PAID_DAY.format(event.dueDate()));
+            case RECEIVED -> amount + " reçus le " + day(event.paidAt());
+            case SETTLED -> amount + " réglés le " + day(event.paidAt());
+        };
+        write(event.actorId(), event.tenantId(), action, "Invoice", event.invoiceId(),
+                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+                        "amount", event.amount(), "paymentMethod", event.method()),
+                null, event.number() != null ? event.number()
+                        : event.clientName() != null ? "brouillon de " + event.clientName() : "brouillon de facture",
+                map("detail", detail), null);
+        log.info("AUDIT: {} number={} tenantId={} actorId={}", action.toLowerCase(java.util.Locale.ROOT),
+                event.number(), event.tenantId(), event.actorId());
+    }
+
+    private static String day(java.time.Instant at) {
+        return at == null ? "" : PAID_DAY.format(at.atZone(com.keevo.shared.domain.time.KeevoZones.WAT));
     }
 
     // ── Quotes (Story 20.3) — label = the quote reference DV-XXXXXXXX (never a UUID) ──────────────────────

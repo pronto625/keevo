@@ -33,9 +33,11 @@ public class IssueCreditNoteUseCase {
     private final CreditNoteRepository creditNotes;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final InvoicePaymentUseCase payments;
 
     public IssueCreditNoteUseCase(InvoiceRepository invoices, CreditNoteRepository creditNotes,
-                                  ApplicationEventPublisher events, Clock clock) {
+                                  ApplicationEventPublisher events, Clock clock, InvoicePaymentUseCase payments) {
+        this.payments = payments;
         this.invoices = invoices;
         this.creditNotes = creditNotes;
         this.events = events;
@@ -66,11 +68,14 @@ public class IssueCreditNoteUseCase {
         String why = CreditNote.requireReason(reason);
         List<CreditNoteLine> lines = CreditNote.creditLines(invoice, creditNotes.linesOfInvoice(invoice.id()),
                 selection); // every refusal happens here, before a number is allocated
+        // Story 20.4 — never more received than owed after it; instalments trimmed to the new amount due
+        payments.beforeCredit(invoice, CreditNote.totals(lines).totalTtc());
         Instant now = clock.instant();
         int year = LocalDate.ofInstant(now, KeevoZones.WAT).getYear();
         CreditNote note = CreditNote.issue(UUID.randomUUID(), CreditNote.number(year, creditNotes.nextNumber(year)),
                 invoice, why, lines, actorId, now, sourceEvent);
         creditNotes.insert(note);
+        payments.refreshAfterCredit(invoice, actorId, tenantId); // Story 20.4: the amount due dropped
         events.publishEvent(new CreditNoteIssuedEvent(note.id(), note.number(), invoice.id(), invoice.number(),
                 note.totals().totalTtc(), actorId, tenantId, now));
         return note;

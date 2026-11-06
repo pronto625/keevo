@@ -363,6 +363,7 @@ development_status:
   m20-1-catalogue-sans-stock-cle-fusion: backlog  # API 808fa41e — champ référence/code-barres, scan via products/lookup, écran « Fusionner avec… », produits fusionnés retirés au pull (mergedIntoId)
   m20-2-crm-etendu-clients-par-etablissement: backlog  # API b2387df8 — champs Bref des fiches clients, liste par établissement (partage), avertissement DUPLICATE_PHONE + pré-contrôle, consentement marketing (REST + SET_CLIENT_MARKETING_CONSENT), re-seed quand le partage change (purge 16-13)
   m20-3-devis: backlog  # API 62b28275 — devis (kind QUOTE, DV-…), liste ?kind=QUOTE|ALL, validation POST /invoices/{id}/convert + CONVERT_QUOTE (idempotent), expectedUpdatedAt → 409 OPTIMISTIC_LOCK, PDF « DEVIS »
+  m20-4-encaissements-echeancier-retard: backlog  # API (commit à reporter) — paymentState/amountPaid/amountDue/payments sur les factures, POST /invoices/{id}/payments + /payments/{paymentId}/settle, ADD_/SETTLE_INVOICE_PAYMENT, filtre ?paymentState=, OVERPAYMENT, notification « Factures en retard »
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -446,10 +447,10 @@ development_status:
   20-1-catalogue-sans-stock-cle-fusion: done  # 2026-11-06 revue 5 couches (50 constats, 6 moyens corrigés, 1 routé → 19-5b), 5 965 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-20-1-catalogue-sans-stock-cle-fusion.md)
   20-2-crm-etendu-consentement: done  # 2026-11-06 build-auto (spec-20-2-crm-etendu-clients-par-etablissement) — revue 5 couches, 20 corrigés, 2 routés (22-5, 20-6), 6 084 tests verts, contrôle live keevo_dev OK
   20-3-devis: done  # 2026-11-06 build-auto (spec-20-3-devis) — revue 5 couches, 18 corrigés, 3 routés (19-5b, 20-12, 20-7), 6 131 tests verts, contrôle live keevo_dev OK
-  20-4-encaissements-echeancier-retard: backlog
+  20-4-encaissements-echeancier-retard: done  # 2026-11-06 build-auto (spec-20-4) — revue 5 couches, 19 corrigés, 1 routé (20-7), 6 178 tests verts, contrôle live keevo_dev OK (acompte, retard + notification, règlement V1)
   20-5-remise-livraison-tva-echeance: backlog
   20-6-derivation-catalogue-crm: backlog  # 2026-11-06 revue 20-2 — 1 item (liste et recherche clients non paginées, LIKE sans index trigramme)
-  20-7-modeles-signatures-liens-publics: backlog  # 2026-11-06 revue 20-3 — 1 item (envoi d un devis au client : lien public / WhatsApp)
+  20-7-modeles-signatures-liens-publics: backlog  # 2026-11-06 revue 20-4 — +1 item (PDF et lien public : acompte, paiements, reste dû, échéancier) | 2026-11-06 revue 20-3 — 1 item (envoi d un devis au client : lien public / WhatsApp)
   20-8-envoi-sms-email: backlog
   20-9-reporting-multi-source: backlog
   20-10-module-expenses: backlog

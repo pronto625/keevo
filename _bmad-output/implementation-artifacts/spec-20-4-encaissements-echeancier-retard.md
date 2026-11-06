@@ -2,14 +2,20 @@
 title: '20-4 Invoice collections — deposit, partial payments, schedule, overdue job'
 type: 'feature'
 created: '2026-11-06'
-status: 'ready-for-dev'
+status: 'done'
+baseline_revision: 'e5a48f85210c3869e821017e2859e30dff14d9f0'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-20-3-devis.md'
 warnings: ['oversized']
-deferred: []
+deferred:
+  - summary: >-
+      The invoice PDF and public link show neither deposits, payments, balance due nor the schedule.
+    evidence: |-
+      InvoiceDocumentUseCase and the templates are untouched by 20.4. Routed to 20-7 (rendering templates, public links).
+    severity: medium
 ---
 
 <intent-contract>
@@ -90,7 +96,25 @@ deferred: []
 - Audit events/labels + export contract + Flutter test-client mirror + `pubspec` bump; `docs/entitlements/endpoints.md` regenerated.
 - `keevo/contracts/invoice-payment-cases.json` + backend test running every case.
 - Tests: unit (calculator, rules), use-case per matrix row, full-context REST + sync (replay, conflicting replay, V1 pay settling, legacy read), Postgres (V10 on an existing schema with PAID/ISSUED/CANCELLED invoices — nothing altered; job marks overdue once and notifies once; concurrent payments on one invoice never exceed the due).
-- Spec section `## Mobile (React Native — dépôt AI/bref)` and sprint key `m20-4-encaissements-echeancier-retard` (finalize).
+- Spec section `## Auto Run Result
+
+Status: done
+
+**Change:** `invoice_payments` (invoicing V10: received payments and scheduled instalments) + stored `invoices.payment_state` recomputed under the invoice row lock; amount due = total TTC − credited; invariant « rows ≤ amount due » (409 `OVERPAYMENT`); legal status moves to PAID with `paid_at`/`payment_method` when fully paid; OVERDUE set only by the daily job (07:00 WAT, ShedLock, ENABLED tenants, superseded and stored-PAID excluded) with ONE owner notification per tenant per run; credit notes refused when more was received than the new due, otherwise unpaid instalments trimmed latest first; draft edits below scheduled instalments refused; past due dates refused; V1 `pay`/`PAY_INVOICE` settle everything; cancel refused once a payment is received; legacy paid invoices read as one payment; REST `POST /invoices/{id}/payments`, `…/payments/{paymentId}/settle`, `?paymentState=`; sync `ADD_INVOICE_PAYMENT` / `SETTLE_INVOICE_PAYMENT`; calculation cases `keevo/contracts/invoice-payment-cases.json` run through the server's own code path.
+
+**Files (main):** `db/modules/invoicing/V10__invoice_payments.sql`; domain `PaymentState`, `InvoicePayment`, `PaymentStateCalculator`, `Invoice` rules; `InvoicePaymentRepository` + JDBC; `InvoicePaymentUseCase`, `InvoiceLifecycleUseCase`, `IssueCreditNoteUseCase`, `ManageDraftInvoiceUseCase`, `InvoiceQueryUseCase` (batched credit lines and payments); `InvoiceController` + DTOs, `InvoiceSyncHandler`; `InvoiceOverdueJob` + `InvoicesOverdueEvent` + messaging `InvoiceOverdueNotificationListener`; `ErrorCode.OVERPAYMENT`; `shared/domain/XafAmounts`; audit labels; contracts (`invoice-payment-cases.json`, `invoice-sync-payloads.json` `paymentOperations`, `export-datasets.json`); `docs/entitlements/endpoints.md`; Flutter test client audit mirror 2.0.27+99.
+
+**Review:** 25 triage rows (42 reviewer findings): 19 patched (high: credit notes vs payments; medium: payment-state index, batched credit lines, contract cases on the served path, draft edit below instalments, past due dates, superseded/READ_ONLY in the job, fully credited invoices, missing tests; low: French labels, audit fallback, one XAF formatter, DTO clock, ordering, dead `Invoice.pay`, mobile note on `updatedAt`), 1 deferred (PDF/public link show neither deposits nor balance → 20-7), 5 rejected with reasons in the triage log. Accepted deviations: OVERDUE only by the job (one notification per invoice); credit-note refusal only on ISSUED invoices (PAID and POS-corrected invoices keep today's credit-note behaviour).
+
+**Follow-up review recommended:** true — a high entry was patched (credit notes vs recorded payments: refusal + instalment trimming are new rules touching the credit-note flow).
+
+**Verification:**
+- Full backend suite package by package: 6,178 tests; 1 failure (`RegistryEventSerializationTest` lacked a round-trip fixture for the new after-commit `InvoicesOverdueEvent`), fixture added and test re-run green.
+- Live on keevo_dev (WhatsApp noop, FCM/Expo off, overdue cron every 30 s via environment), test tenant with invoicing activated for the check then deactivated: issue `FAC-2026-000003` 100 000 → UNPAID; deposit 30 000 → PARTIAL; instalment 40 000 tomorrow → PARTIAL; payment 90 000 → 409 `OVERPAYMENT` « reste dû : 30 000 FCFA »; instalment backdated in the local DB → job « 1 invoice newly overdue, 1 owner notification », state « En retard », inbox « Factures en retard — 1 facture(s) en retard de paiement : FAC-2026-000003 », next run no new notification; V1 `pay` → status PAID, paid 100 000, `paidAt` set, 3 payment rows.
+
+**Residual risks:** V10 applies lazily per tenant on first invoicing call (tested on V1–V9 data, not on a prod copy); the routed PDF item.
+
+## Mobile (React Native — dépôt AI/bref)` and sprint key `m20-4-encaissements-echeancier-retard` (finalize).
 
 **Acceptance Criteria:**
 - Given the invoicing module on a tenant, when the matrix scenarios run over REST and sync, then every row holds and responses are supersets of today's.
@@ -111,3 +135,36 @@ Cost: a payment change = 1 locked read + payments of that invoice (small) + 1 in
 - `cd keevo/backend && mvn -o -q test -Dtest='com/keevo/messaging/**/*Test*,com/keevo/shared/infrastructure/config/*Test*,com/keevo/sync/**/*Test*'` -- expected: pass
 - Full suite package by package (`run-pkgs-wait.sh`) -- expected: 0 failures
 - Live: local backend on keevo_dev (WhatsApp noop, FCM/Expo off), invoicing activated on the test tenant for the check then deactivated -- expected: as in the AC.
+
+## Mobile (React Native — dépôt AI/bref)
+
+**Statut :** API livrée sur `refonte/modulaire` / `develop` (commit à reporter ici après l'intégration). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+
+**Ce qui est fait côté API :** une facture émise peut recevoir un acompte, des paiements partiels et un échéancier. Le serveur calcule l'état de paiement (Non payée, Partiellement payée, Payée, En retard) sous verrou, refuse tout montant qui dépasserait ce qui reste dû, et passe la facture au statut « Payée » dès qu'elle est entièrement réglée. Chaque matin (7 h, heure de Douala), un traitement passe « En retard » les factures dont une échéance est dépassée et prévient le propriétaire par une notification. Les factures payées avant cette version apparaissent avec un seul paiement. Un paiement ne fait jamais passer une facture « En retard » : seul le traitement du matin le fait (et prévient le propriétaire).
+
+**À utiliser :**
+1. Champs ajoutés à chaque facture (REST, pull `invoices`) : `paymentState` (`UNPAID` | `PARTIAL` | `PAID` | `OVERDUE`, `null` pour un brouillon, une facture annulée ou un devis), `paymentStateLabel` (libellé français), `amountPaid` (somme reçue), `amountDue` (total TTC moins les avoirs), `payments` = liste `{id, amount, dueDate, paidAt, method, note, legacy}` (une échéance non réglée a `dueDate` et `paidAt: null` ; `legacy: true` = paiement unique d'une ancienne facture, sans `id`).
+2. Enregistrer un paiement reçu (l'acompte est simplement le premier) : `POST /api/v1/invoices/{id}/payments` `{"paymentId": "<uuid choisi par l'appareil>", "amount": 30000, "paidAt": "2026-11-06", "method": "Mobile Money", "note": "Acompte"}` — facture émise seulement ; `paidAt` ni dans le futur ni avant la date d'émission.
+3. Programmer une échéance : même appel avec `dueDate` à la place de `paidAt` (brouillon ou facture émise), date du jour ou future (passée → 422). Exactement une des deux dates. Un avoir réduit ou supprime d'abord les échéances non réglées (la plus lointaine en premier) ; il est refusé (409) si le montant déjà encaissé dépasse le reste dû après l'avoir. Modifier un brouillon sous le total de ses échéances → 409 `OVERPAYMENT`.
+4. Régler une échéance : `POST /api/v1/invoices/{id}/payments/{paymentId}/settle` `{"paidAt"?: "2026-11-06", "method"?: "Espèces"}` (aujourd'hui par défaut) ; déjà réglée → 200 sans changement.
+5. Solder la facture d'un coup : `POST /api/v1/invoices/{id}/pay` (inchangé) règle toutes les échéances et ajoute un paiement du reste.
+6. Hors ligne : `ADD_INVOICE_PAYMENT {invoiceId, paymentId, amount, paidAt? | dueDate?, method?, note?}` et `SETTLE_INVOICE_PAYMENT {invoiceId, paymentId, paidAt?, method?}` (entityId = la facture) ; renvoyée à l'identique → APPLIED sans doublon ; même `paymentId` avec un autre contenu → REJECTED `VALIDATION_ERROR`.
+6b. Un paiement ou une échéance ajouté sur un brouillon fait avancer son `updatedAt` : pour la modification suivante, l'app doit envoyer comme `expectedUpdatedAt` le `updatedAt` renvoyé par l'appel de paiement (sinon 409 `OPTIMISTIC_LOCK`).
+7. Liste filtrée : `GET /api/v1/invoices?paymentState=OVERDUE` (ou `UNPAID`, `PARTIAL`, `PAID`) ; autre valeur → 400. La notification « Factures en retard » ouvre ce lien (`/invoices?paymentState=OVERDUE`).
+8. Erreurs : montant au-delà du reste dû → 409 `OVERPAYMENT` « Le montant dépasse ce qui reste dû sur la facture (reste dû : X FCFA) », rien n'est enregistré ; date de paiement invalide → 400 `INVOICE_PAYMENT_DATE_INVALID` ; paiement reçu sur un brouillon ou une facture payée/annulée → 409 `INVOICE_INVALID_TRANSITION` ; sur un devis → 409 « Un devis doit être converti en facture » ; montant nul, deux dates ou aucune → 422 `VALIDATION_ERROR` ; échéance inconnue → 404 `INVOICE_NOT_FOUND` ; annulation d'une facture avec un paiement reçu → 409 `INVOICE_INVALID_TRANSITION` « Des paiements sont enregistrés sur cette facture : établissez un avoir ».
+Cas de calcul partagés : `keevo/contracts/invoice-payment-cases.json` ; contrat de synchro : `keevo/contracts/invoice-sync-payloads.json` (`paymentOperations`). Code : `InvoiceController.java`, `InvoicePaymentUseCase.java`, `PaymentStateCalculator.java`, `adapter/in/sync/InvoiceSyncHandler.java`.
+
+**À implémenter côté mobile :**
+1. Sur une facture : bandeau d'état (libellé français et couleur), « Payé : X / Y FCFA », liste des paiements et des échéances (date, montant, mode ; échéance en retard mise en évidence).
+2. Actions « Encaisser » (montant prérempli avec le reste dû, date du jour modifiable, mode), « Programmer une échéance », « Régler » sur une échéance, « Solder ».
+3. Générer le `paymentId` sur l'appareil et mettre l'opération en file hors ligne ; afficher l'état local recalculé avec les cas du contrat jusqu'à la synchro.
+4. Liste « En retard » (filtre `paymentState=OVERDUE`) et ouverture depuis la notification.
+5. Aucune donnée technique à l'écran (ni identifiants, ni codes).
+
+**Critères d'acceptation mobile :**
+- Given une facture émise de 100 000 FCFA, when l'utilisateur encaisse un acompte de 30 000, then elle s'affiche « Partiellement payée », payé 30 000 / 100 000.
+- Given un montant supérieur au reste dû, when l'utilisateur valide, then le message du serveur s'affiche et rien n'est ajouté.
+- Given une échéance dépassée, when le traitement du matin est passé, then la facture est « En retard » et le propriétaire reçoit « Factures en retard ».
+- Mise en place : `curl -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"paymentId":"'$(uuidgen)'","amount":30000,"paidAt":"'$(date +%F)'","method":"Mobile Money"}' $API/api/v1/invoices/$INVOICE_ID/payments`.
+
+**Clé de suivi mobile :** `m20-4-encaissements-echeancier-retard`.

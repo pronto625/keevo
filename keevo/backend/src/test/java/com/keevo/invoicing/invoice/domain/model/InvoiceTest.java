@@ -106,7 +106,7 @@ class InvoiceTest {
     @DisplayName("transitions: ISSUED → PAID, ISSUED → CANCELLED (reason); anything else 409")
     void transitions() {
         Invoice issued = draft().issue("FAC-2026-000001", LocalDate.of(2026, 10, 30), SELLER, T1);
-        Invoice paid = issued.pay(" Espèces ", T1);
+        Invoice paid = issued.markedPaid(T1, " Espèces ", T1);
         assertThat(paid.status()).isEqualTo(InvoiceStatus.PAID);
         assertThat(paid.paidAt()).isEqualTo(T1);
         assertThat(paid.paymentMethod()).isEqualTo("Espèces");
@@ -122,10 +122,10 @@ class InvoiceTest {
             assertThat(((DomainException) e).getDetails()).containsEntry("status", "payée");
         });
         assertThatThrownBy(() -> issued.cancel("  ", T1)).satisfies(e -> assertThat(code(e)).isEqualTo("VALIDATION_ERROR"));
-        assertThatThrownBy(() -> draft().pay(null, T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
+        assertThatThrownBy(() -> draft().markedPaid(T1, null, T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
         assertThatThrownBy(() -> draft().cancel("x", T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
-        assertThatThrownBy(() -> paid.pay(null, T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
-        assertThatThrownBy(() -> cancelled.pay(null, T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
+        assertThatThrownBy(() -> paid.markedPaid(T1, null, T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
+        assertThatThrownBy(() -> cancelled.markedPaid(T1, null, T1)).satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
         assertThatThrownBy(() -> issued.issue("y", LocalDate.now(), SELLER, T1))
                 .satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
     }
@@ -135,31 +135,28 @@ class InvoiceTest {
     void payOnChosenDay() {
         // issued on 2026-10-28, now = 2026-10-30 10:00Z (11:00 in Douala)
         Invoice issued = draft().issue("FAC-2026-000001", LocalDate.of(2026, 10, 28), SELLER, T0);
-        assertThat(issued.pay("Espèces", null, T1).paidAt()).isEqualTo(T1);
-        assertThat(issued.pay("Espèces", LocalDate.of(2026, 10, 30), T1).paidAt()).isEqualTo(T1);
-        Invoice backDated = issued.pay("Espèces", LocalDate.of(2026, 10, 29), T1);
+        assertThat(issued.paymentInstant(null, T1)).isEqualTo(T1);
+        assertThat(issued.paymentInstant(LocalDate.of(2026, 10, 30), T1)).isEqualTo(T1);
+        Invoice backDated = issued.markedPaid(issued.paymentInstant(LocalDate.of(2026, 10, 29), T1), "Espèces", T1);
         assertThat(backDated.status()).isEqualTo(InvoiceStatus.PAID);
         assertThat(backDated.paidAt()).isEqualTo(Instant.parse("2026-10-29T11:00:00Z"));
         assertThat(backDated.updatedAt()).isEqualTo(T1);
-        assertThat(issued.pay(null, LocalDate.of(2026, 10, 28), T1).paidAt())
+        assertThat(issued.paymentInstant(LocalDate.of(2026, 10, 28), T1))
                 .as("the issue day itself is allowed").isEqualTo(Instant.parse("2026-10-28T11:00:00Z"));
 
-        assertThatThrownBy(() -> issued.pay(null, LocalDate.of(2026, 10, 31), T1)).satisfies(e -> {
+        assertThatThrownBy(() -> issued.paymentInstant(LocalDate.of(2026, 10, 31), T1)).satisfies(e -> {
             assertThat(code(e)).isEqualTo("INVOICE_PAYMENT_DATE_INVALID");
             assertThat(((DomainException) e).getDetails().get("reason").toString()).contains("futur");
         });
-        assertThatThrownBy(() -> issued.pay(null, LocalDate.of(2026, 10, 27), T1)).satisfies(e -> {
+        assertThatThrownBy(() -> issued.paymentInstant(LocalDate.of(2026, 10, 27), T1)).satisfies(e -> {
             assertThat(code(e)).isEqualTo("INVOICE_PAYMENT_DATE_INVALID");
             assertThat(((DomainException) e).getDetails().get("reason").toString()).contains("date d'émission");
         });
         // issued on 2026-10-29 at 15:00 Douala, paid « that day » recorded the next day: not before the issue time
         Instant issuedAfternoon = Instant.parse("2026-10-29T14:00:00Z");
         Invoice lateIssue = draft().issue("FAC-2026-000002", LocalDate.of(2026, 10, 29), SELLER, issuedAfternoon);
-        assertThat(lateIssue.pay(null, LocalDate.of(2026, 10, 29), T1).paidAt()).isEqualTo(issuedAfternoon);
+        assertThat(lateIssue.paymentInstant(LocalDate.of(2026, 10, 29), T1)).isEqualTo(issuedAfternoon);
 
-        // the status is checked first
-        assertThatThrownBy(() -> draft().pay(null, LocalDate.of(2026, 10, 31), T1))
-                .satisfies(e -> assertThat(code(e)).isEqualTo("INVOICE_INVALID_TRANSITION"));
     }
 
     @Test
@@ -209,7 +206,7 @@ class InvoiceTest {
         Invoice issued = draft().issue("FAC-2026-000001", LocalDate.of(2026, 10, 30), SELLER, T1);
         assertThat(issued.delivery()).isEqualTo(InvoiceDelivery.NONE);
         Invoice once = issued.sent("+237677000111", T1);
-        Invoice twice = once.pay("Espèces", T1).sent("+237699000000", T1.plusSeconds(60));
+        Invoice twice = once.markedPaid(T1, "Espèces", T1).sent("+237699000000", T1.plusSeconds(60));
         assertThat(once.delivery().sendCount()).isEqualTo(1);
         assertThat(twice.delivery().sendCount()).isEqualTo(2);
         assertThat(twice.delivery().lastSentTo()).isEqualTo("+237699000000");

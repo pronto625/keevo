@@ -83,7 +83,9 @@ class SchedulerLockCoverageTest {
             Map.entry(com.keevo.subscription.plan.adapter.in.scheduling.UsageCounterPurgeJob.class,
                     Duration.ofDays(1)), // 19.8
             Map.entry(com.keevo.messaging.notification.application.service.NotificationRetentionJob.class,
-                    Duration.ofDays(1))); // 19.11
+                    Duration.ofDays(1)), // 19.11
+            Map.entry(com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceOverdueJob.class,
+                    Duration.ofDays(1))); // 20.4
 
     /**
      * Per-instance sweeps: must run on every instance → never locked. Includes the 11.2 sync-lag

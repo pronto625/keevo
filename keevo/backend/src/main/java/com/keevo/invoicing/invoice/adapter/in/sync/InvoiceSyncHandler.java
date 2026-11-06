@@ -1,7 +1,10 @@
 package com.keevo.invoicing.invoice.adapter.in.sync;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.AddInvoicePaymentRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.SettleInvoicePaymentRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.InvoicePaymentUseCase;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.ConvertQuoteRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.PayInvoiceRequestDto;
@@ -44,6 +47,13 @@ import java.util.UUID;
  *       ({@code invoiceId} = the id chosen on the device); replayed, the same invoice ({@code serverEntityId} = the
  *       invoice id). {@code CREATE_INVOICE} takes {@code kind} ({@code QUOTE} = a quote); {@code UPDATE_INVOICE} takes
  *       {@code expectedUpdatedAt} (stale → {@code REJECTED OPTIMISTIC_LOCK}).</li>
+ *   <li>Story 20.4 — {@code ADD_INVOICE_PAYMENT} {@code {invoiceId, paymentId, amount, paidAt? | dueDate?, method?,
+ *       note?}}: a payment received or a scheduled instalment (exactly one date), {@code paymentId} chosen on the
+ *       device; replayed with the same content → APPLIED, no second row; the same {@code paymentId} with another
+ *       content → {@code REJECTED VALIDATION_ERROR}; above what remains due → {@code REJECTED OVERPAYMENT}.
+ *       {@code SETTLE_INVOICE_PAYMENT} {@code {invoiceId, paymentId, paidAt?, method?}}: the instalment is paid
+ *       (already paid → APPLIED, unchanged). {@code serverEntityId} = the invoice id. {@code PAY_INVOICE} now settles
+ *       the whole invoice (instalments paid, balance added).</li>
  * </ul>
  * Payloads are validated with the REST request DTOs (same French messages, {@code VALIDATION_ERROR}); permissions are
  * those of the matching endpoint ({@code @RequiresPermission} is not applied to sync handlers, so it is checked here
@@ -64,6 +74,11 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     /** Story 20.3 — {@code {quoteId, invoiceId}}: the quote becomes a new issued invoice (idempotent). */
     public static final String CONVERT_QUOTE = "CONVERT_QUOTE";
 
+    /** Story 20.4 — a payment received or an instalment scheduled ({@code paymentId} chosen on the device). */
+    public static final String ADD_PAYMENT = "ADD_INVOICE_PAYMENT";
+    /** Story 20.4 — a scheduled instalment paid. */
+    public static final String SETTLE_PAYMENT = "SETTLE_INVOICE_PAYMENT";
+
     /** The permission of each operation: the one of its REST endpoint. */
     private static final Map<String, String> PERMISSIONS = Map.of(
             CREATE, InvoicingModule.INVOICE_CREATE,
@@ -71,11 +86,14 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             ISSUE, InvoicingModule.INVOICE_SEND,
             PAY, InvoicingModule.INVOICE_SEND,
             CANCEL, InvoicingModule.INVOICE_MANAGE,
-            CONVERT_QUOTE, InvoicingModule.INVOICE_SEND);
+            CONVERT_QUOTE, InvoicingModule.INVOICE_SEND,
+            ADD_PAYMENT, InvoicingModule.INVOICE_SEND,
+            SETTLE_PAYMENT, InvoicingModule.INVOICE_SEND);
 
     private final ManageDraftInvoiceUseCase drafts;
     private final InvoiceLifecycleUseCase lifecycle;
     private final ConvertQuoteUseCase conversions;
+    private final InvoicePaymentUseCase payments;
     private final ModuleProvisioner provisioner;
     private final ModulePermissions permissions;
     private final ObjectMapper objectMapper;
@@ -83,8 +101,10 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
 
     public InvoiceSyncHandler(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                               ModuleProvisioner provisioner, ModulePermissions permissions,
-                              ObjectMapper objectMapper, Validator validator, ConvertQuoteUseCase conversions) {
+                              ObjectMapper objectMapper, Validator validator, ConvertQuoteUseCase conversions,
+                              InvoicePaymentUseCase payments) {
         this.drafts = drafts;
+        this.payments = payments;
         this.conversions = conversions;
         this.lifecycle = lifecycle;
         this.provisioner = provisioner;
@@ -123,6 +143,10 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
                 throw new IllegalArgumentException("Invalid field: invoiceId");
             }
         }
+        if ((ADD_PAYMENT.equals(operation.operationType()) || SETTLE_PAYMENT.equals(operation.operationType()))
+                && parseUuid(p.get("paymentId")) == null) {
+            throw new IllegalArgumentException("Missing required field: paymentId");
+        }
     }
 
     @Override
@@ -154,6 +178,15 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
                 ConvertQuoteRequestDto request = read(p, ConvertQuoteRequestDto.class);
                 yield conversions.convert(parseUuid(p.get("quoteId")), request.invoiceId(),
                         request.expectedUpdatedAt(), actorId, tenantId).invoice();
+            }
+            case ADD_PAYMENT -> {
+                AddInvoicePaymentRequestDto request = read(p, AddInvoicePaymentRequestDto.class);
+                yield payments.add(invoiceId(p), request.toCommand(), actorId, tenantId).invoice();
+            }
+            case SETTLE_PAYMENT -> {
+                SettleInvoicePaymentRequestDto request = read(p, SettleInvoicePaymentRequestDto.class);
+                yield payments.settle(invoiceId(p), parseUuid(p.get("paymentId")), request.paidAt(),
+                        request.method(), actorId, tenantId).invoice();
             }
             default -> null;
         };

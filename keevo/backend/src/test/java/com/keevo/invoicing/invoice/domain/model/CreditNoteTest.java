@@ -34,7 +34,7 @@ class CreditNoteTest {
     }
 
     private static Invoice paid() {
-        return issued().pay("Espèces", T1);
+        return issued().markedPaid(T1, "Espèces", T1);
     }
 
     private static String code(Throwable t) {

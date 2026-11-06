@@ -945,6 +945,8 @@ So that **mes documents ont la même allure qu'avant (FUS-FR21, FR22, FR23)**.
 
 - [ ] [Deferred-from: review 20-3, 2026-11-06] A quote cannot be sent to the client: `Invoice.assertSendable` refuses quotes [keevo/backend/src/main/java/com/keevo/invoicing/invoice/domain/model/Invoice.java] — allow the public link / WhatsApp sending of a quote (PDF « DEVIS DV-… » already exists)
 
+- [ ] [Deferred-from: review 20-4, 2026-11-06] The invoice PDF and public link show neither deposits, payments, balance due nor the payment schedule [InvoiceDocumentUseCase, InvoicePdfRenderer] — render amountPaid / amountDue / payments[] (from InvoiceResponseDto) in the 8 templates and the ticket
+
 ### Story 20.8 : Envoi des documents par SMS et email
 
 As a **commerçant**,

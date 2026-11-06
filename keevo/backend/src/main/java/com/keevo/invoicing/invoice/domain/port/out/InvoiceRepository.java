@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.domain.port.out;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
+import com.keevo.invoicing.invoice.domain.model.PaymentState;
 
 import java.util.List;
 import java.util.Optional;
@@ -101,10 +102,17 @@ public interface InvoiceRepository {
      * case-insensitive, already trimmed; {@code from} / {@code to} = issue date range, inclusive (a draft has no issue
      * date: excluded as soon as one bound is given). Story 20.3: {@code kind} = invoices or quotes only ({@code null}
      * = both); a quote's date for {@code from} / {@code to} is its creation day (Africa/Douala) and {@code search} also
-     * matches its reference {@code DV-XXXXXXXX}.
+     * matches its reference {@code DV-XXXXXXXX}. Story 20.4: {@code paymentState} = issued or paid invoices in that
+     * collection state (an invoice without stored state: PAID status = PAID, ISSUED = UNPAID).
      */
     record Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
-                  java.time.LocalDate to, InvoiceKind kind) {
+                  java.time.LocalDate to, InvoiceKind kind, PaymentState paymentState) {
+
+        /** Before Story 20.4: no collection-state criterion. */
+        public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
+                      java.time.LocalDate to, InvoiceKind kind) {
+            this(status, saleId, search, from, to, kind, null);
+        }
 
         /** Before Story 20.3: invoices only (the lists V1 apps know never show a quote). */
         public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,

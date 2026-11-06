@@ -9,7 +9,6 @@ import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.event.catalog.invoicing.InvoiceCancelledEvent;
 import com.keevo.shared.event.catalog.invoicing.InvoiceIssuedEvent;
-import com.keevo.shared.event.catalog.invoicing.InvoicePaidEvent;
 import com.keevo.shared.event.catalog.invoicing.QuoteCancelledEvent;
 import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.capability.entitlement.UsageMetric;
@@ -48,10 +47,13 @@ public class InvoiceLifecycleUseCase {
     private final Clock clock;
     private final CreditNoteRepository creditNotes;
     private final UsageQuotaPort quotas;
+    private final InvoicePaymentUseCase payments;
 
     public InvoiceLifecycleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                    ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock,
-                                   CreditNoteRepository creditNotes, UsageQuotaPort quotas) {
+                                   CreditNoteRepository creditNotes, UsageQuotaPort quotas,
+                                   InvoicePaymentUseCase payments) {
+        this.payments = payments;
         this.creditNotes = creditNotes;
         this.quotas = quotas;
         this.invoices = invoices;
@@ -124,16 +126,15 @@ public class InvoiceLifecycleUseCase {
         return pay(id, paymentMethod, null, actorId, tenantId);
     }
 
-    /** Story 15.5 — {@code paidOn}: the day the client paid ({@code null} = now), see {@link Invoice#pay}. */
+    /**
+     * Story 15.5 — {@code paidOn}: the day the client paid ({@code null} = now), see {@link Invoice#paymentInstant}. Story 20.4:
+     * settles the whole invoice — every scheduled instalment paid on that day, a payment of the balance added, state and
+     * status PAID ({@link InvoicePaymentUseCase#settleAll}); same contract for V1 apps.
+     */
     @Transactional
     public Invoice pay(UUID id, String paymentMethod, LocalDate paidOn, UUID actorId, String tenantId) {
         Invoice issued = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        Instant now = clock.instant();
-        Invoice paid = issued.pay(paymentMethod, paidOn, now);
-        invoices.markPaid(paid);
-        events.publishEvent(new InvoicePaidEvent(paid.id(), paid.number(), paid.client().name(),
-                paid.totals().totalTtc(), paid.paymentMethod(), paid.paidAt(), actorId, tenantId, now));
-        return paid;
+        return payments.settleAll(issued, paymentMethod, paidOn, actorId, tenantId);
     }
 
     @Transactional
@@ -141,8 +142,10 @@ public class InvoiceLifecycleUseCase {
         Invoice issued = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         Instant now = clock.instant();
         // Story 14.7: an invoice with a credit note is no longer cancellable (its rest is credited instead)
-        Invoice cancelled = issued.cancel(reason, now,
-                issued.status() == InvoiceStatus.ISSUED && creditNotes.existsForInvoice(id));
+        // Story 20.4: nor one with a payment received (credited instead)
+        boolean issuedInvoice = issued.status() == InvoiceStatus.ISSUED && !issued.isQuote();
+        Invoice cancelled = issued.cancel(reason, now, issuedInvoice && creditNotes.existsForInvoice(id),
+                issuedInvoice && payments.hasPayments(id));
         invoices.markCancelled(cancelled);
         if (cancelled.isQuote()) { // Story 20.3 — a DRAFT quote, never numbered
             events.publishEvent(new QuoteCancelledEvent(cancelled.id(), cancelled.quoteReference(),

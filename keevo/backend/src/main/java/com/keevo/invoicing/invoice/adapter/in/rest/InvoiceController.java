@@ -10,7 +10,12 @@ import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.AddInvoicePaymentRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.SettleInvoicePaymentRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.InvoicePaymentUseCase;
+import com.keevo.invoicing.invoice.domain.model.PaymentState;
+import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.ConvertQuoteRequestDto;
 import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
@@ -50,6 +55,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -59,6 +65,8 @@ import java.util.UUID;
  * {@code INVOICE_CREATE}; issue / record the payment → {@code INVOICE_SEND}; cancel → {@code INVOICE_MANAGE} (owner).
  * Story 14.3: CRM client suggestions ({@code GET /clients}, {@code INVOICE_CREATE}) and CRM link of the client.
  * Story 20.3: quotes ({@code kind QUOTE}) share these endpoints; {@code POST /{id}/convert} ({@code INVOICE_SEND}).
+ * Story 20.4: collections — {@code POST /{id}/payments}, {@code POST /{id}/payments/{paymentId}/settle}
+ * ({@code INVOICE_SEND}), list filter {@code paymentState}.
  */
 @RestController
 @RequestMapping("/api/v1/invoices")
@@ -82,12 +90,14 @@ public class InvoiceController {
     private final PublicBaseUrl publicBaseUrl;
     private final InvoiceClientResolver clients;
     private final ConvertQuoteUseCase conversions;
+    private final InvoicePaymentUseCase payments;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
                              InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
                              PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients,
-                             ConvertQuoteUseCase conversions) {
+                             ConvertQuoteUseCase conversions, InvoicePaymentUseCase payments) {
+        this.payments = payments;
         this.clients = clients;
         this.conversions = conversions;
         this.drafts = drafts;
@@ -119,7 +129,8 @@ public class InvoiceController {
      * {@value #MAX_SEARCH_LENGTH} characters); {@code from} / {@code to} = issue date range ({@code yyyy-MM-dd},
      * Africa/Douala calendar day, inclusive, {@code from <= to}) — drafts, not issued yet, are left out by a range.
      * Story 20.3: {@code kind} = {@code INVOICE} (absent: the V1 list, invoices only), {@code QUOTE} (quotes only) or
-     * {@code ALL} (both); anything else → 400.
+     * {@code ALL} (both); anything else → 400. Story 20.4: {@code paymentState} = {@code UNPAID} | {@code PARTIAL} |
+     * {@code PAID} | {@code OVERDUE} (issued or paid invoices in that collection state); anything else → 400.
      */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
@@ -127,6 +138,7 @@ public class InvoiceController {
     public ResponseEntity<ApiResponseWrapper<List<InvoiceResponseDto>>> list(
             @RequestParam(required = false) String kind,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String paymentState,
             @RequestParam(required = false) String saleId,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
@@ -154,11 +166,13 @@ public class InvoiceController {
         }
         InvoiceRepository.Page result = queries.list(
                 new InvoiceRepository.Filter(parseStatus(status), parseSaleId(saleId), text, from, to,
-                        parseKind(kind)), page, size);
+                        parseKind(kind), parsePaymentState(paymentState)), page, size);
         InvoicingSettings current = settings.current();
         var credits = queries.credits(result.items());
+        var collections = queries.collections(result.items(), credits); // one batched query for the page
         List<InvoiceResponseDto> items = result.items().stream()
-                .map(i -> dto(i, current, credits.getOrDefault(i.id(), InvoiceQueryUseCase.Credits.NONE)))
+                .map(i -> dto(i, current, credits.getOrDefault(i.id(), InvoiceQueryUseCase.Credits.NONE),
+                        collections.get(i.id())))
                 .toList();
         int totalPages = (int) ((result.totalElements() + size - 1) / size);
         return ResponseEntity.ok(ApiResponseWrapper.paginated(items, page, size, result.totalElements(), totalPages));
@@ -247,6 +261,41 @@ public class InvoiceController {
     }
 
     /**
+     * POST /api/v1/invoices/{id}/payments {@code {paymentId?, amount, paidAt? | dueDate?, method?, note?}} — Story 20.4:
+     * a payment received ({@code paidAt}, ISSUED invoice only; a deposit is the first one) or a scheduled instalment
+     * ({@code dueDate}, DRAFT or ISSUED) — exactly one of the two. 201 with the invoice; the same {@code paymentId}
+     * again → 200, nothing added (different content → 422 {@code VALIDATION_ERROR}). Above what remains due → 409
+     * {@code OVERPAYMENT}. Fully paid → status PAID.
+     */
+    @RequiresPermission(InvoicingModule.INVOICE_SEND)
+    @RequiresEntitlement(InvoicingModule.ID)
+    @PostMapping("/{id}/payments")
+    public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> addPayment(
+            @PathVariable UUID id, @Valid @RequestBody AddInvoicePaymentRequestDto request) {
+        InvoicePaymentUseCase.Result result = payments.add(id, request.toCommand(), CurrentActor.actorId(),
+                TenantContext.getCurrentTenant());
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .body(ApiResponseWrapper.ok(dto(result.invoice())));
+    }
+
+    /**
+     * POST /api/v1/invoices/{id}/payments/{paymentId}/settle {@code {paidAt?, method?}} — Story 20.4: the scheduled
+     * instalment is paid ({@code paidAt} = the day, today by default; same date rules as {@code /pay}); already paid →
+     * 200 unchanged.
+     */
+    @RequiresPermission(InvoicingModule.INVOICE_SEND)
+    @RequiresEntitlement(InvoicingModule.ID)
+    @PostMapping("/{id}/payments/{paymentId}/settle")
+    public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> settlePayment(
+            @PathVariable UUID id, @PathVariable UUID paymentId,
+            @Valid @RequestBody(required = false) SettleInvoicePaymentRequestDto request) {
+        InvoicePaymentUseCase.Result result = payments.settle(id, paymentId,
+                request == null ? null : request.paidAt(), request == null ? null : request.method(),
+                CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        return ResponseEntity.ok(ApiResponseWrapper.ok(dto(result.invoice())));
+    }
+
+    /**
      * POST /api/v1/invoices/{quoteId}/convert {@code {invoiceId?, expectedUpdatedAt?}} — Story 20.3: the DRAFT quote becomes a new issued
      * invoice (DOCUMENTS quota, next {@code FAC-} number, issue date today); 201 with the invoice. Already converted →
      * 200 with the same invoice (idempotent). Same rights as the issue.
@@ -299,13 +348,29 @@ public class InvoiceController {
 
     private InvoiceResponseDto dto(Invoice invoice) {
         boolean draft = invoice.status() == InvoiceStatus.DRAFT;
-        return dto(invoice, draft ? settings.current() : null, draft ? InvoiceQueryUseCase.Credits.NONE
-                : queries.credits(List.of(invoice)).getOrDefault(invoice.id(), InvoiceQueryUseCase.Credits.NONE));
+        Map<UUID, InvoiceQueryUseCase.Credits> credits = draft ? Map.of() : queries.credits(List.of(invoice));
+        return dto(invoice, draft ? settings.current() : null,
+                credits.getOrDefault(invoice.id(), InvoiceQueryUseCase.Credits.NONE),
+                queries.collections(List.of(invoice), credits).get(invoice.id()));
     }
 
     private static InvoiceResponseDto dto(Invoice invoice, InvoicingSettings current,
-                                          InvoiceQueryUseCase.Credits credits) {
-        return InvoiceResponseDto.fromDomain(invoice, current, credits.notes(), credits.fullyCredited());
+                                          InvoiceQueryUseCase.Credits credits,
+                                          PaymentStateCalculator.Collection collection) {
+        return InvoiceResponseDto.fromDomain(invoice, current, credits.notes(), credits.fullyCredited(), collection);
+    }
+
+    /** Story 20.4 — {@code null}: not filtered; unknown → 400. */
+    static PaymentState parsePaymentState(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return PaymentState.valueOf(value.strip().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestParameterException("paymentState", "unknown payment state",
+                    "État de paiement inconnu : choisissez « Non payée », « Partiellement payée », « Payée » ou « En retard »");
+        }
     }
 
     private static InvoiceStatus parseStatus(String status) {

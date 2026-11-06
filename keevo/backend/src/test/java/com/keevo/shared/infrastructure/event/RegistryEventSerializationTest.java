@@ -88,6 +88,10 @@ class RegistryEventSerializationTest {
         f.put(com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent.class,
                 new com.keevo.shared.event.catalog.onboarding.OnboardingCompletedEvent(TENANT,
                         com.keevo.shared.event.catalog.onboarding.SectorKind.CLOTHING, "Boutique Akwa", 6, B, T0));
+        // Story 20.4 — consumed after commit by InvoiceOverdueNotificationListener (owner push)
+        f.put(com.keevo.shared.event.catalog.invoicing.InvoicesOverdueEvent.class,
+                new com.keevo.shared.event.catalog.invoicing.InvoicesOverdueEvent(
+                        List.of("FAC-2026-000012", "FAC-2026-000015"), null, TENANT, T0));
         f.put(ProductCreatedEvent.class, new ProductCreatedEvent(A, "Riz 5kg", "RIZ-5", TENANT, B,
                 "EMPLOYEE", "Awa", "Akwa", T0));
         f.put(SaleManuallyValidatedEvent.class, new SaleManuallyValidatedEvent(A, B, "client fidèle",

@@ -116,6 +116,10 @@ public final class AuditLabels {
             entry("QUOTE_CREATED", "Devis créé"),
             entry("QUOTE_CONVERTED", "Devis converti en facture"),
             entry("QUOTE_CANCELLED", "Devis annulé"),
+            // Collections (Story 20.4)
+            entry("INVOICE_PAYMENT_RECEIVED", "Paiement reçu"),
+            entry("INVOICE_INSTALMENT_SCHEDULED", "Échéance programmée"),
+            entry("INVOICE_INSTALMENT_SETTLED", "Échéance réglée"),
             entry("COMPANY_PROFILE_UPDATED", "Identité de l'entreprise modifiée"));
 
     /** Singular French noun of each audited object type ({@code entityType}). */
@@ -161,6 +165,7 @@ public final class AuditLabels {
             entry("deactivated", "Désactivée"),
             entry("status", "Statut"),
             entry("totalAmount", "Montant total"),
+            entry("amount", "Montant"), // Story 20.4 — a payment / an instalment
             entry("discountAmount", "Remise"),
             entry("appliedPrice", "Prix appliqué"),
             entry("cataloguePrice", "Prix catalogue"),

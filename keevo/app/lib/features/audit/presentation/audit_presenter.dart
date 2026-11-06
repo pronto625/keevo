@@ -423,6 +423,16 @@ class AuditPresenter {
     // Credit notes (Story 14.7)
     'CREDIT_NOTE_ISSUED': AuditActionInfo('Avoir émis', 'émis l\'avoir',
         Icons.receipt_long_outlined, AuditCategory.sale),
+    // Collections (Story 20.4)
+    'INVOICE_PAYMENT_RECEIVED': AuditActionInfo('Paiement reçu',
+        'enregistré un paiement sur la facture', Icons.paid_outlined,
+        AuditCategory.sale),
+    'INVOICE_INSTALMENT_SCHEDULED': AuditActionInfo('Échéance programmée',
+        'programmé une échéance sur la facture', Icons.event_outlined,
+        AuditCategory.sale),
+    'INVOICE_INSTALMENT_SETTLED': AuditActionInfo('Échéance réglée',
+        'réglé une échéance de la facture', Icons.paid_outlined,
+        AuditCategory.sale),
     // Quotes (Story 20.3)
     'QUOTE_CREATED': AuditActionInfo('Devis créé', 'créé le devis',
         Icons.request_quote_outlined, AuditCategory.sale),

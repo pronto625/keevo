@@ -93,6 +93,25 @@ public class JdbcCreditNoteRepository implements CreditNoteRepository {
     }
 
     @Override
+    public Map<UUID, List<CreditNoteLine>> linesOfInvoices(Collection<UUID> invoiceIds) {
+        if (invoiceIds == null || invoiceIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<UUID, List<CreditNoteLine>> byInvoice = new LinkedHashMap<>();
+        jdbc.query("SELECT c.invoice_id AS credited_invoice_id, " + prefixed("l") + " FROM "
+                        + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTE_ITEMS) + " l JOIN "
+                        + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " c ON c.id = l.credit_note_id "
+                        + "WHERE c.invoice_id IN (" + String.join(", ", Collections.nCopies(invoiceIds.size(), "?"))
+                        + ") ORDER BY c.invoice_id, c.issued_at, c.number, l.position",
+                rs -> {
+                    byInvoice.computeIfAbsent(rs.getObject("credited_invoice_id", UUID.class), k -> new ArrayList<>())
+                            .add(line(rs));
+                },
+                invoiceIds.toArray());
+        return byInvoice;
+    }
+
+    @Override
     public boolean existsForInvoice(UUID invoiceId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS (SELECT 1 FROM "
                 + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " WHERE invoice_id = ?)", Boolean.class,

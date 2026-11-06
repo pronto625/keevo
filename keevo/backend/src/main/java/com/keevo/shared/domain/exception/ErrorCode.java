@@ -188,6 +188,7 @@ public enum ErrorCode {
     INVOICE_INVALID_TRANSITION, // HTTP 409 — lifecycle transition not allowed from the invoice's status
     INVOICE_NOT_ISSUABLE,       // HTTP 422 — the draft misses a mandatory element (details.reason, French)
     INVOICE_PAYMENT_DATE_INVALID, // HTTP 400 — Story 15.5: payment date in the future or before the issue date (details.reason)
+    OVERPAYMENT,                // HTTP 409 — Story 20.4: payments + instalments would exceed what the invoice owes (details.remaining)
     // ── Invoice PDF / WhatsApp sending, company identity (Story 14.2) ─────
     INVOICE_PHONE_REQUIRED,     // HTTP 422 — no WhatsApp number given and the client has none
     INVOICE_PHONE_INVALID,      // HTTP 422 — the WhatsApp number is not a valid phone number

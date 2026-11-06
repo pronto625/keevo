@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
+import com.keevo.invoicing.invoice.application.usecase.InvoicePaymentUseCase;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
@@ -60,6 +61,7 @@ class InvoiceSyncHandlerTest {
     private final ManageDraftInvoiceUseCase drafts = mock(ManageDraftInvoiceUseCase.class);
     private final InvoiceLifecycleUseCase lifecycle = mock(InvoiceLifecycleUseCase.class);
     private final ConvertQuoteUseCase conversions = mock(ConvertQuoteUseCase.class);
+    private final InvoicePaymentUseCase payments = mock(InvoicePaymentUseCase.class);
     private final ModuleProvisioner provisioner = mock(ModuleProvisioner.class);
     private final ModulePermissions permissions = mock(ModulePermissions.class);
     private final ObjectMapper objectMapper = JsonMapper.builder().findAndAddModules()
@@ -72,7 +74,7 @@ class InvoiceSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new InvoiceSyncHandler(drafts, lifecycle, provisioner, permissions, objectMapper, validator,
-                conversions);
+                conversions, payments);
         as("OWNER", ALL);
     }
 
@@ -110,10 +112,12 @@ class InvoiceSyncHandlerTest {
     }
 
     @Test
-    @DisplayName("six operation types (Story 20.3: CONVERT_QUOTE), owned by the invoicing module")
+    @DisplayName("eight operation types (Story 20.3: CONVERT_QUOTE; 20.4: ADD / SETTLE_INVOICE_PAYMENT), owned by the "
+            + "invoicing module")
     void contract() {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder("CREATE_INVOICE", "UPDATE_INVOICE",
-                "ISSUE_INVOICE", "PAY_INVOICE", "CANCEL_INVOICE", "CONVERT_QUOTE");
+                "ISSUE_INVOICE", "PAY_INVOICE", "CANCEL_INVOICE", "CONVERT_QUOTE", "ADD_INVOICE_PAYMENT",
+                "SETTLE_INVOICE_PAYMENT");
         assertThat(handler.moduleId()).isEqualTo("invoicing");
     }
 
@@ -299,6 +303,31 @@ class InvoiceSyncHandlerTest {
         verify(conversions).convert(quoteId, newInvoiceId, convertSeen, ACTOR, TENANT);
         verify(lifecycle).cancel(quoteId, "Le client a renoncé", ACTOR, TENANT);
 
+        // Story 20.4 — the collection operations of the Bref app
+        when(payments.add(eq(id), any(), eq(ACTOR), eq(TENANT))).thenReturn(new InvoicePaymentUseCase.Result(any, true));
+        when(payments.settle(eq(id), any(), any(), any(), eq(ACTOR), eq(TENANT)))
+                .thenReturn(new InvoicePaymentUseCase.Result(any, true));
+        for (com.fasterxml.jackson.databind.JsonNode op : contract.path("paymentOperations")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = objectMapper.convertValue(op.path("payload"), Map.class);
+            String type = op.path("operationType").asText();
+            types.add(type);
+            SyncOperationResult r = handler.handle(op(type, payload), ACTOR, TENANT);
+            assertThat(r.status()).as("%s: %s", op.path("name").asText(), r.reason())
+                    .isEqualTo(SyncOperationStatus.APPLIED);
+        }
+        ArgumentCaptor<InvoicePaymentUseCase.NewPayment> added =
+                ArgumentCaptor.forClass(InvoicePaymentUseCase.NewPayment.class);
+        verify(payments, org.mockito.Mockito.times(2)).add(eq(id), added.capture(), eq(ACTOR), eq(TENANT));
+        assertThat(added.getAllValues().get(0)).isEqualTo(new InvoicePaymentUseCase.NewPayment(
+                UUID.fromString("7a4c2e19-3b5d-4f60-9e81-0c2d4b6f8a13"), 30_000, LocalDate.parse("2026-11-06"), null,
+                "Mobile Money", "Acompte"));
+        assertThat(added.getAllValues().get(1)).isEqualTo(new InvoicePaymentUseCase.NewPayment(
+                UUID.fromString("c8e1f5a2-6d4b-4c39-8a7e-2f9b0d3e5c61"), 20_000, null, LocalDate.parse("2026-12-15"),
+                null, "Deuxième versement"));
+        verify(payments).settle(id, UUID.fromString("c8e1f5a2-6d4b-4c39-8a7e-2f9b0d3e5c61"),
+                LocalDate.parse("2026-11-06"), "Espèces", ACTOR, TENANT);
+
         assertThat(types).isEqualTo(handler.supportedTypes());
         ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> content =
                 ArgumentCaptor.forClass(ManageDraftInvoiceUseCase.DraftContent.class);
@@ -309,6 +338,38 @@ class InvoiceSyncHandlerTest {
         verify(lifecycle).pay(id, "Espèces", null, ACTOR, TENANT);
         verify(lifecycle).pay(id, "Mobile Money", LocalDate.parse("2026-10-25"), ACTOR, TENANT);
         verify(lifecycle).cancel(id, "Erreur de client", ACTOR, TENANT);
+    }
+
+    @Test
+    @DisplayName("ADD_INVOICE_PAYMENT: paymentId required; amount validated (French); OVERPAYMENT / reused id rejected "
+            + "with their code; viewer forbidden")
+    void addPaymentOperation() {
+        Map<String, Object> noId = new LinkedHashMap<>();
+        noId.put("invoiceId", invoiceId.toString());
+        noId.put("amount", 1000);
+        noId.put("paidAt", "2026-11-06");
+        assertThat(handler.handle(op("ADD_INVOICE_PAYMENT", noId), ACTOR, TENANT).reason())
+                .isEqualTo("Missing required field: paymentId");
+
+        Map<String, Object> zero = new LinkedHashMap<>(noId);
+        zero.put("paymentId", UUID.randomUUID().toString());
+        zero.put("amount", 0);
+        SyncOperationResult invalid = handler.handle(op("ADD_INVOICE_PAYMENT", zero), ACTOR, TENANT);
+        assertThat(invalid.reason()).isEqualTo("VALIDATION_ERROR");
+        verify(payments, never()).add(any(), any(), any(), any());
+
+        Map<String, Object> ok = new LinkedHashMap<>(zero);
+        ok.put("amount", 30_000);
+        when(payments.add(eq(invoiceId), any(), eq(ACTOR), eq(TENANT)))
+                .thenThrow(DomainException.userFacing(ErrorCode.OVERPAYMENT, "reste dû"))
+                .thenThrow(new DomainException(ErrorCode.VALIDATION_ERROR, "reused", Map.of("reason", "x")));
+        assertThat(handler.handle(op("ADD_INVOICE_PAYMENT", ok), ACTOR, TENANT).reason()).isEqualTo("OVERPAYMENT");
+        assertThat(handler.handle(op("ADD_INVOICE_PAYMENT", ok), ACTOR, TENANT).reason())
+                .isEqualTo("VALIDATION_ERROR");
+
+        as("VIEWER", Set.of("INVOICE_VIEW"));
+        assertThat(handler.handle(op("SETTLE_INVOICE_PAYMENT", Map.of("invoiceId", invoiceId.toString(),
+                "paymentId", UUID.randomUUID().toString())), ACTOR, TENANT).reason()).isEqualTo("FORBIDDEN");
     }
 
     @Test

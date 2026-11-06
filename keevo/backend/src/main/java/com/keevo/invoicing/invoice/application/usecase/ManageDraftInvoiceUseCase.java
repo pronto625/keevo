@@ -5,7 +5,10 @@ import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
 import com.keevo.invoicing.invoice.domain.model.LineInput;
+import com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
+import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
+import com.keevo.shared.domain.XafAmounts;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -41,9 +44,12 @@ public class ManageDraftInvoiceUseCase {
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final InvoiceClientResolver clients;
+    private final InvoicePaymentRepository payments;
 
     public ManageDraftInvoiceUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
-                                     ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients) {
+                                     ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients,
+                                     InvoicePaymentRepository payments) {
+        this.payments = payments;
         this.invoices = invoices;
         this.settings = settings;
         this.events = events;
@@ -124,8 +130,26 @@ public class ManageDraftInvoiceUseCase {
         ClientInfo client = clients.resolve(content.client(), tenantId, current.client().clientId());
         Invoice updated = valid(() -> current.withDraftContent(client, content.lines(), currentSettings(),
                 now()));
+        assertInstalmentsFit(updated);
         invoices.updateDraft(updated);
         return updated;
+    }
+
+    /**
+     * Story 20.4 — the instalments already scheduled on a draft must fit its new total: otherwise 409
+     * {@code OVERPAYMENT}, nothing written.
+     */
+    private void assertInstalmentsFit(Invoice updated) {
+        if (updated.isQuote()) {
+            return;
+        }
+        long committed = PaymentStateCalculator.committed(payments.findByInvoice(updated.id()));
+        if (committed > updated.totals().totalTtc()) {
+            throw DomainException.userFacing(ErrorCode.OVERPAYMENT, "Les échéances programmées ("
+                    + XafAmounts.group(committed) + " FCFA) dépassent le nouveau total de la facture ("
+                    + XafAmounts.group(updated.totals().totalTtc()) + " FCFA) : réduisez-les d'abord",
+                    Map.of("remaining", XafAmounts.group(updated.totals().totalTtc())));
+        }
     }
 
     @Transactional

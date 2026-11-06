@@ -1,0 +1,557 @@
+{
+  "description": "Story 20.4 — calculation cases of invoice collections (acompte, paiements partiels, échéancier, retard): exactly what the API serves, computed by the backend through the same code path (PaymentStateCalculator.afterChange then view; test PaymentStateCalculatorTest), reusable by the Bref React Native app. Amounts in XAF francs (integers). Rows: a payment received has paidAt (yyyy-MM-dd); a scheduled instalment has dueDate (and paidAt once settled). amountDue = totalTtc − creditedTtc; amountPaid = sum of rows with paidAt. cases: storedState = the state stored before the change (null: never computed); newRow = the row added by the change (refused with OVERPAYMENT when the sum of all rows would exceed amountDue — remaining = amountDue − sum of existing rows —, with VALIDATION_ERROR when an instalment's dueDate is before today); expected.state = the state served after the change: PAID if amountPaid >= amountDue; otherwise OVERDUE only if storedState was already OVERDUE and an unpaid row is still past due (dueDate < today, Africa/Douala); otherwise PARTIAL if amountPaid > 0, else UNPAID — a change never makes an invoice overdue. A case without newRow and with storedState null is a read of an invoice whose state was never stored (legacy: issued without row → UNPAID). action cancel: an issued invoice with at least one payment received cannot be cancelled (INVOICE_INVALID_TRANSITION). jobCases: the daily overdue job (07:00 Africa/Douala) on an active ISSUED invoice: marked (→ OVERDUE, owner notified once per run) when an unpaid row is past due and the stored state is neither OVERDUE nor PAID.",
+  "cases": [
+    {
+      "name": "deposit",
+      "description": "Acompte de 30 000 sur une facture de 100 000",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [],
+        "newRow": {
+          "amount": 30000,
+          "paidAt": "2026-11-05"
+        }
+      },
+      "expected": {
+        "state": "PARTIAL",
+        "amountPaid": 30000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "depositEqualsTotal",
+      "description": "Acompte égal au total : la facture est payée",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [],
+        "newRow": {
+          "amount": 100000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "PAID",
+        "amountPaid": 100000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "instalmentsNotDue",
+      "description": "Deux échéances de 50 000 à venir, rien de reçu",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-12-01"
+          }
+        ],
+        "newRow": {
+          "amount": 50000,
+          "dueDate": "2027-01-01"
+        }
+      },
+      "expected": {
+        "state": "UNPAID",
+        "amountPaid": 0,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "depositAndInstalments",
+      "description": "Acompte puis deux échéances à venir",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 30000,
+            "paidAt": "2026-11-02"
+          },
+          {
+            "amount": 35000,
+            "dueDate": "2026-12-01"
+          }
+        ],
+        "newRow": {
+          "amount": 35000,
+          "dueDate": "2027-01-01"
+        }
+      },
+      "expected": {
+        "state": "PARTIAL",
+        "amountPaid": 30000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "instalmentDueToday",
+      "description": "Une échéance due aujourd'hui n'est pas en retard",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-06"
+          }
+        ],
+        "newRow": {
+          "amount": 50000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "PARTIAL",
+        "amountPaid": 50000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "lateNotYetMarked",
+      "description": "Échéance dépassée, pas encore marquée par le traitement du matin : un paiement ne fait pas passer « En retard »",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-05"
+          }
+        ],
+        "newRow": {
+          "amount": 20000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "PARTIAL",
+        "amountPaid": 20000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "stillOverdue",
+      "description": "Déjà « En retard » : un paiement partiel laisse l'échéance dépassée, la facture reste en retard",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "OVERDUE",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-05"
+          },
+          {
+            "amount": 30000,
+            "dueDate": "2026-12-01"
+          }
+        ],
+        "newRow": {
+          "amount": 20000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "OVERDUE",
+        "amountPaid": 20000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "lateInstalmentSettled",
+      "description": "Échéance en retard réglée, la suivante à venir : plus en retard",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "OVERDUE",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-01",
+            "paidAt": "2026-11-06"
+          },
+          {
+            "amount": 50000,
+            "dueDate": "2026-12-01"
+          }
+        ]
+      },
+      "expected": {
+        "state": "PARTIAL",
+        "amountPaid": 50000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "allInstalmentsSettled",
+      "description": "Toutes les échéances réglées",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-01",
+            "paidAt": "2026-11-01"
+          },
+          {
+            "amount": 50000,
+            "dueDate": "2026-12-01",
+            "paidAt": "2026-11-06"
+          }
+        ]
+      },
+      "expected": {
+        "state": "PAID",
+        "amountPaid": 100000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "creditNoteReducesDue",
+      "description": "Avoir de 20 000 : 80 000 reçus suffisent",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 20000,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [],
+        "newRow": {
+          "amount": 80000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "PAID",
+        "amountPaid": 80000,
+        "amountDue": 80000
+      }
+    },
+    {
+      "name": "creditNotePartial",
+      "description": "Avoir de 20 000, 50 000 reçus",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 20000,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [],
+        "newRow": {
+          "amount": 50000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "PARTIAL",
+        "amountPaid": 50000,
+        "amountDue": 80000
+      }
+    },
+    {
+      "name": "exactBalanceAccepted",
+      "description": "Le solde exact est accepté",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 80000,
+            "paidAt": "2026-11-01"
+          }
+        ],
+        "newRow": {
+          "amount": 20000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "state": "PAID",
+        "amountPaid": 100000,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "overpayment",
+      "description": "80 000 reçus puis 30 000 : refusé, reste dû 20 000",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 80000,
+            "paidAt": "2026-11-01"
+          }
+        ],
+        "newRow": {
+          "amount": 30000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "error": "OVERPAYMENT",
+        "remaining": 20000
+      }
+    },
+    {
+      "name": "scheduleExceedingDue",
+      "description": "Échéancier dépassant le montant dû : refusé",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [
+          {
+            "amount": 60000,
+            "dueDate": "2026-12-01"
+          }
+        ],
+        "newRow": {
+          "amount": 50000,
+          "dueDate": "2027-01-01"
+        }
+      },
+      "expected": {
+        "error": "OVERPAYMENT",
+        "remaining": 40000
+      }
+    },
+    {
+      "name": "overpaymentAfterCreditNote",
+      "description": "L'avoir réduit ce qui peut encore être reçu",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 20000,
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 70000,
+            "paidAt": "2026-11-01"
+          }
+        ],
+        "newRow": {
+          "amount": 20000,
+          "paidAt": "2026-11-06"
+        }
+      },
+      "expected": {
+        "error": "OVERPAYMENT",
+        "remaining": 10000
+      }
+    },
+    {
+      "name": "instalmentInThePast",
+      "description": "Une échéance ne peut pas être programmée dans le passé",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [],
+        "newRow": {
+          "amount": 50000,
+          "dueDate": "2026-11-05"
+        }
+      },
+      "expected": {
+        "error": "VALIDATION_ERROR"
+      }
+    },
+    {
+      "name": "legacyIssued",
+      "description": "Facture émise avant cette version, sans paiement ni état enregistré",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": null,
+        "rows": []
+      },
+      "expected": {
+        "state": "UNPAID",
+        "amountPaid": 0,
+        "amountDue": 100000
+      }
+    },
+    {
+      "name": "cancelRefusedWithPayment",
+      "description": "Une facture émise avec un paiement reçu ne s'annule pas : établir un avoir",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 30000,
+            "paidAt": "2026-11-01"
+          }
+        ],
+        "action": "cancel"
+      },
+      "expected": {
+        "error": "INVOICE_INVALID_TRANSITION"
+      }
+    },
+    {
+      "name": "cancelAllowedWithInstalmentsOnly",
+      "description": "Sans paiement reçu (échéances seulement), l'annulation reste possible",
+      "input": {
+        "totalTtc": 100000,
+        "creditedTtc": 0,
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-12-01"
+          }
+        ],
+        "action": "cancel"
+      },
+      "expected": {
+        "cancelled": true
+      }
+    }
+  ],
+  "jobCases": [
+    {
+      "name": "jobMarksLate",
+      "description": "Échéance dépassée et impayée : le traitement du matin passe la facture « En retard » (et prévient le propriétaire)",
+      "input": {
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 30000,
+            "paidAt": "2026-10-01"
+          },
+          {
+            "amount": 70000,
+            "dueDate": "2026-11-05"
+          }
+        ]
+      },
+      "expected": {
+        "marked": true,
+        "state": "OVERDUE"
+      }
+    },
+    {
+      "name": "jobLegacyNull",
+      "description": "Jamais calculée (échéancier saisi sur le brouillon) : marquée elle aussi",
+      "input": {
+        "today": "2026-11-06",
+        "storedState": null,
+        "rows": [
+          {
+            "amount": 100000,
+            "dueDate": "2026-11-01"
+          }
+        ]
+      },
+      "expected": {
+        "marked": true,
+        "state": "OVERDUE"
+      }
+    },
+    {
+      "name": "jobDueToday",
+      "description": "Due aujourd'hui : pas encore en retard",
+      "input": {
+        "today": "2026-11-06",
+        "storedState": "UNPAID",
+        "rows": [
+          {
+            "amount": 100000,
+            "dueDate": "2026-11-06"
+          }
+        ]
+      },
+      "expected": {
+        "marked": false,
+        "state": "UNPAID"
+      }
+    },
+    {
+      "name": "jobAlreadyOverdue",
+      "description": "Déjà « En retard » : rien de nouveau, pas de seconde notification",
+      "input": {
+        "today": "2026-11-06",
+        "storedState": "OVERDUE",
+        "rows": [
+          {
+            "amount": 100000,
+            "dueDate": "2026-11-01"
+          }
+        ]
+      },
+      "expected": {
+        "marked": false,
+        "state": "OVERDUE"
+      }
+    },
+    {
+      "name": "jobPaidNeverFlipped",
+      "description": "Payée (par exemple entièrement couverte par un avoir) : jamais remise en retard",
+      "input": {
+        "today": "2026-11-06",
+        "storedState": "PAID",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-01"
+          }
+        ]
+      },
+      "expected": {
+        "marked": false,
+        "state": "PAID"
+      }
+    },
+    {
+      "name": "jobSettledInstalment",
+      "description": "Échéance dépassée mais réglée : pas en retard",
+      "input": {
+        "today": "2026-11-06",
+        "storedState": "PARTIAL",
+        "rows": [
+          {
+            "amount": 50000,
+            "dueDate": "2026-11-01",
+            "paidAt": "2026-11-02"
+          }
+        ]
+      },
+      "expected": {
+        "marked": false,
+        "state": "PARTIAL"
+      }
+    }
+  ]
+}

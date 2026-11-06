@@ -25,6 +25,12 @@ public interface CreditNoteRepository {
     /** Every line of every credit note of the invoice (what is already credited). */
     List<CreditNoteLine> linesOfInvoice(UUID invoiceId);
 
+    /**
+     * Story 20.4 — the credited lines of each invoice, in one query (invoices without credit note are absent): the
+     * batched form of {@link #linesOfInvoice} for a list or sync page.
+     */
+    Map<UUID, List<CreditNoteLine>> linesOfInvoices(Collection<UUID> invoiceIds);
+
     /** Whether the invoice has at least one credit note. */
     boolean existsForInvoice(UUID invoiceId);
 
