@@ -360,6 +360,7 @@ development_status:
   m19-12-boutiques-etendues-parcours-vente: backlog  # API d601c9f4 — fiche boutique (catégorie, description, NIU, RCCM, pays), logo de boutique, choix Caisse / Documents dans les réglages
   m19-13-profil-interface-visibilite: backlog  # API 54aad8e1 — navigation selon navigationPreset et modules activés, écran Paramètres › Mes modules (interrupteurs owner), choix Caisse / Documents à l'inscription
   m19-10-versions-minimales-app: backlog  # API 25b0eff8 — écran « Mise à jour requise » via app-version/check, en-tête X-App-Version sur toutes les requêtes
+  m20-1-catalogue-sans-stock-cle-fusion: backlog  # API 808fa41e — champ référence/code-barres, scan via products/lookup, écran « Fusionner avec… », produits fusionnés retirés au pull (mergedIntoId)
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

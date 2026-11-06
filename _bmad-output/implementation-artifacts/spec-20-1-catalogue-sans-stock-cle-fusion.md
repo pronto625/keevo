@@ -195,7 +195,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit `__COMMIT__`), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commit 808fa41e), branche `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** un produit peut porter une référence ou un code-barres ; on retrouve un produit en scannant son code ; deux produits en double peuvent être fusionnés : le doublon disparaît du catalogue, ses ventes passées restent, et tout ce qui le visait encore (ventes hors ligne comprises) va sur le produit gardé.
 
