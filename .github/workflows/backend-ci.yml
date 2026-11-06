@@ -26,11 +26,15 @@ jobs:
       - name: Story 10.7 test — backup failure alert and rendered units
         run: bash keevo/backend/scripts/tests/backup-alert-test.sh
 
+      - name: Story 19.11 — load harness guard tests (no database touched)
+        run: bash keevo/backend/scripts/tests/measure-tenants-guard-test.sh
+
       - name: Story 10.7 lint — shellcheck (backup scripts)
         run: |
           docker run --rm -v "${GITHUB_WORKSPACE}/keevo/backend/scripts:/mnt:ro" \
             koalaman/shellcheck:v0.10.0@sha256:2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb \
-            backup-db.sh backup-alert.sh render-backup-units.sh tests/backup-alert-test.sh
+            backup-db.sh backup-alert.sh render-backup-units.sh tests/backup-alert-test.sh \
+            load/measure-tenants.sh tests/measure-tenants-guard-test.sh
 
       - name: Story 10.7 lint — actionlint (deploy workflows)
         run: |

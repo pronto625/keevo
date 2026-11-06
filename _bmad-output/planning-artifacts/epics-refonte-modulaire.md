@@ -143,6 +143,8 @@ Sources d'autorité : `plan-refonte-modulaire.md` (vision, décisions, roadmap) 
 
 #### Story 10.8 : Exécution serveur des runbooks ops (prod & staging)
 
+> **Routé depuis la mesure 19.11 (06/11/2026) :** - [ ] [Deferred-from: spec 19.11, 2026-11-06] Sauvegarde : un `pg_dump` unique a besoin de `max_locks_per_transaction` × `max_connections` ≥ nombre de relations (≈ 54 par tenant) ; avec 64 × 100 il casse vers 110 tenants (« out of shared memory »). Avant ~100 tenants : relever `max_locks_per_transaction` (ex. 256) sur le Postgres de prod, ou faire dumper `backup-db.sh` par paquets de schémas comme `scripts/load/measure-tenants.sh` [keevo/backend/scripts/backup-db.sh] — preuve : `research/fusion-mesures/rapport-charge-tenants-2026-11-05.md`.
+
 > Clé tracker : `10-8-ops-runbook-execution-serveur` — créée le 2026-10-13 par la revue de 10-7 (items livrés côté dépôt, exécution serveur restante). Owner : agent ops (le déploiement backend est manuel).
 
 As a **exploitant**,

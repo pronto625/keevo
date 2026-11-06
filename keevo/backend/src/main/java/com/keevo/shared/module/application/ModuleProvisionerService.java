@@ -195,7 +195,8 @@ public class ModuleProvisionerService implements ModuleProvisioner {
                     : write.getAsInt();
         } catch (DataAccessException | org.springframework.transaction.TransactionException e) {
             // TransactionException: the separate transaction of the read-only branch could not be started
-            throw new ModuleProvisioningException(id, schema, "ROW_WRITE/" + e.getClass().getSimpleName(), version);
+            throw new ModuleProvisioningException(id, schema, "ROW_WRITE/" + e.getClass().getSimpleName(), version,
+                    e);
         } finally {
             registry.evict(schema);
         }
@@ -444,9 +445,11 @@ public class ModuleProvisionerService implements ModuleProvisioner {
                     provision(schema, id);
                 } catch (RuntimeException e) {
                     ok = false;
-                    // our messages carry no schema value nor SQL text; the tenant is named by its code
+                    // our messages carry no schema value nor SQL text; the tenant is named by its code. Story 19.11:
+                    // the root cause (class + message, may name the schema) is logged for diagnosis
                     log.error("Foundation module '{}' could not be provisioned for tenant {} ({}) — retried at the "
-                            + "next start or on its first request", id, tenant.code(), describe(e));
+                            + "next start or on its first request; root cause: {}", id, tenant.code(), describe(e),
+                            rootCause(e));
                 }
             }
             if (ok) {
@@ -457,6 +460,13 @@ public class ModuleProvisionerService implements ModuleProvisioner {
             provisioningSlots.release();
             lock.unlock();
         }
+    }
+
+    private static String rootCause(RuntimeException e) {
+        if (e instanceof ModuleProvisioningException p) {
+            return p.rootCause() == null ? "unknown" : p.rootCause();
+        }
+        return ModuleProvisioningException.describeRoot(e);
     }
 
     private static String describe(RuntimeException e) {

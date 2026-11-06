@@ -60,7 +60,8 @@ spring:
 
   # Flyway — Story 10.1: baseline migration for public schema.
   # ddl-auto=validate active since Story 10.2 (no more transition).
-  # Tenant schema DDL is handled programmatically by TenantSchemaProvisioner.
+  # Public schema only. Tenant schema DDL comes from the per-module Flyway scripts (db/modules/<module>/V*.sql,
+  # Story 16.12), applied per tenant by FlywayModuleMigrations (history flyway_history_<module>).
   flyway:
     enabled: true
     baseline-on-migrate: true
@@ -300,6 +301,12 @@ keevo:
     infobip:
       base-url: ${INFOBIP_BASE_URL:}
       api-key: ${INFOBIP_API_KEY:}
+  # Story 19.11 — nightly purge of the notification inbox (NotificationRetentionJob, Africa/Douala): rows read more
+  # than read-days ago, and every row of a user who is no longer an active member of the tenant. Unread rows are
+  # never purged by age.
+  notification-retention:
+    cron: ${KEEVO_NOTIFICATION_RETENTION_CRON:0 50 3 * * *}
+    read-days: ${KEEVO_NOTIFICATION_RETENTION_READ_DAYS:90}
   # Story 19.9 — Expo push (React Native app tokens ExponentPushToken[…]); off by default like FCM, on in prod by env.
   push:
     expo:

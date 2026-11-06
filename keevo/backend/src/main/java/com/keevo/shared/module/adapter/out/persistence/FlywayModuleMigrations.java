@@ -206,7 +206,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
                 return rows.next();
             }
         } catch (SQLException e) {
-            throw new ModuleProvisioningException("schema", schema, "SCHEMA/" + failureCode(e), null);
+            throw new ModuleProvisioningException("schema", schema, "SCHEMA/" + failureCode(e), null, e);
         }
     }
 
@@ -239,7 +239,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
             }
             return highest == null ? null : highest.getVersion();
         } catch (SQLException e) {
-            throw new ModuleProvisioningException(moduleId, schema, "HISTORY/" + failureCode(e), null);
+            throw new ModuleProvisioningException(moduleId, schema, "HISTORY/" + failureCode(e), null, e);
         }
     }
 
@@ -281,7 +281,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
                     FlywayModuleMigrations::higher));
             return versions;
         } catch (SQLException e) {
-            throw new ModuleProvisioningException("schema", schema, "HISTORY/" + failureCode(e), null);
+            throw new ModuleProvisioningException("schema", schema, "HISTORY/" + failureCode(e), null, e);
         }
     }
 
@@ -326,7 +326,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
             }
             return versions;
         } catch (SQLException e) {
-            throw new ModuleProvisioningException(moduleId, "public", "HISTORY/" + failureCode(e), null);
+            throw new ModuleProvisioningException(moduleId, "public", "HISTORY/" + failureCode(e), null, e);
         }
     }
 
@@ -389,7 +389,7 @@ public class FlywayModuleMigrations implements ModuleMigrationPort {
                     ? meaningful(result.targetSchemaVersion) : from;
             return new Outcome(from, to, result.migrationsExecuted);
         } catch (RuntimeException e) {
-            throw new ModuleProvisioningException(moduleId, schema, failureCode(e), appliedAfterFailure(flyway));
+            throw new ModuleProvisioningException(moduleId, schema, failureCode(e), appliedAfterFailure(flyway), e);
         }
     }
 

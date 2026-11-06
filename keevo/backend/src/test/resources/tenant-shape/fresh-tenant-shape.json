@@ -350,6 +350,7 @@
     "notification_cooldowns: CREATE INDEX idx_cooldown_type_store ON notification_cooldowns USING btree (cooldown_type, store_id)",
     "notification_cooldowns: CREATE UNIQUE INDEX notification_cooldowns_pkey ON notification_cooldowns USING btree (id)",
     "notification_cooldowns: CREATE UNIQUE INDEX uq_cooldown_product_store_type ON notification_cooldowns USING btree (cooldown_type, product_id, store_id)",
+    "notifications: CREATE INDEX idx_notifications_read_at ON notifications USING btree (read_at) WHERE (read_at IS NOT NULL)",
     "notifications: CREATE INDEX idx_notifications_user_created ON notifications USING btree (user_id, created_at DESC, id DESC)",
     "notifications: CREATE INDEX idx_notifications_user_unread ON notifications USING btree (user_id) WHERE (read_at IS NULL)",
     "notifications: CREATE UNIQUE INDEX notifications_pkey ON notifications USING btree (id)",

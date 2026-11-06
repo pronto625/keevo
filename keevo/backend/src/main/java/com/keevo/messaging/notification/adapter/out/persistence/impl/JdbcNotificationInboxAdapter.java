@@ -14,11 +14,15 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
 import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -100,6 +104,24 @@ public class JdbcNotificationInboxAdapter implements NotificationInboxRepository
     public int markAllRead(String schema, UUID userId) {
         return jdbc.update("UPDATE " + table(schema) + " SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL",
                 userId);
+    }
+
+    @Override
+    public Set<String> schemasWithInbox() {
+        return new HashSet<>(jdbc.queryForList("SELECT schemaname FROM pg_catalog.pg_tables "
+                + "WHERE tablename = 'notifications' AND schemaname ~ '^kv_'", String.class));
+    }
+
+    @Override
+    public Purge purge(String schema, UUID tenantId, Instant readBefore) {
+        String table = table(schema);
+        int read = jdbc.update("DELETE FROM " + table + " WHERE read_at IS NOT NULL AND read_at < ?",
+                readBefore.atOffset(ZoneOffset.UTC));
+        // anti-join: scans this tenant's inbox (small: read rows are purged), memberships probed by their unique index
+        int departed = jdbc.update("DELETE FROM " + table + " n WHERE NOT EXISTS (SELECT 1 FROM "
+                + "public.user_tenant_memberships m WHERE m.user_id = n.user_id AND m.tenant_id = ? AND m.is_active)",
+                tenantId);
+        return new Purge(read, departed);
     }
 
     private RowMapper<InboxNotification> rowMapper() {

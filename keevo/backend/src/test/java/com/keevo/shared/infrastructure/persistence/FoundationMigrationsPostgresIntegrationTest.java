@@ -108,7 +108,7 @@ class FoundationMigrationsPostgresIntegrationTest {
                 "sync", "reporting", "messaging");
         latest.forEach((module, version) ->
                 assertThat(migrations.currentVersion(schema, module)).as(module).isEqualTo(version));
-        // core never has a row; every other foundation module is provisioned at its latest version (19.9: messaging 2)
+        // core never has a row; every other foundation module is provisioned at its latest version (19.11: messaging 3)
         Map<String, String> provisioned = new LinkedHashMap<>(latest);
         provisioned.remove("core");
         assertThat(jdbc.queryForList("SELECT module_id || ':' || tm.provisioned_version FROM public.tenant_modules tm "
@@ -293,7 +293,8 @@ class FoundationMigrationsPostgresIntegrationTest {
                 "read_at", "created_at");
         assertThat(jdbc.queryForList("SELECT indexname FROM pg_indexes WHERE schemaname = ? AND tablename = "
                 + "'notifications'", String.class, fresh)).containsExactlyInAnyOrder("notifications_pkey",
-                "idx_notifications_user_created", "idx_notifications_user_unread");
+                "idx_notifications_user_created", "idx_notifications_user_unread",
+                "idx_notifications_read_at"); // 19.11: messaging V3
 
         // an existing tenant built before 19.9: messaging at V1 only
         String schema = "kv_fmnot2";
@@ -309,7 +310,8 @@ class FoundationMigrationsPostgresIntegrationTest {
 
         modules.ensureFoundation(schema);
 
-        assertThat(migrations.currentVersion(schema, "messaging")).isEqualTo("2");
+        assertThat(migrations.currentVersion(schema, "messaging"))
+                .isEqualTo(FoundationScripts.fromClasspath().latestVersions().get("messaging")); // 19.11: V3
         assertThat(notificationColumns(schema)).hasSize(8);
         Map<String, String> after = new LinkedHashMap<>(checksums(schema));
         assertThat(after.remove("notifications")).as("created empty").startsWith("0:");
