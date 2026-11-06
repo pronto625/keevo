@@ -138,7 +138,7 @@ Cost: a payment change = 1 locked read + payments of that invoice (small) + 1 in
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur `refonte/modulaire` / `develop` (commit à reporter ici après l'intégration). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée sur `refonte/modulaire` / `develop`, commit `174e46c5`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** une facture émise peut recevoir un acompte, des paiements partiels et un échéancier. Le serveur calcule l'état de paiement (Non payée, Partiellement payée, Payée, En retard) sous verrou, refuse tout montant qui dépasserait ce qui reste dû, et passe la facture au statut « Payée » dès qu'elle est entièrement réglée. Chaque matin (7 h, heure de Douala), un traitement passe « En retard » les factures dont une échéance est dépassée et prévient le propriétaire par une notification. Les factures payées avant cette version apparaissent avec un seul paiement. Un paiement ne fait jamais passer une facture « En retard » : seul le traitement du matin le fait (et prévient le propriétaire).
 
