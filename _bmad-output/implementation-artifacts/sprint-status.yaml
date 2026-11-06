@@ -362,7 +362,7 @@ development_status:
   m19-10-versions-minimales-app: backlog  # API 25b0eff8 — écran « Mise à jour requise » via app-version/check, en-tête X-App-Version sur toutes les requêtes
   m20-1-catalogue-sans-stock-cle-fusion: backlog  # API 808fa41e — champ référence/code-barres, scan via products/lookup, écran « Fusionner avec… », produits fusionnés retirés au pull (mergedIntoId)
   m20-2-crm-etendu-clients-par-etablissement: backlog  # API b2387df8 — champs Bref des fiches clients, liste par établissement (partage), avertissement DUPLICATE_PHONE + pré-contrôle, consentement marketing (REST + SET_CLIENT_MARKETING_CONSENT), re-seed quand le partage change (purge 16-13)
-  m20-3-devis: backlog  # API 20-3 — devis (kind QUOTE, DV-…), liste ?kind=QUOTE|ALL, validation POST /invoices/{id}/convert + CONVERT_QUOTE (idempotent), expectedUpdatedAt → 409 OPTIMISTIC_LOCK, PDF « DEVIS »
+  m20-3-devis: backlog  # API 62b28275 — devis (kind QUOTE, DV-…), liste ?kind=QUOTE|ALL, validation POST /invoices/{id}/convert + CONVERT_QUOTE (idempotent), expectedUpdatedAt → 409 OPTIMISTIC_LOCK, PDF « DEVIS »
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
