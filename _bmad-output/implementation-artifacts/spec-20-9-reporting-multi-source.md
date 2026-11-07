@@ -2,7 +2,7 @@
 title: '20-9 Multi-source reporting without double counting (R4)'
 type: 'feature'
 created: '2026-11-07'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'e1862565157a106d3d695924d98bf7c5e19404ee'
 review_loop_iteration: 0
 followup_review_recommended: true
@@ -99,8 +99,38 @@ Paths under `keevo/backend/src/main/java/com/keevo/` unless stated.
 
 ## Review Triage Log
 
-### 2026-11-08 — review 1 (coordinator, 11 items)
-- verdicts: 11 patch, 0 reject, 0 defer — every item fixed in `fix(20-9)`.
+### 2026-11-08 — Review pass (5 layers: blind, edge case, verification gap, intent, patterns)
+- verdicts: 44 findings — high 0, medium 14, low 18, false 6, maybe-false 6 (duplicates across layers counted once per layer row below, grouped by root cause)
+- findings:
+  - `[medium]` `[patch]` Blind/edge: manual credit notes on bridged invoices never deducted — deducted when `source_event IS NULL`; test `bridgeManualCreditNoteDeducted`.
+  - `[medium]` `[patch]` Blind/edge/intent: store-scoped consumers resolved invoicing and returned 503 on provisioning failure — `storeScoped()` sales-only relations; reporting never provisions (rebase regression root cause: stale duplicate V13 in target/classes).
+  - `[medium]` `[patch]` Blind/edge/patterns: documents() and lines() resolved separately — one `Relations` call per figure.
+  - `[medium]` `[patch]` Blind/edge: top/worst products split by free-text name — grouped by product_id; worst `HAVING SUM(quantity) > 0`.
+  - `[medium]` `[patch]` Edge: post-dated invoices inflated today/month/year — windows bounded before tomorrow WAT.
+  - `[low]` `[patch]` Edge: negative average basket — 0 when revenue ≤ 0.
+  - `[low]` `[patch]` Edge/blind: marginPercent sign / unknown lines vs unknown revenue mismatch — fixed.
+  - `[medium]` `[patch]` Blind/verification/edge: findRevenueSplit store path untested and built by string surgery — explicit filters + PostgreSQL store test.
+  - `[low]` `[patch]` Blind/edge: summary endpoint 500 on bad date, no from ≤ to check, wall clock — 400s + injected Clock.
+  - `[medium]` `[patch]` Patterns: all-stores windows had no `sales(occurred_at)` index — pos V2 partial index, EXPLAIN-checked.
+  - `[low]` `[patch]` Patterns: store-joined profitability scanned invoice branches — store-scoped relations.
+  - `[low]` `[patch]` Patterns: weekly share total computed twice — once.
+  - `[medium]` `[patch]` Verification: getSummary mapping untested — unit + controller captor tests.
+  - `[medium]` `[patch]` Verification: rewritten store overviews unchecked — two-store PostgreSQL test (today/yesterday, employees, status, order).
+  - `[medium]` `[patch]` Verification: store comparison / sparkline / top store never run on PostgreSQL — POS and mixed tenant runs.
+  - `[medium]` `[patch]` Verification/edge: null `created_by` invoices in leaderboard — excluded, no error, test.
+  - `[low]` `[patch]` Verification/edge: acceptance schema skipped V13, stale test name — fixed (my rename broke it).
+  - `[low]` `[patch]` Blind: RevenueQueryPort javadoc over-claimed — narrowed; ClientsExport / SalesTrend → 20-14, AdminAnalytics GMV → 20-13.
+  - `[medium]` `[defer]` Intent/blind: invoices have no store, so store-scoped reports/exports never include documents — new key 20-14-boutique-des-documents (store_id at creation).
+  - `[maybe-false]` `[defer]` Intent: AC2 on the real prod copy — harness ready; run in 24.12.
+  - `[false]` `[reject]` Intent: AC3 « affichée » at the UI — this repo is API-only; the API exposes the unknown-margin split for the RN screen.
+  - `[low]` `[reject]` Blind: invoice-line margin uses TTC — sales lines also carry VAT-inclusive amounts; changing documents only would make the two sources inconsistent.
+  - `[low]` `[reject]` Blind: invoice discount not prorated over lines in product margin — same as Bref's per-product ranking (line amounts); documented in ProfitabilitySummary.
+  - `[low]` `[reject]` Blind: cancelling an issued invoice rewrites past figures — same semantics as a cancelled sale (status-based); Bref removes cancelled invoices too.
+  - `[low]` `[reject]` Blind: fractional invoice quantities rounded to int in unit counts — unit counts stay integer in existing responses; amounts are exact.
+  - `[low]` `[reject]` Blind: seller with only a credit note shows negative revenue — correct accounting for the window.
+  - `[low]` `[reject]` Patterns: several sums could share one scan with FILTER — pre-existing shape, bounded by indexes.
+  - `[low]` `[reject]` Patterns: per-store correlated top-product subquery — O(stores), few stores.
+  - `[false]` `[reject]` Edge (claim): pos disabled drops V1 sales — sales are now always counted.
 
 ## Design Notes
 
