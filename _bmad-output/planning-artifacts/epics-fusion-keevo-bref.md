@@ -553,6 +553,8 @@ So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/se
 
 - [ ] [Deferred-from: review 20-3, 2026-11-06] Who may end a quote: delete needs INVOICE_CREATE while cancel needs INVOICE_MANAGE (owner), so an employee can delete but not cancel with a reason [InvoicingModule permissions] — decide the permission for cancelling a never-numbered quote
 
+- [ ] [Deferred-from: review 20-10, 2026-11-08] Who may see and record expenses: Bref keeps expenses owner-only (« elles révèlent les marges »), Keevo 20.10 gives MANAGER/EMPLOYEE VIEW+CREATE and VIEWER VIEW on their store (manifest `keevo/modules/expenses/module.json` rolePermissions) — owner decision: keep, or restrict to owner/manager
+
 ### Story 19.6 : Une personne, plusieurs rôles dans plusieurs entreprises
 
 As a **commerçant qui utilise Keevo et Bref**,
