@@ -365,7 +365,7 @@ development_status:
   m20-3-devis: backlog  # API 62b28275 — devis (kind QUOTE, DV-…), liste ?kind=QUOTE|ALL, validation POST /invoices/{id}/convert + CONVERT_QUOTE (idempotent), expectedUpdatedAt → 409 OPTIMISTIC_LOCK, PDF « DEVIS »
   m20-4-encaissements-echeancier-retard: backlog  # API 174e46c5 — paymentState/amountPaid/amountDue/payments sur les factures, POST /invoices/{id}/payments + /payments/{paymentId}/settle, ADD_/SETTLE_INVOICE_PAYMENT, filtre ?paymentState=, OVERPAYMENT, notification « Factures en retard »
   m20-5-remise-livraison-tva-echeance: backlog  # API 3ef5e1d6 — discountAmount/deliveryFee/vatRate/vatExempt/dueDate + client rccm/email/contactName/website + ligne productId/reference (REST et CREATE_/UPDATE_INVOICE), subtotal/vatRateOverride en lecture, taux par pays, avoir total seulement si remise/livraison, cas contracts/invoice-calculation-cases.json
-  m20-6-derivation-catalogue-crm: backlog  # API PENDING — préférence deriveFromDocuments (réglages facturation), client + articles créés/liés à l émission (client.clientId, lines[].productId), GET /clients?limit=&cursor= (meta.nextCursor), recherche échappée
+  m20-6-derivation-catalogue-crm: backlog  # API 79f032c2 — préférence deriveFromDocuments (réglages facturation), client + articles créés/liés à l émission (client.clientId, lines[].productId), GET /clients?limit=&cursor= (meta.nextCursor), recherche échappée
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)

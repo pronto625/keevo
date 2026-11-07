@@ -180,7 +180,7 @@ Paths under `keevo/backend/src/main/java/com/keevo/` unless stated.
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit : voir la clé `m20-6-derivation-catalogue-crm` dans sprint-status).
+**Statut :** API livrée (commit 79f032c2).
 
 **Ce qui est fait côté API**
 - À l'émission d'une facture (`POST /api/v1/invoices/{id}/issue`, sync `ISSUE_INVOICE`, conversion de devis), si la préférence est active : le client est retrouvé par téléphone dans l'établissement de l'utilisateur ou créé ; chaque ligne sans produit est liée à un produit du catalogue retrouvé (clé, nom, produit fusionné) ou créé sans suivi de stock au prix de la ligne. Rien ne change pour les ventes caisse ni pour les brouillons et devis.
