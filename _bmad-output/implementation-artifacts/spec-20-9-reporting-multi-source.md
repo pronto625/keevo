@@ -131,7 +131,7 @@ Status: in-review (no review pass run in this session — `followup_review_recom
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur la branche de la story 20.9 (`feat(20-9)`), à fusionner dans `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10 (aucune nouvelle opération de synchro ici).
+**Statut :** API livrée, commit `0a4c0edd` (branche de la story 20.9), à fusionner dans `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10 (aucune nouvelle opération de synchro ici).
 
 **Ce qui est fait côté API :** le chiffre d'affaires de tous les écrans de rapports compte maintenant les ventes caisse et les factures, chacune une seule fois : une vente caisse qui a produit une facture automatique n'est comptée qu'une fois ; les devis, brouillons et factures annulées ne comptent pas ; un avoir est déduit le jour où il est émis. Une facture compte à sa date de facture (date civile, comme Bref). Le nombre de transactions compte les ventes et les factures (pas les avoirs). Les factures n'ont pas encore de boutique : elles apparaissent dans les chiffres « toutes boutiques », pas dans les chiffres d'une boutique. Si le module Facturation est désactivé, seules les ventes caisse comptent (et inversement).
 
