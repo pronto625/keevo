@@ -25,7 +25,8 @@ public class ConflictStrategyRegistry {
             "CREATE_STORE", "UPDATE_STORE", "DEACTIVATE_STORE",
             "RENAME_CATEGORY", "TOGGLE_CATEGORY",
             "CREATE_EMPLOYEE", "REASSIGN_EMPLOYEE",
-            "DEACTIVATE_EMPLOYEE", "REACTIVATE_EMPLOYEE");
+            "DEACTIVATE_EMPLOYEE", "REACTIVATE_EMPLOYEE",
+            "UPDATE_EXPENSE", "DELETE_EXPENSE"); // Story 20.10
 
     private final Map<String, ConflictResolutionStrategy> strategies;
     private final AppendOnlyStrategy fallback;

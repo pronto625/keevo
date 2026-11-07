@@ -224,6 +224,8 @@ class SyncKeysetIndexJobPostgresIntegrationTest extends PostgresIntegrationTest 
         assertThat(keysetIndexes(schema)).doesNotContainKey("idx_invoices_sync_keyset");
         // the module's migration creates the table (and its index, V6): here the table alone, as before V6
         jdbc.execute("CREATE TABLE \"" + schema + "\".invoices (id UUID PRIMARY KEY, updated_at TIMESTAMPTZ NOT NULL)");
+        // Story 20.10 — the expenses module's table likewise
+        jdbc.execute("CREATE TABLE \"" + schema + "\".expenses (id UUID PRIMARY KEY, updated_at TIMESTAMPTZ NOT NULL)");
 
         assertThat(job().ensureIndexes(schema))
                 .isEqualTo(new SyncKeysetIndexJob.Result(MODULE_INDEX_COUNT, 0, INDEX_COUNT, 0, 0));

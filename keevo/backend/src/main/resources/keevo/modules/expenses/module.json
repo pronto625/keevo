@@ -1,0 +1,32 @@
+{
+  "id": "expenses",
+  "version": "1.0.0",
+  "displayName": "Dépenses",
+  "category": "premium",
+  "requires": [
+    "core",
+    "store"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [
+    "EXPENSE_VIEW",
+    "EXPENSE_CREATE",
+    "EXPENSE_DELETE"
+  ],
+  "routes": [],
+  "rolePermissions": {
+    "MANAGER": ["EXPENSE_VIEW", "EXPENSE_CREATE", "EXPENSE_DELETE"],
+    "EMPLOYEE": ["EXPENSE_VIEW", "EXPENSE_CREATE"],
+    "VIEWER": ["EXPENSE_VIEW"]
+  },
+  "entitlement": "module.expenses",
+  "free": false
+}

@@ -272,6 +272,7 @@ public class GlobalExceptionHandler {
                  "STORE_LOGO_NOT_FOUND",
                  "PREFERENCES_NOT_FOUND",      // 19.12: tenant not onboarded yet (was an unmapped 500)
                  "NOTIFICATION_NOT_FOUND",
+                 "EXPENSE_NOT_FOUND",          // 20.10
                  "APP_VERSION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",

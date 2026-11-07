@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 251 — gated: 123, exempt: 128.
+Handlers: 256 — gated: 128, exempt: 128.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -141,6 +141,12 @@ Handlers: 251 — gated: 123, exempt: 128.
 | GET | `/api/v1/employees/{employeeId}/sessions` | — | — | — | authentification: appareils connectés | DeviceSessionController#employeeSessions |
 | DELETE | `/api/v1/employees/{employeeId}/sessions/{sessionId}` | — | — | — | authentification: appareils connectés | DeviceSessionController#closeEmployeeSession |
 | PATCH | `/api/v1/employees/{employeeId}/store` | — | — | — | core: employés (plafond du plan) | EmployeeController#reassignStore |
+| GET | `/api/v1/expenses` | `expenses` | READ | `EXPENSE_VIEW` |  | ExpenseController#list |
+| POST | `/api/v1/expenses` | `expenses` | WRITE | `EXPENSE_CREATE` |  | ExpenseController#create |
+| GET | `/api/v1/expenses/options` | `expenses` | READ | `EXPENSE_VIEW` |  | ExpenseController#options |
+| DELETE | `/api/v1/expenses/{id}` | `expenses` | WRITE | `EXPENSE_DELETE` |  | ExpenseController#delete |
+| GET | `/api/v1/expenses/{id}` | `expenses` | READ | `EXPENSE_VIEW` |  | ExpenseController#get |
+| PUT | `/api/v1/expenses/{id}` | `expenses` | WRITE | `EXPENSE_CREATE` |  | ExpenseController#update |
 | GET | `/api/v1/exports` | `reporting` | READ | — |  | ExportController#list |
 | POST | `/api/v1/exports` | `reporting` | READ (produit un fichier à partir des données existantes, sans les modifier) | — |  | ExportController#request |
 | GET | `/api/v1/exports/datasets` | `reporting` | READ | — |  | ExportController#datasets |

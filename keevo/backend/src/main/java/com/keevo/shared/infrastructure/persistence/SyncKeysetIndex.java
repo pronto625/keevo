@@ -85,5 +85,7 @@ public record SyncKeysetIndex(String name, String table, String cursor, String m
             new SyncKeysetIndex("idx_inventory_counts_sync_keyset", "inventory_counts", "updated_at"),
             new SyncKeysetIndex("idx_reports_sync_keyset", "reports", "updated_at"),
             // Story 15.5b — module table: created by db/modules/invoicing/V6__invoice_sync_keyset.sql
-            new SyncKeysetIndex("idx_invoices_sync_keyset", "invoices", "updated_at", "invoicing"));
+            new SyncKeysetIndex("idx_invoices_sync_keyset", "invoices", "updated_at", "invoicing"),
+            // Story 20.10 — module table: created by db/modules/expenses/V1__expenses.sql
+            new SyncKeysetIndex("idx_expenses_sync_keyset", "expenses", "updated_at", "expenses"));
 }

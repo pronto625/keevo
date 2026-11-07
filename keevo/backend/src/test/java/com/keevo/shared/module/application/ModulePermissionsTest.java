@@ -163,10 +163,13 @@ class ModulePermissionsTest {
                 new org.springframework.core.io.support.PathMatchingResourcePatternResolver());
         ModulePermissions permissions = permissions(catalog);
         permissions.afterSingletonsInstantiated();
+        // 20.10: + the expenses module's (an employee records and edits, a manager also deletes)
         assertThat(permissions.permissionsFor(Role.EMPLOYEE))
-                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND");
+                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "EXPENSE_VIEW",
+                        "EXPENSE_CREATE");
         assertThat(permissions.permissionsFor(Role.MANAGER))
-                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND");
-        assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactly("INVOICE_VIEW");
+                .containsExactlyInAnyOrder("INVOICE_VIEW", "INVOICE_CREATE", "INVOICE_SEND", "EXPENSE_VIEW",
+                        "EXPENSE_CREATE", "EXPENSE_DELETE");
+        assertThat(permissions.permissionsFor(Role.VIEWER)).containsExactlyInAnyOrder("INVOICE_VIEW", "EXPENSE_VIEW");
     }
 }

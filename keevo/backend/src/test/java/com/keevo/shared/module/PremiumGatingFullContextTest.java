@@ -353,6 +353,7 @@ class PremiumGatingFullContextTest extends FullContextIntegrationTest {
         deltaProviders.forEach(d -> deltas.put(d.entityKey(), d.moduleId()));
         assertThat(deltas).containsAllEntriesOf(Map.of("inventorySessions", "counting", "stockTransfers", "multi-store",
                 "products", "catalog", "clients", "crm", "invoices", "invoicing")); // 15.5b: invoices (premium)
-        assertThat(deltas).hasSize(16);
+        assertThat(deltas).containsEntry("expenses", "expenses"); // 20.10: expenses (premium)
+        assertThat(deltas).hasSize(17);
     }
 }

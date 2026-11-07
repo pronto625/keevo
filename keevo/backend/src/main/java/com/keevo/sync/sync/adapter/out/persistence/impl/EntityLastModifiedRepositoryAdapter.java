@@ -28,6 +28,13 @@ public class EntityLastModifiedRepositoryAdapter implements EntityLastModifiedRe
 
     @Override
     public Optional<Instant> findUpdatedAt(LwwEntity entity, UUID id) {
+        // Story 20.10 — a module table may not exist yet in this tenant: never query a missing relation (it would
+        // abort the operation's transaction); the handler then reports the unknown entity itself.
+        if (entity.moduleTable() && !Boolean.TRUE.equals(em.createNativeQuery(
+                "SELECT to_regclass(CAST(:t AS text)) IS NOT NULL").setParameter("t", entity.table())
+                .getSingleResult())) {
+            return Optional.empty();
+        }
         List<?> rows = em.createNativeQuery(
                         "SELECT updated_at FROM " + entity.table() + " WHERE id = :id")
                 .setParameter("id", id)

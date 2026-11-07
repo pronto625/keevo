@@ -24,7 +24,8 @@ class ModuleIdsAtGoLivePinTest {
     /** The 18 module ids of {@code keevo/modules/*}/module.json at V50. */
     static final Set<String> KNOWN = Set.of("admin", "advanced-reports", "alerts", "catalog", "core", "counting",
             "crm", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
-            "report-config", "reporting", "store", "sync");
+            "report-config", "reporting", "store", "sync",
+            "expenses"); // 20.10 — owner-disabled for existing tenants by V56
 
     @Test
     @DisplayName("every shipped module id is pinned (a new module ships its owner-disabling migration first)")

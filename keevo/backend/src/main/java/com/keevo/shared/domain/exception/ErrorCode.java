@@ -208,6 +208,8 @@ public enum ErrorCode {
     STORE_LOGO_TOO_LARGE,       // HTTP 422 — logo over keevo.store-logo.max-bytes
     STORE_LOGO_TOO_HEAVY,       // HTTP 422 — re-encoded logo still over keevo.store-logo.max-bytes
     STORE_LOGO_NOT_FOUND,       // HTTP 404 — the store has no logo
+    // ── Expenses (Story 20.10) ────────────────────────────────────────────
+    EXPENSE_NOT_FOUND,          // HTTP 404 — expense unknown, deleted or of a store the actor does not see
     // ── Notification inbox (Story 19.9) ───────────────────────────────────
     NOTIFICATION_NOT_FOUND,     // HTTP 404 — notification unknown or of another user
     // ── Generic ───────────────────────────────────────────────────

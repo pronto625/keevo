@@ -151,6 +151,7 @@ public final class ErrorMessages {
             Map.entry("STORE_LOGO_TOO_HEAVY",        "Logo trop lourd après traitement : choisissez une image plus simple"),
             Map.entry("STORE_LOGO_NOT_FOUND",        "Cette boutique n'a pas de logo"),
             Map.entry("NOTIFICATION_NOT_FOUND",      "Notification introuvable"),
+            Map.entry("EXPENSE_NOT_FOUND",           "Dépense introuvable"),
             Map.entry("OPTIMISTIC_LOCK",              "Cette donnée a été modifiée par une autre opération, veuillez réessayer"),
             Map.entry("INVALID_AMOUNT", "Montant invalide"),
             Map.entry("NEGATIVE_MONETARY_VALUE", "Un montant ne peut pas être négatif"),

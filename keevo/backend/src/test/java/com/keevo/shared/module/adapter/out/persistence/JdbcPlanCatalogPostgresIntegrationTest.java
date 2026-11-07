@@ -341,11 +341,12 @@ class JdbcPlanCatalogPostgresIntegrationTest {
         assertThat(profileRow("TEAM")).isEqualTo("8/-/8/-");
         assertThat(profileRow("BUSINESS")).isEqualTo("-/-/-/-");
         assertThat(profileRow("BUSINESS_TRIAL")).isEqualTo("-/-/-/-");
-        assertThat(granted("PRO")).containsExactly("exports", "invoicing", "report-config");
+        // 20.10 (V56): expenses granted from PRO up
+        assertThat(granted("PRO")).containsExactly("expenses", "exports", "invoicing", "report-config");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.profile_modules WHERE plan_type = 'PRO' "
                 + "AND NOT granted", Integer.class)).as("the other paid modules explicitly withheld").isEqualTo(5);
-        List<String> all = List.of("advanced-reports", "alerts", "counting", "exports", "invoicing", "multi-store",
-                "profitability", "report-config");
+        List<String> all = List.of("advanced-reports", "alerts", "counting", "expenses", "exports", "invoicing",
+                "multi-store", "profitability", "report-config");
         for (String plan : List.of("TEAM", "BUSINESS", "BUSINESS_TRIAL")) {
             assertThat(granted(plan)).as(plan).isEqualTo(all);
         }

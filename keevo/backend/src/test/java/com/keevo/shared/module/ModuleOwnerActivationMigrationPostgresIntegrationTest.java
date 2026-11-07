@@ -91,23 +91,25 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
     @DisplayName("pre-existing tenants: invoicing off, nothing else; FREE granted invoicing; default sets seeded; "
             + "re-run keeps an owner choice and an edited DOCUMENT default set")
     void backfillAndRerun() throws Exception {
-        assertThat(rows(FIRST)).containsExactly(Map.entry("invoicing", false));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("invoicing", false));
+        // Story 20.10 — V56 owner-disables the new expenses module the same way
+        assertThat(rows(FIRST)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", false));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", false));
         assertThat(jdbc.queryForObject("SELECT granted FROM public.profile_modules WHERE plan_type = 'FREE' "
                 + "AND module_id = 'invoicing'", Boolean.class)).isTrue();
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "multi-store", "pos");
 
         // since go-live: the first owner enabled invoicing; the super-admin edited the DOCUMENT default set
-        jdbc.update("UPDATE public.tenant_module_activation SET activated = true WHERE tenant_id = ?", FIRST);
+        jdbc.update("UPDATE public.tenant_module_activation SET activated = true WHERE tenant_id = ? "
+                + "AND module_id = 'invoicing'", FIRST);
         jdbc.update("DELETE FROM public.module_activation_rule_modules WHERE module_id = 'multi-store' AND rule_set_id = "
                 + "(SELECT id FROM public.module_activation_rule_sets WHERE sale_flow = 'DOCUMENT' "
                 + "AND sector_type IS NULL)");
 
         rerunV50();
 
-        assertThat(rows(FIRST)).containsExactly(Map.entry("invoicing", true));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("invoicing", false));
+        assertThat(rows(FIRST)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", true));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", false));
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "pos");
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.module_activation_rule_sets", Integer.class))

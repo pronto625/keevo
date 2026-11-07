@@ -45,10 +45,10 @@ class ModuleRegistryPostgresIntegrationTest {
     private static final UUID TENANT_ID = UUID.randomUUID();
     private static final String DELETED_TENANT = "kv_reg002";
     private static final String[] SHIPPED = {"admin", "advanced-reports", "alerts", "catalog", "core", "counting",
-            "crm", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
+            "crm", "expenses", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
             "report-config", "reporting", "store", "sync"};
     /** Story 13.10a — the paid feature modules of plan §6.1. */
-    private static final String[] PAID = {"advanced-reports", "alerts", "counting", "exports", "invoicing",
+    private static final String[] PAID = {"advanced-reports", "alerts", "counting", "expenses", "exports", "invoicing",
             "multi-store", "profitability", "report-config"};
 
     private static JdbcTemplate jdbc;

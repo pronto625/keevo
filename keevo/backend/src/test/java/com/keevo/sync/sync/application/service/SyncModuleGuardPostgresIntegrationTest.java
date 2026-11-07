@@ -449,8 +449,10 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
         // Story 15.5b: offline invoices (paid module)
         put.apply("invoicing").accept(List.of("CREATE_INVOICE", "UPDATE_INVOICE", "ISSUE_INVOICE", "PAY_INVOICE",
                 "CANCEL_INVOICE", "CONVERT_QUOTE", "ADD_INVOICE_PAYMENT", "SETTLE_INVOICE_PAYMENT"));
+        // Story 20.10: offline expenses (paid module)
+        put.apply("expenses").accept(List.of("CREATE_EXPENSE", "UPDATE_EXPENSE", "DELETE_EXPENSE"));
 
-        assertThat(handlers).hasSize(21); // 17.12: StockTrackingSyncHandler
+        assertThat(handlers).hasSize(22); // 17.12: StockTrackingSyncHandler; 20.10: ExpenseSyncHandler
         assertThat(moduleByType).isEqualTo(expected);
     }
 }

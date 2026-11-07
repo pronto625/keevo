@@ -77,7 +77,10 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
             Map.entry("UPDATE_STORE", new Target(LwwEntity.STORE, "storeId")),
             Map.entry("DEACTIVATE_STORE", new Target(LwwEntity.STORE, "storeId")),
             Map.entry("RENAME_CATEGORY", new Target(LwwEntity.CATEGORY, "categoryId")),
-            Map.entry("TOGGLE_CATEGORY", new Target(LwwEntity.CATEGORY, "categoryId")));
+            Map.entry("TOGGLE_CATEGORY", new Target(LwwEntity.CATEGORY, "categoryId")),
+            // Story 20.10 — offline expense edits and deletions (one older than the expense's last write is superseded)
+            Map.entry("UPDATE_EXPENSE", new Target(LwwEntity.EXPENSE, "expenseId")),
+            Map.entry("DELETE_EXPENSE", new Target(LwwEntity.EXPENSE, "expenseId")));
 
     /**
      * OWNER-only operations: for anyone else the handler must still run and reject them

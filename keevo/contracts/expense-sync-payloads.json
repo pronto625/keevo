@@ -1,0 +1,89 @@
+{
+  "description": "Story 20.10 — payloads of the offline expense sync operations, as the Bref React Native app queues them and as ExpenseSyncHandler reads them (backend test ExpenseSyncHandlerTest). entityId of every operation = the expense id. A re-sent operation (same operationId) is answered DUPLICATE; UPDATE_EXPENSE / DELETE_EXPENSE older (clientTimestamp) than the expense's last write are superseded (last write wins). Pull: entity key 'expenses', rows shaped like the REST response, a deleted expense as {id, deleted: true, updatedAt}. Change this file only with both sides.",
+  "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+  "categories": ["goods_purchase", "rent", "salaries", "transport", "utilities", "telecom", "marketing", "taxes", "maintenance", "other"],
+  "paymentMethods": ["cash", "mobile_money", "bank_transfer", "card", "other"],
+  "operations": [
+    {
+      "name": "create",
+      "operationType": "CREATE_EXPENSE",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 150000,
+        "category": "rent",
+        "expenseDate": "2026-11-01",
+        "label": "Loyer de novembre",
+        "paymentMethod": "mobile_money"
+      }
+    },
+    {
+      "name": "createMinimal",
+      "operationType": "CREATE_EXPENSE",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 2500.5,
+        "category": "transport"
+      }
+    },
+    {
+      "name": "createBrefDescription",
+      "operationType": "CREATE_EXPENSE",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 12000,
+        "category": "goods_purchase",
+        "description": "Cartons de savon",
+        "expenseDate": "2026-11-02"
+      }
+    },
+    {
+      "name": "update",
+      "operationType": "UPDATE_EXPENSE",
+      "payload": {
+        "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 155000,
+        "category": "rent",
+        "expenseDate": "2026-11-01",
+        "label": "Loyer de novembre (charges comprises)",
+        "note": "Payé au bailleur M. Ekane",
+        "paymentMethod": "cash",
+        "expectedUpdatedAt": "2026-11-07T08:15:30.123456Z"
+      }
+    },
+    {
+      "name": "delete",
+      "operationType": "DELETE_EXPENSE",
+      "payload": {
+        "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d"
+      }
+    }
+  ],
+  "rejected": [
+    {
+      "name": "unknownCategory",
+      "operationType": "CREATE_EXPENSE",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 1000,
+        "category": "food"
+      },
+      "reason": "VALIDATION_ERROR"
+    },
+    {
+      "name": "threeDecimals",
+      "operationType": "CREATE_EXPENSE",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 10.123,
+        "category": "other"
+      },
+      "reason": "VALIDATION_ERROR"
+    },
+    {
+      "name": "missingExpenseId",
+      "operationType": "DELETE_EXPENSE",
+      "payload": {},
+      "reason": "Missing required field: expenseId"
+    }
+  ]
+}
