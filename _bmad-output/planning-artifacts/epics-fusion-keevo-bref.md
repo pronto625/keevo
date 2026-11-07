@@ -921,7 +921,7 @@ So that **je retrouve le comportement Bref sans saisie préalable (FUS-FR16)**.
 **When** la facture est émise
 **Then** aucune dérivation n'a lieu et la facture reste valide (autonomie du module)
 
-- [ ] [Deferred-from: review 20-2, 2026-11-06] Client list and search are unbounded and use `LIKE '%q%'` without a trigram index (pre-existing shape kept by 20.2) [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSpringRepository.java findAllScoped/searchScoped] — keyset pagination + `pg_trgm` index when client lookup by phone/name serves document derivation
+- [x] [Deferred-from: review 20-2, 2026-11-06] (done in 20-6: opt-in keyset pages, pg_trgm search, bounded lookup) Client list and search are unbounded and use `LIKE '%q%'` without a trigram index (pre-existing shape kept by 20.2) [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/out/persistence/ClientSpringRepository.java findAllScoped/searchScoped] — keyset pagination + `pg_trgm` index when client lookup by phone/name serves document derivation
 
 ### Story 20.7 : Modèles de rendu, signatures, liens publics
 
@@ -1953,6 +1953,8 @@ So that **le code reste simple**.
 **Given** le module `migration`, le mode legacy de l'app (23.11), le pré-migrateur et les canaux EAS de l'ancienne app
 **When** ils sont retirés
 **Then** `migration_records` est archivé hors base chaude (export daté), le module est désinscrit, les tests restent verts, et les ArchUnit/contrats sont mis à jour
+
+- [ ] [Deferred-from: review 20-6, 2026-11-07] `GET /api/v1/clients` without `limit` still returns the whole client list (kept for installed V1 apps) [keevo/backend/src/main/java/com/keevo/crm/contact/adapter/in/web/ClientController.java listClients] — once V1 apps are retired, make `limit` mandatory (or cap it server-side)
 
 ### Story 25.4 : Fin de la distribution Keevo hors store (ADR-02)
 

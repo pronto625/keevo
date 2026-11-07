@@ -351,7 +351,7 @@ class ModuleBackfillPostgresIntegrationTest {
         // every synced tenant — crm keeps its SYSTEM ACTIVE/FREE row; invoicing for enabled tenants
         for (Tenant t : List.of(TRIAL, EXPIRED, GRACED, FREE, ADMIN_ROW)) {
             assertThat(rows(t).get("crm")).startsWith("ACTIVE/FREE/SYSTEM");
-            assertThat(provisionedVersion(t, "crm")).isEqualTo("2"); // 20.2: crm V2
+            assertThat(provisionedVersion(t, "crm")).isEqualTo("3"); // 20.2: crm V2, 20.6: crm V3
         }
         assertThat(provisionedVersion(TRIAL, "invoicing")).isEqualTo(latestInvoicing());
         assertThat(provisionedVersion(ADMIN_ROW, "invoicing")).isEqualTo(latestInvoicing());

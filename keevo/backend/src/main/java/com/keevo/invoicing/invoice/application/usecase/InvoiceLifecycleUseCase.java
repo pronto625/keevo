@@ -36,6 +36,9 @@ import java.util.UUID;
  * en facture »); {@link #cancel} also cancels a DRAFT quote (no number). The conversion of a quote
  * ({@link ConvertQuoteUseCase}) issues its new invoice through {@link #issue(UUID, UUID, String)}: same quota, same
  * numbering, same events.
+ *
+ * <p>Story 20.6 — a counted issue (user issue, sync issue, quote conversion) first derives the invoice's CRM client
+ * and catalogue products ({@link DocumentDerivationService}); the POS bridge never does.
  */
 @Service
 public class InvoiceLifecycleUseCase {
@@ -48,12 +51,14 @@ public class InvoiceLifecycleUseCase {
     private final CreditNoteRepository creditNotes;
     private final UsageQuotaPort quotas;
     private final InvoicePaymentUseCase payments;
+    private final DocumentDerivationService derivation;
 
     public InvoiceLifecycleUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                    ApplicationEventPublisher events, CompanyIdentity companyIdentity, Clock clock,
                                    CreditNoteRepository creditNotes, UsageQuotaPort quotas,
-                                   InvoicePaymentUseCase payments) {
+                                   InvoicePaymentUseCase payments, DocumentDerivationService derivation) {
         this.payments = payments;
+        this.derivation = derivation;
         this.creditNotes = creditNotes;
         this.quotas = quotas;
         this.invoices = invoices;
@@ -85,7 +90,7 @@ public class InvoiceLifecycleUseCase {
     }
 
     private Invoice issue(UUID id, UUID actorId, String tenantId, boolean pricesIncludeVat, boolean counted) {
-        Invoice draft = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
+        Invoice locked = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         InvoicingSettings found = settings.find()
                 .orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
         InvoicingSettings stored = pricesIncludeVat ? withPricesIncludingVat(found) : found;
@@ -97,11 +102,14 @@ public class InvoiceLifecycleUseCase {
         boolean hasLogo = companyIdentity.hasLogo(tenantId);
         Instant now = clock.instant();
         LocalDate today = LocalDate.ofInstant(now, KeevoZones.WAT);
-        draft.assertIssuable(seller); // throws the precise error before any number is allocated
-        draft.terms().assertDueDateFrom(today); // Story 20.5 — a due date never precedes the issue date
+        locked.assertIssuable(seller); // throws the precise error before any number is allocated
+        locked.terms().assertDueDateFrom(today); // Story 20.5 — a due date never precedes the issue date
         if (counted) { // 19.8: before numbering, same transaction — a refusal keeps the draft and the sequence
             quotas.assertAndIncrementForSchema(tenantId, UsageMetric.DOCUMENTS, 1);
         }
+        // Story 20.6 — after the cheap checks (a refused issue derives nothing): a user's issue (never the POS
+        // bridge) records its client and products in the CRM / catalogue when the tenant wants it; same transaction
+        Invoice draft = counted ? derivation.derive(locked, found, seller, actorId, tenantId, now) : locked;
         Invoice issued = ManageDraftInvoiceUseCase.valid(() -> draft.issue(
                 number(today.getYear(), invoices.nextNumber(today.getYear())), today, seller, now))
                 .withSellerIdentity(nameFromDisplay, hasLogo);
@@ -114,13 +122,13 @@ public class InvoiceLifecycleUseCase {
     /** Story 14.4 — the settings with VAT-inclusive prices (automatic invoice of a sale). */
     static InvoicingSettings withPricesIncludingVat(InvoicingSettings s) {
         return new InvoicingSettings(s.legalName(), s.address(), s.phone(), s.niu(), s.rccm(), s.vatRegistered(),
-                s.vatRate(), true, s.paymentDetails(), s.footer());
+                s.vatRate(), true, s.paymentDetails(), s.footer(), s.deriveFromDocuments());
     }
 
     /** The settings with the company display name as legal name (Story 14.2 fallback). */
     static InvoicingSettings withLegalName(InvoicingSettings s, String legalName) {
         return new InvoicingSettings(legalName, s.address(), s.phone(), s.niu(), s.rccm(), s.vatRegistered(),
-                s.vatRate(), s.pricesIncludeVat(), s.paymentDetails(), s.footer());
+                s.vatRate(), s.pricesIncludeVat(), s.paymentDetails(), s.footer(), s.deriveFromDocuments());
     }
 
     @Transactional

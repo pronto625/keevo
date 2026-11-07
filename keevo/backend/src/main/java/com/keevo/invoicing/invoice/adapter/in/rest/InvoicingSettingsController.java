@@ -34,7 +34,8 @@ public class InvoicingSettingsController {
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<InvoicingSettingsDto>> get() {
-        return ResponseEntity.ok(ApiResponseWrapper.ok(InvoicingSettingsDto.fromDomain(settings.current())));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(InvoicingSettingsDto.fromView(
+                settings.currentView(TenantContext.getCurrentTenant()))));
     }
 
     @RequiresPermission(InvoicingModule.INVOICE_MANAGE)
@@ -42,7 +43,7 @@ public class InvoicingSettingsController {
     @PutMapping
     public ResponseEntity<ApiResponseWrapper<InvoicingSettingsDto>> update(
             @Valid @RequestBody InvoicingSettingsDto request) {
-        return ResponseEntity.ok(ApiResponseWrapper.ok(InvoicingSettingsDto.fromDomain(
-                settings.update(request.toDomain(), CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
+        return ResponseEntity.ok(ApiResponseWrapper.ok(InvoicingSettingsDto.fromView(
+                settings.updateView(request.toDomain(), CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }
 }

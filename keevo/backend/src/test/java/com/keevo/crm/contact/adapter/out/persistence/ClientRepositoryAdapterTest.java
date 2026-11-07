@@ -81,9 +81,9 @@ class ClientRepositoryAdapterTest {
     }
 
     @Test
-    @DisplayName("searchByNameOrPhone() delegates to spring repo and maps")
+    @DisplayName("searchByNameOrPhone() delegates to spring repo with the %q% pattern (20.6, trigram index) and maps")
     void should_delegate_search() {
-        when(springRepository.searchByNameOrPhone("ali")).thenReturn(List.of(sampleEntity()));
+        when(springRepository.searchByNameOrPhone("%ali%")).thenReturn(List.of(sampleEntity()));
 
         List<Client> result = adapter.searchByNameOrPhone("ali");
 
@@ -111,5 +111,24 @@ class ClientRepositoryAdapterTest {
         adapter.archive(UUID.randomUUID());
 
         verify(springRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("containsPattern() escapes the LIKE wildcards and the escape char (20.6): « _ » / « % » never match all")
+    void should_escape_like_wildcards() {
+        assertThat(ClientRepositoryAdapter.containsPattern("ali")).isEqualTo("%ali%");
+        assertThat(ClientRepositoryAdapter.containsPattern("_")).isEqualTo("%\\_%");
+        assertThat(ClientRepositoryAdapter.containsPattern("%")).isEqualTo("%\\%%");
+        assertThat(ClientRepositoryAdapter.containsPattern("a\\b")).isEqualTo("%a\\\\b%");
+        assertThat(ClientRepositoryAdapter.containsPattern("50%_off")).isEqualTo("%50\\%\\_off%");
+        assertThat(ClientRepositoryAdapter.containsPattern(null)).isEqualTo("%%");
+    }
+
+    @Test
+    @DisplayName("searchByNameOrPhone(\"_\") passes the escaped pattern to the query")
+    void should_search_with_escaped_pattern() {
+        when(springRepository.searchByNameOrPhone("%\\_%")).thenReturn(List.of());
+        assertThat(adapter.searchByNameOrPhone("_")).isEmpty();
+        verify(springRepository).searchByNameOrPhone("%\\_%");
     }
 }

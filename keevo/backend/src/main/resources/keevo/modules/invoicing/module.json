@@ -8,7 +8,8 @@
   ],
   "enhances": [
     "pos",
-    "crm"
+    "crm",
+    "catalog"
   ],
   "publishes": [
     "invoice.created",
@@ -25,7 +26,8 @@
   ],
   "provides": [],
   "needs": [
-    "ClientLookupPort?"
+    "ClientLookupPort?",
+    "ProductLookupPort?"
   ],
   "extensionPoints": {
     "declares": [],

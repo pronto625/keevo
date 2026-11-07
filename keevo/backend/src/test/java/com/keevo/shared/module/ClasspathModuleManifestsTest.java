@@ -70,8 +70,10 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("pos").needs()).containsExactly("ClientLookupPort?");
         // 14.1: invoicing — standalone (core only), enhances pos/crm, optional ClientLookupPort, own permissions
         assertThat(byId.get("invoicing").requires()).containsExactly("core");
-        assertThat(byId.get("invoicing").enhances()).containsExactly("pos", "crm");
-        assertThat(byId.get("invoicing").needs()).containsExactly("ClientLookupPort?");
+        // 20.6: enhances catalog too, optional ProductLookupPort (document → catalogue products)
+        assertThat(byId.get("invoicing").enhances()).containsExactly("pos", "crm", "catalog");
+        assertThat(byId.get("invoicing").needs()).containsExactly("ClientLookupPort?", "ProductLookupPort?");
+        assertThat(byId.get("catalog").provides()).containsExactly("ProductLookupPort");
         assertThat(byId.get("invoicing").permissions()).containsExactly("INVOICE_CREATE", "INVOICE_VIEW",
                 "INVOICE_SEND", "INVOICE_MANAGE");
         assertThat(byId.get("invoicing").publishes()).containsExactly("invoice.created", "invoice.issued",
@@ -86,7 +88,7 @@ class ClasspathModuleManifestsTest {
                 .allSatisfy(m -> assertThat(m.consumes()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
-        assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm"))
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm") && !m.id().equals("catalog"))
                 .allSatisfy(m -> assertThat(m.provides()).isEmpty());
         assertThat(byId.get("pos").extensionPoints().declares()).containsExactly("pos.checkout.post-sale-actions");
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("pos"))

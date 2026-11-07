@@ -2,6 +2,7 @@ package com.keevo.crm.module;
 
 import com.keevo.crm.api.ClientLookupPort;
 import com.keevo.crm.contact.adapter.in.api.ClientLookupAdapter;
+import com.keevo.crm.contact.application.usecase.DeriveClientFromDocumentUseCase;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.shared.module.CapabilityRegistrar;
 import com.keevo.shared.module.KeevoModule;
@@ -31,9 +32,17 @@ public class CrmModule implements KeevoModule {
     private static final Logger log = LoggerFactory.getLogger(CrmModule.class);
 
     private final ClientRepository clients;
+    private final DeriveClientFromDocumentUseCase documentClients;
 
     public CrmModule(ClientRepository clients) {
+        this(clients, null);
+    }
+
+    /** Story 20.6 — with the document-client derivation behind {@code ClientLookupPort#findOrCreateForDocument}. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public CrmModule(ClientRepository clients, DeriveClientFromDocumentUseCase documentClients) {
         this.clients = clients;
+        this.documentClients = documentClients;
     }
 
     @Override
@@ -43,7 +52,7 @@ public class CrmModule implements KeevoModule {
 
     @Override
     public void registerCapabilities(CapabilityRegistrar registrar) {
-        registrar.provide(ClientLookupPort.class, new ClientLookupAdapter(clients));
+        registrar.provide(ClientLookupPort.class, new ClientLookupAdapter(clients, documentClients));
     }
 
     @Override

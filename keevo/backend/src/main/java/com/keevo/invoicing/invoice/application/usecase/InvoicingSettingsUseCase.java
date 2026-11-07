@@ -21,12 +21,38 @@ public class InvoicingSettingsUseCase {
     private final InvoicingSettingsRepository settings;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final DeriveFromDocumentsPreference derivePreference;
 
     public InvoicingSettingsUseCase(InvoicingSettingsRepository settings, ApplicationEventPublisher events,
-                                    Clock clock) {
+                                    Clock clock, DeriveFromDocumentsPreference derivePreference) {
         this.settings = settings;
         this.events = events;
         this.clock = clock;
+        this.derivePreference = derivePreference;
+    }
+
+    /** Story 20.6 — the settings as served: stored values and the resolved derivation preference. */
+    public record SettingsView(InvoicingSettings settings, boolean deriveFromDocuments) {
+    }
+
+    /** Story 20.6 — {@link #current()} with the resolved derivation preference (one sale-flow read when unset). */
+    @Transactional(readOnly = true)
+    public SettingsView currentView(String tenantSchema) {
+        InvoicingSettings current = current();
+        return new SettingsView(current, derivePreference.resolve(current, tenantSchema));
+    }
+
+    /**
+     * Story 20.6 — saves {@code updated}; its {@code deriveFromDocuments} {@code null} (a body without the field: V1
+     * apps) keeps the stored choice. Answers the saved settings with the resolved preference.
+     */
+    @Transactional
+    public SettingsView updateView(InvoicingSettings updated, UUID actorId, String tenantId) {
+        InvoicingSettings toSave = updated.deriveFromDocuments() != null ? updated
+                : updated.withDeriveFromDocuments(settings.find().map(InvoicingSettings::deriveFromDocuments)
+                        .orElse(null));
+        InvoicingSettings saved = update(toSave, actorId, tenantId);
+        return new SettingsView(saved, derivePreference.resolve(saved, tenantId));
     }
 
     /** The saved profile, or the defaults when the owner never saved one. */

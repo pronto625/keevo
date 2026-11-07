@@ -2,11 +2,14 @@ package com.keevo.crm.contact.adapter.in.api;
 
 import com.keevo.crm.api.ClientLookupPort;
 import com.keevo.crm.api.ClientSummary;
+import com.keevo.crm.api.DocumentClientInput;
+import com.keevo.crm.contact.adapter.in.CurrentClientAccess;
+import com.keevo.crm.contact.application.usecase.DeriveClientFromDocumentUseCase;
 import com.keevo.crm.contact.domain.entity.Client;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
+import com.keevo.crm.contact.domain.service.ClientVisibility;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,13 +30,17 @@ public final class ClientLookupAdapter implements ClientLookupPort {
 
     static final int MAX_LIMIT = 50;
 
-    private static final Comparator<ClientSummary> BY_NAME =
-            Comparator.comparing(ClientSummary::name, String.CASE_INSENSITIVE_ORDER);
-
     private final ClientRepository clientRepository;
+    /** Story 20.6 — {@code null} (tests, tools): no derivation, the answer is always empty. */
+    private final DeriveClientFromDocumentUseCase derivation;
 
     public ClientLookupAdapter(ClientRepository clientRepository) {
+        this(clientRepository, null);
+    }
+
+    public ClientLookupAdapter(ClientRepository clientRepository, DeriveClientFromDocumentUseCase derivation) {
         this.clientRepository = clientRepository;
+        this.derivation = derivation;
     }
 
     @Override
@@ -59,13 +66,22 @@ public final class ClientLookupAdapter implements ClientLookupPort {
         TenantContext.requireCurrent(tenantSchema);
         int max = Math.max(1, Math.min(MAX_LIMIT, limit));
         String q = query == null ? "" : query.strip();
-        List<Client> found = q.isEmpty() ? clientRepository.findAll(false) : clientRepository.searchByNameOrPhone(q);
-        return found.stream()
-                .filter(c -> !c.archived())
+        // Story 20.6 — one bounded, indexed query (keyset order lower(name), id), never the whole client table
+        return clientRepository.findPage(q.isEmpty() ? null : q, false, ClientVisibility.Scope.UNRESTRICTED, null, max)
+                .stream()
                 .map(ClientLookupAdapter::summary)
-                .sorted(BY_NAME)
-                .limit(max)
                 .toList();
+    }
+
+    /**
+     * Story 20.6 — the acting user's establishment comes from the authenticated actor ({@link CurrentClientAccess}:
+     * REST and sync threads alike); no authentication = a member without store → empty.
+     */
+    @Override
+    public Optional<UUID> findOrCreateForDocument(String tenantSchema, DocumentClientInput client, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        if (derivation == null) return Optional.empty();
+        return derivation.execute(client, CurrentClientAccess.get(), actorId, tenantSchema);
     }
 
     private static ClientSummary summary(Client c) {

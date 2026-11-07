@@ -73,4 +73,36 @@ class GetClientsUseCaseTest {
 
         verify(clientRepository).findAll(true, com.keevo.crm.contact.domain.service.ClientVisibility.Scope.UNRESTRICTED);
     }
+
+    @Test
+    @DisplayName("20.6 executePage reads limit + 1: the extra row only yields the cursor of the last returned one")
+    void page_reads_one_more_row() {
+        UUID a = UUID.randomUUID();
+        UUID b = UUID.randomUUID();
+        var scope = com.keevo.crm.contact.domain.service.ClientVisibility.Scope.UNRESTRICTED;
+        when(clientRepository.findPage(null, false, scope, null, 2)).thenReturn(List.of(sampleClient(a),
+                sampleClient(b)));
+
+        var page = useCase.executePage(new GetClientsUseCase.GetClientsQuery(null, false), 1, null);
+
+        assertThat(page.items()).extracting(Client::id).containsExactly(a);
+        assertThat(page.next()).isEqualTo(new GetClientsUseCase.ClientCursor("Alice", a));
+        when(clientRepository.findPage(null, false, scope,
+                new ClientRepository.ClientKeyset("Alice", a), 2)).thenReturn(List.of(sampleClient(b)));
+        var last = useCase.executePage(new GetClientsUseCase.GetClientsQuery(null, false), 1, page.next());
+        assertThat(last.items()).extracting(Client::id).containsExactly(b);
+        assertThat(last.next()).isNull();
+    }
+
+    @Test
+    @DisplayName("20.6 cursor round trip (name with ':' and accents); garbage → IllegalArgumentException")
+    void cursor_round_trip() {
+        var cursor = new GetClientsUseCase.ClientCursor("Éts Ngo : Akwa", UUID.randomUUID());
+        assertThat(GetClientsUseCase.ClientCursor.decode(cursor.encode())).isEqualTo(cursor);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> GetClientsUseCase.ClientCursor.decode("x!"))
+                .isInstanceOf(IllegalArgumentException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> GetClientsUseCase.ClientCursor.decode(
+                java.util.Base64.getUrlEncoder().encodeToString("pas-un-uuid-du-tout-pas-un-uuid-du-t:x".getBytes())))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

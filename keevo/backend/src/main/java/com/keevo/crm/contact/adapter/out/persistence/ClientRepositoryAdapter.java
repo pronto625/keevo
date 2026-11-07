@@ -7,11 +7,15 @@ import com.keevo.crm.contact.domain.entity.ClientType;
 import com.keevo.crm.contact.domain.entity.MarketingConsent;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
 import com.keevo.crm.contact.domain.service.ClientVisibility;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -28,9 +32,17 @@ public class ClientRepositoryAdapter implements ClientRepository {
     private static final Set<UUID> NO_STORE = Set.of(new UUID(0L, 0L));
 
     private final ClientSpringRepository springRepository;
+    /** Story 20.6 — the keyset page query (built per call: only the predicates in use, so the indexes apply). */
+    private final EntityManager entityManager;
 
     public ClientRepositoryAdapter(ClientSpringRepository springRepository) {
+        this(springRepository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public ClientRepositoryAdapter(ClientSpringRepository springRepository, EntityManager entityManager) {
         this.springRepository = springRepository;
+        this.entityManager = entityManager;
     }
 
     @Override
@@ -51,7 +63,7 @@ public class ClientRepositoryAdapter implements ClientRepository {
 
     @Override
     public List<Client> searchByNameOrPhone(String query) {
-        return springRepository.searchByNameOrPhone(query)
+        return springRepository.searchByNameOrPhone(containsPattern(query))
                 .stream().map(this::toDomain).toList();
     }
 
@@ -65,8 +77,64 @@ public class ClientRepositoryAdapter implements ClientRepository {
     @Override
     public List<Client> searchByNameOrPhone(String query, ClientVisibility.Scope scope) {
         if (!scope.restricted()) return searchByNameOrPhone(query);
-        return springRepository.searchScoped(query, storeIds(scope))
+        return springRepository.searchScoped(containsPattern(query), storeIds(scope))
                 .stream().map(this::toDomain).toList();
+    }
+
+    /**
+     * Story 20.6 — {@code %query%}: the shape the trigram indexes serve ({@code LIKE} on a constant pattern). The
+     * user's {@code \\}, {@code %} and {@code _} are escaped (PostgreSQL's default {@code LIKE} escape is the
+     * backslash): a search for « _ » finds an underscore, not every client.
+     */
+    static String containsPattern(String query) {
+        String q = query == null ? "" : query;
+        return "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
+    }
+
+    @Override
+    public Optional<UUID> findDocumentMatch(UUID storeId, String phoneNormalized) {
+        if (phoneNormalized == null) return Optional.empty();
+        List<String> ids = storeId == null
+                ? springRepository.findDocumentMatchWithoutStore(phoneNormalized)
+                : springRepository.findDocumentMatchInStore(storeId, phoneNormalized);
+        return ids.stream().findFirst().map(UUID::fromString);
+    }
+
+    @Override
+    public void fillMissingFromDocument(UUID id, String email, String rccm, String niu, Instant now) {
+        if (email == null && rccm == null && niu == null) return;
+        springRepository.fillMissingFromDocument(id, email == null ? "" : email, rccm == null ? "" : rccm,
+                niu == null ? "" : niu, now);
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public List<Client> findPage(String search, boolean includeArchived, ClientVisibility.Scope scope,
+                                 ClientKeyset after, int limit) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM clients c WHERE ");
+        Map<String, Object> params = new LinkedHashMap<>();
+        boolean searching = search != null && !search.isBlank();
+        if (searching) {
+            // same rule as searchByNameOrPhone: non-archived only (includeArchived ignored, as before 20.6)
+            sql.append("c.archived = FALSE AND (lower(c.name) LIKE lower(:pattern) OR c.phone LIKE :pattern)");
+            params.put("pattern", containsPattern(search.strip()));
+        } else {
+            sql.append(includeArchived ? "TRUE" : "c.archived = FALSE");
+        }
+        if (scope.restricted()) {
+            sql.append(" AND (c.store_id IS NULL OR c.store_id = ANY(CAST(:storeIds AS uuid[])))");
+            params.put("storeIds", arrayLiteral(storeIds(scope)));
+        }
+        if (after != null) {
+            sql.append(" AND (lower(c.name), c.id) > (lower(:afterName), CAST(:afterId AS uuid))");
+            params.put("afterName", after.name());
+            params.put("afterId", after.id().toString());
+        }
+        sql.append(" ORDER BY lower(c.name), c.id LIMIT :limit");
+        params.put("limit", limit);
+        Query query = entityManager.createNativeQuery(sql.toString(), ClientJpaEntity.class);
+        params.forEach(query::setParameter);
+        return ((List<ClientJpaEntity>) query.getResultList()).stream().map(this::toDomain).toList();
     }
 
     @Override

@@ -11,7 +11,9 @@
   ],
   "publishes": [],
   "consumes": [],
-  "provides": [],
+  "provides": [
+    "ProductLookupPort"
+  ],
   "needs": [],
   "extensionPoints": {
     "declares": [],

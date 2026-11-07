@@ -8,6 +8,9 @@ import java.math.BigDecimal;
  *
  * @param vatRegistered    whether the seller collects VAT (else « TVA non applicable », every line at 0 %)
  * @param pricesIncludeVat whether line unit prices are entered VAT included (TTC) or excluded (HT)
+ * @param deriveFromDocuments Story 20.6 — whether issuing an invoice records its client and products in the CRM and
+ *                         the catalogue; {@code null} = not chosen (resolved from the tenant's sale flow: on for
+ *                         {@code DOCUMENT}, off otherwise)
  */
 public record InvoicingSettings(
         String legalName,
@@ -19,10 +22,25 @@ public record InvoicingSettings(
         BigDecimal vatRate,
         boolean pricesIncludeVat,
         String paymentDetails,
-        String footer) {
+        String footer,
+        Boolean deriveFromDocuments) {
 
     /** Cameroon standard VAT rate (17.5 % + 10 % additional council tax = 19.25 %). */
     public static final BigDecimal DEFAULT_VAT_RATE = new BigDecimal("19.25");
+
+    /** Pre-20.6 shape: the derivation preference not chosen. */
+    public InvoicingSettings(String legalName, String address, String phone, String niu, String rccm,
+                             boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                             String paymentDetails, String footer) {
+        this(legalName, address, phone, niu, rccm, vatRegistered, vatRate, pricesIncludeVat, paymentDetails, footer,
+                null);
+    }
+
+    /** Story 20.6 — the same settings with another derivation preference ({@code null} = not chosen). */
+    public InvoicingSettings withDeriveFromDocuments(Boolean derive) {
+        return new InvoicingSettings(legalName, address, phone, niu, rccm, vatRegistered, vatRate, pricesIncludeVat,
+                paymentDetails, footer, derive);
+    }
 
     public InvoicingSettings {
         legalName = trimToNull(legalName);

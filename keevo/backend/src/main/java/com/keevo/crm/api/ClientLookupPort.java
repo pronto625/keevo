@@ -32,4 +32,18 @@ public interface ClientLookupPort extends Capability {
      * non-archived client when the query is blank), sorted by name, at most {@code limit} (clamped to 1–50).
      */
     List<ClientSummary> search(String tenantSchema, String query, int limit);
+
+    /**
+     * Story 20.6 — the CRM client of an issued document, found or created (Bref: issuing a sale records its customer).
+     * The client is looked up by E.164 phone in the acting user's establishment (OWNER: the oldest active store;
+     * store member: its own store), then among the legacy clients without store; several → the oldest. A found client
+     * only gets its empty email / RCCM / NIU filled from the document (never its name). None → created in that store
+     * (audited as a creation by {@code actorId}). Concurrent calls for the same phone and store are serialised.
+     *
+     * <p>Never throws for a business reason (unparseable phone, member without store, nothing to create from): the
+     * answer is then empty and the caller keeps its free-text client. Joins the caller's transaction (required).
+     *
+     * @return the client id to link, empty when no derivation is possible
+     */
+    java.util.Optional<UUID> findOrCreateForDocument(String tenantSchema, DocumentClientInput client, UUID actorId);
 }

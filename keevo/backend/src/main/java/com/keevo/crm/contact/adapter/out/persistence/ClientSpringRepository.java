@@ -24,9 +24,15 @@ public interface ClientSpringRepository extends JpaRepository<ClientJpaEntity, U
     @Query("SELECT c FROM ClientJpaEntity c WHERE (:includeArchived = TRUE OR c.archived = FALSE) ORDER BY c.name")
     List<ClientJpaEntity> findAllFiltered(@Param("includeArchived") boolean includeArchived);
 
+    /**
+     * Story 20.6 — {@code pattern} = {@code %query%} built by the adapter: {@code lower(name) LIKE lower(:pattern)} and
+     * {@code phone LIKE :pattern} are served by the trigram indexes of crm V3 (no sequential scan). {@code ESCAPE '\'} is
+     * explicit: without it Hibernate 6 renders {@code escape ''} on PostgreSQL and the adapter's escaped {@code _ % \}
+     * would match nothing.
+     */
     @Query("SELECT c FROM ClientJpaEntity c WHERE c.archived = FALSE AND " +
-           "(LOWER(c.name) LIKE LOWER(CONCAT('%',:q,'%')) OR c.phone LIKE CONCAT('%',:q,'%'))")
-    List<ClientJpaEntity> searchByNameOrPhone(@Param("q") String query);
+           "(LOWER(c.name) LIKE LOWER(:pattern) ESCAPE '\\' OR c.phone LIKE :pattern ESCAPE '\\')")
+    List<ClientJpaEntity> searchByNameOrPhone(@Param("pattern") String pattern);
 
     @Query("SELECT c FROM ClientJpaEntity c WHERE (:includeArchived = TRUE OR c.archived = FALSE) " +
            "AND (c.storeId IS NULL OR c.storeId IN :storeIds) ORDER BY c.name")
@@ -35,8 +41,8 @@ public interface ClientSpringRepository extends JpaRepository<ClientJpaEntity, U
 
     @Query("SELECT c FROM ClientJpaEntity c WHERE c.archived = FALSE " +
            "AND (c.storeId IS NULL OR c.storeId IN :storeIds) AND " +
-           "(LOWER(c.name) LIKE LOWER(CONCAT('%',:q,'%')) OR c.phone LIKE CONCAT('%',:q,'%'))")
-    List<ClientJpaEntity> searchScoped(@Param("q") String query, @Param("storeIds") Collection<UUID> storeIds);
+           "(LOWER(c.name) LIKE LOWER(:pattern) ESCAPE '\\' OR c.phone LIKE :pattern ESCAPE '\\')")
+    List<ClientJpaEntity> searchScoped(@Param("pattern") String pattern, @Param("storeIds") Collection<UUID> storeIds);
 
     /** Story 20.2 — same-store duplicate probe ({@code idx_clients_store_phone}), oldest first. */
     @Query("SELECT c FROM ClientJpaEntity c WHERE c.storeId = :storeId AND c.phoneNormalized = :phone " +
@@ -56,6 +62,34 @@ public interface ClientSpringRepository extends JpaRepository<ClientJpaEntity, U
     @Query(value = "SELECT CAST(id AS text) FROM clients WHERE id = ANY(CAST(:ids AS uuid[])) AND archived = FALSE "
             + "AND marketing_consent_at IS NOT NULL AND marketing_opt_out_at IS NULL", nativeQuery = true)
     List<String> findMarketingEligibleIds(@Param("ids") String idsArrayLiteral);
+
+    /**
+     * Story 20.6 — the client a document's phone stands for in {@code storeId}: a non-archived client of that store,
+     * else a legacy one (no store); several → the oldest, then the smallest id. Served by
+     * {@code idx_clients_store_phone} (one probe per branch).
+     */
+    @Query(value = "SELECT CAST(id AS text) FROM clients WHERE phone_normalized = :phone AND archived = FALSE "
+            + "AND (store_id = :storeId OR store_id IS NULL) "
+            + "ORDER BY (store_id IS NULL), created_at, id LIMIT 1", nativeQuery = true)
+    List<String> findDocumentMatchInStore(@Param("storeId") UUID storeId, @Param("phone") String phone);
+
+    /** Story 20.6 — {@link #findDocumentMatchInStore} for an actor without store: the legacy clients only. */
+    @Query(value = "SELECT CAST(id AS text) FROM clients WHERE phone_normalized = :phone AND archived = FALSE "
+            + "AND store_id IS NULL ORDER BY created_at, id LIMIT 1", nativeQuery = true)
+    List<String> findDocumentMatchWithoutStore(@Param("phone") String phone);
+
+    /**
+     * Story 20.6 — fills only the empty email / RCCM / NIU of a client from a document (Bref's {@code COALESCE}); an
+     * empty string means « nothing to give ». Touches the row (and {@code updated_at}, for the pull) only when a value
+     * actually changes; never clears the persistence context (other entities of the caller stay managed).
+     */
+    @Modifying
+    @Query(value = "UPDATE clients SET email = COALESCE(email, NULLIF(:email, '')), "
+            + "rccm = COALESCE(rccm, NULLIF(:rccm, '')), niu = COALESCE(niu, NULLIF(:niu, '')), updated_at = :now "
+            + "WHERE id = :id AND ((email IS NULL AND :email <> '') OR (rccm IS NULL AND :rccm <> '') "
+            + "OR (niu IS NULL AND :niu <> ''))", nativeQuery = true)
+    int fillMissingFromDocument(@Param("id") UUID id, @Param("email") String email, @Param("rccm") String rccm,
+                                @Param("niu") String niu, @Param("now") Instant now);
 
     /**
      * Story 20.2 — the only write of the consent columns (mapped {@code updatable = false}): a concurrent generic

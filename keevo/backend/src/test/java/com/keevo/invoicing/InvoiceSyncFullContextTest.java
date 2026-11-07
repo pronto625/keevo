@@ -267,6 +267,34 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
+    @DisplayName("20.6 — DOCUMENT tenant, derivation on: a synced ISSUE_INVOICE links the derived client and product")
+    void syncIssueDerives() throws Exception {
+        jdbc.update("DELETE FROM \"" + schema + "\".tenant_preferences");
+        jdbc.update("INSERT INTO \"" + schema + "\".tenant_preferences (default_sale_flow) VALUES ('DOCUMENT')");
+        String id = UUID.randomUUID().toString();
+        var create = create(id);
+        var issue = simple("ISSUE_INVOICE", id, Map.of());
+
+        Map<String, JsonNode> r = push(ownerToken, create, issue);
+        assertThat(status(r, issue)).isEqualTo("APPLIED");
+
+        UUID clientId = jdbc.queryForObject("SELECT client_id FROM \"" + schema + "\".invoices WHERE id = ?::uuid",
+                UUID.class, id);
+        assertThat(clientId).isNotNull();
+        assertThat(jdbc.queryForMap("SELECT name, phone_normalized FROM \"" + schema + "\".clients WHERE id = ?",
+                clientId)).containsEntry("name", "Société Ndolo").containsEntry("phone_normalized", "+237690000001");
+        UUID productId = jdbc.queryForObject("SELECT product_id FROM \"" + schema + "\".invoice_items WHERE "
+                + "invoice_id = ?::uuid", UUID.class, id);
+        assertThat(productId).isNotNull();
+        assertThat(jdbc.queryForObject("SELECT product_key FROM \"" + schema + "\".products WHERE id = ?",
+                String.class, productId)).isEqualTo("nm:sac de riz 25 kg");
+        JsonNode row = pulled(ownerToken, id);
+        assertThat(row.path("status").asText()).isEqualTo("ISSUED");
+        assertThat(row.path("client").path("id").asText()).isEqualTo(clientId.toString());
+        assertThat(row.path("totalTtc").asLong()).isEqualTo(23_850);
+    }
+
+    @Test
     @DisplayName("payment date before the issue date at sync → REJECTED INVOICE_PAYMENT_DATE_INVALID, stays ISSUED")
     void payDateInvalid() throws Exception {
         String id = UUID.randomUUID().toString();
@@ -507,8 +535,9 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
                     + "DROP COLUMN client_rccm, DROP COLUMN client_email, DROP COLUMN client_contact_name, "
                     + "DROP COLUMN client_website");
             jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
+            jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
             jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('6', '7', '8', '9', '10', "
-                    + "'11', '12')");
+                    + "'11', '12', '13')");
             UUID issued = UUID.randomUUID();
             jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, "
                     + "seller_legal_name, vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, "
@@ -526,7 +555,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             assertThat(rows).filteredOn(n -> n.path("id").asText().equals(issued.toString()))
                     .singleElement().satisfies(n -> assertThat(n.path("number").asText()).isEqualTo("FAC-2026-000042"));
             assertThat(jdbc.queryForObject("SELECT MAX(version::int) FROM " + q + "flyway_history_invoicing "
-                    + "WHERE success", Integer.class)).isEqualTo(12);
+                    + "WHERE success", Integer.class)).isEqualTo(13);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? "
                     + "AND table_name = 'invoices' AND column_name = 'deleted_at'", Integer.class, old)).isEqualTo(1);
         } finally {

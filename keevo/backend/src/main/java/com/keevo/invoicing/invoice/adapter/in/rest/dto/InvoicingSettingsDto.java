@@ -12,6 +12,10 @@ import java.math.BigDecimal;
 /**
  * The seller profile (Story 14.1) — request of {@code PUT /invoicing/settings} and response of both verbs. Printed on
  * each invoice when it is issued (CGI art. 150 (5): name, address, NIU, RCCM).
+ *
+ * <p>Story 20.6 — {@code deriveFromDocuments}: whether issuing an invoice records its client and products in the CRM
+ * and the catalogue. Request: optional (absent = the stored choice unchanged); response: always the resolved value
+ * (not chosen → on for a tenant selling with documents, off otherwise).
  */
 public record InvoicingSettingsDto(
         @Size(max = 200, message = "Le nom du commerce ne doit pas dépasser 200 caractères")
@@ -36,7 +40,16 @@ public record InvoicingSettingsDto(
         @Size(max = 1000, message = "Les coordonnées de paiement ne doivent pas dépasser 1000 caractères")
         String paymentDetails,
         @Size(max = 1000, message = "Le pied de page ne doit pas dépasser 1000 caractères")
-        String footer) {
+        String footer,
+        Boolean deriveFromDocuments) {
+
+    /** Pre-20.6 shape (no derivation preference). */
+    public InvoicingSettingsDto(String legalName, String address, String phone, String niu, String rccm,
+                                Boolean vatRegistered, BigDecimal vatRate, Boolean pricesIncludeVat,
+                                String paymentDetails, String footer) {
+        this(legalName, address, phone, niu, rccm, vatRegistered, vatRate, pricesIncludeVat, paymentDetails, footer,
+                null);
+    }
 
     /** A VAT-registered seller needs a rate above 0 (else STANDARD lines would print 0 % without any mention). */
     @com.fasterxml.jackson.annotation.JsonIgnore
@@ -48,11 +61,20 @@ public record InvoicingSettingsDto(
 
     public InvoicingSettings toDomain() {
         return new InvoicingSettings(legalName, address, phone, niu, rccm, vatRegistered, vatRate, pricesIncludeVat,
-                paymentDetails, footer);
+                paymentDetails, footer, deriveFromDocuments);
     }
 
+    /** Story 20.6 — the response: stored values and the resolved derivation preference. */
+    public static InvoicingSettingsDto fromView(
+            com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase.SettingsView view) {
+        InvoicingSettings s = view.settings();
+        return new InvoicingSettingsDto(s.legalName(), s.address(), s.phone(), s.niu(), s.rccm(), s.vatRegistered(),
+                s.vatRate(), s.pricesIncludeVat(), s.paymentDetails(), s.footer(), view.deriveFromDocuments());
+    }
+
+    /** The stored values as they are ({@code deriveFromDocuments} unresolved: {@code null} = not chosen). */
     public static InvoicingSettingsDto fromDomain(InvoicingSettings s) {
         return new InvoicingSettingsDto(s.legalName(), s.address(), s.phone(), s.niu(), s.rccm(), s.vatRegistered(),
-                s.vatRate(), s.pricesIncludeVat(), s.paymentDetails(), s.footer());
+                s.vatRate(), s.pricesIncludeVat(), s.paymentDetails(), s.footer(), s.deriveFromDocuments());
     }
 }

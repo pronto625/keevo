@@ -45,6 +45,28 @@ public interface ClientRepository {
     /** Story 20.2 — writes only the consent columns (and {@code updated_at}) of a client. */
     void updateConsent(UUID id, com.keevo.crm.contact.domain.entity.MarketingConsent consent, java.time.Instant now);
 
+    /**
+     * Story 20.6 — the non-archived client of {@code storeId} (else a legacy client without store) with this E.164
+     * phone, the oldest first; {@code storeId == null} → legacy clients only.
+     */
+    Optional<UUID> findDocumentMatch(UUID storeId, String phoneNormalized);
+
+    /** Story 20.6 — fills only the empty email / RCCM / NIU of a client ({@code null} = nothing to give). */
+    void fillMissingFromDocument(UUID id, String email, String rccm, String niu, java.time.Instant now);
+
+    /**
+     * Story 20.6 — one page of the client list in {@code (lower(name), id)} order, after {@code after}
+     * ({@code null} = first page): at most {@code limit} rows. {@code search} non-blank → non-archived clients whose
+     * name (case-insensitive) or phone contains it; otherwise {@code includeArchived} applies. Same visibility rule
+     * as {@link #findAll(boolean, ClientVisibility.Scope)}.
+     */
+    List<Client> findPage(String search, boolean includeArchived, ClientVisibility.Scope scope, ClientKeyset after,
+                          int limit);
+
+    /** Story 20.6 — a keyset position of the client list: the last row's name and id. */
+    record ClientKeyset(String name, UUID id) {
+    }
+
     void archive(UUID id);
 
     void unarchive(UUID id);

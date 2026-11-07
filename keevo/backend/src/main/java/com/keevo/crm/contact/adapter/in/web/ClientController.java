@@ -81,19 +81,48 @@ public class ClientController {
                         duplicateWarnings(result.duplicates())));
     }
 
-    /** GET /api/v1/clients?search=&includeArchived=&storeId= */
+    /**
+     * GET /api/v1/clients?search=&includeArchived=&storeId=&limit=&cursor= — Story 20.6: without {@code limit} the
+     * whole list as before (V1 apps); with {@code limit} (1–100) one page ordered by name, {@code meta.nextCursor}
+     * (opaque) to pass as {@code cursor} for the next page, absent on the last page. A bad cursor or limit → 400
+     * {@code VALIDATION_ERROR}.
+     */
     @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
     @GetMapping
     public ResponseEntity<ApiResponseWrapper<List<ClientResponseDto>>> listClients(
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "false") boolean includeArchived,
-            @RequestParam(required = false) UUID storeId) {
+            @RequestParam(required = false) UUID storeId,
+            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) String cursor) {
         var query = new GetClientsUseCase.GetClientsQuery(
                 search, includeArchived, CurrentClientAccess.get(), storeId, TenantContext.getCurrentTenant());
-        var clients = storeChecked(() -> getClientsUseCase.execute(query)); // unknown / inactive store → 400
+        if (limit == null) {
+            var clients = storeChecked(() -> getClientsUseCase.execute(query)); // unknown / inactive store → 400
+            return ResponseEntity.ok(ApiResponseWrapper.ok(
+                    clients.stream().map(ClientResponseDto::fromDomain).toList()));
+        }
+        if (limit < 1 || limit > GetClientsUseCase.MAX_LIMIT) {
+            throw new InvalidRequestParameterException("limit", "limit out of range",
+                    "La taille de page doit être comprise entre 1 et " + GetClientsUseCase.MAX_LIMIT);
+        }
+        GetClientsUseCase.ClientCursor after = null;
+        if (cursor != null && !cursor.isBlank()) {
+            try {
+                after = GetClientsUseCase.ClientCursor.decode(cursor);
+            } catch (IllegalArgumentException e) {
+                throw new InvalidRequestParameterException("cursor", "cursor is malformed", INVALID_CURSOR);
+            }
+        }
+        GetClientsUseCase.ClientCursor from = after;
+        var page = storeChecked(() -> getClientsUseCase.executePage(query, limit, from));
+        Map<String, Object> meta = page.next() == null ? null : Map.of("nextCursor", page.next().encode());
         return ResponseEntity.ok(ApiResponseWrapper.ok(
-                clients.stream().map(ClientResponseDto::fromDomain).toList()));
+                page.items().stream().map(ClientResponseDto::fromDomain).toList(), meta));
     }
+
+    /** Story 20.6 — French message of a cursor this list did not hand out. */
+    static final String INVALID_CURSOR = "Curseur de pagination invalide";
 
     /**
      * GET /api/v1/clients/duplicates?phone=&storeId= — Story 20.2: the non-archived clients of the store with this

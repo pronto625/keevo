@@ -365,6 +365,7 @@ development_status:
   m20-3-devis: backlog  # API 62b28275 — devis (kind QUOTE, DV-…), liste ?kind=QUOTE|ALL, validation POST /invoices/{id}/convert + CONVERT_QUOTE (idempotent), expectedUpdatedAt → 409 OPTIMISTIC_LOCK, PDF « DEVIS »
   m20-4-encaissements-echeancier-retard: backlog  # API 174e46c5 — paymentState/amountPaid/amountDue/payments sur les factures, POST /invoices/{id}/payments + /payments/{paymentId}/settle, ADD_/SETTLE_INVOICE_PAYMENT, filtre ?paymentState=, OVERPAYMENT, notification « Factures en retard »
   m20-5-remise-livraison-tva-echeance: backlog  # API 3ef5e1d6 — discountAmount/deliveryFee/vatRate/vatExempt/dueDate + client rccm/email/contactName/website + ligne productId/reference (REST et CREATE_/UPDATE_INVOICE), subtotal/vatRateOverride en lecture, taux par pays, avoir total seulement si remise/livraison, cas contracts/invoice-calculation-cases.json
+  m20-6-derivation-catalogue-crm: backlog  # API PENDING — préférence deriveFromDocuments (réglages facturation), client + articles créés/liés à l émission (client.clientId, lines[].productId), GET /clients?limit=&cursor= (meta.nextCursor), recherche échappée
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -450,7 +451,7 @@ development_status:
   20-3-devis: done  # 2026-11-06 build-auto (spec-20-3-devis) — revue 5 couches, 18 corrigés, 3 routés (19-5b, 20-12, 20-7), 6 131 tests verts, contrôle live keevo_dev OK
   20-4-encaissements-echeancier-retard: done  # 2026-11-06 build-auto (spec-20-4) — revue 5 couches, 19 corrigés, 1 routé (20-7), 6 178 tests verts, contrôle live keevo_dev OK (acompte, retard + notification, règlement V1)
   20-5-remise-livraison-tva-echeance: done  # 2026-11-06 build-auto (spec-20-5) — revue 5 couches, 15 corrigés, 6 218 tests verts, 62 cas de calcul identiques à Bref, contrôle live keevo_dev OK
-  20-6-derivation-catalogue-crm: backlog  # 2026-11-06 revue 20-2 — 1 item (liste et recherche clients non paginées, LIKE sans index trigramme)
+  20-6-derivation-catalogue-crm: done  # 2026-11-07 build-auto (spec-20-6) — revue 5 couches, 38 constats (20 corrigés, 1 routé → 25-3), 3 317 tests verts (paquets touchés), contrôle live keevo_dev OK ; revue de suivi recommandée
   20-7-modeles-signatures-liens-publics: backlog  # 2026-11-06 revue 20-4 — +1 item (PDF et lien public : acompte, paiements, reste dû, échéancier) | 2026-11-06 revue 20-3 — 1 item (envoi d un devis au client : lien public / WhatsApp)
   20-8-envoi-sms-email: backlog
   20-9-reporting-multi-source: backlog
@@ -531,7 +532,7 @@ development_status:
   epic-25: backlog  # P5 Convergence
   25-1-api-bref-lecture-seule-arret: backlog
   25-2-webhooks-keevo-seul: backlog
-  25-3-retrait-code-transitoire: backlog
+  25-3-retrait-code-transitoire: backlog  # 2026-11-07 revue 20-6 — 1 item (GET /clients sans limit encore non borné pour les apps V1)
   25-4-marque-fiche-store: backlog
   25-5-retrospective-architecture: backlog
   epic-25-retrospective: optional
