@@ -457,6 +457,7 @@ development_status:
   20-9-reporting-multi-source: backlog
   20-10-module-expenses: backlog
   20-11-module-finance: backlog
+  20-14-boutique-des-documents: backlog  # 2026-11-08 revue 20-9 — 3 items (boutique des factures à la création, rapports par boutique et exports clients/tendances sur la source unique)
   20-13-api-super-admin-heritee-bref: backlog  # 2026-11-01 décision utilisateur — l'API Keevo absorbe toute l'API Bref, partie dashboard comprise (FUS-FR38)
   20-12-acceptation-parcours-bref: backlog  # 2026-11-06 revue 20-3 — 1 item (que faire d un devis dont la facture convertie est annulée : dupliquer / re-devis, selon Bref)
   epic-20-retrospective: optional

@@ -1015,6 +1015,20 @@ So that **je pilote mon commerce comme dans Bref (FUS-FR26)**.
 **When** `GET /finance/summary?period=&storeId=` est appelé
 **Then** les valeurs (CA HT via 20.9, dépenses, résultat, marge, variation vs période précédente, séries) sont égales à celles de `finance-math.ts` sur le jeu de cas porté de `finance-math.spec.ts`
 
+### Story 20.14 : Boutique des documents et derniers consommateurs du CA
+
+As a **owner multi-boutiques**,
+I want **que mes factures soient rattachées à une boutique**,
+So that **mes rapports quotidiens, hebdomadaires et par boutique comptent aussi mes factures (FUS-FR24)**.
+
+Scope: invoices (and quotes, credit notes through their invoice) carry the establishment they were made in, so that every store-scoped revenue figure of 20.9 (end-of-day and weekly reports, store overviews, store comparison, store-filtered leaderboard and profitability) includes documents; the last revenue readers still on `sales` only move to the single revenue source.
+
+- [ ] [Deferred-from: review 20-9, 2026-11-08] Invoices have no store: store-scoped reports never include documents [reporting/revenue/adapter/out/persistence/RevenueRelations.java] — add nullable `invoices.store_id` (invoicing module migration), set at creation (member → assigned store, owner → requested or oldest active store, quote conversion copies it, POS bridge → the sale's store), expose it additively, and use it in `RevenueRelations`; 24.4 fills it from Bref `shopId` on import
+- [ ] [Deferred-from: review 20-9, 2026-11-08] `ClientsExportDatasetProvider` computes total_spent / sales_count / last_purchase from sales only — read them from the single revenue source
+- [ ] [Deferred-from: review 20-9, 2026-11-08] `SalesTrendDetectionScheduler` reads sales only — read the single revenue source
+
+Interim AC: Given an EMPLOYEE of store B issuing an invoice, When the end-of-day report of store B is built, Then the invoice's revenue is in it once, and the tenant-wide figures are unchanged.
+
 ### Story 20.12 : Test d'acceptation « parcours Bref sur Keevo »
 
 As a **responsable de la fusion**,
