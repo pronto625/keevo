@@ -6,6 +6,7 @@ import com.keevo.reporting.report.domain.model.EndOfDayReportData.TopProductEntr
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.model.WeeklyReportData;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
+import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,9 @@ import java.util.UUID;
 /**
  * WeeklyReportBuilder — GoF Builder pattern for weekly aggregation.
  * Story 7.3 — Rapport Hebdomadaire Automatique.
+ *
+ * <p>Story 20.9 (R4): every figure reads the single revenue source ({@code RevenueQueryPort}, resolved once per
+ * report); store-scoped, so it holds the store's sales until documents carry a store.
  *
  * <p>Uses EntityManager native queries (same tenant-isolation pattern as EndOfDayReportBuilder).
  * Queries the window resolved by WeeklyReportWindowResolver and computes WoW delta from the previous WEEKLY report via repository.
@@ -49,10 +53,14 @@ public class WeeklyReportBuilder {
         }
     }
 
+    private final RevenueQueryPort revenue;
+
     public WeeklyReportBuilder(EntityManager entityManager,
-                               EndOfDayReportRepository reportRepository) {
+                               EndOfDayReportRepository reportRepository,
+                               RevenueQueryPort revenue) {
         this.entityManager = entityManager;
         this.reportRepository = reportRepository;
+        this.revenue = revenue;
     }
 
     /**
@@ -72,17 +80,19 @@ public class WeeklyReportBuilder {
                                   String tenantId, boolean isAutomatic) {
         Window w   = Window.of(window);
         String sid = storeId.toString();
+        String docs = revenue.documents(); // 20.9: one resolution of the revenue source per report
+        String lines = revenue.lines();
 
-        int totalSales   = countCompletedSales(sid, w);
-        int totalRevenue = sumRevenue(sid, w);
-        int cashAmount   = sumByPaymentMode(sid, w, "CASH");
-        int momoAmount   = sumByPaymentMode(sid, w, "MOBILE_MONEY");
+        int totalSales   = countCompletedSales(docs, sid, w);
+        int totalRevenue = sumRevenue(docs, sid, w);
+        int cashAmount   = sumByPaymentMode(docs, sid, w, "CASH");
+        int momoAmount   = sumByPaymentMode(docs, sid, w, "MOBILE_MONEY");
         int avgBasket    = totalSales > 0 ? totalRevenue / totalSales : 0;
         int lowStockCount = countLowStock(sid);
 
-        List<TopProductEntry> byRevenue = getTop5ByRevenue(sid, w);
-        List<TopProductEntry> byQty     = getTop5ByQty(sid, w);
-        List<EmployeeEntry> employees   = getEmployeeBreakdown(sid, w);
+        List<TopProductEntry> byRevenue = getTop5ByRevenue(lines, sid, w);
+        List<TopProductEntry> byQty     = getTop5ByQty(lines, sid, w);
+        List<EmployeeEntry> employees   = getEmployeeBreakdown(docs, sid, w);
 
         int previousWeekRevenue = resolvePreviousWeekRevenue(storeId, weekEndDate, tenantId);
         int weekOverWeekDelta   = totalRevenue - previousWeekRevenue;
@@ -98,28 +108,28 @@ public class WeeklyReportBuilder {
 
     // ── Aggregation queries ────────────────────────────────────────────────────
 
-    private int countCompletedSales(String storeId, Window w) {
+    private int countCompletedSales(String docs, String storeId, Window w) {
         return toInt(w.bind(entityManager.createNativeQuery(
-                "SELECT COUNT(*) FROM sales " +
-                "WHERE store_id = CAST(:sid AS UUID) AND status = 'COMPLETED' " +
+                "SELECT COALESCE(SUM(doc_count), 0) FROM " + docs + " s " +
+                "WHERE store_id = CAST(:sid AS UUID) " +
                 "  AND " + WINDOW)
                 .setParameter("sid", storeId))
                 .getSingleResult());
     }
 
-    private int sumRevenue(String storeId, Window w) {
+    private int sumRevenue(String docs, String storeId, Window w) {
         return toInt(w.bind(entityManager.createNativeQuery(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
-                "WHERE store_id = CAST(:sid AS UUID) AND status = 'COMPLETED' " +
+                "SELECT COALESCE(SUM(total_amount), 0) FROM " + docs + " s " +
+                "WHERE store_id = CAST(:sid AS UUID) " +
                 "  AND " + WINDOW)
                 .setParameter("sid", storeId))
                 .getSingleResult());
     }
 
-    private int sumByPaymentMode(String storeId, Window w, String mode) {
+    private int sumByPaymentMode(String docs, String storeId, Window w, String mode) {
         return toInt(w.bind(entityManager.createNativeQuery(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
-                "WHERE store_id = CAST(:sid AS UUID) AND status = 'COMPLETED' " +
+                "SELECT COALESCE(SUM(total_amount), 0) FROM " + docs + " s " +
+                "WHERE store_id = CAST(:sid AS UUID) " +
                 "  AND payment_mode = :mode " +
                 "  AND " + WINDOW)
                 .setParameter("sid", storeId)
@@ -138,17 +148,15 @@ public class WeeklyReportBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private List<TopProductEntry> getTop5ByRevenue(String storeId, Window w) {
+    private List<TopProductEntry> getTop5ByRevenue(String lines, String storeId, Window w) {
         List<Object[]> rows = w.bind(entityManager.createNativeQuery(
-                "SELECT si.product_name, " +
-                "       SUM(si.quantity) AS total_qty, " +
-                "       SUM(si.subtotal) AS total_revenue " +
-                "FROM sale_items si " +
-                "JOIN sales s ON si.sale_id = s.id " +
+                "SELECT s.product_name, " +
+                "       SUM(s.quantity) AS total_qty, " +
+                "       SUM(s.subtotal) AS total_revenue " +
+                "FROM " + lines + " s " +
                 "WHERE s.store_id = CAST(:sid AS UUID) " +
                 "  AND " + WINDOW_S + " " +
-                "  AND s.status = 'COMPLETED' " +
-                "GROUP BY si.product_name " +
+                "GROUP BY s.product_name " +
                 "ORDER BY total_revenue DESC " +
                 "LIMIT 5")
                 .setParameter("sid", storeId))
@@ -162,18 +170,16 @@ public class WeeklyReportBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private List<TopProductEntry> getTop5ByQty(String storeId, Window w) {
+    private List<TopProductEntry> getTop5ByQty(String lines, String storeId, Window w) {
         List<Object[]> rows = w.bind(entityManager.createNativeQuery(
-                "SELECT si.product_name, " +
-                "       SUM(si.quantity) AS total_qty, " +
-                "       SUM(si.subtotal) AS total_revenue " +
-                "FROM sale_items si " +
-                "JOIN sales s ON si.sale_id = s.id " +
+                "SELECT s.product_name, " +
+                "       SUM(s.quantity) AS total_qty, " +
+                "       SUM(s.subtotal) AS total_revenue " +
+                "FROM " + lines + " s " +
                 "WHERE s.store_id = CAST(:sid AS UUID) " +
                 "  AND " + WINDOW_S + " " +
-                "  AND s.status = 'COMPLETED' " +
-                "GROUP BY si.product_name " +
-                "ORDER BY total_qty DESC, total_revenue DESC, si.product_name " +
+                "GROUP BY s.product_name " +
+                "ORDER BY total_qty DESC, total_revenue DESC, s.product_name " +
                 "LIMIT 5")
                 .setParameter("sid", storeId))
                 .getResultList();
@@ -186,16 +192,15 @@ public class WeeklyReportBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private List<EmployeeEntry> getEmployeeBreakdown(String storeId, Window w) {
+    private List<EmployeeEntry> getEmployeeBreakdown(String docs, String storeId, Window w) {
         List<Object[]> rows = w.bind(entityManager.createNativeQuery(
                 "SELECT COALESCE(e.first_name || ' ' || e.last_name, 'Propriétaire') AS emp_name, " +
-                "       COUNT(s.id) AS sale_count, " +
+                "       SUM(s.doc_count) AS sale_count, " +
                 "       SUM(s.total_amount) AS total_revenue " +
-                "FROM sales s " +
+                "FROM " + docs + " s " +
                 "LEFT JOIN employees e ON s.employee_id = e.user_id " +
                 "WHERE s.store_id = CAST(:sid AS UUID) " +
                 "  AND " + WINDOW_S + " " +
-                "  AND s.status = 'COMPLETED' " +
                 "GROUP BY s.employee_id, e.first_name, e.last_name " +
                 "ORDER BY total_revenue DESC")
                 .setParameter("sid", storeId))

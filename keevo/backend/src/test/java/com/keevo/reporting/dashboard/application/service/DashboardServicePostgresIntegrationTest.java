@@ -1,5 +1,6 @@
 package com.keevo.reporting.dashboard.application.service;
 
+import com.keevo.reporting.revenue.FixedRevenueSource;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary.DailyCAEntry;
 import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase.GetDashboardSummaryQuery;
@@ -120,7 +121,7 @@ class DashboardServicePostgresIntegrationTest extends PostgresIntegrationTest {
     }
 
     private DashboardSummary summary(Clock clock) {
-        return new DashboardService(jdbc, clock).execute(new GetDashboardSummaryQuery("public"));
+        return new DashboardService(jdbc, clock, FixedRevenueSource.POS_ONLY).execute(new GetDashboardSummaryQuery("public"));
     }
 
     private static void assertHasAtLeast(List<DailyCAEntry> series, String period, long amount) {

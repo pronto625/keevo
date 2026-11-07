@@ -36,6 +36,9 @@ class ProfitabilityControllerTest {
     @Mock
     private GetStorePerformanceUseCase storePerformanceUseCase;
 
+    @Mock
+    private com.keevo.reporting.profitability.domain.port.in.GetProfitabilitySummaryUseCase summaryUseCase;
+
     @InjectMocks
     private ProfitabilityController controller;
 
@@ -195,5 +198,23 @@ class ProfitabilityControllerTest {
                         .param("metric", "SALES_COUNT"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
+    }
+
+    // ── GET /summary (20.9) ───────────────────────────────────────────────────
+
+    @Test
+    void GET_summary_shouldReturnRevenueAndUnknownMargin() throws Exception {
+        when(summaryUseCase.getSummary(any())).thenReturn(
+                com.keevo.reporting.profitability.domain.model.ProfitabilitySummary.of(20_000, 12_000, 10_000, 8_000, 1));
+
+        mockMvc.perform(get("/api/v1/reporting/profitability/summary").param("from", "2026-11-01").param("to", "2026-11-07"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.totalRevenue").value(20000))
+                .andExpect(jsonPath("$.data.revenueWithKnownMargin").value(12000))
+                .andExpect(jsonPath("$.data.costOfKnownMargin").value(10000))
+                .andExpect(jsonPath("$.data.grossMarginXaf").value(2000))
+                .andExpect(jsonPath("$.data.marginPercent").value(20.0))
+                .andExpect(jsonPath("$.data.revenueWithUnknownMargin").value(8000))
+                .andExpect(jsonPath("$.data.unknownMarginLines").value(1));
     }
 }

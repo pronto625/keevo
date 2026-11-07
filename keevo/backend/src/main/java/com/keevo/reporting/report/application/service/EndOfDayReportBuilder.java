@@ -4,6 +4,7 @@ import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.EmployeeEntry;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.TopProductEntry;
 import com.keevo.commerce.api.ClosureWindow;
+import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
@@ -19,6 +20,10 @@ import java.util.UUID;
 /**
  * EndOfDayReportBuilder — GoF Builder pattern.
  * Story 7.2 — assembles EndOfDayReportData from multiple SQL queries.
+ *
+ * <p>Story 20.9 (R4): revenue, counts, payment-mode split, top products and the team breakdown read the single
+ * revenue source ({@code RevenueQueryPort}, resolved once per report). The report is store-scoped and documents carry
+ * no store, so it holds the store's sales; pending sales (not revenue) still read {@code sales}.
  *
  * <p>Uses EntityManager.createNativeQuery() so that Hibernate's
  * SchemaAwareMultiTenantConnectionProvider sets the correct search_path
@@ -48,8 +53,11 @@ public class EndOfDayReportBuilder {
         }
     }
 
-    public EndOfDayReportBuilder(EntityManager entityManager) {
+    private final RevenueQueryPort revenue;
+
+    public EndOfDayReportBuilder(EntityManager entityManager, RevenueQueryPort revenue) {
         this.entityManager = entityManager;
+        this.revenue = revenue;
     }
 
     /**
@@ -79,19 +87,20 @@ public class EndOfDayReportBuilder {
                                     LocalTime closeTime, boolean isAutomatic) {
         Window w   = Window.of(window);
         String sid = storeId.toString();
+        String docs = revenue.documents(); // 20.9: one resolution of the revenue source per report
 
-        int totalSales    = countCompletedSales(sid, w);
-        int totalRevenue  = sumRevenue(sid, w);
-        int cashAmount    = sumByPaymentMode(sid, w, "CASH");
-        int momoAmount    = sumByPaymentMode(sid, w, "MOBILE_MONEY");
+        int totalSales    = countCompletedSales(docs, sid, w);
+        int totalRevenue  = sumRevenue(docs, sid, w);
+        int cashAmount    = sumByPaymentMode(docs, sid, w, "CASH");
+        int momoAmount    = sumByPaymentMode(docs, sid, w, "MOBILE_MONEY");
         int avgBasket     = totalSales > 0 ? totalRevenue / totalSales : 0;
 
         int pendingSalesCount = countPendingSales(sid, w);
         int pendingSalesTotal = sumPendingRevenue(sid, w);
         int lowStockCount     = countLowStock(sid);
 
-        List<TopProductEntry> topProducts = getTop3Products(sid, w);
-        List<EmployeeEntry> employees     = getEmployeeBreakdown(sid, w);
+        List<TopProductEntry> topProducts = getTop3Products(revenue.lines(), sid, w);
+        List<EmployeeEntry> employees     = getEmployeeBreakdown(docs, sid, w);
 
         return new EndOfDayReportData(
                 storeName, date, closeTime, isAutomatic, false,
@@ -122,18 +131,19 @@ public class EndOfDayReportBuilder {
         Window w   = Window.of(window);
         String sid = storeId.toString();
         String eid = employeeId.toString();
+        String docs = revenue.documents(); // 20.9: one resolution of the revenue source per report
 
-        int totalSales   = countCompletedSalesByEmployee(sid, eid, w);
-        int totalRevenue = sumRevenueByEmployee(sid, eid, w);
-        int cashAmount   = sumByPaymentModeByEmployee(sid, eid, w, "CASH");
-        int momoAmount   = sumByPaymentModeByEmployee(sid, eid, w, "MOBILE_MONEY");
+        int totalSales   = countCompletedSalesByEmployee(docs, sid, eid, w);
+        int totalRevenue = sumRevenueByEmployee(docs, sid, eid, w);
+        int cashAmount   = sumByPaymentModeByEmployee(docs, sid, eid, w, "CASH");
+        int momoAmount   = sumByPaymentModeByEmployee(docs, sid, eid, w, "MOBILE_MONEY");
         int avgBasket    = totalSales > 0 ? totalRevenue / totalSales : 0;
 
         int pendingSalesCount = countPendingSalesByEmployee(sid, eid, w);
         int pendingSalesTotal = sumPendingRevenueByEmployee(sid, eid, w);
         int lowStockCount     = countLowStock(sid);
 
-        List<TopProductEntry> topProducts = getTop3ProductsByEmployee(sid, eid, w);
+        List<TopProductEntry> topProducts = getTop3ProductsByEmployee(revenue.lines(), sid, eid, w);
 
         return new EndOfDayReportData(
                 storeName, date, closeTime, isAutomatic, true,
@@ -172,10 +182,10 @@ public class EndOfDayReportBuilder {
 
     // ── Store-level aggregation queries ─────────────────────────────────────
 
-    private int countCompletedSales(String storeId, Window w) {
+    private int countCompletedSales(String docs, String storeId, Window w) {
         return toInt(entityManager.createNativeQuery(
-                "SELECT COUNT(*) FROM sales " +
-                "WHERE store_id = CAST(:sid AS UUID) AND status = 'COMPLETED' " +
+                "SELECT COALESCE(SUM(doc_count), 0) FROM " + docs + " s " +
+                "WHERE store_id = CAST(:sid AS UUID) " +
                 "AND " + WINDOW)
                 .setParameter("sid", storeId)
                 .setParameter("start", w.start())
@@ -185,10 +195,10 @@ public class EndOfDayReportBuilder {
                 .getSingleResult());
     }
 
-    private int sumRevenue(String storeId, Window w) {
+    private int sumRevenue(String docs, String storeId, Window w) {
         return toInt(entityManager.createNativeQuery(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
-                "WHERE store_id = CAST(:sid AS UUID) AND status = 'COMPLETED' " +
+                "SELECT COALESCE(SUM(total_amount), 0) FROM " + docs + " s " +
+                "WHERE store_id = CAST(:sid AS UUID) " +
                 "AND " + WINDOW)
                 .setParameter("sid", storeId)
                 .setParameter("start", w.start())
@@ -198,10 +208,10 @@ public class EndOfDayReportBuilder {
                 .getSingleResult());
     }
 
-    private int sumByPaymentMode(String storeId, Window w, String mode) {
+    private int sumByPaymentMode(String docs, String storeId, Window w, String mode) {
         return toInt(entityManager.createNativeQuery(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
-                "WHERE store_id = CAST(:sid AS UUID) AND status = 'COMPLETED' AND payment_mode = :mode " +
+                "SELECT COALESCE(SUM(total_amount), 0) FROM " + docs + " s " +
+                "WHERE store_id = CAST(:sid AS UUID) AND payment_mode = :mode " +
                 "AND " + WINDOW)
                 .setParameter("sid", storeId)
                 .setParameter("mode", mode)
@@ -249,14 +259,13 @@ public class EndOfDayReportBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private List<TopProductEntry> getTop3Products(String storeId, Window w) {
+    private List<TopProductEntry> getTop3Products(String lines, String storeId, Window w) {
         List<Object[]> rows = entityManager.createNativeQuery(
-                "SELECT si.product_name, SUM(si.quantity) AS total_qty, " +
-                "       SUM(si.subtotal) AS total_revenue " +
-                "FROM sale_items si JOIN sales s ON si.sale_id = s.id " +
+                "SELECT s.product_name, SUM(s.quantity) AS total_qty, " +
+                "       SUM(s.subtotal) AS total_revenue " +
+                "FROM " + lines + " s " +
                 "WHERE s.store_id = CAST(:sid AS UUID) AND " + WINDOW_S + " " +
-                "  AND s.status = 'COMPLETED' " +
-                "GROUP BY si.product_name ORDER BY total_qty DESC, total_revenue DESC, si.product_name LIMIT 3")
+                "GROUP BY s.product_name ORDER BY total_qty DESC, total_revenue DESC, s.product_name LIMIT 3")
                 .setParameter("sid", storeId)
                 .setParameter("start", w.start())
                 .setParameter("end", w.end())
@@ -272,15 +281,14 @@ public class EndOfDayReportBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private List<EmployeeEntry> getEmployeeBreakdown(String storeId, Window w) {
+    private List<EmployeeEntry> getEmployeeBreakdown(String docs, String storeId, Window w) {
         List<Object[]> rows = entityManager.createNativeQuery(
                 "SELECT s.employee_id, " +
                 "       COALESCE(e.first_name || ' ' || e.last_name, 'Propriétaire') AS emp_name, " +
-                "       COUNT(s.id) AS sale_count, SUM(s.total_amount) AS total_revenue " +
-                "FROM sales s " +
+                "       SUM(s.doc_count) AS sale_count, SUM(s.total_amount) AS total_revenue " +
+                "FROM " + docs + " s " +
                 "LEFT JOIN employees e ON s.employee_id = e.user_id " +
                 "WHERE s.store_id = CAST(:sid AS UUID) AND " + WINDOW_S + " " +
-                "  AND s.status = 'COMPLETED' " +
                 "GROUP BY s.employee_id, e.first_name, e.last_name " +
                 "ORDER BY total_revenue DESC")
                 .setParameter("sid", storeId)
@@ -299,34 +307,34 @@ public class EndOfDayReportBuilder {
 
     // ── Employee-scoped aggregation queries ──────────────────────────────────
 
-    private int countCompletedSalesByEmployee(String storeId, String empId, Window w) {
+    private int countCompletedSalesByEmployee(String docs, String storeId, String empId, Window w) {
         return toInt(entityManager.createNativeQuery(
-                "SELECT COUNT(*) FROM sales " +
+                "SELECT COALESCE(SUM(doc_count), 0) FROM " + docs + " s " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'COMPLETED' AND " + WINDOW)
+                "AND " + WINDOW)
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", w.start()).setParameter("end", w.end())
                 .setParameter("lateFrom", w.lateFrom()).setParameter("until", w.until())
                 .getSingleResult());
     }
 
-    private int sumRevenueByEmployee(String storeId, String empId, Window w) {
+    private int sumRevenueByEmployee(String docs, String storeId, String empId, Window w) {
         return toInt(entityManager.createNativeQuery(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
+                "SELECT COALESCE(SUM(total_amount), 0) FROM " + docs + " s " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'COMPLETED' AND " + WINDOW)
+                "AND " + WINDOW)
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", w.start()).setParameter("end", w.end())
                 .setParameter("lateFrom", w.lateFrom()).setParameter("until", w.until())
                 .getSingleResult());
     }
 
-    private int sumByPaymentModeByEmployee(String storeId, String empId,
+    private int sumByPaymentModeByEmployee(String docs, String storeId, String empId,
                                            Window w, String mode) {
         return toInt(entityManager.createNativeQuery(
-                "SELECT COALESCE(SUM(total_amount), 0) FROM sales " +
+                "SELECT COALESCE(SUM(total_amount), 0) FROM " + docs + " s " +
                 "WHERE store_id = CAST(:sid AS UUID) AND employee_id = CAST(:eid AS UUID) " +
-                "AND status = 'COMPLETED' AND payment_mode = :mode " +
+                "AND payment_mode = :mode " +
                 "AND " + WINDOW)
                 .setParameter("sid", storeId).setParameter("eid", empId).setParameter("mode", mode)
                 .setParameter("start", w.start()).setParameter("end", w.end())
@@ -357,14 +365,14 @@ public class EndOfDayReportBuilder {
     }
 
     @SuppressWarnings("unchecked")
-    private List<TopProductEntry> getTop3ProductsByEmployee(String storeId, String empId,
+    private List<TopProductEntry> getTop3ProductsByEmployee(String lines, String storeId, String empId,
                                                             Window w) {
         List<Object[]> rows = entityManager.createNativeQuery(
-                "SELECT si.product_name, SUM(si.quantity) AS total_qty, SUM(si.subtotal) AS total_revenue " +
-                "FROM sale_items si JOIN sales s ON si.sale_id = s.id " +
+                "SELECT s.product_name, SUM(s.quantity) AS total_qty, SUM(s.subtotal) AS total_revenue " +
+                "FROM " + lines + " s " +
                 "WHERE s.store_id = CAST(:sid AS UUID) AND s.employee_id = CAST(:eid AS UUID) " +
-                "AND " + WINDOW_S + " AND s.status = 'COMPLETED' " +
-                "GROUP BY si.product_name ORDER BY total_qty DESC, total_revenue DESC, si.product_name LIMIT 3")
+                "AND " + WINDOW_S + " " +
+                "GROUP BY s.product_name ORDER BY total_qty DESC, total_revenue DESC, s.product_name LIMIT 3")
                 .setParameter("sid", storeId).setParameter("eid", empId)
                 .setParameter("start", w.start()).setParameter("end", w.end())
                 .setParameter("lateFrom", w.lateFrom()).setParameter("until", w.until())

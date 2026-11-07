@@ -1,5 +1,6 @@
 package com.keevo.reporting.profitability.adapter.out.persistence;
 
+import com.keevo.reporting.revenue.FixedRevenueSource;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawDailyMarginRow;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawProductCostRow;
@@ -55,7 +56,7 @@ class JdbcProfitabilityRepositoryTest {
 
     @BeforeEach
     void setUp() {
-        repository = new JdbcProfitabilityRepository(jdbc);
+        repository = new JdbcProfitabilityRepository(jdbc, FixedRevenueSource.POS_ONLY);
         from = LocalDate.of(2026, 7, 1);
         to = LocalDate.of(2026, 7, 7);
         tenantId = "kv_test01";

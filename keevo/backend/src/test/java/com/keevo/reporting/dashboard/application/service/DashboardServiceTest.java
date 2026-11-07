@@ -1,5 +1,6 @@
 package com.keevo.reporting.dashboard.application.service;
 
+import com.keevo.reporting.revenue.FixedRevenueSource;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary;
 import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase.GetDashboardSummaryQuery;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,7 +38,7 @@ class DashboardServiceTest {
     @BeforeEach
     void setUp() {
         service = new DashboardService(jdbc,
-                Clock.fixed(Instant.parse("2026-03-18T14:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-03-18T14:00:00Z"), ZoneOffset.UTC), FixedRevenueSource.POS_ONLY);
 
         // Default stubs — everything returns 0/empty
         lenient().when(jdbc.queryForObject(anyString(), eq(Long.class), (Object[]) any()))

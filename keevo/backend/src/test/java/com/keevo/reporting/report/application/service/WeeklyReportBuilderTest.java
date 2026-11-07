@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.reporting.revenue.FixedRevenueSource;
 import com.keevo.commerce.api.ClosureWindow;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
 import com.keevo.reporting.report.domain.model.ReportType;
@@ -53,7 +54,7 @@ class WeeklyReportBuilderTest {
 
     @BeforeEach
     void setUp() {
-        builder = new WeeklyReportBuilder(entityManager, reportRepository);
+        builder = new WeeklyReportBuilder(entityManager, reportRepository, FixedRevenueSource.POS_ONLY);
         storeId = UUID.randomUUID();
         weekStart = Instant.parse("2026-03-23T00:00:00Z"); // Monday 00:00 UTC
         weekEnd   = Instant.parse("2026-03-29T22:59:59Z"); // Sunday 23:59 WAT = 22:59 UTC

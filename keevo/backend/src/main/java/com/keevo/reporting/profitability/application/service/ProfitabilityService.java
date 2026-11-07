@@ -2,6 +2,7 @@ package com.keevo.reporting.profitability.application.service;
 
 import com.keevo.reporting.profitability.domain.model.*;
 import com.keevo.reporting.profitability.domain.port.in.GetProductProfitabilityUseCase;
+import com.keevo.reporting.profitability.domain.port.in.GetProfitabilitySummaryUseCase;
 import com.keevo.reporting.profitability.domain.port.in.GetStorePerformanceUseCase;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawStorePerformanceRow;
@@ -28,7 +29,7 @@ import java.util.stream.Collectors;
 @Service
 @Transactional(readOnly = true)
 public class ProfitabilityService
-        implements GetProductProfitabilityUseCase, GetStorePerformanceUseCase {
+        implements GetProductProfitabilityUseCase, GetStorePerformanceUseCase, GetProfitabilitySummaryUseCase {
 
     private final ProfitabilityRepository repo;
     private final ProfitabilityReportBuilder reportBuilder;
@@ -51,6 +52,15 @@ public class ProfitabilityService
     @Override
     public ProductProfitabilityDetail getDetail(ProfitabilityQuery query, UUID productId) {
         return reportBuilder.buildDetail(query, productId);
+    }
+
+    // ── GetProfitabilitySummaryUseCase (20.9) ─────────────────────────────────────
+
+    @Override
+    public ProfitabilitySummary getSummary(ProfitabilityQuery query) {
+        var split = repo.findRevenueSplit(query.tenantId(), query.from(), query.to(), query.storeId());
+        return ProfitabilitySummary.of(split.totalRevenue(), split.knownMarginRevenue(), split.knownMarginCost(),
+                split.unknownMarginRevenue(), split.unknownMarginLines());
     }
 
     // ── GetStorePerformanceUseCase ─────────────────────────────────────────────

@@ -2,7 +2,9 @@ package com.keevo.reporting.profitability.adapter.in.rest;
 
 import com.keevo.reporting.profitability.adapter.in.rest.dto.ProductProfitabilityDetailDto;
 import com.keevo.reporting.profitability.adapter.in.rest.dto.ProductProfitabilityEntryDto;
+import com.keevo.reporting.profitability.adapter.in.rest.dto.ProfitabilitySummaryDto;
 import com.keevo.reporting.profitability.adapter.in.rest.dto.StorePerformanceEntryDto;
+import com.keevo.reporting.profitability.domain.port.in.GetProfitabilitySummaryUseCase;
 import com.keevo.reporting.profitability.domain.model.RankingMetric;
 import com.keevo.reporting.profitability.domain.model.SortOption;
 import com.keevo.reporting.profitability.domain.port.in.GetProductProfitabilityUseCase;
@@ -30,6 +32,7 @@ import java.util.UUID;
  * GET /api/v1/reporting/profitability/products            → product list
  * GET /api/v1/reporting/profitability/products/{id}       → product detail
  * GET /api/v1/reporting/profitability/stores              → store comparison
+ * GET /api/v1/reporting/profitability/summary             → revenue and unknown-margin part (20.9)
  * </pre>
  *
  * Story 7.4, Task 9.1.
@@ -46,11 +49,33 @@ public class ProfitabilityController {
 
     private final GetProductProfitabilityUseCase profitabilityUseCase;
     private final GetStorePerformanceUseCase storePerformanceUseCase;
+    private final GetProfitabilitySummaryUseCase summaryUseCase;
 
     public ProfitabilityController(GetProductProfitabilityUseCase profitabilityUseCase,
-                                   GetStorePerformanceUseCase storePerformanceUseCase) {
+                                   GetStorePerformanceUseCase storePerformanceUseCase,
+                                   GetProfitabilitySummaryUseCase summaryUseCase) {
         this.profitabilityUseCase = profitabilityUseCase;
         this.storePerformanceUseCase = storePerformanceUseCase;
+        this.summaryUseCase = summaryUseCase;
+    }
+
+    // ── GET /summary (20.9) ───────────────────────────────────────────────────
+
+    @Operation(summary = "Revenue of the period and the part without known margin (OWNER only)")
+    @RequiresEntitlement(value = "profitability", access = RequiresEntitlement.Access.READ)
+    @GetMapping("/summary")
+    public ResponseEntity<ApiResponseWrapper<ProfitabilitySummaryDto>> getSummary(
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) UUID storeId) {
+
+        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now(WAT);
+        LocalDate dateFrom = from != null ? LocalDate.parse(from)  : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
+
+        var query = new ProfitabilityQuery(
+                TenantContext.getCurrentTenant(), dateFrom, dateTo,
+                SortOption.MARGIN_PCT_DESC, storeId);
+        return ResponseEntity.ok(ApiResponseWrapper.ok(ProfitabilitySummaryDto.from(summaryUseCase.getSummary(query))));
     }
 
     // ── GET /products ─────────────────────────────────────────────────────────

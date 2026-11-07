@@ -453,9 +453,11 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
                 + "DROP COLUMN client_contact_name, DROP COLUMN client_website");
         jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
         jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
+        jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_revenue_day"); // 20.9 V14
+        jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_credit_notes_issued_at");
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_sync_keyset");
         jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5', '6', '7', '8', '9', '10', "
-                + "'11', '12', '13')");
+                + "'11', '12', '13', '14')");
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, seller_legal_name, "
                 + "vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, issued_at) VALUES "

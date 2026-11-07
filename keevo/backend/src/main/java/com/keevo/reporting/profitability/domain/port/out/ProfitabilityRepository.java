@@ -48,6 +48,17 @@ public interface ProfitabilityRepository {
     /** Daily margin aggregation for the 7-day sparkline. */
     record RawDailyMarginRow(String date, long dailyMargin) {}
 
+    /**
+     * Story 20.9 — the period's revenue and how much of it has a known margin: {@code totalRevenue} is the revenue
+     * of the period (documents: sales + invoices − credit notes); lines of a catalogue product give
+     * {@code knownMarginRevenue} / {@code knownMarginCost}; lines without product (or whose product left the
+     * catalogue) give {@code unknownMarginRevenue} over {@code unknownMarginLines} lines (« marge inconnue »).
+     */
+    record RawRevenueSplit(long totalRevenue, long knownMarginRevenue, long knownMarginCost,
+                           long unknownMarginRevenue, int unknownMarginLines) {
+        public static final RawRevenueSplit EMPTY = new RawRevenueSplit(0, 0, 0, 0, 0);
+    }
+
     /** Store that sold the most units of a product over a period (AC4 "top store"). */
     record RawTopStoreRow(UUID storeId, String storeName, int unitsSold) {}
 
@@ -96,4 +107,7 @@ public interface ProfitabilityRepository {
      */
     Optional<RawTopStoreRow> findTopStoreByUnits(
             String tenantId, UUID productId, LocalDate from, LocalDate to, UUID storeId);
+
+    /** Story 20.9 — revenue of [from, to] split by known / unknown margin; {@code storeId} null = all stores. */
+    RawRevenueSplit findRevenueSplit(String tenantId, LocalDate from, LocalDate to, UUID storeId);
 }

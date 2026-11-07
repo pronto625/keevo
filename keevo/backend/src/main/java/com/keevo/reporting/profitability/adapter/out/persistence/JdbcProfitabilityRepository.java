@@ -1,6 +1,7 @@
 package com.keevo.reporting.profitability.adapter.out.persistence;
 
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository;
+import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -24,6 +25,9 @@ import java.util.UUID;
  * {@code DashboardService} and {@code ReportController}: "Aujourd'hui" is the
  * local calendar day, not the UTC one.
  *
+ * <p>Story 20.9 (R4): every figure reads the revenue source ({@link RevenueQueryPort}); the applied price range of
+ * the detail ({@link #findProductCosts}) stays on POS sale lines (it describes the till prices, not revenue).
+ *
  * Story 7.4, Task 8.1.
  */
 @Repository
@@ -32,27 +36,33 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
     /** Shop time zone — same convention as DashboardService / ReportController. */
     static final ZoneId WAT = ZoneId.of("Africa/Lagos");
 
-    private static final String PRODUCT_PROFITABILITY_SQL =
-            "SELECT si.product_id, p.name AS product_name, c.name AS category_name, " +
+    /**
+     * Per-product aggregation over the revenue lines (20.9). The inner join on {@code products} keeps only lines of a
+     * catalogue product: an invoice line without product counts in revenue (see {@link #findRevenueSplit}) but never
+     * here (« marge inconnue »).
+     */
+    private static String productProfitabilitySql(String lines) {
+        return "SELECT s.product_id, p.name AS product_name, c.name AS category_name, " +
             "  p.buy_price, p.transport_cost, " +
-            "  SUM(si.quantity)::int                             AS units_sold, " +
-            "  SUM(si.applied_unit_price * si.quantity)         AS total_revenue, " +
-            "  SUM((p.buy_price + p.transport_cost) * si.quantity) AS total_cost " +
-            "FROM sale_items si " +
-            "JOIN sales s ON s.id = si.sale_id " +
-            "JOIN products p ON p.id = si.product_id " +
+            "  SUM(s.quantity)::int                             AS units_sold, " +
+            "  SUM(s.price_amount)                              AS total_revenue, " +
+            "  ROUND(SUM((p.buy_price + p.transport_cost) * s.quantity))::bigint AS total_cost " +
+            "FROM " + lines + " s " +
+            "JOIN products p ON p.id = s.product_id " +
             "LEFT JOIN categories c ON c.id = p.category_id " +
-            "WHERE s.status = 'COMPLETED' " +
-            "  AND s.occurred_at >= ? AND s.occurred_at < ? ";
+            "WHERE s.occurred_at >= ? AND s.occurred_at < ? ";
+    }
 
     private static final String PRODUCT_PROFITABILITY_STORE_FILTER = "  AND s.store_id = ?::uuid ";
     private static final String PRODUCT_PROFITABILITY_GROUP =
-            "GROUP BY si.product_id, p.name, c.name, p.buy_price, p.transport_cost";
+            "GROUP BY s.product_id, p.name, c.name, p.buy_price, p.transport_cost";
 
     private final JdbcTemplate jdbc;
+    private final RevenueQueryPort revenue;
 
-    public JdbcProfitabilityRepository(JdbcTemplate jdbc) {
+    public JdbcProfitabilityRepository(JdbcTemplate jdbc, RevenueQueryPort revenue) {
         this.jdbc = jdbc;
+        this.revenue = revenue;
     }
 
     @Override
@@ -62,11 +72,11 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         if (storeId == null) {
-            String sql = PRODUCT_PROFITABILITY_SQL + PRODUCT_PROFITABILITY_GROUP;
+            String sql = productProfitabilitySql(revenue.lines()) + PRODUCT_PROFITABILITY_GROUP;
             return jdbc.query(sql, (rs, rowNum) -> mapProfitabilityRow(rs),
                     tsFrom, tsTo);
         } else {
-            String sql = PRODUCT_PROFITABILITY_SQL + PRODUCT_PROFITABILITY_STORE_FILTER
+            String sql = productProfitabilitySql(revenue.lines()) + PRODUCT_PROFITABILITY_STORE_FILTER
                     + PRODUCT_PROFITABILITY_GROUP;
             return jdbc.query(sql, (rs, rowNum) -> mapProfitabilityRow(rs),
                     tsFrom, tsTo, storeId.toString());
@@ -79,24 +89,23 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
+        // 20.9: revenue source; documents carry no store, so the store comparison holds sales only.
         String sql =
             "SELECT " +
             "  s.store_id, " +
             "  st.name                                       AS store_name, " +
             "  COALESCE(SUM(s.total_amount), 0)             AS total_revenue, " +
-            "  COUNT(s.id)::int                             AS sales_count, " +
-            "  COALESCE(SUM(s.total_amount) / NULLIF(COUNT(s.id), 0), 0) AS avg_basket, " +
-            "  (SELECT si2.product_name " +
-            "   FROM sale_items si2 " +
-            "   JOIN sales s2 ON s2.id = si2.sale_id " +
-            "   WHERE s2.store_id = s.store_id AND s2.status = 'COMPLETED' " +
+            "  SUM(s.doc_count)::int                        AS sales_count, " +
+            "  COALESCE(SUM(s.total_amount) / NULLIF(SUM(s.doc_count), 0), 0) AS avg_basket, " +
+            "  (SELECT s2.product_name " +
+            "   FROM " + revenue.lines() + " s2 " +
+            "   WHERE s2.store_id = s.store_id " +
             "     AND s2.occurred_at >= ? AND s2.occurred_at < ? " +
-            "   GROUP BY si2.product_name " +
-            "   ORDER BY SUM(si2.quantity) DESC LIMIT 1) AS top_product " +
-            "FROM sales s " +
+            "   GROUP BY s2.product_name " +
+            "   ORDER BY SUM(s2.quantity) DESC LIMIT 1) AS top_product " +
+            "FROM " + revenue.documents() + " s " +
             "JOIN stores st ON st.id = s.store_id " +
-            "WHERE s.status = 'COMPLETED' " +
-            "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
+            "WHERE s.occurred_at >= ? AND s.occurred_at < ? " +
             "GROUP BY s.store_id, st.name";
 
         return jdbc.query(sql, (rs, rowNum) -> new RawStorePerformanceRow(
@@ -158,12 +167,11 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         String sql =
             "SELECT " +
             "  DATE(s.occurred_at AT TIME ZONE 'Africa/Lagos') AS day, " +
-            "  COALESCE(SUM((si.applied_unit_price - p.buy_price - p.transport_cost) * si.quantity), 0) AS daily_margin " +
-            "FROM sale_items si " +
-            "JOIN sales s ON s.id = si.sale_id " +
-            "JOIN products p ON p.id = si.product_id " +
-            "WHERE s.status = 'COMPLETED' " +
-            "  AND si.product_id = ?::uuid " +
+            "  COALESCE(ROUND(SUM(s.price_amount - (p.buy_price + p.transport_cost) * s.quantity)), 0)::bigint " +
+            "    AS daily_margin " +
+            "FROM " + revenue.lines() + " s " +
+            "JOIN products p ON p.id = s.product_id " +
+            "WHERE s.product_id = ?::uuid " +
             "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
             (storeId != null ? "  AND s.store_id = ?::uuid " : "") +
             "GROUP BY DATE(s.occurred_at AT TIME ZONE 'Africa/Lagos') " +
@@ -184,12 +192,10 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         String sql =
-            "SELECT s.store_id, st.name AS store_name, SUM(si.quantity)::int AS units_sold " +
-            "FROM sale_items si " +
-            "JOIN sales s ON s.id = si.sale_id " +
+            "SELECT s.store_id, st.name AS store_name, SUM(s.quantity)::int AS units_sold " +
+            "FROM " + revenue.lines() + " s " +
             "JOIN stores st ON st.id = s.store_id " +
-            "WHERE s.status = 'COMPLETED' " +
-            "  AND si.product_id = ?::uuid " +
+            "WHERE s.product_id = ?::uuid " +
             "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
             (storeId != null ? "  AND s.store_id = ?::uuid " : "") +
             "GROUP BY s.store_id, st.name " +
@@ -203,6 +209,44 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
             ? jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo)
             : jdbc.query(sql, mapper, productId.toString(), tsFrom, tsTo, storeId.toString());
         return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+    }
+
+    @Override
+    public RawRevenueSplit findRevenueSplit(String tenantId, LocalDate from, LocalDate to, UUID storeId) {
+        Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
+        Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
+        String storeFilter = storeId == null ? "" : " AND s.store_id = ?::uuid";
+
+        // One query: the period's revenue (documents) and its lines split by « margin known » (catalogue product)
+        // vs « marge inconnue » (no product, or a product no longer in the catalogue).
+        String sql =
+            "SELECT " +
+            "  (SELECT COALESCE(SUM(d.total_amount), 0) FROM " + revenue.documents() + " d " +
+            "   WHERE d.occurred_at >= ? AND d.occurred_at < ?" + storeFilter.replace("s.", "d.") + ") AS total_revenue, " +
+            "  COALESCE(SUM(s.price_amount) FILTER (WHERE p.id IS NOT NULL), 0) AS known_revenue, " +
+            "  COALESCE(ROUND(SUM((p.buy_price + p.transport_cost) * s.quantity) FILTER (WHERE p.id IS NOT NULL)), 0)" +
+            "::bigint AS known_cost, " +
+            "  COALESCE(SUM(s.price_amount) FILTER (WHERE p.id IS NULL), 0) AS unknown_revenue, " +
+            "  (COUNT(*) FILTER (WHERE p.id IS NULL AND s.quantity > 0))::int AS unknown_lines " +
+            "FROM " + revenue.lines() + " s " +
+            "LEFT JOIN products p ON p.id = s.product_id " +
+            "WHERE s.occurred_at >= ? AND s.occurred_at < ?" + storeFilter;
+
+        List<Object> args = new ArrayList<>();
+        args.add(tsFrom);
+        args.add(tsTo);
+        if (storeId != null) args.add(storeId.toString());
+        args.add(tsFrom);
+        args.add(tsTo);
+        if (storeId != null) args.add(storeId.toString());
+
+        RawRevenueSplit split = jdbc.queryForObject(sql, (rs, rowNum) -> new RawRevenueSplit(
+                rs.getLong("total_revenue"),
+                rs.getLong("known_revenue"),
+                rs.getLong("known_cost"),
+                rs.getLong("unknown_revenue"),
+                rs.getInt("unknown_lines")), args.toArray());
+        return split != null ? split : RawRevenueSplit.EMPTY;
     }
 
     // ── private helpers ──────────────────────────────────────────────────────

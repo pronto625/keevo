@@ -1,5 +1,6 @@
 package com.keevo.reporting.leaderboard.adapter.out.persistence;
 
+import com.keevo.reporting.revenue.FixedRevenueSource;
 import com.keevo.reporting.leaderboard.domain.port.out.SellerLeaderboardRepository.RawSellerRow;
 import com.keevo.shared.infrastructure.persistence.PostgresIntegrationTest;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,7 +44,7 @@ class JdbcSellerLeaderboardRepositoryPostgresIntegrationTest extends PostgresInt
 
     @BeforeEach
     void setUp() {
-        repo = new JdbcSellerLeaderboardRepository(jdbc);
+        repo = new JdbcSellerLeaderboardRepository(jdbc, FixedRevenueSource.POS_ONLY);
     }
 
     @Test

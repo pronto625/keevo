@@ -1,6 +1,7 @@
 package com.keevo.reporting.leaderboard.adapter.out.persistence;
 
 import com.keevo.reporting.leaderboard.domain.port.out.SellerLeaderboardRepository;
+import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
 import com.keevo.shared.infrastructure.export.ExportValues;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -15,7 +16,11 @@ import java.util.UUID;
 /**
  * JdbcSellerLeaderboardRepository — SQL adapter of the seller leaderboard (v1s-14-2).
  *
- * <p>One query: COMPLETED sales grouped by {@code sales.employee_id} (the actor's user id) in the
+ * <p>Story 20.9 (R4): reads the revenue source ({@link RevenueQueryPort}) — sales by their actor, invoices by their
+ * creator (Bref {@code userId}), credit notes deducted from the seller of their invoice; documents carry no store, so
+ * a store filter keeps sales only.
+ *
+ * <p>One query: revenue documents grouped by {@code employee_id} (the actor's user id) in the
  * WAT window {@code [from 00:00 WAT, to+1 00:00 WAT)} — same convention as
  * {@code JdbcProfitabilityRepository} — UNION the active employees (store-scoped when a store is
  * given) who did not sell. Names come from {@link ExportValues#actorJoins} (latest employee row,
@@ -33,9 +38,11 @@ public class JdbcSellerLeaderboardRepository implements SellerLeaderboardReposit
     private static final String ALIAS = "lb";
 
     private final JdbcTemplate jdbc;
+    private final RevenueQueryPort revenue;
 
-    public JdbcSellerLeaderboardRepository(JdbcTemplate jdbc) {
+    public JdbcSellerLeaderboardRepository(JdbcTemplate jdbc, RevenueQueryPort revenue) {
         this.jdbc = jdbc;
+        this.revenue = revenue;
     }
 
     @Override
@@ -48,10 +55,10 @@ public class JdbcSellerLeaderboardRepository implements SellerLeaderboardReposit
 
         String sql =
             "WITH sold AS (" +
-            "  SELECT s.employee_id AS seller_id, COUNT(s.id)::int AS sales_count," +
+            "  SELECT s.employee_id AS seller_id, COALESCE(SUM(s.doc_count), 0)::int AS sales_count," +
             "         COALESCE(SUM(s.total_amount), 0)::bigint AS total_revenue" +
-            "  FROM sales s" +
-            "  WHERE s.status = 'COMPLETED' AND s.occurred_at >= ? AND s.occurred_at < ?" +
+            "  FROM " + revenue.documents() + " s" +
+            "  WHERE s.occurred_at >= ? AND s.occurred_at < ? AND s.employee_id IS NOT NULL" +
             saleStoreFilter +
             "  GROUP BY s.employee_id" +
             "), sellers AS (" +

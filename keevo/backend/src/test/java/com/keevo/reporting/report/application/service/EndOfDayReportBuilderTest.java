@@ -1,5 +1,6 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.reporting.revenue.FixedRevenueSource;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
@@ -41,7 +42,7 @@ class EndOfDayReportBuilderTest {
 
     @BeforeEach
     void setUp() {
-        builder = new EndOfDayReportBuilder(entityManager);
+        builder = new EndOfDayReportBuilder(entityManager, FixedRevenueSource.POS_ONLY);
         storeId = UUID.randomUUID();
         date = LocalDate.of(2026, 5, 15);
 
