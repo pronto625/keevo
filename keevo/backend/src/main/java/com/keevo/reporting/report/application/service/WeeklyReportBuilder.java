@@ -80,8 +80,10 @@ public class WeeklyReportBuilder {
                                   String tenantId, boolean isAutomatic) {
         Window w   = Window.of(window);
         String sid = storeId.toString();
-        String docs = revenue.documents(); // 20.9: one resolution of the revenue source per report
-        String lines = revenue.lines();
+        // 20.9: one resolution per report; store-scoped → sales-only relations (documents carry no store)
+        RevenueQueryPort.Relations source = revenue.storeScoped();
+        String docs = source.documents();
+        String lines = source.lines();
 
         int totalSales   = countCompletedSales(docs, sid, w);
         int totalRevenue = sumRevenue(docs, sid, w);

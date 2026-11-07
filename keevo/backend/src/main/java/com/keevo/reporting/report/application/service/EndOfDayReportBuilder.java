@@ -87,7 +87,9 @@ public class EndOfDayReportBuilder {
                                     LocalTime closeTime, boolean isAutomatic) {
         Window w   = Window.of(window);
         String sid = storeId.toString();
-        String docs = revenue.documents(); // 20.9: one resolution of the revenue source per report
+        // 20.9: one resolution per report; store-scoped → sales-only relations (documents carry no store)
+        RevenueQueryPort.Relations source = revenue.storeScoped();
+        String docs = source.documents();
 
         int totalSales    = countCompletedSales(docs, sid, w);
         int totalRevenue  = sumRevenue(docs, sid, w);
@@ -99,7 +101,7 @@ public class EndOfDayReportBuilder {
         int pendingSalesTotal = sumPendingRevenue(sid, w);
         int lowStockCount     = countLowStock(sid);
 
-        List<TopProductEntry> topProducts = getTop3Products(revenue.lines(), sid, w);
+        List<TopProductEntry> topProducts = getTop3Products(source.lines(), sid, w);
         List<EmployeeEntry> employees     = getEmployeeBreakdown(docs, sid, w);
 
         return new EndOfDayReportData(
@@ -131,7 +133,9 @@ public class EndOfDayReportBuilder {
         Window w   = Window.of(window);
         String sid = storeId.toString();
         String eid = employeeId.toString();
-        String docs = revenue.documents(); // 20.9: one resolution of the revenue source per report
+        // 20.9: one resolution per report; store-scoped → sales-only relations (documents carry no store)
+        RevenueQueryPort.Relations source = revenue.storeScoped();
+        String docs = source.documents();
 
         int totalSales   = countCompletedSalesByEmployee(docs, sid, eid, w);
         int totalRevenue = sumRevenueByEmployee(docs, sid, eid, w);
@@ -143,7 +147,7 @@ public class EndOfDayReportBuilder {
         int pendingSalesTotal = sumPendingRevenueByEmployee(sid, eid, w);
         int lowStockCount     = countLowStock(sid);
 
-        List<TopProductEntry> topProducts = getTop3ProductsByEmployee(revenue.lines(), sid, eid, w);
+        List<TopProductEntry> topProducts = getTop3ProductsByEmployee(source.lines(), sid, eid, w);
 
         return new EndOfDayReportData(
                 storeName, date, closeTime, isAutomatic, true,

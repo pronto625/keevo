@@ -27,7 +27,7 @@ public record ProfitabilitySummary(
     public static ProfitabilitySummary of(long totalRevenue, long knownRevenue, long knownCost,
                                           long unknownRevenue, int unknownLines) {
         long margin = knownRevenue - knownCost;
-        double percent = knownCost == 0 ? 0.0 : (double) margin / knownCost * 100.0;
+        double percent = knownCost <= 0 ? 0.0 : (double) margin / knownCost * 100.0;
         return new ProfitabilitySummary(totalRevenue, knownRevenue, knownCost, margin, percent, unknownRevenue,
                 unknownLines);
     }

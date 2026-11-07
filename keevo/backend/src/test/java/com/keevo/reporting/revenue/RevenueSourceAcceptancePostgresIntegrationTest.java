@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Story 20.9 (R4, FUS-FR24) — acceptance of the single revenue source on PostgreSQL: a tenant schema built from the
- * foundation scripts plus invoicing V1–V13, read by the real consumers (owner dashboard, seller ranking, product
+ * foundation scripts plus invoicing V1–V14, read by the real consumers (owner dashboard, seller ranking, product
  * profitability and its summary). Scenarios: POS only, documents only, POS → invoice bridge (no double count),
  * credit note deducted, quote not counted, cancelled / draft not counted, invoice line without product (revenue yes,
  * margin unknown), invoice civil date (FUS-NFR9). Plus the comparison harness of AC2 on the synthetic Bref fixture
@@ -80,8 +80,9 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
                 "V4__credit_notes.sql", "V5__sale_invoice_state.sql", "V6__invoice_sync_keyset.sql",
                 "V7__invoice_soft_delete.sql", "V8__invoices_kind_quote.sql", "V9__invoices_kind_list_index.sql",
                 "V10__invoice_payments.sql", "V11__invoice_discount_delivery_vat_due.sql",
-                "V12__invoices_due_date_index.sql", "V14__revenue_indexes.sql", "V14__revenue_indexes.sql")) {
-            invoicingScript(script); // V13 twice: idempotent
+                "V12__invoices_due_date_index.sql", "V13__invoicing_settings_derive_from_documents.sql",
+                "V14__revenue_indexes.sql", "V14__revenue_indexes.sql")) {
+            invoicingScript(script); // V14 twice: idempotent
         }
         DriverManagerDataSource tenant = new DriverManagerDataSource(url, SharedPostgresContainer.username(),
                 SharedPostgresContainer.password());
@@ -112,7 +113,7 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
     void clean() {
         // test database only
         jdbc.execute("TRUNCATE credit_note_items, credit_notes, invoice_payments, invoice_items, invoices, "
-                + "sale_items, sales, products, stores CASCADE");
+                + "sale_items, sales, products, employees, stores CASCADE");
         store = UUID.randomUUID();
         Timestamp t = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
         jdbc.update("INSERT INTO stores (id, created_at, updated_at, is_active, name, type) "
@@ -161,17 +162,38 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
     }
 
     @Test
-    @DisplayName("POS → invoice bridge: the sale and its automatic invoice count once; its credit note is not deducted")
+    @DisplayName("POS → invoice bridge: the sale and its automatic invoice count once; an automatic credit note of it "
+            + "is not deducted")
     void bridgeNoDoubleCount() {
         UUID sale = sale(TODAY_10H, 3000, "COMPLETED");
         UUID auto = invoice("ISSUED", TODAY, 3000, sale, line(product, 1, 3000));
-        creditNote(auto, 3000, TODAY_10H, 1, 1, 3000); // e.g. a sale correction: the sale side already counts it
+        // sale cancelled / corrected: the bridge's credit note carries its event key, the sale side already counts it
+        creditNote(auto, 3000, TODAY_10H, 1, 1, 3000, "sale.corrected:" + sale);
 
         DashboardSummary d = dashboard(FixedRevenueSource.ALL);
         assertThat(d.todayCA()).isEqualTo(3000);
         assertThat(d.todaySalesCount()).isEqualTo(1);
         assertThat(sellers(FixedRevenueSource.ALL)).singleElement()
                 .satisfies(r -> assertThat(r.totalRevenue()).isEqualTo(3000));
+    }
+
+    @Test
+    @DisplayName("POS → invoice bridge: a manual credit note on the automatic invoice is deducted (the sale stays "
+            + "COMPLETED)")
+    void bridgeManualCreditNoteDeducted() {
+        UUID sale = sale(TODAY_10H, 3000, "COMPLETED");
+        UUID auto = invoice("ISSUED", TODAY, 3000, sale, line(product, 1, 3000));
+        creditNote(auto, 1000, TODAY_10H, 1, 1, 1000); // IssueCreditNoteUseCase: source_event NULL
+
+        DashboardSummary d = dashboard(FixedRevenueSource.ALL);
+        assertThat(d.todayCA()).isEqualTo(2000);
+        assertThat(d.todaySalesCount()).isEqualTo(1);
+        assertThat(sellers(FixedRevenueSource.ALL)).singleElement()
+                .satisfies(r -> assertThat(r.totalRevenue()).isEqualTo(2000));
+        assertThat(products(FixedRevenueSource.ALL)).singleElement().satisfies(p -> {
+            assertThat(p.unitsSold()).isZero(); // 1 sold at the till − 1 credited
+            assertThat(p.totalRevenue()).isEqualTo(2000);
+        });
     }
 
     @Test
@@ -263,8 +285,8 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
 
     @Test
     @DisplayName("FUS-NFR11: a window on the source reaches the V14 indexes through the UNION ALL (pushed down)")
-    void windowUsesTheV13Indexes() throws Exception {
-        String sql = "EXPLAIN SELECT COALESCE(SUM(r.total_amount), 0) FROM " + FixedRevenueSource.ALL.documents()
+    void windowUsesTheV14Indexes() throws Exception {
+        String sql = "EXPLAIN SELECT COALESCE(SUM(r.total_amount), 0) FROM " + FixedRevenueSource.ALL.current().documents()
                 + " r WHERE r.occurred_at >= '2026-11-10T23:00:00Z'::timestamptz";
         StringBuilder plan = new StringBuilder();
         try (Connection c = admin.getConnection(); Statement s = c.createStatement()) {
@@ -279,7 +301,7 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
         // invoices: the window is pushed into the branch and matches the V14 expression index; credit notes: the
         // window is pushed too (on empty tables the planner may prefer the invoice join over idx_credit_notes_issued_at)
         assertThat(plan.toString()).contains("Index Scan using idx_invoices_revenue_day")
-                .contains("(issued_at >= ").contains("Index Cond: (occurred_at >= ");
+                .contains("(issued_at >= ").contains("idx_sales_completed_occurred_at");
     }
 
     /**
@@ -321,10 +343,133 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
                 .containsEntry("2026-11-01", 1193L);
     }
 
+    @Test
+    @DisplayName("upper bound: a post-dated invoice (issue date tomorrow) inflates neither today, month nor all time")
+    void postDatedInvoiceExcluded() {
+        invoice("ISSUED", TODAY, 2_000, null, line(null, 1, 2_000));
+        invoice("ISSUED", TODAY.plusDays(1), 50_000, null, line(null, 1, 50_000));
+
+        DashboardSummary d = dashboard(FixedRevenueSource.ALL);
+        assertThat(d.todayCA()).isEqualTo(2_000);
+        assertThat(d.periodTotals().month()).isEqualTo(new DashboardSummary.PeriodTotal(2_000, 1));
+        assertThat(d.periodTotals().allTime()).isEqualTo(new DashboardSummary.PeriodTotal(2_000, 1));
+        assertThat(d.dailyCALast30()).containsExactly(new DailyCAEntry("2026-11-11", 2_000));
+        assertThat(d.averageBasketMonth()).isEqualTo(2_000);
+    }
+
+    @Test
+    @DisplayName("credit notes larger than the period's revenue: average basket 0, never negative")
+    void negativeRevenueBasket() {
+        UUID inv = invoice("ISSUED", TODAY.minusMonths(1), 10_000, null, line(null, 1, 10_000));
+        invoice("ISSUED", TODAY, 1_000, null, line(null, 1, 1_000));
+        creditNote(inv, 10_000, TODAY_10H, 1, 1, 10_000);
+
+        DashboardSummary d = dashboard(FixedRevenueSource.ALL);
+        assertThat(d.periodTotals().month()).isEqualTo(new DashboardSummary.PeriodTotal(-9_000, 1));
+        assertThat(d.averageBasketMonth()).isZero();
+    }
+
+    @Test
+    @DisplayName("two stores: per-store today / yesterday, employees, status from sales only; top and worst products")
+    void twoStoreOverviewAndProductRanking() {
+        UUID storeB = insertStore("Boutique B");
+        employee(store);
+        employee(store);
+        employee(storeB);
+        UUID p2 = insertProduct("Huile 5 L");
+        UUID p3 = insertProduct("Savon");
+        Instant yesterday10h = TODAY_10H.minusSeconds(86_400);
+        saleOf(store, TODAY_10H, product, 5, 1_000);       // A today 5 000
+        saleOf(store, yesterday10h, p2, 2, 5_000);         // A yesterday 10 000 → ratio 0.5 → ATTENTION
+        saleOf(storeB, TODAY_10H, p2, 1, 1_000);           // B today 1 000
+        saleOf(storeB, yesterday10h, product, 1, 4_000);   // B yesterday 4 000 → ratio 0.25 → EN_BAISSE
+        UUID inv = invoice("ISSUED", TODAY, 50_000, null, line(p3, 1, 50_000)); // all stores only
+        creditNote(inv, 50_000, TODAY_10H, 1, 1, 50_000);  // p3: 1 − 1 = 0 units
+
+        DashboardSummary d = dashboard(FixedRevenueSource.ALL);
+        var a = overview(d, store);
+        var b = overview(d, storeB);
+        assertThat(List.of(a.todayCA(), a.yesterdayCA(), (long) a.employeeCount())).containsExactly(5_000L, 10_000L, 2L);
+        assertThat(a.statusLevel()).isEqualTo("ATTENTION");
+        assertThat(List.of(b.todayCA(), b.yesterdayCA(), (long) b.employeeCount())).containsExactly(1_000L, 4_000L, 1L);
+        assertThat(b.statusLevel()).isEqualTo("EN_BAISSE");
+        assertThat(d.todayCA()).isEqualTo(6_000); // 5 000 + 1 000 + 50 000 − 50 000
+
+        // 7 days: product 6 units, p2 3 units, p3 0 units (sold then credited)
+        assertThat(d.weeklyTopProducts()).extracting(DashboardSummary.TopProductEntry::productName)
+                .containsExactly("Riz 25 kg", "Huile 5 L", "Savon");
+        assertThat(d.weeklyWorstProducts()).extracting(DashboardSummary.TopProductEntry::productName)
+                .containsExactly("Huile 5 L", "Riz 25 kg");
+    }
+
+    @Test
+    @DisplayName("store-filtered revenue split: the store's sales only; all stores add the documents")
+    void storeFilteredRevenueSplit() {
+        saleOf(store, TODAY_10H, product, 1, 3_000);
+        invoice("ISSUED", TODAY, 20_000, null, line(product, 1, 12_000), line(null, 1, 8_000));
+        JdbcProfitabilityRepository repo = new JdbcProfitabilityRepository(jdbc, FixedRevenueSource.ALL);
+
+        assertThat(repo.findRevenueSplit(SCHEMA, TODAY, TODAY, store))
+                .isEqualTo(new RawRevenueSplit(3_000, 3_000, 10_000, 0, 0));
+        assertThat(repo.findRevenueSplit(SCHEMA, TODAY, TODAY, null))
+                .isEqualTo(new RawRevenueSplit(23_000, 15_000, 20_000, 8_000, 1));
+    }
+
+    @Test
+    @DisplayName("profitability store comparison, 7-day margin and top store: same on a POS and on a mixed tenant "
+            + "(store-scoped), the margin without store adds the invoice lines")
+    void profitabilityStoreQueriesPosAndMixed() {
+        saleOf(store, TODAY_10H, product, 1, 15_000); // margin 15 000 − 10 000 = 5 000
+        JdbcProfitabilityRepository pos = new JdbcProfitabilityRepository(jdbc, FixedRevenueSource.POS_ONLY);
+        JdbcProfitabilityRepository mixed = new JdbcProfitabilityRepository(jdbc, FixedRevenueSource.ALL);
+
+        for (int run = 0; run < 2; run++) {
+            for (JdbcProfitabilityRepository repo : List.of(pos, mixed)) {
+                assertThat(repo.findRawStoreByPeriod(SCHEMA, TODAY.minusDays(6), TODAY)).singleElement()
+                        .satisfies(r -> {
+                            assertThat(r.storeId()).isEqualTo(store);
+                            assertThat(r.totalRevenue()).isEqualTo(15_000);
+                            assertThat(r.salesCount()).isEqualTo(1);
+                            assertThat(r.topProductName()).isEqualTo("Riz 25 kg");
+                        });
+                assertThat(repo.findTopStoreByUnits(SCHEMA, product, TODAY.minusDays(6), TODAY, null)).get()
+                        .satisfies(t -> assertThat(t.unitsSold()).isEqualTo(1));
+                assertThat(repo.findDailyMarginLast7(SCHEMA, product, TODAY, store)).singleElement()
+                        .satisfies(m -> assertThat(m.dailyMargin()).isEqualTo(5_000));
+            }
+            // second run: the mixed tenant also invoiced the product (1 × 12 000 → margin 2 000), no store
+            if (run == 0) {
+                invoice("ISSUED", TODAY, 12_000, null, line(product, 1, 12_000));
+            }
+        }
+        assertThat(pos.findDailyMarginLast7(SCHEMA, product, TODAY, null)).singleElement()
+                .satisfies(m -> assertThat(m.dailyMargin()).isEqualTo(5_000));
+        assertThat(mixed.findDailyMarginLast7(SCHEMA, product, TODAY, null)).singleElement()
+                .satisfies(m -> assertThat(m.dailyMargin()).isEqualTo(7_000));
+    }
+
+    @Test
+    @DisplayName("seller ranking: an invoice without creator is left out, no error")
+    void invoiceWithoutCreator() {
+        sale(TODAY_10H, 3000, "COMPLETED");
+        UUID orphan = invoice("ISSUED", TODAY, 9_000, null, line(null, 1, 9_000));
+        jdbc.update("UPDATE invoices SET created_by = NULL WHERE id = ?", orphan);
+
+        assertThat(sellers(FixedRevenueSource.ALL)).singleElement().satisfies(r -> {
+            assertThat(r.sellerId()).isEqualTo(seller);
+            assertThat(r.totalRevenue()).isEqualTo(3000);
+        });
+        assertThat(dashboard(FixedRevenueSource.ALL).todayCA()).isEqualTo(12_000); // still revenue
+    }
+
     // ── consumers ───────────────────────────────────────────────────────────────
 
     private DashboardSummary dashboard(RevenueQueryPort source) {
         return new DashboardService(jdbc, CLOCK, source).execute(new GetDashboardSummaryQuery(SCHEMA));
+    }
+
+    private DashboardSummary.StoreOverviewEntry overview(DashboardSummary d, UUID storeId) {
+        return d.storeOverviews().stream().filter(o -> o.storeId().equals(storeId.toString())).findFirst().orElseThrow();
     }
 
     private long storeToday(DashboardSummary d) {
@@ -346,6 +491,38 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
 
     private static Line line(UUID productId, int quantity, long totalTtc) {
         return new Line(productId, quantity, totalTtc);
+    }
+
+    private UUID insertStore(String name) {
+        UUID id = UUID.randomUUID();
+        Timestamp t = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
+        jdbc.update("INSERT INTO stores (id, created_at, updated_at, is_active, name, type) "
+                + "VALUES (?, ?, ?, true, ?, 'STORE')", id, t, t, name);
+        return id;
+    }
+
+    private UUID insertProduct(String name) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO products (id, name, sku, price, buy_price, transport_cost) VALUES (?, ?, ?, 0, 0, 0)",
+                id, name, id.toString().substring(0, 8));
+        return id;
+    }
+
+    private void employee(UUID storeId) {
+        jdbc.update("INSERT INTO employees (id, user_id, store_id, first_name, last_name, status) "
+                + "VALUES (?, ?, ?, 'Awa', 'Ngo', 'ACTIVE')", UUID.randomUUID(), UUID.randomUUID(), storeId);
+    }
+
+    /** A COMPLETED sale of {@code quantity} × {@code unitPrice} of one product in {@code storeId}. */
+    private void saleOf(UUID storeId, Instant occurredAt, UUID productId, int quantity, int unitPrice) {
+        UUID id = UUID.randomUUID();
+        int total = quantity * unitPrice;
+        jdbc.update("INSERT INTO sales (id, created_at, employee_id, occurred_at, payment_mode, status, store_id, "
+                        + "total_amount, discount_amount) VALUES (?, ?, ?, ?, 'CASH', 'COMPLETED', ?, ?, 0)",
+                id, Timestamp.from(occurredAt), seller, Timestamp.from(occurredAt), storeId, total);
+        jdbc.update("INSERT INTO sale_items (sale_id, product_id, product_name, applied_unit_price, quantity, subtotal) "
+                + "VALUES (?, ?, (SELECT name FROM products WHERE id = ?), ?, ?, ?)",
+                id, productId, productId, unitPrice, quantity, total);
     }
 
     private UUID sale(Instant occurredAt, int total, String status) {
@@ -396,12 +573,20 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
                 UUID.randomUUID(), id, total, total, total);
     }
 
+    /** A manual credit note (source_event NULL), as IssueCreditNoteUseCase writes it. */
     private void creditNote(UUID invoice, long total, Instant issuedAt, int invoicePosition, int quantity,
                             long lineTotal) {
+        creditNote(invoice, total, issuedAt, invoicePosition, quantity, lineTotal, null);
+    }
+
+    /** {@code sourceEvent} set = an automatic credit note of the POS bridge (sale cancelled / corrected). */
+    private void creditNote(UUID invoice, long total, Instant issuedAt, int invoicePosition, int quantity,
+                            long lineTotal, String sourceEvent) {
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO credit_notes (id, number, invoice_id, reason, total_ht, total_vat, total_ttc, "
-                        + "issued_at) VALUES (?, ?, ?, 'Retour', ?, 0, ?, ?)",
-                id, "AV-2026-" + String.format("%06d", ++numbers), invoice, total, total, Timestamp.from(issuedAt));
+                        + "issued_at, source_event) VALUES (?, ?, ?, 'Retour', ?, 0, ?, ?, ?)",
+                id, "AV-2026-" + String.format("%06d", ++numbers), invoice, total, total, Timestamp.from(issuedAt),
+                sourceEvent);
         jdbc.update("INSERT INTO credit_note_items (credit_note_id, position, invoice_position, description, quantity, "
                         + "unit_price, vat_treatment, vat_rate, total_ht, total_vat, total_ttc) "
                         + "VALUES (?, 1, ?, 'Article', ?, ?, 'STANDARD', 0, ?, 0, ?)",

@@ -51,13 +51,15 @@ public class JdbcSellerLeaderboardRepository implements SellerLeaderboardReposit
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         String saleStoreFilter = storeId == null ? "" : " AND s.store_id = ?::uuid";
+        // 20.9: one resolution; a store filter reads the sales-only relation (documents carry no store)
+        String docs = (storeId == null ? revenue.current() : revenue.storeScoped()).documents();
         String employeeStoreFilter = storeId == null ? "" : " AND e.store_id = ?::uuid";
 
         String sql =
             "WITH sold AS (" +
             "  SELECT s.employee_id AS seller_id, COALESCE(SUM(s.doc_count), 0)::int AS sales_count," +
             "         COALESCE(SUM(s.total_amount), 0)::bigint AS total_revenue" +
-            "  FROM " + revenue.documents() + " s" +
+            "  FROM " + docs + " s" +
             "  WHERE s.occurred_at >= ? AND s.occurred_at < ? AND s.employee_id IS NOT NULL" +
             saleStoreFilter +
             "  GROUP BY s.employee_id" +

@@ -9,7 +9,6 @@ import com.keevo.shared.infrastructure.web.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
@@ -39,13 +38,17 @@ class ProfitabilityControllerTest {
     @Mock
     private com.keevo.reporting.profitability.domain.port.in.GetProfitabilitySummaryUseCase summaryUseCase;
 
-    @InjectMocks
+    /** 20.9: the summary's default window comes from this clock (Saturday 2026-11-07 WAT). */
+    private static final java.time.Clock CLOCK =
+            java.time.Clock.fixed(java.time.Instant.parse("2026-11-07T10:00:00Z"), java.time.ZoneOffset.UTC);
+
     private ProfitabilityController controller;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
+        controller = new ProfitabilityController(profitabilityUseCase, storePerformanceUseCase, summaryUseCase, CLOCK);
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -216,5 +219,38 @@ class ProfitabilityControllerTest {
                 .andExpect(jsonPath("$.data.marginPercent").value(20.0))
                 .andExpect(jsonPath("$.data.revenueWithUnknownMargin").value(8000))
                 .andExpect(jsonPath("$.data.unknownMarginLines").value(1));
+    }
+
+    @Test
+    void GET_summary_passesStoreAndDefaultWindowFromTheClock() throws Exception {
+        when(summaryUseCase.getSummary(any())).thenReturn(
+                com.keevo.reporting.profitability.domain.model.ProfitabilitySummary.of(0, 0, 0, 0, 0));
+        UUID store = UUID.randomUUID();
+
+        mockMvc.perform(get("/api/v1/reporting/profitability/summary").param("storeId", store.toString()))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(ProfitabilityQuery.class);
+        org.mockito.Mockito.verify(summaryUseCase).getSummary(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().storeId()).isEqualTo(store);
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().to()).isEqualTo(java.time.LocalDate.of(2026, 11, 7));
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().from()).isEqualTo(java.time.LocalDate.of(2026, 10, 9));
+    }
+
+    @Test
+    void GET_summary_fromAfterTo_is400ValidationError() throws Exception {
+        mockMvc.perform(get("/api/v1/reporting/profitability/summary").param("from", "2026-11-07").param("to", "2026-11-01"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.error").value("La date de début doit précéder la date de fin."));
+        org.mockito.Mockito.verifyNoInteractions(summaryUseCase);
+    }
+
+    @Test
+    void GET_summary_unparseableDate_is400() throws Exception {
+        mockMvc.perform(get("/api/v1/reporting/profitability/summary").param("from", "07/11/2026"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.domainCode").value("VALIDATION_ERROR"));
+        org.mockito.Mockito.verifyNoInteractions(summaryUseCase);
     }
 }

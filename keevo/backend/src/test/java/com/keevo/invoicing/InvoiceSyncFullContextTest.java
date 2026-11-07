@@ -557,7 +557,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             assertThat(rows).filteredOn(n -> n.path("id").asText().equals(issued.toString()))
                     .singleElement().satisfies(n -> assertThat(n.path("number").asText()).isEqualTo("FAC-2026-000042"));
             assertThat(jdbc.queryForObject("SELECT MAX(version::int) FROM " + q + "flyway_history_invoicing "
-                    + "WHERE success", Integer.class)).isEqualTo(13);
+                    + "WHERE success", Integer.class)).isEqualTo(14);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? "
                     + "AND table_name = 'invoices' AND column_name = 'deleted_at'", Integer.class, old)).isEqualTo(1);
         } finally {

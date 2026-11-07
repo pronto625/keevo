@@ -72,11 +72,11 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         if (storeId == null) {
-            String sql = productProfitabilitySql(revenue.lines()) + PRODUCT_PROFITABILITY_GROUP;
+            String sql = productProfitabilitySql(revenue.current().lines()) + PRODUCT_PROFITABILITY_GROUP;
             return jdbc.query(sql, (rs, rowNum) -> mapProfitabilityRow(rs),
                     tsFrom, tsTo);
         } else {
-            String sql = productProfitabilitySql(revenue.lines()) + PRODUCT_PROFITABILITY_STORE_FILTER
+            String sql = productProfitabilitySql(revenue.storeScoped().lines()) + PRODUCT_PROFITABILITY_STORE_FILTER
                     + PRODUCT_PROFITABILITY_GROUP;
             return jdbc.query(sql, (rs, rowNum) -> mapProfitabilityRow(rs),
                     tsFrom, tsTo, storeId.toString());
@@ -89,7 +89,8 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
-        // 20.9: revenue source; documents carry no store, so the store comparison holds sales only.
+        // 20.9: store-joined → sales-only relations (documents carry no store), resolved once.
+        RevenueQueryPort.Relations source = revenue.storeScoped();
         String sql =
             "SELECT " +
             "  s.store_id, " +
@@ -98,12 +99,12 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
             "  SUM(s.doc_count)::int                        AS sales_count, " +
             "  COALESCE(SUM(s.total_amount) / NULLIF(SUM(s.doc_count), 0), 0) AS avg_basket, " +
             "  (SELECT s2.product_name " +
-            "   FROM " + revenue.lines() + " s2 " +
+            "   FROM " + source.lines() + " s2 " +
             "   WHERE s2.store_id = s.store_id " +
             "     AND s2.occurred_at >= ? AND s2.occurred_at < ? " +
             "   GROUP BY s2.product_name " +
             "   ORDER BY SUM(s2.quantity) DESC LIMIT 1) AS top_product " +
-            "FROM " + revenue.documents() + " s " +
+            "FROM " + source.documents() + " s " +
             "JOIN stores st ON st.id = s.store_id " +
             "WHERE s.occurred_at >= ? AND s.occurred_at < ? " +
             "GROUP BY s.store_id, st.name";
@@ -169,7 +170,7 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
             "  DATE(s.occurred_at AT TIME ZONE 'Africa/Lagos') AS day, " +
             "  COALESCE(ROUND(SUM(s.price_amount - (p.buy_price + p.transport_cost) * s.quantity)), 0)::bigint " +
             "    AS daily_margin " +
-            "FROM " + revenue.lines() + " s " +
+            "FROM " + (storeId == null ? revenue.current() : revenue.storeScoped()).lines() + " s " +
             "JOIN products p ON p.id = s.product_id " +
             "WHERE s.product_id = ?::uuid " +
             "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
@@ -193,7 +194,7 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
 
         String sql =
             "SELECT s.store_id, st.name AS store_name, SUM(s.quantity)::int AS units_sold " +
-            "FROM " + revenue.lines() + " s " +
+            "FROM " + revenue.storeScoped().lines() + " s " +
             "JOIN stores st ON st.id = s.store_id " +
             "WHERE s.product_id = ?::uuid " +
             "  AND s.occurred_at >= ? AND s.occurred_at < ? " +
@@ -215,22 +216,25 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
     public RawRevenueSplit findRevenueSplit(String tenantId, LocalDate from, LocalDate to, UUID storeId) {
         Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
-        String storeFilter = storeId == null ? "" : " AND s.store_id = ?::uuid";
+        String docStoreFilter  = storeId == null ? "" : " AND d.store_id = ?::uuid";
+        String lineStoreFilter = storeId == null ? "" : " AND s.store_id = ?::uuid";
+        // 20.9: one resolution; a store filter reads the sales-only relations (documents carry no store)
+        RevenueQueryPort.Relations source = storeId == null ? revenue.current() : revenue.storeScoped();
 
         // One query: the period's revenue (documents) and its lines split by « margin known » (catalogue product)
         // vs « marge inconnue » (no product, or a product no longer in the catalogue).
         String sql =
             "SELECT " +
-            "  (SELECT COALESCE(SUM(d.total_amount), 0) FROM " + revenue.documents() + " d " +
-            "   WHERE d.occurred_at >= ? AND d.occurred_at < ?" + storeFilter.replace("s.", "d.") + ") AS total_revenue, " +
+            "  (SELECT COALESCE(SUM(d.total_amount), 0) FROM " + source.documents() + " d " +
+            "   WHERE d.occurred_at >= ? AND d.occurred_at < ?" + docStoreFilter + ") AS total_revenue, " +
             "  COALESCE(SUM(s.price_amount) FILTER (WHERE p.id IS NOT NULL), 0) AS known_revenue, " +
             "  COALESCE(ROUND(SUM((p.buy_price + p.transport_cost) * s.quantity) FILTER (WHERE p.id IS NOT NULL)), 0)" +
             "::bigint AS known_cost, " +
             "  COALESCE(SUM(s.price_amount) FILTER (WHERE p.id IS NULL), 0) AS unknown_revenue, " +
-            "  (COUNT(*) FILTER (WHERE p.id IS NULL AND s.quantity > 0))::int AS unknown_lines " +
-            "FROM " + revenue.lines() + " s " +
+            "  (COUNT(*) FILTER (WHERE p.id IS NULL))::int AS unknown_lines " +
+            "FROM " + source.lines() + " s " +
             "LEFT JOIN products p ON p.id = s.product_id " +
-            "WHERE s.occurred_at >= ? AND s.occurred_at < ?" + storeFilter;
+            "WHERE s.occurred_at >= ? AND s.occurred_at < ?" + lineStoreFilter;
 
         List<Object> args = new ArrayList<>();
         args.add(tsFrom);

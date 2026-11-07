@@ -165,4 +165,28 @@ class ProfitabilityServiceTest {
 
         assertThat(result.get(0).deltaPercent()).isNull();
     }
+
+    // ── 20.9: summary ─────────────────────────────────────────────────────────
+
+    @Test
+    void getSummary_mapsTheRevenueSplitField_byField() {
+        UUID store = UUID.randomUUID();
+        LocalDate from = LocalDate.of(2026, 11, 1), to = LocalDate.of(2026, 11, 7);
+        when(repo.findRevenueSplit("kv_test1", from, to, store))
+                .thenReturn(new RawRevenueSplit(50_000, 30_000, 20_000, 15_000, 3));
+
+        ProfitabilitySummary s = service.getSummary(
+                new ProfitabilityQuery("kv_test1", from, to, SortOption.MARGIN_PCT_DESC, store));
+
+        assertThat(s).isEqualTo(new ProfitabilitySummary(50_000, 30_000, 20_000, 10_000, 50.0, 15_000, 3));
+    }
+
+    @Test
+    void getSummary_marginPercentIsZeroWhenTheKnownCostIsNotPositive() {
+        when(repo.findRevenueSplit(any(), any(), any(), any())).thenReturn(new RawRevenueSplit(9_000, 4_000, -1_000, 0, 0));
+        ProfitabilitySummary s = service.getSummary(new ProfitabilityQuery("kv_test1", LocalDate.of(2026, 11, 1),
+                LocalDate.of(2026, 11, 7), SortOption.MARGIN_PCT_DESC, null));
+        assertThat(s.marginPercent()).isZero();
+        assertThat(s.grossMarginXaf()).isEqualTo(5_000);
+    }
 }

@@ -5,12 +5,13 @@ import java.util.List;
 
 /**
  * Story 20.9 (R4) — the SQL of the revenue source ({@link com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort}),
- * written once. Pure: which branches are present is the caller's choice ({@link ModuleAwareRevenueSource} decides it
- * from the tenant's modules).
+ * written once. Pure: which branches are present is the caller's choice ({@link ProvisionedRevenueSource} decides it
+ * from the tables present in the tenant schema).
  *
- * <p>The window predicates of the consumers are pushed by PostgreSQL into every {@code UNION ALL} branch: sales use
- * their {@code (store_id, occurred_at)} index, counted invoices the partial expression index
- * {@code idx_invoices_revenue_day} (invoicing V14 — same expression as {@link #INVOICE_DAY}), credit notes
+ * <p>The window predicates of the consumers are pushed by PostgreSQL into every {@code UNION ALL} branch: all-stores
+ * windows on sales use the partial index {@code idx_sales_completed_occurred_at} (pos V2), store-scoped ones the
+ * {@code (store_id, occurred_at)} index; counted invoices the partial expression index
+ * {@code idx_invoices_revenue_day} (invoicing V14 — same expression as {@link #INVOICE_DAY}); credit notes
  * {@code idx_credit_notes_issued_at}; lines join on the unique {@code (invoice_id, position)} /
  * {@code (credit_note_id, position)} keys.
  */
@@ -27,6 +28,16 @@ public final class RevenueRelations {
     static final String COUNTED_INVOICE = "i.kind = 'INVOICE' AND i.status IN ('ISSUED', 'PAID') "
             + "AND i.source_sale_id IS NULL AND i.deleted_at IS NULL AND i.superseded_at IS NULL";
 
+    /**
+     * A deducted credit note: one of a counted invoice, or a <b>manual</b> one ({@code source_event IS NULL}) of an
+     * invoice bridged from a POS sale — the sale stays COMPLETED, so the refund must come off here. Automatic credit
+     * notes of bridged invoices (sale cancelled / corrected, {@code source_event} set) are already reflected by the
+     * sale itself and never count.
+     */
+    static final String DEDUCTED_CREDIT_NOTE = "i.kind = 'INVOICE' AND i.status IN ('ISSUED', 'PAID') "
+            + "AND i.deleted_at IS NULL AND i.superseded_at IS NULL "
+            + "AND (i.source_sale_id IS NULL OR cn.source_event IS NULL)";
+
     private static final String SALE_DOCUMENTS =
             "SELECT 'SALE'::text AS source, s.id AS doc_id, s.store_id AS store_id, s.employee_id AS employee_id, "
             + "s.occurred_at AS occurred_at, s.created_at AS created_at, s.payment_mode::text AS payment_mode, "
@@ -41,7 +52,7 @@ public final class RevenueRelations {
     private static final String CREDIT_NOTE_DOCUMENTS =
             "SELECT 'CREDIT_NOTE'::text, cn.id, NULL::uuid, i.created_by, cn.issued_at, cn.issued_at, NULL::text, "
             + "-cn.total_ttc::bigint, 0 "
-            + "FROM credit_notes cn JOIN invoices i ON i.id = cn.invoice_id WHERE " + COUNTED_INVOICE;
+            + "FROM credit_notes cn JOIN invoices i ON i.id = cn.invoice_id WHERE " + DEDUCTED_CREDIT_NOTE;
 
     private static final String EMPTY_DOCUMENTS =
             "SELECT NULL::text AS source, NULL::uuid AS doc_id, NULL::uuid AS store_id, NULL::uuid AS employee_id, "
@@ -68,7 +79,7 @@ public final class RevenueRelations {
             + "FROM credit_note_items cni JOIN credit_notes cn ON cn.id = cni.credit_note_id "
             + "JOIN invoices i ON i.id = cn.invoice_id "
             + "LEFT JOIN invoice_items it ON it.invoice_id = i.id AND it.position = cni.invoice_position "
-            + "WHERE " + COUNTED_INVOICE;
+            + "WHERE " + DEDUCTED_CREDIT_NOTE;
 
     private static final String EMPTY_LINES =
             "SELECT NULL::text AS source, NULL::uuid AS doc_id, NULL::uuid AS store_id, NULL::uuid AS employee_id, "

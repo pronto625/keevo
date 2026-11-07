@@ -13,6 +13,7 @@ import com.keevo.reporting.profitability.domain.port.in.GetStorePerformanceUseCa
 import com.keevo.reporting.profitability.domain.port.in.GetStorePerformanceUseCase.StorePerformanceQuery;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,7 +21,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -50,13 +53,26 @@ public class ProfitabilityController {
     private final GetProductProfitabilityUseCase profitabilityUseCase;
     private final GetStorePerformanceUseCase storePerformanceUseCase;
     private final GetProfitabilitySummaryUseCase summaryUseCase;
+    private final Clock clock;
 
     public ProfitabilityController(GetProductProfitabilityUseCase profitabilityUseCase,
                                    GetStorePerformanceUseCase storePerformanceUseCase,
-                                   GetProfitabilitySummaryUseCase summaryUseCase) {
+                                   GetProfitabilitySummaryUseCase summaryUseCase,
+                                   Clock clock) {
         this.profitabilityUseCase = profitabilityUseCase;
         this.storePerformanceUseCase = storePerformanceUseCase;
         this.summaryUseCase = summaryUseCase;
+        this.clock = clock;
+    }
+
+    /** 20.9 — a {@code yyyy-MM-dd} parameter, or 400 VALIDATION_ERROR (French message) instead of a 500. */
+    private static LocalDate date(String name, String value) {
+        try {
+            return LocalDate.parse(value);
+        } catch (DateTimeParseException e) {
+            throw new InvalidRequestParameterException(name, "unparseable date",
+                    "Date invalide : utilisez le format AAAA-MM-JJ.");
+        }
     }
 
     // ── GET /summary (20.9) ───────────────────────────────────────────────────
@@ -69,8 +85,12 @@ public class ProfitabilityController {
             @RequestParam(required = false) String to,
             @RequestParam(required = false) UUID storeId) {
 
-        LocalDate dateTo   = to   != null ? LocalDate.parse(to)   : LocalDate.now(WAT);
-        LocalDate dateFrom = from != null ? LocalDate.parse(from)  : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
+        LocalDate dateTo   = to   != null ? date("to", to)     : LocalDate.now(clock.withZone(WAT));
+        LocalDate dateFrom = from != null ? date("from", from) : dateTo.minusDays(DEFAULT_PERIOD_DAYS - 1);
+        if (dateFrom.isAfter(dateTo)) {
+            throw new InvalidRequestParameterException("from", "from after to",
+                    "La date de début doit précéder la date de fin.");
+        }
 
         var query = new ProfitabilityQuery(
                 TenantContext.getCurrentTenant(), dateFrom, dateTo,

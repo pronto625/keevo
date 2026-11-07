@@ -396,6 +396,7 @@
     "sale_items: CREATE INDEX idx_sale_items_sale_id ON sale_items USING btree (sale_id)",
     "sale_items: CREATE UNIQUE INDEX sale_items_pkey ON sale_items USING btree (id)",
     "sales: CREATE INDEX idx_sales_client_id ON sales USING btree (client_id)",
+    "sales: CREATE INDEX idx_sales_completed_occurred_at ON sales USING btree (occurred_at) WHERE ((status)::text = 'COMPLETED'::text)",
     "sales: CREATE INDEX idx_sales_store_employee_occurred ON sales USING btree (store_id, employee_id, occurred_at)",
     "sales: CREATE INDEX idx_sales_store_occurred_at ON sales USING btree (store_id, occurred_at)",
     "sales: CREATE INDEX idx_sales_sync_keyset ON sales USING btree (updated_at, ((id)::text))",

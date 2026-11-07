@@ -27,8 +27,9 @@ import java.util.Map;
  *
  * <p>Story 20.9 (R4): every revenue figure reads the single revenue source ({@link RevenueQueryPort}: COMPLETED
  * sales ∪ counted invoices − credit notes, a bridged sale counted once); transactions are {@code SUM(doc_count)}.
- * Documents carry no store: they are in the all-stores figures, not in the store overviews. Store overviews are
- * computed with grouped queries (fixed number of queries whatever the number of stores).
+ * Documents carry no store: they are in the all-stores figures, not in the store overviews, which read the
+ * store-scoped (sales-only) relations with grouped queries (fixed number of queries whatever the number of stores).
+ * Every window ends before tomorrow (WAT).
  *
  * <p>Story 7.1, Task 2.
  */
@@ -62,6 +63,8 @@ public class DashboardService implements GetDashboardSummaryUseCase {
         ZoneId wat = WAT;
         LocalDate today = LocalDate.now(clock.withZone(wat));
         Instant startToday       = today.atStartOfDay(wat).toInstant();
+        // 20.9: every window ends before tomorrow WAT — a post-dated invoice never inflates today / month / all time
+        Instant startTomorrow    = today.plusDays(1).atStartOfDay(wat).toInstant();
         Instant startYesterday   = today.minusDays(1).atStartOfDay(wat).toInstant();
         Instant startDayBefore   = today.minusDays(2).atStartOfDay(wat).toInstant();
         Instant startOfMonth     = today.withDayOfMonth(1).atStartOfDay(wat).toInstant();
@@ -76,13 +79,16 @@ public class DashboardService implements GetDashboardSummaryUseCase {
                 .minusWeeks(11).atStartOfDay(wat).toInstant();
         Instant start12Months = today.withDayOfMonth(1).minusMonths(11).atStartOfDay(wat).toInstant();
         Instant start5Years   = today.withDayOfYear(1).minusYears(4).atStartOfDay(wat).toInstant();
-        ChartWindows windows = new ChartWindows(start30DaysAgo, start12Weeks, start12Months, start5Years);
+        ChartWindows windows = new ChartWindows(start30DaysAgo, start12Weeks, start12Months, start5Years,
+                startTomorrow);
 
-        // 20.9: one resolution of the tenant's revenue source for the whole summary
-        String docs = revenue.documents();
-        String lines = revenue.lines();
+        // 20.9: one resolution of the tenant's revenue source for the all-stores figures; store overviews read the
+        // store-scoped (sales-only) relations
+        RevenueQueryPort.Relations source = revenue.current();
+        String docs = source.documents();
+        String lines = source.lines();
 
-        long todayCA     = sumCA(docs, startToday, null);
+        long todayCA     = sumCA(docs, startToday, startTomorrow);
         long yesterdayCA  = sumCA(docs, startYesterday, startToday);
         long dayBeforeCA  = sumCA(docs, startDayBefore, startYesterday);
 
@@ -90,37 +96,39 @@ public class DashboardService implements GetDashboardSummaryUseCase {
                 ? ((double)(todayCA - yesterdayCA) / yesterdayCA) * 100.0
                 : 0.0;
 
-        int todaySalesCount       = countSales(docs, startToday, null);
-        int totalTransactionsMonth = countSales(docs, startOfMonth, null);
+        int todaySalesCount       = countSales(docs, startToday, startTomorrow);
+        int totalTransactionsMonth = countSales(docs, startOfMonth, startTomorrow);
         int prevMonthTransactions  = countSales(docs, startPrevMonth, startOfMonth);
 
-        long monthCA     = sumCA(docs, startOfMonth, null);
+        long monthCA     = sumCA(docs, startOfMonth, startTomorrow);
         long prevMonthCA = sumCA(docs, startPrevMonth, startOfMonth);
 
-        long averageBasketMonth     = totalTransactionsMonth > 0
-                ? monthCA / totalTransactionsMonth : 0;
-        long prevMonthAverageBasket = prevMonthTransactions > 0
-                ? prevMonthCA / prevMonthTransactions : 0;
+        long averageBasketMonth     = averageBasket(monthCA, totalTransactionsMonth);
+        long prevMonthAverageBasket = averageBasket(prevMonthCA, prevMonthTransactions);
 
         int lowStockCount = countLowStock();
 
-        List<TopProductEntry> topProducts   = getWeeklyProducts(lines, start7DaysAgo, 5, "DESC");
-        List<TopProductEntry> worstProducts = getWeeklyProducts(lines, start7DaysAgo, 5, "ASC");
-        List<DailyCAEntry> dailyCA          = chart(docs, "day", windows.days());
-        List<DailyCAEntry> weeklyCA         = chart(docs, "week", windows.weeks());
-        List<DailyCAEntry> monthlyCA        = chart(docs, "month", windows.months());
-        List<DailyCAEntry> yearlyCA         = chart(docs, "year", windows.years());
-        List<StoreOverviewEntry> stores     = getStoreOverviews(docs, startToday, startYesterday, windows);
+        long weekLinesRevenue = linesRevenue(lines, start7DaysAgo, startTomorrow); // share base, computed once
+        List<TopProductEntry> topProducts   =
+                getWeeklyProducts(lines, start7DaysAgo, startTomorrow, weekLinesRevenue, 5, false);
+        List<TopProductEntry> worstProducts =
+                getWeeklyProducts(lines, start7DaysAgo, startTomorrow, weekLinesRevenue, 5, true);
+        List<DailyCAEntry> dailyCA          = chart(docs, "day", windows.days(), startTomorrow);
+        List<DailyCAEntry> weeklyCA         = chart(docs, "week", windows.weeks(), startTomorrow);
+        List<DailyCAEntry> monthlyCA        = chart(docs, "month", windows.months(), startTomorrow);
+        List<DailyCAEntry> yearlyCA         = chart(docs, "year", windows.years(), startTomorrow);
+        List<StoreOverviewEntry> stores     = getStoreOverviews(revenue.storeScoped().documents(),
+                startToday, startYesterday, windows);
 
         // « Chiffre d'affaires total » — same rules as todayCA (revenue source, corrected total_amount).
         Instant startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                 .atStartOfDay(wat).toInstant();
         Instant startOfYear = today.withDayOfYear(1).atStartOfDay(wat).toInstant();
         PeriodTotals periodTotals = new PeriodTotals(
-                periodTotal(docs, startOfWeek),
+                periodTotal(docs, startOfWeek, startTomorrow),
                 new PeriodTotal(monthCA, totalTransactionsMonth),
-                periodTotal(docs, startOfYear),
-                periodTotal(docs, null));
+                periodTotal(docs, startOfYear, startTomorrow),
+                periodTotal(docs, null, startTomorrow));
 
         return new DashboardSummary(
                 todayCA, yesterdayCA, dayBeforeCA, heroTrend,
@@ -132,34 +140,39 @@ public class DashboardService implements GetDashboardSummaryUseCase {
         );
     }
 
+    /** Average basket; 0 without transactions or when credit notes leave no positive revenue. */
+    static long averageBasket(long revenue, int transactions) {
+        return transactions > 0 && revenue > 0 ? revenue / transactions : 0;
+    }
+
     // ── Private aggregation helpers ─────────────────────────────
 
+    /** Revenue in [from, to). */
     private long sumCA(String docs, Instant from, Instant to) {
-        String sql = "SELECT COALESCE(SUM(r.total_amount), 0) FROM " + docs + " r WHERE r.occurred_at >= ?"
-                + (to != null ? " AND r.occurred_at < ?" : "");
-        Long result = to == null
-                ? jdbc.queryForObject(sql, Long.class, Timestamp.from(from))
-                : jdbc.queryForObject(sql, Long.class, Timestamp.from(from), Timestamp.from(to));
+        Long result = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(r.total_amount), 0) FROM " + docs + " r "
+                        + "WHERE r.occurred_at >= ? AND r.occurred_at < ?",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
         return result != null ? result : 0;
     }
 
-    /** CA and transaction count since {@code from} (null = all time), all stores. */
-    private PeriodTotal periodTotal(String docs, Instant from) {
+    /** CA and transaction count in [from, to) ({@code from} null = since the beginning), all stores. */
+    private PeriodTotal periodTotal(String docs, Instant from, Instant to) {
         String sql = "SELECT COALESCE(SUM(r.total_amount), 0) AS total, COALESCE(SUM(r.doc_count), 0) AS cnt FROM "
-                + docs + " r" + (from != null ? " WHERE r.occurred_at >= ?" : "");
+                + docs + " r WHERE r.occurred_at < ?" + (from != null ? " AND r.occurred_at >= ?" : "");
         RowMapper<PeriodTotal> mapper = (rs, rowNum) -> new PeriodTotal(rs.getLong("total"), rs.getInt("cnt"));
         PeriodTotal result = from != null
-                ? jdbc.queryForObject(sql, mapper, Timestamp.from(from))
-                : jdbc.queryForObject(sql, mapper);
+                ? jdbc.queryForObject(sql, mapper, Timestamp.from(to), Timestamp.from(from))
+                : jdbc.queryForObject(sql, mapper, Timestamp.from(to));
         return result != null ? result : PeriodTotal.ZERO;
     }
 
+    /** Transactions (sales + invoices) in [from, to). */
     private int countSales(String docs, Instant from, Instant to) {
-        String sql = "SELECT COALESCE(SUM(r.doc_count), 0)::int FROM " + docs + " r WHERE r.occurred_at >= ?"
-                + (to != null ? " AND r.occurred_at < ?" : "");
-        Integer result = to == null
-                ? jdbc.queryForObject(sql, Integer.class, Timestamp.from(from))
-                : jdbc.queryForObject(sql, Integer.class, Timestamp.from(from), Timestamp.from(to));
+        Integer result = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(r.doc_count), 0)::int FROM " + docs + " r "
+                        + "WHERE r.occurred_at >= ? AND r.occurred_at < ?",
+                Integer.class, Timestamp.from(from), Timestamp.from(to));
         return result != null ? result : 0;
     }
 
@@ -172,24 +185,30 @@ public class DashboardService implements GetDashboardSummaryUseCase {
         return result != null ? result : 0;
     }
 
-    /**
-     * Best ({@code DESC}) or worst ({@code ASC}) products by units over the window. The share is computed against
-     * the revenue of every line of the window, lines without product included (20.9: they count in revenue but
-     * cannot be ranked as a product).
-     */
-    private List<TopProductEntry> getWeeklyProducts(String lines, Instant from, int limit, String direction) {
-        Long totalRevenue = jdbc.queryForObject(
-                "SELECT COALESCE(SUM(r.subtotal), 0) FROM " + lines + " r WHERE r.occurred_at >= ?",
-                Long.class, Timestamp.from(from));
-        long total = totalRevenue != null ? totalRevenue : 0;
+    /** Revenue of every line in [from, to), lines without product included: the share base of the product lists. */
+    private long linesRevenue(String lines, Instant from, Instant to) {
+        Long total = jdbc.queryForObject(
+                "SELECT COALESCE(SUM(r.subtotal), 0) FROM " + lines + " r "
+                        + "WHERE r.occurred_at >= ? AND r.occurred_at < ?",
+                Long.class, Timestamp.from(from), Timestamp.from(to));
+        return total != null ? total : 0;
+    }
 
+    /**
+     * Best (most units first) or worst (fewest units first, only products with units left after credit notes)
+     * products over [from, to), one row per product — its catalogue name, else the name on its lines. Lines without
+     * product count in the share base ({@code total}) but are never ranked (20.9).
+     */
+    private List<TopProductEntry> getWeeklyProducts(String lines, Instant from, Instant to, long total, int limit,
+                                                    boolean worst) {
         return jdbc.query(
-                "SELECT r.product_id, r.product_name, " +
+                "SELECT r.product_id, COALESCE(MAX(p.name), MAX(r.product_name)) AS product_name, " +
                 "SUM(r.quantity)::int AS units_sold, SUM(r.subtotal) AS revenue " +
-                "FROM " + lines + " r " +
-                "WHERE r.occurred_at >= ? AND r.product_id IS NOT NULL " +
-                "GROUP BY r.product_id, r.product_name " +
-                "ORDER BY units_sold " + direction + " LIMIT ?",
+                "FROM " + lines + " r LEFT JOIN products p ON p.id = r.product_id " +
+                "WHERE r.occurred_at >= ? AND r.occurred_at < ? AND r.product_id IS NOT NULL " +
+                "GROUP BY r.product_id " +
+                (worst ? "HAVING SUM(r.quantity) > 0 ORDER BY units_sold ASC" : "ORDER BY units_sold DESC") +
+                ", r.product_id LIMIT ?",
                 (rs, rowNum) -> {
                     long revenue = rs.getLong("revenue");
                     return new TopProductEntry(
@@ -200,11 +219,11 @@ public class DashboardService implements GetDashboardSummaryUseCase {
                             total > 0 ? (double) revenue / total * 100.0 : 0.0
                     );
                 },
-                Timestamp.from(from), limit);
+                Timestamp.from(from), Timestamp.from(to), limit);
     }
 
-    /** Lower bounds (WAT midnights) of the daily / weekly / monthly / yearly charts. */
-    private record ChartWindows(Instant days, Instant weeks, Instant months, Instant years) {}
+    /** Lower bounds (WAT midnights) of the daily / weekly / monthly / yearly charts, and their common end. */
+    private record ChartWindows(Instant days, Instant weeks, Instant months, Instant years, Instant end) {}
 
     /** {@code DATE_TRUNC} bucket of the revenue instant on the WAT calendar (weeks start on Monday). */
     private static String bucket(String unit) {
@@ -216,29 +235,29 @@ public class DashboardService implements GetDashboardSummaryUseCase {
      * (day, week, month, year); the period string keeps the {@code YYYY-MM-DD} contract (week = its Monday, so a
      * week straddling 31 Dec / 1 Jan is one row).
      */
-    private List<DailyCAEntry> chart(String docs, String unit, Instant from) {
+    private List<DailyCAEntry> chart(String docs, String unit, Instant from, Instant to) {
         String bucket = bucket(unit);
         String sql = "SELECT TO_CHAR(" + bucket + ", 'YYYY-MM-DD') AS period, " +
                 "COALESCE(SUM(r.total_amount), 0) AS total " +
-                "FROM " + docs + " r WHERE r.occurred_at >= ? " +
+                "FROM " + docs + " r WHERE r.occurred_at >= ? AND r.occurred_at < ? " +
                 "GROUP BY " + bucket + " " +
                 "ORDER BY period ASC";
         return jdbc.query(sql, (rs, rowNum) -> new DailyCAEntry(rs.getString("period"), rs.getLong("total")),
-                Timestamp.from(from));
+                Timestamp.from(from), Timestamp.from(to));
     }
 
     /** One grouped chart query for every store: store id → its series (ordered by period). */
-    private Map<String, List<DailyCAEntry>> chartByStore(String docs, String unit, Instant from) {
+    private Map<String, List<DailyCAEntry>> chartByStore(String docs, String unit, Instant from, Instant to) {
         String bucket = bucket(unit);
         String sql = "SELECT r.store_id, TO_CHAR(" + bucket + ", 'YYYY-MM-DD') AS period, " +
                 "COALESCE(SUM(r.total_amount), 0) AS total " +
-                "FROM " + docs + " r WHERE r.store_id IS NOT NULL AND r.occurred_at >= ? " +
+                "FROM " + docs + " r WHERE r.store_id IS NOT NULL AND r.occurred_at >= ? AND r.occurred_at < ? " +
                 "GROUP BY r.store_id, " + bucket + " " +
                 "ORDER BY r.store_id, period ASC";
         Map<String, List<DailyCAEntry>> byStore = new HashMap<>();
         List<StorePoint> points = jdbc.query(sql, (rs, rowNum) -> new StorePoint(
                 rs.getString("store_id"), new DailyCAEntry(rs.getString("period"), rs.getLong("total"))),
-                Timestamp.from(from));
+                Timestamp.from(from), Timestamp.from(to));
         for (StorePoint p : points) {
             byStore.computeIfAbsent(p.storeId(), k -> new ArrayList<>()).add(p.entry());
         }
@@ -258,25 +277,27 @@ public class DashboardService implements GetDashboardSummaryUseCase {
             return List.of();
         }
 
-        // Today (no upper bound, as before) and yesterday, every store in one query.
+        // Today and yesterday, every store in one query (store-scoped: sales only).
         Map<String, StoreDays> days = new HashMap<>();
         jdbc.query(
                 "SELECT r.store_id, " +
                 "COALESCE(SUM(CASE WHEN r.occurred_at >= ? THEN r.total_amount ELSE 0 END), 0) AS today_ca, " +
                 "COALESCE(SUM(CASE WHEN r.occurred_at < ? THEN r.total_amount ELSE 0 END), 0) AS yesterday_ca " +
-                "FROM " + docs + " r WHERE r.store_id IS NOT NULL AND r.occurred_at >= ? GROUP BY r.store_id",
+                "FROM " + docs + " r WHERE r.store_id IS NOT NULL AND r.occurred_at >= ? AND r.occurred_at < ? " +
+                "GROUP BY r.store_id",
                 (rs, rowNum) -> days.put(rs.getString("store_id"),
                         new StoreDays(rs.getLong("today_ca"), rs.getLong("yesterday_ca"))),
-                Timestamp.from(startToday), Timestamp.from(startToday), Timestamp.from(startYesterday));
+                Timestamp.from(startToday), Timestamp.from(startToday), Timestamp.from(startYesterday),
+                Timestamp.from(windows.end()));
 
         Map<String, Integer> employees = new HashMap<>();
         jdbc.query("SELECT store_id, COUNT(*) AS cnt FROM employees WHERE status = 'ACTIVE' GROUP BY store_id",
                 (rs, rowNum) -> employees.put(rs.getString("store_id"), rs.getInt("cnt")));
 
-        Map<String, List<DailyCAEntry>> daily   = chartByStore(docs, "day", windows.days());
-        Map<String, List<DailyCAEntry>> weekly  = chartByStore(docs, "week", windows.weeks());
-        Map<String, List<DailyCAEntry>> monthly = chartByStore(docs, "month", windows.months());
-        Map<String, List<DailyCAEntry>> yearly  = chartByStore(docs, "year", windows.years());
+        Map<String, List<DailyCAEntry>> daily   = chartByStore(docs, "day", windows.days(), windows.end());
+        Map<String, List<DailyCAEntry>> weekly  = chartByStore(docs, "week", windows.weeks(), windows.end());
+        Map<String, List<DailyCAEntry>> monthly = chartByStore(docs, "month", windows.months(), windows.end());
+        Map<String, List<DailyCAEntry>> yearly  = chartByStore(docs, "year", windows.years(), windows.end());
 
         List<StoreOverviewEntry> overviews = new ArrayList<>(stores.size());
         stores.forEach((storeId, storeName) -> {
