@@ -454,7 +454,7 @@ development_status:
   19-14-roles-permissions-personnalises: backlog  # 2026-11-08 demande utilisateur — rôles créés par le propriétaire, droits choisis par permission et boutique ; absorbe les questions de 19-5b
   epic-19-retrospective: optional
 
-  epic-20: backlog  # P1b Modules métier Bref
+  epic-20: done  # P1b Modules métier Bref — 2026-11-08 toutes les stories done (20-1 à 20-14), parcours d acceptation Bref vert
   20-1-catalogue-sans-stock-cle-fusion: done  # 2026-11-06 revue 5 couches (50 constats, 6 moyens corrigés, 1 routé → 19-5b), 5 965 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-20-1-catalogue-sans-stock-cle-fusion.md)
   20-2-crm-etendu-consentement: done  # 2026-11-06 build-auto (spec-20-2-crm-etendu-clients-par-etablissement) — revue 5 couches, 20 corrigés, 2 routés (22-5, 20-6), 6 084 tests verts, contrôle live keevo_dev OK
   20-3-devis: done  # 2026-11-06 build-auto (spec-20-3-devis) — revue 5 couches, 18 corrigés, 3 routés (19-5b, 20-12, 20-7), 6 131 tests verts, contrôle live keevo_dev OK
@@ -468,7 +468,7 @@ development_status:
   20-11-module-finance: done  # 2026-11-08 build-auto parallèle (spec-20-11) — revue 5 couches, 34 constats (12 medium corrigés), calculs identiques à finance-math.ts (contrat finance-math-cases.json), suite complète 6 459 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-14-boutique-des-documents: done  # 2026-11-08 build-auto parallèle (spec-20-14) — revue 5 couches, 37 constats (12 medium corrigés, 2 routés → 17-9, 22-5), + décision utilisateur visibilité des documents par rôle (comme Bref), suite complète 6 436 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-13-api-super-admin-heritee-bref: done  # 2026-11-08 build-auto parallèle (spec-20-13) — table de correspondance des routes Bref, A1–A6 développés (décision utilisateur), revue 5 couches (1 high + medium corrigés, 1 routé → 19-11b), suite complète 6 542 tests verts ; revue de suivi recommandée
-  20-12-acceptation-parcours-bref: backlog  # 2026-11-06 revue 20-3 — 1 item (que faire d un devis dont la facture convertie est annulée : dupliquer / re-devis, selon Bref)
+  20-12-acceptation-parcours-bref: done  # 2026-11-08 BrefJourneyAcceptanceFullContextTest — journée Bref de bout en bout sur l API Keevo (OTP → devis → conversion → acompte → échéance → retard → paiement → SMS → dépense → finance → lien public) + scénario caisse Keevo, 11/11 verts, aucun correctif de production ; devis converti dont la facture est annulée : Bref n offre rien, Keevo identique (duplication proposée, non construite)
   epic-20-retrospective: optional
 
   epic-21: backlog  # P1b Monétisation & engagement

@@ -1075,7 +1075,7 @@ So that **P1b est déclaré terminé sur une preuve, pas sur une liste de ticket
 
 ---
 
-- [ ] [Deferred-from: review 20-3, 2026-11-06] A quote whose converted invoice is later cancelled stays CONVERTED with no way forward [ConvertQuoteUseCase, uq_invoices_source_quote] — check what Bref offers (duplicate the quote or re-quote) and decide during the acceptance run
+- [x] [Deferred-from: review 20-3, 2026-11-06] (decided in 20-12: Bref offers no duplicate/re-quote, Keevo behaves the same; `POST /invoices/{id}/duplicate` proposed in spec-20-12, not built) A quote whose converted invoice is later cancelled stays CONVERTED with no way forward [ConvertQuoteUseCase, uq_invoices_source_quote] — check what Bref offers (duplicate the quote or re-quote) and decide during the acceptance run
 
 ## Epic 21 : Monétisation en libre-service et engagement (P1b)
 
