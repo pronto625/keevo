@@ -250,7 +250,8 @@ class ExportDatasetCatalogTest {
             Object[] args = new Object[ctor.getParameterCount()];
             for (int i = 0; i < args.length; i++) {
                 Class<?> p = ctor.getParameterTypes()[i];
-                if (p != EntityManager.class && p != AuditPort.class) {
+                if (p != EntityManager.class && p != AuditPort.class
+                        && p != com.keevo.shared.capability.revenue.RevenueQueryPort.class) { // 20.14
                     throw new IllegalStateException(type + " has an unexpected dependency " + p);
                 }
                 args[i] = mock(p);

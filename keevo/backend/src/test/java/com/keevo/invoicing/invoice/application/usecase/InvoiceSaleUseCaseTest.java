@@ -59,4 +59,32 @@ class InvoiceSaleUseCaseTest {
         verify(invoices, org.mockito.Mockito.never()).insert(any());
         verifyNoInteractions(lifecycle, events);
     }
+
+    @Test
+    @DisplayName("20.14: the automatic invoice of a sale is made in the sale's store")
+    void invoiceInTheSaleStore() {
+        InvoiceRepository invoices = mock(InvoiceRepository.class);
+        InvoicingSettingsRepository settings = mock(InvoicingSettingsRepository.class);
+        InvoiceLifecycleUseCase lifecycle = mock(InvoiceLifecycleUseCase.class);
+        InvoiceClientResolver clients = mock(InvoiceClientResolver.class);
+        ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
+        SaleInvoiceStateRepository states = mock(SaleInvoiceStateRepository.class);
+        when(states.lock(any())).thenReturn(new SaleInvoiceStateRepository.State(null, null));
+        when(invoices.existsBySourceSale(any())).thenReturn(false);
+        when(settings.find()).thenReturn(Optional.empty());
+        when(clients.saleClient(any(), any())).thenReturn(Optional.empty());
+        InvoiceSaleUseCase useCase = new InvoiceSaleUseCase(invoices, settings, lifecycle, clients, events,
+                Clock.fixed(Instant.parse("2026-10-30T10:00:00Z"), ZoneOffset.UTC), states);
+        UUID store = UUID.randomUUID();
+        SaleCompletedEvent sale = new SaleCompletedEvent(UUID.randomUUID(), UUID.randomUUID(), "kv_abc123",
+                store, 1000, 0, "[]", Instant.now(), null, "CASH",
+                List.of(new SaleCompletedEvent.Line("Savon", 1000, 1)));
+
+        assertThat(useCase.invoice(sale)).isEqualTo(InvoiceSaleUseCase.Outcome.INVOICED);
+
+        org.mockito.ArgumentCaptor<Invoice> draft = org.mockito.ArgumentCaptor.forClass(Invoice.class);
+        verify(invoices).insert(draft.capture());
+        assertThat(draft.getValue().storeId()).isEqualTo(store);
+        assertThat(draft.getValue().sourceSaleId()).isEqualTo(sale.getSaleId());
+    }
 }

@@ -1,6 +1,7 @@
 package com.keevo.crm.contact.adapter.out.export;
 
 import com.keevo.shared.application.port.export.ExportColumn;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import com.keevo.shared.application.port.export.ExportColumnType;
 import com.keevo.shared.application.port.export.ExportFilter;
 import com.keevo.shared.infrastructure.export.KeysetCursor.KeyType;
@@ -23,6 +24,10 @@ import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
  * Export dataset {@code clients} (« Clients ») — Story v1s-18-2. Reference dataset, not
  * store-scoped (no store or period filter); archived clients included. Purchases = COMPLETED
  * sales of the client. Keyset {@code (created_at, id)}.
+ *
+ * <p>Story 20.14 — purchases read the single revenue source ({@link RevenueQueryPort}): the client's COMPLETED sales
+ * and issued / paid invoices (a sale bridged to an automatic invoice counted once), credit notes deducted from the
+ * total (they are not purchases: neither counted nor « dernier achat »).
  *
  * <p>Story 20.2 — Bref fields (type as its French label), the store by name (never its id, « Toutes les boutiques »
  * is never written: a legacy client without store has an empty cell), the marketing consent as Oui/Non + date and the
@@ -63,8 +68,11 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
             new Key("c.created_at", KeyType.TIMESTAMP),
             new Key("c.id", KeyType.UUID));
 
-    public ClientsExportDatasetProvider(EntityManager em) {
+    private final RevenueQueryPort revenue;
+
+    public ClientsExportDatasetProvider(EntityManager em, RevenueQueryPort revenue) {
         super(em);
+        this.revenue = revenue;
     }
 
     @Override public String moduleId() { return "crm"; } // Story 13.10a review: owning module
@@ -82,10 +90,13 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
 
     @Override
     protected String fromClause() {
-        return "clients c LEFT JOIN LATERAL (SELECT COUNT(*) AS sales_count,"
-                + " COALESCE(SUM(s.total_amount), 0) AS total_spent,"
-                + " MAX(COALESCE(s.occurred_at, s.created_at)) AS last_purchase"
-                + " FROM sales s WHERE s.client_id = c.id AND s.status = 'COMPLETED') agg ON TRUE"
+        // Story 20.14 — the single revenue source (sales + invoices − credit notes, a bridged sale counted once),
+        // resolved once per page inside the page's transaction; client_id = c.id is pushed into every branch
+        // (idx_sales_client_id, idx_invoices_client, then idx_credit_notes_invoice)
+        return "clients c LEFT JOIN LATERAL (SELECT COALESCE(SUM(r.doc_count), 0) AS sales_count,"
+                + " COALESCE(SUM(r.total_amount), 0) AS total_spent,"
+                + " MAX(COALESCE(r.recorded_at, r.created_at)) FILTER (WHERE r.doc_count > 0) AS last_purchase"
+                + " FROM " + revenue.current().documents() + " r WHERE r.client_id = c.id) agg ON TRUE"
                 + " LEFT JOIN stores st ON st.id = c.store_id";
     }
 

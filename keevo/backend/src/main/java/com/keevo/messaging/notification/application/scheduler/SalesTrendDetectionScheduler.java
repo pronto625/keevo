@@ -4,6 +4,7 @@ import com.keevo.identity.api.TenantPreferencesView;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
+import com.keevo.messaging.notification.domain.port.out.StoreActivityRepository;
 import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
@@ -21,8 +22,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +38,10 @@ import java.util.UUID;
  * the average of the same hour over the previous 3 days.
  *
  * <p>Story 8.1 — AC3/AC4.
+ *
+ * <p>Story 20.14: activity = transactions of the single revenue source (sales and invoices of the store, a sale
+ * bridged to an invoice counted once), read in one grouped query per tenant; the previous days' windows are the
+ * same hour as the compared one (they were the next hour before).
  *
  * <p>Story 13.10a: sales trends belong to the paid « Rapports avancés » module (plan §6.1) — a tenant for which
  * it is DISABLED is skipped (READ_ONLY still runs: it only reads past sales); an unreadable state is logged at
@@ -61,6 +68,8 @@ public class SalesTrendDetectionScheduler {
     private final StoreQueryPort storeQuery;
     /** Story 13.10a — {@code null} only in unit tests built without it (no gate). */
     private final ModuleRegistry modules;
+    /** Story 20.14 — hourly store activity on the single revenue source (sales and invoices). */
+    private final StoreActivityRepository activity;
 
     static final String ADVANCED_REPORTS = "advanced-reports";
 
@@ -68,8 +77,9 @@ public class SalesTrendDetectionScheduler {
                                         PushNotifier pushNotifier,
                                         NotificationCooldownRepository cooldownRepository,
                                         TenantPreferencesQueryPort preferencesQuery,
-                                        StoreQueryPort storeQuery) {
-        this(jdbcTemplate, pushNotifier, cooldownRepository, preferencesQuery, storeQuery, null);
+                                        StoreQueryPort storeQuery,
+                                        StoreActivityRepository activity) {
+        this(jdbcTemplate, pushNotifier, cooldownRepository, preferencesQuery, storeQuery, null, activity);
     }
 
     @Autowired
@@ -78,7 +88,9 @@ public class SalesTrendDetectionScheduler {
                                         NotificationCooldownRepository cooldownRepository,
                                         TenantPreferencesQueryPort preferencesQuery,
                                         StoreQueryPort storeQuery,
-                                        ModuleRegistry modules) {
+                                        ModuleRegistry modules,
+                                        StoreActivityRepository activity) {
+        this.activity = activity;
         this.modules = modules;
         this.jdbcTemplate = jdbcTemplate;
         this.pushNotifier = pushNotifier;
@@ -137,11 +149,19 @@ public class SalesTrendDetectionScheduler {
         }
 
         List<StoreView> stores = storeQuery.findAllActive(TenantContext.getCurrentTenant());
-        int currentHour = LocalTime.now(ZoneOffset.UTC).getHour();
+        if (stores.isEmpty()) {
+            return;
+        }
+        // cron fires at HH:00 UTC: the last full hour [HH-1:00, HH:00) vs the same hour of the 3 previous days.
+        // Story 20.14 — one grouped query for every store (sales and invoices, single revenue source)
+        Instant hourEnd = Instant.now().truncatedTo(ChronoUnit.HOURS);
+        int prevHour = LocalTime.ofInstant(hourEnd.minus(Duration.ofHours(1)), ZoneOffset.UTC).getHour();
+        Map<UUID, StoreActivityRepository.HourlyActivity> byStore = activity.lastHour(hourEnd);
 
         for (StoreView store : stores) {
             try {
-                analyzeStoreTrend(schema, store, currentHour);
+                analyzeStoreTrend(schema, store, prevHour,
+                        byStore.getOrDefault(store.id(), StoreActivityRepository.HourlyActivity.NONE));
             } catch (Exception e) {
                 log.warn("[TREND] Error analyzing store {} in tenant {}: {}",
                         store.id(), schema, e.getMessage());
@@ -149,44 +169,12 @@ public class SalesTrendDetectionScheduler {
         }
     }
 
-    private void analyzeStoreTrend(String schema, StoreView store, int currentHour) {
-        if (!TenantSchema.isValid(schema)) return; // processTenant() already skipped + logged it
-        String qualifiedSales = "\"" + schema + "\".sales";
+    private void analyzeStoreTrend(String schema, StoreView store, int prevHour,
+                                   StoreActivityRepository.HourlyActivity hourly) {
+        int currentCount = hourly.current();
+        double avgCount = hourly.previousDaysAverage();
 
-        // Count sales in the just-completed hour (cron fires at HH:00 UTC; the window
-        // [HH-1:00, HH:00) is the last full hour of data — avoids false TREND_DOWN at fire time)
-        int prevHour = (currentHour == 0) ? 23 : currentHour - 1;
-        Integer currentCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM " + qualifiedSales +
-                " WHERE status = 'COMPLETED' AND store_id = ?" +
-                " AND occurred_at >= date_trunc('hour', NOW()) - INTERVAL '1 hour'" +
-                " AND occurred_at < date_trunc('hour', NOW())",
-                Integer.class, store.id());
-
-        if (currentCount == null) currentCount = 0;
-
-        // Average over same hour on previous 3 days
-        @SuppressWarnings("SqlSourceToSinkFlow")
-        Double avgCount = jdbcTemplate.queryForObject(
-                "SELECT AVG(hourly_count) FROM (" +
-                "  SELECT COUNT(*) AS hourly_count FROM " + qualifiedSales +
-                "  WHERE status = 'COMPLETED' AND store_id = ?" +
-                "  AND occurred_at >= date_trunc('hour', NOW()) - INTERVAL '1 day'" +
-                "  AND occurred_at <  date_trunc('hour', NOW()) - INTERVAL '1 day' + INTERVAL '1 hour'" +
-                " UNION ALL" +
-                "  SELECT COUNT(*) FROM " + qualifiedSales +
-                "  WHERE status = 'COMPLETED' AND store_id = ?" +
-                "  AND occurred_at >= date_trunc('hour', NOW()) - INTERVAL '2 days'" +
-                "  AND occurred_at <  date_trunc('hour', NOW()) - INTERVAL '2 days' + INTERVAL '1 hour'" +
-                " UNION ALL" +
-                "  SELECT COUNT(*) FROM " + qualifiedSales +
-                "  WHERE status = 'COMPLETED' AND store_id = ?" +
-                "  AND occurred_at >= date_trunc('hour', NOW()) - INTERVAL '3 days'" +
-                "  AND occurred_at <  date_trunc('hour', NOW()) - INTERVAL '3 days' + INTERVAL '1 hour'" +
-                ") sub",
-                Double.class, store.id(), store.id(), store.id());
-
-        if (avgCount == null || avgCount < 1.0) {
+        if (avgCount < 1.0) {
             log.debug("[TREND] Insufficient history for store={} tenant={} (avg={})", store.id(), schema, avgCount);
             return;
         }

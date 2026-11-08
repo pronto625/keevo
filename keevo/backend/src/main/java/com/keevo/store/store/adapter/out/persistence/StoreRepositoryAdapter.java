@@ -54,6 +54,14 @@ public class StoreRepositoryAdapter implements StoreRepository {
     }
 
     @Override
+    public List<Store> findAllById(java.util.Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        return jpa.findAllById(ids).stream().map(this::entityToDomain).toList();
+    }
+
+    @Override
     public int countActive() {
         return (int) jpa.countByIsActiveTrue();
     }

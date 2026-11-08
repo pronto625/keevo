@@ -27,6 +27,7 @@ import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
+import com.keevo.invoicing.invoice.application.usecase.DocumentStoreResolver;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase.DraftContent;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
@@ -92,14 +93,16 @@ public class InvoiceController {
     private final ConvertQuoteUseCase conversions;
     private final InvoicePaymentUseCase payments;
     private final InvoiceResponseAssembler assembler;
+    private final DocumentStoreResolver stores;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
                              InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
                              PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients,
                              ConvertQuoteUseCase conversions, InvoicePaymentUseCase payments,
-                             InvoiceResponseAssembler assembler) {
+                             InvoiceResponseAssembler assembler, DocumentStoreResolver stores) {
         this.assembler = assembler;
+        this.stores = stores;
         this.payments = payments;
         this.clients = clients;
         this.conversions = conversions;
@@ -120,8 +123,17 @@ public class InvoiceController {
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> create(@Valid @RequestBody InvoiceRequestDto request) {
-        Invoice draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
-                TenantContext.getCurrentTenant());
+        Invoice draft;
+        try {
+            draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
+                    TenantContext.getCurrentTenant());
+        } catch (com.keevo.shared.domain.exception.DomainException e) {
+            if (DocumentStoreResolver.isUnknownStore(e)) { // Story 20.14 — a bad storeId is a request error
+                String message = e.getUserMessage() != null ? e.getUserMessage() : e.getMessage();
+                throw new InvalidRequestParameterException(DocumentStoreResolver.STORE_FIELD, message, message);
+            }
+            throw e;
+        }
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(dto(draft)));
     }
 
@@ -174,9 +186,10 @@ public class InvoiceController {
         var credits = queries.credits(result.items());
         var collections = queries.collections(result.items(), credits); // one batched query for the page
         var presentations = queries.presentations(result.items()); // Story 20.7 — one batched query
+        var storeNames = stores.namesOf(result.items(), TenantContext.getCurrentTenant()); // Story 20.14 — one query
         List<InvoiceResponseDto> items = result.items().stream()
                 .map(i -> dto(i, current, credits.getOrDefault(i.id(), InvoiceQueryUseCase.Credits.NONE),
-                        collections.get(i.id()), presentations.get(i.id())))
+                        collections.get(i.id()), presentations.get(i.id()), storeNames))
                 .toList();
         int totalPages = (int) ((result.totalElements() + size - 1) / size);
         return ResponseEntity.ok(ApiResponseWrapper.paginated(items, page, size, result.totalElements(), totalPages));
@@ -366,9 +379,10 @@ public class InvoiceController {
     private static InvoiceResponseDto dto(Invoice invoice, InvoicingSettings current,
                                           InvoiceQueryUseCase.Credits credits,
                                           PaymentStateCalculator.Collection collection,
-                                          com.keevo.invoicing.invoice.domain.model.InvoicePresentation presentation) {
+                                          com.keevo.invoicing.invoice.domain.model.InvoicePresentation presentation,
+                                          Map<UUID, String> storeNames) {
         return InvoiceResponseDto.fromDomain(invoice, current, credits.notes(), credits.fullyCredited(), collection,
-                presentation);
+                presentation, invoice.storeId() == null ? null : storeNames.get(invoice.storeId()));
     }
 
     /** Story 20.4 — {@code null}: not filtered; unknown → 400. */

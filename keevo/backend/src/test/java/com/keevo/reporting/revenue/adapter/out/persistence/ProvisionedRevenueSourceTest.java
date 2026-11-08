@@ -1,6 +1,6 @@
 package com.keevo.reporting.revenue.adapter.out.persistence;
 
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort.Relations;
+import com.keevo.shared.capability.revenue.RevenueQueryPort.Relations;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -12,17 +12,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
  * Story 20.9 — the revenue source's branches follow the tables present in the tenant schema (their data exists),
- * never the module's current activation; it never provisions nor fails.
+ * never the module's current activation; it never provisions nor fails. Story 20.14 — the documents' store follows
+ * the presence of {@code invoices.store_id} (invoicing V16): then store-scoped figures include documents.
  */
 class ProvisionedRevenueSourceTest {
 
     private static final String TENANT = "kv_abc123";
-    private static final String CHECK = ProvisionedRevenueSource.INVOICING_TABLES_PRESENT;
+    private static final String CHECK = ProvisionedRevenueSource.INVOICING_LEVEL;
 
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
     private final ProvisionedRevenueSource source = new ProvisionedRevenueSource(jdbc);
@@ -33,64 +33,79 @@ class ProvisionedRevenueSourceTest {
     }
 
     @Test
-    @DisplayName("invoicing tables present: sales, invoices and credit notes; found once, then cached per tenant")
-    void tablesPresent() {
+    @DisplayName("invoicing V16: sales, invoices and credit notes with their store, also store-scoped; found once, "
+            + "then cached per tenant")
+    void tablesWithStores() {
         TenantContext.setCurrentTenant(TENANT);
-        when(jdbc.queryForObject(CHECK, Boolean.class)).thenReturn(true);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS_WITH_STORES);
 
         Relations r = source.current();
-        assertThat(r.documents()).contains("FROM sales s").contains("FROM invoices i").contains("FROM credit_notes cn");
+        assertThat(r.documents()).contains("FROM sales s").contains("FROM invoices i").contains("FROM credit_notes cn")
+                .contains("i.store_id");
         assertThat(r.lines()).contains("FROM sale_items si").contains("FROM invoice_items it")
-                .contains("FROM credit_note_items cni");
+                .contains("FROM credit_note_items cni").contains("i.store_id");
         assertThat(source.current()).isEqualTo(r);
-        verify(jdbc, times(1)).queryForObject(CHECK, Boolean.class);
+        assertThat(source.storeScoped()).isEqualTo(r);
+        verify(jdbc, times(1)).queryForObject(CHECK, Integer.class);
+    }
+
+    @Test
+    @DisplayName("invoicing V11–V15: documents without store in the all-stores figures, store-scoped sales only; "
+            + "checked again next time (V16 may come)")
+    void tablesWithoutStores() {
+        TenantContext.setCurrentTenant(TENANT);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS);
+
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
+        assertThat(source.current().documents()).doesNotContain("i.store_id").contains("FROM invoices i");
+        assertThat(source.storeScoped()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
+        verify(jdbc, times(3)).queryForObject(CHECK, Integer.class);
     }
 
     @Test
     @DisplayName("no invoicing tables (V1 Keevo tenant): sales only, checked again next time (the module may come)")
     void tablesAbsent() {
         TenantContext.setCurrentTenant(TENANT);
-        when(jdbc.queryForObject(CHECK, Boolean.class)).thenReturn(false);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.SALES);
 
         assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
         assertThat(source.current().documents()).isEqualTo(RevenueRelations.POS_DOCUMENTS);
-        verify(jdbc, times(2)).queryForObject(CHECK, Boolean.class);
+        assertThat(source.storeScoped()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
+        verify(jdbc, times(3)).queryForObject(CHECK, Integer.class);
     }
 
     @Test
     @DisplayName("catalogue unreadable: sales only, no exception")
     void unreadable() {
         TenantContext.setCurrentTenant(TENANT);
-        when(jdbc.queryForObject(CHECK, Boolean.class)).thenThrow(new DataAccessResourceFailureException("down"));
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenThrow(new DataAccessResourceFailureException("down"));
         assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
-    }
-
-    @Test
-    @DisplayName("store-scoped relations are sales only and never touch the database")
-    void storeScoped() {
         assertThat(source.storeScoped()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
-        assertThat(source.storeScoped().lines()).doesNotContain("invoice");
-        verifyNoInteractions(jdbc);
     }
 
     @Test
     @DisplayName("no valid tenant in context: the check runs on the search_path, nothing is cached")
     void noTenant() {
-        when(jdbc.queryForObject(CHECK, Boolean.class)).thenReturn(true);
-        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
-        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
-        verify(jdbc, times(2)).queryForObject(CHECK, Boolean.class);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS_WITH_STORES);
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL_WITH_STORES);
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL_WITH_STORES);
+        verify(jdbc, times(2)).queryForObject(CHECK, Integer.class);
     }
 
     @Test
-    @DisplayName("one definition: counted invoices, deducted credit notes (manual ones of bridged invoices included)")
+    @DisplayName("one definition: counted invoices, deducted credit notes (manual ones of bridged invoices included); "
+            + "client and transaction instant on every branch")
     void predicates() {
         String docs = RevenueRelations.documents(true, true);
         assertThat(docs).contains("s.status = 'COMPLETED'").contains("i.kind = 'INVOICE'")
                 .contains("i.status IN ('ISSUED', 'PAID')").contains("i.deleted_at IS NULL")
                 .contains("i.superseded_at IS NULL").contains("-cn.total_ttc")
-                .contains("(i.source_sale_id IS NULL OR cn.source_event IS NULL)");
-        assertThat(RevenueRelations.documents(false, false)).contains("WHERE FALSE").doesNotContain("FROM sales");
+                .contains("(i.source_sale_id IS NULL OR cn.source_event IS NULL)")
+                .contains("s.client_id AS client_id").contains("s.occurred_at AS recorded_at")
+                .contains("i.client_id, i.issued_at").contains("i.client_id, cn.issued_at");
+        assertThat(RevenueRelations.documents(false, false)).contains("WHERE FALSE").doesNotContain("FROM sales")
+                .contains("recorded_at");
         assertThat(RevenueRelations.lines(false, true)).doesNotContain("FROM sale_items");
+        assertThat(RevenueRelations.documents(true, true, false)).doesNotContain("i.store_id");
     }
 }

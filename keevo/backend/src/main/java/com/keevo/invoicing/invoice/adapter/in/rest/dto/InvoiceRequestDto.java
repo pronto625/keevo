@@ -39,6 +39,10 @@ import java.util.UUID;
  * 422), {@code deliveryFee} (≥ 0, outside VAT), {@code vatRate} (percent 0–100, 2 decimals; absent = the seller's
  * rate), {@code vatExempt} (no VAT on the document, « Exonéré de TVA »), {@code dueDate} (never before the issue date
  * once issued). A {@code PUT} replaces the whole content: absent fields are reset (no discount, no delivery…).
+ *
+ * <p>Story 20.14 (additive): {@code storeId} = the store the document is made in, creation only (ignored by
+ * {@code PUT}): a store member's own store (another one → 403), an owner's active store (unknown or inactive → 400);
+ * absent = the member's store, or the owner's oldest active store.
  */
 public record InvoiceRequestDto(
         UUID id,
@@ -62,7 +66,16 @@ public record InvoiceRequestDto(
         @Digits(integer = 3, fraction = 2, message = "Le taux de TVA accepte au plus 2 décimales")
         BigDecimal vatRate,
         Boolean vatExempt,
-        LocalDate dueDate) {
+        LocalDate dueDate,
+        UUID storeId) {
+
+    /** A Story 20.5 body: no store requested. */
+    public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines, String kind,
+                             Instant expectedUpdatedAt, Long discountAmount, Long deliveryFee, BigDecimal vatRate,
+                             Boolean vatExempt, LocalDate dueDate) {
+        this(id, client, lines, kind, expectedUpdatedAt, discountAmount, deliveryFee, vatRate, vatExempt, dueDate,
+                null);
+    }
 
     /** A V1 body: an invoice, no edit check. */
     public InvoiceRequestDto(UUID id, InvoiceClientDto client, List<InvoiceLineRequestDto> lines) {
@@ -87,6 +100,6 @@ public record InvoiceRequestDto(
         InvoiceKind documentKind = kind == null ? null : InvoiceKind.valueOf(kind.toUpperCase(Locale.ROOT));
         InvoiceTerms terms = new InvoiceTerms(discountAmount == null ? 0 : discountAmount,
                 deliveryFee == null ? 0 : deliveryFee, vatRate, Boolean.TRUE.equals(vatExempt), dueDate);
-        return new DraftContent(info, inputs, documentKind, expectedUpdatedAt, terms);
+        return new DraftContent(info, inputs, documentKind, expectedUpdatedAt, terms, storeId);
     }
 }

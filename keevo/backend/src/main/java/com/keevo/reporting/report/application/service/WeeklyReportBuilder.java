@@ -6,7 +6,7 @@ import com.keevo.reporting.report.domain.model.EndOfDayReportData.TopProductEntr
 import com.keevo.reporting.report.domain.model.ReportType;
 import com.keevo.reporting.report.domain.model.WeeklyReportData;
 import com.keevo.reporting.report.domain.port.out.EndOfDayReportRepository;
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
@@ -80,7 +80,7 @@ public class WeeklyReportBuilder {
                                   String tenantId, boolean isAutomatic) {
         Window w   = Window.of(window);
         String sid = storeId.toString();
-        // 20.9: one resolution per report; store-scoped → sales-only relations (documents carry no store)
+        // 20.9/20.14: one resolution per report; store-scoped relations (documents of the store included)
         RevenueQueryPort.Relations source = revenue.storeScoped();
         String docs = source.documents();
         String lines = source.lines();

@@ -3,7 +3,7 @@ package com.keevo.reporting.dashboard.application.service;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary.*;
 import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase;
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
@@ -27,8 +27,8 @@ import java.util.Map;
  *
  * <p>Story 20.9 (R4): every revenue figure reads the single revenue source ({@link RevenueQueryPort}: COMPLETED
  * sales ∪ counted invoices − credit notes, a bridged sale counted once); transactions are {@code SUM(doc_count)}.
- * Documents carry no store: they are in the all-stores figures, not in the store overviews, which read the
- * store-scoped (sales-only) relations with grouped queries (fixed number of queries whatever the number of stores).
+ * Story 20.14: the store overviews read the store-scoped relations (sales and documents of each store; documents
+ * without store stay in the all-stores figures only) with grouped queries (fixed number whatever the stores).
  * Every window ends before tomorrow (WAT).
  *
  * <p>Story 7.1, Task 2.

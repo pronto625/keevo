@@ -50,6 +50,9 @@ import java.util.UUID;
  * {@code ticketWidth} ({@code "58"} | {@code "80"} | {@code "A4"}, {@code null} = the tenant default),
  * {@code clientSigned} / {@code sellerSigned} (a signature is stored — never its file), {@code legacyReference} (the
  * Bref reference {@code BRF-XXXXXXXX} of an imported invoice, {@code null} otherwise).
+ *
+ * <p>Story 20.14 (additive): {@code storeId} / {@code storeName} = the store the document was made in ({@code null}
+ * for a document made before, or outside any store); a credit note belongs to its invoice's store.
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -103,7 +106,9 @@ public record InvoiceResponseDto(
         String ticketWidth,
         boolean clientSigned,
         boolean sellerSigned,
-        String legacyReference) {
+        String legacyReference,
+        UUID storeId,
+        String storeName) {
 
     /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
     public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
@@ -136,7 +141,7 @@ public record InvoiceResponseDto(
     public static InvoiceResponseDto fromDomain(Invoice i, InvoicingSettings currentSettings,
                                                 List<CreditNoteRepository.Summary> creditNotes,
                                                 boolean fullyCredited, PaymentStateCalculator.Collection collection) {
-        return fromDomain(i, currentSettings, creditNotes, fullyCredited, collection, InvoicePresentation.NONE);
+        return fromDomain(i, currentSettings, creditNotes, fullyCredited, collection, InvoicePresentation.NONE, null);
     }
 
     /** Story 20.7 — with the document's presentation ({@code null} = none stored). */
@@ -144,6 +149,17 @@ public record InvoiceResponseDto(
                                                 List<CreditNoteRepository.Summary> creditNotes,
                                                 boolean fullyCredited, PaymentStateCalculator.Collection collection,
                                                 InvoicePresentation presentation) {
+        return fromDomain(i, currentSettings, creditNotes, fullyCredited, collection, presentation, null);
+    }
+
+    /**
+     * Story 20.14 — same, with {@code storeName} = the name of the invoice's store (looked up once per response or
+     * page, {@code null} when the invoice has no store).
+     */
+    public static InvoiceResponseDto fromDomain(Invoice i, InvoicingSettings currentSettings,
+                                                List<CreditNoteRepository.Summary> creditNotes,
+                                                boolean fullyCredited, PaymentStateCalculator.Collection collection,
+                                                InvoicePresentation presentation, String storeName) {
         InvoicePresentation look = presentation == null ? InvoicePresentation.NONE : presentation;
         List<CreditNote> notes = creditNotes == null ? List.of() : creditNotes.stream()
                 .map(c -> new CreditNote(c.id(), c.number(), c.issuedAt(), c.totalTtc(), c.reason())).toList();
@@ -172,7 +188,8 @@ public record InvoiceResponseDto(
                 i.terms().vatExempt(), i.terms().dueDate(),
                 look.template() == null ? null : look.template().name(),
                 look.ticketWidth() == null ? null : look.ticketWidth().code(),
-                look.signed(SignatureRole.CLIENT), look.signed(SignatureRole.SELLER), look.legacyReference());
+                look.signed(SignatureRole.CLIENT), look.signed(SignatureRole.SELLER), look.legacyReference(),
+                i.storeId(), i.storeId() == null ? null : storeName);
     }
 
     private static Line line(InvoiceLine l) {

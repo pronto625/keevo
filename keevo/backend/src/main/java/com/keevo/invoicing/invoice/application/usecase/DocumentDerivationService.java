@@ -94,7 +94,8 @@ public class DocumentDerivationService {
         if (clientWanted) {
             clientId = writable(ClientLookupPort.class, CRM, tenantSchema)
                     .flatMap(crm -> crm.findOrCreateForDocument(tenantSchema, new DocumentClientInput(client.name(),
-                            client.phone(), client.email(), client.rccm(), client.niu(), client.address()), actorId))
+                            client.phone(), client.email(), client.rccm(), client.niu(), client.address(), draft.storeId()),
+                            actorId))
                     .orElse(null);
         }
         Map<String, UUID> productIds = lineInputs.isEmpty() ? Map.of()

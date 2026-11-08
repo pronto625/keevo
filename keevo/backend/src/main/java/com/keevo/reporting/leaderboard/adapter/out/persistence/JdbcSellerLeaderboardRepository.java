@@ -1,7 +1,7 @@
 package com.keevo.reporting.leaderboard.adapter.out.persistence;
 
 import com.keevo.reporting.leaderboard.domain.port.out.SellerLeaderboardRepository;
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import com.keevo.shared.infrastructure.export.ExportValues;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -17,8 +17,8 @@ import java.util.UUID;
  * JdbcSellerLeaderboardRepository — SQL adapter of the seller leaderboard (v1s-14-2).
  *
  * <p>Story 20.9 (R4): reads the revenue source ({@link RevenueQueryPort}) — sales by their actor, invoices by their
- * creator (Bref {@code userId}), credit notes deducted from the seller of their invoice; documents carry no store, so
- * a store filter keeps sales only.
+ * creator (Bref {@code userId}), credit notes deducted from the seller of their invoice; Story 20.14: a store filter
+ * keeps the sales and documents of that store.
  *
  * <p>One query: revenue documents grouped by {@code employee_id} (the actor's user id) in the
  * WAT window {@code [from 00:00 WAT, to+1 00:00 WAT)} — same convention as
@@ -51,7 +51,7 @@ public class JdbcSellerLeaderboardRepository implements SellerLeaderboardReposit
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
         String saleStoreFilter = storeId == null ? "" : " AND s.store_id = ?::uuid";
-        // 20.9: one resolution; a store filter reads the sales-only relation (documents carry no store)
+        // 20.9/20.14: one resolution; a store filter reads the store-scoped relation
         String docs = (storeId == null ? revenue.current() : revenue.storeScoped()).documents();
         String employeeStoreFilter = storeId == null ? "" : " AND e.store_id = ?::uuid";
 

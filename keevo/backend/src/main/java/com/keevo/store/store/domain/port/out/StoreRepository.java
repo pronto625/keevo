@@ -25,6 +25,9 @@ public interface StoreRepository {
 
     List<Store> findAllActive();
 
+    /** Story 20.14 — the stores among {@code ids}, active or not (one query). */
+    List<Store> findAllById(java.util.Collection<UUID> ids);
+
     int countActive();
 
     /** Story 20.5 — the country of the oldest active store (empty when there is none). One row read. */

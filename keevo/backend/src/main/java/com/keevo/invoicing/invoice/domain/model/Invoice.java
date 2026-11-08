@@ -24,6 +24,9 @@ import java.util.UUID;
  * credited (« Un devis doit être converti en facture »); it ends {@code CONVERTED} (linked to a new invoice issued
  * from it, {@code convertedInvoiceId}) or {@code CANCELLED} (no number). An invoice created by a conversion carries
  * {@code sourceQuoteId}.
+ *
+ * <p>Story 20.14 — {@link #storeId}: the establishment the document was made in ({@code null}: made before V16 or
+ * outside any store); credit notes belong to the store of their invoice.
  */
 public record Invoice(
         UUID id,
@@ -53,13 +56,28 @@ public record Invoice(
         UUID convertedInvoiceId,
         Instant convertedAt,
         UUID sourceQuoteId,
-        InvoiceTerms terms) {
+        InvoiceTerms terms,
+        UUID storeId) {
 
     public Invoice {
         lines = lines == null ? List.of() : List.copyOf(lines);
         delivery = delivery == null ? InvoiceDelivery.NONE : delivery;
         kind = kind == null ? InvoiceKind.INVOICE : kind;
         terms = terms == null ? InvoiceTerms.NONE : terms;
+    }
+
+    /** Story 20.5 shape: no store (Story 20.14 — a document made before V16, or outside any store). */
+    public Invoice(UUID id, String number, InvoiceStatus status, LocalDate issueDate, ClientInfo client,
+                   SellerSnapshot seller, boolean vatRegistered, BigDecimal vatRate, boolean pricesIncludeVat,
+                   String vatMention, List<InvoiceLine> lines, InvoiceTotals totals, Instant issuedAt, Instant paidAt,
+                   String paymentMethod, Instant cancelledAt, String cancellationReason, UUID createdBy,
+                   Instant createdAt, Instant updatedAt, InvoiceDelivery delivery, UUID sourceSaleId,
+                   Instant supersededAt, InvoiceKind kind, UUID convertedInvoiceId, Instant convertedAt,
+                   UUID sourceQuoteId, InvoiceTerms terms) {
+        this(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat, vatMention,
+                lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt,
+                updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId,
+                terms, null);
     }
 
     /** Story 20.3 shape: no document terms (Story 20.5 — no discount, no delivery, the seller's rate, no due date). */
@@ -159,7 +177,7 @@ public record Invoice(
                                     InvoicingSettings settings, Instant now) {
         assertEditable();
         Invoice recomputed = draft(id, newClient, newLines, newTerms, settings, createdBy, createdAt)
-                .as(kind, sourceQuoteId);
+                .as(kind, sourceQuoteId).inStore(storeId);
         return (sourceSaleId == null ? recomputed : recomputed.fromSale(sourceSaleId)).touched(now);
     }
 
@@ -245,7 +263,8 @@ public record Invoice(
     public Invoice conversionDraft(UUID invoiceId, InvoicingSettings settings, UUID actorId, Instant now) {
         assertConvertible();
         List<LineInput> inputs = lines.stream().map(LineInput::of).toList();
-        return draft(invoiceId, client, inputs, terms, settings, actorId, now).as(InvoiceKind.INVOICE, id);
+        return draft(invoiceId, client, inputs, terms, settings, actorId, now).as(InvoiceKind.INVOICE, id)
+                .inStore(storeId);
     }
 
     /** DRAFT quote → CONVERTED, linked to the invoice {@code invoiceId} created from it. */
@@ -255,7 +274,7 @@ public record Invoice(
         }
         return new Invoice(id, null, InvoiceStatus.CONVERTED, null, client, null, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, null, null, null, null, null, createdBy, createdAt, now,
-                delivery, sourceSaleId, supersededAt, kind, invoiceId, now, sourceQuoteId, terms);
+                delivery, sourceSaleId, supersededAt, kind, invoiceId, now, sourceQuoteId, terms, storeId);
     }
 
     private DomainException quoteInvalidTransition() {
@@ -264,12 +283,24 @@ public record Invoice(
                 Map.of("status", status.label(kind).toLowerCase(java.util.Locale.FRENCH)));
     }
 
+    /**
+     * Story 20.14 — the same document made in {@code store} ({@code null} = none): set once at creation (store member
+     * → its store, owner → the requested or the oldest active store, POS bridge → the sale's store), kept by every
+     * later transition; a conversion copies the quote's.
+     */
+    public Invoice inStore(UUID store) {
+        return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
+                vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
+                createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId,
+                convertedAt, sourceQuoteId, terms, store);
+    }
+
     /** The same document as {@code newKind}, converted from {@code quoteId} ({@code null}: not a conversion). */
     private Invoice as(InvoiceKind newKind, UUID quoteId) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
                 createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, newKind, convertedInvoiceId,
-                convertedAt, quoteId, terms);
+                convertedAt, quoteId, terms, storeId);
     }
 
     /**
@@ -321,7 +352,7 @@ public record Invoice(
                 settings.vatRegistered(), rate, settings.pricesIncludeVat(),
                 VatCalculator.vatMention(settings.vatRegistered(), terms.vatExempt()), computed.lines(),
                 computed.totals(), now,
-                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                null, null, null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     /**
@@ -380,7 +411,7 @@ public record Invoice(
         assertCollectable();
         return new Invoice(id, number, InvoiceStatus.PAID, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt, InvoicingSettings.trimToNull(method),
-                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                null, null, createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     private static DomainException invalidPaymentDate(String reason) {
@@ -428,7 +459,7 @@ public record Invoice(
         String why = requireCancellationReason(reason);
         return new Invoice(id, number, InvoiceStatus.CANCELLED, issueDate, client, seller, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, issuedAt, null, null, now, why, createdBy, createdAt,
-                now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     /** Story 20.3 — DRAFT quote → CANCELLED (reason required, no number ever). */
@@ -439,7 +470,7 @@ public record Invoice(
         String why = requireCancellationReason(reason);
         return new Invoice(id, null, InvoiceStatus.CANCELLED, null, client, null, vatRegistered, vatRate,
                 pricesIncludeVat, vatMention, lines, totals, null, null, null, now, why, createdBy, createdAt, now,
-                delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     private static String requireCancellationReason(String reason) {
@@ -495,7 +526,7 @@ public record Invoice(
     private Invoice touched(Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                createdBy, createdAt, now, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     /**
@@ -506,7 +537,7 @@ public record Invoice(
         assertEditable();
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                createdBy, createdAt, updatedAt, delivery, saleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     /** Story 14.2 — the issued invoice with the seller identity flags frozen at issue. */
@@ -516,7 +547,7 @@ public record Invoice(
         }
         return new Invoice(id, number, status, issueDate, client, seller.withIdentityFlags(nameFromDisplayName,
                 hasLogo), vatRegistered, vatRate, pricesIncludeVat, vatMention, lines, totals, issuedAt, paidAt,
-                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                paymentMethod, cancelledAt, cancellationReason, createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     /**
@@ -558,7 +589,7 @@ public record Invoice(
     public Invoice recordSending(String phone, Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms);
+                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     private DomainException invalidTransition() {

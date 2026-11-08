@@ -9,7 +9,7 @@ import com.keevo.reporting.leaderboard.domain.port.out.SellerLeaderboardReposito
 import com.keevo.reporting.profitability.adapter.out.persistence.JdbcProfitabilityRepository;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawProfitabilityRow;
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository.RawRevenueSplit;
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import com.keevo.shared.infrastructure.persistence.SharedPostgresContainer;
 import com.keevo.shared.infrastructure.persistence.TenantFoundation;
 import org.junit.jupiter.api.AfterAll;
@@ -45,7 +45,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * profitability and its summary). Scenarios: POS only, documents only, POS → invoice bridge (no double count),
  * credit note deducted, quote not counted, cancelled / draft not counted, invoice line without product (revenue yes,
  * margin unknown), invoice civil date (FUS-NFR9). Plus the comparison harness of AC2 on the synthetic Bref fixture
- * (the prod-copy run is 24.12).
+ * (the prod-copy run is 24.12). Story 20.14: documents of a store (invoicing V16) in the store figures, the clients
+ * export and the hourly store activity on the same source.
  */
 @DisplayName("20.9 — revenue source (sales ∪ invoices − credit notes) on PostgreSQL")
 class RevenueSourceAcceptancePostgresIntegrationTest {
@@ -81,8 +82,9 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
                 "V7__invoice_soft_delete.sql", "V8__invoices_kind_quote.sql", "V9__invoices_kind_list_index.sql",
                 "V10__invoice_payments.sql", "V11__invoice_discount_delivery_vat_due.sql",
                 "V12__invoices_due_date_index.sql", "V13__invoicing_settings_derive_from_documents.sql",
-                "V14__revenue_indexes.sql", "V14__revenue_indexes.sql")) {
-            invoicingScript(script); // V14 twice: idempotent
+                "V14__revenue_indexes.sql", "V14__revenue_indexes.sql", "V16__invoice_store.sql",
+                "V16__invoice_store.sql")) {
+            invoicingScript(script); // V14 and V16 twice: idempotent
         }
         DriverManagerDataSource tenant = new DriverManagerDataSource(url, SharedPostgresContainer.username(),
                 SharedPostgresContainer.password());
@@ -300,7 +302,9 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
         }
         // invoices: the window is pushed into the branch and matches the V14 expression index; credit notes: the
         // window is pushed too (on empty tables the planner may prefer the invoice join over idx_credit_notes_issued_at)
-        assertThat(plan.toString()).contains("Index Scan using idx_invoices_revenue_day")
+        // (20.14: V16 adds idx_invoices_store_revenue_day, whose second column is the same expression — on empty
+        // tables the planner may take either; both are index conditions on the civil day)
+        assertThat(plan.toString()).containsPattern("Index Scan using idx_invoices_(store_)?revenue_day")
                 .contains("(issued_at >= ").contains("idx_sales_completed_occurred_at");
     }
 
@@ -462,6 +466,120 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
         assertThat(dashboard(FixedRevenueSource.ALL).todayCA()).isEqualTo(12_000); // still revenue
     }
 
+    // ── Story 20.14 — the store of documents ───────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("20.14: an invoice of store B and its credit note count in B's figures (overview, store comparison, "
+            + "store-filtered ranking and split); an invoice without store stays in the all-stores figures; the "
+            + "tenant-wide revenue counts each document once")
+    void documentsOfAStore() {
+        UUID storeB = insertStore("Boutique B");
+        sale(TODAY_10H, 3_000, "COMPLETED");                                         // store A
+        UUID inB = invoiceIn(storeB, "ISSUED", TODAY, 10_000, line(product, 1, 10_000));
+        creditNote(inB, 4_000, TODAY_10H, 1, 1, 4_000);                              // B: 10 000 − 4 000
+        invoice("ISSUED", TODAY, 7_000, null, line(null, 1, 7_000));                 // made before V16: no store
+        UUID bridgedSale = sale(TODAY_10H, 2_000, "COMPLETED");                      // A: + 2 000, its invoice in A
+        invoiceIn(store, "PAID", TODAY, 2_000, bridgedSale, line(product, 1, 2_000));
+
+        DashboardSummary d = dashboard(FixedRevenueSource.ALL);
+        assertThat(d.todayCA()).isEqualTo(3_000 + 6_000 + 7_000 + 2_000);
+        assertThat(d.todaySalesCount()).isEqualTo(4); // 2 sales + 2 invoices (the bridged one counted as its sale)
+        assertThat(overview(d, store).todayCA()).isEqualTo(5_000);
+        assertThat(overview(d, storeB).todayCA()).isEqualTo(6_000);
+
+        JdbcProfitabilityRepository profitability = new JdbcProfitabilityRepository(jdbc, FixedRevenueSource.ALL);
+        assertThat(profitability.findRawStoreByPeriod(SCHEMA, TODAY, TODAY))
+                .filteredOn(r -> r.storeId().equals(storeB)).singleElement().satisfies(r -> {
+                    assertThat(r.totalRevenue()).isEqualTo(6_000);
+                    assertThat(r.salesCount()).isEqualTo(1);
+                });
+        assertThat(profitability.findRevenueSplit(SCHEMA, TODAY, TODAY, storeB).totalRevenue()).isEqualTo(6_000);
+        assertThat(new JdbcSellerLeaderboardRepository(jdbc, FixedRevenueSource.ALL)
+                .findRawSellers(TODAY, TODAY, storeB)).filteredOn(r -> seller.equals(r.sellerId())).singleElement()
+                .satisfies(r -> {
+                    assertThat(r.totalRevenue()).isEqualTo(6_000);
+                    assertThat(r.salesCount()).isEqualTo(1);
+                });
+
+        // a tenant whose invoicing tables are below V16: documents in the all-stores figures only
+        DashboardSummary old = dashboard(FixedRevenueSource.ALL_WITHOUT_STORES);
+        assertThat(old.todayCA()).isEqualTo(d.todayCA());
+        assertThat(overview(old, storeB).todayCA()).isZero();
+        assertThat(overview(old, store).todayCA()).isEqualTo(5_000);
+    }
+
+    @Test
+    @DisplayName("20.14 FUS-NFR11: a store window on the source reaches idx_invoices_store_revenue_day")
+    void storeWindowUsesTheV16Index() throws Exception {
+        String plan = explain("SELECT COALESCE(SUM(r.total_amount), 0) FROM "
+                + FixedRevenueSource.ALL.storeScoped().documents() + " r WHERE r.store_id = '" + store
+                + "'::uuid AND r.occurred_at >= '2026-11-10T23:00:00Z'::timestamptz");
+        // the store and the window are index conditions of the invoice branch (on empty tables the planner may read
+        // sales through either of their indexes)
+        assertThat(plan).contains("Index Scan using idx_invoices_store_revenue_day")
+                .contains("Index Cond: ((store_id = '" + store + "'::uuid) AND");
+    }
+
+    @Test
+    @DisplayName("20.14: clients export — purchases = sales + invoices (a bridged sale once), credit notes deducted "
+            + "from the total, last purchase = latest sale or invoice; client lookups on the client indexes")
+    void clientsExportReadsTheSource() throws Exception {
+        UUID client = UUID.randomUUID();
+        Timestamp t = Timestamp.from(Instant.parse("2025-01-01T00:00:00Z"));
+        jdbc.update("INSERT INTO clients (id, archived, created_at, updated_at, name, phone) "
+                + "VALUES (?, false, ?, ?, 'Awa Traoré', '+237699001122')", client, t, t);
+        UUID s1 = sale(TODAY_10H.minusSeconds(86_400), 3_000, "COMPLETED");
+        jdbc.update("UPDATE sales SET client_id = ? WHERE id = ?", client, s1);
+        UUID auto = invoice("PAID", TODAY.minusDays(1), 3_000, s1, line(product, 1, 3_000)); // bridged: not again
+        UUID inv = invoice("ISSUED", TODAY, 10_000, null, line(null, 1, 10_000));
+        jdbc.update("UPDATE invoices SET client_id = ? WHERE id IN (?, ?)", client, auto, inv);
+        creditNote(inv, 4_000, TODAY_10H.plusSeconds(3_600), 1, 1, 4_000);
+        invoice("CANCELLED", TODAY, 50_000, null, line(null, 1, 50_000));
+
+        var provider = new com.keevo.crm.contact.adapter.out.export.ClientsExportDatasetProvider(null,
+                FixedRevenueSource.ALL);
+        java.lang.reflect.Method from = provider.getClass().getDeclaredMethod("fromClause");
+        from.setAccessible(true);
+        String fromClause = (String) from.invoke(provider);
+        Map<String, Object> row = jdbc.queryForMap("SELECT agg.sales_count, agg.total_spent, agg.last_purchase FROM "
+                + fromClause + " WHERE c.id = ?", client);
+        assertThat(((Number) row.get("sales_count")).longValue()).isEqualTo(2);
+        assertThat(((Number) row.get("total_spent")).longValue()).isEqualTo(3_000 + 10_000 - 4_000);
+        Timestamp issuedAt = jdbc.queryForObject("SELECT issued_at FROM invoices WHERE id = ?", Timestamp.class, inv);
+        assertThat(((Timestamp) row.get("last_purchase")).toInstant()).isEqualTo(issuedAt.toInstant());
+
+        String plan = explain("SELECT agg.total_spent FROM " + fromClause + " WHERE c.id = '" + client + "'::uuid");
+        // client_id = c.id is pushed into the three branches; invoices and their credit notes are reached through
+        // idx_invoices_client (on empty tables the planner may read sales through any of their indexes)
+        assertThat(plan.split("client_id = c\\.id", -1)).hasSize(4);
+        assertThat(plan).contains("Index Scan using idx_invoices_client").contains("idx_credit_notes_invoice");
+    }
+
+    @Test
+    @DisplayName("20.14: hourly store activity (sales-trend job) — sales and invoices of each store at their instant, "
+            + "credit notes 0, the same hour of the 3 previous days, one grouped query")
+    void hourlyStoreActivity() {
+        UUID storeB = insertStore("Boutique B");
+        Instant hourEnd = Instant.parse("2026-11-11T12:00:00Z");
+        sale(Instant.parse("2026-11-11T11:30:00Z"), 1_000, "COMPLETED");               // A, current hour
+        sale(Instant.parse("2026-11-09T11:15:00Z"), 1_000, "COMPLETED");               // A, 2 days before
+        sale(Instant.parse("2026-11-08T11:59:00Z"), 1_000, "COMPLETED");               // A, 3 days before
+        sale(Instant.parse("2026-11-10T12:30:00Z"), 1_000, "COMPLETED");               // A, the hour after: out
+        UUID now = invoiceIn(storeB, "ISSUED", TODAY, 5_000, line(null, 1, 5_000));
+        issuedAt(now, "2026-11-11T11:10:00Z");                                          // B, current hour
+        creditNote(now, 1_000, Instant.parse("2026-11-11T11:20:00Z"), 1, 1, 1_000);     // not a transaction
+        UUID before = invoiceIn(storeB, "PAID", TODAY.minusDays(1), 5_000, line(null, 1, 5_000));
+        issuedAt(before, "2026-11-10T11:30:00Z");                                       // B, 1 day before
+
+        var activity = new com.keevo.messaging.notification.adapter.out.persistence.impl.JdbcStoreActivityRepository(
+                jdbc, FixedRevenueSource.ALL).lastHour(hourEnd);
+
+        assertThat(activity.get(store).current()).isEqualTo(1);
+        assertThat(activity.get(store).previousDaysAverage()).isEqualTo(2 / 3.0);
+        assertThat(activity.get(storeB).current()).isEqualTo(1);
+        assertThat(activity.get(storeB).previousDaysAverage()).isEqualTo(1 / 3.0);
+    }
+
     // ── consumers ───────────────────────────────────────────────────────────────
 
     private DashboardSummary dashboard(RevenueQueryPort source) {
@@ -533,6 +651,36 @@ class RevenueSourceAcceptancePostgresIntegrationTest {
         jdbc.update("INSERT INTO sale_items (sale_id, product_id, product_name, applied_unit_price, quantity, subtotal) "
                 + "VALUES (?, ?, 'Riz 25 kg', ?, 1, ?)", id, product, total, total);
         return id;
+    }
+
+    /** Story 20.14 — an invoice made in {@code storeId}. */
+    private UUID invoiceIn(UUID storeId, String status, LocalDate issueDate, long total, Line... lines) {
+        return invoiceIn(storeId, status, issueDate, total, null, lines);
+    }
+
+    private UUID invoiceIn(UUID storeId, String status, LocalDate issueDate, long total, UUID sourceSale,
+                           Line... lines) {
+        UUID id = invoice(status, issueDate, total, sourceSale, lines);
+        jdbc.update("UPDATE invoices SET store_id = ? WHERE id = ?", storeId, id);
+        return id;
+    }
+
+    private void issuedAt(UUID invoice, String instant) {
+        jdbc.update("UPDATE invoices SET issued_at = ? WHERE id = ?", Timestamp.from(Instant.parse(instant)), invoice);
+    }
+
+    private static String explain(String query) throws Exception {
+        StringBuilder plan = new StringBuilder();
+        try (Connection c = admin.getConnection(); Statement s = c.createStatement()) {
+            s.execute("SET search_path TO \"" + SCHEMA + "\"");
+            s.execute("SET enable_seqscan = off"); // tiny tables: make the planner show the usable index paths
+            try (var rs = s.executeQuery("EXPLAIN " + query)) {
+                while (rs.next()) {
+                    plan.append(rs.getString(1)).append('\n');
+                }
+            }
+        }
+        return plan.toString();
     }
 
     private UUID invoice(String status, LocalDate issueDate, long total, UUID sourceSale, Line... lines) {

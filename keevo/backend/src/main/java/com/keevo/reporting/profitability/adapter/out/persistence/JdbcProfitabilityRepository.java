@@ -1,7 +1,7 @@
 package com.keevo.reporting.profitability.adapter.out.persistence;
 
 import com.keevo.reporting.profitability.domain.port.out.ProfitabilityRepository;
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -89,7 +89,7 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsFrom = Timestamp.from(from.atStartOfDay(WAT).toInstant());
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
 
-        // 20.9: store-joined → sales-only relations (documents carry no store), resolved once.
+        // 20.9/20.14: store-joined → store-scoped relations (documents of each store), resolved once.
         RevenueQueryPort.Relations source = revenue.storeScoped();
         String sql =
             "SELECT " +
@@ -218,7 +218,7 @@ public class JdbcProfitabilityRepository implements ProfitabilityRepository {
         Timestamp tsTo   = Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant());
         String docStoreFilter  = storeId == null ? "" : " AND d.store_id = ?::uuid";
         String lineStoreFilter = storeId == null ? "" : " AND s.store_id = ?::uuid";
-        // 20.9: one resolution; a store filter reads the sales-only relations (documents carry no store)
+        // 20.9/20.14: one resolution; a store filter reads the store-scoped relations
         RevenueQueryPort.Relations source = storeId == null ? revenue.current() : revenue.storeScoped();
 
         // One query: the period's revenue (documents) and its lines split by « margin known » (catalogue product)

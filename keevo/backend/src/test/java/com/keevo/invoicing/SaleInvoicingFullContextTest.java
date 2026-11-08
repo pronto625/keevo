@@ -253,11 +253,14 @@ class SaleInvoicingFullContextTest extends FullContextIntegrationTest {
         assertThat(inv.get("payment_method")).isEqualTo("Espèces");
         assertThat(((Number) inv.get("total_ttc")).longValue()).isEqualTo(2000);
         assertThat(inv.get("created_by")).isEqualTo(ownerId);
+        assertThat(jdbc.queryForObject("SELECT store_id FROM \"" + schema + "\".invoices WHERE id = ?", UUID.class,
+                inv.get("id"))).isEqualTo(storeId); // Story 20.14 — the sale's store
         assertThat(jdbc.queryForObject("SELECT description FROM \"" + schema + "\".invoice_items WHERE invoice_id = ?",
                 String.class, inv.get("id"))).isEqualTo("Savon 14.4");
 
         JsonNode dto = data(call(HttpMethod.GET, "/api/v1/invoices/" + inv.get("id"), null), 200);
         assertThat(dto.path("saleId").asText()).isEqualTo(saleId.toString());
+        assertThat(dto.path("storeId").asText()).isEqualTo(storeId.toString());
         assertThat(dto.path("status").asText()).isEqualTo("PAID");
         assertThat(dto.path("totalTtc").asLong()).isEqualTo(2000);
 

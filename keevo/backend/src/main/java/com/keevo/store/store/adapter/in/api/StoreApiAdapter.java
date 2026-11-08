@@ -100,16 +100,17 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
     @Override
     public java.util.Map<UUID, String> namesByIds(String tenantSchema, java.util.Collection<UUID> storeIds) {
         TenantContext.requireCurrent(tenantSchema);
-        if (storeIds == null || storeIds.isEmpty()) {
+        if (storeIds == null) {
             return java.util.Map.of();
         }
-        // a tenant has a handful of stores: one read of all of them, filtered here
-        java.util.Map<UUID, String> names = new java.util.HashMap<>();
-        for (var store : storeRepository.findAll()) {
-            if (storeIds.contains(store.id())) {
-                names.put(store.id(), store.name());
-            }
+        Set<UUID> ids = storeIds.stream().filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (ids.isEmpty()) {
+            return java.util.Map.of();
         }
+        // Story 20.14 — one IN query on the ids (never the whole table, never one per row)
+        java.util.Map<UUID, String> names = new java.util.HashMap<>();
+        storeRepository.findAllById(ids).forEach(s -> names.put(s.id(), s.name()));
         return names;
     }
 

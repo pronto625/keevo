@@ -144,6 +144,8 @@ public class SaleCreditNoteUseCase {
         }
         saleStates.markCorrected(saleId, at);
         Optional<Invoice> active = invoices.findActiveBySourceSaleForUpdate(saleId);
+        // Story 20.14 — the new invoice stays in the replaced one's store (the sale's), else the event's store
+        UUID storeId = active.map(Invoice::storeId).orElse(event.storeId());
         if (active.isPresent()) {
             Invoice invoice = active.get();
             if (invoice.status() != InvoiceStatus.ISSUED && invoice.status() != InvoiceStatus.PAID) {
@@ -158,7 +160,8 @@ public class SaleCreditNoteUseCase {
             } // already fully credited by hand: replaced without a new credit note
             invoices.markSuperseded(invoice.id(), supersededAt);
         }
-        invoiceSale.paidInvoice(saleId, event.clientId(), event.paymentMode(), lines, event.actorId(), tenant);
+        invoiceSale.paidInvoice(saleId, storeId, event.clientId(), event.paymentMode(), lines, event.actorId(),
+                tenant);
         return Outcome.DONE;
     }
 

@@ -45,7 +45,9 @@ class ManageDraftInvoiceUseCaseTest {
     private final InvoiceClientResolver clients = mock(InvoiceClientResolver.class);
     private final com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository payments =
             mock(com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository.class);
+    private final DocumentStoreResolver stores = mock(DocumentStoreResolver.class);
     private ManageDraftInvoiceUseCase useCase;
+    private static final UUID STORE_B = UUID.randomUUID();
 
     private final UUID id = UUID.randomUUID();
     private final ClientInfo client = new ClientInfo(null, "Société Ndolo", null, null, null);
@@ -55,7 +57,7 @@ class ManageDraftInvoiceUseCaseTest {
     @BeforeEach
     void setUp() {
         useCase = new ManageDraftInvoiceUseCase(invoices, settings, events, Clock.fixed(NOW, ZoneOffset.UTC), clients,
-                payments);
+                payments, null, stores);
         when(settings.find()).thenReturn(Optional.empty());
         when(clients.resolve(any(), eq(TENANT))).thenReturn(client);
     }
@@ -234,5 +236,46 @@ class ManageDraftInvoiceUseCaseTest {
                 false, java.time.LocalDate.of(2026, 10, 31)));
         assertThat(useCase.create(null, today, null, TENANT).terms().dueDate())
                 .isEqualTo(java.time.LocalDate.of(2026, 10, 31));
+    }
+
+    // ── Story 20.14 — the store of a new document ─────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("20.14: a creation is made in the store the resolver decides (requested storeId handed over); an "
+            + "edit keeps it")
+    void createdInStore() {
+        when(invoices.findAnyById(id)).thenReturn(Optional.empty());
+        when(invoices.insertIfAbsent(any())).thenReturn(true);
+        when(stores.forNewDocument(STORE_B, TENANT)).thenReturn(STORE_B);
+        ManageDraftInvoiceUseCase.DraftContent inB = new ManageDraftInvoiceUseCase.DraftContent(client,
+                content.lines(), null, null, null, STORE_B);
+
+        Invoice created = useCase.create(id, inB, null, TENANT);
+
+        assertThat(created.storeId()).isEqualTo(STORE_B);
+        org.mockito.ArgumentCaptor<Invoice> written = org.mockito.ArgumentCaptor.forClass(Invoice.class);
+        verify(invoices).insertIfAbsent(written.capture());
+        assertThat(written.getValue().storeId()).isEqualTo(STORE_B);
+
+        when(invoices.findByIdForUpdate(id)).thenReturn(Optional.of(created));
+        when(clients.resolve(any(), eq(TENANT), any())).thenReturn(client);
+        assertThat(useCase.update(id, content, TENANT).storeId()).isEqualTo(STORE_B);
+    }
+
+    @Test
+    @DisplayName("20.14: a re-sent creation returns the first document, the store is not decided again; a refused "
+            + "store writes nothing")
+    void replayAndRefusal() {
+        Invoice there = existing().inStore(STORE_B);
+        when(invoices.findAnyById(id)).thenReturn(Optional.of(there));
+        assertThat(useCase.create(id, content, null, TENANT).storeId()).isEqualTo(STORE_B);
+        verifyNoInteractions(stores);
+
+        when(stores.forNewDocument(any(), eq(TENANT))).thenThrow(
+                com.keevo.shared.domain.exception.DomainException.userFacing(
+                        com.keevo.shared.domain.exception.ErrorCode.FORBIDDEN, "autre boutique"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> useCase.create(null, content, null, TENANT))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class);
+        verify(invoices, never()).insert(any());
     }
 }

@@ -46,21 +46,27 @@ public class ManageDraftInvoiceUseCase {
     private final Clock clock;
     private final InvoiceClientResolver clients;
     private final InvoicePaymentRepository payments;
+    private final DocumentStoreResolver stores;
 
     private final InvoicePresentationUseCase presentations;
 
     public ManageDraftInvoiceUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                      ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients,
                                      InvoicePaymentRepository payments) {
-        this(invoices, settings, events, clock, clients, payments, null);
+        this(invoices, settings, events, clock, clients, payments, null, null);
     }
 
-    /** Story 20.7 — {@code presentations}: a deleted draft's signature files are removed after the commit. */
+    /**
+     * Story 20.7 — {@code presentations}: a deleted draft's signature files are removed after the commit. Story 20.14
+     * — {@code stores}: the store of a new document ({@code null} only in the short constructor: no store).
+     */
     @org.springframework.beans.factory.annotation.Autowired
     public ManageDraftInvoiceUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                      ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients,
-                                     InvoicePaymentRepository payments, InvoicePresentationUseCase presentations) {
+                                     InvoicePaymentRepository payments, InvoicePresentationUseCase presentations,
+                                     DocumentStoreResolver stores) {
         this.presentations = presentations;
+        this.stores = stores;
         this.payments = payments;
         this.invoices = invoices;
         this.settings = settings;
@@ -74,12 +80,20 @@ public class ManageDraftInvoiceUseCase {
      * exemption, due date; {@code null} = none: a V1 body). Story 20.3: {@code kind} = what a creation makes ({@code null} =
      * {@code INVOICE}); on an edit, {@code null} = unchanged and another kind than the document's → 409; {@code expectedUpdatedAt} = the edit's
      * optimistic check (the {@code updatedAt} the editor last saw; {@code null} = no check; ignored by a creation).
+     * Story 20.14: {@code storeId} = the store requested for a creation ({@code null} = decided from the actor, see
+     * {@link DocumentStoreResolver}); ignored by an edit (a document never changes store).
      */
     public record DraftContent(ClientInfo client, List<LineInput> lines, InvoiceKind kind, Instant expectedUpdatedAt,
-                               InvoiceTerms terms) {
+                               InvoiceTerms terms, UUID storeId) {
 
         public DraftContent {
             terms = terms == null ? InvoiceTerms.NONE : terms;
+        }
+
+        /** Story 20.5 shape: no store requested (Story 20.14 — the creation decides it from the actor). */
+        public DraftContent(ClientInfo client, List<LineInput> lines, InvoiceKind kind, Instant expectedUpdatedAt,
+                            InvoiceTerms terms) {
+            this(client, lines, kind, expectedUpdatedAt, terms, null);
         }
 
         /** Pre-20.5 shape: no document terms (no discount, no delivery, the seller's rate, no due date). */
@@ -113,6 +127,7 @@ public class ManageDraftInvoiceUseCase {
             }
         }
         assertDueDateNotPast(content);
+        UUID storeId = stores.forNewDocument(content.storeId(), tenantId); // Story 20.14 — before anything is written
         ClientInfo client = clients.resolve(content.client(), tenantId);
         Instant now = now();
         UUID invoiceId = id != null ? id : UUID.randomUUID();
@@ -120,7 +135,7 @@ public class ManageDraftInvoiceUseCase {
         Invoice draft = valid(() -> quote
                 ? Invoice.quote(invoiceId, client, content.lines(), content.terms(), currentSettings(), actorId, now)
                 : Invoice.draft(invoiceId, client, content.lines(), content.terms(), currentSettings(), actorId,
-                now));
+                now)).inStore(storeId);
         if (id != null) {
             // the same creation sent concurrently (online retry + queued operation): the first one wins, no PK error
             if (!invoices.insertIfAbsent(draft)) {

@@ -7,6 +7,7 @@ import com.keevo.identity.onboarding.domain.model.TenantPreferences;
 import com.keevo.identity.onboarding.domain.port.out.TenantPreferencesRepository;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
+import com.keevo.messaging.notification.domain.port.out.StoreActivityRepository;
 import com.keevo.shared.capability.notification.PushNotifier;
 import com.keevo.store.store.domain.model.Store;
 import com.keevo.store.api.StoreType;
@@ -23,6 +24,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -42,6 +44,7 @@ class SalesTrendDetectionSchedulerTest {
     @Mock private NotificationCooldownRepository cooldownRepository;
     @Mock private TenantPreferencesRepository tenantPreferencesRepository;
     @Mock private StoreRepository storeRepository;
+    @Mock private StoreActivityRepository activity;
 
     private SalesTrendDetectionScheduler scheduler;
 
@@ -52,7 +55,8 @@ class SalesTrendDetectionSchedulerTest {
     void setUp() {
         scheduler = new SalesTrendDetectionScheduler(
                 jdbcTemplate, pushNotifier, cooldownRepository,
-                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), StoreApiTestSupport.queryPort(storeRepository));
+                IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), StoreApiTestSupport.queryPort(storeRepository),
+                activity);
     }
 
     private Store testStore() {
@@ -82,6 +86,12 @@ class SalesTrendDetectionSchedulerTest {
                 .thenReturn(List.of(schemas));
     }
 
+    /** Story 20.14 — the store's hourly activity, as the revenue source returns it (one query per tenant). */
+    private void stubActivity(int current, double previousDaysAverage) {
+        when(activity.lastHour(any())).thenReturn(Map.of(STORE_ID,
+                new StoreActivityRepository.HourlyActivity(current, previousDaysAverage)));
+    }
+
     // ── AC3: No sales history → skip ─────────────────────────────────────────
 
     @Test
@@ -91,10 +101,7 @@ class SalesTrendDetectionSchedulerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
         when(storeRepository.findAllActive()).thenReturn(List.of(testStore()));
         // Current hour: 5 sales, avg: 0.3 (< 1.0 threshold)
-        when(jdbcTemplate.queryForObject(contains("date_trunc('hour', NOW())"), eq(Integer.class), any(Object[].class)))
-                .thenReturn(5);
-        when(jdbcTemplate.queryForObject(contains("AVG(hourly_count)"), eq(Double.class), any(), any(), any()))
-                .thenReturn(0.3);
+        stubActivity(5, 0.3);
 
         scheduler.detectTrends();
 
@@ -110,10 +117,7 @@ class SalesTrendDetectionSchedulerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
         when(storeRepository.findAllActive()).thenReturn(List.of(testStore()));
         // Current: 2, avg: 10 → ratio = 0.2 < 0.60
-        when(jdbcTemplate.queryForObject(contains("date_trunc('hour', NOW())"), eq(Integer.class), any(Object[].class)))
-                .thenReturn(2);
-        when(jdbcTemplate.queryForObject(contains("AVG(hourly_count)"), eq(Double.class), any(), any(), any()))
-                .thenReturn(10.0);
+        stubActivity(2, 10.0);
         when(cooldownRepository.existsActiveCooldown(eq("TREND_DOWN"), isNull(), eq(STORE_ID), any()))
                 .thenReturn(false);
 
@@ -134,10 +138,7 @@ class SalesTrendDetectionSchedulerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
         when(storeRepository.findAllActive()).thenReturn(List.of(testStore()));
         // Current: 20, avg: 5 → ratio = 4.0 > 1.60
-        when(jdbcTemplate.queryForObject(contains("date_trunc('hour', NOW())"), eq(Integer.class), any(Object[].class)))
-                .thenReturn(20);
-        when(jdbcTemplate.queryForObject(contains("AVG(hourly_count)"), eq(Double.class), any(), any(), any()))
-                .thenReturn(5.0);
+        stubActivity(20, 5.0);
         when(cooldownRepository.existsActiveCooldown(eq("TREND_UP"), isNull(), eq(STORE_ID), any()))
                 .thenReturn(false);
 
@@ -172,10 +173,7 @@ class SalesTrendDetectionSchedulerTest {
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
         when(storeRepository.findAllActive()).thenReturn(List.of(testStore()));
         // Trigger drop > 40%
-        when(jdbcTemplate.queryForObject(contains("date_trunc('hour', NOW())"), eq(Integer.class), any(Object[].class)))
-                .thenReturn(2);
-        when(jdbcTemplate.queryForObject(contains("AVG(hourly_count)"), eq(Double.class), any(), any(), any()))
-                .thenReturn(10.0);
+        stubActivity(2, 10.0);
         when(cooldownRepository.existsActiveCooldown(eq("TREND_DOWN"), isNull(), eq(STORE_ID), any()))
                 .thenReturn(true);
 
@@ -192,10 +190,7 @@ class SalesTrendDetectionSchedulerTest {
         stubActiveSchemas(SCHEMA);
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
         when(storeRepository.findAllActive()).thenReturn(List.of(testStore()));
-        when(jdbcTemplate.queryForObject(contains("date_trunc('hour', NOW())"), eq(Integer.class), any(Object[].class)))
-                .thenReturn(0);
-        when(jdbcTemplate.queryForObject(contains("AVG(hourly_count)"), eq(Double.class), any(), any(), any()))
-                .thenReturn(0.5);
+        stubActivity(0, 0.5);
 
         scheduler.detectTrends();
 
@@ -228,7 +223,7 @@ class SalesTrendDetectionSchedulerTest {
         com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
         SalesTrendDetectionScheduler gated = new SalesTrendDetectionScheduler(jdbcTemplate, pushNotifier,
                 cooldownRepository, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
-                StoreApiTestSupport.queryPort(storeRepository), modules);
+                StoreApiTestSupport.queryPort(storeRepository), modules, activity);
         stubActiveSchemas(SCHEMA);
         when(modules.moduleState(SCHEMA, "advanced-reports")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
 
@@ -247,12 +242,35 @@ class SalesTrendDetectionSchedulerTest {
         com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
         SalesTrendDetectionScheduler gated = new SalesTrendDetectionScheduler(jdbcTemplate, pushNotifier,
                 cooldownRepository, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
-                StoreApiTestSupport.queryPort(storeRepository), modules);
+                StoreApiTestSupport.queryPort(storeRepository), modules, activity);
         stubActiveSchemas(SCHEMA);
         when(modules.moduleState(SCHEMA, "advanced-reports")).thenThrow(new IllegalStateException("db"));
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendDisabledPrefs()));
 
         gated.detectTrends();
         verify(tenantPreferencesRepository).findByCurrentTenant();
+    }
+
+    // ── Story 20.14: one activity read per tenant, a store without activity has no history ──────────
+
+    @Test
+    @DisplayName("20.14: one activity read for all the stores (a full hour); a store absent from it is skipped")
+    void oneActivityReadPerTenant() {
+        stubActiveSchemas(SCHEMA);
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
+        Store other = new Store(UUID.randomUUID(), "Akwa", StoreType.STORE, null, null, true,
+                Instant.now(), Instant.now());
+        when(storeRepository.findAllActive()).thenReturn(List.of(testStore(), other));
+        stubActivity(20, 5.0);
+        when(cooldownRepository.existsActiveCooldown(eq("TREND_UP"), isNull(), eq(STORE_ID), any()))
+                .thenReturn(false);
+
+        scheduler.detectTrends();
+
+        ArgumentCaptor<Instant> hour = ArgumentCaptor.forClass(Instant.class);
+        verify(activity, times(1)).lastHour(hour.capture());
+        assertEquals(hour.getValue(), hour.getValue().truncatedTo(java.time.temporal.ChronoUnit.HOURS));
+        verify(pushNotifier, times(1)).notifyOwners(eq(SCHEMA), any());
+        verify(cooldownRepository, never()).existsActiveCooldown(any(), any(), eq(other.id()), any());
     }
 }

@@ -25,6 +25,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -126,5 +127,28 @@ class DeriveClientFromDocumentUseCaseTest {
         assertThat(id).isPresent();
         assertThat(saved.getValue().email()).isNull();
         assertThat(saved.getValue().profile().rccm()).isNull();
+    }
+
+    @Test
+    @DisplayName("20.14: OWNER, document of an active store → the client is created there; the document's store "
+            + "inactive → the oldest active store")
+    void ownerFollowsTheDocumentStore() {
+        when(stores.findById(TENANT, newer)).thenReturn(Optional.of(new StoreView(newer, "B",
+                com.keevo.store.api.StoreType.STORE, null, null, true, NOW, NOW)));
+        when(clients.findDocumentMatch(any(), eq("+237699000001"))).thenReturn(Optional.empty());
+
+        useCase.execute(new DocumentClientInput("Awa", "699000001", null, null, null, null, newer),
+                ClientAccess.SYSTEM, ACTOR, TENANT);
+        ArgumentCaptor<Client> saved = ArgumentCaptor.forClass(Client.class);
+        verify(clients).save(saved.capture());
+        assertThat(saved.getValue().storeId()).isEqualTo(newer);
+
+        UUID closed = UUID.randomUUID();
+        when(stores.findById(TENANT, closed)).thenReturn(Optional.of(new StoreView(closed, "C",
+                com.keevo.store.api.StoreType.STORE, null, null, false, NOW, NOW)));
+        useCase.execute(new DocumentClientInput("Awa", "699000001", null, null, null, null, closed),
+                ClientAccess.SYSTEM, ACTOR, TENANT);
+        verify(clients, org.mockito.Mockito.times(2)).save(saved.capture());
+        assertThat(saved.getValue().storeId()).isEqualTo(oldest);
     }
 }

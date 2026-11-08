@@ -11,6 +11,14 @@ package com.keevo.crm.api;
  * @param rccm    trade register number
  * @param niu     tax number
  * @param address postal address
+ * @param storeId Story 20.14 — the store of the document ({@code null}: none); an owner's derived client goes there
+ *                when it is still active (a store member's always goes to its own store)
  */
-public record DocumentClientInput(String name, String phone, String email, String rccm, String niu, String address) {
+public record DocumentClientInput(String name, String phone, String email, String rccm, String niu, String address,
+                                  java.util.UUID storeId) {
+
+    /** Story 20.6 shape: a document without store. */
+    public DocumentClientInput(String name, String phone, String email, String rccm, String niu, String address) {
+        this(name, phone, email, rccm, niu, address, null);
+    }
 }

@@ -131,6 +131,15 @@ class InvoicingTermsMigrationPostgresIntegrationTest {
         script("V12__invoices_due_date_index.sql"); // idempotent
         assertThat(jdbc.queryForList("SELECT indexname FROM pg_indexes WHERE schemaname = ?", String.class, SCHEMA))
                 .contains("idx_invoices_issued_due_date_active").doesNotContain("idx_invoices_issued_due_date");
+        // Story 20.14 — V16 on the same tenant: rows untouched, no store (no backfill); idempotent
+        script("V16__invoice_store.sql");
+        script("V16__invoice_store.sql");
+        List<Map<String, Object>> withStore = jdbc.queryForList(select);
+        for (int i = 0; i < after.size(); i++) {
+            Map<String, Object> row = withStore.get(i);
+            after.get(i).forEach((column, value) -> assertThat(row.get(column)).as(column).isEqualTo(value));
+            assertThat(row.get("store_id")).isNull();
+        }
 
         TenantContext.setCurrentTenant(SCHEMA);
         JdbcInvoiceRepository repository = new JdbcInvoiceRepository(jdbc);

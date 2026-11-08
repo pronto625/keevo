@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.adapter.in.sync;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceResponseDto;
+import com.keevo.invoicing.invoice.application.usecase.DocumentStoreResolver;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -47,9 +48,20 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
     private final ObjectMapper objectMapper;
     private final ModuleProvisioner provisioner;
 
+    private final DocumentStoreResolver stores;
+
     public InvoiceDeltaProvider(InvoiceRepository invoices, InvoiceQueryUseCase queries,
                                 InvoicingSettingsUseCase settings, ObjectMapper objectMapper,
                                 ModuleProvisioner provisioner) {
+        this(invoices, queries, settings, objectMapper, provisioner, null);
+    }
+
+    /** Story 20.14 — {@code stores}: the store names of a page ({@code null} only in unit tests: no name). */
+    @org.springframework.beans.factory.annotation.Autowired
+    public InvoiceDeltaProvider(InvoiceRepository invoices, InvoiceQueryUseCase queries,
+                                InvoicingSettingsUseCase settings, ObjectMapper objectMapper,
+                                ModuleProvisioner provisioner, DocumentStoreResolver stores) {
+        this.stores = stores;
         this.provisioner = provisioner;
         this.invoices = invoices;
         this.queries = queries;
@@ -93,11 +105,15 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
                 live.isEmpty() ? Map.of() : queries.collections(live, credits);
         // Story 20.7 — layouts, signatures, Bref references of the page: one batched query
         var presentations = queries.presentations(live);
+        // Story 20.14 — store names of the page: one query
+        Map<java.util.UUID, String> storeNames = live.isEmpty() || stores == null ? Map.of()
+                : stores.namesOf(live, TenantContext.getCurrentTenant());
         List<Map<String, Object>> rows = page.stream().map(d -> d.deleted() ? tombstone(d.invoice())
                 : objectMapper.convertValue(InvoiceResponseDto.fromDomain(d.invoice(), current,
                         credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).notes(),
                         credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).fullyCredited(),
-                        collections.get(d.invoice().id()), presentations.get(d.invoice().id())),
+                        collections.get(d.invoice().id()), presentations.get(d.invoice().id()),
+                        d.invoice().storeId() == null ? null : storeNames.get(d.invoice().storeId())),
                 ROW)).toList();
         Invoice last = page.get(page.size() - 1).invoice();
         return new Page(rows, more ? new Position(last.updatedAt(), last.id().toString()) : null);

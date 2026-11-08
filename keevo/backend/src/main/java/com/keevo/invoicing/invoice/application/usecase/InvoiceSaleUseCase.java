@@ -106,7 +106,8 @@ public class InvoiceSaleUseCase {
             return Outcome.NOT_INVOICEABLE;
         }
         try {
-            paidInvoice(saleId, sale.getClientId(), sale.getPaymentMode(), lines, sale.getActorId(), tenant);
+            paidInvoice(saleId, sale.getStoreId(), sale.getClientId(), sale.getPaymentMode(), lines,
+                    sale.getActorId(), tenant);
         } catch (SaleInvoiceRefused e) {
             log.warn("[invoicing] sale of tenant {} not invoiced: {}", tenant, e.getMessage());
             return Outcome.NOT_INVOICEABLE;
@@ -117,13 +118,13 @@ public class InvoiceSaleUseCase {
     /**
      * Creates, issues and pays the automatic invoice of the sale {@code saleId} in the caller's transaction (Story
      * 14.4; reused by 14.7 for the new invoice of a corrected sale): VAT-inclusive prices, the CRM client when known,
-     * the created / issued / paid events under {@code actor}.
+     * the created / issued / paid events under {@code actor}. Story 20.14: made in the sale's {@code storeId}.
      *
      * @throws SaleInvoiceRefused the domain refuses the content (nothing written) — retrying would fail for ever
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void paidInvoice(UUID saleId, UUID clientId, String paymentMode, List<LineInput> lines, UUID actor,
-                               String tenant) {
+    public void paidInvoice(UUID saleId, UUID storeId, UUID clientId, String paymentMode, List<LineInput> lines,
+                            UUID actor, String tenant) {
         ClientInfo client = SaleInvoiceMapper.client(clients.saleClient(clientId, tenant));
         Instant now = clock.instant();
         InvoicingSettings vatIncluded = InvoiceLifecycleUseCase.withPricesIncludingVat(
@@ -131,7 +132,7 @@ public class InvoiceSaleUseCase {
         Invoice draft;
         try {
             draft = ManageDraftInvoiceUseCase.valid(() -> Invoice.draft(UUID.randomUUID(), client, lines,
-                    vatIncluded, actor, now)).fromSale(saleId);
+                    vatIncluded, actor, now)).fromSale(saleId).inStore(storeId);
         } catch (DomainException e) {
             // content refused by the domain after the mapper accepted it: retrying would fail for ever
             Object reason = e.getDetails() == null ? null : e.getDetails().get("reason");

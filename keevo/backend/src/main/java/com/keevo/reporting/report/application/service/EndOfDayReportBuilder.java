@@ -4,7 +4,7 @@ import com.keevo.reporting.report.domain.model.EndOfDayReportData;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.EmployeeEntry;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData.TopProductEntry;
 import com.keevo.commerce.api.ClosureWindow;
-import com.keevo.reporting.revenue.domain.port.out.RevenueQueryPort;
+import com.keevo.shared.capability.revenue.RevenueQueryPort;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import org.springframework.stereotype.Component;
@@ -87,7 +87,7 @@ public class EndOfDayReportBuilder {
                                     LocalTime closeTime, boolean isAutomatic) {
         Window w   = Window.of(window);
         String sid = storeId.toString();
-        // 20.9: one resolution per report; store-scoped → sales-only relations (documents carry no store)
+        // 20.9/20.14: one resolution per report; store-scoped relations (documents of the store included)
         RevenueQueryPort.Relations source = revenue.storeScoped();
         String docs = source.documents();
 
@@ -133,7 +133,7 @@ public class EndOfDayReportBuilder {
         Window w   = Window.of(window);
         String sid = storeId.toString();
         String eid = employeeId.toString();
-        // 20.9: one resolution per report; store-scoped → sales-only relations (documents carry no store)
+        // 20.9/20.14: one resolution per report; store-scoped relations (documents of the store included)
         RevenueQueryPort.Relations source = revenue.storeScoped();
         String docs = source.documents();
 

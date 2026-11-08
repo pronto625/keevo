@@ -180,4 +180,24 @@ class InvoiceQuoteTest {
         assertThatThrownBy(() -> empty.conversionDraft(UUID.randomUUID(), SELLER, null, T1))
                 .satisfies(e -> assertThat(domain(e).getDomainCode()).isEqualTo("INVOICE_NOT_ISSUABLE"));
     }
+
+    @Test
+    @DisplayName("20.14: the store is kept by every step — edit, conversion (the quote's store), issue, payment, "
+            + "sending, cancellation")
+    void storeKept() {
+        UUID store = UUID.randomUUID();
+        Invoice q = quote().inStore(store);
+        assertThat(q.withDraftContent(CLIENT, LINES, SELLER, T1).storeId()).isEqualTo(store);
+        assertThat(q.converted(UUID.randomUUID(), T1).storeId()).isEqualTo(store);
+        assertThat(q.cancel("Client parti", T1).storeId()).isEqualTo(store);
+
+        Invoice draft = q.conversionDraft(UUID.randomUUID(), SELLER, UUID.randomUUID(), T1);
+        assertThat(draft.storeId()).isEqualTo(store);
+        Invoice issued = draft.issue("FAC-2026-000001", java.time.LocalDate.of(2026, 11, 6), SELLER, T1);
+        assertThat(issued.storeId()).isEqualTo(store);
+        assertThat(issued.sent("+237690000001", T1).storeId()).isEqualTo(store);
+        assertThat(issued.markedPaid(T1, "Espèces", T1).storeId()).isEqualTo(store);
+        assertThat(issued.cancel("Erreur", T1).storeId()).isEqualTo(store);
+        assertThat(Invoice.draft(UUID.randomUUID(), CLIENT, LINES, SELLER, null, T0).storeId()).isNull();
+    }
 }

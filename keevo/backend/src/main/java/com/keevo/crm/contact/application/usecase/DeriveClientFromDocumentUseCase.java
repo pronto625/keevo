@@ -66,6 +66,21 @@ public class DeriveClientFromDocumentUseCase {
         this.clock = clock;
     }
 
+    /**
+     * Story 20.14 — an owner's derived client goes to the document's store when it is still active, else to the
+     * oldest active store (or none), as before.
+     */
+    private UUID ownerStore(UUID documentStore, String tenantSchema) {
+        if (documentStore != null) {
+            try {
+                return storeScope.requireActiveStore(documentStore, tenantSchema);
+            } catch (com.keevo.shared.domain.exception.DomainException e) {
+                log.debug("[crm] document store inactive: client derived into the oldest active store");
+            }
+        }
+        return storeScope.storeForNewClient(ClientAccess.SYSTEM, null, tenantSchema); // oldest active, or none
+    }
+
     @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY) // joins the issue
     public Optional<UUID> execute(DocumentClientInput input, ClientAccess access, UUID actorId, String tenantSchema) {
         if (input == null || access == null) {
@@ -78,7 +93,7 @@ public class DeriveClientFromDocumentUseCase {
         }
         UUID storeId;
         if (access.owner()) {
-            storeId = storeScope.storeForNewClient(ClientAccess.SYSTEM, null, tenantSchema); // oldest active, or none
+            storeId = ownerStore(input.storeId(), tenantSchema);
         } else {
             storeId = access.assignedStoreId();
             if (storeId == null) {

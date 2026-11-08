@@ -43,7 +43,9 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             + "seller_has_logo, source_sale_id, kind, source_quote_id, "
             // Story 20.5 (V11)
             + "discount_amount, delivery_fee, subtotal, vat_rate_override, vat_exempt, due_date, client_rccm, "
-            + "client_email, client_contact_name, client_website";
+            + "client_email, client_contact_name, client_website, "
+            // Story 20.14 (V16) — written at creation only, never updated
+            + "store_id";
     /** Placeholders of {@link #COLUMNS} in an INSERT. */
     private static final String PLACEHOLDERS = String.join(", ",
             java.util.Collections.nCopies(COLUMNS.split(",").length, "?"));
@@ -422,7 +424,8 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 s != null && s.nameFromDisplayName(), s != null && s.hasLogo(), i.sourceSaleId(), i.kind().name(),
                 i.sourceQuoteId(),
                 i.totals().discount(), i.totals().delivery(), i.totals().subtotal(), i.terms().vatRate(),
-                i.terms().vatExempt(), date(i.terms().dueDate()), c.rccm(), c.email(), c.contactName(), c.website()};
+                i.terms().vatExempt(), date(i.terms().dueDate()), c.rccm(), c.email(), c.contactName(), c.website(),
+                i.storeId()};
     }
 
     private static Date date(java.time.LocalDate day) {
@@ -446,7 +449,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                     i.vatRate(), i.pricesIncludeVat(), i.vatMention(), lines, i.totals(), i.issuedAt(), i.paidAt(),
                     i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdBy(), i.createdAt(),
                     i.updatedAt(), i.delivery(), i.sourceSaleId(), i.supersededAt(), i.kind(), i.convertedInvoiceId(),
-                    i.convertedAt(), i.sourceQuoteId(), i.terms());
+                    i.convertedAt(), i.sourceQuoteId(), i.terms(), i.storeId());
         }
     }
 
@@ -489,7 +492,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
                 rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"), kind,
                 rs.getObject("converted_invoice_id", UUID.class), instant(rs, "converted_at"),
-                rs.getObject("source_quote_id", UUID.class), terms);
+                rs.getObject("source_quote_id", UUID.class), terms, rs.getObject("store_id", UUID.class));
         return new Row(id, invoice);
     }
 
