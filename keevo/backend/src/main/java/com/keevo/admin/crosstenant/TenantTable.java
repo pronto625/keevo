@@ -9,9 +9,12 @@ import java.util.List;
  * catalogue query ({@link CrossTenantSql#liveTenants()} / {@link CrossTenantSql#withPresence}).
  */
 public enum TenantTable {
-    SALES("sales", "status", "occurred_at", "created_at", "total_amount", "employee_id", "store_id", "payment_mode"),
+    SALES("sales", "status", "occurred_at", "created_at", "total_amount", "employee_id", "store_id", "payment_mode",
+            "client_id"),
     /** The invoicing tables at the version the revenue SQL reads (same predicate as {@code ProvisionedRevenueSource}). */
     INVOICING("invoice_items", "product_id"),
+    /** Story 20.14 — the documents carry their store (invoicing V16). */
+    INVOICE_STORE("invoices", "store_id"),
     INVOICES("invoices", "id", "kind", "status", "payment_state", "source_sale_id", "deleted_at", "superseded_at",
             "issue_date", "total_ttc", "created_at"),
     INVOICE_PAYMENTS("invoice_payments", "id", "invoice_id", "amount", "paid_at"),

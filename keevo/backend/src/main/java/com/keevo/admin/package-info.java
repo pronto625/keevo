@@ -4,7 +4,8 @@
     allowedDependencies = {"crm :: api", "expenses :: api", "feedback :: api", "identity :: api", "reporting :: revenue", "shared",
         "subscription :: api"}
 )
-// 20.13: "reporting :: revenue" = the 20.9 revenue SQL, read by admin.platformrevenue only (moves to shared with 20-14);
+// 20.13: "reporting :: revenue" = the 20.9 revenue SQL (RevenueRelations — 20-14 moved only the port to
+// shared.capability.revenue, the SQL stays in reporting), read by admin.platformrevenue only;
 // "expenses :: api" = expense category / payment labels of the cross-account expense list; "crm :: api" = customer
 // writes of the super-admin (decision A1).
 package com.keevo.admin;

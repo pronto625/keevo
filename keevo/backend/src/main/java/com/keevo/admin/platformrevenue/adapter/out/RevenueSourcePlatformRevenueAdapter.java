@@ -21,8 +21,10 @@ import java.util.regex.Pattern;
 /**
  * Story 20.13 — the platform revenue of the super-admin API, read from the 20.9 revenue relations
  * ({@link RevenueRelations}, the SQL written once) over every tenant schema, chunked ({@link CrossTenantSql#query}).
- * This is the only class of {@code admin} that touches reporting: when 20-14 moves the source to
- * {@code shared.capability.revenue}, only its import changes.
+ * This is the only class of {@code admin} that touches reporting. 20-14 moved the port to
+ * {@code shared.capability.revenue}, but the SQL ({@link RevenueRelations}) stays in reporting: a tenant-bound port
+ * cannot hand the relations of other schemas, so this adapter reads the SQL itself (named interface
+ * {@code reporting :: revenue}).
  *
  * <p>The relations are unqualified (they normally run on the tenant search_path); {@link #qualify} prefixes each of
  * their tables with the branch's schema. Branches: tenants holding {@code sales} OR the invoicing tables at the version
@@ -41,7 +43,8 @@ public class RevenueSourcePlatformRevenueAdapter implements PlatformRevenuePort 
 
     /** The tables the revenue relations read (unqualified in {@link RevenueRelations}). */
     static final Set<String> RELATION_TABLES =
-            Set.of("sales", "sale_items", "invoices", "invoice_items", "credit_notes", "credit_note_items");
+            Set.of("sales", "sale_items", "invoices", "invoice_items", "credit_notes", "credit_note_items",
+                    "invoicing_settings");
 
     private static final Pattern TABLE_REFERENCE = Pattern.compile(
             "\\b(FROM|JOIN)\\s+(" + String.join("|", RELATION_TABLES) + ")\\b", Pattern.CASE_INSENSITIVE);
@@ -71,7 +74,7 @@ public class RevenueSourcePlatformRevenueAdapter implements PlatformRevenuePort 
         }
         List<Map.Entry<String, Totals>> rows = crossTenant.query(branches, (tenant, params) -> {
             String documents = qualify(RevenueRelations.documents(tenant.has(TenantTable.SALES),
-                    tenant.has(TenantTable.INVOICING)), tenant.schemaName());
+                    tenant.has(TenantTable.INVOICING), tenant.has(TenantTable.INVOICE_STORE)), tenant.schemaName());
             StringBuilder where = new StringBuilder("TRUE");
             if (from != null) {
                 where.append(" AND ").append(REVENUE_TIME).append(" >= ?");

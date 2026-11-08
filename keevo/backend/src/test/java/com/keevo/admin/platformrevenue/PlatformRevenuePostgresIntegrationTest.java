@@ -72,7 +72,7 @@ class PlatformRevenuePostgresIntegrationTest {
         // Broken: a sales table whose amount is not a number — its branch fails at run time, the tenant is skipped.
         jdbc.execute("CREATE SCHEMA kv_pr13ff");
         jdbc.execute("CREATE TABLE kv_pr13ff.sales (id UUID, status TEXT, occurred_at TIMESTAMPTZ, "
-                + "created_at TIMESTAMPTZ, total_amount TEXT, employee_id UUID, store_id UUID, payment_mode TEXT)");
+                + "created_at TIMESTAMPTZ, total_amount TEXT, employee_id UUID, store_id UUID, payment_mode TEXT, client_id UUID)");
         jdbc.execute("INSERT INTO kv_pr13ff.sales VALUES (gen_random_uuid(), 'COMPLETED', now(), now(), 'abc', "
                 + "gen_random_uuid(), gen_random_uuid(), 'CASH')");
         UUID broken = tenant("Broken", "kv_pr13ff", "ACTIVE");

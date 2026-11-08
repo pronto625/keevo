@@ -30,6 +30,19 @@ class RevenueSourcePlatformRevenueAdapterTest {
             }
             assertThat(references).isEqualTo(invoicing ? 4 : 1); // sales | + invoices, credit_notes JOIN invoices
         }
+        // 20-14 / 20-11: documents with their store, and the taxed relation (bridge invoice + invoicing_settings joins)
+        String withStore = RevenueSourcePlatformRevenueAdapter.qualify(RevenueRelations.documents(true, true, true),
+                "kv_abc123");
+        assertThat(withStore).contains("FROM kv_abc123.invoices i").contains("JOIN kv_abc123.invoices i");
+        String taxed = RevenueSourcePlatformRevenueAdapter.qualify(RevenueRelations.taxedDocuments(true, true, true),
+                "kv_abc123");
+        assertThat(taxed).contains("LEFT JOIN kv_abc123.invoices bi").contains("LEFT JOIN kv_abc123.invoicing_settings st");
+        Matcher t = REFERENCE.matcher(taxed);
+        while (t.find()) {
+            assertThat(t.group(1)).startsWith("kv_abc123.");
+        }
+        assertThat(RevenueSourcePlatformRevenueAdapter.qualify(RevenueRelations.taxedSales(), "kv_abc123"))
+                .contains("FROM kv_abc123.sales s");
         assertThat(RevenueSourcePlatformRevenueAdapter.qualify(RevenueRelations.lines(true, true), "kv_abc123"))
                 .contains("FROM kv_abc123.sale_items si JOIN kv_abc123.sales s")
                 .contains("LEFT JOIN kv_abc123.invoice_items it");

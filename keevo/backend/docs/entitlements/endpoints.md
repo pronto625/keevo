@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 267 — gated: 138, exempt: 129.
+Handlers: 289 — gated: 138, exempt: 151.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -34,6 +34,12 @@ Handlers: 267 — gated: 138, exempt: 129.
 | GET | `/api/v1/admin/catalog/products` | — | — | — | super-admin | AdminCatalogController#listProducts |
 | GET | `/api/v1/admin/catalog/products/export` | — | — | — | super-admin | AdminCatalogController#exportProducts |
 | GET | `/api/v1/admin/catalog/summary` | — | — | — | super-admin | AdminCatalogController#getCatalogSummary |
+| GET | `/api/v1/admin/customers` | — | — | — | super-admin | AdminCrossAccountController#listCustomers |
+| GET | `/api/v1/admin/dashboard/activity` | — | — | — | super-admin | AdminPlatformDashboardController#getActivity |
+| GET | `/api/v1/admin/dashboard/growth` | — | — | — | super-admin | AdminPlatformDashboardController#getGrowth |
+| GET | `/api/v1/admin/dashboard/overview` | — | — | — | super-admin | AdminPlatformDashboardController#getOverview |
+| GET | `/api/v1/admin/dashboard/top-accounts` | — | — | — | super-admin | AdminPlatformDashboardController#getTopAccounts |
+| GET | `/api/v1/admin/expenses` | — | — | — | super-admin | AdminCrossAccountController#listExpenses |
 | GET | `/api/v1/admin/feedback` | — | — | — | super-admin | AdminFeedbackController#list |
 | GET | `/api/v1/admin/feedback/count` | — | — | — | super-admin | AdminFeedbackController#count |
 | POST | `/api/v1/admin/feedback/{id}/handle` | — | — | — | super-admin | AdminFeedbackController#handle |
@@ -60,6 +66,7 @@ Handlers: 267 — gated: 138, exempt: 129.
 | GET | `/api/v1/admin/plan-profiles` | — | — | — | super-admin | AdminPlanProfileController#list |
 | GET | `/api/v1/admin/plan-profiles/{planType}` | — | — | — | super-admin | AdminPlanProfileController#get |
 | PUT | `/api/v1/admin/plan-profiles/{planType}` | — | — | — | super-admin | AdminPlanProfileController#update |
+| GET | `/api/v1/admin/products` | — | — | — | super-admin | AdminCrossAccountController#listProducts |
 | GET | `/api/v1/admin/revenue/churn` | — | — | — | super-admin | AdminRevenueController#getChurn |
 | GET | `/api/v1/admin/revenue/churn/export` | — | — | — | super-admin | AdminRevenueController#exportChurn |
 | GET | `/api/v1/admin/revenue/summary` | — | — | — | super-admin | AdminRevenueController#getSummary |
@@ -72,8 +79,18 @@ Handlers: 267 — gated: 138, exempt: 129.
 | GET | `/api/v1/admin/tenants` | — | — | — | super-admin | AdminTenantController#listTenants |
 | POST | `/api/v1/admin/tenants/{tenantId}/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#apply |
 | POST | `/api/v1/admin/tenants/{tenantId}/cancel-deletion` | — | — | — | super-admin | AdminTenantController#cancelDeletion |
+| POST | `/api/v1/admin/tenants/{tenantId}/customers` | — | — | — | super-admin | AdminTenantWriteController#createCustomer |
+| GET | `/api/v1/admin/tenants/{tenantId}/customers/{customerId}` | — | — | — | super-admin | AdminCrossAccountController#getCustomer |
+| PATCH | `/api/v1/admin/tenants/{tenantId}/customers/{customerId}` | — | — | — | super-admin | AdminTenantWriteController#updateCustomer |
+| PUT | `/api/v1/admin/tenants/{tenantId}/customers/{customerId}/marketing-consent` | — | — | — | super-admin | AdminTenantWriteController#setConsent |
 | GET | `/api/v1/admin/tenants/{tenantId}/detail` | — | — | — | super-admin | AdminTenantController#getTenantDetail |
+| GET | `/api/v1/admin/tenants/{tenantId}/expenses/{expenseId}` | — | — | — | super-admin | AdminCrossAccountController#getExpense |
 | POST | `/api/v1/admin/tenants/{tenantId}/force-delete` | — | — | — | super-admin | AdminTenantController#forceDelete |
+| POST | `/api/v1/admin/tenants/{tenantId}/members` | — | — | — | super-admin | AdminTenantWriteController#createMember |
+| DELETE | `/api/v1/admin/tenants/{tenantId}/members/{userId}` | — | — | — | super-admin | AdminTenantWriteController#remove |
+| PATCH | `/api/v1/admin/tenants/{tenantId}/members/{userId}` | — | — | — | super-admin | AdminTenantWriteController#updateMember |
+| POST | `/api/v1/admin/tenants/{tenantId}/members/{userId}/deactivate` | — | — | — | super-admin | AdminTenantWriteController#deactivate |
+| POST | `/api/v1/admin/tenants/{tenantId}/members/{userId}/reactivate` | — | — | — | super-admin | AdminTenantWriteController#reactivate |
 | GET | `/api/v1/admin/tenants/{tenantId}/modules` | — | — | — | super-admin | ModuleAdminController#tenantModules |
 | GET | `/api/v1/admin/tenants/{tenantId}/modules/history` | — | — | — | super-admin | ModuleAdminController#history |
 | POST | `/api/v1/admin/tenants/{tenantId}/modules/{moduleId}/activate` | — | — | — | super-admin | ModuleAdminController#activate |
@@ -82,8 +99,13 @@ Handlers: 267 — gated: 138, exempt: 129.
 | POST | `/api/v1/admin/tenants/{tenantId}/payments/{paymentId}/void` | — | — | — | super-admin | AdminTenantPlanController#voidPayment |
 | POST | `/api/v1/admin/tenants/{tenantId}/plan/free` | — | — | — | super-admin | AdminTenantPlanController#downgradeToFree |
 | POST | `/api/v1/admin/tenants/{tenantId}/plan/premium` | — | — | — | super-admin | AdminTenantPlanController#activatePremium |
+| GET | `/api/v1/admin/tenants/{tenantId}/products/{productId}` | — | — | — | super-admin | AdminCrossAccountController#getProduct |
 | POST | `/api/v1/admin/tenants/{tenantId}/reactivate` | — | — | — | super-admin | AdminTenantPlanController#reactivate |
 | POST | `/api/v1/admin/tenants/{tenantId}/suspend` | — | — | — | super-admin | AdminTenantPlanController#suspend |
+| GET | `/api/v1/admin/users` | — | — | — | super-admin | AdminUserController#listUsers |
+| GET | `/api/v1/admin/users/stats` | — | — | — | super-admin | AdminUserController#getStats |
+| GET | `/api/v1/admin/users/{userId}` | — | — | — | super-admin | AdminUserController#getUser |
+| GET | `/api/v1/admin/users/{userId}/devices` | — | — | — | super-admin | AdminUserController#listDevices |
 | GET | `/api/v1/app-version/check` | — | — | — | version d'application — public | AppVersionCheckController#check |
 | GET | `/api/v1/audit` | — | — | — | core: journal d'audit | AuditController#getAuditHistory |
 | DELETE | `/api/v1/audit/{id}` | — | — | — | core: journal d'audit | AuditController#delete |
