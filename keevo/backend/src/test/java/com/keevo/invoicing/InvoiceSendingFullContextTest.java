@@ -450,14 +450,19 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
                 + "DROP COLUMN payment_state, DROP COLUMN discount_amount, DROP COLUMN delivery_fee, DROP COLUMN subtotal, "
                 + "DROP COLUMN vat_rate_override, "
                 + "DROP COLUMN vat_exempt, DROP COLUMN due_date, DROP COLUMN client_rccm, DROP COLUMN client_email, "
-                + "DROP COLUMN client_contact_name, DROP COLUMN client_website");
+                + "DROP COLUMN client_contact_name, DROP COLUMN client_website, "
+                // 20.7 V15
+                + "DROP COLUMN invoice_template, DROP COLUMN ticket_width, DROP COLUMN signature_client_path, "
+                + "DROP COLUMN signature_seller_path, DROP COLUMN public_link_version, "
+                + "DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference");
+        jdbc.execute("DROP TABLE " + q + "invoicing_document_preferences");
         jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
         jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_revenue_day"); // 20.9 V14
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_credit_notes_issued_at");
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_sync_keyset");
         jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5', '6', '7', '8', '9', '10', "
-                + "'11', '12', '13', '14')");
+                + "'11', '12', '13', '14', '15')");
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, seller_legal_name, "
                 + "vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, issued_at) VALUES "

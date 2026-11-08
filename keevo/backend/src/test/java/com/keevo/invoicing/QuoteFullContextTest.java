@@ -313,13 +313,14 @@ class QuoteFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("issue / pay / send a quote → 409 INVOICE_INVALID_TRANSITION « Un devis doit être converti en "
-            + "facture »; credit note refused too")
+    @DisplayName("issue / pay a quote → 409 INVOICE_INVALID_TRANSITION « Un devis doit être converti en "
+            + "facture »; credit note refused too; Story 20.7: send goes through (no provider here → 503)")
     void invoiceActionsRefused() throws Exception {
         String id = createQuote().path("id").asText();
-        for (String action : List.of("issue", "pay", "send")) {
-            JsonNode err = error(call(HttpMethod.POST, "/api/v1/invoices/" + id + "/" + action,
-                    "send".equals(action) ? Map.of("phone", "+237690000001") : null), 409,
+        error(call(HttpMethod.POST, "/api/v1/invoices/" + id + "/send", Map.of("phone", "+237690000001")), 503,
+                "WHATSAPP_UNAVAILABLE");
+        for (String action : List.of("issue", "pay")) {
+            JsonNode err = error(call(HttpMethod.POST, "/api/v1/invoices/" + id + "/" + action, null), 409,
                     "INVOICE_INVALID_TRANSITION");
             assertThat(err.path("error").asText()).as(action).isEqualTo("Un devis doit être converti en facture");
         }

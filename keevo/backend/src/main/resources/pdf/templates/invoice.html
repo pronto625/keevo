@@ -51,6 +51,15 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
 .block .label { font-weight: bold; color: #0f766e; }
 .footer { margin-top: 8mm; font-size: 8.5pt; color: #555555; text-align: center; }
 .note { font-size: 8pt; color: #555555; margin-top: 1.5mm; }
+.paylist { margin-top: 3mm; margin-left: 45%; }
+.paylist td { padding: 1.2mm 1.5mm; border-bottom: 0.4pt solid #dddddd; }
+.paylist tr.paid td { color: #166534; }
+.paylist tr.strong td { font-weight: bold; border-top: 0.8pt solid #0f766e; }
+.signatures { margin-top: 8mm; width: 70%; margin-left: 30%; page-break-inside: avoid; }
+.signatures td { width: 50%; text-align: center; vertical-align: bottom; padding: 0 3mm; }
+.sig-box { height: 16mm; border-bottom: 0.6pt solid #999999; }
+img.sig { max-height: 15mm; max-width: 50mm; }
+.sig-label { font-size: 8pt; color: #555555; margin-top: 1mm; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -122,6 +131,10 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
 </table>
 <div class="mention" th:if="${vatMention != null}" th:text="${vatMention}">TVA non applicable</div>
 
+<div class="paylist" th:if="${payments != null and !payments.isEmpty()}"><table>
+  <tr th:each="p : ${payments}" th:class="${p.tone()}"><td th:text="${p.label()}">Échéance</td><td class="num" th:text="${p.value()}">0 XAF</td></tr>
+</table></div>
+
 <div th:if="${stamp != null}" th:class="${stampClass}" th:text="${stamp}">PAYÉE</div>
 <div class="stamp-detail" th:if="${stampDetail != null}" th:text="${stampDetail}">Motif</div>
 <div class="stamp-detail" th:if="${paymentMethod != null}" th:text="${paymentMethod}">Mode de paiement</div>
@@ -129,6 +142,12 @@ img.logo { max-height: 22mm; max-width: 45mm; margin-bottom: 2mm; }
 <div class="block" th:if="${paymentDetails != null}">
   <span class="label">Règlement : </span><span th:text="${paymentDetails}">Coordonnées de paiement</span>
 </div>
+<table class="signatures" th:if="${hasSignatures != null and hasSignatures}">
+  <tr>
+    <td><div class="sig-box"><img class="sig" th:if="${clientSignature != null}" th:src="${clientSignature}" alt=""/></div><div class="sig-label">Signature client</div></td>
+    <td><div class="sig-box"><img class="sig" th:if="${sellerSignature != null}" th:src="${sellerSignature}" alt=""/></div><div class="sig-label">Signature vendeur</div></td>
+  </tr>
+</table>
 <div class="footer" th:if="${footer != null}" th:text="${footer}">Merci</div>
 
 </body>

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Story 20.7 — Bref « Minimal » A4 layout (minimal-template.ts): monospace, black rule under the shop header, number
+  and status, dates, « De » / « Pour » parties, reference column, totals box, notes, two signature lines.
+  Flexbox rewritten as tables (PDF engine). Data only through th:text (escaped).
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${docLabel + ' ' + number}">Facture</title>
+<style>
+@page { size: A4 portrait; margin: 14mm; }
+body { font-family: 'Keevo Mono'; font-size: 12px; color: #000000; line-height: 1.5; margin: 0; }
+table { border-collapse: collapse; }
+.header { border-bottom: 2px solid #000000; padding-bottom: 16px; margin-bottom: 16px; }
+.shop-logo { height: 42px; max-width: 126px; border: 1px solid #000000; }
+.shop-name { font-size: 20px; font-weight: bold; letter-spacing: -0.5px; margin-bottom: 3px; }
+.shop-details { color: #666666; font-size: 11px; }
+.meta { width: 100%; margin-top: 12px; }
+.meta td { padding: 0; vertical-align: bottom; }
+.invoice-id { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; color: #999999; }
+.invoice-number { font-size: 16px; font-weight: bold; }
+.status { padding: 3px 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; border: 1px solid #999999; color: #666666; white-space: nowrap; }
+.status-paid { border-color: #000000; background-color: #000000; color: #ffffff; }
+.status-overdue, .status-cancelled { border-color: #ee0000; color: #ee0000; }
+.status-quote { border-color: #1e40af; color: #1e40af; }
+.date-row { margin-bottom: 16px; font-size: 11px; }
+.date-label { color: #999999; padding-right: 6px; }
+.parties { width: 100%; margin-bottom: 20px; }
+.parties td { width: 50%; vertical-align: top; padding: 0 20px 0 0; }
+.party-label { font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #999999; margin-bottom: 5px; }
+.party-name { font-weight: bold; margin-bottom: 3px; }
+.party-details { color: #666666; font-size: 11px; }
+.items { width: 100%; margin-bottom: 16px; }
+.items th { text-align: left; padding: 8px 0; border-bottom: 1px solid #000000; font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #666666; }
+.items th.r { text-align: right; }
+.items td { padding: 9px 0; border-bottom: 1px solid #eeeeee; vertical-align: top; }
+.items tr { page-break-inside: avoid; }
+.ref { font-size: 11px; color: #666666; padding-right: 8px !important; }
+.r { text-align: right; white-space: nowrap; }
+.qty { color: #666666; }
+.tot { font-weight: bold; }
+.totals-box { width: 260px; margin: 0 0 20px auto; }
+.totals-box td { padding: 5px 0; }
+.totals-box td.l { color: #666666; }
+.totals-box td.v { text-align: right; white-space: nowrap; }
+.totals-box tr.grand td { border-top: 2px solid #000000; padding-top: 10px; font-size: 16px; font-weight: bold; color: #000000; }
+.pay-sep td { border-top: 1px dashed #d1d5db; height: 4px; padding: 0; }
+.tone-paid td { color: #166534 !important; }
+.tone-strong td { font-weight: bold; }
+.tone-void td { color: #991b1b !important; }
+.mention { font-size: 10px; font-weight: bold; text-align: right; }
+.notes { padding: 12px 14px; background-color: #f9f9f9; margin-bottom: 20px; font-size: 11px; }
+.notes-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #999999; margin-bottom: 5px; }
+.signatures { width: 100%; margin-top: 28px; page-break-inside: avoid; }
+.signatures td { width: 50%; text-align: center; padding: 0 20px; vertical-align: bottom; }
+.signature-img { max-width: 90px; max-height: 34px; }
+.signature-line { border-top: 1px solid #000000; padding-top: 6px; margin-top: 8px; }
+.signature-label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #666666; }
+.footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #eeeeee; text-align: center; font-size: 10px; color: #999999; }
+</style>
+</head>
+<body>
+<div class="header">
+  <table><tr>
+    <td th:if="${logo != null}" style="padding-right: 12px; vertical-align: middle;"><img class="shop-logo" th:src="${logo}" alt=""/></td>
+    <td style="vertical-align: middle;">
+      <div class="shop-name" th:text="${shopName}">Boutique</div>
+      <div class="shop-details"
+           th:text="${(shopAddress != null ? shopAddress : '') + (shopPhone != null ? ' • ' + shopPhone : '') + (shopNiu != null ? ' • NIU: ' + shopNiu : '') + (shopRccm != null ? ' • RCCM: ' + shopRccm : '')}">Détails</div>
+    </td>
+  </tr></table>
+  <table class="meta"><tr>
+    <td>
+      <div class="invoice-id" th:text="${docLabel}">Facture</div>
+      <div class="invoice-number" th:text="${number}">FAC</div>
+    </td>
+    <td style="text-align: right;"><span th:class="${'status status-' + statusClass}" th:text="${statusLabel}">Payée</span></td>
+  </tr></table>
+</div>
+
+<div class="date-row">
+  <span class="date-label">Date</span><span th:text="${date}">Date</span>
+  <th:block th:if="${dueDate != null}">     <span class="date-label">Échéance :</span><span th:text="${dueDate}">Échéance</span></th:block>
+</div>
+
+<table class="parties"><tr>
+  <td>
+    <div class="party-label">De</div>
+    <div class="party-name" th:text="${shopName}">Boutique</div>
+    <div class="party-details" th:if="${shopAddress != null}" th:text="${shopAddress}">Adresse</div>
+    <div class="party-details" th:if="${shopPhone != null}" th:text="${shopPhone}">Tél.</div>
+  </td>
+  <td>
+    <div class="party-label">Pour</div>
+    <div class="party-name" th:text="${clientName}">Client</div>
+    <div class="party-details" th:if="${clientPhone != null}" th:text="${clientPhone}">Tél.</div>
+    <div class="party-details" th:if="${clientEmail != null}" th:text="${clientEmail}">Email</div>
+    <div class="party-details" th:if="${clientNiu != null}" th:text="${'NIU: ' + clientNiu}">NIU</div>
+    <div class="party-details" th:if="${clientRccm != null}" th:text="${'RCCM: ' + clientRccm}">RCCM</div>
+  </td>
+</tr></table>
+
+<table class="items">
+  <thead><tr><th>Réf.</th><th>Article</th><th class="r">Qté</th><th class="r">Prix</th><th class="r">Total</th></tr></thead>
+  <tbody>
+    <tr th:each="item : ${items}">
+      <td class="ref" th:text="${item.reference() != null ? item.reference() : '—'}">REF</td>
+      <td th:text="${item.name()}">Article</td>
+      <td class="r qty" th:text="${item.quantity()}">1</td>
+      <td class="r" th:text="${item.unitPrice()}">0</td>
+      <td class="r tot" th:text="${item.total()}">0</td>
+    </tr>
+  </tbody>
+</table>
+
+<table class="totals-box">
+  <tr th:each="row : ${totalRows}"><td class="l" th:text="${row.label()}">Sous-total</td><td class="v" th:text="${row.value()}">0</td></tr>
+  <tr class="grand"><td class="l">Total</td><td class="v" th:text="${total}">0</td></tr>
+  <tr class="pay-sep" th:if="${!payments.isEmpty()}"><td colspan="2"></td></tr>
+  <tr th:each="row : ${payments}" th:class="${'tone-' + row.tone()}"><td class="l" th:text="${row.label()}">Payé</td><td class="v" th:text="${row.value()}">0</td></tr>
+  <tr th:if="${vatMention != null}"><td colspan="2" class="mention" th:text="${vatMention}">TVA non applicable</td></tr>
+</table>
+
+<div class="notes" th:if="${notes != null or paymentDetails != null}">
+  <div class="notes-label">Notes</div>
+  <div th:if="${notes != null}" th:text="${notes}">Notes</div>
+  <div th:if="${paymentDetails != null}" th:text="${paymentDetails}">Coordonnées de paiement</div>
+</div>
+
+<table class="signatures"><tr>
+  <td><img class="signature-img" th:if="${clientSignature != null}" th:src="${clientSignature}" alt=""/>
+    <div class="signature-line"><div class="signature-label">Client</div></div></td>
+  <td><img class="signature-img" th:if="${sellerSignature != null}" th:src="${sellerSignature}" alt=""/>
+    <div class="signature-line"><div class="signature-label">Vendeur</div></div></td>
+</tr></table>
+<div class="footer">Merci</div>
+</body>
+</html>

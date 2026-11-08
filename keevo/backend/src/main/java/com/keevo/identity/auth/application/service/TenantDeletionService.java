@@ -298,6 +298,8 @@ public class TenantDeletionService {
         //    schema name (feedback, user_sync_state) or tenant uuid (the others).
         jdbcTemplate.update("DELETE FROM public.feedback WHERE tenant_id = ?", (Object) schemaName);
         jdbcTemplate.update("DELETE FROM public.user_sync_state WHERE tenant_id = ?", (Object) schemaName);
+        // Story 20.7 — the old Bref links of the tenant's imported invoices stop resolving
+        jdbcTemplate.update("DELETE FROM public.invoice_legacy_links WHERE tenant_schema = ?", (Object) schemaName);
         jdbcTemplate.update("DELETE FROM public.user_daily_activity WHERE tenant_id = ?", (Object) tenantId);
         jdbcTemplate.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", (Object) tenantId);
         jdbcTemplate.update("DELETE FROM public.plan_expiry_reminders WHERE tenant_id = ?", (Object) tenantId);

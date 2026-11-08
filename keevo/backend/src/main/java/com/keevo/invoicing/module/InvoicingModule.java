@@ -19,6 +19,9 @@ import org.springframework.stereotype.Component;
  * <p>Permissions, declared by the manifest ({@code rolePermissions}, Story 19.5): {@code OWNER} holds all
  * four; {@code MANAGER} and {@code EMPLOYEE} may view, create and issue / record payment; {@code VIEWER} may only view;
  * cancelling and the seller settings ({@code INVOICE_MANAGE}) are owner decisions.
+ *
+ * <p>Story 20.7: one table outside the tenant schema — {@code public.invoice_legacy_links} (public V58), the
+ * cross-tenant index of the old Bref public links of imported invoices (one primary-key read per opened link).
  */
 @Component
 public class InvoicingModule implements KeevoModule {

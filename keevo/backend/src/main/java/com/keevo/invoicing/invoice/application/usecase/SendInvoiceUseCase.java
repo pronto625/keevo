@@ -1,10 +1,10 @@
 package com.keevo.invoicing.invoice.application.usecase;
 
-import com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner;
 import com.keevo.invoicing.invoice.application.service.InvoicePhones;
 import com.keevo.invoicing.invoice.application.service.InvoiceSendRateLimiter;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
+import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
 import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.exception.DomainException;
@@ -29,30 +29,36 @@ import java.util.UUID;
  * configured ({@code WHATSAPP_UNAVAILABLE} → 503); at most 30 sendings per tenant per hour (429). The message leaves
  * <b>before</b> anything is written: a provider failure (502) records nothing and publishes nothing. Then, in one
  * transaction with the row locked, the sending is recorded and {@link InvoiceSentEvent} published (audit).
+ *
+ * <p>Story 20.7: a quote waiting for its validation is sent too (« voici votre devis DV-… »); the link is signed by
+ * {@link InvoicePublicLinkUseCase} (the document's current link version, the tenant's lifetime — 30 days by default).
  */
 @Service
 public class SendInvoiceUseCase {
 
     /** Path of the public invoice link (JWT-free, see {@code SecurityConfig.PUBLIC_PATHS}). */
-    public static final String SHARED_PATH = "/api/v1/invoices/shared?token=";
+    public static final String SHARED_PATH = InvoicePublicLinkUseCase.SHARED_PATH;
 
     private static final Logger log = LoggerFactory.getLogger(SendInvoiceUseCase.class);
 
     private final InvoiceRepository invoices;
     private final WhatsAppSender whatsApp;
-    private final InvoiceLinkSigner signer;
+    private final InvoicePublicLinkUseCase links;
     private final InvoiceSendRateLimiter rateLimiter;
     private final CompanyIdentity companyIdentity;
+    private final InvoicingSettingsRepository settings;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
     private final Clock clock;
 
-    public SendInvoiceUseCase(InvoiceRepository invoices, WhatsAppSender whatsApp, InvoiceLinkSigner signer,
+    public SendInvoiceUseCase(InvoiceRepository invoices, WhatsAppSender whatsApp, InvoicePublicLinkUseCase links,
                               InvoiceSendRateLimiter rateLimiter, CompanyIdentity companyIdentity,
-                              ApplicationEventPublisher events, TransactionTemplate tx, Clock clock) {
+                              ApplicationEventPublisher events, TransactionTemplate tx, Clock clock,
+                              InvoicingSettingsRepository settings) {
+        this.settings = settings;
         this.invoices = invoices;
         this.whatsApp = whatsApp;
-        this.signer = signer;
+        this.links = links;
         this.rateLimiter = rateLimiter;
         this.companyIdentity = companyIdentity;
         this.events = events;
@@ -75,8 +81,7 @@ public class SendInvoiceUseCase {
         rateLimiter.acquire(tenantSchema);
 
         Instant now = clock.instant();
-        String token = signer.sign(tenantSchema, invoice.id(), now.plus(InvoiceLinkSigner.VALIDITY));
-        String link = stripTrailingSlash(baseUrl) + SHARED_PATH + token;
+        String link = links.signedLink(invoice.id(), baseUrl, tenantSchema).url();
         String message = message(invoice, sellerName(invoice, tenantSchema), link);
         try {
             whatsApp.sendReport(to, message);
@@ -85,7 +90,7 @@ public class SendInvoiceUseCase {
             throw e;
         } catch (RuntimeException e) {
             rateLimiter.release(tenantSchema);
-            log.warn("INVOICE_SEND_FAILED number={} error={}", invoice.number(), e.getClass().getSimpleName());
+            log.warn("INVOICE_SEND_FAILED number={} error={}", invoice.documentReference(), e.getClass().getSimpleName());
             throw new DomainException(ErrorCode.WHATSAPP_DELIVERY_FAILED, e);
         }
 
@@ -94,27 +99,40 @@ public class SendInvoiceUseCase {
             Invoice locked = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
             Invoice recorded = locked.recordSending(to, now);
             invoices.markSent(recorded);
-            events.publishEvent(new InvoiceSentEvent(recorded.id(), recorded.number(), recorded.client().name(),
+            events.publishEvent(new InvoiceSentEvent(recorded.id(), recorded.documentReference(),
+                    recorded.client().name(),
                     recorded.totals().totalTtc(), InvoicePhones.mask(to), actorId, tenantSchema, now));
             return recorded;
         });
-        log.info("INVOICE_SENT number={} tenant={}", invoice.number(), tenantSchema);
+        log.info("INVOICE_SENT number={} tenant={}", invoice.documentReference(), tenantSchema);
         return sent;
     }
 
-    /** The seller name printed on the PDF (snapshot frozen at issue), else the company display name. */
+    /**
+     * The seller name printed on the PDF: the snapshot frozen at issue; Story 20.7 — for a quote (no snapshot) the
+     * current legal name of the settings, as on its PDF; else the company display name.
+     */
     private String sellerName(Invoice invoice, String tenantSchema) {
         if (invoice.seller() != null && invoice.seller().legalName() != null
                 && !invoice.seller().legalName().isBlank()) {
             return invoice.seller().legalName();
         }
+        if (invoice.seller() == null) {
+            String legal = settings.find().map(s -> s.legalName()).orElse(null);
+            if (legal != null && !legal.isBlank()) {
+                return legal;
+            }
+        }
         return companyIdentity.displayName(tenantSchema);
     }
 
-    /** « Bonjour Awa, voici votre facture FAC-2026-000001 de Tech Centre d'un montant de 28 850 XAF : https://… ». */
+    /**
+     * « Bonjour Awa, voici votre facture FAC-2026-000001 de Tech Centre d'un montant de 28 850 XAF : https://… »;
+     * Story 20.7: « … voici votre devis DV-1A2B3C4D de … » for a quote.
+     */
     static String message(Invoice invoice, String displayName, String link) {
-        return "Bonjour " + invoice.client().name() + ", voici votre facture " + invoice.number() + " de "
-                + displayName + " d'un montant de " + amount(invoice.totals().totalTtc()) + " XAF : " + link;
+        return "Bonjour " + invoice.client().name() + ", voici votre " + (invoice.isQuote() ? "devis " : "facture ")
+                + invoice.documentReference() + " de " + displayName + " d'un montant de " + amount(invoice.totals().totalTtc()) + " XAF : " + link;
     }
 
     /** {@code 28850} → {@code 28 850} (plain spaces). */
@@ -129,8 +147,4 @@ public class SendInvoiceUseCase {
         return value < 0 ? "-" + sb : sb.toString();
     }
 
-    private static String stripTrailingSlash(String base) {
-        if (base == null) return "";
-        return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
-    }
 }

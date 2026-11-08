@@ -28,11 +28,15 @@ import java.util.UUID;
  * <p>Secret: {@code keevo.invoicing.link-secret}, defaulting to {@code keevo.export.link-secret}; at least 32
  * characters (shorter fails the start); both blank ⇒ random per boot (links die on restart) + WARN — a real secret
  * is a go-live requirement.
+ *
+ * <p>Story 20.7 — the payload gains the invoice's link version ({@code tenantSchema|invoiceId|expEpochSec|version});
+ * a token of the 14.2 shape (3 parts) reads as version 0, so the links already sent keep opening until the first
+ * rotation. The lifetime is chosen by the caller (tenant preference: 30 days by default, 90 for an imported tenant).
  */
 @Component
 public class InvoiceLinkSigner {
 
-    /** How long a sent link opens the invoice. */
+    /** How long a sent link opens the invoice when the tenant chose nothing (Story 14.2). */
     public static final Duration VALIDITY = Duration.ofDays(30);
     static final int MIN_SECRET_LENGTH = 32;
 
@@ -64,12 +68,31 @@ public class InvoiceLinkSigner {
         }
     }
 
-    /** Verified token content (expiry not checked: the caller answers 410). */
-    public record Claims(String tenantSchema, UUID invoiceId, Instant expiresAt) {
+    /**
+     * Verified token content (expiry and version not checked: the caller answers 410 / 404). {@code version} = 0 for a
+     * token of the 14.2 shape.
+     */
+    public record Claims(String tenantSchema, UUID invoiceId, Instant expiresAt, int version) {
+
+        public Claims(String tenantSchema, UUID invoiceId, Instant expiresAt) {
+            this(tenantSchema, invoiceId, expiresAt, 0);
+        }
     }
 
+    /** A token of link version 0 (the 14.2 shape). */
     public String sign(String tenantSchema, UUID invoiceId, Instant expiresAt) {
         String raw = TenantSchema.validate(tenantSchema) + "|" + invoiceId + "|" + expiresAt.getEpochSecond();
+        String payload = b64(raw.getBytes(StandardCharsets.UTF_8));
+        return payload + "." + b64(mac(payload));
+    }
+
+    /** Story 20.7 — a token bound to the invoice's current link version (version 0 → the 14.2 shape). */
+    public String sign(String tenantSchema, UUID invoiceId, Instant expiresAt, int version) {
+        if (version <= 0) {
+            return sign(tenantSchema, invoiceId, expiresAt);
+        }
+        String raw = TenantSchema.validate(tenantSchema) + "|" + invoiceId + "|" + expiresAt.getEpochSecond() + "|"
+                + version;
         String payload = b64(raw.getBytes(StandardCharsets.UTF_8));
         return payload + "." + b64(mac(payload));
     }
@@ -90,8 +113,11 @@ public class InvoiceLinkSigner {
         try {
             String raw = new String(Base64.getUrlDecoder().decode(payload), StandardCharsets.UTF_8);
             String[] parts = raw.split("\\|", -1);
-            if (parts.length != 3 || !TenantSchema.isValid(parts[0])) throw invalid();
-            return new Claims(parts[0], UUID.fromString(parts[1]), Instant.ofEpochSecond(Long.parseLong(parts[2])));
+            if ((parts.length != 3 && parts.length != 4) || !TenantSchema.isValid(parts[0])) throw invalid();
+            int version = parts.length == 4 ? Integer.parseInt(parts[3]) : 0;
+            if (version < 0) throw invalid();
+            return new Claims(parts[0], UUID.fromString(parts[1]), Instant.ofEpochSecond(Long.parseLong(parts[2])),
+                    version);
         } catch (IllegalArgumentException e) {
             throw invalid();
         }

@@ -50,8 +50,8 @@ class InvoicingMigrationPostgresIntegrationTest {
     private static final String B = "kv_invb02";
     private static final Map<String, UUID> IDS = Map.of(A, UUID.randomUUID(), B, UUID.randomUUID());
     private static final List<String> TABLES = List.of("credit_note_counters", "credit_note_items",
-            "credit_notes", "invoice_counters", "invoice_items", "invoice_payments", "invoices", "invoicing_settings",
-            "sale_invoice_states");
+            "credit_notes", "invoice_counters", "invoice_items", "invoice_payments", "invoices",
+            "invoicing_document_preferences", "invoicing_settings", "sale_invoice_states");
 
     private static DataSource dataSource;
     private static JdbcTemplate jdbc;
@@ -111,24 +111,35 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "AND table_name = ANY (?) ORDER BY 1", String.class, schema, TABLES.toArray(new String[0]));
     }
 
+    /** Number of invoicing migration scripts on the classpath. */
+    private static int invoicingScripts() {
+        try {
+            return new org.springframework.core.io.support.PathMatchingResourcePatternResolver()
+                    .getResources("classpath:db/modules/invoicing/V*__*.sql").length;
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
+    }
+
     private static int rows(String schema) {
         return jdbc.queryForObject("SELECT COUNT(*) FROM public.tenant_modules WHERE tenant_id = ? "
                 + "AND module_id = 'invoicing'", Integer.class, IDS.get(schema));
     }
 
     @Test
-    @DisplayName("trial tenant without row: tables + history V1..V14 (20.6, 20.9), no tenant_modules row; re-provision is a no-op")
+    @DisplayName("trial tenant without row: tables + history V1..V15 (20.7), no tenant_modules row; re-provision is a no-op")
     void trialTenantNoRow() {
         assertThat(tables(A)).isEmpty();
         assertThat(migrations.currentVersion(A, "invoicing")).isNull();
-        assertThat(migrations.latestVersion("invoicing")).isEqualTo("14");
+        assertThat(migrations.latestVersion("invoicing")).isEqualTo("15");
 
         ProvisioningResult result = provisioner.provision(A, "invoicing");
 
-        assertThat(result.migrationsApplied()).isEqualTo(14);
-        assertThat(result.toVersion()).isEqualTo("14");
+        // V14 = 20-9 (revenue indexes), V15 = 20-7: every script on the classpath is applied
+        assertThat(result.migrationsApplied()).isEqualTo(invoicingScripts());
+        assertThat(result.toVersion()).isEqualTo("15");
         assertThat(tables(A)).containsExactlyElementsOf(TABLES);
-        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("14");
+        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("15");
         // Story 15.5b — the keyset index of the invoices sync pull, as SyncKeysetIndexJob expects it
         assertThat(jdbc.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname = ? AND indexname = ?",
                 String.class, A, "idx_invoices_sync_keyset"))
@@ -147,7 +158,7 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM')", IDS.get(A));
         provisioner.provision(A, "invoicing");
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("14");
+                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("15");
     }
 
     @Test

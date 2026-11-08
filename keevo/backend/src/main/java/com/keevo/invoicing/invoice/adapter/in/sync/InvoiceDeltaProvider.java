@@ -91,11 +91,13 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
         // Story 20.4 — payments and states of the page: one batched query
         Map<java.util.UUID, PaymentStateCalculator.Collection> collections =
                 live.isEmpty() ? Map.of() : queries.collections(live, credits);
+        // Story 20.7 — layouts, signatures, Bref references of the page: one batched query
+        var presentations = queries.presentations(live);
         List<Map<String, Object>> rows = page.stream().map(d -> d.deleted() ? tombstone(d.invoice())
                 : objectMapper.convertValue(InvoiceResponseDto.fromDomain(d.invoice(), current,
                         credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).notes(),
                         credits.getOrDefault(d.invoice().id(), InvoiceQueryUseCase.Credits.NONE).fullyCredited(),
-                        collections.get(d.invoice().id())),
+                        collections.get(d.invoice().id()), presentations.get(d.invoice().id())),
                 ROW)).toList();
         Invoice last = page.get(page.size() - 1).invoice();
         return new Page(rows, more ? new Position(last.updatedAt(), last.id().toString()) : null);

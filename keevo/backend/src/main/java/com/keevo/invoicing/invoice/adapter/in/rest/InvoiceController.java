@@ -170,9 +170,10 @@ public class InvoiceController {
         InvoicingSettings current = settings.current();
         var credits = queries.credits(result.items());
         var collections = queries.collections(result.items(), credits); // one batched query for the page
+        var presentations = queries.presentations(result.items()); // Story 20.7 — one batched query
         List<InvoiceResponseDto> items = result.items().stream()
                 .map(i -> dto(i, current, credits.getOrDefault(i.id(), InvoiceQueryUseCase.Credits.NONE),
-                        collections.get(i.id())))
+                        collections.get(i.id()), presentations.get(i.id())))
                 .toList();
         int totalPages = (int) ((result.totalElements() + size - 1) / size);
         return ResponseEntity.ok(ApiResponseWrapper.paginated(items, page, size, result.totalElements(), totalPages));
@@ -312,12 +313,40 @@ public class InvoiceController {
                 .body(ApiResponseWrapper.ok(dto(conversion.invoice())));
     }
 
-    /** GET /api/v1/invoices/{id}/pdf — Story 14.2: the invoice as an A4 PDF, rendered on demand. */
+    /**
+     * GET /api/v1/invoices/{id}/pdf?template=&ticketWidth= — Story 14.2: the invoice as a PDF, rendered on demand.
+     * Story 20.7: in the document's layout (else the tenant's default, else the Keevo layout); {@code template} (one of
+     * the 8 layouts, enum name or Bref code) and {@code ticketWidth} ({@code 58} | {@code 80} | {@code A4}) render
+     * another layout without saving it (preview); unknown → 400.
+     */
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}/pdf")
-    public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
-        return pdfResponse(documents.pdf(id, TenantContext.getCurrentTenant()));
+    public ResponseEntity<byte[]> pdf(@PathVariable UUID id,
+                                      @RequestParam(required = false) String template,
+                                      @RequestParam(required = false) String ticketWidth) {
+        return pdfResponse(documents.pdf(id, TenantContext.getCurrentTenant(), parseTemplate(template),
+                parseTicketWidth(ticketWidth)));
+    }
+
+    /** Story 20.7 — blank → {@code null}; unknown → 400 French. */
+    static com.keevo.invoicing.invoice.domain.model.InvoiceTemplate parseTemplate(String value) {
+        try {
+            return com.keevo.invoicing.invoice.domain.model.InvoiceTemplate.parse(value).orElse(null);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestParameterException("template", "unknown invoice template",
+                    "Modèle inconnu : choisissez Classique, Moderne, Minimal, Reçu ou l'un des 4 tickets");
+        }
+    }
+
+    /** Story 20.7 — blank → {@code null}; unknown → 400 French. */
+    static com.keevo.invoicing.invoice.domain.model.TicketWidth parseTicketWidth(String value) {
+        try {
+            return com.keevo.invoicing.invoice.domain.model.TicketWidth.parse(value).orElse(null);
+        } catch (IllegalArgumentException e) {
+            throw new InvalidRequestParameterException("ticketWidth", "unknown ticket width",
+                    "Largeur de ticket inconnue : 58, 80 ou A4");
+        }
     }
 
     /**
@@ -351,13 +380,16 @@ public class InvoiceController {
         Map<UUID, InvoiceQueryUseCase.Credits> credits = draft ? Map.of() : queries.credits(List.of(invoice));
         return dto(invoice, draft ? settings.current() : null,
                 credits.getOrDefault(invoice.id(), InvoiceQueryUseCase.Credits.NONE),
-                queries.collections(List.of(invoice), credits).get(invoice.id()));
+                queries.collections(List.of(invoice), credits).get(invoice.id()),
+                queries.presentations(List.of(invoice)).get(invoice.id()));
     }
 
     private static InvoiceResponseDto dto(Invoice invoice, InvoicingSettings current,
                                           InvoiceQueryUseCase.Credits credits,
-                                          PaymentStateCalculator.Collection collection) {
-        return InvoiceResponseDto.fromDomain(invoice, current, credits.notes(), credits.fullyCredited(), collection);
+                                          PaymentStateCalculator.Collection collection,
+                                          com.keevo.invoicing.invoice.domain.model.InvoicePresentation presentation) {
+        return InvoiceResponseDto.fromDomain(invoice, current, credits.notes(), credits.fullyCredited(), collection,
+                presentation);
     }
 
     /** Story 20.4 — {@code null}: not filtered; unknown → 400. */

@@ -1,6 +1,7 @@
 package com.keevo.shared.infrastructure.pdf;
 
 import com.openhtmltopdf.outputdevice.helper.BaseRendererBuilder.FontStyle;
+import com.openhtmltopdf.pdfboxout.PdfBoxRenderer;
 import com.openhtmltopdf.pdfboxout.PdfRendererBuilder;
 import org.springframework.stereotype.Component;
 import org.thymeleaf.TemplateEngine;
@@ -31,12 +32,18 @@ import java.util.Map;
 public class PdfDocumentFactory {
 
     public static final String FONT_FAMILY = "Keevo Sans";
+    /** Story 20.7 — monospace family of the Bref ticket layouts (Liberation Mono, SIL OFL 1.1). */
+    public static final String MONO_FONT_FAMILY = "Keevo Mono";
+    /** Page height of the measuring pass of {@link #renderFitted} (long enough for any ticket). */
+    static final int MEASURE_HEIGHT_MM = 3000;
     private static final String TEMPLATES = "pdf/templates/";
     private static final String FONTS = "pdf/fonts/";
 
     private final TemplateEngine engine;
     private final byte[] regularFont;
     private final byte[] boldFont;
+    private final byte[] monoFont;
+    private final byte[] monoBoldFont;
 
     public PdfDocumentFactory() {
         ClassLoaderTemplateResolver resolver = new ClassLoaderTemplateResolver(PdfDocumentFactory.class.getClassLoader());
@@ -49,6 +56,8 @@ public class PdfDocumentFactory {
         this.engine.setTemplateResolver(resolver);
         this.regularFont = load(FONTS + "LiberationSans-Regular.ttf");
         this.boldFont = load(FONTS + "LiberationSans-Bold.ttf");
+        this.monoFont = load(FONTS + "LiberationMono-Regular.ttf");
+        this.monoBoldFont = load(FONTS + "LiberationMono-Bold.ttf");
     }
 
     /** XHTML of {@code template} filled with {@code variables}. */
@@ -60,15 +69,42 @@ public class PdfDocumentFactory {
 
     /** Render {@code template} as a PDF into {@code out} (left open). */
     public void render(String template, Map<String, Object> variables, OutputStream out) throws IOException {
-        String xhtml = html(template, variables);
+        PdfRendererBuilder builder = builder(html(template, variables));
+        builder.toStream(out);
+        builder.run();
+    }
+
+    private PdfRendererBuilder builder(String xhtml) {
         PdfRendererBuilder builder = new PdfRendererBuilder();
         builder.useFastMode();
         builder.useFont(() -> new ByteArrayInputStream(regularFont), FONT_FAMILY, 400, FontStyle.NORMAL, true);
         builder.useFont(() -> new ByteArrayInputStream(boldFont), FONT_FAMILY, 700, FontStyle.NORMAL, true);
+        builder.useFont(() -> new ByteArrayInputStream(monoFont), MONO_FONT_FAMILY, 400, FontStyle.NORMAL, true);
+        builder.useFont(() -> new ByteArrayInputStream(monoBoldFont), MONO_FONT_FAMILY, 700, FontStyle.NORMAL, true);
         builder.withProducer("Keevo");
         builder.withHtmlContent(xhtml, null);
-        builder.toStream(out);
-        builder.run();
+        return builder;
+    }
+
+    /**
+     * Story 20.7 — a single page as tall as its content (thermal ticket rolls have no fixed page height): the template
+     * reads its page height in millimetres from {@code heightVariable}; a first layout on a {@value #MEASURE_HEIGHT_MM}
+     * mm page measures the content (no PDF written), then the document is rendered on a page of that height (at least
+     * {@code minHeightMm}). Cost: two layouts of a small document.
+     */
+    public byte[] renderFitted(String template, Map<String, Object> variables, String heightVariable,
+                               int minHeightMm) {
+        Map<String, Object> measuring = new java.util.HashMap<>(variables);
+        measuring.put(heightVariable, MEASURE_HEIGHT_MM);
+        double contentMm;
+        try (PdfBoxRenderer renderer = builder(html(template, measuring)).buildPdfRenderer()) {
+            renderer.layout();
+            float points = renderer.getRootBox().getHeight() / renderer.getDotsPerPoint();
+            contentMm = points * 25.4 / 72.0;
+        }
+        Map<String, Object> fitted = new java.util.HashMap<>(variables);
+        fitted.put(heightVariable, Math.max(minHeightMm, (int) Math.ceil(contentMm) + 1));
+        return render(template, fitted);
     }
 
     /** Render {@code template} as a PDF in memory (small documents: an invoice). */

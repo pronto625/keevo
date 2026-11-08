@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Story 20.7 — Bref « Moderne » A4 layout (modern-template.ts): dark frame, dark side panel (dates, client) under the
+  logo, large title, number / status card, black-headed table, signatures, notes and shop contacts at the bottom.
+  Flexbox rewritten as tables (PDF engine). Data only through th:text (escaped).
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${docLabel + ' ' + number}">Facture</title>
+<style>
+@page { size: A4 portrait; margin: 26px; background-color: #2d2d2d; }
+body { font-family: 'Keevo Sans'; font-size: 11px; color: #3f3f46; margin: 0; background-color: #efefef; }
+table { border-collapse: collapse; }
+.page { background-color: #efefef; padding: 0 30px 26px 30px; min-height: 270mm; }
+.top { width: 100%; margin-bottom: 34px; }
+.top td { vertical-align: top; padding: 0; }
+.top td.side-wrap { width: 210px; padding-top: 70px; }
+.side { background-color: #2f2f2f; color: #ffffff; padding: 0 28px 28px 28px; }
+.side-logo { width: 104px; height: 104px; background-color: #ffffff; margin: -44px 0 26px 24px; text-align: center; }
+.side-logo img { max-width: 92px; max-height: 92px; margin-top: 6px; }
+.side-logo .initial { font-size: 44px; font-weight: bold; color: #2f2f2f; line-height: 104px; }
+.side-label { font-size: 10.5px; font-weight: bold; margin-bottom: 2px; }
+.side-value { font-size: 10.5px; color: #e5e5e5; margin-bottom: 14px; }
+.side-sep { width: 22px; height: 1px; background-color: #ffffff; margin: 4px 0 18px 0; }
+.side-line { font-size: 10.5px; color: #e5e5e5; line-height: 1.6; }
+.top td.head { padding: 74px 0 0 40px; }
+.brand-ring { width: 12px; height: 12px; border-radius: 13px; border: 7px solid #2f2f2f; }
+.brand-name { font-size: 13px; font-weight: bold; color: #2f2f2f; }
+.brand-tagline { font-size: 9.5px; color: #52525b; }
+h1 { font-size: 52px; font-weight: bold; color: #2f2f2f; line-height: 1; letter-spacing: -0.5px; margin: 30px 0 0 0; }
+.subtitle { font-size: 10.5px; color: #71717a; margin: 6px 0 20px 0; }
+.refs { width: 100%; background-color: #ffffff; margin-bottom: 20px; }
+.refs td { width: 50%; text-align: center; font-size: 10.5px; color: #52525b; line-height: 1.5; padding: 16px 4px !important; }
+.refs td + td { border-left: 1px solid #d4d4d8; }
+.refs strong { display: block; color: #3f3f46; font-weight: normal; }
+.pay-title { font-size: 10.5px; font-weight: bold; color: #2f2f2f; border-bottom: 2px solid #2f2f2f; display: inline-block; padding-bottom: 3px; }
+.pay-lines { font-size: 10.5px; color: #71717a; margin-top: 4px; }
+.card { background-color: #ffffff; }
+.items { width: 100%; }
+.items th { background-color: #2f2f2f; color: #ffffff; font-size: 10.5px; font-weight: bold; text-align: left; padding: 15px 18px; }
+.items th.r, .items td.total { text-align: right; }
+.items th.c, .items td.qty { text-align: center; }
+.items td { padding: 7px 18px; font-size: 10.5px; color: #27272a; vertical-align: top; }
+.items tr { page-break-inside: avoid; }
+.items tr.first td { padding-top: 22px; }
+.items td.num { white-space: nowrap; }
+.items td.total { white-space: nowrap; border-left: 1px solid #e4e4e7; }
+.item-sub { font-size: 9px; color: #a1a1aa; }
+.totals { margin: 0 18px; border-top: 1px solid #e4e4e7; padding: 16px 0 20px 0; }
+.t-row { width: 100%; }
+.t-row td { font-size: 10.5px; padding: 3px 0; color: #27272a; }
+.t-row td.l { font-weight: bold; }
+.t-row td.v { width: 130px; text-align: right; border-left: 1px solid #e4e4e7; white-space: nowrap; }
+.t-grand td { font-weight: bold; }
+.tone-paid td { color: #166534; }
+.tone-strong td { font-weight: bold; }
+.tone-void td { color: #991b1b; }
+.pay-sep { border-top: 1px dashed #d1d5db; margin-top: 6px; padding-top: 6px; }
+.mention { font-size: 10px; font-weight: bold; margin-top: 6px; }
+.sigs { margin: 22px 0 0 auto; page-break-inside: avoid; }
+.sigs td { width: 150px; text-align: center; padding-left: 30px; }
+.sig-img { max-width: 140px; max-height: 44px; }
+.sig-area { height: 44px; }
+.sig-line { height: 1px; background-color: #a1a1aa; margin: 4px 0 6px 0; }
+.sig-label { font-size: 9px; color: #52525b; text-transform: uppercase; letter-spacing: 0.5px; }
+.footer { width: 100%; margin-top: 28px; page-break-inside: avoid; }
+.footer td { vertical-align: top; }
+.footer-notes { font-size: 10.5px; color: #52525b; line-height: 1.7; padding-right: 40px; }
+.contact-icon { width: 18px; height: 18px; background-color: #2f2f2f; color: #ffffff; font-size: 9px; text-align: center; line-height: 18px; }
+.contact-title { font-size: 10px; color: #3f3f46; }
+.contact-value { font-size: 10px; color: #71717a; }
+</style>
+</head>
+<body>
+<div class="page">
+  <table class="top"><tr>
+    <td class="side-wrap">
+      <div class="side">
+        <div class="side-logo">
+          <img th:if="${logo != null}" th:src="${logo}" alt=""/>
+          <span class="initial" th:if="${logo == null}" th:text="${shopInitial}">B</span>
+        </div>
+        <div class="side-label">Date :</div>
+        <div class="side-value" th:text="${dateTime}">Date</div>
+        <th:block th:if="${dueDate != null}">
+          <div class="side-label">Échéance :</div>
+          <div class="side-value" th:text="${dueDate}">Échéance</div>
+        </th:block>
+        <div class="side-sep"></div>
+        <div class="side-label">Facturé à</div>
+        <div class="side-line" th:text="${clientName}">Client</div>
+        <div class="side-line" th:if="${clientAddress != null}" th:text="${clientAddress}">Adresse</div>
+        <div class="side-line" th:if="${clientPhone != null}" style="margin-top: 10px;" th:text="${clientPhone}">Tél.</div>
+        <div class="side-line" th:if="${clientEmail != null}" th:text="${clientEmail}">Email</div>
+        <div class="side-line" th:if="${clientNiu != null}" th:text="${'NIU ' + clientNiu}">NIU</div>
+        <div class="side-line" th:if="${clientRccm != null}" th:text="${'RCCM ' + clientRccm}">RCCM</div>
+      </div>
+    </td>
+    <td class="head">
+      <table><tr>
+        <td style="padding-right: 10px; vertical-align: middle;"><div class="brand-ring"></div></td>
+        <td style="vertical-align: middle;">
+          <div class="brand-name" th:text="${shopName}">Boutique</div>
+          <div class="brand-tagline" th:if="${shopNiu != null or shopRccm != null}"
+               th:text="${(shopNiu != null ? 'NIU ' + shopNiu : '') + (shopNiu != null and shopRccm != null ? ' · ' : '') + (shopRccm != null ? 'RCCM ' + shopRccm : '')}">NIU · RCCM</div>
+        </td>
+      </tr></table>
+      <h1 th:text="${docTitle}">FACTURE</h1>
+      <div class="subtitle">Détails de paiement</div>
+      <table class="refs"><tr>
+        <td><span th:text="${docLabel + ' N° :'}">Facture N° :</span><strong th:text="${'#' + number}">#FAC</strong></td>
+        <td>Statut :<strong th:text="${statusLabel}">Payée</strong></td>
+      </tr></table>
+      <th:block th:if="${paymentMethod != null}">
+        <div class="pay-title">Moyen de paiement</div>
+        <div class="pay-lines" th:text="${paymentMethod}">Espèces</div>
+      </th:block>
+    </td>
+  </tr></table>
+
+  <div class="card">
+    <table class="items">
+      <thead><tr><th>Description</th><th>Prix</th><th class="c">Qté</th><th class="r">Total</th></tr></thead>
+      <tbody>
+        <tr th:each="item, st : ${items}" th:class="${st.first ? 'first' : ''}">
+          <td><span th:text="${item.name()}">Article</span>
+            <div class="item-sub" th:if="${item.reference() != null}" th:text="${'Réf. ' + item.reference()}">Réf.</div></td>
+          <td class="num" th:text="${item.unitPrice()}">0</td>
+          <td class="qty" th:text="${item.quantity()}">1</td>
+          <td class="total" th:text="${item.total()}">0</td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="totals">
+      <table class="t-row" th:each="row : ${totalRows}"><tr><td class="l" th:text="${row.label() + ' :'}">Sous-total</td><td class="v" th:text="${row.value()}">0</td></tr></table>
+      <table class="t-row t-grand"><tr><td class="l">Total :</td><td class="v" th:text="${total}">0</td></tr></table>
+      <div class="pay-sep" th:if="${!payments.isEmpty()}">
+        <table th:each="row : ${payments}" th:class="${'t-row tone-' + row.tone()}"><tr><td class="l" th:text="${row.label() + ' :'}">Payé</td><td class="v" th:text="${row.value()}">0</td></tr></table>
+      </div>
+      <div class="mention" th:if="${vatMention != null}" th:text="${vatMention}">TVA non applicable</div>
+    </div>
+  </div>
+
+  <table class="sigs" th:if="${hasSignatures}"><tr>
+    <td><div class="sig-area"><img class="sig-img" th:if="${clientSignature != null}" th:src="${clientSignature}" alt=""/></div><div class="sig-line"></div><div class="sig-label">Signature client</div></td>
+    <td><div class="sig-area"><img class="sig-img" th:if="${sellerSignature != null}" th:src="${sellerSignature}" alt=""/></div><div class="sig-line"></div><div class="sig-label">Signature vendeur</div></td>
+  </tr></table>
+
+  <table class="footer"><tr>
+    <td class="footer-notes">
+      <div th:text="${notes != null ? notes : 'Merci de votre confiance.'}">Merci de votre confiance.</div>
+      <div th:if="${paymentDetails != null}" th:text="${paymentDetails}">Coordonnées de paiement</div>
+    </td>
+    <td style="width: 220px;">
+      <table th:if="${shopPhone != null}" style="margin-bottom: 10px;"><tr>
+        <td style="padding-right: 10px;"><div class="contact-icon">T</div></td>
+        <td><div class="contact-title">Tél.</div><div class="contact-value" th:text="${shopPhone}">Tél.</div></td>
+      </tr></table>
+      <table th:if="${shopAddress != null}"><tr>
+        <td style="padding-right: 10px;"><div class="contact-icon">A</div></td>
+        <td><div class="contact-title">Boutique</div><div class="contact-value" th:text="${shopAddress}">Adresse</div></td>
+      </tr></table>
+    </td>
+  </tr></table>
+</div>
+</body>
+</html>

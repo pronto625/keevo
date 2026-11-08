@@ -17,6 +17,22 @@ class InvoiceLinkSignerTest {
     private final InvoiceLinkSigner signer = new InvoiceLinkSigner(SECRET);
 
     @Test
+    @DisplayName("Story 20.7 — link version: signed and read back; a 14.2 token (3 parts) reads as version 0; the "
+            + "version is covered by the MAC")
+    void versionRoundTrip() {
+        UUID id = UUID.randomUUID();
+        Instant exp = Instant.parse("2026-11-29T10:00:00Z");
+        assertThat(signer.verify(signer.sign("kv_abc123", id, exp, 3)).version()).isEqualTo(3);
+        assertThat(signer.verify(signer.sign("kv_abc123", id, exp)).version()).isZero();
+        assertThat(signer.sign("kv_abc123", id, exp, 0)).isEqualTo(signer.sign("kv_abc123", id, exp));
+        String v1 = signer.sign("kv_abc123", id, exp, 1);
+        String v2 = signer.sign("kv_abc123", id, exp, 2);
+        String forged = v2.substring(0, v2.indexOf('.')) + v1.substring(v1.indexOf('.'));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> signer.verify(forged))
+                .isInstanceOf(com.keevo.shared.domain.exception.DomainException.class);
+    }
+
+    @Test
     @DisplayName("sign → verify returns schema, invoice and expiry")
     void roundTrip() {
         UUID id = UUID.randomUUID();

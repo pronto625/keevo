@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.adapter.in.rest;
 import com.keevo.invoicing.invoice.application.service.InvoiceLinkRateLimiter;
 import com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceDocumentUseCase;
+import com.keevo.invoicing.invoice.application.usecase.InvoicePublicLinkUseCase;
 import com.keevo.invoicing.module.InvoicingModule;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -25,6 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
  * controller validates the schema and sets / clears {@link TenantContext} itself; the module's tables are brought to
  * their latest version first (lazy provisioning, the gated endpoints are bypassed). Each token opens at most 30
  * times per 10 minutes (429); an unexpected failure answers a French 503.
+ *
+ * <p>Story 20.7: the token's link version must be the document's current one (a rotation kills the older links → 404);
+ * the PDF is printed in the document's layout (else the tenant's default) with its payments and signatures.
  */
 @EntitlementExempt("lien signé envoyé au client (facture déjà contrôlée à l'envoi)")
 @RestController
@@ -35,10 +39,12 @@ public class InvoiceSharedLinkController {
     private final InvoiceDocumentUseCase documents;
     private final ObjectProvider<ModuleProvisioner> provisioner;
     private final InvoiceLinkRateLimiter limiter;
+    private final InvoicePublicLinkUseCase links;
 
     public InvoiceSharedLinkController(InvoiceDocumentUseCase documents,
                                        ObjectProvider<ModuleProvisioner> provisioner,
-                                       InvoiceLinkRateLimiter limiter) {
+                                       InvoiceLinkRateLimiter limiter, InvoicePublicLinkUseCase links) {
+        this.links = links;
         this.documents = documents;
         this.provisioner = provisioner;
         this.limiter = limiter;
@@ -62,6 +68,7 @@ public class InvoiceSharedLinkController {
             if (p != null) {
                 p.ensureProvisioned(schema, InvoicingModule.ID);
             }
+            links.assertCurrentVersion(claims);
             return InvoiceController.pdfResponse(documents.pdf(claims.invoiceId(), schema));
         } catch (DomainException e) {
             if ("INVOICE_NOT_FOUND".equals(e.getDomainCode()) || "SERVICE_UNAVAILABLE".equals(e.getDomainCode())) {

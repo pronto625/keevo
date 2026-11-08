@@ -522,12 +522,27 @@ public record Invoice(
     /**
      * Story 14.2 — only an issued or paid invoice can be sent (and re-sent) to the client: a draft has no legal value,
      * a cancelled invoice must not reach the client as if it were due → {@code INVOICE_INVALID_TRANSITION}.
+     * Story 20.7: a quote waiting for its validation ({@code DRAFT}) is sent too (public link / WhatsApp, Bref
+     * behaviour); a converted or cancelled quote is not.
      */
     public void assertSendable() {
-        assertInvoice();
+        if (isQuote()) {
+            if (status != InvoiceStatus.DRAFT) {
+                throw quoteInvalidTransition();
+            }
+            return;
+        }
         if (status != InvoiceStatus.ISSUED && status != InvoiceStatus.PAID) {
             throw invalidTransition();
         }
+    }
+
+    /**
+     * Story 20.7 — the reference printed and sent for the document: the legal number of an invoice, the {@code DV-}
+     * reference of a quote; {@code null} for a draft invoice.
+     */
+    public String documentReference() {
+        return isQuote() ? quoteReference() : number;
     }
 
     /** Story 14.2 — one more WhatsApp sending to {@code phone} (E.164) at {@code now}. */

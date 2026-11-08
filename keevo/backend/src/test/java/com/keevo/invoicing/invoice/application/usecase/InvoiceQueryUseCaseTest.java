@@ -36,7 +36,8 @@ class InvoiceQueryUseCaseTest {
     private final CreditNoteRepository creditNotes = mock(CreditNoteRepository.class);
     private final InvoicePaymentRepository payments = mock(InvoicePaymentRepository.class);
     private final InvoiceQueryUseCase queries = new InvoiceQueryUseCase(mock(InvoiceRepository.class), creditNotes,
-            payments, Clock.fixed(NOW, ZoneOffset.UTC));
+            payments, mock(com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository.class),
+            Clock.fixed(NOW, ZoneOffset.UTC));
 
     private static Invoice invoice() {
         InvoicingSettings seller = new InvoicingSettings("Boutique", null, null, null, null, false,

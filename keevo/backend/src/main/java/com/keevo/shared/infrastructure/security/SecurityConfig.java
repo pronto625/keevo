@@ -74,6 +74,7 @@ public class SecurityConfig {
             "/api/v1/app-version/check",     // Story 19.10 — minimum / latest app version (per-IP limited, raw body)
             "/api/v1/exports/download",      // v1s-18-1 — signed export link (HMAC token, no JWT)
             "/api/v1/invoices/shared",       // 14.2 — signed invoice PDF link sent by WhatsApp (HMAC token, no JWT)
+            "/api/v1/invoices/public/*",     // 20.7 — old Bref public link of an imported invoice (UUID token, no JWT)
             "/v3/api-docs",
             "/v3/api-docs/**",
             "/swagger-ui/**",

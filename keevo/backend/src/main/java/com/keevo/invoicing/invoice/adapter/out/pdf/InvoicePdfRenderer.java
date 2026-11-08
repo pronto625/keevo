@@ -5,7 +5,10 @@ import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
 import com.keevo.invoicing.invoice.domain.model.InvoiceTotals;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
+import com.keevo.invoicing.invoice.domain.model.InvoiceTemplate;
+import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
 import com.keevo.invoicing.invoice.domain.model.SellerSnapshot;
+import com.keevo.invoicing.invoice.domain.model.TicketWidth;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceDocumentRenderer;
 import com.keevo.shared.capability.business.CompanyIdentity.Logo;
 import com.keevo.shared.infrastructure.pdf.PdfDocumentFactory;
@@ -17,6 +20,7 @@ import com.keevo.shared.domain.time.KeevoZones;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +31,11 @@ import java.util.Map;
  * XAF, dates dd/MM/yyyy) and written by the template with escaped {@code th:text} only; no identifier other than the
  * invoice number is ever printed. Story 20.3: a quote prints « DEVIS DV-XXXXXXXX », its creation date, no legal
  * number, and the mention « Devis — en attente de validation » while it waits for its conversion.
+ *
+ * <p>Story 20.7 — strategy per layout: no template → this Keevo standard A4 invoice (now with the payment block when
+ * payments were recorded, the signatures and the Bref reference of an imported invoice); one of Bref's 8 templates →
+ * its own Thymeleaf file ({@link #LAYOUTS}) filled from {@link BrefLayoutView}, the narrow ones on a 58 / 80 mm roll
+ * page fitted to the content or in a 110 mm column of an A4 sheet.
  */
 @Component
 public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
@@ -50,9 +59,70 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
         }
     }
 
+    /**
+     * Story 20.7 — the layout registry (strategy per {@link InvoiceTemplate}): the Thymeleaf file of each Bref layout;
+     * the narrow ones are printed on a roll page fitted to their content, or in a 110 mm column of an A4 sheet.
+     */
+    static final Map<InvoiceTemplate, String> LAYOUTS;
+
+    static {
+        Map<InvoiceTemplate, String> layouts = new EnumMap<>(InvoiceTemplate.class);
+        for (InvoiceTemplate t : InvoiceTemplate.values()) {
+            layouts.put(t, "invoice-" + t.code());
+        }
+        LAYOUTS = java.util.Collections.unmodifiableMap(layouts);
+    }
+
+    /** Template variable holding the page height (mm) of a roll ticket ({@link PdfDocumentFactory#renderFitted}). */
+    static final String PAGE_HEIGHT = "pageHeightMm";
+    /** Shortest roll ticket printed (Bref's minimum page height, about 110 mm). */
+    static final int MIN_TICKET_HEIGHT_MM = 110;
+
     @Override
-    public byte[] render(Invoice invoice, SellerSnapshot seller, Logo logo) {
-        return documents.render(TEMPLATE, variables(invoice, seller, logo));
+    public byte[] render(RenderRequest request) {
+        InvoiceTemplate template = request.template();
+        if (template == null) {
+            return documents.render(TEMPLATE, variables(request));
+        }
+        Map<String, Object> v = BrefLayoutView.variables(request);
+        String file = LAYOUTS.get(template);
+        if (!template.narrow()) {
+            return documents.render(file, v);
+        }
+        TicketWidth width = request.ticketWidth() == null ? TicketWidth.DEFAULT : request.ticketWidth();
+        v.put("ticketWidth", width.code());
+        v.put("contentWidthMm", width.contentWidthMm());
+        v.put("narrow58", width == TicketWidth.MM_58);
+        v.put("a4Sheet", width == TicketWidth.A4);
+        if (width == TicketWidth.A4) {
+            return documents.render(file, v);
+        }
+        v.put("pageWidthMm", width.contentWidthMm());
+        return documents.renderFitted(file, v, PAGE_HEIGHT, MIN_TICKET_HEIGHT_MM);
+    }
+
+    /** Story 20.7 — the Keevo layout plus the payment block, the signatures and the Bref reference. */
+    static Map<String, Object> variables(RenderRequest r) {
+        Map<String, Object> v = variables(r.invoice(), r.seller(), r.logo());
+        Invoice invoice = r.invoice();
+        if (r.legacyReference() != null) {
+            v.put("title", v.get("title") + " — " + r.legacyReference());
+            if (invoice.number() == null && !invoice.isQuote() && invoice.status() != InvoiceStatus.DRAFT) {
+                v.put("title", "FACTURE " + r.legacyReference());
+            }
+        }
+        PaymentStateCalculator.Collection collection = r.collection();
+        boolean received = collection != null && collection.payments().stream().anyMatch(p -> !p.legacy());
+        List<BrefLayoutView.Row> payments = List.of();
+        if (received && !invoice.isQuote() && invoice.status() != InvoiceStatus.CANCELLED) {
+            long remaining = Math.max(0, collection.amountDue() - collection.amountPaid());
+            payments = BrefLayoutView.paymentRows(invoice, collection, true, collection.amountPaid(), remaining);
+        }
+        v.put("payments", payments);
+        v.put("clientSignature", r.clientSignature());
+        v.put("sellerSignature", r.sellerSignature());
+        v.put("hasSignatures", r.clientSignature() != null || r.sellerSignature() != null);
+        return v;
     }
 
     static Map<String, Object> variables(Invoice invoice, SellerSnapshot seller, Logo logo) {

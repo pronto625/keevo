@@ -4,6 +4,8 @@ import com.keevo.invoicing.invoice.domain.model.CreditNote;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.port.out.CreditNoteRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository;
+import com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository;
+import com.keevo.invoicing.invoice.domain.model.InvoicePresentation;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
 import com.keevo.shared.domain.time.KeevoZones;
@@ -26,14 +28,26 @@ public class InvoiceQueryUseCase {
     private final InvoiceRepository invoices;
     private final CreditNoteRepository creditNotes;
     private final InvoicePaymentRepository payments;
+    private final InvoicePresentationRepository presentations;
     private final Clock clock;
 
     public InvoiceQueryUseCase(InvoiceRepository invoices, CreditNoteRepository creditNotes,
-                               InvoicePaymentRepository payments, Clock clock) {
+                               InvoicePaymentRepository payments, InvoicePresentationRepository presentations,
+                               Clock clock) {
         this.invoices = invoices;
         this.creditNotes = creditNotes;
         this.payments = payments;
+        this.presentations = presentations;
         this.clock = clock;
+    }
+
+    /** Story 20.7 — the presentation of each document of a page: one query (absent = none stored). */
+    @Transactional(readOnly = true)
+    public Map<UUID, InvoicePresentation> presentations(Collection<Invoice> list) {
+        if (list.isEmpty()) {
+            return Map.of();
+        }
+        return presentations.findAll(list.stream().map(Invoice::id).toList());
     }
 
     /**

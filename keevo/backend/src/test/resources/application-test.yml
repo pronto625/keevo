@@ -27,6 +27,8 @@ keevo:
     storage-dir: ${java.io.tmpdir}/keevo-test-company-logos
   store-logo:
     storage-dir: ${java.io.tmpdir}/keevo-test-store-logos
+  invoice-signature:
+    storage-dir: ${java.io.tmpdir}/keevo-test-invoice-signatures
 
 # Story 12.4 — the shared test database outlives every cached context: a context start must not replay
 # the incomplete publications left by other test classes. Replay is covered explicitly

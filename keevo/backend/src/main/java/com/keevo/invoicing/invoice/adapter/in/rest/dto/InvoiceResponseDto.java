@@ -4,6 +4,8 @@ import com.keevo.invoicing.invoice.application.service.InvoicePhones;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
+import com.keevo.invoicing.invoice.domain.model.InvoicePresentation;
+import com.keevo.invoicing.invoice.domain.model.SignatureRole;
 import com.keevo.invoicing.invoice.domain.model.InvoicingSettings;
 import com.keevo.invoicing.invoice.domain.model.PaymentStateCalculator;
 import com.keevo.invoicing.invoice.domain.model.SellerSnapshot;
@@ -43,6 +45,11 @@ import java.util.UUID;
  * the rate applied (0 when exempt), {@code vatRateOverride} = the rate requested for the document ({@code null} = the
  * seller's), {@code vatExempt}, {@code dueDate}; client {@code rccm}, {@code email}, {@code contactName},
  * {@code website}; line {@code productId}, {@code reference}. {@code totalTtc = totalHt + totalVat + deliveryFee}.
+ *
+ * <p>Story 20.7 (additive): {@code invoiceTemplate} (one of the 8 Bref layouts, {@code null} = the tenant default),
+ * {@code ticketWidth} ({@code "58"} | {@code "80"} | {@code "A4"}, {@code null} = the tenant default),
+ * {@code clientSigned} / {@code sellerSigned} (a signature is stored — never its file), {@code legacyReference} (the
+ * Bref reference {@code BRF-XXXXXXXX} of an imported invoice, {@code null} otherwise).
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -91,7 +98,12 @@ public record InvoiceResponseDto(
         long deliveryFee,
         BigDecimal vatRateOverride,
         boolean vatExempt,
-        LocalDate dueDate) {
+        LocalDate dueDate,
+        String invoiceTemplate,
+        String ticketWidth,
+        boolean clientSigned,
+        boolean sellerSigned,
+        String legacyReference) {
 
     /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
     public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
@@ -124,6 +136,15 @@ public record InvoiceResponseDto(
     public static InvoiceResponseDto fromDomain(Invoice i, InvoicingSettings currentSettings,
                                                 List<CreditNoteRepository.Summary> creditNotes,
                                                 boolean fullyCredited, PaymentStateCalculator.Collection collection) {
+        return fromDomain(i, currentSettings, creditNotes, fullyCredited, collection, InvoicePresentation.NONE);
+    }
+
+    /** Story 20.7 — with the document's presentation ({@code null} = none stored). */
+    public static InvoiceResponseDto fromDomain(Invoice i, InvoicingSettings currentSettings,
+                                                List<CreditNoteRepository.Summary> creditNotes,
+                                                boolean fullyCredited, PaymentStateCalculator.Collection collection,
+                                                InvoicePresentation presentation) {
+        InvoicePresentation look = presentation == null ? InvoicePresentation.NONE : presentation;
         List<CreditNote> notes = creditNotes == null ? List.of() : creditNotes.stream()
                 .map(c -> new CreditNote(c.id(), c.number(), c.issuedAt(), c.totalTtc(), c.reason())).toList();
         long credited = notes.stream().mapToLong(CreditNote::totalTtc).sum();
@@ -148,7 +169,10 @@ public record InvoiceResponseDto(
                 paid.amountDue(), paid.payments().stream().map(p -> new Payment(p.id(), p.amount(), p.dueDate(),
                         p.paidAt(), p.method(), p.note(), p.legacy())).toList(),
                 i.totals().subtotal(), i.totals().discount(), i.totals().delivery(), i.terms().vatRate(),
-                i.terms().vatExempt(), i.terms().dueDate());
+                i.terms().vatExempt(), i.terms().dueDate(),
+                look.template() == null ? null : look.template().name(),
+                look.ticketWidth() == null ? null : look.ticketWidth().code(),
+                look.signed(SignatureRole.CLIENT), look.signed(SignatureRole.SELLER), look.legacyReference());
     }
 
     private static Line line(InvoiceLine l) {

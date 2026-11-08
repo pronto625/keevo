@@ -214,6 +214,11 @@ keevo:
     storage-dir: ${KEEVO_STORE_LOGO_DIR:${user.home}/keevo-data/store-logos}
     max-bytes: 204800             # 200 KB
     max-dimension: 600            # longest side of the stored logo
+  # Story 20.7 — signatures of documents (client / seller). The directory MUST be persistent: only copy.
+  invoice-signature:
+    storage-dir: ${KEEVO_INVOICE_SIGNATURE_DIR:${user.home}/keevo-data/invoice-signatures}
+    max-bytes: 204800             # 200 KB
+    max-dimension: 800            # longest side of the stored image
   # FR21 — product photo thumbnails, stored server side and synced to every device.
   # The directory MUST be persistent (volume / backed-up disk): it holds the only copy.
   product-photo:

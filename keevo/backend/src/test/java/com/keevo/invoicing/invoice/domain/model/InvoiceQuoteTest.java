@@ -69,20 +69,31 @@ class InvoiceQuoteTest {
     }
 
     @Test
-    @DisplayName("issue / pay / send / credit note on a quote → INVOICE_INVALID_TRANSITION « Un devis doit être "
-            + "converti en facture »")
+    @DisplayName("issue / pay / credit note on a quote → INVOICE_INVALID_TRANSITION « Un devis doit être "
+            + "converti en facture » (Story 20.7: sending is allowed)")
     void invoiceOnlyActionsRefused() {
         Invoice q = quote();
         for (Runnable action : List.<Runnable>of(
                 () -> q.issue("FAC-2026-000001", LocalDate.of(2026, 11, 6), SELLER, T1),
                 () -> q.assertIssuable(SELLER),
                 () -> q.markedPaid(T1, "Espèces", T1),
-                q::assertSendable,
                 () -> CreditNote.creditLines(q, List.of(), null))) {
             assertThatThrownBy(action::run).isInstanceOf(DomainException.class).satisfies(e -> {
                 assertThat(domain(e).getDomainCode()).isEqualTo("INVOICE_INVALID_TRANSITION");
                 assertThat(domain(e).getUserMessage()).isEqualTo("Un devis doit être converti en facture");
             });
+        }
+    }
+
+    @Test
+    @DisplayName("Story 20.7 — a quote waiting for validation is sendable (reference DV-…); converted / cancelled → 409")
+    void quoteSending() {
+        Invoice q = quote();
+        q.assertSendable();
+        assertThat(q.documentReference()).isEqualTo(q.quoteReference()).startsWith("DV-");
+        for (Invoice ended : List.of(q.cancel("Le client a renoncé", T1), q.converted(UUID.randomUUID(), T1))) {
+            assertThatThrownBy(ended::assertSendable).isInstanceOf(DomainException.class)
+                    .satisfies(e -> assertThat(domain(e).getDomainCode()).isEqualTo("INVOICE_INVALID_TRANSITION"));
         }
     }
 

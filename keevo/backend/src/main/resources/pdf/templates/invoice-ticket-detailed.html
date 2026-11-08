@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Story 20.7 — Bref « Ticket détaillé » (ticket-detailed.ts): the most complete ticket — boxed document / client block,
+  articles in columns (qty / unit price / total), solid rules, payment block, signatures. Printed on a 58 / 80 mm roll
+  (page fitted to the content) or in a 110 mm column of an A4 sheet. Data only through th:text (escaped).
+-->
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<title th:text="${docLabel + ' ' + number}">Facture</title>
+<style th:inline="text">
+@page { size: [[${a4Sheet ? 'A4 portrait' : pageWidthMm + 'mm ' + pageHeightMm + 'mm'}]]; margin: [[${a4Sheet ? '10mm 0' : '0'}]]; }
+.paper { width: [[${contentWidthMm}]]mm; [[${a4Sheet ? 'margin: 0 auto;' : ''}]] }
+</style>
+<style>
+body { margin: 0; font-family: 'Keevo Mono'; font-size: 11px; color: #111111; }
+table { border-collapse: collapse; width: 100%; }
+td { padding: 0; vertical-align: top; }
+.inner { padding: 18px 16px 20px 16px; }
+.center { text-align: center; }
+.shop-logo { height: 52px; max-width: 156px; margin-bottom: 8px; border: 1px solid #111111; }
+.shop-name { font-size: 14px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.4px; }
+.shop-meta { font-size: 9.5px; color: #444444; margin-top: 3px; line-height: 1.5; }
+.box { border: 1px solid #111111; border-radius: 4px; padding: 8px 10px; margin: 10px 0; }
+.box-title { font-size: 8.5px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; color: #666666; margin-bottom: 4px; }
+.box-row td { font-size: 10.5px; padding: 1px 0; }
+.box-row td.l { color: #666666; padding-right: 6px; }
+.box-row td.v { text-align: right; }
+.status-line { text-align: center; margin: 10px 0; }
+.status { padding: 3px 12px; font-size: 9.5px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border: 1.5px solid #111111; white-space: nowrap; }
+.status-paid { background-color: #111111; color: #ffffff; }
+.items { margin: 10px 0; }
+.items th { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.5px; color: #666666; text-align: left; padding: 0 0 4px 0; border-bottom: 1.5px solid #111111; font-weight: normal; }
+.items th.num { text-align: right; }
+.items td { padding: 6px 0; border-bottom: 1px solid #dddddd; font-size: 10.5px; }
+.td-name { font-weight: bold; }
+.td-ref { font-size: 8.5px; color: #999999; font-weight: normal; margin-top: 1px; }
+.td-num { text-align: right; white-space: nowrap; padding-left: 4px !important; }
+.td-total { font-weight: bold; }
+.totals-box { border-top: 2px solid #111111; margin-top: 4px; padding-top: 6px; }
+.t-row td { font-size: 10.5px; padding: 2px 0; }
+.t-row td.l { color: #666666; }
+.t-row td.v { text-align: right; white-space: nowrap; }
+.t-row.discount td.v { color: #16a34a; }
+.t-row.grand td { font-size: 15px; font-weight: bold; padding-top: 6px; color: #111111; }
+.tone-paid td { color: #166534 !important; }
+.tone-strong td { font-weight: bold; }
+.tone-void td { color: #991b1b !important; }
+.payments { border-top: 1px dashed #d1d5db; margin-top: 6px; padding-top: 6px; }
+.mention { font-size: 9px; text-align: center; margin-top: 4px; }
+.notes-box { margin-top: 10px; font-size: 10px; color: #444444; }
+.sig-row { margin-top: 16px; }
+.sig-row td { width: 50%; text-align: center; padding: 0 6px; }
+.sig-img { max-width: 70px; max-height: 28px; margin-bottom: 4px; }
+.sig-placeholder { height: 28px; margin-bottom: 4px; }
+.sig-line { border-top: 1px solid #111111; padding-top: 4px; }
+.sig-label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: #666666; }
+.footer { text-align: center; font-size: 10px; margin-top: 14px; border-top: 1px solid #dddddd; padding-top: 8px; }
+.footer-thanks { font-weight: bold; text-transform: uppercase; letter-spacing: 1px; }
+.footer-sub { font-size: 8.5px; color: #999999; margin-top: 3px; }
+.n58 .inner { padding: 12px 8px 14px 8px; }
+.n58 .items td, .n58 .box-row td, .n58 .t-row td { font-size: 8.5px; }
+.n58 .items th { font-size: 7px; letter-spacing: 0; }
+.n58 .td-num { padding-left: 2px !important; }
+.n58 .t-row.grand td { font-size: 12px; }
+.n58 .shop-name { font-size: 12px; }
+</style>
+</head>
+<body>
+<div th:class="${narrow58 ? 'paper n58' : 'paper'}"><div class="inner">
+  <div class="center">
+    <img class="shop-logo" th:if="${logo != null}" th:src="${logo}" alt=""/>
+    <div class="shop-name" th:text="${shopName}">Boutique</div>
+    <div class="shop-meta">
+      <div th:if="${shopAddress != null}" th:text="${shopAddress}">Adresse</div>
+      <div th:if="${shopPhone != null}" th:text="${shopPhone}">Tél.</div>
+      <div th:if="${shopNiu != null}" th:text="${'NIU: ' + shopNiu}">NIU</div>
+      <div th:if="${shopRccm != null}" th:text="${'RCCM: ' + shopRccm}">RCCM</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <div class="box-title" th:text="${docLabel + ' N° ' + number}">Facture N°</div>
+    <table class="box-row"><tr><td class="l">Date</td><td class="v" th:text="${date}">Date</td></tr></table>
+    <table class="box-row" th:if="${dueDate != null}"><tr><td class="l">Échéance :</td><td class="v" th:text="${dueDate}">Échéance</td></tr></table>
+    <table class="box-row"><tr><td class="l">Client</td><td class="v" th:text="${clientName}">Client</td></tr></table>
+    <table class="box-row" th:if="${clientPhone != null}"><tr><td class="l">Tél.</td><td class="v" th:text="${clientPhone}">Tél.</td></tr></table>
+    <table class="box-row" th:if="${clientEmail != null}"><tr><td class="l">Email</td><td class="v" th:text="${clientEmail}">Email</td></tr></table>
+    <table class="box-row" th:if="${clientNiu != null}"><tr><td class="l">NIU</td><td class="v" th:text="${clientNiu}">NIU</td></tr></table>
+    <table class="box-row" th:if="${clientRccm != null}"><tr><td class="l">RCCM</td><td class="v" th:text="${clientRccm}">RCCM</td></tr></table>
+  </div>
+
+  <div class="status-line"><span th:class="${'status status-' + statusClass}" th:text="${statusLabel}">Payée</span></div>
+
+  <table class="items">
+    <thead><tr><th>Article</th><th class="num">Qté</th><th class="num">Prix</th><th class="num">Total</th></tr></thead>
+    <tbody>
+      <tr th:each="item : ${items}">
+        <td class="td-name"><span th:text="${item.name()}">Article</span>
+          <div class="td-ref" th:if="${item.reference() != null}" th:text="${item.reference()}">REF</div></td>
+        <td class="td-num" th:text="${item.quantity()}">1</td>
+        <td class="td-num" th:text="${item.unitPrice()}">0</td>
+        <td class="td-num td-total" th:text="${item.total()}">0</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="totals-box">
+    <table class="t-row" th:each="row : ${totalRows}" th:classappend="${row.tone()}"><tr><td class="l" th:text="${row.label()}">Sous-total</td><td class="v" th:text="${row.value()}">0</td></tr></table>
+    <table class="t-row grand"><tr><td class="l">TOTAL</td><td class="v" th:text="${total}">0</td></tr></table>
+    <div class="payments" th:if="${!payments.isEmpty()}">
+      <table th:each="row : ${payments}" th:class="${'t-row tone-' + row.tone()}"><tr><td class="l" th:text="${row.label()}">Payé</td><td class="v" th:text="${row.value()}">0</td></tr></table>
+    </div>
+    <div class="mention" th:if="${vatMention != null}" th:text="${vatMention}">TVA non applicable</div>
+  </div>
+
+  <table class="box-row" th:if="${paymentMethod != null}" style="margin-top: 8px;"><tr><td class="l">Moyen de paiement :</td><td class="v" th:text="${paymentMethod}">Espèces</td></tr></table>
+
+  <div class="notes-box" th:if="${notes != null}" th:text="${notes}">Notes</div>
+
+  <table class="sig-row" th:if="${hasSignatures}"><tr>
+    <td><img class="sig-img" th:if="${clientSignature != null}" th:src="${clientSignature}" alt=""/><div class="sig-placeholder" th:if="${clientSignature == null}"></div>
+      <div class="sig-line"><div class="sig-label">Client</div></div></td>
+    <td><img class="sig-img" th:if="${sellerSignature != null}" th:src="${sellerSignature}" alt=""/><div class="sig-placeholder" th:if="${sellerSignature == null}"></div>
+      <div class="sig-line"><div class="sig-label">Vendeur</div></div></td>
+  </tr></table>
+
+  <div class="footer">
+    <div class="footer-thanks">Merci de votre confiance</div>
+    <div class="footer-sub" th:text="${shopName}">Boutique</div>
+  </div>
+</div></div>
+</body>
+</html>

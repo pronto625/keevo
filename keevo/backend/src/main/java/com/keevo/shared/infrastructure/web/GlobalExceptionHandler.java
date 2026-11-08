@@ -270,6 +270,7 @@ public class GlobalExceptionHandler {
                  "INVOICE_LINK_INVALID",
                  "COMPANY_LOGO_NOT_FOUND",
                  "STORE_LOGO_NOT_FOUND",
+                 "INVOICE_SIGNATURE_NOT_FOUND",
                  "PREFERENCES_NOT_FOUND",      // 19.12: tenant not onboarded yet (was an unmapped 500)
                  "NOTIFICATION_NOT_FOUND",
                  "EXPENSE_NOT_FOUND",          // 20.10
@@ -344,6 +345,8 @@ public class GlobalExceptionHandler {
                  "STORE_LOGO_INVALID",
                  "STORE_LOGO_TOO_LARGE",
                  "STORE_LOGO_TOO_HEAVY",
+                 "INVOICE_SIGNATURE_INVALID",
+                 "INVOICE_SIGNATURE_TOO_LARGE",
                  "PLAN_PROFILE_INVALID",
                  "BUNDLE_INVALID",
                  "MODULE_ACTIVATION_RULE_INVALID",
