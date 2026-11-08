@@ -371,13 +371,13 @@ development_status:
   m20-7-modeles-signatures-liens-publics: backlog  # API 487a8ec5+51d426dc — 8 modèles Bref (PUT /invoices/{id}/layout, ?template=&ticketWidth=), signatures client/vendeur, POST /invoices/{id}/public-link (+/rotate), réglages /invoicing/settings/documents, devis envoyable, bloc paiements sur PDF, anciens liens Bref
   m20-14-boutique-des-documents: backlog  # API b5b41077+676dc274+d1cdf583 — storeId/storeName sur les documents (création, liste ?storeId= propriétaire seul), visibilité par rôle (employé = ses documents, gérant/lecteur = sa boutique, 404 hors portée), chiffres par boutique avec factures
   m20-11-module-finance: backlog  # API 04620d05 — GET /api/v1/finance/summary (period=AAAA-MM|AAAA ou startDate/endDate, storeId) : CA HT, dépenses, résultat, marge, comparaison, séries, byStore ; propriétaire seul ; contrat finance-math-cases.json
-  d20-13-api-super-admin-heritee-bref: backlog  # API 169ed5c0+08b4789f — /admin/dashboard/{overview,growth,top-accounts,activity}, /admin/{customers,products,expenses} + fiches, /admin/users (+stats, devices), écritures A1–A4 (clients, membres)
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
   # Directives : section « ## Dashboard super-admin (autre dépôt) » à la fin de chaque spec.
   # Statuts : backlog → in-progress → review (livré, à tester ici) → done (testé ici). d16-11 (session) et d16-4 (conventions admin, tâches de fond) à lire en premier.
   # ─────────────────────────────────────────────────────────
+  d20-13-api-super-admin-heritee-bref: backlog  # API 169ed5c0+08b4789f — /admin/dashboard/{overview,growth,top-accounts,activity}, /admin/{customers,products,expenses} + fiches, /admin/users (+stats, devices), écritures A1–A4 (clients, membres)
   d16-11-sessions-longues-et-sures: backlog  # API 7b8f04d9 — session super-admin : connexion KV-ADMIN, rôle lu au profil, renouvellement 30 min, 12 h glissantes
   d16-4-console-super-admin-modules: backlog  # API fc1e431f — section Modules de la fiche compte, catalogue, provisionnement, tâches de fond (202/409/suivi)
   d16-5-migration-backfill-tenant-modules: backlog  # API 13eca21e — carte « Migration des modules » : simulation puis exécution confirmée
