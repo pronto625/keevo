@@ -515,7 +515,7 @@ development_status:
   24-1-api-bref-statut-gel-export: backlog
   24-2-migration-identite-boutiques-membres: backlog
   24-3-import-produits-clients: backlog
-  24-4-import-documents-paiements-depenses: backlog
+  24-4-import-documents-paiements-depenses: backlog  # 2026-11-08 revue 20-7 — 1 item (liens 90 j, anciens liens Bref, papiers 53/110 mm à l import) | 2026-11-08 revue 20-9 — boutique des factures importées (shopId) via 20-14
   24-5-import-monetisation: backlog
   24-6-import-annexes-index-portail: backlog
   24-7-bridge-identite-collisions: backlog  # 2026-11-04 revue 19.3 — 1 item (import social_id Bref → user_authenticators)

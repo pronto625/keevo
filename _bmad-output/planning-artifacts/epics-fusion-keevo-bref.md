@@ -1755,6 +1755,8 @@ So that **l'historique commercial et les impayés sont intacts**.
 **When** il est importé
 **Then** la valeur Bref est conservée telle quelle, l'anomalie est inscrite dans `migration_records.note` et dans le rapport, sans correction silencieuse (R3)
 
+- [ ] [Deferred-from: review 20-7, 2026-11-08] Imported tenants must get 90-day public links and their old Bref links: set `invoicing_document_preferences.public_link_days = 90` (`DocumentPreferences.IMPORTED_LINK_DAYS`), and call `InvoicePublicLinkUseCase.attachLegacy` for each imported invoice (`legacy_public_token`, `BRF-` reference); map Bref papers 53 mm → 58 and 110 mm → A4
+
 ### Story 24.5 : Import de la monétisation (ADR-07)
 
 As a **outil de migration**,
