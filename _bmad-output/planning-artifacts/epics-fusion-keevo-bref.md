@@ -746,6 +746,20 @@ So that **l'arrivée des owners Bref ne dégrade pas le service (FUS-NFR3)**.
 **When** le rapport est rédigé
 **Then** une décision d'architecture (pool de connexions, migrations paresseuses par tenant, schéma partagé pour les tenants FREE inactifs) est actée avant l'Epic 24
 
+### Story 19.11b : Écrans super-admin sans boucle par compte
+
+As a **super-admin**,
+I want **que les écrans plateforme restent rapides quel que soit le nombre de comptes**,
+So that **la console tient la charge d'un grand nombre de tenants (R1, FUS-NFR11)**.
+
+Scope: move the remaining per-tenant query loops of the super-admin services to the chunked cross-tenant union pattern delivered by 20-13 (`CrossTenantSql`, chunked `UNION ALL`, per-chunk isolation, one catalogue query per request).
+
+- [ ] [Deferred-from: review 20-13, 2026-11-08] `AdminAnalyticsService.getOverview` (stores, active stores, products), `getTopStores`, `getAdoption`, `getGeography` still run one query per tenant
+- [ ] [Deferred-from: review 20-13, 2026-11-08] `AdminOperationsService.listTenantActivity`, `listInactiveTenants` still run one query per tenant
+- [ ] [Deferred-from: review 20-13, 2026-11-08] `AdminCatalogService` (products list, summary, CSV export) still runs one query per tenant
+
+Interim AC: Given 500 tenants, When each of these endpoints is called, Then it issues a bounded number of statements (one per chunk of 100 tenants), and one broken tenant schema is skipped with a warning instead of failing the call.
+
 ### Story 19.12 : Boutiques étendues et préférence de parcours de vente
 
 As a **owner**,
