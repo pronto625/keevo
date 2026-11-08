@@ -113,10 +113,8 @@ class ClientsPerStoreUseCasesTest {
     }
 
     @Test
-    void ownerWithoutStore_getsTheOldestActiveStore() {
-        when(storeQuery.findAllActive(T)).thenReturn(List.of(
-                new StoreView(B, "B", StoreType.STORE, null, null, true, T0.plusSeconds(5), T0),
-                new StoreView(A, "A", StoreType.STORE, null, null, true, T0, T0)));
+    void ownerWithoutStore_getsTheDefaultStore() {
+        when(storeQuery.defaultStore(T)).thenReturn(java.util.Optional.of(A)); // 20.14
         when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
         var useCase = new CreateClientUseCase(repo, events, storeScope);
 

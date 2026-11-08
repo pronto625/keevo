@@ -28,6 +28,19 @@ public interface StoreQueryPort {
     Set<UUID> clientVisibleStoreIds(String tenantSchema, UUID storeId);
 
     /**
+     * Story 20.14 — French refusal of a store that is unknown or deactivated, the same wherever a store is chosen
+     * (documents, clients).
+     */
+    String UNKNOWN_OR_INACTIVE_STORE = "Boutique inconnue ou désactivée";
+
+    /**
+     * Story 20.14 — the tenant's default store, the one policy of every module that picks a store for the owner:
+     * the active shops before the warehouses, then the oldest ({@code created_at}), then the id; empty when the tenant
+     * has no active store. One query ({@code LIMIT 1}).
+     */
+    Optional<UUID> defaultStore(String tenantSchema);
+
+    /**
      * Story 20.10 — the display names of the given stores (active or not), keyed by id; unknown ids are absent. One
      * query, whatever the number of ids (a list page's stores).
      */

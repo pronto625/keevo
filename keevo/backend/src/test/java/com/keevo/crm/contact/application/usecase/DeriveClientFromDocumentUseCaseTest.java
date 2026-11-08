@@ -57,6 +57,7 @@ class DeriveClientFromDocumentUseCaseTest {
                 NOW.minusSeconds(3600), NOW);
         StoreView b = new StoreView(newer, "B", com.keevo.store.api.StoreType.STORE, null, null, true, NOW, NOW);
         when(stores.findAllActive(TENANT)).thenReturn(List.of(b, a));
+        when(stores.defaultStore(TENANT)).thenReturn(Optional.of(oldest)); // 20.14 — the default-store policy
         when(clients.save(any())).thenAnswer(i -> i.getArgument(0));
     }
 

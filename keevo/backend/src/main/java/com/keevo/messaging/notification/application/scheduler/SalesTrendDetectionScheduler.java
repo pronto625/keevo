@@ -21,6 +21,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
@@ -66,21 +67,14 @@ public class SalesTrendDetectionScheduler {
     private final NotificationCooldownRepository cooldownRepository;
     private final TenantPreferencesQueryPort preferencesQuery;
     private final StoreQueryPort storeQuery;
-    /** Story 13.10a — {@code null} only in unit tests built without it (no gate). */
+    /** Story 13.10a — {@code null} = no gate (unit tests). */
     private final ModuleRegistry modules;
     /** Story 20.14 — hourly store activity on the single revenue source (sales and invoices). */
     private final StoreActivityRepository activity;
+    /** Story 20.14 — the hour compared (injected, so tests fix it). */
+    private final Clock clock;
 
     static final String ADVANCED_REPORTS = "advanced-reports";
-
-    public SalesTrendDetectionScheduler(JdbcTemplate jdbcTemplate,
-                                        PushNotifier pushNotifier,
-                                        NotificationCooldownRepository cooldownRepository,
-                                        TenantPreferencesQueryPort preferencesQuery,
-                                        StoreQueryPort storeQuery,
-                                        StoreActivityRepository activity) {
-        this(jdbcTemplate, pushNotifier, cooldownRepository, preferencesQuery, storeQuery, null, activity);
-    }
 
     @Autowired
     public SalesTrendDetectionScheduler(JdbcTemplate jdbcTemplate,
@@ -89,7 +83,9 @@ public class SalesTrendDetectionScheduler {
                                         TenantPreferencesQueryPort preferencesQuery,
                                         StoreQueryPort storeQuery,
                                         ModuleRegistry modules,
-                                        StoreActivityRepository activity) {
+                                        StoreActivityRepository activity,
+                                        Clock clock) {
+        this.clock = clock;
         this.activity = activity;
         this.modules = modules;
         this.jdbcTemplate = jdbcTemplate;
@@ -154,9 +150,16 @@ public class SalesTrendDetectionScheduler {
         }
         // cron fires at HH:00 UTC: the last full hour [HH-1:00, HH:00) vs the same hour of the 3 previous days.
         // Story 20.14 — one grouped query for every store (sales and invoices, single revenue source)
-        Instant hourEnd = Instant.now().truncatedTo(ChronoUnit.HOURS);
+        Instant hourEnd = clock.instant().truncatedTo(ChronoUnit.HOURS);
         int prevHour = LocalTime.ofInstant(hourEnd.minus(Duration.ofHours(1)), ZoneOffset.UTC).getHour();
-        Map<UUID, StoreActivityRepository.HourlyActivity> byStore = activity.lastHour(hourEnd);
+        Map<UUID, StoreActivityRepository.HourlyActivity> byStore;
+        try {
+            byStore = activity.lastHour(hourEnd);
+        } catch (RuntimeException e) {
+            // one tenant's unreadable activity never stops the others
+            log.warn("[TREND] Activity unreadable for tenant {} ({}) — skipped", schema, e.getClass().getSimpleName());
+            return;
+        }
 
         for (StoreView store : stores) {
             try {

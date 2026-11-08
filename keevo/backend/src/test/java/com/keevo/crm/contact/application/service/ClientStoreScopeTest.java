@@ -74,15 +74,14 @@ class ClientStoreScopeTest {
     }
 
     @Test
-    void owner_withoutStore_getsTheOldestActiveStore() {
-        Instant t0 = Instant.parse("2026-01-01T00:00:00Z");
-        when(storeQuery.findAllActive(T)).thenReturn(List.of(view(B, true, t0.plusSeconds(60)), view(A, true, t0)));
+    void owner_withoutStore_getsTheDefaultStore() { // 20.14 — StoreQueryPort.defaultStore (one query)
+        when(storeQuery.defaultStore(T)).thenReturn(java.util.Optional.of(A));
         assertThat(scope.storeForNewClient(ClientAccess.SYSTEM, null, T)).isEqualTo(A);
     }
 
     @Test
     void owner_withoutAnyStore_getsNone() {
-        when(storeQuery.findAllActive(T)).thenReturn(List.of());
+        when(storeQuery.defaultStore(T)).thenReturn(java.util.Optional.empty());
         assertThat(scope.storeForNewClient(ClientAccess.SYSTEM, null, T)).isNull();
     }
 

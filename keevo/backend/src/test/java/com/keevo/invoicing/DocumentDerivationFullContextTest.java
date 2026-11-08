@@ -411,4 +411,25 @@ class DocumentDerivationFullContextTest extends FullContextIntegrationTest {
         assertThat(count("clients")).isEqualTo(clientsBefore);
         assertThat(count("products")).isEqualTo(productsBefore);
     }
+
+    @Test
+    @DisplayName("20.14: an owner's invoice made in a newer store, issued with derivation → the client is created in "
+            + "that store (not the oldest), the invoice keeps it")
+    void derivedClientFollowsTheInvoiceStore() throws Exception {
+        saleFlow("DOCUMENT");
+        settings(null);
+        UUID newer = store("Boutique Bonapriso", 60);
+        Map<String, Object> body = draftBody("Awa", "699 00 00 07");
+        body.put("storeId", newer.toString());
+
+        JsonNode draft = data(call(HttpMethod.POST, "/api/v1/invoices", body), 201);
+        assertThat(draft.path("storeId").asText()).isEqualTo(newer.toString());
+        JsonNode issued = issue(draft);
+
+        assertThat(issued.path("storeId").asText()).isEqualTo(newer.toString());
+        String clientId = issued.path("client").path("id").asText();
+        assertThat(clientId).isNotBlank();
+        assertThat(jdbc.queryForObject("SELECT store_id FROM \"" + schema + "\".clients WHERE id = ?::uuid",
+                UUID.class, clientId)).isEqualTo(newer).isNotEqualTo(oldestStore);
+    }
 }

@@ -98,6 +98,12 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
     }
 
     @Override
+    public Optional<UUID> defaultStore(String tenantSchema) {
+        TenantContext.requireCurrent(tenantSchema);
+        return storeRepository.defaultStoreId();
+    }
+
+    @Override
     public java.util.Map<UUID, String> namesByIds(String tenantSchema, java.util.Collection<UUID> storeIds) {
         TenantContext.requireCurrent(tenantSchema);
         if (storeIds == null) {

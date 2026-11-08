@@ -200,4 +200,20 @@ class InvoiceQuoteTest {
         assertThat(issued.cancel("Erreur", T1).storeId()).isEqualTo(store);
         assertThat(Invoice.draft(UUID.randomUUID(), CLIENT, LINES, SELLER, null, T0).storeId()).isNull();
     }
+
+    @Test
+    @DisplayName("20.14: the store is fixed at creation — another store, or a store set after the draft, is refused "
+            + "by the domain; the same store again is a no-op")
+    void storeFixedAtCreation() {
+        UUID store = UUID.randomUUID();
+        Invoice q = quote().inStore(store);
+        assertThat(q.inStore(store)).isSameAs(q);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> q.inStore(UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> q.inStore(null))
+                .isInstanceOf(IllegalStateException.class);
+        Invoice cancelled = quote().cancel("Client parti", T1);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> cancelled.inStore(store))
+                .isInstanceOf(IllegalStateException.class);
+    }
 }

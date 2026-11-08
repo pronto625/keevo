@@ -33,6 +33,12 @@ public interface StoreRepository {
     /** Story 20.5 — the country of the oldest active store (empty when there is none). One row read. */
     Optional<String> oldestActiveCountry();
 
+    /**
+     * Story 20.14 — the default store of the tenant: the active shops before the warehouses, then the oldest, then
+     * the id; empty without active store. One row read.
+     */
+    Optional<UUID> defaultStoreId();
+
     /** Returns true if any store with type=WAREHOUSE exists for the current tenant. */
     boolean existsWarehouse();
 }

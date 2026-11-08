@@ -7,7 +7,9 @@ import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary;
 import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase;
 import com.keevo.reporting.report.application.service.EndOfDayReportBuilder;
+import com.keevo.reporting.report.application.service.WeeklyReportBuilder;
 import com.keevo.reporting.report.domain.model.EndOfDayReportData;
+import com.keevo.reporting.report.domain.model.WeeklyReportData;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
@@ -65,6 +67,7 @@ class InvoiceStoreFullContextTest extends FullContextIntegrationTest {
     @Autowired ModuleRegistry registry;
     @Autowired EndOfDayReportBuilder endOfDay;
     @Autowired GetDashboardSummaryUseCase dashboard;
+    @Autowired WeeklyReportBuilder weeklyReport;
 
     private final UUID ownerId = UUID.randomUUID();
     private final UUID employeeId = UUID.randomUUID();
@@ -144,6 +147,23 @@ class InvoiceStoreFullContextTest extends FullContextIntegrationTest {
         return body;
     }
 
+    private JsonNode pushCreate(String token, Map<String, Object> payload) throws Exception {
+        clientClock = clientClock.plusSeconds(1);
+        Map<String, Object> op = new LinkedHashMap<>();
+        op.put("operationId", UUID.randomUUID().toString());
+        op.put("operationType", "CREATE_INVOICE");
+        op.put("entityId", payload.get("id"));
+        op.put("payload", payload);
+        op.put("clientTimestamp", clientClock.toString());
+        JsonNode pushed = data(call(token, HttpMethod.POST, "/api/v1/sync/push",
+                Map.of("deviceId", UUID.randomUUID().toString(), "operations", List.of(op))), 200);
+        return pushed.path("results").get(0);
+    }
+
+    private int invoiceCount() {
+        return jdbc.queryForObject("SELECT COUNT(*) FROM \"" + schema + "\".invoices", Integer.class);
+    }
+
     private UUID storeOf(String invoiceId) {
         return jdbc.queryForObject("SELECT store_id FROM \"" + schema + "\".invoices WHERE id = ?::uuid", UUID.class,
                 invoiceId);
@@ -196,7 +216,7 @@ class InvoiceStoreFullContextTest extends FullContextIntegrationTest {
         assertThat(b.totalRevenue()).isEqualTo(bBefore.totalRevenue() + 10_000);
         assertThat(b.totalSales()).isEqualTo(bBefore.totalSales() + 1);
         assertThat(endOfDay(storeA).totalRevenue()).isZero();
-        DashboardSummary d = dashboard();
+        DashboardSummary d = dashboard(); // the real bean: ProvisionedRevenueSource, not a test double
         assertThat(d.todayCA()).isEqualTo(tenantBefore + 10_000);
         assertThat(storeToday(d, storeB)).isEqualTo(10_000);
         assertThat(storeToday(d, storeA)).isZero();
@@ -233,11 +253,13 @@ class InvoiceStoreFullContextTest extends FullContextIntegrationTest {
 
         MvcResult unknown = call(ownerToken, HttpMethod.POST, "/api/v1/invoices",
                 content("Société Ndolo", 5_000, UUID.randomUUID(), null));
-        assertThat(unknown.getResponse().getStatus()).as(body(unknown)).isEqualTo(400);
-        assertThat(body(unknown)).contains("Boutique inconnue ou désactivée");
+        assertThat(unknown.getResponse().getStatus()).as(body(unknown)).isEqualTo(422);
+        JsonNode error = objectMapper.readTree(body(unknown));
+        assertThat(error.path("domainCode").asText()).isEqualTo("VALIDATION_ERROR");
+        assertThat(error.path("error").asText()).isEqualTo("Boutique inconnue ou désactivée");
         jdbc.update("UPDATE \"" + schema + "\".stores SET is_active = false WHERE id = ?", storeB);
         assertThat(call(ownerToken, HttpMethod.POST, "/api/v1/invoices", content("X", 5_000, storeB, null))
-                .getResponse().getStatus()).isEqualTo(400);
+                .getResponse().getStatus()).isEqualTo(422);
         jdbc.update("UPDATE \"" + schema + "\".stores SET is_active = true WHERE id = ?", storeB);
 
         Map<String, Object> edit = content("Société Ndolo SA", 6_000, storeA, null);
@@ -285,5 +307,82 @@ class InvoiceStoreFullContextTest extends FullContextIntegrationTest {
             assertThat(n.path("storeId").asText()).isEqualTo(storeB.toString());
             assertThat(n.path("storeName").asText()).isEqualTo("Boutique Bonapriso");
         });
+    }
+
+    // ── review 1 ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("sync refusals: an EMPLOYEE of B asking for A → REJECTED FORBIDDEN; an owner's unknown or inactive "
+            + "store → REJECTED VALIDATION_ERROR; the French message in conflictData, nothing created")
+    void syncRefusals() throws Exception {
+        Map<String, Object> other = content("Awa", 2_000, storeA, null);
+        other.put("id", UUID.randomUUID().toString());
+        JsonNode r1 = pushCreate(employeeToken, other);
+        assertThat(r1.path("status").asText()).as(r1.toString()).isEqualTo("REJECTED");
+        assertThat(r1.path("reason").asText()).isEqualTo("FORBIDDEN");
+        assertThat(r1.path("conflictData").path("message").asText())
+                .isEqualTo("Vous ne pouvez créer un document que dans votre boutique");
+
+        for (UUID bad : List.of(UUID.randomUUID(), storeB)) {
+            if (bad.equals(storeB)) {
+                jdbc.update("UPDATE \"" + schema + "\".stores SET is_active = false WHERE id = ?", storeB);
+            }
+            Map<String, Object> unknown = content("Awa", 2_000, bad, null);
+            unknown.put("id", UUID.randomUUID().toString());
+            JsonNode r2 = pushCreate(ownerToken, unknown);
+            assertThat(r2.path("status").asText()).as(r2.toString()).isEqualTo("REJECTED");
+            assertThat(r2.path("reason").asText()).isEqualTo("VALIDATION_ERROR");
+            assertThat(r2.path("conflictData").path("message").asText()).isEqualTo("Boutique inconnue ou désactivée");
+        }
+        assertThat(invoiceCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("an EMPLOYEE whose store is deactivated → 403 with an actionable French message")
+    void employeeOfAnInactiveStore() throws Exception {
+        jdbc.update("UPDATE \"" + schema + "\".stores SET is_active = false WHERE id = ?", storeB);
+        MvcResult r = call(employeeToken, HttpMethod.POST, "/api/v1/invoices", content("Awa", 1_000, null, null));
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(403);
+        assertThat(objectMapper.readTree(body(r)).path("error").asText()).startsWith("Votre boutique est désactivée");
+        assertThat(invoiceCount()).isZero();
+    }
+
+    @Test
+    @DisplayName("quote of B converted after B was deactivated → the invoice is made in the default store")
+    void conversionOfAQuoteOfAnInactiveStore() throws Exception {
+        JsonNode quote = data(call(ownerToken, HttpMethod.POST, "/api/v1/invoices",
+                content("Société Ndolo", 11_925, storeB, "QUOTE")), 201);
+        jdbc.update("UPDATE \"" + schema + "\".stores SET is_active = false WHERE id = ?", storeB);
+        JsonNode invoice = data(call(ownerToken, HttpMethod.POST,
+                "/api/v1/invoices/" + quote.path("id").asText() + "/convert", null), 201);
+        assertThat(invoice.path("storeId").asText()).isEqualTo(storeA.toString());
+    }
+
+    @Test
+    @DisplayName("through the real revenue source: an employee who only issued invoices is listed for its "
+            + "end-of-day report and gets its figures; the weekly report of B counts the invoice")
+    void employeeOnlyInvoicesAndWeekly() throws Exception {
+        JsonNode draft = data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices",
+                content("Awa Traoré", 8_000, null, null)), 201);
+        data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + draft.path("id").asText() + "/issue", null),
+                200);
+        LocalDate today = LocalDate.now(WAT);
+        ClosureWindow window = new ClosureWindow(today.atStartOfDay(WAT).toInstant(), Instant.now().plusSeconds(60),
+                null, null);
+
+        List<UUID> employees = inTenant(() -> endOfDay.getDistinctEmployeeIds(storeB, window));
+        assertThat(employees).containsExactly(employeeId);
+        EndOfDayReportData mine = inTenant(() -> endOfDay.buildForEmployee(storeB, employeeId, window, "Boutique",
+                today, LocalTime.of(20, 0), false, "Paul"));
+        assertThat(mine.totalRevenue()).isEqualTo(8_000);
+        assertThat(mine.totalSales()).isEqualTo(1);
+
+        ClosureWindow week = new ClosureWindow(today.minusDays(6).atStartOfDay(WAT).toInstant(),
+                Instant.now().plusSeconds(60), null, null);
+        WeeklyReportData weekly = inTenant(() -> weeklyReport.build(storeB, week, "Boutique", today, schema, false));
+        assertThat(weekly.totalRevenue()).isEqualTo(8_000);
+        assertThat(weekly.totalSales()).isEqualTo(1);
+        assertThat(inTenant(() -> weeklyReport.build(storeA, week, "Boutique", today, schema, false))
+                .totalRevenue()).isZero();
     }
 }

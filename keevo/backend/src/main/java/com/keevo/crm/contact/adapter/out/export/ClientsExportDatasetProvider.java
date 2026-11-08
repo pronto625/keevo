@@ -22,8 +22,7 @@ import static com.keevo.shared.infrastructure.export.ExportValues.toLong;
 
 /**
  * Export dataset {@code clients} (« Clients ») — Story v1s-18-2. Reference dataset, not
- * store-scoped (no store or period filter); archived clients included. Purchases = COMPLETED
- * sales of the client. Keyset {@code (created_at, id)}.
+ * store-scoped (no store or period filter); archived clients included. Keyset {@code (created_at, id)}.
  *
  * <p>Story 20.14 — purchases read the single revenue source ({@link RevenueQueryPort}): the client's COMPLETED sales
  * and issued / paid invoices (a sale bridged to an automatic invoice counted once), credit notes deducted from the
@@ -98,6 +97,12 @@ public class ClientsExportDatasetProvider extends NativeKeysetExportDataset {
                 + " MAX(COALESCE(r.recorded_at, r.created_at)) FILTER (WHERE r.doc_count > 0) AS last_purchase"
                 + " FROM " + revenue.current().documents() + " r WHERE r.client_id = c.id) agg ON TRUE"
                 + " LEFT JOIN stores st ON st.id = c.store_id";
+    }
+
+    /** Story 20.14 — counting needs no purchase totals: the plain clients join (same rows). */
+    @Override
+    protected String countFromClause() {
+        return "clients c LEFT JOIN stores st ON st.id = c.store_id";
     }
 
     @Override

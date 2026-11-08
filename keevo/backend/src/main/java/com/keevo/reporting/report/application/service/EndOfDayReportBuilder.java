@@ -170,11 +170,13 @@ public class EndOfDayReportBuilder {
     @Transactional(readOnly = true)
     public List<UUID> getDistinctEmployeeIds(UUID storeId, ClosureWindow window) {
         Window w = Window.of(window);
+        // 20.14: from the store-scoped revenue source — an employee who only issued invoices of the store gets
+        // their report too (credit notes are not transactions: doc_count > 0)
         List<Object> rows = w.bind(entityManager.createNativeQuery(
-                "SELECT DISTINCT s.employee_id FROM sales s " +
+                "SELECT DISTINCT s.employee_id FROM " + revenue.storeScoped().documents() + " s " +
                 "WHERE s.store_id = CAST(:sid AS UUID) " +
                 "  AND " + WINDOW_S + " " +
-                "  AND s.status = 'COMPLETED' " +
+                "  AND s.doc_count > 0 " +
                 "  AND s.employee_id IS NOT NULL"))
                 .setParameter("sid", storeId.toString())
                 .getResultList();

@@ -8,6 +8,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -25,7 +30,13 @@ class ProvisionedRevenueSourceTest {
     private static final String CHECK = ProvisionedRevenueSource.INVOICING_LEVEL;
 
     private final JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    private final ProvisionedRevenueSource source = new ProvisionedRevenueSource(jdbc);
+    private Instant now = Instant.parse("2026-11-08T10:00:00Z");
+    private final Clock clock = new Clock() {
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        @Override public Instant instant() { return now; }
+    };
+    private final ProvisionedRevenueSource source = new ProvisionedRevenueSource(jdbc, clock);
 
     @AfterEach
     void clear() {
@@ -51,7 +62,7 @@ class ProvisionedRevenueSourceTest {
 
     @Test
     @DisplayName("invoicing V11–V15: documents without store in the all-stores figures, store-scoped sales only; "
-            + "checked again next time (V16 may come)")
+            + "cached for the TTL, then checked again (V16 may come) — and once V16 is seen, for good")
     void tablesWithoutStores() {
         TenantContext.setCurrentTenant(TENANT);
         when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS);
@@ -59,11 +70,18 @@ class ProvisionedRevenueSourceTest {
         assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
         assertThat(source.current().documents()).doesNotContain("i.store_id").contains("FROM invoices i");
         assertThat(source.storeScoped()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
-        verify(jdbc, times(3)).queryForObject(CHECK, Integer.class);
+        verify(jdbc, times(1)).queryForObject(CHECK, Integer.class);
+
+        now = now.plus(ProvisionedRevenueSource.LOWER_LEVEL_TTL);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS_WITH_STORES);
+        assertThat(source.storeScoped()).isEqualTo(ProvisionedRevenueSource.ALL_WITH_STORES);
+        now = now.plus(ProvisionedRevenueSource.LOWER_LEVEL_TTL.multipliedBy(10));
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL_WITH_STORES);
+        verify(jdbc, times(2)).queryForObject(CHECK, Integer.class);
     }
 
     @Test
-    @DisplayName("no invoicing tables (V1 Keevo tenant): sales only, checked again next time (the module may come)")
+    @DisplayName("no invoicing tables (V1 Keevo tenant): sales only, cached for the TTL then checked again")
     void tablesAbsent() {
         TenantContext.setCurrentTenant(TENANT);
         when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.SALES);
@@ -71,7 +89,22 @@ class ProvisionedRevenueSourceTest {
         assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
         assertThat(source.current().documents()).isEqualTo(RevenueRelations.POS_DOCUMENTS);
         assertThat(source.storeScoped()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
-        verify(jdbc, times(3)).queryForObject(CHECK, Integer.class);
+        verify(jdbc, times(1)).queryForObject(CHECK, Integer.class);
+        now = now.plus(ProvisionedRevenueSource.LOWER_LEVEL_TTL);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS);
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
+        verify(jdbc, times(2)).queryForObject(CHECK, Integer.class);
+    }
+
+    @Test
+    @DisplayName("the level only goes up: a lower answer after the TTL (catalogue glitch) keeps the level seen")
+    void neverDown() {
+        TenantContext.setCurrentTenant(TENANT);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS);
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
+        now = now.plus(ProvisionedRevenueSource.LOWER_LEVEL_TTL);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.SALES);
+        assertThat(source.current()).isEqualTo(ProvisionedRevenueSource.ALL);
     }
 
     @Test

@@ -28,6 +28,14 @@ public interface JpaStoreRepository extends JpaRepository<StoreJpaEntity, UUID> 
             + "s.id ASC")
     List<String> findActiveCountriesOldestFirst(org.springframework.data.domain.Pageable page);
 
+    /**
+     * Story 20.14 — the active stores' ids in default-store order: shops before warehouses, then the oldest, then the
+     * id (callers take the first one, {@code LIMIT 1}).
+     */
+    @Query("SELECT s.id FROM StoreJpaEntity s WHERE s.isActive = true ORDER BY CASE WHEN s.type = "
+            + "com.keevo.store.api.StoreType.WAREHOUSE THEN 1 ELSE 0 END, s.createdAt ASC NULLS LAST, s.id ASC")
+    List<UUID> findActiveIdsInDefaultOrder(org.springframework.data.domain.Pageable page);
+
     /** Story 19.12 — {@code SELECT … FOR UPDATE} of one store (serialises logo changes of that store). */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT s FROM StoreJpaEntity s WHERE s.id = :id")

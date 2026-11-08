@@ -18,9 +18,9 @@ import java.util.UUID;
  * relations: sales and invoices of each store, a sale bridged to an invoice counted once), at the transaction instant
  * ({@code recorded_at}: a sale's {@code occurred_at}, an invoice's {@code issued_at}).
  *
- * <p>One grouped query for all the stores of the tenant (instead of two per store): the four one-hour windows are
- * pushed into each branch of the source — sales on {@code idx_sales_completed_occurred_at}, invoices on
- * {@code idx_invoices_counted_issued_at}, credit notes on {@code idx_credit_notes_issued_at}. Runs in its own
+ * <p>One grouped query for all the stores of the tenant (instead of two per store): only transactions
+ * ({@code doc_count > 0}: credit notes left out), the four one-hour windows pushed into each branch of the source —
+ * sales on {@code idx_sales_completed_occurred_at}, invoices on {@code idx_invoices_counted_issued_at}. Runs in its own
  * read-only transaction so the source resolves in the tenant's search_path (the caller sets the tenant context).
  */
 @Component
@@ -63,7 +63,7 @@ public class JdbcStoreActivityRepository implements StoreActivityRepository {
                 + "COALESCE(SUM(r.doc_count) FILTER (WHERE NOT (r.recorded_at >= ? AND r.recorded_at < ?)), 0) "
                 + "AS previous "
                 + "FROM " + revenue.storeScoped().documents() + " r "
-                + "WHERE r.store_id IS NOT NULL AND (" + windows + ") "
+                + "WHERE r.store_id IS NOT NULL AND r.doc_count > 0 AND (" + windows + ") "
                 + "GROUP BY r.store_id";
         Map<UUID, HourlyActivity> activity = new HashMap<>();
         jdbc.query(sql, rs -> {

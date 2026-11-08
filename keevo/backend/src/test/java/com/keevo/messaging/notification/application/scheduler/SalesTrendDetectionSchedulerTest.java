@@ -50,13 +50,16 @@ class SalesTrendDetectionSchedulerTest {
 
     private static final String SCHEMA = "kv_abc123";
     private static final UUID STORE_ID = UUID.randomUUID();
+    /** 14:37 UTC: the hour compared ends at 14:00. */
+    private static final java.time.Clock CLOCK = java.time.Clock.fixed(Instant.parse("2026-11-11T14:37:00Z"),
+            java.time.ZoneOffset.UTC);
 
     @BeforeEach
     void setUp() {
         scheduler = new SalesTrendDetectionScheduler(
                 jdbcTemplate, pushNotifier, cooldownRepository,
                 IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository), StoreApiTestSupport.queryPort(storeRepository),
-                activity);
+                null, activity, CLOCK);
     }
 
     private Store testStore() {
@@ -223,7 +226,7 @@ class SalesTrendDetectionSchedulerTest {
         com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
         SalesTrendDetectionScheduler gated = new SalesTrendDetectionScheduler(jdbcTemplate, pushNotifier,
                 cooldownRepository, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
-                StoreApiTestSupport.queryPort(storeRepository), modules, activity);
+                StoreApiTestSupport.queryPort(storeRepository), modules, activity, CLOCK);
         stubActiveSchemas(SCHEMA);
         when(modules.moduleState(SCHEMA, "advanced-reports")).thenReturn(com.keevo.shared.module.ModuleState.DISABLED);
 
@@ -242,7 +245,7 @@ class SalesTrendDetectionSchedulerTest {
         com.keevo.shared.module.ModuleRegistry modules = mock(com.keevo.shared.module.ModuleRegistry.class);
         SalesTrendDetectionScheduler gated = new SalesTrendDetectionScheduler(jdbcTemplate, pushNotifier,
                 cooldownRepository, IdentityOnboardingApiTestSupport.preferencesQueryPort(tenantPreferencesRepository),
-                StoreApiTestSupport.queryPort(storeRepository), modules, activity);
+                StoreApiTestSupport.queryPort(storeRepository), modules, activity, CLOCK);
         stubActiveSchemas(SCHEMA);
         when(modules.moduleState(SCHEMA, "advanced-reports")).thenThrow(new IllegalStateException("db"));
         when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendDisabledPrefs()));
@@ -267,10 +270,27 @@ class SalesTrendDetectionSchedulerTest {
 
         scheduler.detectTrends();
 
-        ArgumentCaptor<Instant> hour = ArgumentCaptor.forClass(Instant.class);
-        verify(activity, times(1)).lastHour(hour.capture());
-        assertEquals(hour.getValue(), hour.getValue().truncatedTo(java.time.temporal.ChronoUnit.HOURS));
+        verify(activity, times(1)).lastHour(Instant.parse("2026-11-11T14:00:00Z"));
         verify(pushNotifier, times(1)).notifyOwners(eq(SCHEMA), any());
         verify(cooldownRepository, never()).existsActiveCooldown(any(), any(), eq(other.id()), any());
+    }
+
+    @Test
+    @DisplayName("20.14: the activity of one tenant unreadable → logged, the next tenant still processed")
+    void activityFailureIsolated() {
+        String schema2 = "kv_def456";
+        stubActiveSchemas(SCHEMA, schema2);
+        when(tenantPreferencesRepository.findByCurrentTenant()).thenReturn(Optional.of(trendEnabledPrefs()));
+        when(storeRepository.findAllActive()).thenReturn(List.of(testStore()));
+        when(activity.lastHour(any()))
+                .thenThrow(new org.springframework.dao.DataAccessResourceFailureException("down"))
+                .thenReturn(Map.of(STORE_ID, new StoreActivityRepository.HourlyActivity(20, 5.0)));
+        when(cooldownRepository.existsActiveCooldown(eq("TREND_UP"), isNull(), eq(STORE_ID), any()))
+                .thenReturn(false);
+
+        assertDoesNotThrow(() -> scheduler.detectTrends());
+
+        verify(activity, times(2)).lastHour(any());
+        verify(pushNotifier, times(1)).notifyOwners(eq(schema2), any());
     }
 }

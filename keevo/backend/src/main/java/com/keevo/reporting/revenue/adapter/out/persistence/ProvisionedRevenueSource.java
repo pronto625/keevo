@@ -9,7 +9,10 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.Set;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,7 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  * Never provisions a module and never fails for one: a schema without the tables (or an unreadable catalogue,
  * logged at WARN) reads sales only. Cost: one catalogue lookup ({@code pg_attribute} on {@code to_regclass}) per
- * resolution until the V16 column is found, then none (cached per tenant schema — tables are never dropped).
+ * tenant and per {@link #LOWER_LEVEL_TTL} while the V16 column is missing, then none (the V16 level is cached for
+ * good — tables are never dropped). The level only goes up: a lower level is re-checked after its TTL (the module
+ * may have been provisioned or migrated meanwhile), never below what was already seen.
  */
 @Component
 public class ProvisionedRevenueSource implements RevenueQueryPort {
@@ -48,18 +53,30 @@ public class ProvisionedRevenueSource implements RevenueQueryPort {
     /** Invoicing V16+: documents with their store. */
     static final int DOCUMENTS_WITH_STORES = 2;
 
-    /** Resolved through the current search_path (the tenant schema): {@link #SALES} | {@link #DOCUMENTS} | 2. */
+    /**
+     * Resolved through the current search_path (the tenant schema): {@link #SALES}, {@link #DOCUMENTS} or
+     * {@link #DOCUMENTS_WITH_STORES}.
+     */
     static final String INVOICING_LEVEL = "SELECT CASE "
             + "WHEN NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('invoice_items') "
             + "AND attname = 'product_id' AND NOT attisdropped) THEN 0 "
             + "WHEN EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('invoices') "
             + "AND attname = 'store_id' AND NOT attisdropped) THEN 2 ELSE 1 END";
 
-    private final JdbcTemplate jdbc;
-    private final Set<String> withStores = ConcurrentHashMap.newKeySet();
+    /** How long a level below {@link #DOCUMENTS_WITH_STORES} is trusted before the catalogue is read again. */
+    static final Duration LOWER_LEVEL_TTL = Duration.ofMinutes(5);
 
-    public ProvisionedRevenueSource(JdbcTemplate jdbc) {
+    /** A tenant's level and until when it is trusted ({@code null} = for good). */
+    private record Cached(int level, Instant until) {
+    }
+
+    private final JdbcTemplate jdbc;
+    private final Clock clock;
+    private final Map<String, Cached> levels = new ConcurrentHashMap<>();
+
+    public ProvisionedRevenueSource(JdbcTemplate jdbc, Clock clock) {
         this.jdbc = jdbc;
+        this.clock = clock;
     }
 
     @Override
@@ -79,19 +96,22 @@ public class ProvisionedRevenueSource implements RevenueQueryPort {
     private int level() {
         String schema = TenantContext.getCurrentTenant();
         boolean tenant = TenantSchema.isValid(schema);
-        if (tenant && withStores.contains(schema)) {
-            return DOCUMENTS_WITH_STORES;
+        Instant now = clock.instant();
+        Cached cached = tenant ? levels.get(schema) : null;
+        if (cached != null && (cached.until() == null || now.isBefore(cached.until()))) {
+            return cached.level();
         }
         Integer found;
         try {
             found = jdbc.queryForObject(INVOICING_LEVEL, Integer.class);
         } catch (DataAccessException e) {
             log.warn("revenue source: invoicing tables not checkable ({}) — sales only", e.getClass().getSimpleName());
-            return SALES;
+            return cached == null ? SALES : cached.level();
         }
-        int level = found == null ? SALES : found;
-        if (level == DOCUMENTS_WITH_STORES && tenant) {
-            withStores.add(schema);
+        // the level only goes up (tables are never dropped)
+        int level = Math.max(found == null ? SALES : found, cached == null ? SALES : cached.level());
+        if (tenant) {
+            levels.put(schema, new Cached(level, level == DOCUMENTS_WITH_STORES ? null : now.plus(LOWER_LEVEL_TTL)));
         }
         return level;
     }

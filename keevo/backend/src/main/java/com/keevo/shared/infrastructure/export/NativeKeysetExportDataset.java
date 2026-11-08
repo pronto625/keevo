@@ -58,6 +58,15 @@ public abstract class NativeKeysetExportDataset implements ExportDatasetProvider
     /** FROM clause body with its joins (no {@code FROM}); joins must never duplicate a row. */
     protected abstract String fromClause();
 
+    /**
+     * Story 20.14 — the FROM clause of {@link #count}: {@link #fromClause()} by default; a dataset whose FROM carries
+     * per-row aggregates (a {@code LATERAL}) that never filter rows returns the plain joins, so counting never
+     * computes them. Must select exactly the rows of {@link #fromClause()} for every filter.
+     */
+    protected String countFromClause() {
+        return fromClause();
+    }
+
     /** Ordered keyset, ending with a primary key. */
     protected abstract List<Key> keyset();
 
@@ -113,7 +122,7 @@ public abstract class NativeKeysetExportDataset implements ExportDatasetProvider
     public long count(ExportFilter filter) {
         Map<String, Object> params = new LinkedHashMap<>();
         List<String> where = where(filter, params);
-        Query q = em.createNativeQuery("SELECT COUNT(*) FROM " + fromClause() + whereSql(where));
+        Query q = em.createNativeQuery("SELECT COUNT(*) FROM " + countFromClause() + whereSql(where));
         params.forEach(q::setParameter);
         return ((Number) q.getSingleResult()).longValue();
     }

@@ -261,10 +261,19 @@ public record Invoice(
      * current settings, linked to the quote ({@code sourceQuoteId}). Issued right after by the regular issue path.
      */
     public Invoice conversionDraft(UUID invoiceId, InvoicingSettings settings, UUID actorId, Instant now) {
+        return conversionDraft(invoiceId, settings, actorId, now, storeId);
+    }
+
+    /**
+     * Story 20.14 — same, made in {@code store}: the quote's store while it is active, else the default store (the
+     * caller resolves it).
+     */
+    public Invoice conversionDraft(UUID invoiceId, InvoicingSettings settings, UUID actorId, Instant now,
+                                   UUID store) {
         assertConvertible();
         List<LineInput> inputs = lines.stream().map(LineInput::of).toList();
         return draft(invoiceId, client, inputs, terms, settings, actorId, now).as(InvoiceKind.INVOICE, id)
-                .inStore(storeId);
+                .inStore(store);
     }
 
     /** DRAFT quote → CONVERTED, linked to the invoice {@code invoiceId} created from it. */
@@ -287,8 +296,21 @@ public record Invoice(
      * Story 20.14 — the same document made in {@code store} ({@code null} = none): set once at creation (store member
      * → its store, owner → the requested or the oldest active store, POS bridge → the sale's store), kept by every
      * later transition; a conversion copies the quote's.
+     *
+     * <p>Fixed at creation, enforced here: only a document being created ({@code DRAFT}) without a store gets one;
+     * asking an issued / converted / cancelled document, or another store than the one it has → {@link
+     * IllegalStateException} (a programming error, never a user action). The same store again is a no-op.
      */
     public Invoice inStore(UUID store) {
+        if (java.util.Objects.equals(store, storeId)) {
+            return this;
+        }
+        if (storeId != null) {
+            throw new IllegalStateException("The store of a document is fixed at its creation");
+        }
+        if (status != InvoiceStatus.DRAFT) {
+            throw new IllegalStateException("A store is set only while the document is created");
+        }
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
                 createdBy, createdAt, updatedAt, delivery, sourceSaleId, supersededAt, kind, convertedInvoiceId,

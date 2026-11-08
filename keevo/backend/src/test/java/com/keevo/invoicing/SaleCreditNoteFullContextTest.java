@@ -213,6 +213,11 @@ class SaleCreditNoteFullContextTest extends FullContextIntegrationTest {
         }
     }
 
+    private UUID storeOf(Object invoiceId) {
+        return jdbc.queryForObject("SELECT store_id FROM \"" + schema + "\".invoices WHERE id = ?", UUID.class,
+                invoiceId);
+    }
+
     private SaleCreditNoteListener target() {
         return AopTestUtils.getUltimateTargetObject(listener);
     }
@@ -262,6 +267,12 @@ class SaleCreditNoteFullContextTest extends FullContextIntegrationTest {
     void saleCorrected() throws Exception {
         UUID saleId = sell(2);
         Map<String, Object> old = awaitInvoice(saleId);
+        assertThat(storeOf(old.get("id"))).isEqualTo(storeId); // Story 20.14 — the sale's store
+        // Story 20.14 — the replacement keeps the replaced invoice's store (moved here to tell it from the event's)
+        UUID otherStore = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schema + "\".stores (id, created_at, updated_at, is_active, name, type) "
+                + "VALUES (?, now(), now(), true, 'Boutique Akwa', 'STORE')", otherStore);
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET store_id = ? WHERE id = ?", otherStore, old.get("id"));
 
         correct(saleId, 3);
 
@@ -280,6 +291,7 @@ class SaleCreditNoteFullContextTest extends FullContextIntegrationTest {
         assertThat(fresh.get("status")).isEqualTo("PAID");
         assertThat(fresh.get("number")).isEqualTo("FAC-" + year + "-000002");
         assertThat(((Number) fresh.get("total_ttc")).longValue()).isEqualTo(3000);
+        assertThat(storeOf(fresh.get("id"))).isEqualTo(otherStore);
 
         List<Map<String, Object>> notes = creditNotesOf(old.get("id"));
         assertThat(notes).hasSize(1);
@@ -435,6 +447,8 @@ class SaleCreditNoteFullContextTest extends FullContextIntegrationTest {
         assertThat(((Number) invoices.get(0).get("total_ttc")).longValue()).isEqualTo(3000);
         assertThat(invoices.get(0).get("status")).isEqualTo("PAID");
         assertThat(creditNoteCount()).isZero();
+        // Story 20.14 — no active invoice to replace: the event's store
+        assertThat(storeOf(invoices.get(0).get("id"))).isEqualTo(storeId);
     }
 
     @Test

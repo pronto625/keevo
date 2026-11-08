@@ -7,7 +7,6 @@ import com.keevo.store.api.StoreQueryPort;
 import com.keevo.store.api.StoreView;
 import org.springframework.stereotype.Service;
 
-import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -57,7 +56,8 @@ public class ClientStoreScope {
     /**
      * The store of a new client. A store member always gets its own store; another {@code requested} store →
      * {@code FORBIDDEN}. An OWNER gets {@code requested} (an active store of the tenant, else {@code VALIDATION_ERROR}
-     * with details {@code field = storeId}) or, without it, the oldest active store ({@code null} when none).
+     * with details {@code field = storeId}) or, without it, the tenant's default store
+     * ({@link StoreQueryPort#defaultStore}: a shop before a warehouse, then the oldest; {@code null} when none).
      */
     public UUID storeForNewClient(ClientAccess access, UUID requested, String tenantSchema) {
         if (!access.owner()) {
@@ -77,12 +77,7 @@ public class ClientStoreScope {
         if (requested != null) {
             return requireActiveStore(requested, tenantSchema);
         }
-        return storeQuery.findAllActive(tenantSchema).stream()
-                .filter(s -> s.id() != null)
-                .min(Comparator.comparing(StoreView::createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(StoreView::id))
-                .map(StoreView::id)
-                .orElse(null);
+        return storeQuery.defaultStore(tenantSchema).orElse(null); // 20.14 — the one default-store policy
     }
 
     /** The given store when it is an active store of the tenant, else {@code VALIDATION_ERROR} (field storeId). */
@@ -95,7 +90,7 @@ public class ClientStoreScope {
 
     private static DomainException unknownStore() {
         return DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
-                "Établissement inconnu ou désactivé", Map.of("field", STORE_FIELD));
+                StoreQueryPort.UNKNOWN_OR_INACTIVE_STORE, Map.of("field", STORE_FIELD));
     }
 
     /** Every active store of the tenant (an OWNER's « all my stores » duplicate check). One query. */

@@ -67,28 +67,51 @@ class DocumentStoreResolverTest {
     }
 
     @Test
-    @DisplayName("store member: its own store, nothing read; the same store requested is fine; another → 403")
+    @DisplayName("store member: its own active store; the same store requested is fine; another → 403")
     void member() {
+        when(stores.findById(TENANT, B)).thenReturn(Optional.of(store(B, StoreType.STORE, true, "2026-01-02T00:00:00Z")));
+        when(stores.findById(TENANT, A)).thenReturn(Optional.of(store(A, StoreType.STORE, true, "2026-01-01T00:00:00Z")));
         actor("EMPLOYEE", B);
         assertThat(resolver.forNewDocument(null, TENANT)).isEqualTo(B);
         assertThat(resolver.forNewDocument(B, TENANT)).isEqualTo(B);
         assertThatThrownBy(() -> resolver.forNewDocument(A, TENANT)).isInstanceOfSatisfying(DomainException.class,
-                e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN));
+                e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                    assertThat(e.getUserMessage()).isEqualTo(DocumentStoreResolver.OTHER_STORE);
+                });
         actor("MANAGER", A);
         assertThat(resolver.forNewDocument(null, TENANT)).isEqualTo(A);
-        verifyNoInteractions(stores);
     }
 
     @Test
-    @DisplayName("store member without store in its token: no store (the document is still made)")
+    @DisplayName("store member whose store is deactivated → 403 with an actionable French message (as expenses)")
+    void memberOfAnInactiveStore() {
+        when(stores.findById(TENANT, B)).thenReturn(Optional.of(store(B, StoreType.STORE, false, "2026-01-02T00:00:00Z")));
+        actor("EMPLOYEE", B);
+        assertThatThrownBy(() -> resolver.forNewDocument(null, TENANT)).isInstanceOfSatisfying(DomainException.class,
+                e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                    assertThat(e.getUserMessage()).startsWith("Votre boutique est désactivée");
+                });
+    }
+
+    @Test
+    @DisplayName("store member without store in its token: no store, nothing read; any storeId sent → 403 with its "
+            + "own French message")
     void memberWithoutStore() {
         actor("EMPLOYEE", null);
         assertThat(resolver.forNewDocument(null, TENANT)).isNull();
+        assertThatThrownBy(() -> resolver.forNewDocument(A, TENANT)).isInstanceOfSatisfying(DomainException.class,
+                e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                    assertThat(e.getUserMessage()).isEqualTo(DocumentStoreResolver.NO_ASSIGNED_STORE);
+                });
         verifyNoInteractions(stores);
     }
 
     @Test
-    @DisplayName("owner: the requested active store; unknown or inactive → VALIDATION_ERROR field storeId")
+    @DisplayName("owner: the requested active store; unknown or inactive → VALIDATION_ERROR field storeId, one "
+            + "French message")
     void ownerRequested() {
         actor("OWNER", null);
         when(stores.findById(TENANT, B)).thenReturn(Optional.of(store(B, StoreType.STORE, true, "2026-01-02T00:00:00Z")));
@@ -96,26 +119,32 @@ class DocumentStoreResolverTest {
         assertThat(resolver.forNewDocument(B, TENANT)).isEqualTo(B);
         for (UUID bad : List.of(A, UUID.randomUUID())) {
             assertThatThrownBy(() -> resolver.forNewDocument(bad, TENANT)).isInstanceOfSatisfying(
-                    DomainException.class, e -> assertThat(DocumentStoreResolver.isUnknownStore(e)).isTrue());
+                    DomainException.class, e -> {
+                        assertThat(DocumentStoreResolver.isUnknownStore(e)).isTrue();
+                        assertThat(e.getUserMessage()).isEqualTo(StoreQueryPort.UNKNOWN_OR_INACTIVE_STORE);
+                    });
         }
     }
 
     @Test
-    @DisplayName("owner without storeId: the oldest active shop (a warehouse only when no shop), none without store")
+    @DisplayName("owner without storeId: the store module's default store (one query), none without store")
     void ownerDefault() {
         actor("OWNER", null);
-        when(stores.findAllActive(TENANT)).thenReturn(List.of(
-                store(B, StoreType.STORE, true, "2026-03-01T00:00:00Z"),
-                store(W, StoreType.WAREHOUSE, true, "2025-01-01T00:00:00Z"),
-                store(A, StoreType.STORE, true, "2026-02-01T00:00:00Z")));
+        when(stores.defaultStore(TENANT)).thenReturn(Optional.of(A));
         assertThat(resolver.forNewDocument(null, TENANT)).isEqualTo(A);
-
-        when(stores.findAllActive(TENANT)).thenReturn(List.of(store(W, StoreType.WAREHOUSE, true,
-                "2025-01-01T00:00:00Z")));
-        assertThat(resolver.forNewDocument(null, TENANT)).isEqualTo(W);
-
-        when(stores.findAllActive(TENANT)).thenReturn(List.of());
+        when(stores.defaultStore(TENANT)).thenReturn(Optional.empty());
         assertThat(resolver.forNewDocument(null, TENANT)).isNull();
+    }
+
+    @Test
+    @DisplayName("conversion: the quote's store while active, else the default store; a quote without store → none")
+    void conversion() {
+        when(stores.findById(TENANT, B)).thenReturn(Optional.of(store(B, StoreType.STORE, true, "2026-01-02T00:00:00Z")));
+        when(stores.findById(TENANT, W)).thenReturn(Optional.of(store(W, StoreType.STORE, false, "2026-01-02T00:00:00Z")));
+        when(stores.defaultStore(TENANT)).thenReturn(Optional.of(A));
+        assertThat(resolver.forConversion(B, TENANT)).isEqualTo(B);
+        assertThat(resolver.forConversion(W, TENANT)).isEqualTo(A);
+        assertThat(resolver.forConversion(null, TENANT)).isNull();
     }
 
     @Test
@@ -131,6 +160,6 @@ class DocumentStoreResolverTest {
         when(stores.namesByIds(TENANT, Set.of(A, B))).thenReturn(Map.of(A, "Akwa", B, "Bonapriso"));
         assertThat(resolver.namesOf(List.of(none.inStore(A), none.inStore(B), none.inStore(A), none), TENANT))
                 .containsEntry(A, "Akwa").containsEntry(B, "Bonapriso");
-        verify(stores).namesOf(TENANT, Set.of(A, B));
+        verify(stores).namesByIds(TENANT, Set.of(A, B));
     }
 }

@@ -123,17 +123,10 @@ public class InvoiceController {
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> create(@Valid @RequestBody InvoiceRequestDto request) {
-        Invoice draft;
-        try {
-            draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
-                    TenantContext.getCurrentTenant());
-        } catch (com.keevo.shared.domain.exception.DomainException e) {
-            if (DocumentStoreResolver.isUnknownStore(e)) { // Story 20.14 — a bad storeId is a request error
-                String message = e.getUserMessage() != null ? e.getUserMessage() : e.getMessage();
-                throw new InvalidRequestParameterException(DocumentStoreResolver.STORE_FIELD, message, message);
-            }
-            throw e;
-        }
+        // Story 20.14 — a refused storeId is a DomainException (403 FORBIDDEN, or VALIDATION_ERROR field storeId),
+        // answered by the global mapping with its French message, exactly like the sync rejection
+        Invoice draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
+                TenantContext.getCurrentTenant());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(dto(draft)));
     }
 

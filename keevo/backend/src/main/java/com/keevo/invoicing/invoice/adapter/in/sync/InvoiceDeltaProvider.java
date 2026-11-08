@@ -50,14 +50,7 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
 
     private final DocumentStoreResolver stores;
 
-    public InvoiceDeltaProvider(InvoiceRepository invoices, InvoiceQueryUseCase queries,
-                                InvoicingSettingsUseCase settings, ObjectMapper objectMapper,
-                                ModuleProvisioner provisioner) {
-        this(invoices, queries, settings, objectMapper, provisioner, null);
-    }
-
-    /** Story 20.14 — {@code stores}: the store names of a page ({@code null} only in unit tests: no name). */
-    @org.springframework.beans.factory.annotation.Autowired
+    /** Story 20.14 — {@code stores}: the store names of a page (one lookup). */
     public InvoiceDeltaProvider(InvoiceRepository invoices, InvoiceQueryUseCase queries,
                                 InvoicingSettingsUseCase settings, ObjectMapper objectMapper,
                                 ModuleProvisioner provisioner, DocumentStoreResolver stores) {
@@ -106,7 +99,7 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
         // Story 20.7 — layouts, signatures, Bref references of the page: one batched query
         var presentations = queries.presentations(live);
         // Story 20.14 — store names of the page: one query
-        Map<java.util.UUID, String> storeNames = live.isEmpty() || stores == null ? Map.of()
+        Map<java.util.UUID, String> storeNames = live.isEmpty() ? Map.of()
                 : stores.namesOf(live, TenantContext.getCurrentTenant());
         List<Map<String, Object>> rows = page.stream().map(d -> d.deleted() ? tombstone(d.invoice())
                 : objectMapper.convertValue(InvoiceResponseDto.fromDomain(d.invoice(), current,

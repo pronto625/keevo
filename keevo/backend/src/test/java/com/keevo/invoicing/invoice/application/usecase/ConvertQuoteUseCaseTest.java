@@ -58,7 +58,8 @@ class ConvertQuoteUseCaseTest {
 
     @BeforeEach
     void setUp() {
-        useCase = new ConvertQuoteUseCase(invoices, settings, lifecycle, events, Clock.fixed(NOW, ZoneOffset.UTC));
+        useCase = new ConvertQuoteUseCase(invoices, settings, lifecycle, events, Clock.fixed(NOW, ZoneOffset.UTC),
+                null, org.mockito.Mockito.mock(DocumentStoreResolver.class));
         when(settings.find()).thenReturn(Optional.of(SELLER));
     }
 

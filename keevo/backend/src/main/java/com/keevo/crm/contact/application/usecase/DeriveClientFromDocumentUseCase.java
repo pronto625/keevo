@@ -67,15 +67,18 @@ public class DeriveClientFromDocumentUseCase {
     }
 
     /**
-     * Story 20.14 — an owner's derived client goes to the document's store when it is still active, else to the
-     * oldest active store (or none), as before.
+     * Story 20.14 — an owner's derived client goes to the document's store when it is still active (only the
+     * « unknown or inactive store » refusal is absorbed), else to the tenant's default store (or none).
      */
     private UUID ownerStore(UUID documentStore, String tenantSchema) {
         if (documentStore != null) {
             try {
                 return storeScope.requireActiveStore(documentStore, tenantSchema);
             } catch (com.keevo.shared.domain.exception.DomainException e) {
-                log.debug("[crm] document store inactive: client derived into the oldest active store");
+                if (!ClientStoreScope.isUnknownStore(e)) {
+                    throw e;
+                }
+                log.debug("[crm] document store inactive: client derived into the default store");
             }
         }
         return storeScope.storeForNewClient(ClientAccess.SYSTEM, null, tenantSchema); // oldest active, or none

@@ -51,23 +51,23 @@ public class ConvertQuoteUseCase {
     private final ApplicationEventPublisher events;
     private final Clock clock;
     private final com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations;
+    private final DocumentStoreResolver stores;
 
-    public ConvertQuoteUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
-                               InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock) {
-        this(invoices, settings, lifecycle, events, clock, null);
-    }
-
-    /** Story 20.7 — {@code presentations}: the new invoice takes the quote's layout and signatures. */
-    @org.springframework.beans.factory.annotation.Autowired
+    /**
+     * Story 20.7 — {@code presentations}: the new invoice takes the quote's layout and signatures ({@code null} in
+     * unit tests: none copied). Story 20.14 — {@code stores}: the new invoice's store.
+     */
     public ConvertQuoteUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock,
-                               com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations) {
+                               com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations,
+                               DocumentStoreResolver stores) {
         this.presentations = presentations;
         this.invoices = invoices;
         this.settings = settings;
         this.lifecycle = lifecycle;
         this.events = events;
         this.clock = clock;
+        this.stores = stores;
     }
 
     /** Story 20.3 — the French refusal of a conversion whose amounts the current VAT settings would change. */
@@ -108,7 +108,10 @@ public class ConvertQuoteUseCase {
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
         InvoicingSettings current = settings.find()
                 .orElseGet(() -> InvoicingSettings.defaults(settings.countryVatRate()));
-        Invoice draft = ManageDraftInvoiceUseCase.valid(() -> quote.conversionDraft(newId, current, actorId, now));
+        // Story 20.14 — the quote's store while active, else the default store (one store read)
+        UUID store = stores.forConversion(quote.storeId(), tenantId);
+        Invoice draft = ManageDraftInvoiceUseCase.valid(() -> quote.conversionDraft(newId, current, actorId, now,
+                store));
         if (!draft.totals().equals(quote.totals())) {
             // the client accepted the quote's amounts: never issue other ones silently
             throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, VAT_SETTINGS_CHANGED,

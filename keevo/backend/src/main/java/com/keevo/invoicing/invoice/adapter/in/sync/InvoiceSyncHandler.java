@@ -54,6 +54,13 @@ import java.util.UUID;
  *       {@code SETTLE_INVOICE_PAYMENT} {@code {invoiceId, paymentId, paidAt?, method?}}: the instalment is paid
  *       (already paid → APPLIED, unchanged). {@code serverEntityId} = the invoice id. {@code PAY_INVOICE} now settles
  *       the whole invoice (instalments paid, balance added).</li>
+ *   <li>Story 20.14 — {@code CREATE_INVOICE} takes an optional {@code storeId} (the store the document is made in,
+ *       ignored by {@code UPDATE_INVOICE}): a store member's own store, absent = its store; another store →
+ *       {@code REJECTED FORBIDDEN} « Vous ne pouvez créer un document que dans votre boutique », its store deactivated
+ *       or no store on its account with a {@code storeId} → {@code REJECTED FORBIDDEN} with its French message; an
+ *       owner's unknown or deactivated store → {@code REJECTED VALIDATION_ERROR} « Boutique inconnue ou
+ *       désactivée »; absent = the owner's default store. Nothing is created on a rejection; the French message is in
+ *       {@code conflictData.message}.</li>
  * </ul>
  * Payloads are validated with the REST request DTOs (same French messages, {@code VALIDATION_ERROR}); permissions are
  * those of the matching endpoint ({@code @RequiresPermission} is not applied to sync handlers, so it is checked here
@@ -196,6 +203,22 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
         }
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED,
                 result.id().toString(), null);
+    }
+
+    /**
+     * Story 20.14 — a rejection keeps its code as {@code reason}; when the refusal has a French message for the user
+     * (e.g. « Boutique inconnue ou désactivée », « Vous ne pouvez créer un document que dans votre boutique ») and no
+     * other details, {@code conflictData} carries it as {@code {message}} — the same text as the REST error, so the
+     * app shows it on the queued document.
+     */
+    @Override
+    protected SyncOperationResult mapDomainException(SyncOperation operation, DomainException e) {
+        SyncOperationResult result = super.mapDomainException(operation, e);
+        if (result.conflictData() != null || e.getUserMessage() == null || e.getUserMessage().isBlank()) {
+            return result;
+        }
+        return new SyncOperationResult(result.operationId(), result.status(), result.serverEntityId(),
+                result.reason(), Map.of("message", e.getUserMessage()));
     }
 
     /** Same rule as {@code @RequiresPermission} on the matching endpoint (roles of the authenticated actor). */
