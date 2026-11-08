@@ -130,7 +130,7 @@ Status: done
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur la branche de la story 20-7 (commit `feat(20-7)`, fusion sur `refonte/modulaire` par l'orchestrateur). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée sur la branche de la story 20-7 (commit `44505da1`, fusion sur `refonte/modulaire` par l'orchestrateur). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** chaque facture ou devis peut être imprimé dans l'un des 8 modèles de Bref (Classique, Moderne, Minimal, Reçu, Ticket classique / compact / détaillé / moderne) sur papier 58 mm, 80 mm ou A4 ; le PDF est fait par le serveur. Le client et le vendeur peuvent signer ; les signatures sont imprimées. Le lien public dure 30 jours (90 pour un compte importé de Bref), peut être régénéré (les anciens liens cessent de fonctionner), et les anciens liens Bref des factures importées s'ouvrent toujours. Un devis en attente peut être envoyé au client (lien / WhatsApp). Les PDF et le lien public montrent les versements, les échéances, le montant payé et le reste à payer.
 
