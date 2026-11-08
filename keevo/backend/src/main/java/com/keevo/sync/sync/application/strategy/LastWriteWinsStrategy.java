@@ -89,6 +89,13 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
     private static final java.util.Set<String> OWNER_ONLY =
             java.util.Set.of("UPDATE_STORE", "DEACTIVATE_STORE", "TOGGLE_CATEGORY");
 
+    /**
+     * Story 20.10 — operations reserved to the OWNER and the MANAGER (the roles holding {@code EXPENSE_*}, user
+     * decision 2026-11-08): for an EMPLOYEE or a VIEWER the handler must still run and reject them (FORBIDDEN), never
+     * answer « superseded ».
+     */
+    private static final java.util.Set<String> OWNER_OR_MANAGER = java.util.Set.of("UPDATE_EXPENSE", "DELETE_EXPENSE");
+
     private final SyncOperationsLogRepository logRepository;
     private final EntityLastModifiedRepository entityLastModified;
     private final UserSyncStateRepository userSyncStateRepository;
@@ -116,6 +123,8 @@ public class LastWriteWinsStrategy implements ConflictResolutionStrategy {
             return PreApplyCheck.NONE; // a withdrawal is never superseded
         }
         if (OWNER_ONLY.contains(operation.operationType()) && !CurrentActor.isOwner()) return PreApplyCheck.NONE;
+        if (OWNER_OR_MANAGER.contains(operation.operationType())
+                && !CurrentActor.isOwner() && !CurrentActor.isManager()) return PreApplyCheck.NONE;
         UUID id = entityId(operation, target);
         if (id == null) return PreApplyCheck.NONE;
         Optional<Instant> updatedAt = entityLastModified.findUpdatedAt(target.entity(), id);

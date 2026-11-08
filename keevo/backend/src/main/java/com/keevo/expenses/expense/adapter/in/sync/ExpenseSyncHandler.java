@@ -57,6 +57,12 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
     /** Calendar of the default date of an offline creation (Keevo's business day zone). */
     static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Douala");
 
+    /**
+     * French message of an operation refused to the actor's role: expenses are for the OWNER and the MANAGER only
+     * (user decision 2026-11-08) — an EMPLOYEE or a VIEWER holds no {@code EXPENSE_*} permission.
+     */
+    static final String ROLE_REFUSED = "Les dépenses sont réservées au propriétaire et au gérant.";
+
     /** The permission of each operation: the one of its REST endpoint. */
     private static final Map<String, String> PERMISSIONS = Map.of(
             CREATE, ExpensesModule.EXPENSE_CREATE,
@@ -169,8 +175,7 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
         String required = PERMISSIONS.get(type);
         Set<String> held = permissions.permissionsOf(ModulePermissions.rolesOf(CurrentActor.authentication()));
         if (required == null || !held.contains(required)) {
-            throw DomainException.userFacing(ErrorCode.FORBIDDEN,
-                    "Votre rôle ne permet pas cette opération sur les dépenses.");
+            throw DomainException.userFacing(ErrorCode.FORBIDDEN, ROLE_REFUSED);
         }
     }
 

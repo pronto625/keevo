@@ -687,6 +687,9 @@ public class SyncPushService implements SyncUseCase {
             if (provider.ownerOnly() && !command.owner()) {
                 // Story v1s-18-7 — owner-only delta: never queried for other roles (FR98).
                 state.positions().put(key, PullCursor.DONE);
+            } else if (provider.requiredPermission() != null && !pullScope.holds(provider.requiredPermission())) {
+                // Story 20.10 — permission-guarded delta (e.g. expenses: OWNER and MANAGER): never queried without it
+                state.positions().put(key, PullCursor.DONE);
             } else if (provider.moduleId() != null
                     && moduleStates.get(provider.moduleId()) == ModuleState.DISABLED) {
                 // Story 13.10a review — the entity's module is DISABLED for the tenant: nothing sent (premium data

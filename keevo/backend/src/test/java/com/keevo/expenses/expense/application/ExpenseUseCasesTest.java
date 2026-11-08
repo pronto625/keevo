@@ -31,7 +31,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-@DisplayName("Expense use cases — replays, member without store, edit date (Story 20.10)")
+@DisplayName("Expense use cases — replays, manager without store, edit date (Story 20.10)")
 class ExpenseUseCasesTest {
 
     private static final String T = "kv_test01";
@@ -58,7 +58,7 @@ class ExpenseUseCasesTest {
     }
 
     @Test
-    @DisplayName("a member without store: empty list with count 0 (no query), creation refused")
+    @DisplayName("a manager without store: empty list with count 0 (no query), creation refused")
     void memberWithoutStore() {
         ExpenseQueryUseCase.Page page = queries.list(new ExpenseQueryUseCase.ListQuery(null, null, null, null, null,
                 ExpenseSort.RECENT, null, 20), ExpenseAccess.member(null), T);

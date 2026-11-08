@@ -9,6 +9,7 @@ import com.keevo.shared.infrastructure.security.JwtTokenProvider;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
 import com.keevo.shared.module.RequiresEntitlement;
+import com.keevo.shared.module.application.ModulePermissions;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncOperationDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPullResponseDto;
 import com.keevo.sync.sync.adapter.in.rest.dto.SyncPushRequestDto;
@@ -73,6 +74,14 @@ public class SyncController {
         this.conflictsLogRepository = conflictsLogRepository;
         this.syncGateCheckService = syncGateCheckService;
         this.userSyncStateRepository = userSyncStateRepository;
+    }
+
+    /** Story 20.10 — the role → permission mapping of a restricted pull (absent = no permission, fail closed). */
+    private ModulePermissions modulePermissions;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setModulePermissions(ModulePermissions modulePermissions) {
+        this.modulePermissions = modulePermissions;
     }
 
     /**
@@ -221,7 +230,7 @@ public class SyncController {
         SyncPullResult result = syncUseCase.pull(
                 new SyncUseCase.PullCommand(actorId, tenantId, sinceInstant,
                         cursor != null && !cursor.isBlank() ? cursor : null,
-                        owner, pullScope(owner, actorId),
+                        owner, withPermissions(pullScope(owner, actorId)),
                         deviceId != null && !deviceId.isBlank() ? deviceId : null));
 
         return ResponseEntity.ok(ApiResponseWrapper.ok(SyncPullResponseDto.from(result)));
@@ -237,6 +246,18 @@ public class SyncController {
             return PullScope.unrestricted(actorId);
         }
         return PullScope.employee(CurrentActor.assignedStoreIdOrNull(), actorId);
+    }
+
+    /**
+     * Story 20.10 — a restricted scope carries the module permissions of the actor's roles (resolved once per pull),
+     * so permission-guarded deltas ({@code DeltaEntityProvider#requiredPermission}) follow the REST rules.
+     */
+    PullScope withPermissions(PullScope scope) {
+        if (!scope.restricted()) {
+            return scope;
+        }
+        return scope.withPermissions(modulePermissions == null ? java.util.Set.of()
+                : modulePermissions.permissionsOf(ModulePermissions.rolesOf(CurrentActor.authentication())));
     }
 
     @RequiresEntitlement(value = "sync", access = RequiresEntitlement.Access.READ)

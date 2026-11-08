@@ -24,8 +24,8 @@
   "routes": [],
   "rolePermissions": {
     "MANAGER": ["EXPENSE_VIEW", "EXPENSE_CREATE", "EXPENSE_DELETE"],
-    "EMPLOYEE": ["EXPENSE_VIEW", "EXPENSE_CREATE"],
-    "VIEWER": ["EXPENSE_VIEW"]
+    "EMPLOYEE": [],
+    "VIEWER": []
   },
   "entitlement": "module.expenses",
   "free": false

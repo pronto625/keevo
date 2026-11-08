@@ -138,6 +138,7 @@ class ExpenseSyncHandlerTest {
         for (JsonNode op : contract.path("rejected")) {
             String name = op.path("name").asText();
             reset(manage);
+            as(op.path("role").asText("OWNER"), op.has("role") ? Set.of() : ALL);
             switch (name) {
                 case "forbidden" -> when(manage.update(eq(id), any(), any(), any(), any())).thenThrow(
                         DomainException.userFacing(ErrorCode.FORBIDDEN, op.path("message").asText()));
@@ -156,6 +157,7 @@ class ExpenseSyncHandlerTest {
                 assertThat(r.conflictData()).as(name).containsEntry("message", op.path("message").asText());
             }
         }
+        as("OWNER", ALL);
 
         // the pull row has exactly the REST response fields; the tombstone exactly {id, deleted, updatedAt}
         Map<String, Object> rest = objectMapper.convertValue(ExpenseResponseDto.fromDomain(expense(id), "Boutique"),
@@ -189,7 +191,7 @@ class ExpenseSyncHandlerTest {
     }
 
     @Test
-    @DisplayName("a refusal reaches the device with its French message (domain rule, permission)")
+    @DisplayName("a refusal reaches the device with its French message (domain rule, role)")
     void frenchReasons() {
         UUID id = UUID.randomUUID();
         when(manage.create(eq(id), any(), any(), any(), any())).thenThrow(DomainException.userFacing(
@@ -201,11 +203,39 @@ class ExpenseSyncHandlerTest {
         assertThat(r.conflictData()).containsEntry("message", "La date de la dépense ne peut pas dépasser demain")
                 .containsEntry("field", "expenseDate");
 
-        as("EMPLOYEE", Set.of("EXPENSE_VIEW", "EXPENSE_CREATE"));
-        r = handler.handle(op("DELETE_EXPENSE", id.toString(), Map.of("expenseId", id.toString())), ACTOR, TENANT);
-        assertThat(r.reason()).isEqualTo("FORBIDDEN");
-        assertThat(r.conflictData()).containsEntry("message", "Votre rôle ne permet pas cette opération sur les dépenses.");
-        verify(manage, org.mockito.Mockito.never()).delete(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("user decision 2026-11-08: an EMPLOYEE or a VIEWER is REJECTED FORBIDDEN on every operation (French "
+            + "message, use case never called); a MANAGER's operations apply")
+    void roles() {
+        UUID id = UUID.randomUUID();
+        List<SyncOperation> ops = List.of(
+                op("CREATE_EXPENSE", id.toString(), Map.of("id", id.toString(), "amount", 10, "category", "other")),
+                op("UPDATE_EXPENSE", id.toString(), Map.of("expenseId", id.toString(), "amount", 10,
+                        "category", "other")),
+                op("DELETE_EXPENSE", id.toString(), Map.of("expenseId", id.toString())));
+        for (String role : List.of("EMPLOYEE", "VIEWER")) {
+            as(role, Set.of());
+            for (SyncOperation o : ops) {
+                SyncOperationResult r = handler.handle(o, ACTOR, TENANT);
+                assertThat(r.status()).as("%s %s", role, o.operationType()).isEqualTo(SyncOperationStatus.REJECTED);
+                assertThat(r.reason()).isEqualTo("FORBIDDEN");
+                assertThat(r.conflictData()).containsEntry("message",
+                        "Les dépenses sont réservées au propriétaire et au gérant.");
+            }
+        }
+        verifyNoInteractions(manage);
+
+        as("MANAGER", ALL);
+        when(manage.create(eq(id), any(), any(), eq(ACTOR), eq(TENANT)))
+                .thenReturn(new ManageExpenseUseCase.Created(expense(id), true));
+        when(manage.update(eq(id), any(), any(), eq(ACTOR), eq(TENANT))).thenReturn(expense(id));
+        for (SyncOperation o : ops) {
+            assertThat(handler.handle(o, ACTOR, TENANT).status()).as("MANAGER %s", o.operationType())
+                    .isEqualTo(SyncOperationStatus.APPLIED);
+        }
+        verify(manage).delete(eq(id), any(ExpenseAccess.class), eq(ACTOR));
     }
 
     @Test

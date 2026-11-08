@@ -67,6 +67,15 @@ public interface DeltaEntityProvider {
         return false;
     }
 
+    /**
+     * Story 20.10 — the module permission a restricted pull must hold to receive this delta ({@code null} = none
+     * required). Without it ({@link PullScope#holds}) the pull returns an empty list for {@link #entityKey()} and
+     * never queries the provider; an unrestricted pull (OWNER) always holds it.
+     */
+    default String requiredPermission() {
+        return null;
+    }
+
     /** First page of the delta since the given timestamp. */
     default List<Map<String, Object>> queryDelta(Instant since) {
         return queryDeltaPage(since, null, PAGE_SIZE).rows();

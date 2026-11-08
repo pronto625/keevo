@@ -21,9 +21,11 @@ import java.util.Map;
  * Story 20.10 — the {@code expenses} delta of the sync pull: the expenses changed since the device's cursor, each one
  * exactly as the REST API returns it ({@link ExpenseResponseDto}), a deleted one as a tombstone
  * {@code {id, deleted: true, updatedAt}}. Keyset paged on ({@code updated_at}, id as text) —
- * {@code idx_expenses_sync_keyset}. Store-specific: a store member's pull carries their store's expenses only
- * (bound parameter), a member without store none. Owned by {@code expenses}: skipped while the module is DISABLED; a
- * tenant whose table was never provisioned has no delta.
+ * {@code idx_expenses_sync_keyset}. Guarded by {@code EXPENSE_VIEW} (user decision 2026-11-08: OWNER and MANAGER
+ * only): an EMPLOYEE's or a VIEWER's pull gets nothing ({@link #requiredPermission()}, checked again here). Store
+ * scope: a MANAGER's pull carries their store's expenses only (bound parameter), a manager without store none.
+ * Owned by {@code expenses}: skipped while the module is DISABLED; a tenant whose table was never provisioned has no
+ * delta.
  */
 @Component
 public class ExpenseDeltaProvider implements DeltaEntityProvider {
@@ -57,6 +59,11 @@ public class ExpenseDeltaProvider implements DeltaEntityProvider {
         return ExpensesModule.ID;
     }
 
+    @Override
+    public String requiredPermission() {
+        return ExpensesModule.EXPENSE_VIEW;
+    }
+
     /** Without a scope (internal callers): every store. */
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit) {
@@ -65,7 +72,7 @@ public class ExpenseDeltaProvider implements DeltaEntityProvider {
 
     @Override
     public Page queryDeltaPage(Instant since, Position after, int limit, PullScope scope) {
-        if (scope.excludesEveryStore() || !expenses.tablesExist()) {
+        if (!scope.holds(ExpensesModule.EXPENSE_VIEW) || scope.excludesEveryStore() || !expenses.tablesExist()) {
             return new Page(List.of(), null);
         }
         provisioner.ensureProvisioned(TenantContext.getCurrentTenant(), ExpensesModule.ID);

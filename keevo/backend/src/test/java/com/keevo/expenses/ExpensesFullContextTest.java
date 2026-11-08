@@ -40,8 +40,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Story 20.10 — the « Dépenses » module end to end with the production security filter, JWTs, module gate and the
- * real sync chain: provisioning on first use, Bref rules, store scope (owner / employee), keyset list with totals,
- * edit / delete, offline operations (DUPLICATE, last write wins, tombstones), module disabled.
+ * real sync chain: provisioning on first use, Bref rules, roles (user decision 2026-11-08: OWNER and MANAGER only,
+ * an EMPLOYEE or a VIEWER refused everywhere), store scope (owner / manager), keyset list with totals, edit / delete,
+ * offline operations (DUPLICATE, last write wins, tombstones), module disabled.
  */
 @AutoConfigureMockMvc
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
@@ -63,6 +64,8 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     private UUID storeB;
     private String ownerToken;
     private String employeeToken;
+    private String managerToken;
+    private String viewerToken;
     private Instant clock = Instant.now().minusSeconds(600);
     private final Map<String, String> devices = new HashMap<>();
 
@@ -79,6 +82,8 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         ownerToken = TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema, "OWNER");
         employeeToken = TestAccess.token(jdbc, jwtTokenProvider, employeeId, schema, "EMPLOYEE", "ACTIVE", storeB,
                 false);
+        managerToken = memberToken("MANAGER", "Marie", storeB);
+        viewerToken = memberToken("VIEWER", "Jean", storeB);
     }
 
     @AfterEach
@@ -198,11 +203,11 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
                 + "\".expenses WHERE id = ?", Boolean.class, UUID.fromString(id)));
     }
 
-    private String managerToken() {
-        UUID managerId = UUID.randomUUID();
+    private String memberToken(String role, String firstName, UUID store) {
+        UUID memberId = UUID.randomUUID();
         jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
-                + "password_change_required) VALUES (?, ?, 'Marie', 'Ngo', false)", managerId, storeB);
-        return TestAccess.token(jdbc, jwtTokenProvider, managerId, schema, "MANAGER", "ACTIVE", storeB, false);
+                + "password_change_required) VALUES (?, ?, ?, 'Ngo', false)", memberId, store, firstName);
+        return TestAccess.token(jdbc, jwtTokenProvider, memberId, schema, role, "ACTIVE", store, false);
     }
 
     // ── REST ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -235,7 +240,7 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
 
         JsonNode got = ok(call(ownerToken, HttpMethod.GET, "/api/v1/expenses/" + id, null), 200).path("data");
         assertThat(got.path("category").asText()).isEqualTo("rent");
-        JsonNode options = ok(call(employeeToken, HttpMethod.GET, "/api/v1/expenses/options", null), 200).path("data");
+        JsonNode options = ok(call(managerToken, HttpMethod.GET, "/api/v1/expenses/options", null), 200).path("data");
         assertThat(options.path("categories")).hasSize(10);
         assertThat(options.path("paymentMethods")).hasSize(5);
     }
@@ -265,24 +270,24 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("store scope: the employee records and sees only their store; the owner sees all or filters; another "
-            + "store's expense is 404 for the employee; an employee may not delete")
+    @DisplayName("store scope: the manager records and sees only their store; the owner sees all or filters; another "
+            + "store's expense is 404 for the manager, who edits and deletes in their own store")
     void storeScope() throws Exception {
         Map<String, Object> inA = expense(5000, "transport", null);
         inA.put("storeId", storeA.toString());
         String a = create(ownerToken, inA).path("id").asText();
-        JsonNode b = create(employeeToken, expense(7000, "telecom", null));
+        JsonNode b = create(managerToken, expense(7000, "telecom", null));
         assertThat(b.path("storeId").asText()).isEqualTo(storeB.toString());
 
         Map<String, Object> intoA = expense(100, "other", null);
         intoA.put("storeId", storeA.toString());
-        error(call(employeeToken, HttpMethod.POST, "/api/v1/expenses", intoA), 403, "FORBIDDEN");
+        error(call(managerToken, HttpMethod.POST, "/api/v1/expenses", intoA), 403, "FORBIDDEN");
 
-        JsonNode employeeList = ok(call(employeeToken, HttpMethod.GET, "/api/v1/expenses?storeId=" + storeA, null),
+        JsonNode managerList = ok(call(managerToken, HttpMethod.GET, "/api/v1/expenses?storeId=" + storeA, null),
                 200);
-        assertThat(employeeList.path("data")).hasSize(1);
-        assertThat(employeeList.path("data").get(0).path("storeId").asText()).isEqualTo(storeB.toString());
-        assertThat(employeeList.path("meta").path("totalAmount").asText()).isEqualTo("7000");
+        assertThat(managerList.path("data")).hasSize(1);
+        assertThat(managerList.path("data").get(0).path("storeId").asText()).isEqualTo(storeB.toString());
+        assertThat(managerList.path("meta").path("totalAmount").asText()).isEqualTo("7000");
 
         JsonNode all = ok(call(ownerToken, HttpMethod.GET, "/api/v1/expenses", null), 200);
         assertThat(all.path("data")).hasSize(2);
@@ -293,11 +298,22 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         error(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?storeId=" + UUID.randomUUID(), null), 400,
                 "VALIDATION_ERROR");
 
-        error(call(employeeToken, HttpMethod.GET, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
-        error(call(employeeToken, HttpMethod.PUT, "/api/v1/expenses/" + a, expense(1, "other", null)), 404,
+        error(call(managerToken, HttpMethod.GET, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
+        error(call(managerToken, HttpMethod.PUT, "/api/v1/expenses/" + a, expense(1, "other", null)), 404,
                 "EXPENSE_NOT_FOUND");
-        error(call(employeeToken, HttpMethod.DELETE, "/api/v1/expenses/" + b.path("id").asText(), null), 403,
-                "FORBIDDEN");
+        error(call(managerToken, HttpMethod.DELETE, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
+        assertThat(live(a)).isTrue();
+
+        String bId = b.path("id").asText();
+        Map<String, Object> moveToA = expense(8000, "telecom", null);
+        moveToA.put("storeId", storeA.toString());
+        error(call(managerToken, HttpMethod.PUT, "/api/v1/expenses/" + bId, moveToA), 403, "FORBIDDEN");
+        JsonNode edited = ok(call(managerToken, HttpMethod.PUT, "/api/v1/expenses/" + bId,
+                expense(8000, "telecom", null)), 200).path("data");
+        assertThat(edited.path("amount").asText()).isEqualTo("8000");
+        assertThat(edited.path("storeId").asText()).isEqualTo(storeB.toString());
+        ok(call(managerToken, HttpMethod.DELETE, "/api/v1/expenses/" + bId, null), 204);
+        assertThat(live(bId)).isFalse();
     }
 
     @Test
@@ -438,8 +454,8 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("sync: an employee's pull carries their store's expenses only; their delete is FORBIDDEN; an invalid "
-            + "payload is REJECTED VALIDATION_ERROR")
+    @DisplayName("sync: a manager's operations apply in their store and their pull carries their store's expenses only "
+            + "(a deletion as a tombstone); an invalid payload is REJECTED VALIDATION_ERROR")
     void syncScope() throws Exception {
         Map<String, Object> inA = expense(5000, "transport", null);
         inA.put("storeId", storeA.toString());
@@ -452,14 +468,18 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         Map<String, Object> bad = expense(10, "food", null);
         bad.put("id", UUID.randomUUID().toString());
         var invalid = op("CREATE_EXPENSE", (String) bad.get("id"), bad);
-        var results = push(employeeToken, create, delete, invalid);
+        var results = push(managerToken, create, invalid);
         assertThat(result(results, create).path("status").asText()).isEqualTo("APPLIED");
-        assertThat(result(results, delete).path("reason").asText()).isEqualTo("FORBIDDEN");
         assertThat(result(results, invalid).path("reason").asText()).isEqualTo("VALIDATION_ERROR");
 
-        List<String> employeeSees = pullExpenses(employeeToken).stream().map(n -> n.path("id").asText()).toList();
-        assertThat(employeeSees).containsExactly(b);
+        List<String> managerSees = pullExpenses(managerToken).stream().map(n -> n.path("id").asText()).toList();
+        assertThat(managerSees).containsExactly(b);
         assertThat(pullExpenses(ownerToken).stream().map(n -> n.path("id").asText())).containsExactlyInAnyOrder(a, b);
+
+        assertThat(result(push(managerToken, delete), delete).path("status").asText()).isEqualTo("APPLIED");
+        List<JsonNode> afterDelete = pullExpenses(managerToken);
+        assertThat(afterDelete).hasSize(1);
+        assertThat(afterDelete.get(0).path("deleted").asBoolean()).isTrue();
     }
 
     @Test
@@ -524,8 +544,8 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("an employee of store B replaying store A's expense id → 403 with a French message, nothing of the "
-            + "expense disclosed; a MANAGER of store B deleting it → 404, the row stays live")
+    @DisplayName("a manager of store B replaying store A's expense id → 403 with a French message, nothing of the "
+            + "expense disclosed; deleting it → 404, the row stays live")
     void otherStoreIds() throws Exception {
         Map<String, Object> inA = expense(5000, "transport", null);
         inA.put("storeId", storeA.toString());
@@ -534,12 +554,12 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
 
         Map<String, Object> replay = expense(1, "other", null);
         replay.put("id", a);
-        MvcResult r = call(employeeToken, HttpMethod.POST, "/api/v1/expenses", replay);
+        MvcResult r = call(managerToken, HttpMethod.POST, "/api/v1/expenses", replay);
         error(r, 403, "FORBIDDEN");
         assertThat(body(r)).doesNotContain("Taxi secret").doesNotContain("5000").doesNotContain(storeA.toString())
                 .contains("autre boutique");
 
-        error(call(managerToken(), HttpMethod.DELETE, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
+        error(call(managerToken, HttpMethod.DELETE, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
         assertThat(live(a)).isTrue();
     }
 
@@ -586,8 +606,58 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         JsonNode moved = ok(call(ownerToken, HttpMethod.PUT, "/api/v1/expenses/" + id, move), 200).path("data");
         assertThat(moved.path("storeId").asText()).isEqualTo(storeB.toString());
         assertThat(moved.path("storeName").asText()).isEqualTo("Boutique Bonapriso");
-        assertThat(ok(call(employeeToken, HttpMethod.GET, "/api/v1/expenses/" + id, null), 200)
+        assertThat(ok(call(managerToken, HttpMethod.GET, "/api/v1/expenses/" + id, null), 200)
                 .path("data").path("id").asText()).isEqualTo(id);
+    }
+
+    // ── user decision 2026-11-08: expenses for the OWNER and the MANAGER only ────────────────────────────
+
+    @Test
+    @DisplayName("an EMPLOYEE or a VIEWER is refused on every REST route (403 FORBIDDEN, French message), every sync "
+            + "operation is REJECTED FORBIDDEN (never superseded) and their pull carries no expense")
+    void employeeAndViewerRefused() throws Exception {
+        Map<String, Object> inB = expense(5000, "transport", null);
+        inB.put("storeId", storeB.toString());
+        String b = create(ownerToken, inB).path("id").asText();
+        for (String token : List.of(employeeToken, viewerToken)) {
+            List<MvcResult> refused = List.of(
+                    call(token, HttpMethod.GET, "/api/v1/expenses", null),
+                    call(token, HttpMethod.GET, "/api/v1/expenses/options", null),
+                    call(token, HttpMethod.GET, "/api/v1/expenses/" + b, null),
+                    call(token, HttpMethod.POST, "/api/v1/expenses", expense(100, "other", null)),
+                    call(token, HttpMethod.PUT, "/api/v1/expenses/" + b, expense(100, "other", null)),
+                    call(token, HttpMethod.DELETE, "/api/v1/expenses/" + b, null));
+            for (MvcResult r : refused) {
+                error(r, 403, "FORBIDDEN");
+                assertThat(objectMapper.readTree(body(r)).path("error").asText()).isNotBlank();
+                assertThat(body(r)).doesNotContain("transport").doesNotContain("5000");
+            }
+
+            String id = UUID.randomUUID().toString();
+            Map<String, Object> payload = expense(100, "other", null);
+            payload.put("id", id);
+            var create = op("CREATE_EXPENSE", id, payload);
+            Map<String, Object> edit = expense(1, "other", null);
+            edit.put("expenseId", b);
+            var update = op("UPDATE_EXPENSE", b, edit); // queued before the owner's REST write: would be superseded
+            var delete = op("DELETE_EXPENSE", b, Map.of("expenseId", b));
+            var results = push(token, create, update, delete);
+            for (var op : List.of(create, update, delete)) {
+                assertThat(result(results, op).path("status").asText()).isEqualTo("REJECTED");
+                assertThat(result(results, op).path("reason").asText()).isEqualTo("FORBIDDEN");
+                if (token.equals(employeeToken)) {
+                    // a VIEWER's batch is refused as a whole before any handler (Story 19.5: read-only role)
+                    assertThat(result(results, op).path("conflictData").path("message").asText())
+                            .isEqualTo("Les dépenses sont réservées au propriétaire et au gérant.");
+                }
+            }
+            assertThat(pullExpenses(token)).isEmpty();
+        }
+        assertThat(rows()).isEqualTo(1);
+        assertThat(live(b)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT amount FROM \"" + schema + "\".expenses WHERE id = ?",
+                java.math.BigDecimal.class, UUID.fromString(b))).isEqualByComparingTo("5000");
+        assertThat(pullExpenses(managerToken).stream().map(n -> n.path("id").asText())).containsExactly(b);
     }
 
     @Test

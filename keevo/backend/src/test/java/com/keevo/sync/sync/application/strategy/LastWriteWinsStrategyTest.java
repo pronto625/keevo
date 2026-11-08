@@ -226,6 +226,26 @@ class LastWriteWinsStrategyTest {
                 .isEqualTo(PreApplyCheck.NONE);
     }
 
+    @ParameterizedTest(name = "{0} older than the expense from an EMPLOYEE or a VIEWER → left to the handler (FORBIDDEN)")
+    @CsvSource({"UPDATE_EXPENSE, ROLE_EMPLOYEE", "DELETE_EXPENSE, ROLE_EMPLOYEE", "UPDATE_EXPENSE, ROLE_VIEWER"})
+    @DisplayName("20.10 decision 2026-11-08: expense edits are for the OWNER and the MANAGER; others never superseded")
+    void expenseOperation_fromEmployeeOrViewer_leftToTheHandler(String type, String role) {
+        authenticate(role);
+        entityUpdatedAt(LwwEntity.EXPENSE, T2);
+
+        assertThat(strategy.beforeApply(op(type, "expenseId", T1), DEVICE, TENANT)).isEqualTo(PreApplyCheck.NONE);
+    }
+
+    @Test
+    @DisplayName("20.10: an older expense edit from a MANAGER is superseded like the owner's")
+    void expenseOperation_fromManager_superseded() {
+        authenticate("ROLE_MANAGER");
+        entityUpdatedAt(LwwEntity.EXPENSE, T2);
+
+        assertThat(strategy.beforeApply(op("UPDATE_EXPENSE", "expenseId", T1), DEVICE, TENANT).isSuperseded())
+                .isTrue();
+    }
+
     @Test
     void invalidId_noDecision() {
         var op = new SyncOperation("op-new", "UPDATE_PRODUCT", null, Map.of("productId", "not-a-uuid"), T1);

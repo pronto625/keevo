@@ -43,7 +43,9 @@ import java.util.UUID;
  * Expenses of the tenant — Story 20.10 (Bref expenses, FUS-FR25). Every handler is gated by the {@code expenses}
  * module ({@code @RequiresEntitlement}: GET → READ, other verbs → WRITE) and a module permission
  * ({@code @RequiresPermission}): view → {@code EXPENSE_VIEW}; record / edit → {@code EXPENSE_CREATE}; delete →
- * {@code EXPENSE_DELETE}. Store scope: an OWNER sees every store (or {@code storeId=}), anyone else their store only.
+ * {@code EXPENSE_DELETE}. Those permissions are held by the OWNER and the MANAGER only (user decision 2026-11-08): an
+ * EMPLOYEE or a VIEWER gets 403 {@code FORBIDDEN} on every route. Store scope: an OWNER sees every store (or
+ * {@code storeId=}), a MANAGER their store only.
  */
 @RestController
 @RequestMapping("/api/v1/expenses")

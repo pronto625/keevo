@@ -311,8 +311,10 @@ class SyncControllerPullGateTest {
 
         var command = pulled("device-e");
 
+        // 20.10: a restricted scope carries the role's module permissions (none here: no mapping bean in the slice)
         org.assertj.core.api.Assertions.assertThat(command.scope())
-                .isEqualTo(com.keevo.shared.application.port.sync.PullScope.employee(store, actorId));
+                .isEqualTo(com.keevo.shared.application.port.sync.PullScope.employee(store, actorId)
+                        .withPermissions(java.util.Set.of()));
         org.assertj.core.api.Assertions.assertThat(command.deviceId()).isEqualTo("device-e");
     }
 

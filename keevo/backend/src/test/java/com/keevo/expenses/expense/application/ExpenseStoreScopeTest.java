@@ -21,7 +21,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-@DisplayName("ExpenseStoreScope — expenses per store (Story 20.10, ADR-08)")
+@DisplayName("ExpenseStoreScope — expenses per store, OWNER or MANAGER (Story 20.10, ADR-08, decision 2026-11-08)")
 class ExpenseStoreScopeTest {
 
     private static final String T = "kv_test01";
@@ -51,7 +51,7 @@ class ExpenseStoreScopeTest {
     }
 
     @Test
-    @DisplayName("list: owner all or one known store (inactive included); member their store (filter ignored), none "
+    @DisplayName("list: owner all or one known store (inactive included); manager their store (filter ignored), none "
             + "without store")
     void listScope() {
         tenantStores();
@@ -63,7 +63,7 @@ class ExpenseStoreScopeTest {
     }
 
     @Test
-    @DisplayName("new expense: owner → requested active store or the oldest active one; member → their active store only")
+    @DisplayName("new expense: owner → requested active store or the oldest active one; manager → their active store only")
     void storeForNew() {
         tenantStores();
         assertThat(scope.storeForNew(ExpenseAccess.OWNER, null, T)).isEqualTo(older);
@@ -76,7 +76,7 @@ class ExpenseStoreScopeTest {
     }
 
     @Test
-    @DisplayName("edit: the owner's unchanged store costs no query and he may move it to an active store; a member "
+    @DisplayName("edit: the owner's unchanged store costs no query and he may move it to an active store; a manager "
             + "follows the creation rule (own active store, no move) with French messages")
     void storeForEdit() {
         assertThat(scope.storeForEdit(ExpenseAccess.OWNER, newer, null, T)).isEqualTo(newer);
@@ -93,7 +93,7 @@ class ExpenseStoreScopeTest {
     }
 
     @Test
-    @DisplayName("member refusals tell the user what to do")
+    @DisplayName("manager refusals tell the user what to do")
     void frenchRefusals() {
         tenantStores();
         refusedWith(() -> scope.storeForNew(ExpenseAccess.member(null), null, T),

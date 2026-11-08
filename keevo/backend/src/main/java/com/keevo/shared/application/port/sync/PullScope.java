@@ -22,8 +22,12 @@ import java.util.UUID;
  * @param actorId    the user id of the actor pulling (personal datasets), may be null
  * @param clientStoreIds Story 20.2 — for a restricted pull, the stores whose clients it sees (resolved once per pull
  *                   by the pull service); {@code null} = not resolved (the clients provider resolves it itself)
+ * @param permissions Story 20.10 — for a restricted pull, the module permissions the actor holds (resolved once by the
+ *                   pull endpoint from the role mapping); {@code null} = not resolved, which holds none (fail closed).
+ *                   Ignored for an unrestricted pull (OWNER holds every permission).
  */
-public record PullScope(boolean restricted, UUID storeId, UUID actorId, Set<UUID> clientStoreIds) {
+public record PullScope(boolean restricted, UUID storeId, UUID actorId, Set<UUID> clientStoreIds,
+                        Set<String> permissions) {
 
     /** Every row of the tenant (OWNER view). */
     public static final PullScope UNRESTRICTED = new PullScope(false, null, null);
@@ -33,16 +37,35 @@ public record PullScope(boolean restricted, UUID storeId, UUID actorId, Set<UUID
 
     public PullScope {
         clientStoreIds = clientStoreIds == null ? null : Set.copyOf(clientStoreIds);
+        permissions = permissions == null ? null : Set.copyOf(permissions);
+    }
+
+    /** Story 20.2 arity — permissions not resolved. */
+    public PullScope(boolean restricted, UUID storeId, UUID actorId, Set<UUID> clientStoreIds) {
+        this(restricted, storeId, actorId, clientStoreIds, null);
     }
 
     /** Pre-20.2 arity — client visible stores not resolved. */
     public PullScope(boolean restricted, UUID storeId, UUID actorId) {
-        this(restricted, storeId, actorId, null);
+        this(restricted, storeId, actorId, null, null);
     }
 
     /** Story 20.2 — the same scope with the client visible stores resolved. */
     public PullScope withClientStoreIds(Set<UUID> ids) {
-        return new PullScope(restricted, storeId, actorId, ids);
+        return new PullScope(restricted, storeId, actorId, ids, permissions);
+    }
+
+    /** Story 20.10 — the same scope with the actor's module permissions resolved. */
+    public PullScope withPermissions(Set<String> held) {
+        return new PullScope(restricted, storeId, actorId, clientStoreIds, held);
+    }
+
+    /**
+     * Story 20.10 — whether this pull may read data guarded by {@code permission}: always when unrestricted (OWNER /
+     * super-admin), else only when the resolved permissions contain it (unresolved = no).
+     */
+    public boolean holds(String permission) {
+        return !restricted || (permissions != null && permission != null && permissions.contains(permission));
     }
 
     public static PullScope unrestricted(UUID actorId) {
