@@ -2,7 +2,7 @@
 title: '20-13 API super-admin héritée de Bref — vue plateforme, listes inter-comptes, utilisateurs'
 type: 'feature'
 created: '2026-11-08'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'f9ce63f0ddf86f6e49549a8ceab33a41047bfc0b'
 review_loop_iteration: 1
 followup_review_recommended: true
@@ -209,6 +209,8 @@ Each needs its own chunked SQL (several use `TenantLastActivitySql` or a Java re
 **Decisions:** 2026-11-08 — l'utilisateur demande de tout développer (A1–A6).
 
 **Out of scope, owning stories:** campaigns → 21.6; public offer endpoint (`GET /plans`) → 21.10; owner self-service plan / checkout routes → 21.1 / 21.10; documents per store (per-store revenue incl. invoices, top stores with documents) → 20-14 / 24.4; port moved to `shared.capability.revenue` by 20-14 (rebased; the SQL stays in reporting, read through `reporting :: revenue`); remaining per-tenant loops (listed in Design Notes) → to be routed by the coordinator.
+
+**Verification (orchestrator):** full suite package by package on the rebased branch (clean build): 6 542 tests, 0 failures after fixing one timestamp-dependent assertion in `ExpensesFullContextTest.otherStoreIds` (test only). No local super-admin credentials, so no live keevo_dev call: the 22 routes are exercised through the real HTTP chain (security filter, PostgreSQL) by `BrefSuperAdminApiFullContextTest`, incl. the 403 for owners.
 
 ## Dashboard super-admin (autre dépôt)
 

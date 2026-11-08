@@ -371,6 +371,7 @@ development_status:
   m20-7-modeles-signatures-liens-publics: backlog  # API 487a8ec5+51d426dc — 8 modèles Bref (PUT /invoices/{id}/layout, ?template=&ticketWidth=), signatures client/vendeur, POST /invoices/{id}/public-link (+/rotate), réglages /invoicing/settings/documents, devis envoyable, bloc paiements sur PDF, anciens liens Bref
   m20-14-boutique-des-documents: backlog  # API b5b41077+676dc274+d1cdf583 — storeId/storeName sur les documents (création, liste ?storeId= propriétaire seul), visibilité par rôle (employé = ses documents, gérant/lecteur = sa boutique, 404 hors portée), chiffres par boutique avec factures
   m20-11-module-finance: backlog  # API 04620d05 — GET /api/v1/finance/summary (period=AAAA-MM|AAAA ou startDate/endDate, storeId) : CA HT, dépenses, résultat, marge, comparaison, séries, byStore ; propriétaire seul ; contrat finance-math-cases.json
+  d20-13-api-super-admin-heritee-bref: backlog  # API 169ed5c0+08b4789f — /admin/dashboard/{overview,growth,top-accounts,activity}, /admin/{customers,products,expenses} + fiches, /admin/users (+stats, devices), écritures A1–A4 (clients, membres)
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -465,7 +466,7 @@ development_status:
   20-10-module-expenses: done  # 2026-11-08 build-auto parallèle (spec-20-10) — revue 5 couches, 41 constats (28 corrigés, 3 routés → 22-5, 19-5b, 20-13), suite complète 6 329 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-11-module-finance: done  # 2026-11-08 build-auto parallèle (spec-20-11) — revue 5 couches, 34 constats (12 medium corrigés), calculs identiques à finance-math.ts (contrat finance-math-cases.json), suite complète 6 459 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-14-boutique-des-documents: done  # 2026-11-08 build-auto parallèle (spec-20-14) — revue 5 couches, 37 constats (12 medium corrigés, 2 routés → 17-9, 22-5), + décision utilisateur visibilité des documents par rôle (comme Bref), suite complète 6 436 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
-  20-13-api-super-admin-heritee-bref: backlog  # 2026-11-01 décision utilisateur — l'API Keevo absorbe toute l'API Bref, partie dashboard comprise (FUS-FR38)
+  20-13-api-super-admin-heritee-bref: done  # 2026-11-08 build-auto parallèle (spec-20-13) — table de correspondance des routes Bref, A1–A6 développés (décision utilisateur), revue 5 couches (1 high + medium corrigés, 1 routé → 19-11b), suite complète 6 542 tests verts ; revue de suivi recommandée
   20-12-acceptation-parcours-bref: backlog  # 2026-11-06 revue 20-3 — 1 item (que faire d un devis dont la facture convertie est annulée : dupliquer / re-devis, selon Bref)
   epic-20-retrospective: optional
 
