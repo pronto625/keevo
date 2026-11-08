@@ -169,11 +169,13 @@ Status: in-review (no review pass run in this session — `followup_review_recom
 
 **Review 1 fixes (2026-11-08):** see Spec Change Log. Verification: reporting 458 tests 0 failures (acceptance 17); invoicing 324 tests, 1 pin (13 → 14) fixed, `InvoiceSyncFullContextTest` re-run 15/15; architecture 122/122; `shared/infrastructure/persistence` (tenant shape, foundation migrations, pos V2) 124/124.
 
+**Verification (orchestrator):** full suite package by package on the rebased branch after a clean build: 6 287 tests, 0 failures. Live on keevo_dev (WhatsApp noop, FCM/Expo off), test tenant with invoicing activated for the check then deactivated: `FAC-2026-000007` (7 000) added once to today's revenue, a quote left it unchanged, profitability summary returned the unknown-margin split, inverted dates → 400 « La date de début doit précéder la date de fin. »; after deactivating invoicing the issued invoice stays counted (tables present).
+
 **Residual risks:** (1) documents have no store: per-store figures and the store closure reports stay POS-only until 24.4 adds `invoices.store_id`; (2) revenue of a tenant whose invoicing tables are below V11 (never touched since 20.5) is sales-only until its next invoicing call provisions them; (3) product figures use line amounts before document discount/delivery (as Bref's top items), so their sum may differ from the document revenue; (4) invoicing V14 number may collide with a parallel story's invoicing migration — renumber at merge if so.
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée, commit `0a4c0edd` (branche de la story 20.9), à fusionner dans `refonte/modulaire` / `develop`. Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10 (aucune nouvelle opération de synchro ici).
+**Statut :** API livrée, commits `8d228140` + `891771ab` (refonte/modulaire / develop). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10 (aucune nouvelle opération de synchro ici).
 
 **Ce qui est fait côté API :** le chiffre d'affaires de tous les écrans de rapports compte maintenant les ventes caisse et les factures, chacune une seule fois : une vente caisse qui a produit une facture automatique n'est comptée qu'une fois ; les devis, brouillons et factures annulées ne comptent pas ; un avoir est déduit le jour où il est émis. Une facture compte à sa date de facture (date civile, comme Bref). Le nombre de transactions compte les ventes et les factures (pas les avoirs). Les factures n'ont pas encore de boutique : elles apparaissent dans les chiffres « toutes boutiques », pas dans les chiffres d'une boutique. Les factures déjà émises restent comptées même si le module Facturation est ensuite désactivé. Un avoir saisi à la main sur la facture automatique d'une vente caisse est déduit ; les avoirs automatiques (vente annulée ou corrigée) ne le sont pas, la vente le reflète déjà. Une facture datée de demain n'entre dans aucun chiffre avant sa date.
 
