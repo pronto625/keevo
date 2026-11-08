@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 257 — gated: 129, exempt: 128.
+Handlers: 266 — gated: 137, exempt: 129.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -170,6 +170,7 @@ Handlers: 257 — gated: 129, exempt: 128.
 | GET | `/api/v1/invoices` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#list |
 | POST | `/api/v1/invoices` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#create |
 | GET | `/api/v1/invoices/clients` | `invoicing` | READ | `INVOICE_CREATE` |  | InvoiceController#clientSuggestions |
+| GET | `/api/v1/invoices/public/{token}` | — | — | — | ancien lien public Bref d'une facture importée (lien déjà partagé au client) | InvoiceLegacyLinkController#legacy |
 | GET | `/api/v1/invoices/shared` | — | — | — | lien signé envoyé au client (facture déjà contrôlée à l'envoi) | InvoiceSharedLinkController#shared |
 | DELETE | `/api/v1/invoices/{id}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoiceController#delete |
 | GET | `/api/v1/invoices/{id}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#get |
@@ -178,13 +179,21 @@ Handlers: 257 — gated: 129, exempt: 128.
 | POST | `/api/v1/invoices/{id}/convert` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#convert |
 | POST | `/api/v1/invoices/{id}/credit-notes` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | CreditNoteController#create |
 | POST | `/api/v1/invoices/{id}/issue` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#issue |
+| PUT | `/api/v1/invoices/{id}/layout` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoicePresentationController#layout |
 | POST | `/api/v1/invoices/{id}/pay` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#pay |
 | POST | `/api/v1/invoices/{id}/payments` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#addPayment |
 | POST | `/api/v1/invoices/{id}/payments/{paymentId}/settle` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#settlePayment |
 | GET | `/api/v1/invoices/{id}/pdf` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoiceController#pdf |
+| POST | `/api/v1/invoices/{id}/public-link` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoicePresentationController#publicLink |
+| POST | `/api/v1/invoices/{id}/public-link/rotate` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoicePresentationController#rotate |
 | POST | `/api/v1/invoices/{id}/send` | `invoicing` | WRITE | `INVOICE_SEND` |  | InvoiceController#send |
+| DELETE | `/api/v1/invoices/{id}/signatures/{role}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoicePresentationController#unsign |
+| GET | `/api/v1/invoices/{id}/signatures/{role}` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoicePresentationController#signature |
+| PUT | `/api/v1/invoices/{id}/signatures/{role}` | `invoicing` | WRITE | `INVOICE_CREATE` |  | InvoicePresentationController#sign |
 | GET | `/api/v1/invoicing/settings` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoicingSettingsController#get |
 | PUT | `/api/v1/invoicing/settings` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoicingSettingsController#update |
+| GET | `/api/v1/invoicing/settings/documents` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoicePresentationController#preferences |
+| PUT | `/api/v1/invoicing/settings/documents` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoicePresentationController#updatePreferences |
 | GET | `/api/v1/messaging/status` | `messaging` | READ | — |  | MessagingStatusController#getStatus |
 | GET | `/api/v1/notifications` | `messaging` | READ | — |  | NotificationController#list |
 | GET | `/api/v1/notifications/announcements` | — | — | — | core: annonces de la plateforme | AnnouncementController#list |
