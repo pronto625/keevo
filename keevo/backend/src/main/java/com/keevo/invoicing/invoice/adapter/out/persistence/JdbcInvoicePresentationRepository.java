@@ -14,7 +14,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,7 +30,7 @@ public class JdbcInvoicePresentationRepository implements InvoicePresentationRep
 
     static final String PREFERENCES = "invoicing_document_preferences";
     private static final String COLUMNS = "id, invoice_template, ticket_width, signature_client_path, "
-            + "signature_seller_path, public_link_version, legacy_public_token, legacy_reference";
+            + "signature_seller_path, public_link_version, legacy_public_token, legacy_reference, link_shared_at";
 
     private final JdbcTemplate jdbc;
 
@@ -56,11 +55,11 @@ public class JdbcInvoicePresentationRepository implements InvoicePresentationRep
             return Map.of();
         }
         Map<UUID, InvoicePresentation> out = new HashMap<>();
-        jdbc.query("SELECT " + COLUMNS + " FROM " + invoices() + " WHERE id IN ("
-                        + String.join(", ", Collections.nCopies(invoiceIds.size(), "?")) + ")",
-                rs -> {
-                    out.put(rs.getObject("id", UUID.class), map(rs));
-                }, invoiceIds.toArray());
+        // one query for the page, on the primary key
+        jdbc.query("SELECT " + COLUMNS + " FROM " + invoices() + " WHERE id = ANY(?) AND deleted_at IS NULL",
+                ps -> ps.setArray(1, ps.getConnection().createArrayOf("uuid", invoiceIds.toArray())),
+                (org.springframework.jdbc.core.RowCallbackHandler) rs -> out.put(rs.getObject("id", UUID.class),
+                        map(rs)));
         return out;
     }
 
@@ -68,7 +67,8 @@ public class JdbcInvoicePresentationRepository implements InvoicePresentationRep
         return new InvoicePresentation(InvoiceTemplate.fromStored(rs.getString("invoice_template")),
                 TicketWidth.fromCode(rs.getString("ticket_width")), rs.getString("signature_client_path"),
                 rs.getString("signature_seller_path"), rs.getInt("public_link_version"),
-                rs.getObject("legacy_public_token", UUID.class), rs.getString("legacy_reference"));
+                rs.getObject("legacy_public_token", UUID.class), rs.getString("legacy_reference"),
+                rs.getTimestamp("link_shared_at") != null);
     }
 
     @Override
@@ -84,6 +84,20 @@ public class JdbcInvoicePresentationRepository implements InvoicePresentationRep
                 : " SET signature_seller_path = ?";
         jdbc.update("UPDATE " + invoices() + set + ", updated_at = GREATEST(updated_at, ?) WHERE id = ?",
                 fileName, ts(now), invoiceId);
+    }
+
+    @Override
+    public void markShared(UUID invoiceId, Instant now) {
+        jdbc.update("UPDATE " + invoices() + " SET link_shared_at = ? WHERE id = ? AND link_shared_at IS NULL",
+                ts(now), invoiceId);
+    }
+
+    @Override
+    public void copyLayoutAndSignatures(UUID fromId, UUID toId, Instant now) {
+        jdbc.update("UPDATE " + invoices() + " t SET invoice_template = s.invoice_template, "
+                + "ticket_width = s.ticket_width, signature_client_path = s.signature_client_path, "
+                + "signature_seller_path = s.signature_seller_path, updated_at = GREATEST(t.updated_at, ?) FROM "
+                + invoices() + " s WHERE t.id = ? AND s.id = ?", ts(now), toId, fromId);
     }
 
     @Override

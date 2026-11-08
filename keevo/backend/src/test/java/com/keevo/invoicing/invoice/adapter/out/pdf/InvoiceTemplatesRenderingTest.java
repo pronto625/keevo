@@ -200,6 +200,31 @@ class InvoiceTemplatesRenderingTest {
     }
 
     @Test
+    @DisplayName("a very long ticket (400 lines) is paginated on roll pages of the maximum height, never one huge page")
+    void longTicket() throws IOException {
+        List<LineInput> lines = new ArrayList<>();
+        for (int i = 1; i <= 400; i++) {
+            lines.add(new LineInput("Article numéro " + i, BigDecimal.ONE, 1_000, VatTreatment.STANDARD));
+        }
+        Invoice issued = Invoice.draft(UUID.randomUUID(), new ClientInfo(null, "Grossiste", null, null, null), lines,
+                TTC_SELLER, UUID.randomUUID(), T0).issue("FAC-2026-000099", LocalDate.of(2026, 11, 2), TTC_SELLER, T1);
+        byte[] pdf = RENDERER.render(new RenderRequest(issued, SellerSnapshot.of(TTC_SELLER), null,
+                InvoiceTemplate.TICKET_CLASSIC, TicketWidth.MM_80, null, null, null, null));
+        try (PDDocument doc = Loader.loadPDF(pdf)) {
+            assertThat(doc.getNumberOfPages()).isGreaterThan(1);
+            float maxMm = InvoicePdfRenderer.MAX_TICKET_HEIGHT_MM;
+            for (var page : doc.getPages()) {
+                assertThat(page.getMediaBox().getHeight() * 25.4f / 72f)
+                        .isCloseTo(maxMm, org.assertj.core.data.Offset.offset(1f));
+                assertThat(page.getMediaBox().getWidth() * 25.4f / 72f)
+                        .isCloseTo(80f, org.assertj.core.data.Offset.offset(1f));
+            }
+            assertThat(squash(new PDFTextStripper().getText(doc))).contains(squash("Article numéro 400"),
+                    squash("400 000 XAF"));
+        }
+    }
+
+    @Test
     @DisplayName("Keevo standard layout: payment block, signatures and Bref reference added; plain invoice unchanged")
     void standardLayout() throws IOException {
         Sample paid = partiallyPaid();
@@ -225,7 +250,7 @@ class InvoiceTemplatesRenderingTest {
     }
 
     private static String squash(String text) {
-        return text.replaceAll("\\s+", "").toLowerCase(java.util.Locale.FRENCH);
+        return text.replaceAll("[\\s\\u00A0]+", "").toLowerCase(java.util.Locale.FRENCH);
     }
 
     private static int images(byte[] pdf) throws IOException {

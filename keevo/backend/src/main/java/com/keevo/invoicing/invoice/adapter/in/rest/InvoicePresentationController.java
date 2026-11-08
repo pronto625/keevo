@@ -1,13 +1,14 @@
 package com.keevo.invoicing.invoice.adapter.in.rest;
 
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.DocumentPreferencesDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.DocumentPreferencesRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceLayoutRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceResponseDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.PublicLinkDto;
 import com.keevo.invoicing.invoice.application.usecase.InvoicePresentationUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicePublicLinkUseCase;
-import com.keevo.invoicing.invoice.domain.model.DocumentPreferences;
 import com.keevo.invoicing.invoice.domain.model.SignatureRole;
+import com.keevo.invoicing.invoice.domain.port.out.InvoiceSignatureLimits;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceSignatureStorage.StoredImage;
 import com.keevo.invoicing.module.InvoicingModule;
 import com.keevo.shared.domain.exception.DomainException;
@@ -19,8 +20,6 @@ import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.shared.module.RequiresEntitlement;
 import com.keevo.shared.module.RequiresPermission;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
@@ -44,16 +43,16 @@ import java.util.UUID;
  * Story 20.7 (fusion Keevo × Bref, FUS-FR21/22/23) — layout, signatures and public link of a document (invoice or
  * quote), and the tenant's document defaults. Gated by the {@code invoicing} module like {@link InvoiceController}.
  * <ul>
- *   <li>{@code PUT /api/v1/invoices/{id}/layout} {@code {invoiceTemplate?, ticketWidth?}} — any status
- *       ({@code INVOICE_CREATE}) → the invoice;</li>
- *   <li>{@code PUT /api/v1/invoices/{id}/signatures/{client|seller}} multipart {@code file} (PNG / JPEG ≤ 200 KB,
- *       {@code INVOICE_CREATE}) → the invoice; {@code DELETE} (draft only) → the invoice; {@code GET} → the image
- *       ({@code INVOICE_VIEW});</li>
- *   <li>{@code POST /api/v1/invoices/{id}/public-link} → {@code {url, expiresAt, validityDays}} (issued / paid invoice
- *       or quote waiting for validation, {@code INVOICE_SEND}); {@code POST …/public-link/rotate} → the new link, every
- *       older one stops opening ({@code INVOICE_SEND});</li>
- *   <li>{@code GET / PUT /api/v1/invoicing/settings/documents} {@code {invoiceTemplate, ticketWidth, publicLinkDays}}
- *       (read {@code INVOICE_VIEW}, write {@code INVOICE_MANAGE}).</li>
+ *   <li>{@code PUT /api/v1/invoices/{id}/layout} {@code {invoiceTemplate?, ticketWidth?}} — partial (absent =
+ *       unchanged, {@code null} = account default), any status ({@code INVOICE_CREATE}) → the invoice;</li>
+ *   <li>{@code PUT /api/v1/invoices/{id}/signatures/{client|seller}} multipart {@code file} (PNG / JPEG ≤ 2 MB raw,
+ *       ≤ 200 KB once re-encoded, {@code INVOICE_CREATE}) → the invoice; {@code DELETE} (draft only) → the invoice;
+ *       {@code GET} → the image ({@code INVOICE_VIEW});</li>
+ *   <li>{@code POST /api/v1/invoices/{id}/public-link} → {@code {url, expiresAt, validityDays}} and
+ *       {@code POST …/public-link/rotate} (issued / paid invoice or quote waiting for validation, else 409;
+ *       {@code INVOICE_SEND});</li>
+ *   <li>{@code GET / PUT /api/v1/invoicing/settings/documents} {@code {invoiceTemplate?, ticketWidth?, publicLinkDays?}}
+ *       — partial (read {@code INVOICE_VIEW}, write {@code INVOICE_MANAGE}).</li>
  * </ul>
  */
 @RestController
@@ -66,26 +65,27 @@ public class InvoicePresentationController {
     private final InvoicePublicLinkUseCase links;
     private final InvoiceResponseAssembler invoices;
     private final PublicBaseUrl publicBaseUrl;
-    private final int maxBytes;
+    private final InvoiceSignatureLimits limits;
 
     public InvoicePresentationController(InvoicePresentationUseCase presentation, InvoicePublicLinkUseCase links,
                                          InvoiceResponseAssembler invoices, PublicBaseUrl publicBaseUrl,
-                                         @Value("${keevo.invoice-signature.max-bytes:204800}") int maxBytes) {
+                                         InvoiceSignatureLimits limits) {
         this.presentation = presentation;
         this.links = links;
         this.invoices = invoices;
         this.publicBaseUrl = publicBaseUrl;
-        this.maxBytes = maxBytes;
+        this.limits = limits;
     }
 
     @RequiresPermission(InvoicingModule.INVOICE_CREATE)
     @RequiresEntitlement(InvoicingModule.ID)
     @PutMapping("/api/v1/invoices/{id}/layout")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> layout(
-            @PathVariable UUID id, @Valid @RequestBody InvoiceLayoutRequestDto request) {
+            @PathVariable UUID id, @RequestBody InvoiceLayoutRequestDto request) {
         return ResponseEntity.ok(ApiResponseWrapper.ok(invoices.dto(presentation.updateLayout(id,
-                InvoiceController.parseTemplate(request.invoiceTemplate()),
-                InvoiceController.parseTicketWidth(request.ticketWidth())))));
+                InvoiceLayoutParams.templateChange(request.invoiceTemplate()),
+                InvoiceLayoutParams.widthChange(request.ticketWidth()), CurrentActor.actorId(),
+                TenantContext.getCurrentTenant()))));
     }
 
     @RequiresPermission(InvoicingModule.INVOICE_CREATE)
@@ -96,15 +96,15 @@ public class InvoicePresentationController {
                                                                        @RequestParam("file") MultipartFile file)
             throws IOException {
         SignatureRole r = role(role);
-        if (file.getSize() > maxBytes) { // refused before the upload is read into memory
+        if (file.getSize() > limits.maxUploadBytes()) { // refused before the upload is read into memory
             throw new DomainException(ErrorCode.INVOICE_SIGNATURE_TOO_LARGE,
-                    "Signature of " + file.getSize() + " bytes over " + maxBytes);
+                    "Signature upload of " + file.getSize() + " bytes over " + limits.maxUploadBytes());
         }
         if (!acceptedType(file.getContentType())) {
             throw new DomainException(ErrorCode.INVOICE_SIGNATURE_INVALID, "Declared type not accepted");
         }
         return ResponseEntity.ok(ApiResponseWrapper.ok(invoices.dto(presentation.sign(id, r, file.getBytes(),
-                TenantContext.getCurrentTenant()))));
+                CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }
 
     @RequiresPermission(InvoicingModule.INVOICE_CREATE)
@@ -113,7 +113,7 @@ public class InvoicePresentationController {
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> unsign(@PathVariable UUID id,
                                                                          @PathVariable String role) {
         return ResponseEntity.ok(ApiResponseWrapper.ok(invoices.dto(presentation.unsign(id, role(role),
-                TenantContext.getCurrentTenant()))));
+                CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }
 
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
@@ -142,7 +142,7 @@ public class InvoicePresentationController {
     @PostMapping("/api/v1/invoices/{id}/public-link/rotate")
     public ResponseEntity<ApiResponseWrapper<PublicLinkDto>> rotate(@PathVariable UUID id, HttpServletRequest http) {
         return ResponseEntity.ok(ApiResponseWrapper.ok(PublicLinkDto.from(links.rotate(id,
-                publicBaseUrl.resolve(http), TenantContext.getCurrentTenant()))));
+                publicBaseUrl.resolve(http), CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }
 
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
@@ -156,11 +156,11 @@ public class InvoicePresentationController {
     @RequiresEntitlement(InvoicingModule.ID)
     @PutMapping("/api/v1/invoicing/settings/documents")
     public ResponseEntity<ApiResponseWrapper<DocumentPreferencesDto>> updatePreferences(
-            @Valid @RequestBody DocumentPreferencesDto request) {
-        DocumentPreferences wanted = new DocumentPreferences(InvoiceController.parseTemplate(request.invoiceTemplate()),
-                InvoiceController.parseTicketWidth(request.ticketWidth()), request.publicLinkDays());
-        return ResponseEntity.ok(ApiResponseWrapper.ok(DocumentPreferencesDto.from(
-                presentation.updatePreferences(wanted, CurrentActor.actorId()))));
+            @RequestBody DocumentPreferencesRequestDto request) {
+        return ResponseEntity.ok(ApiResponseWrapper.ok(DocumentPreferencesDto.from(presentation.updatePreferences(
+                InvoiceLayoutParams.templateChange(request.invoiceTemplate()),
+                InvoiceLayoutParams.widthChange(request.ticketWidth()), request.publicLinkDays(),
+                CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }
 
     /** {@code client} / {@code seller}; anything else → 400 French. */

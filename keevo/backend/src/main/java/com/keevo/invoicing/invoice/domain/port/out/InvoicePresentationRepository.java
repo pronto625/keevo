@@ -33,6 +33,15 @@ public interface InvoicePresentationRepository {
     /** Sets (or clears, {@code fileName} null) the signature file of {@code role}. */
     void updateSignature(UUID invoiceId, SignatureRole role, String fileName, Instant now);
 
+    /** Story 20.7 — the document's public link was handed out (first time only; one UPDATE). */
+    void markShared(UUID invoiceId, Instant now);
+
+    /**
+     * Quote conversion — the new invoice takes the quote's layout and signatures (same signature files: a converted
+     * quote's signatures can no longer change, an issued invoice's neither). One UPDATE … FROM on primary keys.
+     */
+    void copyLayoutAndSignatures(UUID fromId, UUID toId, Instant now);
+
     /**
      * Rotation: bumps {@code public_link_version} and clears the legacy Bref token (one UPDATE); returns the new
      * version, empty when the document is unknown.

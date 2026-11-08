@@ -47,9 +47,20 @@ public class ManageDraftInvoiceUseCase {
     private final InvoiceClientResolver clients;
     private final InvoicePaymentRepository payments;
 
+    private final InvoicePresentationUseCase presentations;
+
     public ManageDraftInvoiceUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                      ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients,
                                      InvoicePaymentRepository payments) {
+        this(invoices, settings, events, clock, clients, payments, null);
+    }
+
+    /** Story 20.7 — {@code presentations}: a deleted draft's signature files are removed after the commit. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public ManageDraftInvoiceUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
+                                     ApplicationEventPublisher events, Clock clock, InvoiceClientResolver clients,
+                                     InvoicePaymentRepository payments, InvoicePresentationUseCase presentations) {
+        this.presentations = presentations;
         this.payments = payments;
         this.invoices = invoices;
         this.settings = settings;
@@ -181,6 +192,10 @@ public class ManageDraftInvoiceUseCase {
     public void delete(UUID id) {
         Invoice current = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         current.assertEditable();
+        if (presentations != null) {
+            presentations.discardSignatures(id, com.keevo.shared.infrastructure.persistence.TenantContext
+                    .getCurrentTenant());
+        }
         invoices.deleteDraft(id, clock.instant());
     }
 

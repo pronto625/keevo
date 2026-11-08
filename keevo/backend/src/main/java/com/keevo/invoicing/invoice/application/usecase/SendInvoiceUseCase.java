@@ -5,6 +5,8 @@ import com.keevo.invoicing.invoice.application.service.InvoiceSendRateLimiter;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicingSettingsRepository;
+import com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository;
+import com.keevo.invoicing.invoice.domain.model.InvoicePresentation;
 import com.keevo.shared.capability.business.CompanyIdentity;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.exception.DomainException;
@@ -47,6 +49,7 @@ public class SendInvoiceUseCase {
     private final InvoiceSendRateLimiter rateLimiter;
     private final CompanyIdentity companyIdentity;
     private final InvoicingSettingsRepository settings;
+    private final InvoicePresentationRepository presentations;
     private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
     private final Clock clock;
@@ -54,8 +57,9 @@ public class SendInvoiceUseCase {
     public SendInvoiceUseCase(InvoiceRepository invoices, WhatsAppSender whatsApp, InvoicePublicLinkUseCase links,
                               InvoiceSendRateLimiter rateLimiter, CompanyIdentity companyIdentity,
                               ApplicationEventPublisher events, TransactionTemplate tx, Clock clock,
-                              InvoicingSettingsRepository settings) {
+                              InvoicingSettingsRepository settings, InvoicePresentationRepository presentations) {
         this.settings = settings;
+        this.presentations = presentations;
         this.invoices = invoices;
         this.whatsApp = whatsApp;
         this.links = links;
@@ -81,8 +85,11 @@ public class SendInvoiceUseCase {
         rateLimiter.acquire(tenantSchema);
 
         Instant now = clock.instant();
-        String link = links.signedLink(invoice.id(), baseUrl, tenantSchema).url();
-        String message = message(invoice, sellerName(invoice, tenantSchema), link);
+        InvoicePresentation presentation = presentations.find(id).orElse(InvoicePresentation.NONE);
+        // Story 20.7 — an imported invoice without Keevo number is sent under its Bref reference
+        String reference = InvoicePublicLinkUseCase.reference(invoice, presentation.legacyReference());
+        String link = links.signedLink(invoice.id(), presentation.linkVersion(), baseUrl, tenantSchema).url();
+        String message = message(invoice, reference, sellerName(invoice, tenantSchema), link);
         try {
             whatsApp.sendReport(to, message);
         } catch (DomainException e) {
@@ -90,7 +97,7 @@ public class SendInvoiceUseCase {
             throw e;
         } catch (RuntimeException e) {
             rateLimiter.release(tenantSchema);
-            log.warn("INVOICE_SEND_FAILED number={} error={}", invoice.documentReference(), e.getClass().getSimpleName());
+            log.warn("INVOICE_SEND_FAILED number={} error={}", reference, e.getClass().getSimpleName());
             throw new DomainException(ErrorCode.WHATSAPP_DELIVERY_FAILED, e);
         }
 
@@ -99,12 +106,12 @@ public class SendInvoiceUseCase {
             Invoice locked = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
             Invoice recorded = locked.recordSending(to, now);
             invoices.markSent(recorded);
-            events.publishEvent(new InvoiceSentEvent(recorded.id(), recorded.documentReference(),
-                    recorded.client().name(),
-                    recorded.totals().totalTtc(), InvoicePhones.mask(to), actorId, tenantSchema, now));
+            events.publishEvent(new InvoiceSentEvent(recorded.id(), reference, recorded.client().name(),
+                    recorded.totals().totalTtc(), InvoicePhones.mask(to), actorId, tenantSchema, now,
+                    recorded.isQuote()));
             return recorded;
         });
-        log.info("INVOICE_SENT number={} tenant={}", invoice.documentReference(), tenantSchema);
+        log.info("INVOICE_SENT number={} tenant={}", reference, tenantSchema);
         return sent;
     }
 
@@ -131,8 +138,13 @@ public class SendInvoiceUseCase {
      * Story 20.7: « … voici votre devis DV-1A2B3C4D de … » for a quote.
      */
     static String message(Invoice invoice, String displayName, String link) {
+        return message(invoice, invoice.documentReference(), displayName, link);
+    }
+
+    /** Story 20.7 — with the printed reference ({@code FAC-…}, {@code DV-…}, or {@code BRF-…} of an import). */
+    static String message(Invoice invoice, String reference, String displayName, String link) {
         return "Bonjour " + invoice.client().name() + ", voici votre " + (invoice.isQuote() ? "devis " : "facture ")
-                + invoice.documentReference() + " de " + displayName + " d'un montant de " + amount(invoice.totals().totalTtc()) + " XAF : " + link;
+                + reference + " de " + displayName + " d'un montant de " + amount(invoice.totals().totalTtc()) + " XAF : " + link;
     }
 
     /** {@code 28850} → {@code 28 850} (plain spaces). */

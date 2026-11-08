@@ -48,8 +48,10 @@ class InvoicePublicLinkUseCaseTest {
     private final LegacyInvoiceLinkRegistry registry = mock(LegacyInvoiceLinkRegistry.class);
     private final CompanyIdentity identity = mock(CompanyIdentity.class);
     private final InvoiceLinkSigner signer = new InvoiceLinkSigner("0123456789abcdef0123456789abcdef-test");
+    private final org.springframework.context.ApplicationEventPublisher events =
+            mock(org.springframework.context.ApplicationEventPublisher.class);
     private final InvoicePublicLinkUseCase links = new InvoicePublicLinkUseCase(invoices, presentations, registry,
-            signer, identity, Clock.fixed(NOW, ZoneOffset.UTC));
+            signer, identity, events, Clock.fixed(NOW, ZoneOffset.UTC));
 
     private static Invoice issued() {
         return Invoice.draft(UUID.randomUUID(), new ClientInfo(null, "Client", null, null, null),
@@ -84,16 +86,24 @@ class InvoicePublicLinkUseCaseTest {
     }
 
     @Test
-    @DisplayName("version: a link signed before a rotation no longer opens; 14.2 tokens read as version 0")
-    void version() {
-        UUID id = UUID.randomUUID();
-        when(presentations.find(id)).thenReturn(Optional.of(version(2, null)));
-        links.assertCurrentVersion(signer.verify(signer.sign(SCHEMA, id, NOW.plusSeconds(60), 2)));
-        assertThatThrownBy(() -> links.assertCurrentVersion(signer.verify(signer.sign(SCHEMA, id, NOW.plusSeconds(60)))))
-                .isInstanceOf(DomainException.class).hasFieldOrPropertyWithValue("domainCode", "INVOICE_LINK_INVALID");
-        when(presentations.find(id)).thenReturn(Optional.empty());
-        assertThatThrownBy(() -> links.assertCurrentVersion(signer.verify(signer.sign(SCHEMA, id, NOW.plusSeconds(60),
-                2)))).isInstanceOf(DomainException.class);
+    @DisplayName("not sendable (draft invoice, cancelled quote) → 409 for a link and for a rotation, nothing written")
+    void notSendable() {
+        Invoice draft = Invoice.draft(UUID.randomUUID(), new ClientInfo(null, "Client", null, null, null),
+                List.of(new LineInput("Article", BigDecimal.ONE, 1_000, VatTreatment.STANDARD)), SELLER,
+                UUID.randomUUID(), NOW);
+        Invoice cancelledQuote = Invoice.quote(UUID.randomUUID(), new ClientInfo(null, "Client", null, null, null),
+                List.of(new LineInput("Article", BigDecimal.ONE, 1_000, VatTreatment.STANDARD)), SELLER,
+                UUID.randomUUID(), NOW).cancel("Abandon", NOW);
+        for (Invoice doc : List.of(draft, cancelledQuote)) {
+            when(invoices.findById(doc.id())).thenReturn(Optional.of(doc));
+            when(invoices.findByIdForUpdate(doc.id())).thenReturn(Optional.of(doc));
+            assertThatThrownBy(() -> links.link(doc.id(), "https://k", SCHEMA))
+                    .hasFieldOrPropertyWithValue("domainCode", "INVOICE_INVALID_TRANSITION");
+            assertThatThrownBy(() -> links.rotate(doc.id(), "https://k", UUID.randomUUID(), SCHEMA))
+                    .hasFieldOrPropertyWithValue("domainCode", "INVOICE_INVALID_TRANSITION");
+        }
+        verify(presentations, never()).rotateLink(any(), any());
+        verify(presentations, never()).markShared(any(), any());
     }
 
     @Test
@@ -102,13 +112,15 @@ class InvoicePublicLinkUseCaseTest {
         Invoice invoice = issued();
         UUID legacy = UUID.randomUUID();
         when(invoices.findByIdForUpdate(invoice.id())).thenReturn(Optional.of(invoice));
-        when(presentations.find(invoice.id())).thenReturn(Optional.of(version(0, legacy)),
-                Optional.of(version(1, null)));
+        when(presentations.find(invoice.id())).thenReturn(Optional.of(version(0, legacy)));
         when(presentations.rotateLink(eq(invoice.id()), any())).thenReturn(Optional.of(1));
         when(presentations.preferences()).thenReturn(DocumentPreferences.DEFAULTS);
-        InvoicePublicLinkUseCase.Link link = links.rotate(invoice.id(), "https://k", SCHEMA);
+        InvoicePublicLinkUseCase.Link link = links.rotate(invoice.id(), "https://k", UUID.randomUUID(), SCHEMA);
         verify(registry).unregister(legacy);
+        // the version comes from the UPDATE … RETURNING: the row is read once
+        verify(presentations, org.mockito.Mockito.times(1)).find(invoice.id());
         assertThat(signer.verify(token(link)).version()).isEqualTo(1);
+        verify(events).publishEvent(any(com.keevo.shared.event.catalog.invoicing.InvoiceLinkRotatedEvent.class));
     }
 
     @Test
@@ -147,5 +159,12 @@ class InvoicePublicLinkUseCaseTest {
                 UUID.fromString("1a2b3c4d-0000-4000-8000-000000000000")), null, SCHEMA);
         verify(presentations).attachLegacy(eq(invoice.id()), eq(token), eq("BRF-1A2B3C4D"), any());
         verify(registry).register(token, SCHEMA, invoice.id(), null);
+
+        // another token later: the old one is retired
+        UUID other = UUID.randomUUID();
+        when(presentations.find(invoice.id())).thenReturn(Optional.of(version(0, token)));
+        links.attachLegacy(invoice.id(), other, "BRF-1A2B3C4D", null, SCHEMA);
+        verify(registry).unregister(token);
+        verify(registry).register(other, SCHEMA, invoice.id(), null);
     }
 }

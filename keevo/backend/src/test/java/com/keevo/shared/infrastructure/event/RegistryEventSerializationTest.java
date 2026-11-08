@@ -92,6 +92,22 @@ class RegistryEventSerializationTest {
         f.put(com.keevo.shared.event.catalog.invoicing.InvoicesOverdueEvent.class,
                 new com.keevo.shared.event.catalog.invoicing.InvoicesOverdueEvent(
                         List.of("FAC-2026-000012", "FAC-2026-000015"), null, TENANT, T0));
+        // Story 20.7 — audited invoicing events (layouts, signatures, links, document defaults, quote sending)
+        f.put(com.keevo.shared.event.catalog.invoicing.InvoiceSentEvent.class,
+                new com.keevo.shared.event.catalog.invoicing.InvoiceSentEvent(A, "DV-1A2B3C4D", "Société Ndolo",
+                        23_850, "+237 6•• ••• 111", B, TENANT, T0, true));
+        f.put(com.keevo.shared.event.catalog.invoicing.InvoiceSignatureChangedEvent.class,
+                new com.keevo.shared.event.catalog.invoicing.InvoiceSignatureChangedEvent(A, "FAC-2026-000042", false,
+                        "Signature client", false, B, TENANT, T0));
+        f.put(com.keevo.shared.event.catalog.invoicing.InvoiceLayoutChangedEvent.class,
+                new com.keevo.shared.event.catalog.invoicing.InvoiceLayoutChangedEvent(A, "DV-1A2B3C4D", true,
+                        "Ticket classique", "58 mm", B, TENANT, T0));
+        f.put(com.keevo.shared.event.catalog.invoicing.InvoiceLinkRotatedEvent.class,
+                new com.keevo.shared.event.catalog.invoicing.InvoiceLinkRotatedEvent(A, "FAC-2026-000042", false, B,
+                        TENANT, T0));
+        f.put(com.keevo.shared.event.catalog.invoicing.DocumentPreferencesUpdatedEvent.class,
+                new com.keevo.shared.event.catalog.invoicing.DocumentPreferencesUpdatedEvent("Ticket moderne", "80 mm",
+                        90, B, TENANT, T0));
         f.put(ProductCreatedEvent.class, new ProductCreatedEvent(A, "Riz 5kg", "RIZ-5", TENANT, B,
                 "EMPLOYEE", "Awa", "Akwa", T0));
         f.put(SaleManuallyValidatedEvent.class, new SaleManuallyValidatedEvent(A, B, "client fidèle",

@@ -16,7 +16,11 @@ public interface LegacyInvoiceLinkRegistry {
 
     Optional<Target> find(UUID token);
 
-    /** Records (or re-points) a token — the import (Story 24.4). */
+    /**
+     * Records a token — the import (Story 24.4); the same token for the same target again only refreshes its expiry.
+     *
+     * @throws IllegalStateException the token already points to another tenant or invoice (never moved)
+     */
     void register(UUID token, String tenantSchema, UUID invoiceId, Instant expiresAt);
 
     /** The token stops opening anything (rotation); unknown token = no-op. */

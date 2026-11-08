@@ -140,7 +140,7 @@ public final class ErrorMessages {
             Map.entry("INVOICE_LINK_RATE_LIMITED",   "Trop de demandes pour ce lien, réessayez plus tard"),
             Map.entry("INVOICE_LINK_EXPIRED",        "Ce lien de facture a expiré : demandez un nouvel envoi à votre commerçant"),
             Map.entry("INVOICE_SIGNATURE_INVALID",   "Format de signature non pris en charge (PNG ou JPEG)"),
-            Map.entry("INVOICE_SIGNATURE_TOO_LARGE", "La signature est trop lourde (200 Ko maximum)"),
+            Map.entry("INVOICE_SIGNATURE_TOO_LARGE", "La signature est trop lourde : choisissez une image plus légère"),
             Map.entry("INVOICE_SIGNATURE_NOT_FOUND", "Ce document n'a pas cette signature"),
             Map.entry("CREDIT_NOTE_NOT_FOUND",       "Avoir introuvable"),
             Map.entry("CREDIT_NOTE_INVALID",         "L'avoir n'est pas valide : {reason}"),

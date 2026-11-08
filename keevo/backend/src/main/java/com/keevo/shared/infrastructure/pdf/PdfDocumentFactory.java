@@ -90,10 +90,11 @@ public class PdfDocumentFactory {
      * Story 20.7 — a single page as tall as its content (thermal ticket rolls have no fixed page height): the template
      * reads its page height in millimetres from {@code heightVariable}; a first layout on a {@value #MEASURE_HEIGHT_MM}
      * mm page measures the content (no PDF written), then the document is rendered on a page of that height (at least
-     * {@code minHeightMm}). Cost: two layouts of a small document.
+     * {@code minHeightMm}). Content taller than {@code maxHeightMm} is rendered on pages of {@code maxHeightMm}
+     * (paginated) — a printer or viewer never gets a page of several metres. Cost: two layouts.
      */
     public byte[] renderFitted(String template, Map<String, Object> variables, String heightVariable,
-                               int minHeightMm) {
+                               int minHeightMm, int maxHeightMm) {
         Map<String, Object> measuring = new java.util.HashMap<>(variables);
         measuring.put(heightVariable, MEASURE_HEIGHT_MM);
         double contentMm;
@@ -103,7 +104,8 @@ public class PdfDocumentFactory {
             contentMm = points * 25.4 / 72.0;
         }
         Map<String, Object> fitted = new java.util.HashMap<>(variables);
-        fitted.put(heightVariable, Math.max(minHeightMm, (int) Math.ceil(contentMm) + 1));
+        int height = Math.max(minHeightMm, (int) Math.ceil(contentMm) + 1);
+        fitted.put(heightVariable, Math.min(height, maxHeightMm));
         return render(template, fitted);
     }
 

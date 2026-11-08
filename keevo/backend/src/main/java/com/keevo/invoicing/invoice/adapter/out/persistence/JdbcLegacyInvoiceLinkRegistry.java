@@ -12,7 +12,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * {@link LegacyInvoiceLinkRegistry} on {@code public.invoice_legacy_links} (public V58, Story 20.7): one primary-key
+ * {@link LegacyInvoiceLinkRegistry} on {@code public.invoice_legacy_links} (public V57, Story 20.7): one primary-key
  * read per opened link, whatever the number of tenants.
  */
 @Component
@@ -38,11 +38,16 @@ public class JdbcLegacyInvoiceLinkRegistry implements LegacyInvoiceLinkRegistry 
 
     @Override
     public void register(UUID token, String tenantSchema, UUID invoiceId, Instant expiresAt) {
-        jdbc.update("INSERT INTO public.invoice_legacy_links (token, tenant_schema, invoice_id, expires_at) "
-                        + "VALUES (?, ?, ?, ?) ON CONFLICT (token) DO UPDATE SET tenant_schema = EXCLUDED.tenant_schema, "
-                        + "invoice_id = EXCLUDED.invoice_id, expires_at = EXCLUDED.expires_at",
+        // a replay for the same target only refreshes the expiry; a token is never moved to another tenant / invoice
+        int written = jdbc.update("INSERT INTO public.invoice_legacy_links AS l (token, tenant_schema, invoice_id, "
+                        + "expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (token) DO UPDATE SET expires_at = "
+                        + "EXCLUDED.expires_at WHERE l.tenant_schema = EXCLUDED.tenant_schema "
+                        + "AND l.invoice_id = EXCLUDED.invoice_id",
                 token, TenantSchema.validate(tenantSchema), invoiceId,
                 expiresAt == null ? null : Timestamp.from(expiresAt));
+        if (written == 0) {
+            throw new IllegalStateException("Bref public token already attached to another invoice");
+        }
     }
 
     @Override

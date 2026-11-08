@@ -9,12 +9,16 @@ import com.keevo.invoicing.invoice.domain.model.SignatureRole;
 import com.keevo.invoicing.invoice.domain.model.TicketWidth;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceRepository;
+import com.keevo.invoicing.invoice.domain.port.out.InvoiceSignatureLimits;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceSignatureNormalizer;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceSignatureStorage;
 import com.keevo.invoicing.invoice.domain.port.out.InvoiceSignatureStorage.StoredImage;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
-import org.springframework.beans.factory.annotation.Value;
+import com.keevo.shared.event.catalog.invoicing.DocumentPreferencesUpdatedEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoiceLayoutChangedEvent;
+import com.keevo.shared.event.catalog.invoicing.InvoiceSignatureChangedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -23,7 +27,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -33,13 +39,15 @@ import java.util.UUID;
  *       not a legal mention);</li>
  *   <li>its client and seller signatures — stored like the logos (re-encoded PNG / JPEG file, the row keeps the file
  *       name). Signing a cancelled invoice or a converted / cancelled quote is refused; on an issued invoice a
- *       signature is added once and never replaced nor removed (it is evidence of the client's agreement); a draft's
- *       signature can be replaced or removed;</li>
+ *       signature is added once and never replaced nor removed (evidence of the agreement) — unless its stored file
+ *       is missing; on a quote already sent (WhatsApp or public link) the client signature is frozen the same way;
+ *       a draft's signature can be replaced or removed;</li>
  *   <li>the tenant's defaults (layout, paper, public link lifetime).</li>
  * </ul>
- * Pattern of the logos (Ports &amp; Adapters + file swap after commit): the file the row no longer points to is deleted
- * only after the commit, the new file after a rollback. Cost: one locked invoice read, one presentation read, one
- * UPDATE, one file write.
+ * Every change is audited (signature added / removed, layout, document settings). Partial updates: an absent field
+ * ({@code null} {@link Optional}) keeps the current value, {@link Optional#empty()} clears it. Pattern of the logos
+ * (Ports &amp; Adapters + file swap after commit). Cost: one locked invoice read, one presentation read, one UPDATE,
+ * one file write.
  */
 @Service
 public class InvoicePresentationUseCase {
@@ -48,49 +56,63 @@ public class InvoicePresentationUseCase {
     private final InvoicePresentationRepository presentations;
     private final InvoiceSignatureStorage storage;
     private final InvoiceSignatureNormalizer normalizer;
-    private final int maxBytes;
+    private final ApplicationEventPublisher events;
+    private final int maxUploadBytes;
     private final Clock clock;
 
     public InvoicePresentationUseCase(InvoiceRepository invoices, InvoicePresentationRepository presentations,
                                       InvoiceSignatureStorage storage, InvoiceSignatureNormalizer normalizer,
-                                      @Value("${keevo.invoice-signature.max-bytes:204800}") int maxBytes,
-                                      Clock clock) {
+                                      ApplicationEventPublisher events, InvoiceSignatureLimits limits, Clock clock) {
         this.invoices = invoices;
         this.presentations = presentations;
         this.storage = storage;
         this.normalizer = normalizer;
-        this.maxBytes = maxBytes;
+        this.events = events;
+        this.maxUploadBytes = limits.maxUploadBytes();
         this.clock = clock;
     }
 
-    /** The document's layout ({@code null} = the tenant default); any status. */
+    /**
+     * The document's layout; {@code template} / {@code width} {@code null} = unchanged, empty = back to the tenant
+     * default. Any status.
+     */
     @Transactional
-    public Invoice updateLayout(UUID id, InvoiceTemplate template, TicketWidth width) {
+    public Invoice updateLayout(UUID id, Optional<InvoiceTemplate> template, Optional<TicketWidth> width,
+                                UUID actorId, String tenantSchema) {
         Invoice invoice = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        presentations.updateLayout(id, template, width, clock.instant());
-        return invoices.findById(invoice.id()).orElseThrow(InvoiceQueryUseCase::notFound);
+        InvoicePresentation current = presentations.find(id).orElse(InvoicePresentation.NONE);
+        InvoiceTemplate t = template == null ? current.template() : template.orElse(null);
+        TicketWidth w = width == null ? current.ticketWidth() : width.orElse(null);
+        Instant now = clock.instant();
+        presentations.updateLayout(id, t, w, now);
+        events.publishEvent(new InvoiceLayoutChangedEvent(id,
+                InvoicePublicLinkUseCase.reference(invoice, current.legacyReference()), invoice.isQuote(),
+                t == null ? "Modèle du compte" : t.label(), w == null ? null : widthLabel(w), actorId, tenantSchema,
+                now));
+        return invoices.findById(id).orElseThrow(InvoiceQueryUseCase::notFound);
     }
 
-    /** Stores the signature of {@code role} (PNG / JPEG ≤ max bytes). */
+    /** Stores the signature of {@code role} (PNG / JPEG; re-encoded, then ≤ the stored-size limit). */
     @Transactional
-    public Invoice sign(UUID id, SignatureRole role, byte[] upload, String tenantSchema) {
+    public Invoice sign(UUID id, SignatureRole role, byte[] upload, UUID actorId, String tenantSchema) {
         // cheap checks and the re-encoding first: no database work for a refused upload
         if (upload == null || upload.length == 0) {
             throw new DomainException(ErrorCode.INVOICE_SIGNATURE_INVALID, "Empty signature");
         }
-        if (upload.length > maxBytes) {
+        if (upload.length > maxUploadBytes) {
             throw new DomainException(ErrorCode.INVOICE_SIGNATURE_TOO_LARGE,
-                    "Signature of " + upload.length + " bytes over " + maxBytes);
+                    "Signature upload of " + upload.length + " bytes over " + maxUploadBytes);
         }
         StoredImage image = normalizer.normalize(upload);
         Invoice invoice = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
         assertSignable(invoice);
         InvoicePresentation presentation = presentations.find(id).orElse(InvoicePresentation.NONE);
         String previous = presentation.signature(role);
-        if (previous != null && invoice.status() != InvoiceStatus.DRAFT) {
-            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION,
-                    "Ce document émis est déjà signé : sa signature ne peut pas être remplacée",
-                    Map.of("status", "déjà signée"));
+        if (previous != null && frozen(invoice, presentation, role) && fileExists(tenantSchema, previous)) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, invoice.isQuote()
+                            ? "Ce devis a été envoyé au client : sa signature ne peut plus être remplacée"
+                            : "Ce document émis est déjà signé : sa signature ne peut pas être remplacée",
+                    Map.of("status", "déjà signé"));
         }
         String fileName;
         try {
@@ -101,24 +123,38 @@ public class InvoicePresentationUseCase {
         onCompletion(() -> {
             if (previous != null && !previous.equals(fileName)) storage.delete(tenantSchema, previous);
         }, () -> storage.delete(tenantSchema, fileName));
-        presentations.updateSignature(id, role, fileName, clock.instant());
+        Instant now = clock.instant();
+        presentations.updateSignature(id, role, fileName, now);
+        events.publishEvent(new InvoiceSignatureChangedEvent(id,
+                InvoicePublicLinkUseCase.reference(invoice, presentation.legacyReference()), invoice.isQuote(),
+                role.label(), false, actorId, tenantSchema, now));
         return invoices.findById(id).orElseThrow(InvoiceQueryUseCase::notFound);
     }
 
-    /** Removes the signature of {@code role} — a draft (invoice or quote) only; not signed = no-op. */
+    /**
+     * Removes the signature of {@code role} — a draft (invoice or quote) only, and not a sent quote's client
+     * signature; not signed = no-op.
+     */
     @Transactional
-    public Invoice unsign(UUID id, SignatureRole role, String tenantSchema) {
+    public Invoice unsign(UUID id, SignatureRole role, UUID actorId, String tenantSchema) {
         Invoice invoice = invoices.findByIdForUpdate(id).orElseThrow(InvoiceQueryUseCase::notFound);
-        String previous = presentations.find(id).orElse(InvoicePresentation.NONE).signature(role);
+        InvoicePresentation presentation = presentations.find(id).orElse(InvoicePresentation.NONE);
+        String previous = presentation.signature(role);
         if (previous == null) {
             return invoice;
         }
-        if (invoice.status() != InvoiceStatus.DRAFT) {
-            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION,
-                    "La signature d'un document émis ne peut pas être retirée", Map.of("status", "émise"));
+        if (frozen(invoice, presentation, role)) {
+            throw DomainException.userFacing(ErrorCode.INVOICE_INVALID_TRANSITION, invoice.isQuote()
+                            ? "Ce devis a été envoyé au client : sa signature ne peut plus être retirée"
+                            : "La signature d'un document émis ne peut pas être retirée",
+                    Map.of("status", "émis"));
         }
-        presentations.updateSignature(id, role, null, clock.instant());
+        Instant now = clock.instant();
+        presentations.updateSignature(id, role, null, now);
         onCompletion(() -> storage.delete(tenantSchema, previous), () -> { });
+        events.publishEvent(new InvoiceSignatureChangedEvent(id,
+                InvoicePublicLinkUseCase.reference(invoice, presentation.legacyReference()), invoice.isQuote(),
+                role.label(), true, actorId, tenantSchema, now));
         return invoices.findById(id).orElseThrow(InvoiceQueryUseCase::notFound);
     }
 
@@ -136,14 +172,43 @@ public class InvoicePresentationUseCase {
         }
     }
 
+    /**
+     * Story 20.7 — a deleted draft's signature files go after the commit (called by the draft deletion, in its
+     * transaction, before the row disappears from the reads).
+     */
+    public void discardSignatures(UUID id, String tenantSchema) {
+        InvoicePresentation p = presentations.find(id).orElse(InvoicePresentation.NONE);
+        String client = p.clientSignature();
+        String seller = p.sellerSignature();
+        if (client == null && seller == null) {
+            return;
+        }
+        onCompletion(() -> {
+            if (client != null) storage.delete(tenantSchema, client);
+            if (seller != null) storage.delete(tenantSchema, seller);
+        }, () -> { });
+    }
+
     @Transactional(readOnly = true)
     public DocumentPreferences preferences() {
         return presentations.preferences();
     }
 
+    /** The tenant defaults; each argument {@code null} = unchanged, empty = back to the default. */
     @Transactional
-    public DocumentPreferences updatePreferences(DocumentPreferences preferences, UUID actorId) {
-        presentations.savePreferences(preferences, actorId, clock.instant());
+    public DocumentPreferences updatePreferences(Optional<InvoiceTemplate> template, Optional<TicketWidth> width,
+                                                 Optional<Integer> linkDays, UUID actorId, String tenantSchema) {
+        DocumentPreferences current = presentations.preferences();
+        DocumentPreferences wanted = new DocumentPreferences(
+                template == null ? current.template() : template.orElse(null),
+                width == null ? current.ticketWidth() : width.orElse(null),
+                linkDays == null ? current.publicLinkDays() : linkDays.orElse(null));
+        Instant now = clock.instant();
+        presentations.savePreferences(wanted, actorId, now);
+        events.publishEvent(new DocumentPreferencesUpdatedEvent(
+                wanted.template() == null ? "Modèle Keevo" : wanted.template().label(),
+                widthLabel(wanted.ticketWidth() == null ? TicketWidth.DEFAULT : wanted.ticketWidth()),
+                wanted.linkDays(), actorId, tenantSchema, now));
         return presentations.preferences();
     }
 
@@ -155,6 +220,31 @@ public class InvoicePresentationUseCase {
                     invoice.isQuote() ? "Ce devis a été converti ou annulé : il ne peut plus être signé"
                             : "Cette facture est annulée : elle ne peut plus être signée",
                     Map.of("status", s.label(invoice.kind()).toLowerCase(java.util.Locale.FRENCH)));
+        }
+    }
+
+    /**
+     * A signature that can no longer be replaced nor removed: any signature of an issued / paid document; the client
+     * signature of a quote already sent (WhatsApp sending count or public link handed out).
+     */
+    static boolean frozen(Invoice invoice, InvoicePresentation presentation, SignatureRole role) {
+        if (invoice.status() != InvoiceStatus.DRAFT) {
+            return true;
+        }
+        return invoice.isQuote() && role == SignatureRole.CLIENT
+                && (invoice.delivery().sendCount() > 0 || presentation.linkShared());
+    }
+
+    /** « 58 mm », « 80 mm », « A4 ». */
+    static String widthLabel(TicketWidth w) {
+        return w == TicketWidth.A4 ? "A4" : w.code() + " mm";
+    }
+
+    private boolean fileExists(String tenantSchema, String file) {
+        try {
+            return storage.read(tenantSchema, file).isPresent();
+        } catch (IOException e) {
+            return true; // unreadable is not missing: stays frozen
         }
     }
 

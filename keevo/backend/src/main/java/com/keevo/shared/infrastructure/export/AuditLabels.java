@@ -116,6 +116,13 @@ public final class AuditLabels {
             entry("QUOTE_CREATED", "Devis créé"),
             entry("QUOTE_CONVERTED", "Devis converti en facture"),
             entry("QUOTE_CANCELLED", "Devis annulé"),
+            // Layouts, signatures, public links (Story 20.7)
+            entry("QUOTE_SENT", "Devis envoyé"),
+            entry("INVOICE_SIGNED", "Document signé"),
+            entry("INVOICE_SIGNATURE_REMOVED", "Signature retirée"),
+            entry("INVOICE_LAYOUT_CHANGED", "Modèle d'impression modifié"),
+            entry("INVOICE_LINK_ROTATED", "Lien public régénéré"),
+            entry("INVOICE_DOCUMENT_SETTINGS_UPDATED", "Modèles et liens des documents modifiés"),
             // Collections (Story 20.4)
             entry("INVOICE_PAYMENT_RECEIVED", "Paiement reçu"),
             entry("INVOICE_INSTALMENT_SCHEDULED", "Échéance programmée"),

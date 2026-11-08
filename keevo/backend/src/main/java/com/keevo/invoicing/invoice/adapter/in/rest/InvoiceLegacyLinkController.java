@@ -25,8 +25,10 @@ import java.util.regex.Pattern;
  * {@code GET /api/v1/invoices/public/{token}} (Bref's path {@code /v1/invoices/public/:token}, token = Bref's UUID) →
  * the PDF of the imported invoice, Bref reference printed next to the number. No JWT
  * ({@code SecurityConfig.PUBLIC_PATHS}). Unknown / malformed token, tenant not ACTIVE or invoice gone → 404
- * {@code INVOICE_LINK_INVALID}; past Bref's expiry → 410 {@code INVOICE_LINK_EXPIRED}; 30 openings per token per 10
- * minutes (429); anything unexpected → French 503. Same tenant binding as {@link InvoiceSharedLinkController}.
+ * {@code INVOICE_LINK_INVALID}; past Bref's expiry → 410 {@code INVOICE_LINK_EXPIRED}; the invoice must still hold
+ * the token (a retired token → 404). Rate limits: 30 openings per resolving token per 10 minutes, and 20 misses
+ * (unknown / expired / malformed token) per address per 10 minutes — 429; anything unexpected → French 503. Same
+ * tenant binding as {@link InvoiceSharedLinkController}.
  */
 @EntitlementExempt("ancien lien public Bref d'une facture importée (lien déjà partagé au client)")
 @RestController
@@ -51,19 +53,25 @@ public class InvoiceLegacyLinkController {
     }
 
     @GetMapping("/api/v1/invoices/public/{token}")
-    public ResponseEntity<byte[]> legacy(@PathVariable("token") String token) {
+    public ResponseEntity<byte[]> legacy(@PathVariable("token") String token,
+                                         jakarta.servlet.http.HttpServletRequest request) {
+        String address = request.getRemoteAddr();
+        limiter.assertMissesAllowed(address);
         if (token == null || !UUID_TEXT.matcher(token).matches()) {
+            limiter.recordMiss(address);
             throw new DomainException(ErrorCode.INVOICE_LINK_INVALID, "Malformed legacy invoice link");
         }
-        limiter.acquire("legacy:" + token.toLowerCase(java.util.Locale.ROOT));
+        UUID uuid = UUID.fromString(token);
         LegacyInvoiceLinkRegistry.Target target;
         try {
-            target = links.resolveLegacy(UUID.fromString(token));
+            target = links.resolveLegacy(uuid);
         } catch (DomainException e) {
+            limiter.recordMiss(address);
             throw e;
         } catch (RuntimeException e) {
             throw unavailable(e);
         }
+        limiter.acquire("legacy:" + uuid);
         String schema = TenantSchema.validate(target.tenantSchema());
         TenantContext.setCurrentTenant(schema);
         try {
@@ -71,6 +79,7 @@ public class InvoiceLegacyLinkController {
             if (p != null) {
                 p.ensureProvisioned(schema, InvoicingModule.ID);
             }
+            links.assertLegacyCurrent(uuid, target);
             return InvoiceController.pdfResponse(documents.pdf(target.invoiceId(), schema));
         } catch (DomainException e) {
             if ("INVOICE_NOT_FOUND".equals(e.getDomainCode()) || "SERVICE_UNAVAILABLE".equals(e.getDomainCode())) {

@@ -100,6 +100,9 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
 
     /** The tenant's own public rows, keyed as production writes them (schema name or tenant uuid). */
     private void insertTenantPublicRows(UUID tenantId, String schema, UUID userId) {
+        // Story 20.7 — an old Bref link of an imported invoice of the tenant
+        jdbc.update("INSERT INTO public.invoice_legacy_links (token, tenant_schema, invoice_id) VALUES (?, ?, ?)",
+                UUID.randomUUID(), schema, UUID.randomUUID());
         jdbc.update("INSERT INTO public.feedback (type, description, tenant_id, user_id, submitted_at) "
                 + "VALUES ('BUG', 'Je suis Jean, mon numéro est le 699 00 00 00', ?, ?, now())", schema, userId);
         jdbc.update("INSERT INTO public.user_daily_activity (user_id, tenant_id, activity_date) VALUES (?, ?, ?)",
@@ -185,6 +188,8 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
     private void assertTenantPublicRowsGone(Seed seed) {
         assertThat(count("SELECT count(*) FROM public.feedback WHERE tenant_id = ?", seed.schema())).isZero();
         assertThat(count("SELECT count(*) FROM public.user_sync_state WHERE tenant_id = ?", seed.schema())).isZero();
+        assertThat(count("SELECT count(*) FROM public.invoice_legacy_links WHERE tenant_schema = ?", seed.schema()))
+                .isZero(); // Story 20.7
         assertThat(count("SELECT count(*) FROM public.user_daily_activity WHERE tenant_id = ?", seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.tenant_modules WHERE tenant_id = ?", seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.plan_expiry_reminders WHERE tenant_id = ?", seed.tenantId())).isZero();
@@ -277,6 +282,8 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
         assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", other.getId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.feedback WHERE tenant_id = ?", other.getSchemaName())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.user_sync_state WHERE tenant_id = ?", other.getSchemaName())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.invoice_legacy_links WHERE tenant_schema = ?",
+                other.getSchemaName())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.user_daily_activity WHERE tenant_id = ?", other.getId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.usage_counters WHERE tenant_id = ?", other.getId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.usage_credits WHERE tenant_id = ?", other.getId())).isEqualTo(1);

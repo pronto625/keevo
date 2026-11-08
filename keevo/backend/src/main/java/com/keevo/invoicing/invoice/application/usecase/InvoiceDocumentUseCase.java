@@ -88,8 +88,25 @@ public class InvoiceDocumentUseCase {
      */
     @Transactional(readOnly = true)
     public InvoiceDocument pdf(UUID id, String tenantSchema, InvoiceTemplate template, TicketWidth width) {
+        return pdf(id, tenantSchema, template, width, null);
+    }
+
+    /**
+     * Story 20.7 — the PDF behind a signed public link: {@code expectedVersion} = the token's link version; a document
+     * rotated since → {@code INVOICE_LINK_INVALID} (404). Checked on the presentation row read for the PDF (one read).
+     */
+    @Transactional(readOnly = true)
+    public InvoiceDocument pdfForLink(UUID id, String tenantSchema, int expectedVersion) {
+        return pdf(id, tenantSchema, null, null, expectedVersion);
+    }
+
+    private InvoiceDocument pdf(UUID id, String tenantSchema, InvoiceTemplate template, TicketWidth width,
+                                Integer expectedVersion) {
         Invoice invoice = invoices.findById(id).orElseThrow(InvoiceQueryUseCase::notFound);
         InvoicePresentation presentation = presentations.find(id).orElse(InvoicePresentation.NONE);
+        if (expectedVersion != null && presentation.linkVersion() != expectedVersion) {
+            throw new DomainException(ErrorCode.INVOICE_LINK_INVALID, "Invoice link rotated");
+        }
         DocumentPreferences preferences = presentations.preferences();
         InvoiceTemplate layout = template != null ? template : presentation.effectiveTemplate(preferences);
         TicketWidth paper = width != null ? width : presentation.effectiveWidth(preferences);
@@ -103,7 +120,7 @@ public class InvoiceDocumentUseCase {
     /**
      * Resolves a public link (Story 14.2): signature, expiry, tenant still ACTIVE. Tampered, unknown or suspended →
      * {@code INVOICE_LINK_INVALID} (404, no detail); expired → {@code INVOICE_LINK_EXPIRED} (410). The link version
-     * (Story 20.7 rotation) is checked once the tenant is bound ({@link InvoicePublicLinkUseCase#assertCurrentVersion}).
+     * (Story 20.7 rotation) is checked once the tenant is bound ({@link #pdfForLink}).
      */
     public InvoiceLinkSigner.Claims verifyLink(String token) {
         InvoiceLinkSigner.Claims claims = signer.verify(token);

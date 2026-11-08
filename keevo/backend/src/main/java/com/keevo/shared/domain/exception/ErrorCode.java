@@ -196,7 +196,7 @@ public enum ErrorCode {
     INVOICE_LINK_RATE_LIMITED,  // HTTP 429 — public invoice link opened too often (per token, 10 min window)
     INVOICE_LINK_EXPIRED,       // HTTP 410 — public invoice link older than its validity (30 days)
     INVOICE_SIGNATURE_INVALID,  // HTTP 422 — Story 20.7: signature not a PNG / JPEG image (or corrupt)
-    INVOICE_SIGNATURE_TOO_LARGE, // HTTP 422 — Story 20.7: signature over keevo.invoice-signature.max-bytes
+    INVOICE_SIGNATURE_TOO_LARGE, // HTTP 422 — Story 20.7: upload over max-upload-bytes, or still over max-bytes re-encoded
     INVOICE_SIGNATURE_NOT_FOUND, // HTTP 404 — Story 20.7: the document has no such signature
     // ── Credit notes (Story 14.7) ─────────────────────────────────────────
     CREDIT_NOTE_NOT_FOUND,      // HTTP 404 — credit note id unknown in the tenant

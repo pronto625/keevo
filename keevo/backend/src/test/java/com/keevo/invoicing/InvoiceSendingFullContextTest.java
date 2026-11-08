@@ -454,7 +454,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
                 // 20.7 V15
                 + "DROP COLUMN invoice_template, DROP COLUMN ticket_width, DROP COLUMN signature_client_path, "
                 + "DROP COLUMN signature_seller_path, DROP COLUMN public_link_version, "
-                + "DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference");
+                + "DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference, DROP COLUMN link_shared_at");
         jdbc.execute("DROP TABLE " + q + "invoicing_document_preferences");
         jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
         jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13

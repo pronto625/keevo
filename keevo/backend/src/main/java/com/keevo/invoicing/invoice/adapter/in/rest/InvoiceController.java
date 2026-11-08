@@ -91,12 +91,15 @@ public class InvoiceController {
     private final InvoiceClientResolver clients;
     private final ConvertQuoteUseCase conversions;
     private final InvoicePaymentUseCase payments;
+    private final InvoiceResponseAssembler assembler;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
                              InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
                              PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients,
-                             ConvertQuoteUseCase conversions, InvoicePaymentUseCase payments) {
+                             ConvertQuoteUseCase conversions, InvoicePaymentUseCase payments,
+                             InvoiceResponseAssembler assembler) {
+        this.assembler = assembler;
         this.payments = payments;
         this.clients = clients;
         this.conversions = conversions;
@@ -325,29 +328,10 @@ public class InvoiceController {
     public ResponseEntity<byte[]> pdf(@PathVariable UUID id,
                                       @RequestParam(required = false) String template,
                                       @RequestParam(required = false) String ticketWidth) {
-        return pdfResponse(documents.pdf(id, TenantContext.getCurrentTenant(), parseTemplate(template),
-                parseTicketWidth(ticketWidth)));
+        return pdfResponse(documents.pdf(id, TenantContext.getCurrentTenant(), InvoiceLayoutParams.template(template),
+                InvoiceLayoutParams.width(ticketWidth)));
     }
 
-    /** Story 20.7 — blank → {@code null}; unknown → 400 French. */
-    static com.keevo.invoicing.invoice.domain.model.InvoiceTemplate parseTemplate(String value) {
-        try {
-            return com.keevo.invoicing.invoice.domain.model.InvoiceTemplate.parse(value).orElse(null);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidRequestParameterException("template", "unknown invoice template",
-                    "Modèle inconnu : choisissez Classique, Moderne, Minimal, Reçu ou l'un des 4 tickets");
-        }
-    }
-
-    /** Story 20.7 — blank → {@code null}; unknown → 400 French. */
-    static com.keevo.invoicing.invoice.domain.model.TicketWidth parseTicketWidth(String value) {
-        try {
-            return com.keevo.invoicing.invoice.domain.model.TicketWidth.parse(value).orElse(null);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidRequestParameterException("ticketWidth", "unknown ticket width",
-                    "Largeur de ticket inconnue : 58, 80 ou A4");
-        }
-    }
 
     /**
      * POST /api/v1/invoices/{id}/send {@code {phone?}} — Story 14.2: WhatsApp message with a signed link to the PDF
@@ -376,12 +360,7 @@ public class InvoiceController {
     }
 
     private InvoiceResponseDto dto(Invoice invoice) {
-        boolean draft = invoice.status() == InvoiceStatus.DRAFT;
-        Map<UUID, InvoiceQueryUseCase.Credits> credits = draft ? Map.of() : queries.credits(List.of(invoice));
-        return dto(invoice, draft ? settings.current() : null,
-                credits.getOrDefault(invoice.id(), InvoiceQueryUseCase.Credits.NONE),
-                queries.collections(List.of(invoice), credits).get(invoice.id()),
-                queries.presentations(List.of(invoice)).get(invoice.id()));
+        return assembler.dto(invoice);
     }
 
     private static InvoiceResponseDto dto(Invoice invoice, InvoicingSettings current,

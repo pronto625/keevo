@@ -217,7 +217,8 @@ keevo:
   # Story 20.7 — signatures of documents (client / seller). The directory MUST be persistent: only copy.
   invoice-signature:
     storage-dir: ${KEEVO_INVOICE_SIGNATURE_DIR:${user.home}/keevo-data/invoice-signatures}
-    max-bytes: 204800             # 200 KB
+    max-bytes: 204800             # 200 KB — stored image, after re-encoding
+    max-upload-bytes: 2097152     # 2 MB — raw upload accepted before re-encoding / downscaling
     max-dimension: 800            # longest side of the stored image
   # FR21 — product photo thumbnails, stored server side and synced to every device.
   # The directory MUST be persistent (volume / backed-up disk): it holds the only copy.

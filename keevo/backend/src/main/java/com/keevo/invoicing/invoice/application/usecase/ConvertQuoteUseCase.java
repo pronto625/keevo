@@ -50,9 +50,19 @@ public class ConvertQuoteUseCase {
     private final InvoiceLifecycleUseCase lifecycle;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations;
 
     public ConvertQuoteUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
                                InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock) {
+        this(invoices, settings, lifecycle, events, clock, null);
+    }
+
+    /** Story 20.7 — {@code presentations}: the new invoice takes the quote's layout and signatures. */
+    @org.springframework.beans.factory.annotation.Autowired
+    public ConvertQuoteUseCase(InvoiceRepository invoices, InvoicingSettingsRepository settings,
+                               InvoiceLifecycleUseCase lifecycle, ApplicationEventPublisher events, Clock clock,
+                               com.keevo.invoicing.invoice.domain.port.out.InvoicePresentationRepository presentations) {
+        this.presentations = presentations;
         this.invoices = invoices;
         this.settings = settings;
         this.lifecycle = lifecycle;
@@ -112,6 +122,10 @@ public class ConvertQuoteUseCase {
                 return new Conversion(converted.get(), invoices.findById(quoteId).orElse(quote), false);
             }
             throw DomainException.userFacing(ErrorCode.VALIDATION_ERROR, ID_TAKEN, Map.of("invoiceId", ID_TAKEN));
+        }
+        if (presentations != null) {
+            // Story 20.7 — same layout and signatures as the quote the client accepted (one UPDATE … FROM)
+            presentations.copyLayoutAndSignatures(quoteId, newId, now);
         }
         Invoice issued = lifecycle.issue(newId, actorId, tenantId);
         Invoice converted = quote.converted(issued.id(), now);

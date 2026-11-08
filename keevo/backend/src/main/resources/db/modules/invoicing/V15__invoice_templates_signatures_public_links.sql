@@ -10,6 +10,7 @@
 --   * invoices.public_link_version   — bumped by a rotation: links signed with an older version stop opening;
 --   * invoices.legacy_public_token   — the Bref public token of an imported invoice (old links redirected here);
 --   * invoices.legacy_reference      — the Bref reference « BRF-XXXXXXXX » printed next to the legal number;
+--   * invoices.link_shared_at        — first public link handed out (with send_count: the document was sent);
 --   * invoicing_document_preferences — one row (id = 1): default template, ticket width, public link lifetime
 --     (days, NULL = 30; an imported Bref tenant gets 90). A separate table: writing it never creates the seller
 --     settings row (whose absence means « country VAT rate », Story 20.5).
@@ -28,6 +29,8 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS signature_seller_path VARCHAR(120)
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS public_link_version   INT          NOT NULL DEFAULT 0;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS legacy_public_token   UUID;
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS legacy_reference      VARCHAR(12);
+-- first time a public link of the document was handed out (a sent quote's client signature is then frozen)
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS link_shared_at        TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS invoicing_document_preferences (
     id               SMALLINT    PRIMARY KEY DEFAULT 1 CHECK (id = 1),

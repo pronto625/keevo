@@ -3,7 +3,6 @@ package com.keevo.invoicing.invoice.adapter.in.rest;
 import com.keevo.invoicing.invoice.application.service.InvoiceLinkRateLimiter;
 import com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceDocumentUseCase;
-import com.keevo.invoicing.invoice.application.usecase.InvoicePublicLinkUseCase;
 import com.keevo.invoicing.module.InvoicingModule;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -39,12 +38,10 @@ public class InvoiceSharedLinkController {
     private final InvoiceDocumentUseCase documents;
     private final ObjectProvider<ModuleProvisioner> provisioner;
     private final InvoiceLinkRateLimiter limiter;
-    private final InvoicePublicLinkUseCase links;
 
     public InvoiceSharedLinkController(InvoiceDocumentUseCase documents,
                                        ObjectProvider<ModuleProvisioner> provisioner,
-                                       InvoiceLinkRateLimiter limiter, InvoicePublicLinkUseCase links) {
-        this.links = links;
+                                       InvoiceLinkRateLimiter limiter) {
         this.documents = documents;
         this.provisioner = provisioner;
         this.limiter = limiter;
@@ -68,8 +65,7 @@ public class InvoiceSharedLinkController {
             if (p != null) {
                 p.ensureProvisioned(schema, InvoicingModule.ID);
             }
-            links.assertCurrentVersion(claims);
-            return InvoiceController.pdfResponse(documents.pdf(claims.invoiceId(), schema));
+            return InvoiceController.pdfResponse(documents.pdfForLink(claims.invoiceId(), schema, claims.version()));
         } catch (DomainException e) {
             if ("INVOICE_NOT_FOUND".equals(e.getDomainCode()) || "SERVICE_UNAVAILABLE".equals(e.getDomainCode())) {
                 throw new DomainException(ErrorCode.INVOICE_LINK_INVALID, "Invoice link target not available");

@@ -77,6 +77,8 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
     static final String PAGE_HEIGHT = "pageHeightMm";
     /** Shortest roll ticket printed (Bref's minimum page height, about 110 mm). */
     static final int MIN_TICKET_HEIGHT_MM = 110;
+    /** Tallest roll page; a longer ticket is paginated on pages of this height. */
+    static final int MAX_TICKET_HEIGHT_MM = 1000;
 
     @Override
     public byte[] render(RenderRequest request) {
@@ -98,7 +100,7 @@ public class InvoicePdfRenderer implements InvoiceDocumentRenderer {
             return documents.render(file, v);
         }
         v.put("pageWidthMm", width.contentWidthMm());
-        return documents.renderFitted(file, v, PAGE_HEIGHT, MIN_TICKET_HEIGHT_MM);
+        return documents.renderFitted(file, v, PAGE_HEIGHT, MIN_TICKET_HEIGHT_MM, MAX_TICKET_HEIGHT_MM);
     }
 
     /** Story 20.7 — the Keevo layout plus the payment block, the signatures and the Bref reference. */

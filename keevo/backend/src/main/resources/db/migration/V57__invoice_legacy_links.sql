@@ -1,4 +1,4 @@
--- V58 — Story 20.7 (fusion Keevo × Bref, FUS-FR23): the old Bref public invoice links keep working.
+-- V57 — Story 20.7 (fusion Keevo × Bref, FUS-FR23): the old Bref public invoice links keep working.
 --
 --   invoice_legacy_links  one row per imported Bref invoice that had a public token: an old link
 --                         (« …/v1/invoices/public/<uuid> », redirected to Keevo) carries only that UUID, so the tenant

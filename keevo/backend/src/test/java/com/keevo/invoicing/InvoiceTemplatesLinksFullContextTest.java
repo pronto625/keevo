@@ -69,6 +69,8 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired SendInvoiceUseCase sendInvoiceUseCase;
     @Autowired InvoicePublicLinkUseCase links;
+    @Autowired com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner signer;
+    @Autowired com.keevo.invoicing.invoice.adapter.out.storage.InvoiceSignatureProperties signatureProperties;
 
     static final class FakeWhatsApp implements WhatsAppSender {
         final List<String[]> sent = new ArrayList<>();
@@ -91,6 +93,9 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     private String schema;
     private UUID tenantId;
     private String ownerToken;
+    private String employeeToken;
+    private String viewerToken;
+    private UUID otherTenantId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -98,6 +103,8 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         tenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class, schema);
         ownerToken = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, ownerId, schema,
                 "OWNER");
+        employeeToken = member("EMPLOYEE");
+        viewerToken = member("VIEWER");
         original = (WhatsAppSender) ReflectionTestUtils.getField(target(), "whatsApp");
         settings();
     }
@@ -109,6 +116,10 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
             jdbc.update("DELETE FROM public.invoice_legacy_links WHERE token = ?", token);
         }
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", tenantId);
+        if (otherTenantId != null) {
+            jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ?", otherTenantId);
+        }
+        jdbc.update("UPDATE public.tenants SET status = 'ACTIVE' WHERE id = ?", tenantId);
         TenantContext.clear();
         SecurityContextHolder.clearContext();
     }
@@ -118,6 +129,27 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────────────
+
+    private String member(String role) {
+        UUID userId = UUID.randomUUID();
+        UUID storeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".stores LIMIT 1", UUID.class);
+        jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
+                + "password_change_required) VALUES (?, ?, 'Paul', 'Ekane', false)", userId, storeId);
+        return com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider, userId, schema, role,
+                "ACTIVE", storeId, false);
+    }
+
+    private java.nio.file.Path signatureFile(String id, String role) {
+        String name = jdbc.queryForObject("SELECT signature_" + role + "_path FROM \"" + schema
+                + "\".invoices WHERE id = ?::uuid", String.class, id);
+        return name == null ? null
+                : java.nio.file.Path.of(signatureProperties.getStorageDir()).resolve(schema).resolve(name);
+    }
+
+    private List<Map<String, Object>> audit(String action) {
+        return jdbc.queryForList("SELECT entity_type, entity_label FROM \"" + schema + "\".audit_log WHERE action = ?",
+                action);
+    }
 
     private MvcResult call(String token, HttpMethod method, String path, Object body) throws Exception {
         MockHttpServletRequestBuilder request = MockMvcRequestBuilders.request(method, path);
@@ -210,10 +242,37 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     }
 
     private MvcResult upload(String id, String role, byte[] content, String type) throws Exception {
+        return upload(ownerToken, id, role, content, type);
+    }
+
+    private MvcResult upload(String token, String id, String role, byte[] content, String type) throws Exception {
         return mockMvc.perform(MockMvcRequestBuilders.multipart(HttpMethod.PUT,
                         "/api/v1/invoices/" + id + "/signatures/" + role)
                 .file(new MockMultipartFile("file", "signature.png", type, content))
-                .header("Authorization", "Bearer " + ownerToken)).andReturn();
+                .header("Authorization", "Bearer " + token)).andReturn();
+    }
+
+    /** A 1600 × 1000 slightly noisy photo at maximum JPEG quality (over 200 KB, under 2 MB). */
+    private static byte[] bigJpeg() throws Exception {
+        BufferedImage img = new BufferedImage(1600, 1000, BufferedImage.TYPE_INT_RGB);
+        java.util.Random random = new java.util.Random(7);
+        for (int y = 0; y < 1000; y++) {
+            for (int x = 0; x < 1600; x++) {
+                int v = 150 + x / 20 + random.nextInt(6);
+                img.setRGB(x, y, (v << 16) | (v << 8) | v);
+            }
+        }
+        javax.imageio.ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
+        javax.imageio.ImageWriteParam param = writer.getDefaultWriteParam();
+        param.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);
+        param.setCompressionQuality(1.0f);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (var ios = ImageIO.createImageOutputStream(out)) {
+            writer.setOutput(ios);
+            writer.write(null, new javax.imageio.IIOImage(img, null, null), param);
+        }
+        writer.dispose();
+        return out.toByteArray();
     }
 
     private static String path(String url) {
@@ -258,6 +317,24 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         assertThat(pageWidthMm(owner(HttpMethod.GET, "/api/v1/invoices/" + other + "/pdf", null)))
                 .isCloseTo(80f, org.assertj.core.data.Offset.offset(1f));
 
+        // partial updates: an absent field keeps its value, null clears it
+        JsonNode kept = data(owner(HttpMethod.PUT, "/api/v1/invoices/" + id + "/layout",
+                Map.of("ticketWidth", "A4")), 200);
+        assertThat(kept.path("invoiceTemplate").asText()).isEqualTo("TICKET_CLASSIC");
+        assertThat(kept.path("ticketWidth").asText()).isEqualTo("A4");
+        Map<String, Object> clear = new LinkedHashMap<>();
+        clear.put("invoiceTemplate", null);
+        JsonNode cleared = data(owner(HttpMethod.PUT, "/api/v1/invoices/" + id + "/layout", clear), 200);
+        assertThat(cleared.path("invoiceTemplate").isNull()).isTrue();
+        assertThat(cleared.path("ticketWidth").asText()).isEqualTo("A4");
+        JsonNode prefsKept = data(owner(HttpMethod.PUT, "/api/v1/invoicing/settings/documents",
+                Map.of("publicLinkDays", 45)), 200);
+        assertThat(prefsKept.path("invoiceTemplate").asText()).isEqualTo("TICKET_MODERN");
+        assertThat(prefsKept.path("publicLinkDays").asInt()).isEqualTo(45);
+        assertThat(audit("INVOICE_LAYOUT_CHANGED")).isNotEmpty().allSatisfy(a ->
+                assertThat(String.valueOf(a.get("entity_label"))).startsWith("FAC-"));
+        assertThat(audit("INVOICE_DOCUMENT_SETTINGS_UPDATED")).hasSize(2);
+
         JsonNode bad = error(owner(HttpMethod.GET, "/api/v1/invoices/" + id + "/pdf?template=fancy", null), 400,
                 "VALIDATION_ERROR");
         assertThat(bad.path("error").asText()).startsWith("Modèle inconnu");
@@ -290,7 +367,12 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
                 "INVOICE_SIGNATURE_INVALID");
         assertThat(invalid.path("error").asText()).isEqualTo("Format de signature non pris en charge (PNG ou JPEG)");
         error(upload(draft, "seller", png(), "application/pdf"), 422, "INVOICE_SIGNATURE_INVALID");
-        error(upload(draft, "seller", new byte[300 * 1024], "image/png"), 422, "INVOICE_SIGNATURE_TOO_LARGE");
+        error(upload(draft, "seller", new byte[3 * 1024 * 1024], "image/png"), 422, "INVOICE_SIGNATURE_TOO_LARGE");
+        // a raw photo over 200 KB (≤ 2 MB) is accepted: re-encoded and downscaled before the 200 KB check
+        byte[] photo = bigJpeg();
+        assertThat(photo.length).isGreaterThan(200 * 1024).isLessThan(2 * 1024 * 1024);
+        assertThat(data(upload(draft, "seller", photo, "image/jpeg"), 200).path("sellerSigned").asBoolean()).isTrue();
+        data(owner(HttpMethod.DELETE, "/api/v1/invoices/" + draft + "/signatures/seller", null), 200);
         error(upload(draft, "witness", png(), "image/png"), 400, "VALIDATION_ERROR");
 
         data(owner(HttpMethod.POST, "/api/v1/invoices/" + draft + "/issue", null), 200);
@@ -337,9 +419,34 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         assertThat(pdfText(call(null, HttpMethod.GET, path(rotated.path("url").asText()), null)))
                 .contains("Société Ndolo");
 
+        assertThat(audit("INVOICE_LINK_ROTATED")).singleElement()
+                .satisfies(a -> assertThat(String.valueOf(a.get("entity_label"))).startsWith("FAC-"));
+
         String draft = create(null).path("id").asText();
         error(owner(HttpMethod.POST, "/api/v1/invoices/" + draft + "/public-link", null), 409,
                 "INVOICE_INVALID_TRANSITION");
+        JsonNode rotateDraft = error(owner(HttpMethod.POST, "/api/v1/invoices/" + draft + "/public-link/rotate", null),
+                409, "INVOICE_INVALID_TRANSITION");
+        assertThat(rotateDraft.path("error").asText()).isEqualTo(objectMapper.readTree(body(owner(HttpMethod.POST,
+                "/api/v1/invoices/" + draft + "/send", Map.of("phone", "+237677000111")))).path("error").asText());
+        String cancelled = issued();
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + cancelled + "/cancel", Map.of("reason", "Erreur")), 200);
+        error(owner(HttpMethod.POST, "/api/v1/invoices/" + cancelled + "/public-link/rotate", null), 409,
+                "INVOICE_INVALID_TRANSITION");
+    }
+
+    @Test
+    @DisplayName("a link of the 14.2 shape (3-part token, version 0) opens end to end, and stops after the first "
+            + "rotation")
+    void legacyShapeToken() throws Exception {
+        String id = issued();
+        String token = signer.sign(schema, UUID.fromString(id), Instant.now().plus(Duration.ofDays(30)));
+        assertThat(new String(java.util.Base64.getUrlDecoder().decode(token.substring(0, token.indexOf('.'))),
+                StandardCharsets.UTF_8).split("\\|")).hasSize(3);
+        assertThat(pdfText(call(null, HttpMethod.GET, "/api/v1/invoices/shared?token=" + token, null)))
+                .contains("Société Ndolo");
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null), 200);
+        error(call(null, HttpMethod.GET, "/api/v1/invoices/shared?token=" + token, null), 404, "INVOICE_LINK_INVALID");
     }
 
     @Test
@@ -359,6 +466,11 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         assertThat(pdfText(call(null, HttpMethod.GET, message.substring(message.indexOf("/api/v1/")), null)))
                 .contains("DEVIS " + reference);
         data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link", null), 200);
+        assertThat(audit("QUOTE_SENT")).singleElement().satisfies(a -> {
+            assertThat(a.get("entity_type")).isEqualTo("Quote");
+            assertThat(a.get("entity_label")).isEqualTo(reference);
+        });
+        assertThat(audit("INVOICE_SENT")).isEmpty();
 
         data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/cancel", Map.of("reason", "Abandon")), 200);
         error(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/send", null), 409, "INVOICE_INVALID_TRANSITION");
@@ -392,8 +504,48 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 410, "INVOICE_LINK_EXPIRED");
         jdbc.update("UPDATE public.invoice_legacy_links SET expires_at = NULL WHERE token = ?", token);
 
+        // the invoice no longer holds the token (registry row left behind): 404
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET legacy_public_token = NULL WHERE id = ?::uuid", id);
+        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 404, "INVOICE_LINK_INVALID");
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET legacy_public_token = ? WHERE id = ?::uuid", token, id);
+
+        jdbc.update("UPDATE public.tenants SET status = 'SUSPENDED' WHERE id = ?", tenantId);
+        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 404, "INVOICE_LINK_INVALID");
+        jdbc.update("UPDATE public.tenants SET status = 'ACTIVE' WHERE id = ?", tenantId);
+
         data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null), 200);
         error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 404, "INVOICE_LINK_INVALID");
+    }
+
+    @Test
+    @DisplayName("legacy Bref link limits: 30 openings of a real token per window then 429; a token moved to "
+            + "another invoice is refused (import)")
+    void legacyLimits() throws Exception {
+        String id = issued();
+        UUID token = UUID.randomUUID();
+        legacyTokens.add(token);
+        TenantContext.setCurrentTenant(schema);
+        try {
+            links.attachLegacy(UUID.fromString(id), token, "BRF-0A0B0C0D", null, schema);
+            String other = id; // same target again: accepted (expiry refreshed)
+            links.attachLegacy(UUID.fromString(other), token, "BRF-0A0B0C0D", null, schema);
+        } finally {
+            TenantContext.clear();
+        }
+        String second = issued();
+        TenantContext.setCurrentTenant(schema);
+        try {
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> links.attachLegacy(UUID.fromString(second),
+                    token, "BRF-0A0B0C0D", null, schema)).isInstanceOf(IllegalStateException.class);
+        } finally {
+            TenantContext.clear();
+        }
+        for (int i = 0; i < com.keevo.invoicing.invoice.application.service.InvoiceLinkRateLimiter.MAX_PER_WINDOW;
+             i++) {
+            assertThat(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null).getResponse().getStatus())
+                    .isEqualTo(200);
+        }
+        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 429, "INVOICE_LINK_RATE_LIMITED");
     }
 
     @Test
@@ -415,5 +567,180 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         String classic = pdfText(call(null, HttpMethod.GET, path(link.path("url").asText()), null));
         assertThat(classic.toLowerCase(java.util.Locale.FRENCH)).contains("montant payé", "reste à payer",
                 "13 850 xaf");
+    }
+
+    @Test
+    @DisplayName("signing refused (409) on a cancelled invoice, a converted quote and a cancelled quote; audited "
+            + "« Document signé » / « Signature retirée » with the document reference")
+    void signingRefusedAndAudited() throws Exception {
+        String cancelled = issued();
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + cancelled + "/cancel", Map.of("reason", "Erreur")), 200);
+        error(upload(cancelled, "client", png(), "image/png"), 409, "INVOICE_INVALID_TRANSITION");
+
+        String converted = create("QUOTE").path("id").asText();
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + converted + "/convert", null), 201);
+        error(upload(converted, "client", png(), "image/png"), 409, "INVOICE_INVALID_TRANSITION");
+
+        String cancelledQuote = create("QUOTE").path("id").asText();
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + cancelledQuote + "/cancel", Map.of("reason", "Abandon")),
+                200);
+        JsonNode refused = error(upload(cancelledQuote, "seller", png(), "image/png"), 409,
+                "INVOICE_INVALID_TRANSITION");
+        assertThat(refused.path("error").asText()).contains("ne peut plus être signé");
+
+        JsonNode quote = create("QUOTE");
+        String q = quote.path("id").asText();
+        data(upload(q, "client", png(), "image/png"), 200);
+        data(owner(HttpMethod.DELETE, "/api/v1/invoices/" + q + "/signatures/client", null), 200);
+        assertThat(audit("INVOICE_SIGNED")).singleElement().satisfies(a -> {
+            assertThat(a.get("entity_type")).isEqualTo("Quote");
+            assertThat(a.get("entity_label")).isEqualTo(quote.path("quoteReference").asText());
+        });
+        assertThat(audit("INVOICE_SIGNATURE_REMOVED")).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("a sent quote's client signature is frozen (replace / remove → 409); the seller's stays editable")
+    void sentQuoteFrozen() throws Exception {
+        String q = create("QUOTE").path("id").asText();
+        data(upload(q, "client", png(), "image/png"), 200);
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + q + "/public-link", null), 200);
+        JsonNode replace = error(upload(q, "client", png(), "image/png"), 409, "INVOICE_INVALID_TRANSITION");
+        assertThat(replace.path("error").asText()).contains("envoyé au client");
+        error(owner(HttpMethod.DELETE, "/api/v1/invoices/" + q + "/signatures/client", null), 409,
+                "INVOICE_INVALID_TRANSITION");
+        data(upload(q, "seller", png(), "image/png"), 200);
+        data(upload(q, "seller", png(), "image/png"), 200);
+    }
+
+    @Test
+    @DisplayName("issued document whose signature file is missing: it can be signed again; a deleted draft's "
+            + "signature files are removed after the commit")
+    void missingFileAndDraftDeletion() throws Exception {
+        String id = create(null).path("id").asText();
+        data(upload(id, "client", png(), "image/png"), 200);
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/issue", null), 200);
+        java.nio.file.Path file = signatureFile(id, "client");
+        assertThat(file).exists();
+        java.nio.file.Files.delete(file);
+        data(upload(id, "client", png(), "image/png"), 200);
+        assertThat(signatureFile(id, "client")).exists();
+        error(upload(id, "client", png(), "image/png"), 409, "INVOICE_INVALID_TRANSITION");
+
+        String draft = create(null).path("id").asText();
+        data(upload(draft, "client", png(), "image/png"), 200);
+        data(upload(draft, "seller", png(), "image/png"), 200);
+        java.nio.file.Path client = signatureFile(draft, "client");
+        java.nio.file.Path seller = signatureFile(draft, "seller");
+        assertThat(client).exists();
+        assertThat(seller).exists();
+        assertThat(owner(HttpMethod.DELETE, "/api/v1/invoices/" + draft, null).getResponse().getStatus())
+                .isEqualTo(204);
+        assertThat(client).doesNotExist();
+        assertThat(seller).doesNotExist();
+    }
+
+    @Test
+    @DisplayName("a signed quote with its layout converts into an invoice with the same layout and signatures")
+    void signedQuoteConverts() throws Exception {
+        String q = create("QUOTE").path("id").asText();
+        data(owner(HttpMethod.PUT, "/api/v1/invoices/" + q + "/layout",
+                Map.of("invoiceTemplate", "TICKET_MODERN", "ticketWidth", "58")), 200);
+        data(upload(q, "client", png(), "image/png"), 200);
+        JsonNode invoice = data(owner(HttpMethod.POST, "/api/v1/invoices/" + q + "/convert", null), 201);
+        assertThat(invoice.path("clientSigned").asBoolean()).isTrue();
+        assertThat(invoice.path("sellerSigned").asBoolean()).isFalse();
+        assertThat(invoice.path("invoiceTemplate").asText()).isEqualTo("TICKET_MODERN");
+        assertThat(invoice.path("ticketWidth").asText()).isEqualTo("58");
+        String id = invoice.path("id").asText();
+        assertThat(pageWidthMm(owner(HttpMethod.GET, "/api/v1/invoices/" + id + "/pdf", null)))
+                .isCloseTo(58f, org.assertj.core.data.Offset.offset(1f));
+        assertThat(owner(HttpMethod.GET, "/api/v1/invoices/" + id + "/signatures/client", null).getResponse()
+                .getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("roles: EMPLOYEE signs and rotates (create / send rights) but cannot change the document settings; "
+            + "VIEWER reads signatures and settings only")
+    void roles() throws Exception {
+        String id = issued();
+        data(upload(employeeToken, id, "client", png(), "image/png"), 200);
+        data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null), 200);
+        assertThat(call(employeeToken, HttpMethod.PUT, "/api/v1/invoicing/settings/documents",
+                Map.of("publicLinkDays", 60)).getResponse().getStatus()).isEqualTo(403);
+        data(call(employeeToken, HttpMethod.GET, "/api/v1/invoicing/settings/documents", null), 200);
+
+        assertThat(upload(viewerToken, id, "seller", png(), "image/png").getResponse().getStatus()).isEqualTo(403);
+        assertThat(call(viewerToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null)
+                .getResponse().getStatus()).isEqualTo(403);
+        assertThat(call(viewerToken, HttpMethod.DELETE, "/api/v1/invoices/" + id + "/signatures/client", null)
+                .getResponse().getStatus()).isEqualTo(403);
+        assertThat(call(viewerToken, HttpMethod.PUT, "/api/v1/invoicing/settings/documents",
+                Map.of("publicLinkDays", 60)).getResponse().getStatus()).isEqualTo(403);
+        assertThat(call(viewerToken, HttpMethod.GET, "/api/v1/invoices/" + id + "/signatures/client", null)
+                .getResponse().getStatus()).isEqualTo(200);
+        data(call(viewerToken, HttpMethod.GET, "/api/v1/invoicing/settings/documents", null), 200);
+    }
+
+    @Test
+    @DisplayName("tenant isolation: another tenant cannot read the signature nor rotate the link (404)")
+    void crossTenant() throws Exception {
+        String id = issued();
+        data(upload(id, "client", png(), "image/png"), 200);
+        String otherSchema = tx.execute(st -> tenantFactory.create()).getSchemaName();
+        otherTenantId = jdbc.queryForObject("SELECT id FROM public.tenants WHERE schema_name = ?", UUID.class,
+                otherSchema);
+        String otherOwner = com.keevo.shared.infrastructure.security.TestAccess.token(jdbc, jwtTokenProvider,
+                UUID.randomUUID(), otherSchema, "OWNER");
+        assertThat(call(otherOwner, HttpMethod.GET, "/api/v1/invoices/" + id + "/signatures/client", null)
+                .getResponse().getStatus()).isEqualTo(404);
+        assertThat(call(otherOwner, HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null)
+                .getResponse().getStatus()).isEqualTo(404);
+        assertThat(jdbc.queryForObject("SELECT public_link_version FROM \"" + schema + "\".invoices WHERE id = ?::uuid",
+                Integer.class, id)).isZero();
+    }
+
+    @Test
+    @DisplayName("list and sync pull carry invoiceTemplate / ticketWidth / clientSigned / legacyReference; the pull "
+            + "from the cursor taken before the changes returns the row")
+    void listAndPull() throws Exception {
+        String id = issued();
+        MvcResult first = call(ownerToken, HttpMethod.GET, "/api/v1/sync/pull", null);
+        String since = data(first, 200).path("serverTimestamp").asText();
+        assertThat(since).isNotBlank();
+        Thread.sleep(5);
+
+        data(owner(HttpMethod.PUT, "/api/v1/invoices/" + id + "/layout",
+                Map.of("invoiceTemplate", "CLASSIC", "ticketWidth", "80")), 200);
+        data(upload(id, "client", png(), "image/png"), 200);
+        UUID token = UUID.randomUUID();
+        legacyTokens.add(token);
+        TenantContext.setCurrentTenant(schema);
+        try {
+            links.attachLegacy(UUID.fromString(id), token, "BRF-ABCDEF12", null, schema);
+        } finally {
+            TenantContext.clear();
+        }
+
+        JsonNode listed = null;
+        for (JsonNode n : data(owner(HttpMethod.GET, "/api/v1/invoices", null), 200)) {
+            if (n.path("id").asText().equals(id)) listed = n;
+        }
+        assertThat(listed).isNotNull();
+        assertThat(listed.path("invoiceTemplate").asText()).isEqualTo("CLASSIC");
+        assertThat(listed.path("ticketWidth").asText()).isEqualTo("80");
+        assertThat(listed.path("clientSigned").asBoolean()).isTrue();
+        assertThat(listed.path("legacyReference").asText()).isEqualTo("BRF-ABCDEF12");
+
+        MvcResult delta = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/sync/pull").param("since", since)
+                .header("Authorization", "Bearer " + ownerToken)).andReturn();
+        JsonNode pulled = null;
+        for (JsonNode n : data(delta, 200).path("entities").path("invoices")) {
+            if (n.path("id").asText().equals(id)) pulled = n;
+        }
+        assertThat(pulled).as("changed since the cursor").isNotNull();
+        assertThat(pulled.path("invoiceTemplate").asText()).isEqualTo("CLASSIC");
+        assertThat(pulled.path("clientSigned").asBoolean()).isTrue();
+        assertThat(pulled.path("legacyReference").asText()).isEqualTo("BRF-ABCDEF12");
     }
 }

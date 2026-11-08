@@ -1047,11 +1047,16 @@ public class AuditEventListener {
                 event.actorId());
     }
 
-    /** Story 14.2 — label = the invoice number, detail = the masked WhatsApp number (never the full one). */
+    /**
+     * Story 14.2 — label = the invoice number, detail = the masked WhatsApp number (never the full one). Story 20.7:
+     * a quote is audited « Devis envoyé » on the quote, label {@code DV-…}.
+     */
     @EventListener
     public void on(InvoiceSentEvent event) {
-        write(event.actorId(), event.tenantId(), "INVOICE_SENT", "Invoice", event.invoiceId(),
-                null, map("invoiceNumber", event.number(), "clientName", event.clientName(),
+        write(event.actorId(), event.tenantId(), event.quote() ? "QUOTE_SENT" : "INVOICE_SENT",
+                event.quote() ? "Quote" : "Invoice", event.invoiceId(),
+                null, map(event.quote() ? "quoteReference" : "invoiceNumber", event.number(),
+                        "clientName", event.clientName(),
                         "totalAmount", event.totalTtc(), "sentTo", event.maskedPhone()),
                 null, event.number(), null, null);
         log.info("AUDIT: invoice_sent number={} tenantId={} actorId={}", event.number(), event.tenantId(),
@@ -1067,6 +1072,43 @@ public class AuditEventListener {
                 null, event.displayName(), null, null);
         log.info("AUDIT: company_profile_updated fields={} tenantId={} actorId={}",
                 event.after() == null ? java.util.Set.of() : event.after().keySet(), event.tenantId(),
+                event.actorId());
+    }
+
+    // ── Story 20.7 — layouts, signatures, public links, document defaults (label = DV-… / FAC-…, never a UUID) ──
+
+    @EventListener
+    public void on(com.keevo.shared.event.catalog.invoicing.InvoiceSignatureChangedEvent event) {
+        write(event.actorId(), event.tenantId(), event.removed() ? "INVOICE_SIGNATURE_REMOVED" : "INVOICE_SIGNED",
+                event.quote() ? "Quote" : "Invoice", event.invoiceId(), null, null, null, event.reference(),
+                map("detail", event.roleLabel()), null);
+        log.info("AUDIT: invoice_signature removed={} tenantId={} actorId={}", event.removed(), event.tenantId(),
+                event.actorId());
+    }
+
+    @EventListener
+    public void on(com.keevo.shared.event.catalog.invoicing.InvoiceLayoutChangedEvent event) {
+        String detail = event.templateLabel() + (event.ticketWidth() == null ? "" : " — " + event.ticketWidth());
+        write(event.actorId(), event.tenantId(), "INVOICE_LAYOUT_CHANGED", event.quote() ? "Quote" : "Invoice",
+                event.invoiceId(), null, null, null, event.reference(), map("detail", detail), null);
+        log.info("AUDIT: invoice_layout_changed tenantId={} actorId={}", event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(com.keevo.shared.event.catalog.invoicing.InvoiceLinkRotatedEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_LINK_ROTATED", event.quote() ? "Quote" : "Invoice",
+                event.invoiceId(), null, null, null, event.reference(),
+                map("detail", "Les liens partagés auparavant ne s'ouvrent plus"), null);
+        log.info("AUDIT: invoice_link_rotated tenantId={} actorId={}", event.tenantId(), event.actorId());
+    }
+
+    @EventListener
+    public void on(com.keevo.shared.event.catalog.invoicing.DocumentPreferencesUpdatedEvent event) {
+        write(event.actorId(), event.tenantId(), "INVOICE_DOCUMENT_SETTINGS_UPDATED", "InvoicingSettings",
+                InvoicingSettingsUpdatedEvent.SETTINGS_ENTITY_ID, null, null, null, "Modèles et liens des documents",
+                map("detail", event.templateLabel() + " — " + event.ticketWidth() + " — lien valable "
+                        + event.publicLinkDays() + " jours"), null);
+        log.info("AUDIT: invoice_document_settings_updated tenantId={} actorId={}", event.tenantId(),
                 event.actorId());
     }
 

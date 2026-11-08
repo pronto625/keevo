@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
  * four; {@code MANAGER} and {@code EMPLOYEE} may view, create and issue / record payment; {@code VIEWER} may only view;
  * cancelling and the seller settings ({@code INVOICE_MANAGE}) are owner decisions.
  *
- * <p>Story 20.7: one table outside the tenant schema — {@code public.invoice_legacy_links} (public V58), the
+ * <p>Story 20.7: one table outside the tenant schema — {@code public.invoice_legacy_links} (public V57), the
  * cross-tenant index of the old Bref public links of imported invoices (one primary-key read per opened link).
  */
 @Component
