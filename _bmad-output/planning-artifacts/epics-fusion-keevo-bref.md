@@ -555,6 +555,9 @@ So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/se
 
 - [ ] [Deferred-from: review 20-10, 2026-11-08] Who may see and record expenses: Bref keeps expenses owner-only (« elles révèlent les marges »), Keevo 20.10 gives MANAGER/EMPLOYEE VIEW+CREATE and VIEWER VIEW on their store (manifest `keevo/modules/expenses/module.json` rolePermissions) — owner decision: keep, or restrict to owner/manager
 
+- [ ] [Deferred-from: review 20-7, 2026-11-08] An EMPLOYEE may rotate a document's public link (INVOICE_SEND) — owner decision: keep or restrict to owner/manager
+- [ ] [Deferred-from: review 20-14, 2026-11-08] Invoice reads (`GET /invoices`, pull) are not filtered by store for store members, although creation is store-scoped — decide whether members see only their store's documents
+
 ### Story 19.6 : Une personne, plusieurs rôles dans plusieurs entreprises
 
 As a **commerçant qui utilise Keevo et Bref**,
@@ -945,9 +948,9 @@ So that **mes documents ont la même allure qu'avant (FUS-FR21, FR22, FR23)**.
 **When** une facture importée est ouverte par un ancien lien Bref redirigé
 **Then** elle s'affiche ; la référence `BRF-` apparaît sur le PDF à côté du numéro légal s'il existe
 
-- [ ] [Deferred-from: review 20-3, 2026-11-06] A quote cannot be sent to the client: `Invoice.assertSendable` refuses quotes [keevo/backend/src/main/java/com/keevo/invoicing/invoice/domain/model/Invoice.java] — allow the public link / WhatsApp sending of a quote (PDF « DEVIS DV-… » already exists)
+- [x] [Deferred-from: review 20-3, 2026-11-06] (done in 20-7) A quote cannot be sent to the client: `Invoice.assertSendable` refuses quotes [keevo/backend/src/main/java/com/keevo/invoicing/invoice/domain/model/Invoice.java] — allow the public link / WhatsApp sending of a quote (PDF « DEVIS DV-… » already exists)
 
-- [ ] [Deferred-from: review 20-4, 2026-11-06] The invoice PDF and public link show neither deposits, payments, balance due nor the payment schedule [InvoiceDocumentUseCase, InvoicePdfRenderer] — render amountPaid / amountDue / payments[] (from InvoiceResponseDto) in the 8 templates and the ticket
+- [x] [Deferred-from: review 20-4, 2026-11-06] (done in 20-7) The invoice PDF and public link show neither deposits, payments, balance due nor the payment schedule [InvoiceDocumentUseCase, InvoicePdfRenderer] — render amountPaid / amountDue / payments[] (from InvoiceResponseDto) in the 8 templates and the ticket
 
 ### Story 20.8 : Envoi des documents par SMS et email
 

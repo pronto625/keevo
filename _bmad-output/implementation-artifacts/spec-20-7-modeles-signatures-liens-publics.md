@@ -161,9 +161,11 @@ Status: done
 
 **Routed (out of scope):** import of `legacy_public_token` / `legacy_reference` / `publicLinkDays = 90` / paper 53→58, 110→A4 → 24-4; SMS / email sending of the link → 20-8; RN screens → m20-7-modeles-signatures-liens-publics.
 
+**Verification (orchestrator):** full suite package by package on the rebased branch (clean build): 6 389 tests, 0 failures; Flutter test client: audit labels added (2.0.28+100), `local_export_contract_test` and `test/features/audit` green. Live on keevo_dev (WhatsApp noop, FCM/Expo off), invoicing activated for the check then deactivated: `FAC-2026-000008` rendered as classic / modern / ticket-classic 80 mm PDFs, layout set to modern, public link (30 days) opens the PDF, rotation → old link 404, a quote gets a link, rotate on a draft → 409 French message, document settings readable.
+
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur la branche de la story 20-7 (commit `44505da1`, fusion sur `refonte/modulaire` par l'orchestrateur). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commits `487a8ec5` + `51d426dc`, refonte/modulaire / develop). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
 
 **Ce qui est fait côté API :** chaque facture ou devis peut être imprimé dans l'un des 8 modèles de Bref (Classique, Moderne, Minimal, Reçu, Ticket classique / compact / détaillé / moderne) sur papier 58 mm, 80 mm ou A4 ; le PDF est fait par le serveur. Le client et le vendeur peuvent signer ; les signatures sont imprimées. Le lien public dure 30 jours (90 pour un compte importé de Bref), peut être régénéré (les anciens liens cessent de fonctionner), et les anciens liens Bref des factures importées s'ouvrent toujours. Un devis en attente peut être envoyé au client (lien / WhatsApp). Les PDF et le lien public montrent les versements, les échéances, le montant payé et le reste à payer.
 
