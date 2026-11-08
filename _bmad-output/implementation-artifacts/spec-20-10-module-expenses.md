@@ -5,7 +5,7 @@ created: '2026-11-07'
 status: 'done'
 baseline_revision: 'e1862565157a106d3d695924d98bf7c5e19404ee'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-20-4-encaissements-echeancier-retard.md'
@@ -80,6 +80,42 @@ Paths under `keevo/backend/src/main/` unless stated.
 - Given the `expenses` manifest and its V1 script, when the module is used by a tenant, then the table is provisioned and every route is gated by entitlement and permission.
 - Given `CREATE_/UPDATE_/DELETE_EXPENSE` pushed twice, then the second is `DUPLICATE`; the pull carries deletions as tombstones; LWW on `clientTimestamp`.
 - Given an EMPLOYEE of one store, when listing expenses (REST or pull), then only that store's expenses are returned.
+
+## Review Triage Log
+
+### 2026-11-08 — Review pass (5 layers: blind, edge case, verification gap, intent, patterns)
+- verdicts: 41 findings — high 0, medium 13, low 19, false 4, maybe-false 5 (grouped by root cause)
+- findings:
+  - `[medium]` `[patch]` Blind/edge: sync rejections lost their French reason — handler maps the message into `conflictData.message`; validate() reasons in French; contract + tests.
+  - `[medium]` `[patch]` Blind: offline CREATE/UPDATE without date took the apply day — CREATE defaults to the clientTimestamp's Douala date, UPDATE keeps the current date.
+  - `[medium]` `[patch]` Blind/edge: replay of a deleted id returned the archived row — 404 / REJECTED EXPENSE_NOT_FOUND after the visibility check.
+  - `[low]` `[patch]` Blind: REST replay answered 201 — 200 when not created.
+  - `[medium]` `[patch]` Edge: CREATE_EXPENSE without entityId broke later LWW — entityId required and equal to the id.
+  - `[medium]` `[patch]` Patterns/blind: no trigram index for search — GIN trigram on label/note (guarded DO block, public.gin_trgm_ops).
+  - `[low]` `[patch]` Patterns/blind: category index without the keyset tail — `(store_id, category, expense_date, created_at, id)`.
+  - `[low]` `[patch]` Patterns/blind: member pull scanned all stores — `(store_id, updated_at, id::text)` index.
+  - `[low]` `[patch]` Patterns: re-read after write — in-memory row returned.
+  - `[low]` `[reject]` Patterns: to_regclass probe per LWW op — constant cost, prevents an aborted transaction.
+  - `[low]` `[reject]` Patterns: oldest store chosen in memory — bounded store set, one query.
+  - `[medium]` `[patch]` Blind/edge: cursor not tied to filters / tampered cursor 500 — filter hash + bounded decode → 400.
+  - `[low]` `[patch]` Edge: pre-2000 dates, java.sql.Date conversion — 422 + LocalDate binding.
+  - `[low]` `[patch]` Blind/edge/verification: DTO @Size before trim — removed, domain rule only.
+  - `[low]` `[patch]` Blind: member edit in an inactive store / generic refusals — same rule as creation, actionable French messages.
+  - `[medium]` `[patch]` Blind: response had no display names — `storeName` (one batch lookup per page); `createdByName` not available (identity::api not allowed) — noted in the mobile section.
+  - `[low]` `[patch]` Blind: contract file incomplete — pull row, tombstone, LWW and rejection examples, checked by the contract test.
+  - `[medium]` `[patch]` Verification: missing-table guard untested — UPDATE/DELETE before provisioning test.
+  - `[medium]` `[patch]` Verification: cross-store create replay untested — 403 without leak.
+  - `[medium]` `[patch]` Verification: manager cross-store delete untested — 404, row live.
+  - `[low]` `[patch]` Verification: search escaping test could not fail — decoy note, `_` and `\`.
+  - `[medium]` `[patch]` Verification: LWW on DELETE untested — older delete superseded.
+  - `[low]` `[patch]` Blind: other gaps (member without store, owner move, cursor reuse, date ties) — tests added (member without store as unit test: full context requires employees.store_id).
+  - `[medium]` `[defer]` Edge/blind: an expense moved out of a store sends no tombstone to that store's devices — routed to 22.5 (same gap as clients), noted in the mobile section.
+  - `[maybe-false]` `[defer]` Intent: Bref keeps expenses owner-only, the AC gives employees store-scoped access — routed to 19-5b (owner decision).
+  - `[false]` `[reject]` Intent: Bref route/PATCH/offset shape not mirrored — Keevo API conventions (keyset, PUT) apply; the RN app adapts.
+  - `[maybe-false]` `[defer]` Intent: Bref admin cross-account listing — 20.13.
+  - `[false]` `[reject]` Intent: table created on first use rather than at activation — the platform's lazy provisioning is the module contract (13.4).
+  - `[false]` `[reject]` Intent: DUPLICATE only for the same operationId — that is the sync protocol (16.10); a same-id create is idempotent.
+  - `[low]` `[reject]` Edge (claim): no ManageExpenseUseCase unit test — covered end to end; ExpenseUseCasesTest added for the member-without-store branch.
 
 ## Design Notes
 
