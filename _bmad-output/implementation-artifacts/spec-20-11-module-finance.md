@@ -2,7 +2,7 @@
 title: '20-11 Module finance — Bref result (revenue excl. VAT − expenses), margin and trend'
 type: 'feature'
 created: '2026-11-08'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'f9ce63f0ddf86f6e49549a8ceab33a41047bfc0b'
 review_loop_iteration: 0
 followup_review_recommended: true
@@ -81,6 +81,35 @@ Paths under `keevo/backend/src/main/` unless stated.
 - 2026-11-08 — review 1 (coordinator): V59 → V58; JS rounding on doubles (+ half-cent contract cases from Node); « payé » checked against Bref (status PAID only, kept); VAT of unbridged POS sales from the seller's rate when VAT-registered; default month in WAT; `period=` compared with the previous calendar month / year; store filter on `storeScopedTaxed()`, « Sans boutique » row, no `(store_id)` set under a filter; revenue and expense ports take the tenant schema and read both periods in one grouped query each; unknown store through the global `VALIDATION_ERROR` mapping (422); `requires` lists `store`; 42P01 fallback; endDate named when alone before the default start; years 2000–2100; contract summary cases run end to end. KEEP: the separate taxed relation (the 20.9 `documents` stays join-free).
 
 ## Review Triage Log
+
+### 2026-11-08 — Review pass (5 layers: blind, edge case, verification gap, intent, patterns)
+- verdicts: 34 findings — high 0, medium 12, low 13, false 4, maybe-false 5 (grouped by root cause)
+- findings:
+  - `[medium]` `[patch]` Edge: `round2` on exact decimals differed from JS `Math.round` on doubles — doubles at the mirror points, half-cent contract cases checked under Node.
+  - `[medium]` `[patch]` Blind: paid/unpaid vs partial payments — verified Bref uses status `paid` only; kept, partial-payment test added.
+  - `[medium]` `[patch]` Blind: unbridged POS sales of a VAT-registered tenant counted TTC as HT — VAT derived from the tenant rate (set-based join on settings).
+  - `[medium]` `[patch]` Blind/edge: default month in UTC — WAT (FUS-NFR9).
+  - `[medium]` `[patch]` Blind: `period=yyyy-MM` compared to a sliding window — previous calendar month/year; sliding window kept for startDate/endDate (Bref).
+  - `[medium]` `[patch]` Blind: store filter rule differed from reporting; `byStore` did not add up — `storeScopedTaxed()`, « Sans boutique » row, grouping set dropped when a store is selected.
+  - `[low]` `[patch]` Blind: revenue port without tenant guard — `requireCurrent`.
+  - `[low]` `[patch]` Blind: controller string-matched remap — global VALIDATION_ERROR mapping (422).
+  - `[low]` `[patch]` Blind: `requires` missing `store` — added.
+  - `[low]` `[patch]` Blind: COUNT functions differed — `COUNT(*)`, one grouped query per side.
+  - `[low]` `[patch]` Patterns/edge/blind: `withTable` cache never evicted — evict on 42P01 under a savepoint, zeros.
+  - `[low]` `[patch]` Edge: endDate-only error named startDate; absurd years — fixed, 2000–2100 bounds.
+  - `[medium]` `[patch]` Verification: production `taxedDocuments` wiring untested — `ProvisionedRevenueSourceTest`.
+  - `[medium]` `[patch]` Verification: PAID invoice / credit-note VAT in the period untested — PostgreSQL cases.
+  - `[medium]` `[patch]` Intent: contract cases never driven through the endpoint — 2 summary cases end to end through `GET /api/v1/finance/summary`.
+  - `[low]` `[patch]` Verification: `assertSubset` accepted a missing field for an expected null — presence required.
+  - `[low]` `[patch]` Blind: MANAGER/VIEWER 403 untested — added.
+  - `[maybe-false]` `[patch]` Blind: public migration gap with outOfOrder off — renumbered V58, merge order enforced.
+  - `[low]` `[reject]` Patterns: two scans per side where one would do — folded into one grouped query per side anyway.
+  - `[low]` `[reject]` Patterns: index-only scan for expenses — not needed at current volumes.
+  - `[maybe-false]` `[reject]` Edge: credit note of a bridged sale under a store filter — fixed by 20-14 (credit notes follow their invoice's store).
+  - `[false]` `[reject]` Intent: `period=` format — `yyyy-MM|yyyy` plus Bref's startDate/endDate; the AC leaves the format open.
+  - `[false]` `[reject]` Intent: endpoint values not numerically equal to Bref — the AC says « CA HT via 20.9 », formula-equivalent by design.
+  - `[maybe-false]` `[reject]` Intent: `byShop` renamed `byStore` — Keevo naming; documented in the mobile section.
+
 
 ## Design Notes
 
