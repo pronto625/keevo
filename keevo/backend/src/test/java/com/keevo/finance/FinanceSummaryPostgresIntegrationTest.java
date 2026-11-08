@@ -283,9 +283,9 @@ class FinanceSummaryPostgresIntegrationTest {
         String window = " r WHERE r.occurred_at >= '2026-09-01T00:00:00Z'::timestamptz";
         assertThat(explain("SELECT COALESCE(SUM(r.total_amount), 0) FROM " + RevenueRelations.documents(true, true)
                 + window)).doesNotContain("Left Join").contains("idx_sales_completed_occurred_at");
-        assertThat(explain("SELECT COALESCE(SUM(r.tax_amount), 0) FROM " + RevenueRelations.taxedDocuments(true, true)
+        assertThat(explain("SELECT COALESCE(SUM(r.tax_amount), 0) FROM " + RevenueRelations.taxedDocuments(true, true, true)
                 + window)).contains("Left Join").contains("source_sale")
-                .contains("idx_sales_completed_occurred_at").contains("idx_invoices_revenue_day");
+                .contains("idx_sales_completed_occurred_at").contains("revenue_day"); // V14 or V16 (store) day index
         assertThat(explain("SELECT SUM(amount) FROM expenses WHERE archived_at IS NULL "
                 + "AND expense_date >= '2026-09-01' AND expense_date <= '2026-09-30'"))
                 .contains("Index Cond: ((expense_date >= "); // the date range is an index range (V1 partial indexes)

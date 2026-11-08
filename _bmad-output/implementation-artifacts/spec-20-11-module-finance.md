@@ -120,6 +120,8 @@ Status: in-review (no review pass run in this session — `followup_review_recom
 
 **Review 1 fixes (2026-11-08):** see Spec Change Log. Verification after a clean build: finance 21/21 (new: half-cent rounding, calendar comparison, PAID invoice + credit note with VAT, partly paid invoice, non-zero deltaPct, unbridged sale of a VAT-registered seller, « Sans boutique », contract summary cases end to end, MANAGER / VIEWER 403); expenses 39/39; reporting 453/453 (`ProvisionedRevenueSourceTest` + 2); architecture 125/125; admin 587/587; shared/module 555/555 (manifest `requires`, V58).
 
+**Rebase on 20-14 (2a0b848b, 2026-11-08):** port moved to `shared.capability.revenue` (`taxedDocuments`, `storeScopedTaxed()`, tax / paid columns and the VAT joins carried over, following 20-14 store levels; `reporting :: revenue` dropped), `endpoints.md` regenerated. Clean build, one package at a time: finance 21/21, expenses 41/41, reporting 458/458, invoicing 411/411, architecture 131/131, shared 1 320/1 320, admin 587/587.
+
 **Residual risks:** (1) rebased on 20-14 (2a0b848b): the taxed relations follow its store levels (V16 documents with their store, a credit note its invoice's; below V16 store-scoped = taxed sales only); « Sans boutique » now holds only pre-V16 documents; (2) V58 must be applied after 20-7's V57 (`outOfOrder` off) — 20-7 merges first; (3) documents carry no store until 20-14: the store-filtered figures are POS-only and the documents appear under « Sans boutique »; the credit note of a bridged sale under a store filter is fixed by 20-14; (4) a corrected POS sale whose automatic invoice is superseded falls back to the seller-rate VAT (or 0) until a new active invoice exists.
 
 ## Mobile (React Native — dépôt AI/bref)
