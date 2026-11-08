@@ -322,7 +322,7 @@ development_status:
   16-13-scope-employe-donnees-synchro: done  # 2026-11-01 build-auto done (spec-16-13-scope-employe-donnees-synchro.md) — pull d'un employé limité à sa boutique (8 jeux), portée portée par la commande, scope/reseed dans la réponse, renvoi complet au changement de boutique (V37) ; 26 constats (6 corrigés) ; mobile → m16-13
   16-14-api-prete-client-mobile: done  # 2026-11-01 build-auto done (spec-16-14-api-prete-client-mobile.md) — catalogue d'erreurs français unique (filtres compris), messages de service seulement sur opt-in, validation en français, grâce visible par l'employé, détails du plafond dans la synchro, API admin alignée ; 36 constats ; mobile → m16-14, dashboard → d16-14
   16-6-rgpd-suppression-compte-donnees: done  # 2026-11-02 build-auto done (spec-16-6-rgpd-suppression-compte-donnees.md) — cœur V1 vérifié et complété : purge des données personnelles restantes dans public (jetons de réinitialisation, feedback, activité, synchro, modules, notifications ciblées, texte libre de facturation), fiche tenant anonymisée, fichiers d'export purgés (+ balayage horaire), trace durable account_deletion_log (V40) ; modules DISABLED jamais purgés ; 33 constats (12 corrigés) ; pas de partie mobile
-  16-7-go-live-canary-runbook: backlog  # 2026-11-06 revue 16-12 (2) — +1 item (surveiller les erreurs de lecture du jar au dry-run, chargement des plugins Flyway) | 2026-11-06 user — +1 item (prod : 25 entreprises dont 2 réelles ; liste des réelles confirmée par le user, puis suppression des fantômes par l agent ops après sauvegarde, avant la mise à niveau du go-live) | 2026-11-06 test appareil épic 19 — +1 item (produits sans suivi invendables sur la V1) | 2026-11-05 revue 19.10 — +1 item (retrait de la V1 Flutter : refus des clients sans X-App-Version pour tous les rôles) | 2026-11-03 spec 16-12 — +1 item (dry-run copie de prod : FK manquantes des schémas dérivés, durée de la mise à niveau des tables de base au 1er démarrage, sondes) | 2026-11-03 décision user : go-live seulement au jalon GL = tout le merge Keevo × Bref (19–21, app RN 22.1–22.13/23.1–23.11, outil 24.1–24.10 + dry-run 24.12) | 2026-11-01 spec 16-5 — +1 item (dry-run du backfill tenant_modules sur copie de prod avant le go-live)
+  16-7-go-live-canary-runbook: backlog  # 2026-11-09 implémentation 21-10 — +1 item (seau rate limit du super-admin) | 2026-11-06 revue 16-12 (2) — +1 item (surveiller les erreurs de lecture du jar au dry-run, chargement des plugins Flyway) | 2026-11-06 user — +1 item (prod : 25 entreprises dont 2 réelles ; liste des réelles confirmée par le user, puis suppression des fantômes par l agent ops après sauvegarde, avant la mise à niveau du go-live) | 2026-11-06 test appareil épic 19 — +1 item (produits sans suivi invendables sur la V1) | 2026-11-05 revue 19.10 — +1 item (retrait de la V1 Flutter : refus des clients sans X-App-Version pour tous les rôles) | 2026-11-03 spec 16-12 — +1 item (dry-run copie de prod : FK manquantes des schémas dérivés, durée de la mise à niveau des tables de base au 1er démarrage, sondes) | 2026-11-03 décision user : go-live seulement au jalon GL = tout le merge Keevo × Bref (19–21, app RN 22.1–22.13/23.1–23.11, outil 24.1–24.10 + dry-run 24.12) | 2026-11-01 spec 16-5 — +1 item (dry-run du backfill tenant_modules sur copie de prod avant le go-live)
   16-12-conversion-ddl-tenant-modules: done  # 2026-11-06 correctif livré (spec-16-12-2) : scripts de modules lus une fois et servis à Flyway depuis la mémoire ; jar empaqueté, parallélisme 4, 362 schémas, 0 échec sur 5 passages ; 5 980 tests verts | 2026-11-06 rouverte par la mesure 19.11 — upgrade parallèle depuis le jar empaqueté : échecs aléatoires (lecture concurrente du jar), correctif requis avant tout déploiement | 2026-11-03 build-auto done, revue 5 couches (50 constats, 26 corrigés), 4 997 tests verts, keevo_dev 343 tenants 143 s puis 1 s (spec-16-12) — DDL tenant dans db/modules/<id>/V1 (9 modules), TenantSchemaSyncService supprimé, mise à niveau ensembliste au démarrage ; contrôle live keevo_dev OK au niveau API (343 tenants, données identiques, aucune FK ajoutée) ; contrôle Flutter/Redmi optionnel quand un appareil est branché (backend seul, non bloquant)
   16-9-facturation-electronique-dgi: backlog  # 2026-10-30 spec 14-1 (recherche légale) — 1 item
   epic-16-retrospective: optional
@@ -372,9 +372,11 @@ development_status:
   m20-14-boutique-des-documents: backlog  # API b5b41077+676dc274+d1cdf583 — storeId/storeName sur les documents (création, liste ?storeId= propriétaire seul), visibilité par rôle (employé = ses documents, gérant/lecteur = sa boutique, 404 hors portée), chiffres par boutique avec factures
   m20-11-module-finance: backlog  # API 04620d05 — GET /api/v1/finance/summary (period=AAAA-MM|AAAA ou startDate/endDate, storeId) : CA HT, dépenses, résultat, marge, comparaison, séries, byStore ; propriétaire seul ; contrat finance-math-cases.json
   m20-8-envoi-sms-email: backlog  # API 26ab9513 — POST /invoices/{id}/send {channel|channels[], phone?, email?} (SMS, EMAIL, WHATSAPP), SEND_INVOICE hors ligne mis en file (outbox, 5 essais), lastSentChannel / lastSendStatus dans le pull, statut incertain 409
+  m21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — « Mon plan » : GET /subscription/offers (plans, plafonds, prix par durée, prix barré + fin de promotion, code promo)
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
+  d21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — écran « Offre » : plans, durées, grille de prix + historique, essai, remises, journal ; revenus par plan ; durée à l'activation
   # Directives : section « ## Dashboard super-admin (autre dépôt) » à la fin de chaque spec.
   # Statuts : backlog → in-progress → review (livré, à tester ici) → done (testé ici). d16-11 (session) et d16-4 (conventions admin, tâches de fond) à lire en premier.
   # ─────────────────────────────────────────────────────────
@@ -471,9 +473,9 @@ development_status:
   20-12-acceptation-parcours-bref: done  # 2026-11-08 BrefJourneyAcceptanceFullContextTest — journée Bref de bout en bout sur l API Keevo (OTP → devis → conversion → acompte → échéance → retard → paiement → SMS → dépense → finance → lien public) + scénario caisse Keevo, 11/11 verts, aucun correctif de production ; devis converti dont la facture est annulée : Bref n offre rien, Keevo identique (duplication proposée, non construite)
   epic-20-retrospective: optional
 
-  epic-21: backlog  # P1b Monétisation & engagement
-  21-1-payments-mobile-money: backlog
-  21-2-storekit-revenuecat: backlog
+  epic-21: in-progress  # P1b Monétisation & engagement — 2026-11-09 21-10 done
+  21-1-payments-mobile-money: backlog  # 2026-11-09 21-10 — 3 items (prix figé à l'initiation via OfferPricing.quote, compteur des codes promo, plan/cycle du paiement)
+  21-2-storekit-revenuecat: backlog  # 2026-11-09 21-10 — 1 item (écart prix App Store / grille affiché au super-admin)
   21-3-credit-packs-sms: backlog
   21-4-ai-assistant: backlog  # 2026-11-02 réécrite : assistant par outils (21-8), parité Bref Point, pas de SQL généré
   21-5-whatsapp-cloud: backlog  # 2026-11-04 revue 19.9b — 1 item (factures par le modèle Meta bref_facture depuis le WABA de l'owner)
@@ -481,7 +483,7 @@ development_status:
   21-7-client-portal: backlog
   21-8-couche-outils-ia-mcp: backlog  # 2026-11-02 décision utilisateur : IA par outils MCP directement (FUS-FR39) — avant 21-4
   21-9-serveur-mcp-externe: backlog  # 2026-11-02 FUS-FR39 — après 21-4
-  21-10-catalogue-offres-configurable: backlog  # 2026-11-03 ADR-05 : rien de l'offre figé dans le code (plans, modules, plafonds, quotas, cycles, prix, essais, remises) — dashboard super-admin, FUS-FR40
+  21-10-catalogue-offres-configurable: done  # 2026-11-09 build-auto (spec-21-10-catalogue-offres-configurable.md) — revue 5 couches (39 constats, 26 corrigés, 13 rejetés, 0 reporté), tests verts (subscription 143, architecture 131, admin 688, shared 1 320, identity 866), live keevo_dev OK ; routés → 21-1 (3), 21-2 (1), 16-7 (1) ; revue de suivi recommandée | 2026-11-03 ADR-05 : rien de l'offre figé dans le code (plans, modules, plafonds, quotas, cycles, prix, essais, remises) — dashboard super-admin, FUS-FR40
   epic-21-retrospective: optional
 
   epic-22: backlog  # P2 App RN parité Keevo

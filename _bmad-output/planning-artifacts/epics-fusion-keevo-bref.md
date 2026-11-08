@@ -1099,6 +1099,11 @@ So that **mon abonnement s'active sans attendre le support (FUS-FR9)**.
 **When** Keevo le reçoit via le routeur (24.10)
 **Then** il est ignoré sans erreur (owner inconnu)
 
+**Éléments routés vers 21.1 (story 21.10, 2026-11-09) :**
+- [ ] [Deferred-from: 21.10, 2026-11-09] Prix figé à l'initiation : appeler le port `subscription.api.OfferPricing.quote(tenant, plan, cycle, promoCode)` à l'initiation du paiement et enregistrer le prix remisé obtenu (montant de base, remise appliquée, montant dû) avec la demande ; la confirmation (webhook) applique ce prix enregistré, jamais le prix du moment — critère « un paiement déjà initié garde le prix affiché » de 21.10. Un devis à 0 FCFA (remise de 100 % ou montant ≥ prix) est une offre gratuite : l'activer sans passer par MyCoolPay.
+- [ ] [Deferred-from: 21.10, 2026-11-09] Compter les utilisations d'un code promo (et un éventuel plafond d'utilisations) au paiement confirmé — 21.10 applique le code sans compteur faute de paiement.
+- [ ] [Deferred-from: 21.10, 2026-11-09] Écrire `tenant_payments.plan_code` et `cycle_code` (colonnes ajoutées par 21.10, V60) à la confirmation, pour la ventilation des revenus par plan et cycle.
+
 ### Story 21.2 : Achats intégrés iOS (StoreKit / RevenueCat) et abonnements externes
 
 As a **owner sur iPhone**,
@@ -1114,6 +1119,9 @@ So that **mon abonnement Apple actuel continue après la migration (FUS-FR9, FUS
 **Given** l'`app_user_id` RevenueCat d'un owner migré
 **When** il était l'id utilisateur Bref
 **Then** il reste valide car les UUID utilisateur sont conservés (FUS-MIG2) — vérifié en sandbox avant la vague Apple
+
+**Éléments routés vers 21.2 (story 21.10, 2026-11-09) :**
+- [ ] [Deferred-from: 21.10, 2026-11-09] Écart de prix App Store : les prix Apple se règlent dans App Store Connect ; lire les produits StoreKit (RevenueCat) et afficher au super-admin, dans le catalogue d'offres (`GET /api/v1/admin/offers`), l'écart entre le prix Apple et la grille configurable par plan et cycle.
 
 ### Story 21.3 : Crédit de compte et packs SMS
 
@@ -1251,9 +1259,9 @@ So that **rien ne soit figé dans le code et que l'offre évolue sans redéploie
 
 
 **Éléments reportés routés (revue 19.7a, 2026-11-04) :**
-- [ ] [Deferred-from: revue 19.7a, 2026-11-04] Changer la nature (kind) d'un plan déjà attribué ne resynchronise pas les lignes de modules des tenants concernés (`JdbcPlanCatalog.save`) — la CRUD doit soit interdire le changement de nature d'un plan utilisé, soit déclencher la resynchronisation des profils.
-- [ ] [Deferred-from: revue 19.7a, 2026-11-04] (les deux chemins d'activation super-admin refusent déjà un plan archivé depuis 19.7b) `archived_at` et `visible` ne sont pas appliqués à l'attribution : un plan archivé ou masqué peut encore être attribué (`AdminSubscriptionController`, `AdminPlanProfileController.parsePlanType`, `ActivatePlanService`) — refuser un plan archivé pour une nouvelle attribution.
-- [ ] [Deferred-from: revue 19.7a, 2026-11-04] Les revenus comptent tous les plans payants dans un seul seau « PREMIUM » (`RevenueMetrics`) faute de prix par plan — à ventiler par plan et cycle une fois les prix en base.
+- [x] [Deferred-from: revue 19.7a, 2026-11-04] (fait en 21-10, 2026-11-09) Changer la nature (kind) d'un plan déjà attribué ne resynchronise pas les lignes de modules des tenants concernés (`JdbcPlanCatalog.save`) — la CRUD doit soit interdire le changement de nature d'un plan utilisé, soit déclencher la resynchronisation des profils.
+- [x] [Deferred-from: revue 19.7a, 2026-11-04] (fait en 21-10, 2026-11-09) (les deux chemins d'activation super-admin refusent déjà un plan archivé depuis 19.7b) `archived_at` et `visible` ne sont pas appliqués à l'attribution : un plan archivé ou masqué peut encore être attribué (`AdminSubscriptionController`, `AdminPlanProfileController.parsePlanType`, `ActivatePlanService`) — refuser un plan archivé pour une nouvelle attribution.
+- [x] [Deferred-from: revue 19.7a, 2026-11-04] (fait en 21-10, 2026-11-09) Les revenus comptent tous les plans payants dans un seul seau « PREMIUM » (`RevenueMetrics`) faute de prix par plan — à ventiler par plan et cycle une fois les prix en base.
 
 ## Epic 22 : App React Native — fondations et parité Keevo (P2)
 
