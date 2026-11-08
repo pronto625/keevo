@@ -96,16 +96,17 @@ class DocumentStoreResolverTest {
     }
 
     @Test
-    @DisplayName("store member without store in its token: no store, nothing read; any storeId sent → 403 with its "
-            + "own French message")
+    @DisplayName("store member without store in its token (user decision 2026-11-08, Bref noShopAssigned): 403 with "
+            + "a French message, with or without storeId, nothing read")
     void memberWithoutStore() {
         actor("EMPLOYEE", null);
-        assertThat(resolver.forNewDocument(null, TENANT)).isNull();
-        assertThatThrownBy(() -> resolver.forNewDocument(A, TENANT)).isInstanceOfSatisfying(DomainException.class,
-                e -> {
-                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
-                    assertThat(e.getUserMessage()).isEqualTo(DocumentStoreResolver.NO_ASSIGNED_STORE);
-                });
+        for (UUID requested : java.util.Arrays.asList(null, A)) {
+            assertThatThrownBy(() -> resolver.forNewDocument(requested, TENANT)).isInstanceOfSatisfying(
+                    DomainException.class, e -> {
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+                        assertThat(e.getUserMessage()).isEqualTo(DocumentAccess.NO_STORE);
+                    });
+        }
         verifyNoInteractions(stores);
     }
 

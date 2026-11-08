@@ -229,6 +229,19 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         return id;
     }
 
+    /** Story 20.14 — an invoice created and issued by the employee (it acts only on its own documents). */
+    private String issuedByEmployee() throws Exception {
+        Map<String, Object> line = new LinkedHashMap<>();
+        line.put("description", "Sac de riz 25 kg");
+        line.put("quantity", 1);
+        line.put("unitPrice", 11_925);
+        line.put("vatTreatment", "STANDARD");
+        String id = data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices",
+                Map.of("client", Map.of("name", "Société Ndolo"), "lines", List.of(line))), 201).path("id").asText();
+        data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/issue", null), 200);
+        return id;
+    }
+
     private static byte[] png() throws Exception {
         BufferedImage img = new BufferedImage(300, 100, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = img.createGraphics();
@@ -663,7 +676,9 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     @DisplayName("roles: EMPLOYEE signs and rotates (create / send rights) but cannot change the document settings; "
             + "VIEWER reads signatures and settings only")
     void roles() throws Exception {
-        String id = issued();
+        String id = issuedByEmployee(); // Story 20.14 — an employee signs / rotates only its own documents
+        assertThat(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + issued() + "/public-link/rotate", null)
+                .getResponse().getStatus()).isEqualTo(404);
         data(upload(employeeToken, id, "client", png(), "image/png"), 200);
         data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null), 200);
         assertThat(call(employeeToken, HttpMethod.PUT, "/api/v1/invoicing/settings/documents",

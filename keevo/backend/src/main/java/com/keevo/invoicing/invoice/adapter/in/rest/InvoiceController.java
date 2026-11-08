@@ -27,6 +27,7 @@ import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
+import com.keevo.invoicing.invoice.application.usecase.DocumentAccess;
 import com.keevo.invoicing.invoice.application.usecase.DocumentStoreResolver;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase.DraftContent;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -94,15 +95,18 @@ public class InvoiceController {
     private final InvoicePaymentUseCase payments;
     private final InvoiceResponseAssembler assembler;
     private final DocumentStoreResolver stores;
+    private final DocumentAccess access;
 
     public InvoiceController(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                              InvoiceQueryUseCase queries, InvoicingSettingsUseCase settings,
                              InvoiceDocumentUseCase documents, SendInvoiceUseCase sending,
                              PublicBaseUrl publicBaseUrl, InvoiceClientResolver clients,
                              ConvertQuoteUseCase conversions, InvoicePaymentUseCase payments,
-                             InvoiceResponseAssembler assembler, DocumentStoreResolver stores) {
+                             InvoiceResponseAssembler assembler, DocumentStoreResolver stores,
+                             DocumentAccess access) {
         this.assembler = assembler;
         this.stores = stores;
+        this.access = access;
         this.payments = payments;
         this.clients = clients;
         this.conversions = conversions;
@@ -125,6 +129,7 @@ public class InvoiceController {
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> create(@Valid @RequestBody InvoiceRequestDto request) {
         // Story 20.14 — a refused storeId is a DomainException (403 FORBIDDEN, or VALIDATION_ERROR field storeId),
         // answered by the global mapping with its French message, exactly like the sync rejection
+        access.requireCreatable(request.id()); // Story 20.14 — an id of a document the actor does not see → 404
         Invoice draft = drafts.create(request.id(), content(request), CurrentActor.actorId(),
                 TenantContext.getCurrentTenant());
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponseWrapper.ok(dto(draft)));
@@ -151,6 +156,7 @@ public class InvoiceController {
             @RequestParam(required = false) String search,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) UUID storeId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (page < 0) {
@@ -174,7 +180,8 @@ public class InvoiceController {
         }
         InvoiceRepository.Page result = queries.list(
                 new InvoiceRepository.Filter(parseStatus(status), parseSaleId(saleId), text, from, to,
-                        parseKind(kind), parsePaymentState(paymentState)), page, size);
+                        parseKind(kind), parsePaymentState(paymentState), access.forList(storeId), storeId),
+                page, size);
         InvoicingSettings current = settings.current();
         var credits = queries.credits(result.items());
         var collections = queries.collections(result.items(), credits); // one batched query for the page
@@ -208,6 +215,7 @@ public class InvoiceController {
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> get(@PathVariable UUID id) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(queries.get(id))));
     }
 
@@ -220,6 +228,7 @@ public class InvoiceController {
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> update(@PathVariable UUID id,
                                                                          @Valid @RequestBody InvoiceRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(drafts.update(id, content(request), TenantContext.getCurrentTenant()))));
     }
 
@@ -228,6 +237,7 @@ public class InvoiceController {
     @RequiresEntitlement(InvoicingModule.ID)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         drafts.delete(id);
         return ResponseEntity.noContent().build();
     }
@@ -237,6 +247,7 @@ public class InvoiceController {
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping("/{id}/issue")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> issue(@PathVariable UUID id) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         Invoice issued = lifecycle.issue(id, CurrentActor.actorId(), TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(issued)));
     }
@@ -251,6 +262,7 @@ public class InvoiceController {
     @PostMapping("/{id}/pay")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> pay(
             @PathVariable UUID id, @Valid @RequestBody(required = false) PayInvoiceRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         Invoice paid = lifecycle.pay(id, request == null ? null : request.paymentMethod(),
                 request == null ? null : request.paidAt(), CurrentActor.actorId(), TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(paid)));
@@ -265,6 +277,7 @@ public class InvoiceController {
     @PostMapping("/{id}/cancel")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> cancel(
             @PathVariable UUID id, @Valid @RequestBody CancelInvoiceRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         Invoice cancelled = lifecycle.cancel(id, request.reason(), CurrentActor.actorId(),
                 TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(cancelled)));
@@ -282,6 +295,7 @@ public class InvoiceController {
     @PostMapping("/{id}/payments")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> addPayment(
             @PathVariable UUID id, @Valid @RequestBody AddInvoicePaymentRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         InvoicePaymentUseCase.Result result = payments.add(id, request.toCommand(), CurrentActor.actorId(),
                 TenantContext.getCurrentTenant());
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
@@ -299,6 +313,7 @@ public class InvoiceController {
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> settlePayment(
             @PathVariable UUID id, @PathVariable UUID paymentId,
             @Valid @RequestBody(required = false) SettleInvoicePaymentRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         InvoicePaymentUseCase.Result result = payments.settle(id, paymentId,
                 request == null ? null : request.paidAt(), request == null ? null : request.method(),
                 CurrentActor.actorId(), TenantContext.getCurrentTenant());
@@ -315,6 +330,7 @@ public class InvoiceController {
     @PostMapping("/{id}/convert")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> convert(
             @PathVariable UUID id, @RequestBody(required = false) ConvertQuoteRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         ConvertQuoteUseCase.Conversion conversion = conversions.convert(id,
                 request == null ? null : request.invoiceId(), request == null ? null : request.expectedUpdatedAt(),
                 CurrentActor.actorId(), TenantContext.getCurrentTenant());
@@ -334,6 +350,7 @@ public class InvoiceController {
     public ResponseEntity<byte[]> pdf(@PathVariable UUID id,
                                       @RequestParam(required = false) String template,
                                       @RequestParam(required = false) String ticketWidth) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return pdfResponse(documents.pdf(id, TenantContext.getCurrentTenant(), InvoiceLayoutParams.template(template),
                 InvoiceLayoutParams.width(ticketWidth)));
     }
@@ -349,6 +366,7 @@ public class InvoiceController {
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> send(
             @PathVariable UUID id, @Valid @RequestBody(required = false) SendInvoiceRequestDto request,
             HttpServletRequest http) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         Invoice sent = sending.send(id, request == null ? null : request.phone(), publicBaseUrl.resolve(http),
                 CurrentActor.actorId(), TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(sent)));

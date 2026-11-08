@@ -23,8 +23,8 @@ import java.util.stream.Collectors;
  * {@code stores} table):
  * <ul>
  *   <li>a store member (EMPLOYEE, MANAGER, VIEWER) → its assigned store: another store requested → 403; its store
- *       deactivated → 403 (same rule as the expenses of 20.10); a member token without store → no store, and any
- *       {@code storeId} sent → 403 with its own message;</li>
+ *       deactivated → 403 (same rule as the expenses of 20.10); a member without store → 403 (user decision
+ *       2026-11-08, Bref {@code noShopAssigned});</li>
  *   <li>an OWNER (or any unscoped actor) → the requested store when it is an active store of the tenant (else
  *       {@code VALIDATION_ERROR} field {@code storeId}, {@link StoreQueryPort#UNKNOWN_OR_INACTIVE_STORE}), else the
  *       tenant's default store ({@link StoreQueryPort#defaultStore}), {@code null} when it has no active store;</li>
@@ -41,9 +41,6 @@ public class DocumentStoreResolver {
     static final String OTHER_STORE = "Vous ne pouvez créer un document que dans votre boutique";
     static final String OWN_STORE_INACTIVE =
             "Votre boutique est désactivée : demandez au propriétaire de la réactiver pour créer des documents.";
-    static final String NO_ASSIGNED_STORE = "Votre compte n'est rattaché à aucune boutique : créez le document sans "
-            + "choisir de boutique, ou demandez au propriétaire de vous rattacher à une boutique.";
-
     private final StoreQueryPort stores;
 
     public DocumentStoreResolver(StoreQueryPort stores) {
@@ -85,10 +82,8 @@ public class DocumentStoreResolver {
     /** A store member: its own active store; another store, an inactive store or a store without member → 403. */
     UUID forMember(UUID own, UUID requested, String tenantSchema) {
         if (own == null) {
-            if (requested != null) {
-                throw DomainException.userFacing(ErrorCode.FORBIDDEN, NO_ASSIGNED_STORE);
-            }
-            return null;
+            // user decision 2026-11-08 (Bref noShopAssigned): a member without store makes no document
+            throw DomainException.userFacing(ErrorCode.FORBIDDEN, DocumentAccess.NO_STORE);
         }
         if (requested != null && !requested.equals(own)) {
             throw DomainException.userFacing(ErrorCode.FORBIDDEN, OTHER_STORE);

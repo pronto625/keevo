@@ -105,8 +105,19 @@ public interface InvoiceRepository {
      * matches its reference {@code DV-XXXXXXXX}. Story 20.4: {@code paymentState} = issued or paid invoices in that
      * collection state (an invoice without stored state: PAID status = PAID, ISSUED = UNPAID).
      */
+    /**
+     * Story 20.14 — {@code scope}: the documents the actor sees ({@code null} = all), {@code storeId}: the owner's
+     * explicit store filter ({@code null} = none).
+     */
     record Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
-                  java.time.LocalDate to, InvoiceKind kind, PaymentState paymentState) {
+                  java.time.LocalDate to, InvoiceKind kind, PaymentState paymentState,
+                  com.keevo.invoicing.invoice.domain.model.DocumentScope scope, UUID storeId) {
+
+        /** Before Story 20.14: every document, no store filter. */
+        public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
+                      java.time.LocalDate to, InvoiceKind kind, PaymentState paymentState) {
+            this(status, saleId, search, from, to, kind, paymentState, null, null);
+        }
 
         /** Before Story 20.4: no collection-state criterion. */
         public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
@@ -146,6 +157,20 @@ public interface InvoiceRepository {
      * {@code limit}, with their lines.
      */
     List<DeltaItem> delta(java.time.Instant since, java.time.Instant afterCursor, String afterId, int limit);
+
+    /**
+     * Story 20.14 — the same delta restricted to {@code scope} (the documents the puller sees; served by the V16
+     * indexes {@code (created_by | store_id, updated_at, id)}).
+     */
+    List<DeltaItem> delta(java.time.Instant since, java.time.Instant afterCursor, String afterId, int limit,
+                          com.keevo.invoicing.invoice.domain.model.DocumentScope scope);
+
+    /** Story 20.14 — the creator and store of a document (deleted drafts included), by primary key. */
+    java.util.Optional<com.keevo.invoicing.invoice.domain.model.DocumentScope.Owner> ownerOf(UUID invoiceId);
+
+    /** Story 20.14 — the creator and store of the invoice of a credit note. */
+    java.util.Optional<com.keevo.invoicing.invoice.domain.model.DocumentScope.Owner> ownerOfCreditNote(
+            UUID creditNoteId);
 
     /** One row of the delta: the invoice, or a deleted draft ({@code deleted}: only its id and times matter). */
     record DeltaItem(Invoice invoice, boolean deleted) {

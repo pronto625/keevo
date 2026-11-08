@@ -1,6 +1,7 @@
 package com.keevo.invoicing.invoice.adapter.out.persistence;
 
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
+import com.keevo.invoicing.invoice.domain.model.DocumentScope;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceDelivery;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
@@ -310,6 +311,16 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             conditions.add(LIST_DATE + " <= ?");
             filter.add(Date.valueOf(criteria.to()));
         }
+        if (criteria.scope() != null && !criteria.scope().all()) {
+            // Story 20.14 — what the actor sees (idx_invoices_created_by_sync / idx_invoices_store_sync)
+            DocumentScope.Sql scoped = criteria.scope().sql(null);
+            conditions.add(scoped.condition());
+            filter.addAll(scoped.args());
+        }
+        if (criteria.storeId() != null) {
+            conditions.add("store_id = ?"); // Story 20.14 — the owner's store filter
+            filter.add(criteria.storeId());
+        }
         conditions.add("deleted_at IS NULL");
         String where = " WHERE " + String.join(" AND ", conditions);
         Long total = jdbc.queryForObject("SELECT COUNT(*) FROM " + table + where, Long.class, filter.toArray());
@@ -344,11 +355,21 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
 
     @Override
     public List<DeltaItem> delta(Instant since, Instant afterCursor, String afterId, int limit) {
+        return delta(since, afterCursor, afterId, limit, DocumentScope.ALL);
+    }
+
+    @Override
+    public List<DeltaItem> delta(Instant since, Instant afterCursor, String afterId, int limit, DocumentScope scope) {
         String table = InvoicingTables.qualified(InvoicingTables.INVOICES);
         List<Object> args = new ArrayList<>();
         StringBuilder sql = new StringBuilder("SELECT " + SELECT_COLUMNS + ", deleted_at IS NOT NULL AS deleted FROM "
                 + table + " WHERE " + SYNC_CURSOR + " >= ?");
         args.add(ts(since));
+        if (scope != null && !scope.all()) {
+            DocumentScope.Sql scoped = scope.sql(null); // Story 20.14 — the puller's documents only
+            sql.append(" AND ").append(scoped.condition());
+            args.addAll(scoped.args());
+        }
         if (afterCursor != null && afterId != null) {
             // row-value comparison in the index order: the keyset index starts right after the previous page
             sql.append(" AND (" + SYNC_CURSOR + ", CAST(id AS text)) > (?, ?)");
@@ -369,6 +390,21 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         Map<UUID, List<InvoiceLine>> lines = live.isEmpty() ? Map.of() : lines(live);
         return rows.stream().map(r -> new DeltaItem(r.with(lines.getOrDefault(r.id(), List.of())),
                 deleted.contains(r.id()))).toList();
+    }
+
+    @Override
+    public Optional<DocumentScope.Owner> ownerOf(UUID invoiceId) {
+        return jdbc.query("SELECT created_by, store_id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                        + " WHERE id = ?", (rs, n) -> new DocumentScope.Owner(rs.getObject("created_by", UUID.class),
+                        rs.getObject("store_id", UUID.class)), invoiceId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<DocumentScope.Owner> ownerOfCreditNote(UUID creditNoteId) {
+        return jdbc.query("SELECT i.created_by, i.store_id FROM " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                        + " i JOIN " + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " cn ON cn.invoice_id = i.id "
+                        + "WHERE cn.id = ?", (rs, n) -> new DocumentScope.Owner(rs.getObject("created_by", UUID.class),
+                        rs.getObject("store_id", UUID.class)), creditNoteId).stream().findFirst();
     }
 
     // ── mapping ─────────────────────────────────────────────────────────────────────────────────────────────

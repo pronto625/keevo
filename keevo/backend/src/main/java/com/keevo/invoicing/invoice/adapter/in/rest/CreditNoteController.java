@@ -37,9 +37,13 @@ public class CreditNoteController {
     private final IssueCreditNoteUseCase issue;
     private final CreditNoteQueryUseCase queries;
 
-    public CreditNoteController(IssueCreditNoteUseCase issue, CreditNoteQueryUseCase queries) {
+    private final com.keevo.invoicing.invoice.application.usecase.DocumentAccess access;
+
+    public CreditNoteController(IssueCreditNoteUseCase issue, CreditNoteQueryUseCase queries,
+                                com.keevo.invoicing.invoice.application.usecase.DocumentAccess access) {
         this.issue = issue;
         this.queries = queries;
+        this.access = access;
     }
 
     /**
@@ -51,6 +55,7 @@ public class CreditNoteController {
     @PostMapping("/invoices/{id}/credit-notes")
     public ResponseEntity<ApiResponseWrapper<CreditNoteResponseDto>> create(
             @PathVariable UUID id, @Valid @RequestBody CreditNoteRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         List<CreditNoteSelection> selection = request.lines() == null ? null : request.lines().stream()
                 .map(l -> new CreditNoteSelection(l.position(), l.quantity())).toList();
         CreditNote note = issue.issue(id, request.reason(), selection, CurrentActor.actorId(),
@@ -64,6 +69,7 @@ public class CreditNoteController {
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/credit-notes/{id}")
     public ResponseEntity<ApiResponseWrapper<CreditNoteResponseDto>> get(@PathVariable UUID id) {
+        access.requireCreditNote(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(CreditNoteResponseDto.fromDomain(queries.get(id))));
     }
 
@@ -72,6 +78,7 @@ public class CreditNoteController {
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/credit-notes/{id}/pdf")
     public ResponseEntity<byte[]> pdf(@PathVariable UUID id) {
+        access.requireCreditNote(id); // Story 20.14 — out of the actor's scope → 404
         return InvoiceController.pdfResponse(queries.pdf(id, TenantContext.getCurrentTenant()));
     }
 }

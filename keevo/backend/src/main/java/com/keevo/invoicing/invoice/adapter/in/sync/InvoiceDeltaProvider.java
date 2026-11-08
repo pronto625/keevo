@@ -3,6 +3,7 @@ package com.keevo.invoicing.invoice.adapter.in.sync;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceResponseDto;
+import com.keevo.invoicing.invoice.application.usecase.DocumentAccess;
 import com.keevo.invoicing.invoice.application.usecase.DocumentStoreResolver;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceQueryUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicingSettingsUseCase;
@@ -49,11 +50,15 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
     private final ModuleProvisioner provisioner;
 
     private final DocumentStoreResolver stores;
+    /** Story 20.14 — the puller's documents only (a member without store pulls none). */
+    private final DocumentAccess access;
 
     /** Story 20.14 — {@code stores}: the store names of a page (one lookup). */
     public InvoiceDeltaProvider(InvoiceRepository invoices, InvoiceQueryUseCase queries,
                                 InvoicingSettingsUseCase settings, ObjectMapper objectMapper,
-                                ModuleProvisioner provisioner, DocumentStoreResolver stores) {
+                                ModuleProvisioner provisioner, DocumentStoreResolver stores,
+                                DocumentAccess access) {
+        this.access = access;
         this.stores = stores;
         this.provisioner = provisioner;
         this.invoices = invoices;
@@ -82,8 +87,14 @@ public class InvoiceDeltaProvider implements DeltaEntityProvider {
         // the pull then keeps its cursor and retries).
         provisioner.ensureProvisioned(TenantContext.getCurrentTenant(), InvoicingModule.ID);
         // one extra row tells whether another page exists
-        List<InvoiceRepository.DeltaItem> found = invoices.delta(since, after == null ? null : after.cursor(),
-                after == null ? null : after.id(), limit + 1);
+        // Story 20.14 — visibility per role; a document never leaves a scope (creator and store are fixed): the
+        // tombstones of a puller whose role or store changes are routed to 22.5
+        com.keevo.invoicing.invoice.domain.model.DocumentScope scope = access.forPull();
+        List<InvoiceRepository.DeltaItem> found = scope.all()
+                ? invoices.delta(since, after == null ? null : after.cursor(), after == null ? null : after.id(),
+                        limit + 1)
+                : invoices.delta(since, after == null ? null : after.cursor(), after == null ? null : after.id(),
+                        limit + 1, scope);
         boolean more = found.size() > limit;
         List<InvoiceRepository.DeltaItem> page = more ? found.subList(0, limit) : found;
         if (page.isEmpty()) {

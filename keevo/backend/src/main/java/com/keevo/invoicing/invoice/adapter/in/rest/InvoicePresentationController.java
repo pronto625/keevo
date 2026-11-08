@@ -65,11 +65,14 @@ public class InvoicePresentationController {
     private final InvoicePublicLinkUseCase links;
     private final InvoiceResponseAssembler invoices;
     private final PublicBaseUrl publicBaseUrl;
+    private final com.keevo.invoicing.invoice.application.usecase.DocumentAccess access;
     private final InvoiceSignatureLimits limits;
 
     public InvoicePresentationController(InvoicePresentationUseCase presentation, InvoicePublicLinkUseCase links,
                                          InvoiceResponseAssembler invoices, PublicBaseUrl publicBaseUrl,
-                                         InvoiceSignatureLimits limits) {
+                                         InvoiceSignatureLimits limits,
+                                         com.keevo.invoicing.invoice.application.usecase.DocumentAccess access) {
+        this.access = access;
         this.presentation = presentation;
         this.links = links;
         this.invoices = invoices;
@@ -82,6 +85,7 @@ public class InvoicePresentationController {
     @PutMapping("/api/v1/invoices/{id}/layout")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> layout(
             @PathVariable UUID id, @RequestBody InvoiceLayoutRequestDto request) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(invoices.dto(presentation.updateLayout(id,
                 InvoiceLayoutParams.templateChange(request.invoiceTemplate()),
                 InvoiceLayoutParams.widthChange(request.ticketWidth()), CurrentActor.actorId(),
@@ -95,6 +99,7 @@ public class InvoicePresentationController {
                                                                        @PathVariable String role,
                                                                        @RequestParam("file") MultipartFile file)
             throws IOException {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         SignatureRole r = role(role);
         if (file.getSize() > limits.maxUploadBytes()) { // refused before the upload is read into memory
             throw new DomainException(ErrorCode.INVOICE_SIGNATURE_TOO_LARGE,
@@ -112,6 +117,7 @@ public class InvoicePresentationController {
     @DeleteMapping("/api/v1/invoices/{id}/signatures/{role}")
     public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> unsign(@PathVariable UUID id,
                                                                          @PathVariable String role) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(invoices.dto(presentation.unsign(id, role(role),
                 CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }
@@ -120,6 +126,7 @@ public class InvoicePresentationController {
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     @GetMapping("/api/v1/invoices/{id}/signatures/{role}")
     public ResponseEntity<byte[]> signature(@PathVariable UUID id, @PathVariable String role) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         StoredImage image = presentation.signature(id, role(role), TenantContext.getCurrentTenant());
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.contentType()))
@@ -133,6 +140,7 @@ public class InvoicePresentationController {
     @PostMapping("/api/v1/invoices/{id}/public-link")
     public ResponseEntity<ApiResponseWrapper<PublicLinkDto>> publicLink(@PathVariable UUID id,
                                                                         HttpServletRequest http) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(PublicLinkDto.from(links.link(id,
                 publicBaseUrl.resolve(http), TenantContext.getCurrentTenant()))));
     }
@@ -141,6 +149,7 @@ public class InvoicePresentationController {
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping("/api/v1/invoices/{id}/public-link/rotate")
     public ResponseEntity<ApiResponseWrapper<PublicLinkDto>> rotate(@PathVariable UUID id, HttpServletRequest http) {
+        access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
         return ResponseEntity.ok(ApiResponseWrapper.ok(PublicLinkDto.from(links.rotate(id,
                 publicBaseUrl.resolve(http), CurrentActor.actorId(), TenantContext.getCurrentTenant()))));
     }

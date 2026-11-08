@@ -304,7 +304,10 @@ class CreditNoteFullContextTest extends FullContextIntegrationTest {
         assertError(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/credit-notes",
                 Map.of("reason", "Retour")), 403, "FORBIDDEN");
         String noteId = data(credit(id, "Retour", List.of(sel(1, 1))), 201).path("id").asText();
-        data(call(employeeToken, HttpMethod.GET, "/api/v1/credit-notes/" + noteId, null), 200);
+        // Story 20.14 (décision utilisateur 2026-11-08): an employee only sees the documents it created — the
+        // owner's credit note is unknown to it
+        assertError(call(employeeToken, HttpMethod.GET, "/api/v1/credit-notes/" + noteId, null), 404,
+                "CREDIT_NOTE_NOT_FOUND");
 
         jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = 'PREMIUM_TRIAL', "
                 + "expires_at = now() - interval '1 day'");

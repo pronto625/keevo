@@ -74,7 +74,8 @@ class InvoiceSyncHandlerTest {
     @BeforeEach
     void setUp() {
         handler = new InvoiceSyncHandler(drafts, lifecycle, provisioner, permissions, objectMapper, validator,
-                conversions, payments);
+                conversions, payments,
+                org.mockito.Mockito.mock(com.keevo.invoicing.invoice.application.usecase.DocumentAccess.class));
         as("OWNER", ALL);
     }
 

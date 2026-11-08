@@ -21,6 +21,8 @@ deferred: []
 
 **Approach:** a nullable `invoices.store_id` (invoicing V16) written at creation from the actor (member → assigned store; owner → requested active store, else the oldest active shop), copied by quote conversion, taken from the sale by the POS bridge; credit notes follow their invoice. The revenue source reads it, so store-scoped figures include documents once; the source port moves to the shared core so crm and messaging read it too.
 
+**Décision utilisateur 2026-11-08 — visibility of documents per role (as Bref `invoice.controller.ts` `assertCanAccess` / `assertListScope` / `findAll`):** an EMPLOYEE sees and acts only on the documents they created (invoices, quotes, credit notes through their invoice), a MANAGER or VIEWER on those of their assigned store (the VIEWER stays read-only by its permissions), the OWNER on everything; a member without store is refused.
+
 ## Boundaries & Constraints
 
 **Always:**
@@ -33,9 +35,11 @@ deferred: []
 - **Sales trend:** per store, transactions (sales + invoices) of the last full hour vs the average of the same hour over the 3 previous days, in one grouped query per tenant.
 - **Additive /api/v1:** request `storeId` optional; responses gain `storeId` and `storeName` (null when none). No new sync operation, no event change.
 
+- **Visibility (décision utilisateur 2026-11-08):** one policy (`DocumentAccess` + `DocumentScope`, same pattern as `ClientVisibility` / `ExpenseStoreScope`) for REST, sync and the pull. Lists (`GET /invoices`, every `kind` / `paymentState` filter) and the pull add one indexed equality (`created_by = actor` or `store_id = assigned store`). Every read and action on one document (get, PDF, update / delete draft, issue, convert, cancel, pay / add / settle payment, credit note, credit note read / PDF, send, public link, rotation, layout, signatures; REST and sync) checks the document first: out of scope → 404 `INVOICE_NOT_FOUND` (`CREDIT_NOTE_NOT_FOUND` for a credit note) — the Keevo convention of clients (20.2) and expenses (20.10), Bref answers 403. A creation reusing the id of a document the actor does not see → 404 (never a replay). Explicit `storeId` list filter: OWNER only, anyone else → 403 « Seul le propriétaire peut filtrer les documents par boutique. » (Bref `onlyOwnerShopId`). Member without store → 403 « Votre compte n'est rattaché à aucune boutique : demandez au propriétaire de vous en attribuer une. » (Bref `noShopAssigned`) on lists, reads, actions and creation; its pull reads no document. System work without actor (POS bridge, jobs) is unrestricted.
+
 **Never:**
 - No backfill of old invoices' store, no change of totals, numbers, counters or quotas.
-- No store-scoped invoice list / visibility (who sees which invoices) — routed (see Design Notes).
+- No tombstones when a puller's role or store changes (documents never change creator or store) — routed to 22.5.
 - No public Flyway migration; no change to invoicing V15 (reserved for 20-7).
 - No per-store / per-row query loop; no UUID or raw code in a label or an export.
 
@@ -141,7 +145,9 @@ Paths under `keevo/backend/src/main/` unless stated.
 
 **Not done on purpose:** no backfill of the existing bridged invoices from `sales.store_id` (that table belongs to the pos module; invoicing never reads it — they stay « no store »); per-store rows do not add up to the tenant total, since documents made before V16 have no store.
 
-**Routed (not in this story):** the scheduler full-context test (sales-trend job on a real tenant) → **17-9**; store-scoped invoice list (an employee seeing only its store's documents) → **19.5b** (fine rights, already owns « who sees / ends a document »); filling `store_id` from Bref `shopId` on import → **24.4** (already stated in the epic); a « Chiffre d'affaires » export dataset → **22.12** (20.9); platform GMV → **20.13**.
+**Visibility cost:** one primary-key read of the document's creator and store per action (none for the owner); lists and the pull one equality served by the V16 indexes `idx_invoices_created_by_sync (created_by, updated_at, id)` / `idx_invoices_store_sync (store_id, updated_at, id)` (the pull keyset exactly; the list narrowed to the actor's documents before its sort).
+
+**Routed (not in this story):** pull tombstones when a member's role or store changes → **22.5** (same item as the clients leaving a store's scope); the scheduler full-context test (sales-trend job on a real tenant) → **17-9**; filling `store_id` from Bref `shopId` on import → **24.4** (already stated in the epic); a « Chiffre d'affaires » export dataset → **22.12** (20.9); platform GMV → **20.13**.
 
 ## Verification
 
@@ -164,7 +170,9 @@ Status: in-review (no review pass run in this session — `followup_review_recom
 
 **Review 1 fixes (2026-11-08):** see Spec Change Log. Verification after a clean build (serialized wrapper, one package at a time): invoicing 346 / 0, reporting 456 / 0, crm 238 / 0, messaging 370 / 0, commerce 268 / 0, store 128 / 0, architecture 122 / 0.
 
-**Residual risks:** (1) invoicing V16 is applied after V14 with V15 absent: if 20-7's V15 lands after a tenant already reached V16, Flyway (`outOfOrder` off) will not run it — merge 20-7 first or renumber at merge (no production tenant has invoicing V14+ yet: the refonte is not live); (2) a tenant whose invoicing tables are below V16 keeps its level for 5 minutes (TTL, the level only goes up), so store figures may lag that long after V16 is provisioned; (3) stored daily / weekly reports are not recomputed: documents appear in store reports built from now on; (4) the invoice list is not filtered by store (a store member still lists every invoice) — routed to 19.5b; (5) `contracts/invoice-sync-payloads.json` was left unchanged (read by the Flutter app test): `storeId` is optional and documented below; (6) no backfill of existing bridged invoices from `sales.store_id` (pos table); (7) store rows do not add up to the tenant total (pre-V16 documents have no store); (8) the sales-trend job has no full-context test — routed to 17-9.
+**Rebase on 20-7 + visibility per role (décision utilisateur 2026-11-08):** rebased on refonte/modulaire (dc300775: invoicing V15, public V57); the store names go through `StoreQueryPort.namesByIds` (20.10, now one IN query) and 20-7's `InvoiceResponseAssembler`; `DocumentAccess` / `DocumentScope` guard lists, the pull, every REST and sync action (V16 adds `idx_invoices_created_by_sync` / `idx_invoices_store_sync`). New tests: `InvoiceVisibilityFullContextTest` (4), `DocumentAccessTest` (7); four existing full-context tests where an employee acted on the owner's documents were moved to the employee's own documents or now expect 404. Verification after a clean build: invoicing 411 / 0, reporting 456 / 0, crm 238 / 0, commerce 268 / 0, messaging 370 / 0, architecture 131 / 0, sync 675 / 0, shared 1 320 / 0.
+
+**Residual risks:** (1) invoicing V16 is applied after V14 with V15 absent: if 20-7's V15 lands after a tenant already reached V16, Flyway (`outOfOrder` off) will not run it — merge 20-7 first or renumber at merge (no production tenant has invoicing V14+ yet: the refonte is not live); (2) a tenant whose invoicing tables are below V16 keeps its level for 5 minutes (TTL, the level only goes up), so store figures may lag that long after V16 is provisioned; (3) stored daily / weekly reports are not recomputed: documents appear in store reports built from now on; (4) visibility per role is now in this story (décision utilisateur 2026-11-08); pull tombstones on a role / store change → 22.5; (5) `contracts/invoice-sync-payloads.json` was left unchanged (read by the Flutter app test): `storeId` is optional and documented below; (6) no backfill of existing bridged invoices from `sales.store_id` (pos table); (7) store rows do not add up to the tenant total (pre-V16 documents have no store); (8) the sales-trend job has no full-context test — routed to 17-9.
 
 ## Mobile (React Native — dépôt AI/bref)
 
@@ -189,5 +197,14 @@ Code : `InvoiceRequestDto.java`, `InvoiceResponseDto.java`, `DocumentStoreResolv
 - Given le propriétaire qui choisit la boutique B, when il convertit un devis de B, then la facture obtenue affiche « Boutique : B ».
 - Given une facture créée avant la mise à jour, when le filtre boutique B est actif, then elle n'apparaît pas dans les chiffres de B mais reste dans « Toutes les boutiques ».
 - Mise en place : `curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$API/api/v1/invoices" -d '{"client":{"name":"Awa"},"lines":[{"description":"Riz","quantity":1,"unitPrice":10000}],"storeId":"'$STORE_ID'"}'`.
+
+**Visibilité par rôle (décision utilisateur 2026-11-08, comme Bref) :**
+- Employé : ne voit et ne manipule que les documents qu'il a créés (factures, devis, avoirs de ces factures) — liste, fiche, PDF, encaissements, envoi, lien public, rotation, synchro.
+- Gérant et lecteur : les documents de leur boutique (le lecteur reste en lecture seule).
+- Propriétaire : tout ; il peut filtrer la liste par boutique avec `GET /api/v1/invoices?storeId=` ; un autre rôle qui envoie `storeId` → 403 « Seul le propriétaire peut filtrer les documents par boutique. »
+- Un document hors de portée répond 404 `INVOICE_NOT_FOUND` (avoir : `CREDIT_NOTE_NOT_FOUND`) ; en synchro `REJECTED` avec `reason` = `INVOICE_NOT_FOUND`. L'app retire ce document de son cache et n'affiche pas d'erreur technique.
+- Compte sans boutique → 403 « Votre compte n'est rattaché à aucune boutique : demandez au propriétaire de vous en attribuer une. » ; son pull ne renvoie aucun document.
+- À implémenter : ne plus afficher le filtre « Boutique » de la liste des documents pour un employé, un gérant ou un lecteur ; masquer les documents d'autrui dans le cache local (le pull ne les renvoie plus, mais un cache ancien peut en contenir : le vider à la mise à jour).
+- Critère : un employé A et un employé B de la même boutique ne voient chacun que leurs factures ; le gérant de la boutique voit les deux ; une facture de A ouverte par B (lien interne) affiche « Document introuvable ».
 
 **Clé de suivi mobile :** `m20-14-boutique-des-documents`.

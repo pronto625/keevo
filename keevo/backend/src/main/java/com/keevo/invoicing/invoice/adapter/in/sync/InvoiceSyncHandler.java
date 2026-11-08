@@ -9,6 +9,7 @@ import com.keevo.invoicing.invoice.adapter.in.rest.dto.ConvertQuoteRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.PayInvoiceRequestDto;
 import com.keevo.invoicing.invoice.application.usecase.ConvertQuoteUseCase;
+import com.keevo.invoicing.invoice.application.usecase.DocumentAccess;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceLifecycleUseCase;
 import com.keevo.invoicing.invoice.application.usecase.ManageDraftInvoiceUseCase;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
@@ -61,6 +62,9 @@ import java.util.UUID;
  *       owner's unknown or deactivated store → {@code REJECTED VALIDATION_ERROR} « Boutique inconnue ou
  *       désactivée »; absent = the owner's default store. Nothing is created on a rejection; the French message is in
  *       {@code conflictData.message}.</li>
+ *   <li>Story 20.14 — visibility (user decision 2026-11-08, as Bref): an EMPLOYEE acts only on the documents they
+ *       created, a MANAGER / VIEWER on those of their store; any other document → {@code REJECTED
+ *       INVOICE_NOT_FOUND} (never disclosed); a member without store → {@code REJECTED FORBIDDEN}.</li>
  * </ul>
  * Payloads are validated with the REST request DTOs (same French messages, {@code VALIDATION_ERROR}); permissions are
  * those of the matching endpoint ({@code @RequiresPermission} is not applied to sync handlers, so it is checked here
@@ -106,10 +110,14 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     private final ObjectMapper objectMapper;
     private final Validator validator;
 
+    /** Story 20.14 — the documents the actor sees (same policy as REST). */
+    private final DocumentAccess access;
+
     public InvoiceSyncHandler(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                               ModuleProvisioner provisioner, ModulePermissions permissions,
                               ObjectMapper objectMapper, Validator validator, ConvertQuoteUseCase conversions,
-                              InvoicePaymentUseCase payments) {
+                              InvoicePaymentUseCase payments, DocumentAccess access) {
+        this.access = access;
         this.drafts = drafts;
         this.payments = payments;
         this.conversions = conversions;
@@ -162,6 +170,14 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
         requirePermission(type);
         provisioner.ensureProvisioned(tenantId, InvoicingModule.ID);
         Map<String, Object> p = operation.payload();
+        // Story 20.14 — a document outside the actor's scope is unknown (404 INVOICE_NOT_FOUND → REJECTED)
+        if (CREATE.equals(type)) {
+            access.requireCreatable(parseUuid(p.get("id")));
+        } else if (CONVERT_QUOTE.equals(type)) {
+            access.requireInvoice(parseUuid(p.get("quoteId")));
+        } else {
+            access.requireInvoice(invoiceId(p));
+        }
         Invoice result = switch (type) {
             case CREATE -> {
                 UUID id = parseUuid(p.get("id"));

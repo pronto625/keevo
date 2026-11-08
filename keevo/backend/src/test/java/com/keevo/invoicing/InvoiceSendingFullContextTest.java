@@ -172,12 +172,17 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
 
     /** A draft for « Société Ndolo » (phone optional): 2 × 11 925 TTC + 5 000 exempt = 28 850 TTC. */
     private String createDraft(String clientPhone) throws Exception {
+        return createDraft(ownerToken, clientPhone);
+    }
+
+    /** Story 20.14 — the same draft created by {@code token} (an employee sees only its own documents). */
+    private String createDraft(String token, String clientPhone) throws Exception {
         Map<String, Object> client = new LinkedHashMap<>();
         client.put("name", "Société Ndolo");
         client.put("phone", clientPhone);
         Map<String, Object> draft = Map.of("client", client, "lines", List.of(
                 line("Sac de riz 25 kg", 2, 11_925, "STANDARD"), line("Livraison", 1, 5_000, "EXEMPT")));
-        return data(owner(HttpMethod.POST, "/api/v1/invoices", draft), 201).path("id").asText();
+        return data(call(token, HttpMethod.POST, "/api/v1/invoices", draft), 201).path("id").asText();
     }
 
     private void settings() throws Exception {
@@ -222,7 +227,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
             + "view, unknown → 404")
     void pdf() throws Exception {
         settings();
-        String draft = createDraft(null);
+        String draft = createDraft(employeeToken, null); // Story 20.14 — the employee's own draft
         MvcResult d = call(employeeToken, HttpMethod.GET, "/api/v1/invoices/" + draft + "/pdf", null);
         assertThat(d.getResponse().getStatus()).isEqualTo(200);
         assertThat(d.getResponse().getHeader("Content-Disposition")).contains("inline").contains("brouillon.pdf");
@@ -335,9 +340,11 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
         assertThat(pdf.getResponse().getStatus()).as(body(pdf)).isEqualTo(200);
         assertThat(pdfText(pdf)).contains("FACTURE N° " + number, "28 850 XAF");
 
-        // override phone (employee may send): local number normalized
-        data(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/send", Map.of("phone", "677 00 01 12")),
-                200);
+        // Story 20.14 — the owner's invoice is unknown to an employee (it sends only its own documents)
+        assertThat(call(employeeToken, HttpMethod.POST, "/api/v1/invoices/" + id + "/send",
+                Map.of("phone", "677 00 01 12")).getResponse().getStatus()).isEqualTo(404);
+        // override phone: local number normalized
+        data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/send", Map.of("phone", "677 00 01 12")), 200);
         assertThat(fake.sent.get(1)[0]).isEqualTo("+237677000112");
         assertThat(sending(id).get("send_count")).isEqualTo(2);
         assertThat(sentAudits()).isEqualTo(2);

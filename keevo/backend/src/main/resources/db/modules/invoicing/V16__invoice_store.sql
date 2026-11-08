@@ -12,7 +12,9 @@
 --   * idx_invoices_counted_issued_at — hourly store activity of the tenant (sales-trend job, one grouped query over
 --                                      all stores) on the issue instant;
 --   * idx_invoices_client            — per-client totals of the clients export (issued / paid, live rows: covers
---                                      counted invoices and the invoices whose credit notes are deducted).
+--                                      counted invoices and the invoices whose credit notes are deducted);
+--   * idx_invoices_created_by_sync / idx_invoices_store_sync — documents visible to an employee / a manager or
+--                                      viewer (list and sync pull, below).
 -- Idempotent. Applied lazily inside the tenant schema (ModuleProvisioner.ensureProvisioned).
 --
 -- V15 is reserved for story 20-7 (built in parallel).
@@ -37,3 +39,9 @@ CREATE INDEX IF NOT EXISTS idx_invoices_client
     ON invoices (client_id)
     WHERE client_id IS NOT NULL AND kind = 'INVOICE' AND status IN ('ISSUED', 'PAID') AND deleted_at IS NULL
       AND superseded_at IS NULL;
+
+-- Visibility of documents per role (user decision 2026-11-08, as Bref): an EMPLOYEE sees the documents they created,
+-- a MANAGER / VIEWER those of their store. One equality predicate added to the list and to the sync pull; these
+-- indexes serve the pull keyset (updated_at, id as text) and narrow the list to the actor's documents.
+CREATE INDEX IF NOT EXISTS idx_invoices_created_by_sync ON invoices (created_by, updated_at, (CAST(id AS text)));
+CREATE INDEX IF NOT EXISTS idx_invoices_store_sync ON invoices (store_id, updated_at, (CAST(id AS text)));
