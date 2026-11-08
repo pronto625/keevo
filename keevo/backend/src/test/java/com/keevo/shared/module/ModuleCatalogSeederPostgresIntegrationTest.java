@@ -112,7 +112,7 @@ class ModuleCatalogSeederPostgresIntegrationTest {
     @DisplayName("first boot inserts the 18 modules with every seeded column; second boot changes nothing")
     void firstAndSecondBoot() {
         SeedReport first = seeder.seed(shipped());
-        assertThat(first.inserted()).hasSize(19);
+        assertThat(first.inserted()).hasSize(20);
         assertThat(first.updated()).isEmpty();
 
         Map<String, Object> pos = jdbc.queryForMap("SELECT version, display_name, category, requires::text AS requires, "
@@ -125,13 +125,13 @@ class ModuleCatalogSeederPostgresIntegrationTest {
         assertThat(pos.get("installed_at")).isNotNull();
         assertThat(jdbc.queryForList("SELECT id FROM public.module_definitions ORDER BY id", String.class))
                 .containsExactly("admin", "advanced-reports", "alerts", "catalog", "core", "counting", "crm",
-                        "expenses", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
+                        "expenses", "exports", "finance", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
                         "report-config", "reporting", "store", "sync");
 
         List<Map<String, Object>> before = jdbc.queryForList("SELECT *, xmin::text AS row_version FROM public.module_definitions ORDER BY id");
         SeedReport second = seeder.seed(shipped());
         assertThat(second.changedRows()).isZero();
-        assertThat(second.unchanged()).hasSize(19);
+        assertThat(second.unchanged()).hasSize(20);
         assertThat(jdbc.queryForList("SELECT *, xmin::text AS row_version FROM public.module_definitions ORDER BY id"))
                 .isEqualTo(before); // xmin unchanged = no row rewritten
     }
@@ -165,7 +165,7 @@ class ModuleCatalogSeederPostgresIntegrationTest {
 
         SeedReport report = seeder.seed(shippedWith("catalog", "\"version\":\"1.0.0\"", "\"version\":\"1.1.0\""));
         assertThat(report.updated()).containsExactly("catalog");
-        assertThat(report.unchanged()).hasSize(18);
+        assertThat(report.unchanged()).hasSize(19);
 
         Map<String, Object> catalog = jdbc.queryForMap("SELECT version, manifest->>'version' AS cached, installed_at "
                 + "FROM public.module_definitions WHERE id = 'catalog'");
@@ -208,7 +208,7 @@ class ModuleCatalogSeederPostgresIntegrationTest {
         SeedReport report = seeder.seed(shipped());
         assertThat(report.notOnClasspath()).containsExactly("legacy");
         assertThat(version("legacy")).isEqualTo("0.9.0");
-        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public.module_definitions", Integer.class)).isEqualTo(20);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public.module_definitions", Integer.class)).isEqualTo(21);
         assertThat(warnings()).anySatisfy(w -> assertThat(w).contains("'legacy'", "no manifest", "row kept"));
     }
 

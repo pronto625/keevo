@@ -37,6 +37,13 @@ public interface RevenueQueryPort {
     Relations storeScoped();
 
     /**
+     * Story 20.11 — {@link #storeScoped()} for a reader of the VAT (the finance summary): the same {@code documents} /
+     * {@code lines}, and {@code taxedDocuments} whose sales carry their VAT (bridge invoice or the seller's rate) when
+     * the invoicing tables exist.
+     */
+    Relations storeScopedTaxed();
+
+    /**
      * The two derived tables (each parenthesised — alias it).
      *
      * @param documents one row per revenue document: {@code source} ({@code SALE} | {@code INVOICE} |
@@ -47,14 +54,29 @@ public interface RevenueQueryPort {
      *                  {@code total_amount} (bigint, negative for a credit note), {@code doc_count} (1 for a sale or
      *                  an invoice, 0 for a credit note); Story 20.14: {@code client_id} (the CRM client, its
      *                  invoice's for a credit note; null when none) and {@code recorded_at} (the instant of the
-     *                  transaction: a sale's {@code occurred_at}, a document's {@code issued_at} — for hourly figures)
+     *                  transaction: a sale's {@code occurred_at}, a document's {@code issued_at} — for hourly figures);
+     *                  Story 20.11: {@code tax_amount} (bigint VAT inside {@code total_amount}: an invoice's
+     *                  {@code total_vat}, minus a credit note's; 0 for a sale here — see {@code taxedDocuments}) and
+     *                  {@code paid_amount} (the settled part, Bref's « payé »: a sale's total, a PAID invoice's total,
+     *                  minus a credit note of a PAID invoice; 0 otherwise)
      * @param lines     one row per revenue line: {@code source}, {@code doc_id}, {@code store_id},
      *                  {@code employee_id}, {@code occurred_at}, {@code created_at}, {@code product_id} (null for an
      *                  invoice line without product — revenue, never a per-product margin), {@code product_name},
      *                  {@code quantity} (numeric, negative for a credit-note line), {@code subtotal} and
      *                  {@code price_amount} (bigint line amount; a document line's total TTC; negative for a credit
      *                  note)
+     * @param taxedDocuments Story 20.11 — the same rows and columns as {@code documents}, except a sale's
+     *                  {@code tax_amount}: the VAT of its active automatic invoice (POS bridge), else — for a
+     *                  VAT-registered seller — {@code TTC − HALF_UP(TTC × 100 / (100 + rate))}, else 0, when the
+     *                  invoicing tables exist. Revenue excl. VAT = {@code total_amount − tax_amount} (Bref's
+     *                  {@code total − tax}). Costs two left joins per sale (unique index, settings row) — read it only
+     *                  for VAT.
      */
-    record Relations(String documents, String lines) {
+    record Relations(String documents, String lines, String taxedDocuments) {
+
+        /** Without a separate taxed relation: {@code taxedDocuments} = {@code documents} (sales carry no VAT). */
+        public Relations(String documents, String lines) {
+            this(documents, lines, documents);
+        }
     }
 }

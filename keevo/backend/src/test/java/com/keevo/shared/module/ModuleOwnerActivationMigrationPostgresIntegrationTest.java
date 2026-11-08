@@ -91,9 +91,9 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
     @DisplayName("pre-existing tenants: invoicing off, nothing else; FREE granted invoicing; default sets seeded; "
             + "re-run keeps an owner choice and an edited DOCUMENT default set")
     void backfillAndRerun() throws Exception {
-        // Story 20.10 — V56 owner-disables the new expenses module the same way
-        assertThat(rows(FIRST)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", false));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", false));
+        // Story 20.10 — V56 owner-disables the new expenses module the same way; 20.11 — V58 the finance module
+        assertThat(rows(FIRST)).containsExactly(Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false));
         assertThat(jdbc.queryForObject("SELECT granted FROM public.profile_modules WHERE plan_type = 'FREE' "
                 + "AND module_id = 'invoicing'", Boolean.class)).isTrue();
         assertThat(ruleModules("POS")).containsExactly("invoicing");
@@ -108,8 +108,8 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
 
         rerunV50();
 
-        assertThat(rows(FIRST)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", true));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("expenses", false), Map.entry("invoicing", false));
+        assertThat(rows(FIRST)).containsExactly(Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", true));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false));
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "pos");
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.module_activation_rule_sets", Integer.class))

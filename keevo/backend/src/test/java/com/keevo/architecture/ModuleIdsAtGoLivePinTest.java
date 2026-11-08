@@ -25,7 +25,8 @@ class ModuleIdsAtGoLivePinTest {
     static final Set<String> KNOWN = Set.of("admin", "advanced-reports", "alerts", "catalog", "core", "counting",
             "crm", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
             "report-config", "reporting", "store", "sync",
-            "expenses"); // 20.10 — owner-disabled for existing tenants by V56
+            "expenses", // 20.10 — owner-disabled for existing tenants by V56
+            "finance"); // 20.11 — owner-disabled for existing tenants by V58
 
     @Test
     @DisplayName("every shipped module id is pinned (a new module ships its owner-disabling migration first)")

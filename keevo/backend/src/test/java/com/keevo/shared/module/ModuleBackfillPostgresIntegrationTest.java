@@ -72,7 +72,7 @@ class ModuleBackfillPostgresIntegrationTest {
     private static final String TEST_DB = "keevo_module_backfill";
     private static final Instant T0 = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     private static final Duration GRACE = Duration.ofDays(7);
-    private static final List<String> PAID = List.of("advanced-reports", "alerts", "counting", "expenses", "exports",
+    private static final List<String> PAID = List.of("advanced-reports", "alerts", "counting", "expenses", "exports", "finance",
             "invoicing", "multi-store", "profitability", "report-config");
 
     private static final Tenant TRIAL = new Tenant("kv_bftr01", "KV-BFTR01");
@@ -315,7 +315,7 @@ class ModuleBackfillPostgresIntegrationTest {
         // 5 tenants synced (BROKEN and NO_SUBSCRIPTIONS failed), NO_SCHEMA and the platform tenant skipped
         assertThat(real.tenantsProcessed()).isEqualTo(5);
         assertThat(real.tenantsSkipped()).isEqualTo(2);
-        assertThat(real.rowsInserted()).isEqualTo(5 * 9 - 1); // 9 paid modules since 20.10
+        assertThat(real.rowsInserted()).isEqualTo(5 * 10 - 1); // 10 paid modules since 20.11
         assertThat(real.rowsPreserved()).isEqualTo(1);
         assertThat(real.failures()).extracting(ModuleBackfill.Failure::tenantCode)
                 .containsExactly(BROKEN.code(), NO_SUBSCRIPTIONS.code());
@@ -337,7 +337,7 @@ class ModuleBackfillPostgresIntegrationTest {
         assertThat(before.get(EXPIRED.code()).get("invoicing")).isEqualTo(ModuleState.READ_ONLY);
         assertThat(before.get(GRACED.code()).get("invoicing")).isEqualTo(ModuleState.READ_ONLY);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND status = 'DISABLED' AND disabled_at IS NOT NULL", Integer.class, FREE.id())).isEqualTo(9);
+                + "AND status = 'DISABLED' AND disabled_at IS NOT NULL", Integer.class, FREE.id())).isEqualTo(10);
         // super-admin row untouched, the other paid modules DISABLED
         // (only its provisioned_version is recorded by the invoicing provisioning)
         assertThat(fullRow(ADMIN_ROW, "invoicing")).isEqualTo(withVersion(adminRowBefore, latestInvoicing()));

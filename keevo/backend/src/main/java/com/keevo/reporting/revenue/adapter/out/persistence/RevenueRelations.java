@@ -50,18 +50,48 @@ public final class RevenueRelations {
             "SELECT 'SALE'::text AS source, s.id AS doc_id, s.store_id AS store_id, s.employee_id AS employee_id, "
             + "s.occurred_at AS occurred_at, s.created_at AS created_at, s.payment_mode::text AS payment_mode, "
             + "s.total_amount::bigint AS total_amount, 1 AS doc_count, s.client_id AS client_id, "
-            + "s.occurred_at AS recorded_at "
+            + "s.occurred_at AS recorded_at, 0::bigint AS tax_amount, s.total_amount::bigint AS paid_amount "
             + "FROM sales s WHERE s.status = 'COMPLETED'";
+
+    /**
+     * Story 20.11 — the sales branch of the taxed relations (invoicing tables present): the same rows, with the sale's
+     * VAT as {@code tax_amount} (a POS sale stores no VAT itself):
+     * <ul>
+     *   <li>bridged to an active automatic invoice (POS bridge) → that invoice's {@code total_vat};</li>
+     *   <li>otherwise, for a VAT-registered seller ({@code invoicing_settings.vat_registered}) → extracted from the
+     *       VAT-inclusive amount with the seller's rate, Keevo's per-line rule:
+     *       {@code TTC − HALF_UP(TTC × 100 / (100 + rate))};</li>
+     *   <li>otherwise 0.</li>
+     * </ul>
+     * Set-based: a left join on the unique partial index on {@code source_sale_id} (active invoices: at most one row per
+     * sale, never a duplicate) and on the single settings row ({@code id = 1}). Kept out of {@link #documents}:
+     * PostgreSQL does not remove the joins from a {@code UNION ALL} branch whose {@code tax_amount} is unread (checked
+     * by EXPLAIN), so only the taxed relations pay them.
+     */
+    private static final String SALE_DOCUMENTS_WITH_VAT =
+            "SELECT 'SALE'::text AS source, s.id AS doc_id, s.store_id AS store_id, s.employee_id AS employee_id, "
+            + "s.occurred_at AS occurred_at, s.created_at AS created_at, s.payment_mode::text AS payment_mode, "
+            + "s.total_amount::bigint AS total_amount, 1 AS doc_count, s.client_id AS client_id, "
+            + "s.occurred_at AS recorded_at, "
+            + "(CASE WHEN bi.id IS NOT NULL THEN bi.total_vat "
+            + "WHEN st.vat_registered THEN s.total_amount - ROUND(s.total_amount * 100.0 / (100 + st.vat_rate)) "
+            + "ELSE 0 END)::bigint AS tax_amount, s.total_amount::bigint AS paid_amount "
+            + "FROM sales s LEFT JOIN invoices bi ON bi.source_sale_id = s.id AND bi.superseded_at IS NULL "
+            + "AND bi.kind = 'INVOICE' AND bi.status IN ('ISSUED', 'PAID') AND bi.deleted_at IS NULL "
+            + "LEFT JOIN invoicing_settings st ON st.id = 1 "
+            + "WHERE s.status = 'COMPLETED'";
 
     private static String invoiceDocuments(String store) {
         return "SELECT 'INVOICE'::text, i.id, " + store + ", i.created_by, " + INVOICE_DAY + ", i.issued_at, "
-                + "NULL::text, i.total_ttc::bigint, 1, i.client_id, i.issued_at "
+                + "NULL::text, i.total_ttc::bigint, 1, i.client_id, i.issued_at, i.total_vat::bigint, "
+                + "(CASE WHEN i.status = 'PAID' THEN i.total_ttc ELSE 0 END)::bigint "
                 + "FROM invoices i WHERE " + COUNTED_INVOICE;
     }
 
     private static String creditNoteDocuments(String store) {
         return "SELECT 'CREDIT_NOTE'::text, cn.id, " + store + ", i.created_by, cn.issued_at, cn.issued_at, "
-                + "NULL::text, -cn.total_ttc::bigint, 0, i.client_id, cn.issued_at "
+                + "NULL::text, -cn.total_ttc::bigint, 0, i.client_id, cn.issued_at, -cn.total_vat::bigint, "
+                + "(CASE WHEN i.status = 'PAID' THEN -cn.total_ttc ELSE 0 END)::bigint "
                 + "FROM credit_notes cn JOIN invoices i ON i.id = cn.invoice_id WHERE " + DEDUCTED_CREDIT_NOTE;
     }
 
@@ -69,7 +99,7 @@ public final class RevenueRelations {
             "SELECT NULL::text AS source, NULL::uuid AS doc_id, NULL::uuid AS store_id, NULL::uuid AS employee_id, "
             + "NULL::timestamptz AS occurred_at, NULL::timestamptz AS created_at, NULL::text AS payment_mode, "
             + "0::bigint AS total_amount, 0 AS doc_count, NULL::uuid AS client_id, "
-            + "NULL::timestamptz AS recorded_at WHERE FALSE";
+            + "NULL::timestamptz AS recorded_at, 0::bigint AS tax_amount, 0::bigint AS paid_amount WHERE FALSE";
 
     private static final String SALE_LINES =
             "SELECT 'SALE'::text AS source, s.id AS doc_id, s.store_id AS store_id, s.employee_id AS employee_id, "
@@ -123,10 +153,31 @@ public final class RevenueRelations {
      * {@code invoices.store_id}); a credit note carries its invoice's store.
      */
     public static String documents(boolean sales, boolean invoicing, boolean invoiceStore) {
+        return documents(sales ? SALE_DOCUMENTS : null, invoicing, invoiceStore);
+    }
+
+    /**
+     * Story 20.11 — the documents derived table whose sales carry their VAT ({@link #SALE_DOCUMENTS_WITH_VAT}) when
+     * {@code invoicing}; otherwise the same as {@link #documents(boolean, boolean, boolean)}.
+     */
+    public static String taxedDocuments(boolean sales, boolean invoicing, boolean invoiceStore) {
+        return documents(sales ? (invoicing ? SALE_DOCUMENTS_WITH_VAT : SALE_DOCUMENTS) : null, invoicing,
+                invoiceStore);
+    }
+
+    /**
+     * Story 20.11 — sales only, each with its VAT: the taxed store-scoped relation of a tenant whose invoicing tables
+     * have no documents' store yet (below V16).
+     */
+    public static String taxedSales() {
+        return wrap(List.of(SALE_DOCUMENTS_WITH_VAT));
+    }
+
+    private static String documents(String salesBranch, boolean invoicing, boolean invoiceStore) {
         String store = invoiceStore ? INVOICE_STORE : NO_STORE;
         List<String> branches = new ArrayList<>(3);
-        if (sales) {
-            branches.add(SALE_DOCUMENTS);
+        if (salesBranch != null) {
+            branches.add(salesBranch);
         }
         if (invoicing) {
             if (branches.isEmpty()) {

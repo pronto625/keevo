@@ -1,0 +1,109 @@
+{
+  "description": "Story 20.11 — cases of the finance summary math (FUS-FR26), shared with the Bref React Native app. Section by section, every case of api-bref src/finance/finance-math.spec.ts (source bref-spec), run by the backend on FinanceMath (test FinanceMathContractTest). Dates are civil dates yyyy-MM-dd. round2 = JavaScript Math.round(n × 100) / 100 on IEEE doubles (a half rounded toward +∞; binary artefacts included: section round2, source node-js = values printed by Node 24). computeDelta: deltaPct null when previous is 0, divided by |previous|. pct: null when whole is 0. Section summary (source bref-service): the assembly of FinanceService.getSummary on raw totals — excludingTax = round2(ttc − tax), net = round2(excludingTax − expenses), marginPct = pct(net, excludingTax), expenseRatioPct = pct(expenses, excludingTax), avgPerDay = round2(expenses / days), unpaid = round2(ttc − paid), deltas on the rounded revenue and net and on the raw expenses, sharePct = pct(round2(category amount), expenses), every series key of the period (zeros included). Amounts in XAF.",
+  "daysInclusive": [
+    { "source": "bref-spec", "startDate": "2026-09-01", "endDate": "2026-09-30", "expected": 30 },
+    { "source": "bref-spec", "startDate": "2026-09-15", "endDate": "2026-09-15", "expected": 1 },
+    { "source": "bref-spec", "startDate": "2028-02-01", "endDate": "2028-02-29", "expected": 29 }
+  ],
+  "previousPeriod": [
+    { "source": "bref-spec", "startDate": "2026-09-01", "endDate": "2026-09-30",
+      "expected": { "startDate": "2026-08-02", "endDate": "2026-08-31" } },
+    { "source": "bref-spec", "startDate": "2026-01-01", "endDate": "2026-12-31",
+      "expected": { "startDate": "2025-01-01", "endDate": "2025-12-31" } },
+    { "source": "bref-spec", "startDate": "2026-03-10", "endDate": "2026-03-10",
+      "expected": { "startDate": "2026-03-09", "endDate": "2026-03-09" } }
+  ],
+  "pickGranularity": [
+    { "source": "bref-spec", "startDate": "2026-09-01", "endDate": "2026-09-30", "expected": "day" },
+    { "source": "bref-spec", "startDate": "2026-01-01", "endDate": "2026-12-31", "expected": "month" }
+  ],
+  "bucketKeys": [
+    { "source": "bref-spec", "startDate": "2026-09-29", "endDate": "2026-10-02", "granularity": "day",
+      "expected": ["2026-09-29", "2026-09-30", "2026-10-01", "2026-10-02"] },
+    { "source": "bref-spec", "startDate": "2026-11-15", "endDate": "2027-02-10", "granularity": "month",
+      "expected": ["2026-11", "2026-12", "2027-01", "2027-02"] },
+    { "source": "bref-spec", "startDate": "2026-05-01", "endDate": "2026-05-31", "granularity": "month",
+      "expected": ["2026-05"] }
+  ],
+  "computeDelta": [
+    { "source": "bref-spec", "current": 150, "previous": 100,
+      "expected": { "previous": 100, "delta": 50, "deltaPct": 50 } },
+    { "source": "bref-spec", "current": 50, "previous": 100,
+      "expected": { "previous": 100, "delta": -50, "deltaPct": -50 } },
+    { "source": "bref-spec", "current": 80, "previous": 0,
+      "expected": { "previous": 0, "delta": 80, "deltaPct": null } },
+    { "source": "bref-spec", "current": -20, "previous": -100,
+      "expected": { "deltaPct": 80 } }
+  ],
+  "round2": [
+    { "source": "node-js", "value": 1.005, "expected": 1 },
+    { "source": "node-js", "value": 2.675, "expected": 2.68 },
+    { "source": "node-js", "value": -0.025, "expected": -0.02 },
+    { "source": "node-js", "value": 0.125, "expected": 0.13 },
+    { "source": "node-js", "value": 1.255, "expected": 1.25 }
+  ],
+  "pct": [
+    { "source": "bref-spec", "part": 25, "whole": 200, "expected": 12.5 },
+    { "source": "bref-spec", "part": 5, "whole": 0, "expected": null }
+  ],
+  "summary": [
+    {
+      "source": "bref-service",
+      "name": "a month with VAT, two expense categories and growth",
+      "period": { "startDate": "2026-09-01", "endDate": "2026-09-30" },
+      "revenue": { "ttc": 16925, "tax": 1925, "paid": 5000, "count": 2,
+        "excludingTaxByBucket": { "2026-09-03": 10000, "2026-09-10": 5000 } },
+      "previousRevenue": { "ttc": 10000, "tax": 0, "paid": 10000, "count": 1 },
+      "expenses": { "total": 3000, "count": 2,
+        "byCategory": [ { "category": "rent", "categoryLabel": "Loyer", "amount": 2000 },
+                        { "category": "salaries", "categoryLabel": "Salaires", "amount": 1000 } ],
+        "byBucket": { "2026-09-03": 3000 } },
+      "previousExpenses": { "total": 0, "count": 0 },
+      "expected": {
+        "period": { "days": 30, "granularity": "day" },
+        "revenue": { "ttc": 16925, "tax": 1925, "excludingTax": 15000, "paid": 5000, "unpaid": 11925, "invoiceCount": 2 },
+        "expenses": { "total": 3000, "count": 2, "avgPerDay": 100 },
+        "result": { "net": 12000, "marginPct": 80, "expenseRatioPct": 20 },
+        "comparison": {
+          "previousPeriod": { "startDate": "2026-08-02", "endDate": "2026-08-31" },
+          "revenue": { "previous": 10000, "delta": 5000, "deltaPct": 50 },
+          "expenses": { "previous": 0, "delta": 3000, "deltaPct": null },
+          "result": { "previous": 10000, "delta": 2000, "deltaPct": 20 }
+        },
+        "byCategory": [ { "category": "rent", "amount": 2000, "sharePct": 66.67 },
+                        { "category": "salaries", "amount": 1000, "sharePct": 33.33 } ],
+        "seriesSize": 30,
+        "series": [ { "key": "2026-09-03", "revenue": 10000, "expenses": 3000, "result": 7000 },
+                    { "key": "2026-09-10", "revenue": 5000, "expenses": 0, "result": 5000 },
+                    { "key": "2026-09-30", "revenue": 0, "expenses": 0, "result": 0 } ]
+      }
+    },
+    {
+      "source": "bref-service",
+      "name": "a year without revenue: loss, null margins, cents rounded like JavaScript",
+      "period": { "startDate": "2026-01-01", "endDate": "2026-12-31" },
+      "revenue": { "ttc": 0, "tax": 0, "paid": 0, "count": 0, "excludingTaxByBucket": {} },
+      "previousRevenue": { "ttc": 500, "tax": 0, "paid": 500, "count": 1 },
+      "expenses": { "total": 333.33, "count": 3,
+        "byCategory": [ { "category": "other", "categoryLabel": "Autre", "amount": 333.33 } ],
+        "byBucket": { "2026-02": 333.33 } },
+      "previousExpenses": { "total": 600, "count": 1 },
+      "expected": {
+        "period": { "days": 365, "granularity": "month" },
+        "revenue": { "ttc": 0, "tax": 0, "excludingTax": 0, "paid": 0, "unpaid": 0, "invoiceCount": 0 },
+        "expenses": { "total": 333.33, "count": 3, "avgPerDay": 0.91 },
+        "result": { "net": -333.33, "marginPct": null, "expenseRatioPct": null },
+        "comparison": {
+          "previousPeriod": { "startDate": "2025-01-01", "endDate": "2025-12-31" },
+          "revenue": { "previous": 500, "delta": -500, "deltaPct": -100 },
+          "expenses": { "previous": 600, "delta": -266.67, "deltaPct": -44.44 },
+          "result": { "previous": -100, "delta": -233.33, "deltaPct": -233.33 }
+        },
+        "byCategory": [ { "category": "other", "amount": 333.33, "sharePct": 100 } ],
+        "seriesSize": 12,
+        "series": [ { "key": "2026-01", "revenue": 0, "expenses": 0, "result": 0 },
+                    { "key": "2026-02", "revenue": 0, "expenses": 333.33, "result": -333.33 } ]
+      }
+    }
+  ]
+}

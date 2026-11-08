@@ -1,0 +1,32 @@
+{
+  "id": "finance",
+  "version": "1.0.0",
+  "displayName": "Finance",
+  "category": "premium",
+  "requires": [
+    "core",
+    "store",
+    "expenses",
+    "reporting"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [
+    "FINANCE_VIEW"
+  ],
+  "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
+  "entitlement": "module.finance",
+  "free": false
+}

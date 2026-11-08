@@ -117,6 +117,40 @@ class ProvisionedRevenueSourceTest {
     }
 
     @Test
+    @DisplayName("20.11 — taxed relations: the sales carry the bridge invoice's VAT or the seller's rate; the 20.9 "
+            + "documents relation has no join; store-scoped below V16 = taxed sales only, from V16 = the full taxed "
+            + "relations with the documents' store; one cached lookup")
+    void taxedRelations() {
+        TenantContext.setCurrentTenant(TENANT);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS);
+
+        Relations all = source.current();
+        assertThat(all.taxedDocuments()).contains("LEFT JOIN invoices bi ON bi.source_sale_id = s.id")
+                .contains("LEFT JOIN invoicing_settings st").contains("FROM invoices i").contains("FROM credit_notes cn");
+        assertThat(all.documents()).doesNotContain("LEFT JOIN").contains("0::bigint AS tax_amount");
+        Relations store = source.storeScopedTaxed();
+        assertThat(store.documents()).isEqualTo(RevenueRelations.POS_DOCUMENTS);
+        assertThat(store.taxedDocuments()).contains("LEFT JOIN invoices bi").doesNotContain("FROM invoices i ")
+                .doesNotContain("credit_notes");
+        verify(jdbc, times(1)).queryForObject(CHECK, Integer.class);
+
+        TenantContext.setCurrentTenant("kv_abc124");
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS_WITH_STORES);
+        assertThat(source.storeScopedTaxed()).isEqualTo(ProvisionedRevenueSource.ALL_WITH_STORES);
+        assertThat(source.storeScopedTaxed().taxedDocuments()).contains("LEFT JOIN invoices bi").contains("i.store_id");
+    }
+
+    @Test
+    @DisplayName("20.11 — without invoicing tables: sales-only relations everywhere, taxed ones included (no join)")
+    void taxedRelationsWithoutInvoicing() {
+        TenantContext.setCurrentTenant(TENANT);
+        when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.SALES);
+        assertThat(source.current().taxedDocuments()).isEqualTo(RevenueRelations.POS_DOCUMENTS);
+        assertThat(source.storeScopedTaxed()).isEqualTo(ProvisionedRevenueSource.SALES_ONLY);
+        assertThat(source.storeScopedTaxed().taxedDocuments()).doesNotContain("invoice");
+    }
+
+    @Test
     @DisplayName("no valid tenant in context: the check runs on the search_path, nothing is cached")
     void noTenant() {
         when(jdbc.queryForObject(CHECK, Integer.class)).thenReturn(ProvisionedRevenueSource.DOCUMENTS_WITH_STORES);

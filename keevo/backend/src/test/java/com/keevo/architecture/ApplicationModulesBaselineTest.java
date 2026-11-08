@@ -37,7 +37,7 @@ class ApplicationModulesBaselineTest {
 
     /** The 14 top-level packages under com.keevo (story 12.1; crm split out of catalog in 12.5). */
     private static final Set<String> EXPECTED_MODULES = Set.of(
-        "admin", "catalog", "commerce", "crm", "expenses", "feedback", "identity", "inventory", "invoicing",
+        "admin", "catalog", "commerce", "crm", "expenses", "feedback", "finance", "identity", "inventory", "invoicing",
         "messaging", "reporting", "shared", "store", "subscription", "sync");
 
     /**

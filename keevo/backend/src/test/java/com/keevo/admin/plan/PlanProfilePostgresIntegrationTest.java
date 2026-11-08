@@ -51,7 +51,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 @DisplayName("Plan profiles and configurable limits — full context (Story 16.8)")
 class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
-    private static final List<String> PAID = List.of("advanced-reports", "alerts", "counting", "expenses", "exports",
+    private static final List<String> PAID = List.of("advanced-reports", "alerts", "counting", "expenses", "exports", "finance",
             "invoicing", "multi-store", "profitability", "report-config"); // 20.10 (V56): + expenses
 
     @Autowired MockMvc mockMvc;

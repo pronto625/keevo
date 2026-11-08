@@ -41,10 +41,13 @@ public class ProvisionedRevenueSource implements RevenueQueryPort {
     static final Relations SALES_ONLY = new Relations(RevenueRelations.POS_DOCUMENTS, RevenueRelations.POS_LINES);
     /** Documents without store (invoicing V11–V15). */
     static final Relations ALL = new Relations(RevenueRelations.documents(true, true),
-            RevenueRelations.lines(true, true));
+            RevenueRelations.lines(true, true), RevenueRelations.taxedDocuments(true, true, false));
     /** Story 20.14 — documents with their store (invoicing V16+). */
     static final Relations ALL_WITH_STORES = new Relations(RevenueRelations.documents(true, true, true),
-            RevenueRelations.lines(true, true, true));
+            RevenueRelations.lines(true, true, true), RevenueRelations.taxedDocuments(true, true, true));
+    /** Story 20.11 — store-scoped below V16 (sales only) with the sales' VAT. */
+    static final Relations STORE_SCOPED_TAXED = new Relations(RevenueRelations.POS_DOCUMENTS, RevenueRelations.POS_LINES,
+            RevenueRelations.taxedSales());
 
     /** No invoicing branch readable. */
     static final int SALES = 0;
@@ -91,6 +94,15 @@ public class ProvisionedRevenueSource implements RevenueQueryPort {
     @Override
     public Relations storeScoped() {
         return level() == DOCUMENTS_WITH_STORES ? ALL_WITH_STORES : SALES_ONLY;
+    }
+
+    @Override
+    public Relations storeScopedTaxed() {
+        return switch (level()) {
+            case DOCUMENTS_WITH_STORES -> ALL_WITH_STORES;
+            case DOCUMENTS -> STORE_SCOPED_TAXED;
+            default -> SALES_ONLY;
+        };
     }
 
     private int level() {

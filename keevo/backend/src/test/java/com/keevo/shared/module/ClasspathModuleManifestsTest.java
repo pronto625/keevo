@@ -23,10 +23,10 @@ class ClasspathModuleManifestsTest {
                 .collect(Collectors.toMap(ModuleManifest::id, Function.identity()));
 
         List<String> paid = List.of("multi-store", "counting", "advanced-reports", "report-config", "alerts",
-                "profitability", "exports", "invoicing", "expenses");
+                "profitability", "exports", "invoicing", "expenses", "finance");
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
                 "messaging", "sync", "admin", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
-                "profitability", "exports", "invoicing", "expenses");
+                "profitability", "exports", "invoicing", "expenses", "finance");
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
             // 14.4: pos publishes sale.completed (1.3.0), invoicing consumes it (1.1.0)
@@ -93,7 +93,15 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("expenses").category()).isEqualTo(ModuleCategory.PREMIUM);
         assertThat(byId.get("expenses").displayName()).isEqualTo("Dépenses");
         assertThat(byId.get("expenses").routes()).isEmpty();
-        assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing") && !m.id().equals("expenses"))
+        // 20.11: finance — premium, requires expenses and reporting, FINANCE_VIEW held by the owner only, no routes
+        assertThat(byId.get("finance").permissions()).containsExactly("FINANCE_VIEW");
+        assertThat(byId.get("finance").requires()).containsExactly("core", "store", "expenses", "reporting");
+        assertThat(byId.get("finance").category()).isEqualTo(ModuleCategory.PREMIUM);
+        assertThat(byId.get("finance").displayName()).isEqualTo("Finance");
+        assertThat(byId.get("finance").routes()).isEmpty();
+        assertThat(byId.get("finance").free()).isFalse();
+        assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing") && !m.id().equals("expenses")
+                        && !m.id().equals("finance"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("crm") && !m.id().equals("catalog"))
                 .allSatisfy(m -> assertThat(m.provides()).isEmpty());

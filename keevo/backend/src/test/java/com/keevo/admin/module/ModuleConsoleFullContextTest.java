@@ -236,10 +236,10 @@ class ModuleConsoleFullContextTest extends FullContextIntegrationTest {
                 .param("cascade", "true").param("force", "true"));
         assertThat(cascaded.getResponse().getStatus()).as(body(cascaded)).isEqualTo(200);
         JsonNode result = data(cascaded);
-        assertThat(result.get("deactivated")).hasSize(5);
-        assertThat(result.get("deactivated").get(4).get("displayName").asText()).isEqualTo("Rapports");
+        assertThat(result.get("deactivated")).hasSize(6); // 20.11: + finance (requires reporting)
+        assertThat(result.get("deactivated").get(5).get("displayName").asText()).isEqualTo("Rapports");
         assertThat(result.get("forced")).isEmpty();
-        for (String id : List.of("reporting", "exports", "profitability", "advanced-reports", "report-config")) {
+        for (String id : List.of("reporting", "exports", "profitability", "advanced-reports", "report-config", "finance")) {
             assertThat(status(id)).as(id).isEqualTo("DISABLED");
         }
 
