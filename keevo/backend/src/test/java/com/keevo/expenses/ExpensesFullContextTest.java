@@ -556,7 +556,7 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         replay.put("id", a);
         MvcResult r = call(managerToken, HttpMethod.POST, "/api/v1/expenses", replay);
         error(r, 403, "FORBIDDEN");
-        assertThat(body(r)).doesNotContain("Taxi secret").doesNotContain("5000").doesNotContain(storeA.toString())
+        assertThat(body(r)).doesNotContain("Taxi secret").doesNotContain("\"amount\"").doesNotContain("\"data\"").doesNotContain(storeA.toString())
                 .contains("autre boutique");
 
         error(call(managerToken, HttpMethod.DELETE, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
