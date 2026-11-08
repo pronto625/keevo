@@ -234,7 +234,20 @@ Les epics 16 et 17 restent liés à la fusion :
 **Exigences :** FUS-FR1–FR8, FR11, FR12, FR17 (préférence), FUS-NFR1, FUS-NFR3.
 **Dépend de :** Epic 16 (16-2, 16-3, 16-5, 16-8 — livrées sur la branche, pas besoin qu'elles soient en prod), story 18.2.
 
-### Epic 20 : Modules métier Bref dans Keevo — documents, catalogue, clients, dépenses, finance (P1b)
+#### Story 19.14 : Rôles et permissions personnalisés par le propriétaire
+
+As a **propriétaire**,
+I want **créer mes propres rôles, y rattacher mes employés et choisir exactement leurs droits**,
+So that **je configure mon équipe simplement, sans dépendre des rôles figés (OWNER / MANAGER / EMPLOYEE / VIEWER)**.
+
+Scope (2026-11-08 user request): a per-tenant role editor — the owner creates a named role, picks permissions from the module catalogue (grouped by module, French labels, no technical codes on screen), assigns it to members, and can restrict it to stores. The existing fixed roles become built-in presets (editable copies), and every permission check (`@RequiresPermission`, sync handlers, pull scopes, document/expense/client scopes) reads the member's effective permissions. Absorbs the open fine-grained questions of 19-5b (product merge, quote end, sessions, ceilings) as configurable permissions instead of fixed decisions.
+
+- [ ] [Decided 2026-11-08] Expenses today: owner + manager only (fix 20-10) — becomes a configurable permission
+- [ ] [Decided 2026-11-08] Documents today: employee = own documents, manager/viewer = their store, owner = all (20-14) — becomes a configurable scope (own / store / all)
+
+Interim AC: Given an owner who creates the role « Caissier » with « Créer des ventes » and « Voir les dépenses », When an employee with that role signs in, Then they can sell and read expenses and nothing else, on REST and sync alike.
+
+## Epic 20 : Modules métier Bref dans Keevo — documents, catalogue, clients, dépenses, finance (P1b)
 **Valeur :** tout ce qu'un commerçant Bref fait au quotidien existe dans Keevo, sans casser ce qu'un commerçant Keevo fait déjà.
 **Exigences :** FUS-FR13–FR26.
 **Dépend de :** 19.1, 19.5, 19.7, 19.8.

@@ -446,6 +446,7 @@ development_status:
   19-11-charge-nombre-tenants: done  # 2026-11-06 mesure locale 363 schémas (≈ 7 × N) : cibles de temps tenues à N = 52 ; 2 défauts routés (upgrade parallèle depuis le jar → 16-12 rouverte, bloquant avant déploiement ; pg_dump unique → 10-8), rétention des notifications livrée, 5 887 tests verts ; revue de suivi recommandée | build-auto (spec-19-11-charge-nombre-tenants.md)
   19-12-boutiques-etendues-parcours-vente: done  # 2026-11-05 revue 5 couches (41 constats, 9 moyens corrigés, 1 routé → 24.2), 5 738 tests verts, live keevo_dev OK (PREFERENCES_NOT_FOUND 500 → 404 corrigé) ; revue de suivi recommandée | build-auto (spec-19-12-boutiques-etendues-parcours-vente.md)
   19-13-profil-interface-visibilite: done  # 2026-11-05 revue 5 couches (39 constats, 7 moyens corrigés, 1 routé → 24.2), seed Caisse = facturation désactivée (journal de la spec), 5 785 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-13-profil-interface-visibilite.md)
+  19-14-roles-permissions-personnalises: backlog  # 2026-11-08 demande utilisateur — rôles créés par le propriétaire, droits choisis par permission et boutique ; absorbe les questions de 19-5b
   epic-19-retrospective: optional
 
   epic-20: backlog  # P1b Modules métier Bref
