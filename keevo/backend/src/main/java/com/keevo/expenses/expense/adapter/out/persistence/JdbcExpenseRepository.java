@@ -12,7 +12,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -81,7 +80,7 @@ public class JdbcExpenseRepository implements ExpenseRepository {
     public boolean insertIfAbsent(Expense e) {
         return jdbc.update("INSERT INTO " + table() + " (" + COLUMNS + ") VALUES (" + PLACEHOLDERS + ") "
                         + "ON CONFLICT (id) DO NOTHING",
-                e.id(), e.storeId(), e.category().key(), e.amount(), Date.valueOf(e.expenseDate()), e.label(),
+                e.id(), e.storeId(), e.category().key(), e.amount(), e.expenseDate(), e.label(),
                 e.note(), e.paymentMethod() == null ? null : e.paymentMethod().key(), e.createdBy(), e.updatedBy(),
                 ts(e.createdAt()), ts(e.updatedAt()), ts(e.archivedAt())) == 1;
     }
@@ -91,7 +90,7 @@ public class JdbcExpenseRepository implements ExpenseRepository {
         int updated = jdbc.update("UPDATE " + table() + " SET store_id = ?, category = ?, amount = ?, expense_date = ?, "
                         + "label = ?, note = ?, payment_method = ?, updated_by = ?, updated_at = ?, archived_at = ? "
                         + "WHERE id = ?",
-                e.storeId(), e.category().key(), e.amount(), Date.valueOf(e.expenseDate()), e.label(), e.note(),
+                e.storeId(), e.category().key(), e.amount(), e.expenseDate(), e.label(), e.note(),
                 e.paymentMethod() == null ? null : e.paymentMethod().key(), e.updatedBy(), ts(e.updatedAt()),
                 ts(e.archivedAt()), e.id());
         if (updated != 1) {
@@ -142,11 +141,11 @@ public class JdbcExpenseRepository implements ExpenseRepository {
         }
         if (f.from() != null) {
             sql.append(" AND expense_date >= ?");
-            args.add(Date.valueOf(f.from()));
+            args.add(f.from());
         }
         if (f.to() != null) {
             sql.append(" AND expense_date <= ?");
-            args.add(Date.valueOf(f.to()));
+            args.add(f.to());
         }
         if (f.search() != null) {
             String pattern = "%" + escapeLike(f.search()) + "%";
@@ -180,10 +179,8 @@ public class JdbcExpenseRepository implements ExpenseRepository {
         return jdbc.query(sql.toString(), (rs, n) -> row(rs), args.toArray());
     }
 
+    /** A cursor value as a bound parameter: a {@link LocalDate} is bound as is ({@code setObject}, no time zone). */
     private static Object sqlValue(Object value) {
-        if (value instanceof LocalDate d) {
-            return Date.valueOf(d);
-        }
         if (value instanceof Instant i) {
             return Timestamp.from(i);
         }
@@ -197,7 +194,7 @@ public class JdbcExpenseRepository implements ExpenseRepository {
                 rs.getObject("store_id", UUID.class),
                 ExpenseCategory.fromKey(rs.getString("category")).orElseThrow(),
                 rs.getBigDecimal("amount"),
-                rs.getDate("expense_date").toLocalDate(),
+                rs.getObject("expense_date", LocalDate.class),
                 rs.getString("label"),
                 rs.getString("note"),
                 method == null ? null : ExpensePaymentMethod.fromKey(method).orElseThrow(),

@@ -3,6 +3,7 @@ package com.keevo.expenses.expense.adapter.in.sync;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.keevo.expenses.expense.adapter.in.rest.dto.ExpenseResponseDto;
 import com.keevo.expenses.expense.application.service.ExpenseAccess;
 import com.keevo.expenses.expense.application.usecase.ManageExpenseUseCase;
 import com.keevo.expenses.expense.domain.model.Expense;
@@ -11,6 +12,8 @@ import com.keevo.expenses.expense.domain.model.ExpenseContent;
 import com.keevo.shared.application.port.sync.SyncOperation;
 import com.keevo.shared.application.port.sync.SyncOperationResult;
 import com.keevo.shared.application.port.sync.SyncOperationStatus;
+import com.keevo.shared.domain.exception.DomainException;
+import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.application.ModulePermissions;
 import jakarta.validation.Validation;
@@ -28,7 +31,9 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,7 +43,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -54,7 +61,8 @@ class ExpenseSyncHandlerTest {
     private final ModuleProvisioner provisioner = mock(ModuleProvisioner.class);
     private final ModulePermissions permissions = mock(ModulePermissions.class);
     private final ObjectMapper objectMapper = JsonMapper.builder().findAndAddModules()
-            .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES).build();
+            .disable(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).build();
     private final Validator validator = Validation.buildDefaultValidatorFactory().getValidator();
     private ExpenseSyncHandler handler;
 
@@ -75,13 +83,22 @@ class ExpenseSyncHandlerTest {
         when(permissions.permissionsOf(anyCollection())).thenReturn(held);
     }
 
-    private static SyncOperation op(String type, Map<String, Object> payload) {
-        return new SyncOperation(UUID.randomUUID().toString(), type, null, payload, Instant.now());
+    private static SyncOperation op(String type, String entityId, Map<String, Object> payload, Instant at) {
+        return new SyncOperation(UUID.randomUUID().toString(), type, entityId, payload, at);
+    }
+
+    private static SyncOperation op(String type, String entityId, Map<String, Object> payload) {
+        return op(type, entityId, payload, Instant.now());
     }
 
     private static Expense expense(UUID id) {
         return Expense.create(id, UUID.randomUUID(), ExpenseContent.of("rent", BigDecimal.TEN, null, null, null, null,
                 Clock.systemUTC()), ACTOR, Instant.now());
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> map(JsonNode node) {
+        return objectMapper.convertValue(node, Map.class);
     }
 
     @Test
@@ -93,9 +110,9 @@ class ExpenseSyncHandlerTest {
     }
 
     @Test
-    @DisplayName("contract keevo/contracts/expense-sync-payloads.json: every queued payload is applied, the refused ones "
-            + "are rejected with the documented reason")
-    void contractPayloads() throws Exception {
+    @DisplayName("contract keevo/contracts/expense-sync-payloads.json: queued payloads applied; refusals with their code "
+            + "and French message; pull row and tombstone shapes; result examples")
+    void contract() throws Exception {
         JsonNode contract = objectMapper.readTree(Path.of("..", "contracts", "expense-sync-payloads.json").toFile());
         UUID id = UUID.fromString(contract.path("expenseId").asText());
         when(manage.create(eq(id), any(), any(), eq(ACTOR), eq(TENANT)))
@@ -107,11 +124,10 @@ class ExpenseSyncHandlerTest {
 
         Set<String> types = new HashSet<>();
         for (JsonNode op : contract.path("operations")) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> payload = objectMapper.convertValue(op.path("payload"), Map.class);
             String type = op.path("operationType").asText();
             types.add(type);
-            SyncOperationResult r = handler.handle(op(type, payload), ACTOR, TENANT);
+            SyncOperationResult r = handler.handle(op(type, op.path("entityId").asText(null), map(op.path("payload"))),
+                    ACTOR, TENANT);
             assertThat(r.status()).as("%s: %s", op.path("name").asText(), r.reason())
                     .isEqualTo(SyncOperationStatus.APPLIED);
             assertThat(r.serverEntityId()).isEqualTo(id.toString());
@@ -120,47 +136,89 @@ class ExpenseSyncHandlerTest {
         verify(manage).delete(eq(id), eq(ExpenseAccess.OWNER), eq(ACTOR));
 
         for (JsonNode op : contract.path("rejected")) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> payload = objectMapper.convertValue(op.path("payload"), Map.class);
-            SyncOperationResult r = handler.handle(op(op.path("operationType").asText(), payload), ACTOR, TENANT);
-            assertThat(r.status()).as(op.path("name").asText()).isEqualTo(SyncOperationStatus.REJECTED);
-            assertThat(r.reason()).as(op.path("name").asText()).isEqualTo(op.path("reason").asText());
+            String name = op.path("name").asText();
+            reset(manage);
+            switch (name) {
+                case "forbidden" -> when(manage.update(eq(id), any(), any(), any(), any())).thenThrow(
+                        DomainException.userFacing(ErrorCode.FORBIDDEN, op.path("message").asText()));
+                case "stale" -> when(manage.update(eq(id), any(), any(), any(), any())).thenThrow(
+                        DomainException.userFacing(ErrorCode.OPTIMISTIC_LOCK, ManageExpenseUseCase.STALE_EXPENSE,
+                                Map.of("currentUpdatedAt", "2026-11-07T08:15:30.123456Z")));
+                case "notFound" -> doThrow(DomainException.userFacing(ErrorCode.EXPENSE_NOT_FOUND,
+                        "Dépense introuvable")).when(manage).delete(eq(id), any(), any());
+                default -> { }
+            }
+            SyncOperationResult r = handler.handle(op(op.path("operationType").asText(),
+                    op.path("entityId").asText(null), map(op.path("payload"))), ACTOR, TENANT);
+            assertThat(r.status()).as(name).isEqualTo(SyncOperationStatus.REJECTED);
+            assertThat(r.reason()).as(name).isEqualTo(op.path("reason").asText());
+            if (op.has("message")) {
+                assertThat(r.conflictData()).as(name).containsEntry("message", op.path("message").asText());
+            }
         }
+
+        // the pull row has exactly the REST response fields; the tombstone exactly {id, deleted, updatedAt}
+        Map<String, Object> rest = objectMapper.convertValue(ExpenseResponseDto.fromDomain(expense(id), "Boutique"),
+                Map.class);
+        assertThat(map(contract.path("pull").path("row")).keySet()).containsExactlyInAnyOrderElementsOf(rest.keySet());
+        Iterator<String> tombstone = contract.path("pull").path("tombstone").fieldNames();
+        List<String> fields = new java.util.ArrayList<>();
+        tombstone.forEachRemaining(fields::add);
+        assertThat(fields).containsExactly("id", "deleted", "updatedAt");
+        assertThat(contract.path("results").path("superseded").path("status").asText()).isEqualTo("APPLIED");
+        assertThat(contract.path("results").path("superseded").path("reason").asText()).isEqualTo("LWW_SUPERSEDED");
+        assertThat(contract.path("results").path("rejected").path("conflictData").path("message").asText())
+                .isEqualTo("Dépense introuvable");
     }
 
     @Test
-    @DisplayName("the create payload reaches the use case as the REST body would (Bref 'description' = label)")
-    void createMapping() {
+    @DisplayName("an offline creation without date takes the day it was queued (Africa/Douala), not the sync day")
+    void createDefaultDate() {
         UUID id = UUID.randomUUID();
         when(manage.create(eq(id), any(), any(), eq(ACTOR), eq(TENANT)))
                 .thenReturn(new ManageExpenseUseCase.Created(expense(id), true));
-        handler.handle(op("CREATE_EXPENSE", Map.of("id", id.toString(), "amount", 2500.5, "category", "transport",
-                "description", "Taxi", "expenseDate", "2026-11-02")), ACTOR, TENANT);
+        // 2026-03-04T23:30Z = 2026-03-05 00:30 in Douala
+        handler.handle(op("CREATE_EXPENSE", id.toString(), Map.of("id", id.toString(), "amount", 2500.5,
+                "category", "transport", "description", "Taxi"), Instant.parse("2026-03-04T23:30:00Z")), ACTOR, TENANT);
         ArgumentCaptor<ManageExpenseUseCase.Command> command = ArgumentCaptor.forClass(ManageExpenseUseCase.Command.class);
         verify(manage).create(eq(id), command.capture(), eq(ExpenseAccess.OWNER), eq(ACTOR), eq(TENANT));
+        assertThat(command.getValue().defaultDate()).isEqualTo(LocalDate.of(2026, 3, 5));
         assertThat(command.getValue().amount()).isEqualByComparingTo("2500.5");
         assertThat(command.getValue().label()).isEqualTo("Taxi");
-        assertThat(command.getValue().expenseDate()).isEqualTo("2026-11-02");
         verify(provisioner).ensureProvisioned(TENANT, "expenses");
     }
 
     @Test
-    @DisplayName("permissions are the endpoints': an employee may not delete, a missing permission → FORBIDDEN")
-    void permissions() {
+    @DisplayName("a refusal reaches the device with its French message (domain rule, permission)")
+    void frenchReasons() {
+        UUID id = UUID.randomUUID();
+        when(manage.create(eq(id), any(), any(), any(), any())).thenThrow(DomainException.userFacing(
+                ErrorCode.VALIDATION_ERROR, "La date de la dépense ne peut pas dépasser demain",
+                Map.of("field", "expenseDate")));
+        SyncOperationResult r = handler.handle(op("CREATE_EXPENSE", id.toString(), Map.of("id", id.toString(),
+                "amount", 10, "category", "other", "expenseDate", "2099-01-01")), ACTOR, TENANT);
+        assertThat(r.reason()).isEqualTo("VALIDATION_ERROR");
+        assertThat(r.conflictData()).containsEntry("message", "La date de la dépense ne peut pas dépasser demain")
+                .containsEntry("field", "expenseDate");
+
         as("EMPLOYEE", Set.of("EXPENSE_VIEW", "EXPENSE_CREATE"));
-        SyncOperationResult r = handler.handle(op("DELETE_EXPENSE", Map.of("expenseId", UUID.randomUUID().toString())),
-                ACTOR, TENANT);
-        assertThat(r.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        r = handler.handle(op("DELETE_EXPENSE", id.toString(), Map.of("expenseId", id.toString())), ACTOR, TENANT);
         assertThat(r.reason()).isEqualTo("FORBIDDEN");
-        verifyNoInteractions(manage);
+        assertThat(r.conflictData()).containsEntry("message", "Votre rôle ne permet pas cette opération sur les dépenses.");
+        verify(manage, org.mockito.Mockito.never()).delete(any(), any(), any());
     }
 
     @Test
-    @DisplayName("entityId must name the payload's expense")
-    void entityIdMismatch() {
-        SyncOperation op = new SyncOperation(UUID.randomUUID().toString(), "DELETE_EXPENSE",
-                UUID.randomUUID().toString(), Map.of("expenseId", UUID.randomUUID().toString()), Instant.now());
-        assertThat(handler.handle(op, ACTOR, TENANT).status()).isEqualTo(SyncOperationStatus.REJECTED);
+    @DisplayName("entityId must name the payload's expense; required on a creation")
+    void entityId() {
+        UUID id = UUID.randomUUID();
+        SyncOperationResult mismatch = handler.handle(op("DELETE_EXPENSE", UUID.randomUUID().toString(),
+                Map.of("expenseId", id.toString())), ACTOR, TENANT);
+        assertThat(mismatch.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(mismatch.reason()).isEqualTo("entityId ne correspond pas à expenseId");
+        SyncOperationResult missing = handler.handle(op("CREATE_EXPENSE", null,
+                Map.of("id", id.toString(), "amount", 1, "category", "other")), ACTOR, TENANT);
+        assertThat(missing.reason()).isEqualTo("entityId obligatoire : l'identifiant de la dépense");
         verifyNoInteractions(manage);
     }
 }

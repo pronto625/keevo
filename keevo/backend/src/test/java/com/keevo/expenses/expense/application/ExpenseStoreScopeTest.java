@@ -76,15 +76,37 @@ class ExpenseStoreScopeTest {
     }
 
     @Test
-    @DisplayName("edit: unchanged store costs no query; only the owner moves an expense, to an active store")
+    @DisplayName("edit: the owner's unchanged store costs no query and he may move it to an active store; a member "
+            + "follows the creation rule (own active store, no move) with French messages")
     void storeForEdit() {
-        assertThat(scope.storeForEdit(ExpenseAccess.member(newer), newer, null, T)).isEqualTo(newer);
-        assertThat(scope.storeForEdit(ExpenseAccess.member(newer), newer, newer, T)).isEqualTo(newer);
+        assertThat(scope.storeForEdit(ExpenseAccess.OWNER, newer, null, T)).isEqualTo(newer);
+        assertThat(scope.storeForEdit(ExpenseAccess.OWNER, newer, newer, T)).isEqualTo(newer);
         verifyNoInteractions(stores);
         tenantStores();
-        refused(() -> scope.storeForEdit(ExpenseAccess.member(newer), newer, older, T), ErrorCode.FORBIDDEN);
+        assertThat(scope.storeForEdit(ExpenseAccess.member(newer), newer, null, T)).isEqualTo(newer);
+        refusedWith(() -> scope.storeForEdit(ExpenseAccess.member(newer), newer, older, T),
+                "Seul le propriétaire peut changer la boutique d'une dépense.");
+        refusedWith(() -> scope.storeForEdit(ExpenseAccess.member(closed), closed, null, T),
+                "Votre boutique est désactivée : demandez au propriétaire de la réactiver pour gérer ses dépenses.");
         assertThat(scope.storeForEdit(ExpenseAccess.OWNER, newer, older, T)).isEqualTo(older);
         refused(() -> scope.storeForEdit(ExpenseAccess.OWNER, newer, closed, T), ErrorCode.VALIDATION_ERROR);
+    }
+
+    @Test
+    @DisplayName("member refusals tell the user what to do")
+    void frenchRefusals() {
+        tenantStores();
+        refusedWith(() -> scope.storeForNew(ExpenseAccess.member(null), null, T),
+                "Votre compte n'est rattaché à aucune boutique : demandez au propriétaire de vous en attribuer une.");
+        refusedWith(() -> scope.storeForNew(ExpenseAccess.member(newer), older, T),
+                "Vous ne pouvez gérer que les dépenses de votre boutique.");
+    }
+
+    private static void refusedWith(Runnable call, String message) {
+        assertThatThrownBy(call::run).isInstanceOfSatisfying(DomainException.class, e -> {
+            assertThat(e.getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
+            assertThat(e.getUserMessage()).isEqualTo(message);
+        });
     }
 
     @Test

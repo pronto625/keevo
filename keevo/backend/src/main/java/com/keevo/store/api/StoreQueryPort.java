@@ -26,4 +26,10 @@ public interface StoreQueryPort {
      * shares its clients — every active store sharing them; empty when the store is unknown or inactive. One query.
      */
     Set<UUID> clientVisibleStoreIds(String tenantSchema, UUID storeId);
+
+    /**
+     * Story 20.10 — the display names of the given stores (active or not), keyed by id; unknown ids are absent. One
+     * query, whatever the number of ids (a list page's stores).
+     */
+    java.util.Map<UUID, String> namesByIds(String tenantSchema, java.util.Collection<UUID> storeIds);
 }

@@ -1,12 +1,14 @@
 {
-  "description": "Story 20.10 — payloads of the offline expense sync operations, as the Bref React Native app queues them and as ExpenseSyncHandler reads them (backend test ExpenseSyncHandlerTest). entityId of every operation = the expense id. A re-sent operation (same operationId) is answered DUPLICATE; UPDATE_EXPENSE / DELETE_EXPENSE older (clientTimestamp) than the expense's last write are superseded (last write wins). Pull: entity key 'expenses', rows shaped like the REST response, a deleted expense as {id, deleted: true, updatedAt}. Change this file only with both sides.",
+  "description": "Story 20.10 — payloads of the offline expense sync operations, as the Bref React Native app queues them and as ExpenseSyncHandler reads them (backend test ExpenseSyncHandlerTest). entityId of every operation = the expense id (required for CREATE_EXPENSE). A re-sent operation (same operationId) is answered DUPLICATE; UPDATE_EXPENSE / DELETE_EXPENSE older (clientTimestamp) than the expense's last write are acknowledged APPLIED with reason LWW_SUPERSEDED and not applied. A CREATE_EXPENSE without expenseDate takes the day it was queued (clientTimestamp, Africa/Douala); an UPDATE_EXPENSE without expenseDate keeps the current date. A rejection has reason = the error code and conflictData.message = the French message to show; a malformed operation has a French reason. Pull: entity key 'expenses', rows shaped like the REST response, a deleted expense as a tombstone. Change this file only with both sides.",
   "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+  "storeId": "2c9e4b18-77a1-4d0f-8e35-6b1f0a9d3c57",
   "categories": ["goods_purchase", "rent", "salaries", "transport", "utilities", "telecom", "marketing", "taxes", "maintenance", "other"],
   "paymentMethods": ["cash", "mobile_money", "bank_transfer", "card", "other"],
   "operations": [
     {
       "name": "create",
       "operationType": "CREATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
         "amount": 150000,
@@ -19,6 +21,7 @@
     {
       "name": "createMinimal",
       "operationType": "CREATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
         "amount": 2500.5,
@@ -26,8 +29,24 @@
       }
     },
     {
+      "name": "createWithStoreAndNote",
+      "operationType": "CREATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "storeId": "2c9e4b18-77a1-4d0f-8e35-6b1f0a9d3c57",
+        "amount": 45000,
+        "category": "utilities",
+        "expenseDate": "2026-11-03",
+        "label": "Facture d'électricité",
+        "note": "Compteur de la boutique de Bonapriso",
+        "paymentMethod": "cash"
+      }
+    },
+    {
       "name": "createBrefDescription",
       "operationType": "CREATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
         "amount": 12000,
@@ -39,6 +58,7 @@
     {
       "name": "update",
       "operationType": "UPDATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
         "amount": 155000,
@@ -53,6 +73,7 @@
     {
       "name": "delete",
       "operationType": "DELETE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d"
       }
@@ -62,28 +83,125 @@
     {
       "name": "unknownCategory",
       "operationType": "CREATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
         "amount": 1000,
         "category": "food"
       },
-      "reason": "VALIDATION_ERROR"
+      "reason": "VALIDATION_ERROR",
+      "message": "Catégorie de dépense inconnue"
     },
     {
       "name": "threeDecimals",
       "operationType": "CREATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
       "payload": {
         "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
         "amount": 10.123,
         "category": "other"
       },
-      "reason": "VALIDATION_ERROR"
+      "reason": "VALIDATION_ERROR",
+      "message": "Le montant accepte au plus 2 décimales"
+    },
+    {
+      "name": "forbidden",
+      "operationType": "UPDATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "payload": {
+        "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "storeId": "2c9e4b18-77a1-4d0f-8e35-6b1f0a9d3c57",
+        "amount": 1000,
+        "category": "other"
+      },
+      "reason": "FORBIDDEN",
+      "message": "Seul le propriétaire peut changer la boutique d'une dépense."
+    },
+    {
+      "name": "stale",
+      "operationType": "UPDATE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "payload": {
+        "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 1000,
+        "category": "other",
+        "expectedUpdatedAt": "2026-11-01T00:00:00Z"
+      },
+      "reason": "OPTIMISTIC_LOCK",
+      "message": "Cette dépense a été modifiée entre-temps : rechargez-la avant de l'enregistrer."
+    },
+    {
+      "name": "notFound",
+      "operationType": "DELETE_EXPENSE",
+      "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "payload": {
+        "expenseId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d"
+      },
+      "reason": "EXPENSE_NOT_FOUND",
+      "message": "Dépense introuvable"
     },
     {
       "name": "missingExpenseId",
       "operationType": "DELETE_EXPENSE",
       "payload": {},
-      "reason": "Missing required field: expenseId"
+      "reason": "Champ obligatoire manquant ou invalide : expenseId"
+    },
+    {
+      "name": "createWithoutEntityId",
+      "operationType": "CREATE_EXPENSE",
+      "payload": {
+        "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "amount": 1000,
+        "category": "other"
+      },
+      "reason": "entityId obligatoire : l'identifiant de la dépense"
     }
-  ]
+  ],
+  "results": {
+    "superseded": {
+      "operationId": "5d2b8f0e-1c7a-4e93-a6d4-0f9b2c3e4d51",
+      "status": "APPLIED",
+      "serverEntityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "reason": "LWW_SUPERSEDED",
+      "conflictData": {
+        "conflictType": "LAST_WRITE_SUPERSEDED",
+        "entityType": "EXPENSE",
+        "entityId": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+        "incomingTimestamp": "2026-11-07T08:00:00Z",
+        "keptTimestamp": "2026-11-07T08:15:30.123456Z"
+      }
+    },
+    "rejected": {
+      "operationId": "7a1e3c5d-2b4f-4c6a-8e9d-1f0a2b3c4d5e",
+      "status": "REJECTED",
+      "serverEntityId": null,
+      "reason": "EXPENSE_NOT_FOUND",
+      "conflictData": {
+        "message": "Dépense introuvable"
+      }
+    }
+  },
+  "pull": {
+    "row": {
+      "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "storeId": "2c9e4b18-77a1-4d0f-8e35-6b1f0a9d3c57",
+      "storeName": "Boutique Bonapriso",
+      "category": "rent",
+      "categoryLabel": "Loyer",
+      "amount": 150000,
+      "expenseDate": "2026-11-01",
+      "label": "Loyer de novembre",
+      "note": null,
+      "paymentMethod": "mobile_money",
+      "paymentMethodLabel": "Mobile money",
+      "createdBy": "4e7d9a21-0b3c-4f58-9a6e-2d1c0b9a8f76",
+      "createdAt": "2026-11-01T09:12:44.512300Z",
+      "updatedAt": "2026-11-07T08:15:30.123456Z"
+    },
+    "tombstone": {
+      "id": "8b1d2f60-3c4e-4a7b-9d21-5e6f7a8b9c0d",
+      "deleted": true,
+      "updatedAt": "2026-11-07T09:00:00.000001Z"
+    }
+  }
 }

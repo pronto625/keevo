@@ -6,6 +6,7 @@ import com.keevo.store.api.StoreQueryPort;
 import com.keevo.store.api.StoreView;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.Optional;
@@ -13,13 +14,21 @@ import java.util.UUID;
 
 /**
  * Story 20.10 (ADR-08, same rules as the 20.2 clients) — the store an actor's expenses live in, read through the
- * store module's API (the module never reads the {@code stores} table). At most one store query per call.
+ * store module's API (the module never reads the {@code stores} table). At most one store query per call. Every
+ * refusal carries a French message telling the user what to do.
  */
 @Service
 public class ExpenseStoreScope {
 
     /** Details key of the « unknown store » refusal: the REST list answers 400 for it. */
     public static final String STORE_FIELD = "storeId";
+
+    static final String NO_STORE =
+            "Votre compte n'est rattaché à aucune boutique : demandez au propriétaire de vous en attribuer une.";
+    static final String INACTIVE_STORE =
+            "Votre boutique est désactivée : demandez au propriétaire de la réactiver pour gérer ses dépenses.";
+    static final String OTHER_STORE = "Vous ne pouvez gérer que les dépenses de votre boutique.";
+    static final String MOVE_REFUSED = "Seul le propriétaire peut changer la boutique d'une dépense.";
 
     /** What a list may read: every store ({@link #ALL}), one store, or nothing ({@link #NONE}). */
     public record ListScope(boolean none, UUID storeId) {
@@ -63,17 +72,7 @@ public class ExpenseStoreScope {
      */
     public UUID storeForNew(ExpenseAccess access, UUID requested, String tenantSchema) {
         if (!access.owner()) {
-            UUID own = access.assignedStoreId();
-            if (own == null) {
-                throw new DomainException(ErrorCode.FORBIDDEN, "Store member without an assigned store");
-            }
-            if (requested != null && !requested.equals(own)) {
-                throw new DomainException(ErrorCode.FORBIDDEN, "A store member cannot record an expense of another store");
-            }
-            if (activeStore(own, tenantSchema).isEmpty()) {
-                throw new DomainException(ErrorCode.FORBIDDEN, "Store member of an inactive store");
-            }
-            return own;
+            return memberStore(access, requested, tenantSchema);
         }
         if (requested != null) {
             return activeStore(requested, tenantSchema).orElseThrow(ExpenseStoreScope::unknownStore);
@@ -89,21 +88,47 @@ public class ExpenseStoreScope {
     }
 
     /**
-     * The store an edited expense moves to: {@code requested} null = unchanged; an OWNER may move it to another
-     * active store; a member may not move it ({@code FORBIDDEN}).
+     * The store of an edited expense: {@code requested} null = unchanged. A store member follows the creation rule
+     * (their own active store; a move → {@code FORBIDDEN}); an OWNER may move it to another active store.
      */
     public UUID storeForEdit(ExpenseAccess access, UUID current, UUID requested, String tenantSchema) {
+        if (!access.owner()) {
+            if (requested != null && !requested.equals(current)) {
+                throw forbidden(MOVE_REFUSED);
+            }
+            return memberStore(access, current, tenantSchema);
+        }
         if (requested == null || requested.equals(current)) {
             return current;
-        }
-        if (!access.owner()) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "A store member cannot move an expense to another store");
         }
         return activeStore(requested, tenantSchema).orElseThrow(ExpenseStoreScope::unknownStore);
     }
 
+    /** The display names of the stores of a page (one query). */
+    public Map<UUID, String> names(String tenantSchema, Collection<UUID> storeIds) {
+        return storeIds.isEmpty() ? Map.of() : stores.namesByIds(tenantSchema, storeIds);
+    }
+
+    private UUID memberStore(ExpenseAccess access, UUID requested, String tenantSchema) {
+        UUID own = access.assignedStoreId();
+        if (own == null) {
+            throw forbidden(NO_STORE);
+        }
+        if (requested != null && !requested.equals(own)) {
+            throw forbidden(OTHER_STORE);
+        }
+        if (activeStore(own, tenantSchema).isEmpty()) {
+            throw forbidden(INACTIVE_STORE);
+        }
+        return own;
+    }
+
     private Optional<UUID> activeStore(UUID storeId, String tenantSchema) {
         return stores.findById(tenantSchema, storeId).filter(StoreView::active).map(StoreView::id);
+    }
+
+    private static DomainException forbidden(String message) {
+        return DomainException.userFacing(ErrorCode.FORBIDDEN, message);
     }
 
     private static DomainException unknownStore() {

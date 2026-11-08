@@ -97,6 +97,22 @@ class StoreApiAdapter implements StoreQueryPort, StoreCommandPort {
         return StoreClientSharing.visibleStoreIds(storeId, storeRepository.findAllActive());
     }
 
+    @Override
+    public java.util.Map<UUID, String> namesByIds(String tenantSchema, java.util.Collection<UUID> storeIds) {
+        TenantContext.requireCurrent(tenantSchema);
+        if (storeIds == null || storeIds.isEmpty()) {
+            return java.util.Map.of();
+        }
+        // a tenant has a handful of stores: one read of all of them, filtered here
+        java.util.Map<UUID, String> names = new java.util.HashMap<>();
+        for (var store : storeRepository.findAll()) {
+            if (storeIds.contains(store.id())) {
+                names.put(store.id(), store.name());
+            }
+        }
+        return names;
+    }
+
     // ── StoreCommandPort ──────────────────────────────────────────────────────
 
     @Override

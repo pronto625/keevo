@@ -188,6 +188,23 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         return LocalDate.now(ZoneOffset.UTC).toString();
     }
 
+    private JsonNode search(String text) throws Exception {
+        return ok(mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/expenses")
+                .header("Authorization", "Bearer " + ownerToken).param("search", text)).andReturn(), 200).path("data");
+    }
+
+    private boolean live(String id) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT archived_at IS NULL FROM \"" + schema
+                + "\".expenses WHERE id = ?", Boolean.class, UUID.fromString(id)));
+    }
+
+    private String managerToken() {
+        UUID managerId = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schema + "\".employees (user_id, store_id, first_name, last_name, "
+                + "password_change_required) VALUES (?, ?, 'Marie', 'Ngo', false)", managerId, storeB);
+        return TestAccess.token(jdbc, jwtTokenProvider, managerId, schema, "MANAGER", "ACTIVE", storeB, false);
+    }
+
     // ── REST ─────────────────────────────────────────────────────────────────────────────────────────────
 
     @Test
@@ -210,8 +227,9 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT to_regclass(?) IS NOT NULL", Boolean.class,
                 "\"" + schema + "\".expenses")).isTrue();
 
+        assertThat(created.path("storeName").asText()).isNotBlank();
         body.put("amount", 1);
-        JsonNode again = create(ownerToken, body);
+        JsonNode again = ok(call(ownerToken, HttpMethod.POST, "/api/v1/expenses", body), 200).path("data"); // replay
         assertThat(again.path("amount").asText()).isEqualTo("150000");
         assertThat(rows()).isEqualTo(1);
 
@@ -287,9 +305,10 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
     void keysetList() throws Exception {
         int[] amounts = {3000, 1000, 5000, 1000, 2000};
         String[] dates = {"2026-10-01", "2026-10-03", "2026-10-02", "2026-10-05", "2026-10-04"};
+        String[] notes = {"Facture SONEL 500 francs", "Code a_b", "Facture SONEL 50%", "Chemin c:\\caisse", "axb"};
         for (int i = 0; i < amounts.length; i++) {
             Map<String, Object> e = expense(amounts[i], i % 2 == 0 ? "rent" : "salaries", dates[i]);
-            e.put("note", i == 2 ? "Facture SONEL 50%" : null);
+            e.put("note", notes[i]);
             create(ownerToken, e);
         }
         for (String sort : List.of("recent", "oldest", "amount_desc", "amount_asc", "bogus")) {
@@ -328,9 +347,18 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
                 "/api/v1/expenses?category=rent&from=2026-10-02&to=2026-10-04", null), 200);
         assertThat(filtered.path("data").findValuesAsText("expenseDate")).containsExactly("2026-10-04", "2026-10-02");
         assertThat(filtered.path("meta").path("totalAmount").asText()).isEqualTo("7000");
-        JsonNode searched = ok(mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/expenses")
-                .header("Authorization", "Bearer " + ownerToken).param("search", "sonel 50%")).andReturn(), 200);
-        assertThat(searched.path("data")).hasSize(1);
+        // LIKE wildcards are literal: « 50% » is not « 500 », « a_b » is not « axb », a backslash is a backslash
+        assertThat(search("sonel 50%").findValuesAsText("note")).containsExactly("Facture SONEL 50%");
+        assertThat(search("a_b").findValuesAsText("note")).containsExactly("Code a_b");
+        assertThat(search("c:\\caisse").findValuesAsText("note")).containsExactly("Chemin c:\\caisse");
+
+        // a cursor is bound to its filters and sort: reused after a filter change → 400
+        String next = ok(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?size=2", null), 200)
+                .path("meta").path("nextCursor").asText();
+        error(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?size=2&category=rent&cursor=" + next, null), 400,
+                "VALIDATION_ERROR");
+        error(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?size=2&sort=oldest&cursor=" + next, null), 400,
+                "VALIDATION_ERROR");
         error(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?category=food", null), 400, "VALIDATION_ERROR");
         error(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?cursor=xyz", null), 400, "VALIDATION_ERROR");
         error(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?from=2026-10-05&to=2026-10-01", null), 400,
@@ -447,5 +475,143 @@ class ExpensesFullContextTest extends FullContextIntegrationTest {
         var create = op("CREATE_EXPENSE", id, payload);
         assertThat(result(push(ownerToken, create), create).path("reason").asText()).isEqualTo("MODULE_INACTIVE");
         assertThat(pullExpenses(ownerToken)).isEmpty();
+    }
+
+    // ── review 20-10 ─────────────────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("edit / delete pushed before the tenant has the expenses table → REJECTED EXPENSE_NOT_FOUND (French "
+            + "message), the operation's transaction never aborted")
+    void syncBeforeTable() throws Exception {
+        // the registration trial provisions the module: back to a tenant that never used it (table and history gone)
+        jdbc.execute("DROP TABLE IF EXISTS \"" + schema + "\".expenses");
+        jdbc.execute("DROP TABLE IF EXISTS \"" + schema + "\".flyway_history_expenses");
+        assertThat(jdbc.queryForObject("SELECT to_regclass(?) IS NULL", Boolean.class, "\"" + schema + "\".expenses"))
+                .isTrue();
+        String id = UUID.randomUUID().toString();
+        Map<String, Object> edit = expense(10, "other", null);
+        edit.put("expenseId", id);
+        var update = op("UPDATE_EXPENSE", id, edit);
+        var delete = op("DELETE_EXPENSE", id, Map.of("expenseId", id));
+        var results = push(ownerToken, update, delete);
+        for (var op : List.of(update, delete)) {
+            assertThat(result(results, op).path("status").asText()).isEqualTo("REJECTED");
+            assertThat(result(results, op).path("reason").asText()).isEqualTo("EXPENSE_NOT_FOUND");
+            assertThat(result(results, op).path("conflictData").path("message").asText())
+                    .isEqualTo("Dépense introuvable");
+        }
+    }
+
+    @Test
+    @DisplayName("offline creation without date: the day it was queued (Africa/Douala); a REST edit without date "
+            + "keeps the current date")
+    void offlineDates() throws Exception {
+        String id = UUID.randomUUID().toString();
+        Map<String, Object> payload = expense(1000, "other", null);
+        payload.put("id", id);
+        var create = op("CREATE_EXPENSE", id, payload);
+        Instant queued = Instant.parse((String) create.get("clientTimestamp"));
+        assertThat(result(push(ownerToken, create), create).path("status").asText()).isEqualTo("APPLIED");
+        String expected = LocalDate.ofInstant(queued, java.time.ZoneId.of("Africa/Douala")).toString();
+        JsonNode got = ok(call(ownerToken, HttpMethod.GET, "/api/v1/expenses/" + id, null), 200).path("data");
+        assertThat(got.path("expenseDate").asText()).isEqualTo(expected);
+
+        String rest = create(ownerToken, expense(500, "rent", "2026-10-01")).path("id").asText();
+        JsonNode edited = ok(call(ownerToken, HttpMethod.PUT, "/api/v1/expenses/" + rest, expense(600, "rent", null)),
+                200).path("data");
+        assertThat(edited.path("expenseDate").asText()).isEqualTo("2026-10-01");
+        assertThat(edited.path("amount").asText()).isEqualTo("600");
+    }
+
+    @Test
+    @DisplayName("an employee of store B replaying store A's expense id → 403 with a French message, nothing of the "
+            + "expense disclosed; a MANAGER of store B deleting it → 404, the row stays live")
+    void otherStoreIds() throws Exception {
+        Map<String, Object> inA = expense(5000, "transport", null);
+        inA.put("storeId", storeA.toString());
+        inA.put("label", "Taxi secret");
+        String a = create(ownerToken, inA).path("id").asText();
+
+        Map<String, Object> replay = expense(1, "other", null);
+        replay.put("id", a);
+        MvcResult r = call(employeeToken, HttpMethod.POST, "/api/v1/expenses", replay);
+        error(r, 403, "FORBIDDEN");
+        assertThat(body(r)).doesNotContain("Taxi secret").doesNotContain("5000").doesNotContain(storeA.toString())
+                .contains("autre boutique");
+
+        error(call(managerToken(), HttpMethod.DELETE, "/api/v1/expenses/" + a, null), 404, "EXPENSE_NOT_FOUND");
+        assertThat(live(a)).isTrue();
+    }
+
+    @Test
+    @DisplayName("replaying a deleted expense id → 404 over REST, REJECTED EXPENSE_NOT_FOUND over sync")
+    void replayDeleted() throws Exception {
+        Map<String, Object> body = expense(1000, "other", null);
+        String id = create(ownerToken, body).path("id").asText();
+        ok(call(ownerToken, HttpMethod.DELETE, "/api/v1/expenses/" + id, null), 204);
+        body.put("id", id);
+        error(call(ownerToken, HttpMethod.POST, "/api/v1/expenses", body), 404, "EXPENSE_NOT_FOUND");
+        var create = op("CREATE_EXPENSE", id, body);
+        JsonNode result = result(push(ownerToken, create), create);
+        assertThat(result.path("status").asText()).isEqualTo("REJECTED");
+        assertThat(result.path("reason").asText()).isEqualTo("EXPENSE_NOT_FOUND");
+        assertThat(rows()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("a DELETE_EXPENSE queued before the last edit is superseded (LWW): the expense stays live")
+    void deleteSuperseded() throws Exception {
+        String id = UUID.randomUUID().toString();
+        Map<String, Object> payload = expense(1000, "other", null);
+        payload.put("id", id);
+        var create = op("CREATE_EXPENSE", id, payload);
+        var olderDelete = op("DELETE_EXPENSE", id, Map.of("expenseId", id));
+        Map<String, Object> edit = expense(2000, "other", null);
+        edit.put("expenseId", id);
+        var newerEdit = op("UPDATE_EXPENSE", id, edit);
+        var first = push(ownerToken, create, newerEdit);
+        assertThat(result(first, newerEdit).path("status").asText()).isEqualTo("APPLIED");
+        JsonNode late = result(push(ownerToken, olderDelete), olderDelete);
+        assertThat(late.path("status").asText()).isEqualTo("APPLIED");
+        assertThat(late.path("reason").asText()).isEqualTo("LWW_SUPERSEDED");
+        assertThat(live(id)).isTrue();
+    }
+
+    @Test
+    @DisplayName("the owner moves an expense to another store with PUT; the response names the new store")
+    void ownerMoves() throws Exception {
+        String id = create(ownerToken, expense(1000, "other", null)).path("id").asText();
+        Map<String, Object> move = expense(1000, "other", null);
+        move.put("storeId", storeB.toString());
+        JsonNode moved = ok(call(ownerToken, HttpMethod.PUT, "/api/v1/expenses/" + id, move), 200).path("data");
+        assertThat(moved.path("storeId").asText()).isEqualTo(storeB.toString());
+        assertThat(moved.path("storeName").asText()).isEqualTo("Boutique Bonapriso");
+        assertThat(ok(call(employeeToken, HttpMethod.GET, "/api/v1/expenses/" + id, null), 200)
+                .path("data").path("id").asText()).isEqualTo(id);
+    }
+
+    @Test
+    @DisplayName("same date: the creation time then the id break the ties — every page walked, nothing repeated")
+    void dateTies() throws Exception {
+        List<String> created = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            created.add(create(ownerToken, expense(100 + i, "other", "2026-10-10")).path("id").asText());
+        }
+        for (String sort : List.of("recent", "oldest")) {
+            List<String> seen = new ArrayList<>();
+            String cursor = null;
+            do {
+                JsonNode page = ok(call(ownerToken, HttpMethod.GET, "/api/v1/expenses?size=1&sort=" + sort
+                        + (cursor == null ? "" : "&cursor=" + cursor), null), 200);
+                page.path("data").forEach(n -> seen.add(n.path("id").asText()));
+                cursor = page.path("meta").path("hasMore").asBoolean() ? page.path("meta").path("nextCursor").asText()
+                        : null;
+            } while (cursor != null);
+            List<String> expected = new ArrayList<>(created); // created one after the other: creation-time order
+            if (sort.equals("recent")) {
+                java.util.Collections.reverse(expected);
+            }
+            assertThat(seen).as(sort).containsExactlyElementsOf(expected);
+        }
     }
 }

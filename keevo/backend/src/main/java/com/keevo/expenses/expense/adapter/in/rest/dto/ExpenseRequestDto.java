@@ -10,7 +10,6 @@ import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,10 +39,9 @@ public record ExpenseRequestDto(
         String category,
         @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}", message = "Date de dépense invalide (format attendu AAAA-MM-JJ)")
         String expenseDate,
+        // lengths checked by the domain after trimming (ExpenseContent): padding never makes a text too long
         @JsonAlias("description")
-        @Size(max = 500, message = "Le libellé ne doit pas dépasser 500 caractères")
         String label,
-        @Size(max = 1000, message = "La note ne doit pas dépasser 1000 caractères")
         String note,
         @Pattern(regexp = ExpensePaymentMethod.KEYS_PATTERN, message = "Mode de paiement inconnu")
         String paymentMethod,

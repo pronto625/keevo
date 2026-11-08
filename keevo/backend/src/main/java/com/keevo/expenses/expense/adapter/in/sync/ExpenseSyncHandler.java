@@ -12,13 +12,17 @@ import com.keevo.shared.application.port.sync.SyncOperationStatus;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.security.CurrentActor;
+import com.keevo.shared.infrastructure.web.ErrorMessages;
 import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.application.ModulePermissions;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -28,16 +32,19 @@ import java.util.UUID;
  * endpoints (same Bref rules, same store scope):
  * <ul>
  *   <li>{@code CREATE_EXPENSE} {@code {id, storeId?, amount, category, expenseDate?, label?, note?, paymentMethod?}}
- *       — the id generated on the device; idempotent on that id (sent again → the expense already created);</li>
+ *       — the id generated on the device, also the operation's {@code entityId} (required: the last-write-wins check
+ *       of later edits compares against this row); idempotent on that id; an absent date = the day the operation
+ *       was queued ({@code clientTimestamp}, Africa/Douala), never the day it reaches the server;</li>
  *   <li>{@code UPDATE_EXPENSE} {@code {expenseId, storeId?, amount, category, expenseDate?, label?, note?,
- *       paymentMethod?, expectedUpdatedAt?}} — replaces the content (stale {@code expectedUpdatedAt} →
- *       {@code REJECTED OPTIMISTIC_LOCK});</li>
+ *       paymentMethod?, expectedUpdatedAt?}} — replaces the content, an absent date keeps the current one (stale
+ *       {@code expectedUpdatedAt} → {@code REJECTED OPTIMISTIC_LOCK});</li>
  *   <li>{@code DELETE_EXPENSE} {@code {expenseId}} — final; already deleted → APPLIED.</li>
  * </ul>
- * Payloads are validated with the REST request DTO (French reason in {@code VALIDATION_ERROR}); permissions are the
- * matching endpoints' ({@code FORBIDDEN} otherwise). A re-sent operation is answered {@code DUPLICATE} by the push's
- * operation log; {@code UPDATE_/DELETE_EXPENSE} older than the expense's last write are superseded by the push's
- * last-write-wins strategy (on {@code clientTimestamp}) before reaching this handler. The module gate is the push's
+ * Payloads are validated with the REST request DTO; permissions are the matching endpoints'. Every rejection carries
+ * its French message in {@code conflictData.message} ({@code reason} stays the error code); a malformed operation is
+ * rejected with a French {@code reason}. A re-sent operation is answered {@code DUPLICATE} by the push's operation
+ * log; {@code UPDATE_/DELETE_EXPENSE} older than the expense's last write are superseded by the push's last-write-wins
+ * strategy (on {@code clientTimestamp}) before reaching this handler. The module gate is the push's
  * ({@link #moduleId()}); the module's table is provisioned (lazily) first.
  */
 @Component
@@ -46,6 +53,9 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
     public static final String CREATE = "CREATE_EXPENSE";
     public static final String UPDATE = "UPDATE_EXPENSE";
     public static final String DELETE = "DELETE_EXPENSE";
+
+    /** Calendar of the default date of an offline creation (Keevo's business day zone). */
+    static final ZoneId BUSINESS_ZONE = ZoneId.of("Africa/Douala");
 
     /** The permission of each operation: the one of its REST endpoint. */
     private static final Map<String, String> PERMISSIONS = Map.of(
@@ -80,13 +90,17 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
 
     @Override
     protected void validate(SyncOperation operation) {
-        String idField = CREATE.equals(operation.operationType()) ? "id" : "expenseId";
+        boolean create = CREATE.equals(operation.operationType());
+        String idField = create ? "id" : "expenseId";
         UUID id = parseUuid(operation.payload().get(idField));
         if (id == null) {
-            throw new IllegalArgumentException("Missing required field: " + idField);
+            throw new IllegalArgumentException("Champ obligatoire manquant ou invalide : " + idField);
+        }
+        if (create && operation.entityId() == null) {
+            throw new IllegalArgumentException("entityId obligatoire : l'identifiant de la dépense");
         }
         if (operation.entityId() != null && !id.equals(parseUuid(operation.entityId()))) {
-            throw new IllegalArgumentException("entityId does not match " + idField);
+            throw new IllegalArgumentException("entityId ne correspond pas à " + idField);
         }
     }
 
@@ -99,8 +113,11 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
         UUID id = switch (type) {
             case CREATE -> {
                 ExpenseRequestDto request = read(p);
-                yield manage.create(parseUuid(p.get("id")), request.toCommand(), CurrentExpenseAccess.get(), actorId,
-                        tenantId).expense().id();
+                // an absent date is the day the expense was recorded on the device, not the day it syncs
+                LocalDate queued = LocalDate.ofInstant(resolveClientTime(null, operation.clientTimestamp()),
+                        BUSINESS_ZONE);
+                yield manage.create(parseUuid(p.get("id")), request.toCommand().withDefaultDate(queued),
+                        CurrentExpenseAccess.get(), actorId, tenantId).expense().id();
             }
             case UPDATE -> {
                 ExpenseRequestDto request = read(p);
@@ -121,12 +138,39 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
         return new SyncOperationResult(operation.operationId(), SyncOperationStatus.APPLIED, id.toString(), null);
     }
 
+    /**
+     * {@code reason} = the error code (as every handler), plus the French message for the device in
+     * {@code conflictData.message}: the user-facing message of the refusal, else its {@code details.reason}, else the
+     * code's catalogue message.
+     */
+    @Override
+    protected SyncOperationResult mapDomainException(SyncOperation op, DomainException e) {
+        String reason = e.getErrorCode() != null ? e.getErrorCode().name() : e.getDomainCode();
+        Map<String, Object> data = new LinkedHashMap<>();
+        if (e.getDetails() != null) {
+            data.putAll(e.getDetails());
+        }
+        data.put("message", message(e, reason));
+        return new SyncOperationResult(op.operationId(), SyncOperationStatus.REJECTED, null, reason, data);
+    }
+
+    static String message(DomainException e, String reason) {
+        if (e.getUserMessage() != null) {
+            return e.getUserMessage();
+        }
+        if (e.getDetails() != null && e.getDetails().get("reason") instanceof String text && !text.isBlank()) {
+            return text;
+        }
+        return ErrorMessages.of(reason, "Opération refusée");
+    }
+
     /** Same rule as {@code @RequiresPermission} on the matching endpoint (roles of the authenticated actor). */
     private void requirePermission(String type) {
         String required = PERMISSIONS.get(type);
         Set<String> held = permissions.permissionsOf(ModulePermissions.rolesOf(CurrentActor.authentication()));
         if (required == null || !held.contains(required)) {
-            throw new DomainException(ErrorCode.FORBIDDEN, "Expense operation not allowed for this role");
+            throw DomainException.userFacing(ErrorCode.FORBIDDEN,
+                    "Votre rôle ne permet pas cette opération sur les dépenses.");
         }
     }
 
@@ -154,6 +198,6 @@ public class ExpenseSyncHandler extends AbstractSyncOperationHandler {
     }
 
     private static DomainException invalid(String reason) {
-        return new DomainException(ErrorCode.VALIDATION_ERROR, "Invalid expense operation", Map.of("reason", reason));
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, reason);
     }
 }

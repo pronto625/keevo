@@ -49,8 +49,35 @@ CREATE INDEX IF NOT EXISTS idx_expenses_store_amount
     ON expenses (store_id, amount, expense_date, id) WHERE archived_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_expenses_amount
     ON expenses (amount, expense_date, id) WHERE archived_at IS NULL;
--- category filter (and its totals)
+-- category filter of one store, in the « recent » / « oldest » order (and its totals)
 CREATE INDEX IF NOT EXISTS idx_expenses_store_category_date
-    ON expenses (store_id, category, expense_date) WHERE archived_at IS NULL;
--- sync pull keyset (ExpenseDeltaProvider)
+    ON expenses (store_id, category, expense_date, created_at, id) WHERE archived_at IS NULL;
+-- sync pull keyset (ExpenseDeltaProvider): every store (owner), then one store (store member's pull)
 CREATE INDEX IF NOT EXISTS idx_expenses_sync_keyset ON expenses (updated_at, (CAST(id AS text)));
+CREATE INDEX IF NOT EXISTS idx_expenses_store_sync_keyset ON expenses (store_id, updated_at, (CAST(id AS text)));
+
+-- search « label / note ILIKE '%q%' »: GIN trigram indexes. The operator class comes from the pg_trgm extension
+-- installed in public by the public migration V55; this script runs inside the tenant schema without public in its
+-- search_path, hence public.gin_trgm_ops. Where the extension is missing, the script installs it in public (trusted
+-- extension, same right as V55); only a database refusing it skips the indexes, with a warning (crm V3 pattern).
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+        BEGIN
+            CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
+        EXCEPTION WHEN insufficient_privilege OR feature_not_supported OR undefined_file
+                       OR unique_violation OR duplicate_object THEN -- a concurrent provisioning installed it
+            RAISE WARNING 'expenses V1: pg_trgm cannot be installed in %: %', current_schema(), SQLERRM;
+        END;
+    END IF;
+    -- the opclass is named public.gin_trgm_ops: only an extension living in public serves it
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm' AND extnamespace = 'public'::regnamespace) THEN
+        CREATE INDEX IF NOT EXISTS idx_expenses_label_trgm ON expenses USING gin (label public.gin_trgm_ops)
+            WHERE archived_at IS NULL;
+        CREATE INDEX IF NOT EXISTS idx_expenses_note_trgm ON expenses USING gin (note public.gin_trgm_ops)
+            WHERE archived_at IS NULL;
+    ELSE
+        RAISE WARNING 'expenses V1: pg_trgm missing from public, trigram indexes skipped in %', current_schema();
+    END IF;
+END
+$$;

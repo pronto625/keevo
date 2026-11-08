@@ -37,8 +37,11 @@ public class ExpenseDeltaProvider implements DeltaEntityProvider {
     private final ExpenseRepository expenses;
     private final ObjectMapper objectMapper;
     private final ModuleProvisioner provisioner;
+    private final com.keevo.expenses.expense.application.usecase.ExpenseQueryUseCase queries;
 
-    public ExpenseDeltaProvider(ExpenseRepository expenses, ObjectMapper objectMapper, ModuleProvisioner provisioner) {
+    public ExpenseDeltaProvider(ExpenseRepository expenses, ObjectMapper objectMapper, ModuleProvisioner provisioner,
+                                com.keevo.expenses.expense.application.usecase.ExpenseQueryUseCase queries) {
+        this.queries = queries;
         this.expenses = expenses;
         this.objectMapper = objectMapper;
         this.provisioner = provisioner;
@@ -74,8 +77,11 @@ public class ExpenseDeltaProvider implements DeltaEntityProvider {
         if (page.isEmpty()) {
             return new Page(List.of(), null);
         }
+        // the page's store names: one batch lookup
+        Map<java.util.UUID, String> names = queries.storeNames(page.stream().filter(e -> !e.deleted())
+                .map(Expense::storeId).collect(java.util.stream.Collectors.toSet()), TenantContext.getCurrentTenant());
         List<Map<String, Object>> rows = page.stream().map(e -> e.deleted() ? tombstone(e)
-                : objectMapper.convertValue(ExpenseResponseDto.fromDomain(e), ROW)).toList();
+                : objectMapper.convertValue(ExpenseResponseDto.fromDomain(e, names.get(e.storeId())), ROW)).toList();
         Expense last = page.get(page.size() - 1);
         return new Page(rows, more ? new Position(last.updatedAt(), last.id().toString()) : null);
     }

@@ -14,6 +14,7 @@ import java.util.UUID;
 public record ExpenseResponseDto(
         UUID id,
         UUID storeId,
+        String storeName,
         String category,
         String categoryLabel,
         BigDecimal amount,
@@ -27,8 +28,9 @@ public record ExpenseResponseDto(
         Instant updatedAt
 ) {
 
-    public static ExpenseResponseDto fromDomain(Expense e) {
-        return new ExpenseResponseDto(e.id(), e.storeId(), e.category().key(), e.category().label(),
+    /** {@code storeName}: the store's display name, looked up once per page ({@code null} when unknown). */
+    public static ExpenseResponseDto fromDomain(Expense e, String storeName) {
+        return new ExpenseResponseDto(e.id(), e.storeId(), storeName, e.category().key(), e.category().label(),
                 plain(e.amount()), e.expenseDate(), e.label(), e.note(),
                 e.paymentMethod() == null ? null : e.paymentMethod().key(),
                 e.paymentMethod() == null ? null : e.paymentMethod().label(),

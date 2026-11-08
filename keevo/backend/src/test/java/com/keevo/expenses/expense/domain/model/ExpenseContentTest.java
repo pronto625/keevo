@@ -91,21 +91,27 @@ class ExpenseContentTest {
     }
 
     @Test
-    @DisplayName("Bref isTooFarInFuture: today and tomorrow (UTC) accepted, later refused; no lower bound")
-    void future_dates() {
+    @DisplayName("Bref isTooFarInFuture: today and tomorrow (UTC) accepted, later refused; nothing before 2000-01-01")
+    void date_range() {
         assertThat(of("other", "1", "2026-09-20").expenseDate()).isEqualTo(LocalDate.of(2026, 9, 20));
         assertThat(of("other", "1", "2026-09-21").expenseDate()).isEqualTo(LocalDate.of(2026, 9, 21));
-        assertThat(of("other", "1", "2001-01-01").expenseDate()).isEqualTo(LocalDate.of(2001, 1, 1));
+        assertThat(of("other", "1", "2000-01-01").expenseDate()).isEqualTo(LocalDate.of(2000, 1, 1));
         refused(() -> of("other", "1", "2026-09-22"), "La date de la dépense ne peut pas dépasser demain");
         refused(() -> of("other", "1", "2027-09-20"), "La date de la dépense ne peut pas dépasser demain");
+        refused(() -> of("other", "1", "1999-12-31"),
+                "La date de la dépense ne peut pas être antérieure au 1er janvier 2000");
+        refused(() -> of("other", "1", "0001-01-01"),
+                "La date de la dépense ne peut pas être antérieure au 1er janvier 2000");
     }
 
     @Test
-    @DisplayName("Bref todayIso: an absent date is today in UTC")
+    @DisplayName("an absent date: the caller's default (edit, offline creation), else today in UTC (Bref todayIso)")
     void default_date() {
         Clock lateUtc = Clock.fixed(Instant.parse("2026-09-20T23:30:00Z"), ZoneOffset.UTC);
         assertThat(ExpenseContent.of("other", BigDecimal.ONE, null, null, null, null, lateUtc).expenseDate())
                 .isEqualTo(LocalDate.of(2026, 9, 20));
+        assertThat(ExpenseContent.of("other", BigDecimal.ONE, null, LocalDate.of(2026, 9, 2), null, null, null,
+                lateUtc).expenseDate()).isEqualTo(LocalDate.of(2026, 9, 2));
     }
 
     @ParameterizedTest
@@ -116,7 +122,7 @@ class ExpenseContentTest {
     }
 
     @Test
-    @DisplayName("unknown payment method, texts too long → refused")
+    @DisplayName("unknown payment method, texts too long after trimming → refused; padding never counts")
     void other_refusals() {
         refused(() -> ExpenseContent.of("other", BigDecimal.ONE, null, null, null, "cheque", CLOCK),
                 "Mode de paiement inconnu");
@@ -124,10 +130,12 @@ class ExpenseContentTest {
                 "Le libellé ne doit pas dépasser 500 caractères");
         refused(() -> ExpenseContent.of("other", BigDecimal.ONE, null, null, "x".repeat(1001), null, CLOCK),
                 "La note ne doit pas dépasser 1000 caractères");
+        String padded = "   " + "x".repeat(500) + "   ";
+        assertThat(ExpenseContent.of("other", BigDecimal.ONE, null, padded, null, null, CLOCK).label()).hasSize(500);
     }
 
     @Test
-    @DisplayName("sorts: Bref keys, unknown → recent; cursor round-trip bound to its sort")
+    @DisplayName("sorts: Bref keys, unknown → recent; cursor round-trip bound to its filters and sort; tampered → refused")
     void sorts_and_cursor() {
         assertThat(ExpenseSort.fromKey(null)).isEqualTo(ExpenseSort.RECENT);
         assertThat(ExpenseSort.fromKey("whatever")).isEqualTo(ExpenseSort.RECENT);
@@ -135,13 +143,39 @@ class ExpenseContentTest {
         Expense e = Expense.create(UUID.randomUUID(), UUID.randomUUID(), of("rent", "12.5", "2026-09-01"),
                 UUID.randomUUID(), Instant.parse("2026-09-01T10:00:00.123456Z"));
         for (ExpenseSort sort : ExpenseSort.values()) {
-            ExpenseCursor c = ExpenseCursor.after(sort, e);
-            assertThat(ExpenseCursor.decode(c.encode(), sort)).isEqualTo(c);
+            String filters = ExpenseCursor.filters(null, null, null, null, null, sort);
+            ExpenseCursor c = ExpenseCursor.after(filters, sort, e);
+            assertThat(ExpenseCursor.decode(c.encode(), filters, sort)).isEqualTo(c);
         }
-        String recent = ExpenseCursor.after(ExpenseSort.RECENT, e).encode();
-        assertThatThrownBy(() -> ExpenseCursor.decode(recent, ExpenseSort.AMOUNT_DESC))
+        String recentFilters = ExpenseCursor.filters(null, null, null, null, null, ExpenseSort.RECENT);
+        String recent = ExpenseCursor.after(recentFilters, ExpenseSort.RECENT, e).encode();
+        String otherSort = ExpenseCursor.filters(null, null, null, null, null, ExpenseSort.AMOUNT_DESC);
+        String otherCategory = ExpenseCursor.filters(null, ExpenseCategory.RENT, null, null, null, ExpenseSort.RECENT);
+        String otherSearch = ExpenseCursor.filters(null, null, null, null, "loyer", ExpenseSort.RECENT);
+        for (String filters : new String[]{otherSort, otherCategory, otherSearch}) {
+            assertThat(filters).isNotEqualTo(recentFilters);
+            assertThatThrownBy(() -> ExpenseCursor.decode(recent, filters, ExpenseSort.RECENT))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThatThrownBy(() -> ExpenseCursor.decode("not-a-cursor", recentFilters, ExpenseSort.RECENT))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> ExpenseCursor.decode("not-a-cursor", ExpenseSort.RECENT))
-                .isInstanceOf(IllegalArgumentException.class);
+        // well-formed but out of range: extreme instant, huge or negative amount, far date
+        String amountFilters = ExpenseCursor.filters(null, null, null, null, null, ExpenseSort.AMOUNT_DESC);
+        for (String raw : new String[]{
+                recentFilters + "~2026-09-01~+1000000000-01-01T00:00:00Z~" + e.id(),
+                recentFilters + "~+999999999-01-01~2026-09-01T10:00:00Z~" + e.id()}) {
+            assertThatThrownBy(() -> ExpenseCursor.decode(b64(raw), recentFilters, ExpenseSort.RECENT))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+        for (String amount : new String[]{"1e400", "-5", "1000000000000", "0.001"}) {
+            String raw = amountFilters + "~2026-09-01~" + amount + "~" + e.id();
+            assertThatThrownBy(() -> ExpenseCursor.decode(b64(raw), amountFilters, ExpenseSort.AMOUNT_DESC))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+    }
+
+    private static String b64(String raw) {
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 }
