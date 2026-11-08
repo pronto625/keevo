@@ -2,7 +2,7 @@
 title: '20-14 Store of documents and last revenue consumers'
 type: 'feature'
 created: '2026-11-08'
-status: 'in-review'
+status: 'done'
 baseline_revision: 'f912cca68d04a0835a055a13ea07bb9aed25f6c8'
 review_loop_iteration: 0
 followup_review_recommended: true
@@ -92,6 +92,36 @@ Paths under `keevo/backend/src/main/` unless stated.
 - 2026-11-08 — review 1 (coordinator): revenue levels below V16 cached with a 5-minute TTL (level only goes up); clients export counted without the revenue lateral (`countFromClause`); one default-store policy (`StoreQueryPort.defaultStore`, one query) and one « unknown or inactive store » message for documents and clients; derivation absorbs only that refusal; `Invoice.inStore` refuses an overwrite or a non-draft; store activity counts `doc_count > 0`, the trend job takes a `Clock` and isolates a tenant's activity failure; end-of-day employee list from the store-scoped source; member with an inactive store / without store, conversion of a quote of a deactivated store; REST store refusals through the global mapping, sync rejections carry the French message; delta provider always gets its store resolver. KEEP: attribution at creation only, the three source levels, the shared-capability port.
 
 ## Review Triage Log
+
+### 2026-11-08 — Review pass (5 layers: blind, edge case, verification gap, intent, patterns)
+- verdicts: 37 findings — high 0, medium 12, low 15, false 3, maybe-false 7 (grouped by root cause)
+- findings:
+  - `[medium]` `[patch]` Patterns/blind/edge: levels below V16 no longer cached (catalogue query per figure) — 5-minute TTL for lower levels, V16 cached for good, level never goes down.
+  - `[medium]` `[patch]` Patterns: clients export COUNT computed the revenue lateral for every client — `countFromClause()` hook.
+  - `[medium]` `[patch]` Patterns/blind: two default-store policies (shop-first vs any store), two messages — `StoreQueryPort.defaultStore`, one French message.
+  - `[medium]` `[patch]` Blind/edge: ownerStore caught every DomainException — only the unknown-store refusal.
+  - `[medium]` `[patch]` Blind: `Invoice.inStore` could overwrite a store on issued documents — refused in the domain, test.
+  - `[low]` `[patch]` Patterns/blind: store activity scanned credit notes — `doc_count > 0`.
+  - `[low]` `[patch]` Blind: trend scheduler read the system clock — injected Clock.
+  - `[medium]` `[patch]` Edge: one tenant's activity failure aborted the run — per-tenant WARN.
+  - `[medium]` `[patch]` Edge: employees with invoices only got no end-of-day report — distinct employees from the source.
+  - `[medium]` `[patch]` Edge: member of an inactive store / storeless member with storeId / conversion of an inactive store's quote — 403 actionable messages, default store on conversion.
+  - `[low]` `[patch]` Blind/patterns: controller-only try/catch, sync refusal message — global mapping (422) and `conflictData.message` in sync.
+  - `[low]` `[patch]` Blind/patterns: nullable test constructors in production (delta provider, scheduler) — removed.
+  - `[low]` `[patch]` Blind: stale javadocs (clients export, level javadoc, sync payload) — rewritten.
+  - `[medium]` `[patch]` Verification: derived client store for an owner invoice in store B untested — full-context test.
+  - `[medium]` `[patch]` Verification: corrected sale replacement invoice store untested — assertions added.
+  - `[medium]` `[patch]` Blind/intent: sync refusals, weekly report and employee-only case untested — tests added.
+  - `[maybe-false]` `[defer]` Verification: scheduler tenant routing only tested with a preset schema — routed to 17-9 (dashboards/reports use the same routing and are covered).
+  - `[maybe-false]` `[defer]` Blind: invoice reads not filtered by store for members — routed to 19-5b.
+  - `[low]` `[reject]` Blind: no backfill of bridged invoices from `sales.store_id` — sales belong to the pos module; documented.
+  - `[low]` `[reject]` Blind: store rows do not sum to the tenant total — pre-V16 documents have no store; documented.
+  - `[low]` `[reject]` Patterns: per-batch store lookup in sync — one tiny indexed query per operation (single defaultStore query now).
+  - `[low]` `[reject]` Patterns: 29-argument Invoice record — pre-existing shape.
+  - `[maybe-false]` `[reject]` Edge: V15/V16 ordering — merge order 20-7 then 20-14 (enforced by the orchestrator).
+  - `[false]` `[reject]` Intent: tenant totals « unchanged » taken literally — the invoice is counted once; tenant-wide figures without stores are unchanged (AC-ii test).
+  - `[low]` `[reject]` Intent: trend comparison window moved to the same hour — fixes a pre-existing off-by-one-hour bug, documented.
+
 
 ## Design Notes
 
