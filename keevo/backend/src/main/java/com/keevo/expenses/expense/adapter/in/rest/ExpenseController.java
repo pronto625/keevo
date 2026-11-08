@@ -132,7 +132,7 @@ public class ExpenseController {
                     size), CurrentExpenseAccess.get(), TenantContext.getCurrentTenant());
         } catch (DomainException e) {
             if (ExpenseStoreScope.isUnknownStore(e)) {
-                throw new InvalidRequestParameterException("storeId", "unknown store", "Établissement inconnu");
+                throw new InvalidRequestParameterException("storeId", "unknown store", e.getUserMessage()); // 20.14 — one message
             }
             throw e;
         }

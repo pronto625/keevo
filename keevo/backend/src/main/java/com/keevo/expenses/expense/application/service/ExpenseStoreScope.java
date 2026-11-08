@@ -7,7 +7,6 @@ import com.keevo.store.api.StoreView;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -67,7 +66,8 @@ public class ExpenseStoreScope {
     /**
      * The store of a new expense. A store member: their own active store ({@code requested} another one, no store or
      * an inactive one → {@code FORBIDDEN}). An OWNER: {@code requested} (an active store, else
-     * {@code VALIDATION_ERROR} field {@code storeId}) or, without it, the oldest active store (none →
+     * {@code VALIDATION_ERROR} field {@code storeId}) or, without it, the tenant's default store
+     * ({@link StoreQueryPort#defaultStore}: a shop before a warehouse, then the oldest; none →
      * {@code VALIDATION_ERROR}).
      */
     public UUID storeForNew(ExpenseAccess access, UUID requested, String tenantSchema) {
@@ -77,11 +77,8 @@ public class ExpenseStoreScope {
         if (requested != null) {
             return activeStore(requested, tenantSchema).orElseThrow(ExpenseStoreScope::unknownStore);
         }
-        return stores.findAllActive(tenantSchema).stream()
-                .filter(s -> s.id() != null)
-                .min(Comparator.comparing(StoreView::createdAt, Comparator.nullsLast(Comparator.naturalOrder()))
-                        .thenComparing(StoreView::id))
-                .map(StoreView::id)
+        // Story 20.14 — the one default-store policy of every module (a shop before a warehouse, then the oldest)
+        return stores.defaultStore(tenantSchema)
                 .orElseThrow(() -> DomainException.userFacing(ErrorCode.VALIDATION_ERROR,
                         "Aucun établissement actif : créez une boutique avant d'enregistrer une dépense",
                         Map.of("field", STORE_FIELD)));
@@ -132,7 +129,7 @@ public class ExpenseStoreScope {
     }
 
     private static DomainException unknownStore() {
-        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, "Établissement inconnu ou désactivé",
+        return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, StoreQueryPort.UNKNOWN_OR_INACTIVE_STORE,
                 Map.of("field", STORE_FIELD));
     }
 

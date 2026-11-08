@@ -39,7 +39,7 @@ class ExpenseStoreScopeTest {
         StoreView a = store(older, true, Instant.parse("2026-01-01T00:00:00Z"));
         StoreView b = store(newer, true, Instant.parse("2026-06-01T00:00:00Z"));
         StoreView c = store(closed, false, Instant.parse("2025-01-01T00:00:00Z"));
-        when(stores.findAllActive(T)).thenReturn(List.of(b, a));
+        when(stores.defaultStore(T)).thenReturn(Optional.of(older)); // 20.14 — StoreQueryPort.defaultStore
         when(stores.findById(T, older)).thenReturn(Optional.of(a));
         when(stores.findById(T, newer)).thenReturn(Optional.of(b));
         when(stores.findById(T, closed)).thenReturn(Optional.of(c));
@@ -63,7 +63,7 @@ class ExpenseStoreScopeTest {
     }
 
     @Test
-    @DisplayName("new expense: owner → requested active store or the oldest active one; manager → their active store only")
+    @DisplayName("new expense: owner → requested active store or the default store; manager → their active store only")
     void storeForNew() {
         tenantStores();
         assertThat(scope.storeForNew(ExpenseAccess.OWNER, null, T)).isEqualTo(older);
@@ -112,7 +112,7 @@ class ExpenseStoreScopeTest {
     @Test
     @DisplayName("an owner without any active store cannot record (French reason)")
     void noStore() {
-        when(stores.findAllActive(T)).thenReturn(List.of());
+        when(stores.defaultStore(T)).thenReturn(Optional.empty());
         refused(() -> scope.storeForNew(ExpenseAccess.OWNER, null, T), ErrorCode.VALIDATION_ERROR);
     }
 }
