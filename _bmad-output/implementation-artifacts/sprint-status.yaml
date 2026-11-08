@@ -371,6 +371,7 @@ development_status:
   m20-7-modeles-signatures-liens-publics: backlog  # API 487a8ec5+51d426dc — 8 modèles Bref (PUT /invoices/{id}/layout, ?template=&ticketWidth=), signatures client/vendeur, POST /invoices/{id}/public-link (+/rotate), réglages /invoicing/settings/documents, devis envoyable, bloc paiements sur PDF, anciens liens Bref
   m20-14-boutique-des-documents: backlog  # API b5b41077+676dc274+d1cdf583 — storeId/storeName sur les documents (création, liste ?storeId= propriétaire seul), visibilité par rôle (employé = ses documents, gérant/lecteur = sa boutique, 404 hors portée), chiffres par boutique avec factures
   m20-11-module-finance: backlog  # API 04620d05 — GET /api/v1/finance/summary (period=AAAA-MM|AAAA ou startDate/endDate, storeId) : CA HT, dépenses, résultat, marge, comparaison, séries, byStore ; propriétaire seul ; contrat finance-math-cases.json
+  m20-8-envoi-sms-email: backlog  # API 26ab9513 — POST /invoices/{id}/send {channel|channels[], phone?, email?} (SMS, EMAIL, WHATSAPP), SEND_INVOICE hors ligne mis en file (outbox, 5 essais), lastSentChannel / lastSendStatus dans le pull, statut incertain 409
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -461,7 +462,7 @@ development_status:
   20-5-remise-livraison-tva-echeance: done  # 2026-11-06 build-auto (spec-20-5) — revue 5 couches, 15 corrigés, 6 218 tests verts, 62 cas de calcul identiques à Bref, contrôle live keevo_dev OK
   20-6-derivation-catalogue-crm: done  # 2026-11-07 build-auto (spec-20-6) — revue 5 couches, 38 constats (20 corrigés, 1 routé → 25-3), 3 317 tests verts (paquets touchés), contrôle live keevo_dev OK ; revue de suivi recommandée
   20-7-modeles-signatures-liens-publics: done  # 2026-11-08 build-auto parallèle (spec-20-7) — revue 5 couches, 43 constats (1 high + 16 medium corrigés, 2 routés → 24-4, 19-5b), suite complète 6 389 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
-  20-8-envoi-sms-email: backlog
+  20-8-envoi-sms-email: done  # 2026-11-08 build-auto parallèle (spec-20-8) — revue 5 couches (1 high + medium corrigés : outbox durable comme Bref, statut incertain, base publique), suite complète 6 596 tests verts, contrôle live keevo_dev OK (sans fournisseur) ; KEEVO_PUBLIC_BASE_URL obligatoire au go-live ; revue de suivi recommandée
   20-9-reporting-multi-source: done  # 2026-11-08 build-auto parallèle (spec-20-9) — revue 5 couches, 44 constats (18 corrigés, 2 routés → 20-14, 24-12, GMV → 20-13), suite complète 6 287 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-10-module-expenses: done  # 2026-11-08 build-auto parallèle (spec-20-10) — revue 5 couches, 41 constats (28 corrigés, 3 routés → 22-5, 19-5b, 20-13), suite complète 6 329 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-11-module-finance: done  # 2026-11-08 build-auto parallèle (spec-20-11) — revue 5 couches, 34 constats (12 medium corrigés), calculs identiques à finance-math.ts (contrat finance-math-cases.json), suite complète 6 459 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée

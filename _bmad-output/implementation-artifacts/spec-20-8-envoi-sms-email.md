@@ -267,9 +267,11 @@ The export contract is unchanged by the fixes; it was regenerated in the first b
 - Bref acceptance journey with SMS sending → 20-12.
 - Flutter test client audit labels → coordinator (field `channel` « Canal d'envoi », values `WHATSAPP` « WhatsApp », `SMS` « SMS », `EMAIL` « E-mail », code key `channel`).
 
+**Verification (orchestrator):** full suite package by package on the rebased branch (clean build): 6 596 tests, 0 failures; Flutter test client: channel audit labels (2.0.29+101), export contract + audit tests green. Live on keevo_dev with no SMS/e-mail provider configured and WhatsApp noop (nothing can leave): `FAC-2026-000010` issued; SMS → 503 « L'envoi par SMS n'est pas disponible pour le moment », e-mail → 503, EMAIL with a phone → 422 « Le numéro de téléphone ne sert pas à l'envoi par e-mail », WhatsApp (noop) → 503 as before 20-8; invoice unchanged (sendCount 0, no send status).
+
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur la branche de la story 20-8 (à fusionner après 20-14 et 20-13). Conventions générales : spec-16-11 ; protocole de synchro : spec-16-10.
+**Statut :** API livrée (commit `26ab9513`, refonte/modulaire / develop).
 
 **Ce qui est fait côté API :**
 - Une facture émise ou payée, ou un devis en attente, s'envoie au client par WhatsApp, SMS ou e-mail, un ou plusieurs canaux à la fois (comme `sendChannels` de Bref).
