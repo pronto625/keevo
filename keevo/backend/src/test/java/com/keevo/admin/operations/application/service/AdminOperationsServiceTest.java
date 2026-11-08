@@ -23,6 +23,10 @@ import org.springframework.dao.TransientDataAccessResourceException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Bucket;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Totals;
 
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -44,12 +48,29 @@ class AdminOperationsServiceTest {
     private static final Instant NOW = Instant.parse("2026-10-13T10:00:00Z");
 
     @Mock JdbcTemplate jdbc;
+    @Mock PlatformRevenuePort revenue;
 
     AdminOperationsService service;
 
+    /** 20.13: per-schema revenue answered by the port (recorded by {@link #stubRows} from gmv / order_count rows). */
+    private final Map<String, Totals> revenueBySchema = new HashMap<>();
+    private final Map<String, Totals> revenueByDay = new HashMap<>();
+    private RuntimeException revenueFailure;
+
     @BeforeEach
     void setUp() {
-        service = new AdminOperationsService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new AdminOperationsService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC), revenue);
+        lenient().when(revenue.totals(any(), any(), any(), any())).thenAnswer(inv -> {
+            if (revenueFailure != null) throw revenueFailure;
+            List<TenantBranch> tenants = inv.getArgument(0);
+            if (inv.getArgument(3) == Bucket.DAY) return revenueByDay;
+            Map<String, Totals> out = new HashMap<>();
+            tenants.forEach(t -> {
+                Totals totals = revenueBySchema.get(t.schemaName());
+                if (totals != null) out.put(t.id(), totals);
+            });
+            return out;
+        });
     }
 
     // ── Period resolution ─────────────────────────────────────────────────────
@@ -70,7 +91,7 @@ class AdminOperationsServiceTest {
     @DisplayName("TODAY uses the WAT calendar day even when UTC is still the previous day")
     void windowToday_usesWatCalendarDay() {
         service = new AdminOperationsService(jdbc,
-                Clock.fixed(Instant.parse("2026-10-12T23:30:00Z"), ZoneOffset.UTC)); // 00:30 WAT on the 13th
+                Clock.fixed(Instant.parse("2026-10-12T23:30:00Z"), ZoneOffset.UTC), revenue); // 00:30 WAT on the 13th
 
         AdminOperationsService.Window w = service.resolveWindow(new OperationsPeriodQuery("TODAY", null, null));
 
@@ -157,70 +178,26 @@ class AdminOperationsServiceTest {
     }
 
     @Test
-    @DisplayName("overview counts COMPLETED sales only, bound to the window instants")
-    void overview_queryFiltersCompletedSalesInWindow() {
-        stubTenants(tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null));
-        stubRows("kv_aaaaaa.sales", row("gmv", 0L, "order_count", 0L));
+    @DisplayName("20.13: overview reads GMV / orders once from the revenue source, over the window instants")
+    void overview_readsRevenueSourceOnceForTheWindow() {
+        stubTenants(tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null),
+                tenant("t2", "Boutique B", "kv_bbbbbb", "FREE", null));
 
         service.getOverview(new OperationsPeriodQuery("7D", null, null));
 
-        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Object> args = ArgumentCaptor.forClass(Object.class);
-        verify(jdbc).queryForList(sql.capture(), args.capture(), args.capture());
-        assertThat(sql.getValue())
-                .contains("FROM kv_aaaaaa.sales")
-                .contains("status = 'COMPLETED'")
-                .contains("COALESCE(occurred_at, created_at) >= ?")
-                .contains("COALESCE(occurred_at, created_at) < ?");
-        assertThat(args.getAllValues()).containsExactly(
-                OffsetDateTime.parse("2026-10-06T23:00:00Z"),
-                OffsetDateTime.parse("2026-10-13T23:00:00Z"));
+        verify(revenue).totals(argThat(l -> l.size() == 2), eq(Instant.parse("2026-10-06T23:00:00Z")),
+                eq(Instant.parse("2026-10-13T23:00:00Z")), eq(Bucket.TENANT));
+        verify(jdbc, never()).queryForList(anyString(), any(Object[].class)); // no per-tenant query left
     }
 
     @Test
-    @DisplayName("overview skips a tenant whose schema query fails and keeps the others")
-    void overview_skipsBrokenTenant() {
-        stubTenants(
-                tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null),
-                tenant("t2", "Boutique B", "kv_bbbbbb", "FREE", null));
-        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class)))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
-        stubRows("kv_bbbbbb.sales", row("gmv", 700L, "order_count", 2L));
+    @DisplayName("20.13: a failing revenue statement fails the overview (no partial 200)")
+    void overview_revenueFailurePropagates() {
+        stubTenants(tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null));
+        revenueFailure = new BadSqlGrammarException("q", "sql", new SQLException("broken"));
 
-        OperationsOverview result = service.getOverview(new OperationsPeriodQuery("30D", null, null));
-
-        assertThat(result.totalGmv()).isEqualTo(700L);
-        assertThat(result.totalOrders()).isEqualTo(2L);
-        assertThat(result.activeTenantsCount()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("a skipped tenant created in the period is not counted as new")
-    void overview_skippedTenantNotCountedAsNew() {
-        Instant inWindow = Instant.parse("2026-10-10T08:00:00Z");
-        stubTenants(
-                tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", inWindow),
-                tenant("t2", "Boutique B", "kv_bbbbbb", "FREE", inWindow));
-        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class)))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
-        stubRows("kv_bbbbbb.sales", row("gmv", 0L, "order_count", 0L));
-
-        OperationsOverview result = service.getOverview(new OperationsPeriodQuery("7D", null, null));
-
-        assertThat(result.newTenantsCount()).isEqualTo(1);
-    }
-
-    @Test
-    @DisplayName("a per-tenant data error (integrity / data) skips only that tenant")
-    void overview_skipsTenantOnDataError() {
-        stubTenants(
-                tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null),
-                tenant("t2", "Boutique B", "kv_bbbbbb", "FREE", null));
-        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class)))
-                .thenThrow(new DataIntegrityViolationException("bad data"));
-        stubRows("kv_bbbbbb.sales", row("gmv", 700L, "order_count", 2L));
-
-        assertThat(service.getOverview(new OperationsPeriodQuery("7D", null, null)).totalGmv()).isEqualTo(700L);
+        assertThatThrownBy(() -> service.getOverview(new OperationsPeriodQuery("30D", null, null)))
+                .isSameAs(revenueFailure);
     }
 
     static Stream<Arguments> resourceFailures() {
@@ -237,7 +214,8 @@ class AdminOperationsServiceTest {
     @DisplayName("connection / resource failures are rethrown (endpoint fails, no all-zero 200)")
     void resourceFailures_areRethrown(RuntimeException failure) {
         stubTenants(tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null));
-        when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class))).thenThrow(failure);
+        lenient().when(jdbc.queryForList(contains("kv_aaaaaa.sales"), any(Object[].class))).thenThrow(failure);
+        revenueFailure = failure;
 
         assertThatThrownBy(() -> service.getOverview(new OperationsPeriodQuery("7D", null, null))).isSameAs(failure);
         assertThatThrownBy(() -> service.getTrend(new OperationsPeriodQuery("7D", null, null))).isSameAs(failure);
@@ -294,11 +272,9 @@ class AdminOperationsServiceTest {
         stubTenants(
                 tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null),
                 tenant("t2", "Boutique B", "kv_bbbbbb", "FREE", null));
-        stubRows("kv_aaaaaa.sales",
-                row("day", java.sql.Date.valueOf("2026-10-08"), "gmv", 1000L, "order_count", 2L),
-                row("day", java.sql.Date.valueOf("2026-10-13"), "gmv", 300L, "order_count", 1L));
-        stubRows("kv_bbbbbb.sales",
-                row("day", java.sql.Date.valueOf("2026-10-08"), "gmv", 500L, "order_count", 1L));
+        revenueByDay.put("2026-10-08", new Totals(1500L, 3L));
+        revenueByDay.put("2026-10-13", new Totals(300L, 1L));
+        revenueByDay.put("2026-10-20", new Totals(999L, 9L)); // outside the window: ignored
 
         List<GmvTrendPoint> points = service.getTrend(new OperationsPeriodQuery("7D", null, null));
 
@@ -313,19 +289,15 @@ class AdminOperationsServiceTest {
     }
 
     @Test
-    @DisplayName("trend groups by the WAT calendar day of the sale time")
-    void trend_groupsByWatDay() {
+    @DisplayName("20.13: trend reads daily (WAT) revenue once from the revenue source")
+    void trend_readsDailyRevenueSource() {
         stubTenants(tenant("t1", "Boutique A", "kv_aaaaaa", "FREE", null));
-        stubRows("kv_aaaaaa.sales");
 
         service.getTrend(new OperationsPeriodQuery("TODAY", null, null));
 
-        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-        verify(jdbc).queryForList(sql.capture(), any(Object[].class));
-        assertThat(sql.getValue())
-                .contains("AT TIME ZONE 'Africa/Douala'")
-                .contains("status = 'COMPLETED'")
-                .contains("GROUP BY 1");
+        verify(revenue).totals(argThat(l -> l.size() == 1), eq(Instant.parse("2026-10-12T23:00:00Z")),
+                eq(Instant.parse("2026-10-13T23:00:00Z")), eq(Bucket.DAY));
+        verify(jdbc, never()).queryForList(anyString(), any(Object[].class));
     }
 
     // ── listTenantActivity ────────────────────────────────────────────────────
@@ -492,6 +464,11 @@ class AdminOperationsServiceTest {
     @SafeVarargs
     private void stubRows(String sqlFragment, Map<String, Object>... rows) {
         lenient().when(jdbc.queryForList(contains(sqlFragment), any(Object[].class))).thenReturn(List.of(rows));
+        if (sqlFragment.endsWith(".sales") && rows.length == 1 && rows[0].containsKey("gmv")) {
+            revenueBySchema.put(sqlFragment.substring(0, sqlFragment.length() - ".sales".length()),
+                    new Totals(((Number) rows[0].get("gmv")).longValue(),
+                            ((Number) rows[0].get("order_count")).longValue()));
+        }
     }
 
     private static Map<String, Object> tenant(String id, String name, String schema, String plan, Instant createdAt) {

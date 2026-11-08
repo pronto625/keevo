@@ -2,6 +2,8 @@ package com.keevo.admin.analytics.application.service;
 
 import com.keevo.admin.analytics.domain.model.*;
 import com.keevo.admin.analytics.domain.port.in.*;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -38,8 +40,10 @@ import java.util.function.Supplier;
  *       (total tenants, stores, products, DAU/MAU, adoption, geography, top stores) exclude {@code DELETED}
  *       tenants; history (growth new / cumulative tenants, retention cohorts, past months' MAU) counts every
  *       tenant ever created, DELETED included, so past figures never shrink after a deletion.</li>
- *   <li>GMV = {@code SUM(total_amount)} of {@code COMPLETED} sales, sale time
- *       {@code COALESCE(occurred_at, created_at)} — same rule as 9-7. Day / week / month boundaries are WAT.</li>
+ *   <li>GMV = the single revenue source of 20.9 ({@link PlatformRevenuePort}, Story 20.13 — COMPLETED sales ∪ counted
+ *       invoices − credit notes, a bridged sale counted once); « completed sales » = its revenue documents (sales +
+ *       counted invoices). Top stores stay sales-only (documents carry no store yet — 20.9 rule). Day / week / month
+ *       boundaries are WAT.</li>
  *   <li>Geography = the owner phone's calling code (V1 proxy: stores have no structured city).</li>
  * </ul>
  *
@@ -102,11 +106,14 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final OwnerRecipientResolver ownerRecipientResolver;
+    private final PlatformRevenuePort revenue;
 
-    public AdminAnalyticsService(JdbcTemplate jdbc, Clock clock, OwnerRecipientResolver ownerRecipientResolver) {
+    public AdminAnalyticsService(JdbcTemplate jdbc, Clock clock, OwnerRecipientResolver ownerRecipientResolver,
+                                 PlatformRevenuePort revenue) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.ownerRecipientResolver = ownerRecipientResolver;
+        this.revenue = revenue;
     }
 
     // ── Overview ──────────────────────────────────────────────────────────────
@@ -123,7 +130,8 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         List<TenantRef> tenants = current(loadTenants());
         OffsetDateTime activeSince = startOf(windowStart);
         OffsetDateTime tomorrow = startOf(today.plusDays(1));
-        long stores = 0, activeStores = 0, products = 0, sales = 0, gmv = 0;
+        long stores = 0, activeStores = 0, products = 0;
+        List<TenantRef> queried = new ArrayList<>();
         for (TenantRef tenant : queryable(tenants)) {
             String s = tenant.schemaName();
             if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // queryable() filters; re-checked at use
@@ -133,18 +141,19 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
                     + "AND EXISTS (SELECT 1 FROM " + s + ".sales sa WHERE sa.store_id = st.id AND sa.status = 'COMPLETED' "
                     + "AND COALESCE(sa.occurred_at, sa.created_at) >= ? "
                     + "AND COALESCE(sa.occurred_at, sa.created_at) < ?)) AS active_store_count, "
-                    + "(SELECT COUNT(*) FROM " + s + ".products WHERE archived = false) AS product_count, "
-                    + "(SELECT COUNT(*) FROM " + s + ".sales WHERE status = 'COMPLETED') AS sales_count, "
-                    + "(SELECT COALESCE(SUM(total_amount), 0) FROM " + s + ".sales WHERE status = 'COMPLETED') AS gmv",
+                    + "(SELECT COUNT(*) FROM " + s + ".products WHERE archived = false) AS product_count",
                     activeSince, tomorrow);
             if (row == null) continue;
+            queried.add(tenant);
             stores += asLong(row.get("store_count"));
             activeStores += asLong(row.get("active_store_count"));
             products += asLong(row.get("product_count"));
-            sales += asLong(row.get("sales_count"));
-            gmv += asLong(row.get("gmv"));
         }
-        return new AnalyticsOverview(dau, mau, ratio, tenants.size(), stores, activeStores, products, sales, gmv);
+        // 20.13 (R4): GMV and document count from the single revenue source — one statement for all tenants.
+        PlatformRevenuePort.Totals all = revenue.totals(branches(queried), null, null, PlatformRevenuePort.Bucket.TENANT)
+                .values().stream().reduce(PlatformRevenuePort.Totals.ZERO, PlatformRevenuePort.Totals::plus);
+        return new AnalyticsOverview(dau, mau, ratio, tenants.size(), stores, activeStores, products,
+                all.documents(), all.revenue());
     }
 
     private long countDistinctUsers(LocalDate from, LocalDate to) {
@@ -174,20 +183,14 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
         // History: every tenant ever created (DELETED included) for new / cumulative counts; sales are read
         // from the schemas that still exist (a DELETED tenant's schema is dropped).
         List<TenantRef> tenants = loadTenants();
-        for (TenantRef tenant : queryable(current(tenants))) {
-            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
-            List<Map<String, Object>> rows = safeRows(tenant,
-                    "SELECT to_char(" + SALE_TIME + " AT TIME ZONE '" + WAT.getId() + "', 'YYYY-MM') AS month, "
-                    + "COUNT(*) AS sales_count, COALESCE(SUM(total_amount), 0) AS gmv "
-                    + "FROM " + tenant.schemaName() + ".sales WHERE status = 'COMPLETED' AND "
-                    + SALE_TIME + " >= ? AND " + SALE_TIME + " < ? GROUP BY 1",
-                    startOf(firstDay), startOf(endDay));
-            for (Map<String, Object> row : rows) {
-                long[] acc = sales.get(parseMonth(row.get("month")));
-                if (acc == null) continue;
-                acc[0] += asLong(row.get("sales_count"));
-                acc[1] += asLong(row.get("gmv"));
-            }
+        // 20.13 (R4): monthly revenue and document count from the single revenue source, one statement.
+        Map<String, PlatformRevenuePort.Totals> monthly = revenue.totals(branches(queryable(current(tenants))),
+                startOf(firstDay).toInstant(), startOf(endDay).toInstant(), PlatformRevenuePort.Bucket.MONTH);
+        for (Map.Entry<String, PlatformRevenuePort.Totals> month : monthly.entrySet()) {
+            long[] acc = sales.get(parseMonth(month.getKey()));
+            if (acc == null) continue;
+            acc[0] += month.getValue().documents();
+            acc[1] += month.getValue().revenue();
         }
 
         for (Map<String, Object> row : jdbc.queryForList(
@@ -462,6 +465,12 @@ public class AdminAnalyticsService implements GetAnalyticsOverviewUseCase, GetGr
     }
 
     // ── Tenant loading & JDBC helpers ─────────────────────────────────────────
+
+    private static List<TenantBranch> branches(List<TenantRef> tenants) {
+        return tenants.stream()
+                .map(t -> new TenantBranch(t.id(), t.name(), t.schemaName(), t.status(), t.createdAt()))
+                .toList();
+    }
 
     private record TenantRef(String id, String schemaName, String name, Instant createdAt, String status) {
         boolean deleted() { return "DELETED".equals(status); }

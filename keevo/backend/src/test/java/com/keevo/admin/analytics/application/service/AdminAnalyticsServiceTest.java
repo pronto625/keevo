@@ -1,6 +1,10 @@
 package com.keevo.admin.analytics.application.service;
 
 import com.keevo.admin.analytics.domain.model.*;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Bucket;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Totals;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -44,12 +48,14 @@ class AdminAnalyticsServiceTest {
 
     @Mock JdbcTemplate jdbc;
     @Mock OwnerRecipientResolver ownerRecipientResolver;
+    @Mock PlatformRevenuePort revenue;
 
     AdminAnalyticsService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminAnalyticsService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC), ownerRecipientResolver);
+        service = new AdminAnalyticsService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC), ownerRecipientResolver, revenue);
+        lenient().when(revenue.totals(any(), any(), any(), any())).thenReturn(Map.of());
     }
 
     // ── Overview ──────────────────────────────────────────────────────────────
@@ -62,10 +68,9 @@ class AdminAnalyticsServiceTest {
         stubTenants(
                 tenant("t1", "Boutique A", "kv_aaaaaa", Instant.parse("2026-01-01T08:00:00Z")),
                 tenant("t2", "Boutique B", "kv_bbbbbb", Instant.parse("2026-02-01T08:00:00Z")));
-        stubRows("kv_aaaaaa.stores", row("store_count", 2L, "active_store_count", 1L, "product_count", 40L,
-                "sales_count", 5L, "gmv", 10_000L));
-        stubRows("kv_bbbbbb.stores", row("store_count", 1L, "active_store_count", 1L, "product_count", 10L,
-                "sales_count", 2L, "gmv", 2_500L));
+        stubRows("kv_aaaaaa.stores", row("store_count", 2L, "active_store_count", 1L, "product_count", 40L));
+        stubRows("kv_bbbbbb.stores", row("store_count", 1L, "active_store_count", 1L, "product_count", 10L));
+        stubRevenue(Bucket.TENANT, Map.of("t1", new Totals(10_000L, 5L), "t2", new Totals(2_500L, 2L)));
 
         AnalyticsOverview o = service.getOverview();
 
@@ -90,7 +95,7 @@ class AdminAnalyticsServiceTest {
     }
 
     @Test
-    @DisplayName("overview SQL: STORE type only, non-archived products, COMPLETED sales, active stores since WAT D-29")
+    @DisplayName("overview SQL: STORE type only, non-archived products, active stores since WAT D-29; no GMV in SQL")
     void overview_sqlPredicates() {
         when(jdbc.queryForObject(anyString(), eq(Long.class), any(Object[].class))).thenReturn(0L);
         stubTenants(tenant("t1", "A", "kv_aaaaaa", null));
@@ -104,8 +109,9 @@ class AdminAnalyticsServiceTest {
         assertThat(sql.getValue())
                 .contains("kv_aaaaaa.stores WHERE is_active = true AND type = 'STORE'")
                 .contains("kv_aaaaaa.products WHERE archived = false")
-                .contains("kv_aaaaaa.sales WHERE status = 'COMPLETED'")
-                .contains("COALESCE(sa.occurred_at, sa.created_at) < ?");
+                .contains("sa.status = 'COMPLETED'")
+                .contains("COALESCE(sa.occurred_at, sa.created_at) < ?")
+                .doesNotContain("SUM(total_amount)"); // 20.13: GMV comes from the revenue port
         // Active stores: [WAT D-29, start of tomorrow) — future-dated sales never count.
         assertThat(args.getAllValues()).containsExactly(
                 OffsetDateTime.parse("2026-09-13T23:00:00Z"), OffsetDateTime.parse("2026-10-13T23:00:00Z"));
@@ -152,7 +158,10 @@ class AdminAnalyticsServiceTest {
                 .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
         when(jdbc.queryForList(contains("kv_cccccc.stores"), any(Object[].class)))
                 .thenThrow(new DataIntegrityViolationException("bad data"));
-        stubRows("kv_bbbbbb.stores", row("gmv", 700L, "sales_count", 2L));
+        stubRows("kv_bbbbbb.stores", row("store_count", 1L));
+        // 20.13: the revenue port only receives the tenants whose own query succeeded.
+        stubRevenue(Bucket.TENANT, Map.of("t1", new Totals(5_000L, 1L), "t2", new Totals(700L, 2L),
+                "t3", new Totals(9_000L, 3L)));
 
         AnalyticsOverview o = service.getOverview();
 
@@ -176,6 +185,7 @@ class AdminAnalyticsServiceTest {
         stubTenants(tenant("t1", "A", "kv_aaaaaa", null));
         lenient().when(jdbc.queryForList(contains("kv_aaaaaa."), any(Object[].class))).thenThrow(failure);
         lenient().when(ownerRecipientResolver.resolveOwnerWhatsAppPhone("kv_aaaaaa")).thenThrow(failure);
+        lenient().when(revenue.totals(any(), any(), any(), any())).thenThrow(failure);
 
         assertThatThrownBy(() -> service.getOverview()).isSameAs(failure);
         assertThatThrownBy(() -> service.getGrowth(null)).isSameAs(failure);
@@ -222,10 +232,8 @@ class AdminAnalyticsServiceTest {
                 tenant("t2", "B", "kv_bbbbbb", Instant.parse("2026-09-30T23:30:00Z")), // 1 Oct 00:30 WAT
                 tenant("t3", "C", "kv_cccccc", Instant.parse("2026-09-10T08:00:00Z")),
                 deleted(tenant("t4", "Gone", "kv_dddddd", Instant.parse("2026-09-15T08:00:00Z"))));
-        stubRows("kv_aaaaaa.sales", row("month", "2026-09", "sales_count", 2L, "gmv", 1000L),
-                row("month", "2026-10", "sales_count", 1L, "gmv", 500L));
-        stubRows("kv_bbbbbb.sales", row("month", "2026-10", "sales_count", 3L, "gmv", 300L));
-        stubRows("kv_cccccc.sales");
+        stubRevenue(Bucket.MONTH, Map.of("2026-09", new Totals(1000L, 2L), "2026-10", new Totals(800L, 4L),
+                "2026-07", new Totals(99L, 1L)));
         when(jdbc.queryForList(contains("user_daily_activity"), any(Object[].class)))
                 .thenReturn(List.of(row("month", "2026-10", "mau", 7L)));
 
@@ -249,6 +257,9 @@ class AdminAnalyticsServiceTest {
         assertThat(oct.mau()).isEqualTo(7);
         assertThat(sep.mau()).isZero();
         verify(jdbc, never()).queryForList(contains("kv_dddddd"), any(Object[].class));
+        // 20.13: revenue read once for the live tenants (DELETED excluded), over the WAT window of the 3 months.
+        verify(revenue).totals(argThat(l -> l.stream().map(TenantBranch::id).toList().equals(List.of("t1", "t2", "t3"))),
+                eq(Instant.parse("2026-07-31T23:00:00Z")), eq(Instant.parse("2026-10-31T23:00:00Z")), eq(Bucket.MONTH));
         // Past months' MAU: KV-ADMIN excluded, DELETED tenants' past activity kept.
         verify(jdbc).queryForList(argThat((String s) -> s.contains("COUNT(DISTINCT a.user_id) AS mau")
                         && s.contains("t.id <> '00000000-0000-0000-0000-000000000000'::uuid")
@@ -546,6 +557,17 @@ class AdminAnalyticsServiceTest {
     private void stubDistinctUsers(LocalDate from, LocalDate to, long count) {
         when(jdbc.queryForObject(contains("COUNT(DISTINCT a.user_id)"), eq(Long.class), eq(from), eq(to)))
                 .thenReturn(count);
+    }
+
+    /** The port answers with the entries of the tenants it receives (TENANT bucket) or all entries (time buckets). */
+    private void stubRevenue(Bucket bucket, Map<String, Totals> totals) {
+        lenient().when(revenue.totals(any(), any(), any(), eq(bucket))).thenAnswer(inv -> {
+            List<TenantBranch> tenants = inv.getArgument(0);
+            if (bucket != Bucket.TENANT) return totals;
+            Map<String, Totals> out = new HashMap<>();
+            tenants.forEach(t -> { if (totals.containsKey(t.id())) out.put(t.id(), totals.get(t.id())); });
+            return out;
+        });
     }
 
     @SafeVarargs

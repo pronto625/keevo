@@ -35,7 +35,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * classes share the database: assertions target the data seeded here (lower bounds or before/after deltas).
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({AdminAnalyticsService.class, ClockConfig.class})
+@Import({AdminAnalyticsService.class, ClockConfig.class, com.keevo.admin.crosstenant.CrossTenantSql.class,
+        com.keevo.admin.platformrevenue.adapter.out.RevenueSourcePlatformRevenueAdapter.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("AdminAnalyticsService on PostgreSQL (9-4)")
 class AdminAnalyticsServiceIntegrationTest extends PostgresIntegrationTest {

@@ -1,6 +1,8 @@
 package com.keevo.admin.operations.application.service;
 
 import com.keevo.admin.TenantLastActivitySql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
 import com.keevo.admin.operations.domain.model.*;
 import com.keevo.admin.operations.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -27,8 +29,10 @@ import java.util.*;
  *
  * <p>Definitions (PO defaults written in the story, kept):
  * <ul>
- *   <li>GMV = {@code SUM(total_amount)} of {@code sales} with {@code status = 'COMPLETED'}; orders = their count.</li>
- *   <li>The period filters {@code COALESCE(occurred_at, created_at)}; day boundaries are Africa/Douala (WAT).</li>
+ *   <li>GMV = the single revenue source of 20.9 ({@link PlatformRevenuePort}, Story 20.13: COMPLETED sales ∪ counted
+ *       invoices − credit notes, a bridged sale counted once); orders = its revenue documents.</li>
+ *   <li>The period filters the revenue instant (sale {@code occurred_at}, invoice civil issue date); day boundaries
+ *       are Africa/Douala (WAT).</li>
  *   <li>Last activity = latest merchant event ({@link com.keevo.admin.TenantLastActivitySql}); a tenant is inactive when
  *       it is null or older than {@value #INACTIVITY_DAYS} days.</li>
  *   <li>Only {@code public.tenants} with {@code status = 'ACTIVE'}, never the KV-ADMIN system tenant.</li>
@@ -58,17 +62,14 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
     private static final String SYSTEM_TENANT_ID = "00000000-0000-0000-0000-000000000000";
     private static final DateTimeFormatter FR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    /** Sale time used for the period and for last activity. */
-    private static final String SALE_TIME = "COALESCE(occurred_at, created_at)";
-    private static final String IN_WINDOW =
-            "status = 'COMPLETED' AND " + SALE_TIME + " >= ? AND " + SALE_TIME + " < ?";
-
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final PlatformRevenuePort revenue;
 
-    public AdminOperationsService(JdbcTemplate jdbc, Clock clock) {
+    public AdminOperationsService(JdbcTemplate jdbc, Clock clock, PlatformRevenuePort revenue) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.revenue = revenue;
     }
 
     // ── GetOperationsOverviewUseCase ──────────────────────────────────────────
@@ -81,22 +82,20 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         int activeTenants = 0;
         int newTenants = 0;
 
-        for (TenantRef tenant : loadActiveTenants()) {
-            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
-            Map<String, Object> row = safeSingleRow(tenant,
-                    "SELECT COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
-                    + "FROM " + tenant.schemaName() + ".sales WHERE " + IN_WINDOW,
-                    window.startTs(), window.endTs());
-            if (row == null) continue; // skipped tenant: not counted anywhere, new tenants included
+        // 20.13 (R4): GMV and orders from the single revenue source, one statement for all tenants.
+        List<TenantRef> tenants = loadActiveTenants();
+        Map<String, PlatformRevenuePort.Totals> byTenant =
+                revenue.totals(branches(tenants), window.start(), window.end(), PlatformRevenuePort.Bucket.TENANT);
+        for (TenantRef tenant : tenants) {
             if (tenant.createdAt() != null
                     && !tenant.createdAt().isBefore(window.start())
                     && tenant.createdAt().isBefore(window.end())) {
                 newTenants++;
             }
-            long orders = asLong(row.get("order_count"));
-            totalGmv += asLong(row.get("gmv"));
-            totalOrders += orders;
-            if (orders > 0) activeTenants++;
+            PlatformRevenuePort.Totals totals = byTenant.getOrDefault(tenant.id(), PlatformRevenuePort.Totals.ZERO);
+            totalGmv += totals.revenue();
+            totalOrders += totals.documents();
+            if (totals.documents() > 0) activeTenants++;
         }
         return new OperationsOverview(totalGmv, totalOrders, activeTenants, newTenants, window.label());
     }
@@ -111,22 +110,15 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
             byDay.put(d, new long[2]);
         }
 
-        for (TenantRef tenant : loadActiveTenants()) {
-            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; }
-            List<Map<String, Object>> rows = safeRows(tenant,
-                    "SELECT CAST((" + SALE_TIME + ") AT TIME ZONE '" + WAT.getId() + "' AS DATE) AS day, "
-                    + "COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
-                    + "FROM " + tenant.schemaName() + ".sales WHERE " + IN_WINDOW + " GROUP BY 1",
-                    window.startTs(), window.endTs());
-            for (Map<String, Object> row : rows) {
-                LocalDate day = asLocalDate(row.get("day"));
-                long[] acc = day != null ? byDay.get(day) : null;
-                if (acc == null) continue;
-                acc[0] += asLong(row.get("gmv"));
-                acc[1] += asLong(row.get("order_count"));
-            }
+        // 20.13 (R4): daily GMV and orders from the single revenue source, one statement.
+        Map<String, PlatformRevenuePort.Totals> daily = revenue.totals(branches(loadActiveTenants()),
+                window.start(), window.end(), PlatformRevenuePort.Bucket.DAY);
+        for (Map.Entry<String, PlatformRevenuePort.Totals> day : daily.entrySet()) {
+            long[] acc = byDay.get(LocalDate.parse(day.getKey()));
+            if (acc == null) continue;
+            acc[0] += day.getValue().revenue();
+            acc[1] += day.getValue().documents();
         }
-
         return byDay.entrySet().stream()
                 .map(e -> new GmvTrendPoint(e.getKey(), e.getValue()[0], e.getValue()[1]))
                 .toList();
@@ -147,22 +139,23 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         }
 
         List<TenantActivity> rows = new ArrayList<>();
-        for (TenantRef tenant : loadActiveTenants()) {
+        List<TenantRef> tenants = loadActiveTenants();
+        // 20.13 (R4): GMV and orders from the single revenue source, one statement for all tenants.
+        Map<String, PlatformRevenuePort.Totals> byTenant =
+                revenue.totals(branches(tenants), window.start(), window.end(), PlatformRevenuePort.Bucket.TENANT);
+        for (TenantRef tenant : tenants) {
             String s = tenant.schemaName();
             if (!TenantSchema.isValid(s)) { skipInvalid(tenant); continue; } // loadActiveTenants() filters; re-checked at use
             Map<String, Object> row = safeSingleRow(tenant,
-                    "WITH w AS (SELECT COALESCE(SUM(total_amount), 0) AS gmv, COUNT(*) AS order_count "
-                    + "FROM " + s + ".sales WHERE " + IN_WINDOW + ") "
-                    + "SELECT w.gmv, w.order_count, "
-                    + TenantLastActivitySql.expression(s) + " AS last_activity_at, "
+                    "SELECT " + TenantLastActivitySql.expression(s) + " AS last_activity_at, "
                     + "(SELECT COUNT(*) FROM " + s + ".stores WHERE is_active = true AND type = 'STORE') AS store_count, "
-                    + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan "
-                    + "FROM w",
-                    params(window.startTs(), window.endTs(), TenantLastActivitySql.args(tenant.id())));
+                    + "(SELECT plan_type FROM " + s + ".subscriptions ORDER BY created_at DESC LIMIT 1) AS plan",
+                    TenantLastActivitySql.args(tenant.id()));
             if (row == null) continue;
+            PlatformRevenuePort.Totals totals = byTenant.getOrDefault(tenant.id(), PlatformRevenuePort.Totals.ZERO);
             rows.add(new TenantActivity(
                     tenant.id(), tenant.name(), planOf(row, tenant),
-                    asLong(row.get("gmv")), asLong(row.get("order_count")),
+                    totals.revenue(), totals.documents(),
                     asInstant(row.get("last_activity_at")),
                     (int) asLong(row.get("store_count"))));
         }
@@ -268,6 +261,12 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
 
     private record TenantRef(String id, String schemaName, String name, String planType, Instant createdAt) {}
 
+    private static List<TenantBranch> branches(List<TenantRef> tenants) {
+        return tenants.stream()
+                .map(t -> new TenantBranch(t.id(), t.name(), t.schemaName(), "ACTIVE", t.createdAt()))
+                .toList();
+    }
+
     private static void skipInvalid(TenantRef tenant) {
         log.warn("Operations monitoring: tenant {} skipped (invalid schema name)", tenant.id());
     }
@@ -296,11 +295,6 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         return rows == null || rows.isEmpty() ? null : rows.get(0);
     }
 
-    private List<Map<String, Object>> safeRows(TenantRef tenant, String sql, Object... args) {
-        List<Map<String, Object>> rows = safeRowsOrNull(tenant, sql, args);
-        return rows == null ? List.of() : rows;
-    }
-
     private List<Map<String, Object>> safeRowsOrNull(TenantRef tenant, String sql, Object... args) {
         try {
             return jdbc.queryForList(sql, args);
@@ -323,14 +317,6 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         return plan != null ? plan.toString() : tenant.planType();
     }
 
-    private static Object[] params(Object a, Object b, Object[] rest) {
-        Object[] out = new Object[2 + rest.length];
-        out[0] = a;
-        out[1] = b;
-        System.arraycopy(rest, 0, out, 2, rest.length);
-        return out;
-    }
-
     private static long asLong(Object value) {
         return value instanceof Number n ? n.longValue() : 0L;
     }
@@ -339,13 +325,6 @@ public class AdminOperationsService implements GetOperationsOverviewUseCase, Get
         if (value instanceof Timestamp ts) return ts.toInstant();
         if (value instanceof OffsetDateTime odt) return odt.toInstant();
         if (value instanceof Instant i) return i;
-        return null;
-    }
-
-    private static LocalDate asLocalDate(Object value) {
-        if (value instanceof java.sql.Date d) return d.toLocalDate();
-        if (value instanceof LocalDate d) return d;
-        if (value instanceof Timestamp ts) return ts.toLocalDateTime().toLocalDate();
         return null;
     }
 }
