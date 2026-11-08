@@ -36,7 +36,11 @@ import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 
 /**
  * Story 20.13 — the super-admin API inherited from Bref, end to end with the production security chain: platform
@@ -90,6 +94,7 @@ class BrefSuperAdminApiFullContextTest extends FullContextIntegrationTest {
             jdbc.update("DELETE FROM public.users WHERE id = ?", u);
         }
         jdbc.update("DELETE FROM public.user_tenant_memberships WHERE user_id = ?", ownerId);
+        jdbc.update("DELETE FROM \"" + schemaA + "\".employees WHERE last_name = ?", marker);
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id IN (?, ?)", tenantA, tenantB);
         TenantContext.clear();
         SecurityContextHolder.clearContext();
@@ -106,9 +111,26 @@ class BrefSuperAdminApiFullContextTest extends FullContextIntegrationTest {
             "/api/v1/admin/tenants/00000000-0000-0000-0000-000000000001/customers/00000000-0000-0000-0000-000000000002",
             "/api/v1/admin/tenants/00000000-0000-0000-0000-000000000001/products/00000000-0000-0000-0000-000000000002",
             "/api/v1/admin/tenants/00000000-0000-0000-0000-000000000001/expenses/00000000-0000-0000-0000-000000000002"})
-    @DisplayName("every new route refuses a non-super-admin (owner) with 403")
+    @DisplayName("every new read route refuses a non-super-admin (owner) with 403")
     void ownerRefused(String path) throws Exception {
         assertThat(call(path, ownerToken).getResponse().getStatus()).isEqualTo(403);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"POST /customers", "PATCH /customers/00000000-0000-0000-0000-000000000002",
+            "PUT /customers/00000000-0000-0000-0000-000000000002/marketing-consent", "POST /members",
+            "PATCH /members/00000000-0000-0000-0000-000000000002",
+            "POST /members/00000000-0000-0000-0000-000000000002/deactivate",
+            "POST /members/00000000-0000-0000-0000-000000000002/reactivate",
+            "DELETE /members/00000000-0000-0000-0000-000000000002"})
+    @DisplayName("every write route (A1–A4) refuses a non-super-admin (owner) with 403, nothing written")
+    void ownerRefusedOnWrites(String route) throws Exception {
+        String[] parts = route.split(" ");
+        MvcResult r = mockMvc.perform(request(org.springframework.http.HttpMethod.valueOf(parts[0]),
+                        "/api/v1/admin/tenants/" + tenantA + parts[1])
+                .header("Authorization", "Bearer " + ownerToken).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"X\",\"phone\":\"+237690009999\",\"consent\":true}")).andReturn();
+        assertThat(r.getResponse().getStatus()).isEqualTo(403);
     }
 
     // ── dashboard ────────────────────────────────────────────────────────────
@@ -179,6 +201,42 @@ class BrefSuperAdminApiFullContextTest extends FullContextIntegrationTest {
         error(call("/api/v1/admin/tenants/" + UUID.randomUUID() + "/customers/" + c1, adminToken), 404);
         error(call("/api/v1/admin/customers?q=autre&cursor=" + cursor, adminToken), 422);
         error(call("/api/v1/admin/customers?tenantId=pas-un-compte", adminToken), 422);
+        assertThat(detail.path("statusLabel").asText()).isEqualTo("Actif");
+    }
+
+    @Test
+    @DisplayName("customers: equal sort keys in two accounts at a page boundary — every row once, in order")
+    void customersTieAcrossTenants() throws Exception {
+        Instant t = Instant.now().minus(2, ChronoUnit.HOURS).truncatedTo(ChronoUnit.SECONDS);
+        UUID a = client(schemaA, storeA, "Egal " + marker + " a", t);
+        UUID b = client(schemaB, null, "Egal " + marker + " b", t);
+        UUID a2 = client(schemaA, storeA, "Egal " + marker + " c", t);
+
+        List<String> seen = new ArrayList<>();
+        String cursor = null;
+        do {
+            JsonNode page = data(call("/api/v1/admin/customers?q=" + marker + "&limit=1"
+                    + (cursor == null ? "" : "&cursor=" + cursor), adminToken));
+            seen.addAll(ids(page.path("items")));
+            cursor = page.path("nextCursor").isNull() ? null : page.path("nextCursor").asText();
+        } while (cursor != null && seen.size() < 10);
+
+        assertThat(seen).containsExactlyInAnyOrder(a.toString(), b.toString(), a2.toString()).doesNotHaveDuplicates();
+    }
+
+    @Test
+    @DisplayName("detail on an older schema (a detail column missing) → 404, never a 500; the list still works")
+    void detailOnOlderSchema() throws Exception {
+        UUID c = client(schemaB, null, "Ancienne " + marker, Instant.now());
+        jdbc.execute("ALTER TABLE \"" + schemaB + "\".clients DROP COLUMN niu"); // test database only
+
+        try {
+            error(call("/api/v1/admin/tenants/" + tenantB + "/customers/" + c, adminToken), 404);
+            JsonNode list = data(call("/api/v1/admin/customers?q=" + marker + "&tenantId=" + tenantB, adminToken));
+            assertThat(ids(list.path("items"))).containsExactly(c.toString());
+        } finally {
+            jdbc.execute("ALTER TABLE \"" + schemaB + "\".clients ADD COLUMN IF NOT EXISTS niu VARCHAR(50)");
+        }
     }
 
     @Test
@@ -219,12 +277,112 @@ class BrefSuperAdminApiFullContextTest extends FullContextIntegrationTest {
         assertThat(detail.path("createdByName").asText()).isEqualTo("Awa " + marker);
         assertThat(detail.path("storeName").asText()).isNotBlank();
 
+        // Several pages: totalAmount on the first page only, every expense once.
+        createExpense(1_000, "telecom", "Forfait " + marker);
+        JsonNode p1 = data(call("/api/v1/admin/expenses?tenantId=" + tenantA + "&q=" + marker + "&limit=2",
+                adminToken));
+        assertThat(p1.path("totalAmount").decimalValue()).isEqualByComparingTo("18500");
+        JsonNode p2 = data(call("/api/v1/admin/expenses?tenantId=" + tenantA + "&q=" + marker + "&limit=2&cursor="
+                + p1.path("page").path("nextCursor").asText(), adminToken));
+        assertThat(p2.path("totalAmount").isNull()).isTrue();
+        assertThat(p2.path("page").path("items")).hasSize(1);
+        assertThat(ids(p2.path("page").path("items"))).doesNotContainAnyElementsOf(ids(p1.path("page").path("items")));
+
         // Account B never used the module: no expenses table, empty list, no error.
         JsonNode none = data(call("/api/v1/admin/expenses?tenantId=" + tenantB, adminToken));
         assertThat(none.path("page").path("items")).isEmpty();
         error(call("/api/v1/admin/tenants/" + tenantB + "/expenses/" + e1, adminToken), 404);
         error(call("/api/v1/admin/expenses?category=food", adminToken), 422);
         error(call("/api/v1/admin/expenses?from=2026-11-09&to=2026-11-01", adminToken), 422);
+    }
+
+    // ── account writes (decisions A1–A4) ─────────────────────────────────────
+
+    @Test
+    @DisplayName("A1: create, update and set the consent of a customer of an account — crm rules, audit by the super-admin")
+    void customerWrites() throws Exception {
+        MvcResult created = send(post("/api/v1/admin/tenants/" + tenantA + "/customers"), Map.of(
+                "name", "Client " + marker, "phone", "+237690001122", "storeId", storeA.toString()));
+        assertThat(created.getResponse().getStatus()).as(body(created)).isEqualTo(201);
+        JsonNode customer = objectMapper.readTree(body(created)).path("data").path("customer");
+        String id = customer.path("id").asText();
+        assertThat(customer.path("phone").asText()).isEqualTo("+237690001122");
+        assertThat(customer.path("storeName").asText()).isNotBlank();
+
+        MvcResult updated = send(patch("/api/v1/admin/tenants/" + tenantA + "/customers/" + id),
+                Map.of("email", "client@exemple.cm", "clientType", "company"));
+        JsonNode u = data(updated);
+        assertThat(u.path("email").asText()).isEqualTo("client@exemple.cm");
+        assertThat(u.path("clientTypeLabel").asText()).isEqualTo("Entreprise");
+
+        JsonNode consent = data(send(put("/api/v1/admin/tenants/" + tenantA + "/customers/" + id
+                + "/marketing-consent"), Map.of("consent", true)));
+        assertThat(consent.path("marketingConsent").asBoolean()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT marketing_consent_by FROM \"" + schemaA + "\".clients WHERE id = ?",
+                UUID.class, UUID.fromString(id))).isEqualTo(adminId);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM \"" + schemaA + "\".audit_log WHERE entity_id = ? "
+                + "AND user_id = ?", Integer.class, UUID.fromString(id), adminId)).isGreaterThanOrEqualTo(1);
+
+        MvcResult missing = send(post("/api/v1/admin/tenants/" + tenantA + "/customers"), Map.of("phone", "+237690001133"));
+        assertThat(missing.getResponse().getStatus()).isEqualTo(422);
+        assertThat(objectMapper.readTree(body(missing)).path("error").asText()).isEqualTo("Le nom du client est obligatoire");
+        assertThat(send(put("/api/v1/admin/tenants/" + tenantA + "/customers/" + UUID.randomUUID()
+                + "/marketing-consent"), Map.of("consent", false)).getResponse().getStatus()).isEqualTo(404);
+        assertThat(send(post("/api/v1/admin/tenants/" + UUID.randomUUID() + "/customers"),
+                Map.of("name", "X", "phone", "+237690001144")).getResponse().getStatus()).isEqualTo(404);
+    }
+
+    @Test
+    @DisplayName("A2–A4: add, update, deactivate (sessions revoked), reactivate and remove a member; never the owner")
+    void memberWrites() throws Exception {
+        String phone = "+2376" + String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000));
+        MvcResult created = send(post("/api/v1/admin/tenants/" + tenantA + "/members"), Map.of(
+                "phoneNumber", phone, "firstName", "Marie", "lastName", marker, "storeId", storeA.toString(),
+                "role", "MANAGER"));
+        assertThat(created.getResponse().getStatus()).as(body(created)).isEqualTo(201);
+        JsonNode member = objectMapper.readTree(body(created)).path("data");
+        UUID userId = UUID.fromString(member.path("userId").asText());
+        assertThat(member.path("employeeId").asText()).isNotBlank();
+        users.add(userId);
+        assertThat(member.path("temporaryPassword").asText()).isNotBlank();
+        assertThat(jdbc.queryForObject("SELECT role FROM public.user_tenant_memberships WHERE user_id = ? AND tenant_id = ?",
+                String.class, userId, tenantA)).isEqualTo("MANAGER");
+
+        JsonNode updated = data(send(patch("/api/v1/admin/tenants/" + tenantA + "/members/" + userId),
+                Map.of("firstName", "Mariette", "role", "VIEWER")));
+        assertThat(updated.path("firstName").asText()).isEqualTo("Mariette");
+        assertThat(jdbc.queryForObject("SELECT role FROM public.user_tenant_memberships WHERE user_id = ? AND tenant_id = ?",
+                String.class, userId, tenantA)).isEqualTo("VIEWER");
+
+        session(userId, schemaA, "Tecno Spark");
+        JsonNode off = data(send(post("/api/v1/admin/tenants/" + tenantA + "/members/" + userId + "/deactivate"), null));
+        assertThat(off.path("active").asBoolean()).isFalse();
+        assertThat(off.path("statusLabel").asText()).isEqualTo("Désactivé");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public.refresh_tokens WHERE user_id = ? AND revoked = false",
+                Integer.class, userId)).isZero();
+        assertThat(data(send(post("/api/v1/admin/tenants/" + tenantA + "/members/" + userId + "/reactivate"), null))
+                .path("active").asBoolean()).isTrue();
+
+        MvcResult removed = send(delete("/api/v1/admin/tenants/" + tenantA + "/members/" + userId), null);
+        assertThat(removed.getResponse().getStatus()).as(body(removed)).isEqualTo(204);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM public.user_tenant_memberships WHERE user_id = ? "
+                + "AND tenant_id = ?", Integer.class, userId, tenantA)).isZero();
+
+        // The owner is never removed (an owner with an employee row, e.g. promoted).
+        UUID ownerEmployee = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schemaA + "\".employees (id, user_id, store_id, first_name, last_name, status) "
+                + "VALUES (?, ?, ?, 'Awa', ?, 'ACTIVE')", ownerEmployee, ownerId, storeA, marker);
+        MvcResult owner = send(delete("/api/v1/admin/tenants/" + tenantA + "/members/" + ownerId), null);
+        assertThat(owner.getResponse().getStatus()).as(body(owner)).isEqualTo(403);
+        assertThat(objectMapper.readTree(body(owner)).path("error").asText())
+                .isEqualTo("Le propriétaire du compte ne peut pas être supprimé");
+        assertThat(send(delete("/api/v1/admin/tenants/" + tenantA + "/members/" + UUID.randomUUID()), null)
+                .getResponse().getStatus()).isEqualTo(404);
+        MvcResult badRole = send(post("/api/v1/admin/tenants/" + tenantA + "/members"), Map.of(
+                "phoneNumber", phone, "firstName", "X", "storeId", storeA.toString(), "role", "OWNER"));
+        assertThat(badRole.getResponse().getStatus()).isEqualTo(422);
+        assertThat(objectMapper.readTree(body(badRole)).path("error").asText())
+                .isEqualTo("Rôle inconnu : choisissez MANAGER, EMPLOYEE ou VIEWER");
     }
 
     // ── users ────────────────────────────────────────────────────────────────
@@ -274,6 +432,15 @@ class BrefSuperAdminApiFullContextTest extends FullContextIntegrationTest {
 
     private MvcResult call(String path, String token) throws Exception {
         return mockMvc.perform(get(path).header("Authorization", "Bearer " + token)).andReturn();
+    }
+
+    private MvcResult send(org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder request,
+                           Object body) throws Exception {
+        request.header("Authorization", "Bearer " + adminToken);
+        if (body != null) {
+            request.contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(body));
+        }
+        return mockMvc.perform(request).andReturn();
     }
 
     private JsonNode data(MvcResult r) throws Exception {

@@ -31,7 +31,7 @@ import java.util.*;
  * <ul>
  *   <li>GMV = the single revenue source of 20.9 ({@link PlatformRevenuePort}, Story 20.13: COMPLETED sales ∪ counted
  *       invoices − credit notes, a bridged sale counted once); orders = its revenue documents.</li>
- *   <li>The period filters the revenue instant (sale {@code occurred_at}, invoice civil issue date); day boundaries
+ *   <li>The period filters the revenue instant (sale {@code COALESCE(occurred_at, created_at)}, invoice civil issue date); day boundaries
  *       are Africa/Douala (WAT).</li>
  *   <li>Last activity = latest merchant event ({@link com.keevo.admin.TenantLastActivitySql}); a tenant is inactive when
  *       it is null or older than {@value #INACTIVITY_DAYS} days.</li>

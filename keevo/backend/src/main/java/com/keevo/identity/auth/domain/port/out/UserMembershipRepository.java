@@ -44,6 +44,9 @@ public interface UserMembershipRepository {
     /** Reactivate the user's membership in ONE tenant (set is_active = true). Story 3.5. */
     void reactivate(UUID userId, UUID tenantId);
 
+    /** Story 20.13 — deletes the user's membership in ONE tenant (member removal); no-op when there is none. */
+    void remove(UUID userId, UUID tenantId);
+
     /**
      * Story 14.11 — update the role for a specific (userId, tenantId) membership.
      */

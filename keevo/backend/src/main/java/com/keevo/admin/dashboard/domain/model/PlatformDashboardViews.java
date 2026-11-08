@@ -4,7 +4,7 @@ import java.time.Instant;
 
 /**
  * Story 20.13 — read models of the super-admin platform dashboard inherited from Bref ({@code GET /dashboard/overview},
- * {@code /growth}, {@code /top-shops}, {@code /activity}). Accounts are Keevo tenants (a migrated Bref owner is one
+ * {@code /growth}, {@code /top-shops} → {@code /top-accounts}, {@code /activity}). Accounts are Keevo tenants (a migrated Bref owner is one
  * tenant); users are distinct people; revenue is the 20.9 single source. Months and « this month » are Africa/Douala.
  */
 public final class PlatformDashboardViews {
@@ -55,7 +55,8 @@ public final class PlatformDashboardViews {
         USER_CREATED("Nouvel utilisateur"),
         STORE_CREATED("Nouvelle boutique"),
         INVOICE_CREATED("Facture créée"),
-        QUOTE_CREATED("Devis créé");
+        QUOTE_CREATED("Devis créé"),
+        PAYMENT_RECEIVED("Paiement reçu");
 
         private final String label;
 

@@ -32,7 +32,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Story 20.13 (R4) — the platform revenue adapter on PostgreSQL: three tenant schemas in one statement — POS with a
  * sale bridged to an automatic invoice (counted once), documents only (invoice − credit note, quote / draft not
  * counted), POS only without the invoicing tables (no branch failure) — plus a deleted tenant never read and a
- * schema-less tenant skipped by the catalogue filter.
+ * schema-less tenant skipped by the catalogue filter, a tenant whose branch fails at run time skipped (chunk retried
+ * tenant by tenant), a documents-only tenant (no sales table) and a legacy sale without {@code occurred_at}.
  */
 @DisplayName("20.13 — platform revenue across tenant schemas (single statement, no double count)")
 class PlatformRevenuePostgresIntegrationTest {
@@ -68,6 +69,13 @@ class PlatformRevenuePostgresIntegrationTest {
         UUID c = tenant("Gamma", POS_ONLY, "SUSPENDED");
         tenant("Gone", "kv_pr13dd", "DELETED");
         UUID ghost = tenant("Ghost", "kv_pr13ee", "ACTIVE"); // schema never created
+        // Broken: a sales table whose amount is not a number — its branch fails at run time, the tenant is skipped.
+        jdbc.execute("CREATE SCHEMA kv_pr13ff");
+        jdbc.execute("CREATE TABLE kv_pr13ff.sales (id UUID, status TEXT, occurred_at TIMESTAMPTZ, "
+                + "created_at TIMESTAMPTZ, total_amount TEXT, employee_id UUID, store_id UUID, payment_mode TEXT)");
+        jdbc.execute("INSERT INTO kv_pr13ff.sales VALUES (gen_random_uuid(), 'COMPLETED', now(), now(), 'abc', "
+                + "gen_random_uuid(), gen_random_uuid(), 'CASH')");
+        UUID broken = tenant("Broken", "kv_pr13ff", "ACTIVE");
 
         // Alpha: a POS sale of 5 000 bridged to its automatic invoice (counts once, as the sale), a cancelled sale.
         UUID store = store(POS_AND_DOCS);
@@ -80,14 +88,22 @@ class PlatformRevenuePostgresIntegrationTest {
         invoice(DOCS_ONLY, "DRAFT", LocalDate.of(2026, 11, 5), 4_000, null, "INVOICE");
         invoice(DOCS_ONLY, "DRAFT", null, 9_000, null, "QUOTE");
         invoice(DOCS_ONLY, "ISSUED", LocalDate.of(2026, 10, 20), 3_000, null, "INVOICE");
+        // Beta keeps the invoicing tables only: no sales table at all (a documents-only account still counts).
+        jdbc.execute("DROP TABLE " + DOCS_ONLY + ".sale_items, " + DOCS_ONLY + ".sales CASCADE");
         // Gamma: POS only, one sale in November, one in October.
         UUID storeC = store(POS_ONLY);
         sale(POS_ONLY, storeC, 1_000, "COMPLETED", NOV_5);
         sale(POS_ONLY, storeC, 600, "COMPLETED", OCT_20);
+        // A legacy sale without occurred_at counts at its creation time (Oct 21).
+        jdbc.update("INSERT INTO " + POS_ONLY + ".sales (id, created_at, employee_id, occurred_at, payment_mode, status, "
+                + "store_id, total_amount, discount_amount) VALUES (?, ?, ?, NULL, 'CASH', 'COMPLETED', ?, 400, 0)",
+                UUID.randomUUID(), Timestamp.from(OCT_20.plusSeconds(86_400)), UUID.randomUUID(), storeC);
 
-        CrossTenantSql crossTenant = new CrossTenantSql(jdbc, 1000);
-        adapter = new RevenueSourcePlatformRevenueAdapter(jdbc, crossTenant);
-        tenants = List.of(branch(a, POS_AND_DOCS), branch(b, DOCS_ONLY), branch(c, POS_ONLY), branch(ghost, "kv_pr13ee"));
+        // Chunks of 2 branches: the broken tenant shares a chunk with a healthy one.
+        CrossTenantSql crossTenant = new CrossTenantSql(jdbc, 2);
+        adapter = new RevenueSourcePlatformRevenueAdapter(crossTenant);
+        tenants = List.of(branch(a, POS_AND_DOCS), branch(b, DOCS_ONLY), branch(c, POS_ONLY), branch(ghost, "kv_pr13ee"),
+                branch(broken, "kv_pr13ff"));
     }
 
     @AfterAll
@@ -102,8 +118,9 @@ class PlatformRevenuePostgresIntegrationTest {
 
         assertThat(totals.get(tenants.get(0).id())).isEqualTo(new Totals(5_000, 1));
         assertThat(totals.get(tenants.get(1).id())).isEqualTo(new Totals(8_000, 2)); // 7 000 − 2 000 + 3 000
-        assertThat(totals.get(tenants.get(2).id())).isEqualTo(new Totals(1_600, 2));
+        assertThat(totals.get(tenants.get(2).id())).isEqualTo(new Totals(2_000, 3)); // legacy sale included
         assertThat(totals).doesNotContainKey(tenants.get(3).id()); // no schema: not a branch, no failure
+        assertThat(totals).doesNotContainKey(tenants.get(4).id()); // its branch fails: skipped, the others kept
     }
 
     @Test
@@ -114,7 +131,13 @@ class PlatformRevenuePostgresIntegrationTest {
 
         Map<String, Totals> months = adapter.totals(tenants, from, to, Bucket.MONTH);
         assertThat(months.get("2026-11")).isEqualTo(new Totals(11_000, 3)); // 5 000 + 5 000 + 1 000
-        assertThat(months.get("2026-10")).isEqualTo(new Totals(3_600, 2));
+        assertThat(months.get("2026-10")).isEqualTo(new Totals(4_000, 3)); // + legacy sale (created_at)
+        // the all-time total equals the sum of the months
+        long allTime = adapter.totals(tenants, null, null, Bucket.TENANT).values().stream()
+                .mapToLong(Totals::revenue).sum();
+        long byMonth = adapter.totals(tenants, null, null, Bucket.MONTH).values().stream()
+                .mapToLong(Totals::revenue).sum();
+        assertThat(byMonth).isEqualTo(allTime).isEqualTo(15_000);
 
         Map<String, Totals> days = adapter.totals(tenants, Instant.parse("2026-11-04T23:00:00Z"),
                 Instant.parse("2026-11-05T23:00:00Z"), Bucket.DAY);

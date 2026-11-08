@@ -36,6 +36,29 @@ class RevenueSourcePlatformRevenueAdapterTest {
     }
 
     @Test
+    @DisplayName("keywords in any case are qualified; a documents-only relation (no sales) too")
+    void caseInsensitiveAndDocumentsOnly() {
+        assertThat(RevenueSourcePlatformRevenueAdapter.qualify("(select 1 from sales s join invoices i on true)",
+                "kv_abc123")).isEqualTo("(select 1 from kv_abc123.sales s join kv_abc123.invoices i on true)");
+        assertThat(RevenueSourcePlatformRevenueAdapter.qualify(RevenueRelations.documents(false, true), "kv_abc123"))
+                .contains("FROM kv_abc123.invoices i").doesNotContain("FROM sales");
+    }
+
+    @Test
+    @DisplayName("LATERAL and comma joins are refused with a clear message")
+    void lateralAndCommaJoinRefused() {
+        assertThatThrownBy(() -> RevenueSourcePlatformRevenueAdapter.qualify(
+                "(SELECT 1 FROM sales s LEFT JOIN LATERAL (SELECT 1) x ON TRUE)", "kv_abc123"))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("LATERAL");
+        assertThatThrownBy(() -> RevenueSourcePlatformRevenueAdapter.qualify(
+                "(SELECT 1 FROM sales s, invoices i WHERE TRUE)", "kv_abc123"))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("comma join");
+        assertThatThrownBy(() -> RevenueSourcePlatformRevenueAdapter.qualify(
+                "(select 1 from sales, invoices)", "kv_abc123"))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("comma join");
+    }
+
+    @Test
     @DisplayName("a table the adapter does not know, or an invalid schema, is refused")
     void unknownTableOrSchemaRefused() {
         assertThatThrownBy(() -> RevenueSourcePlatformRevenueAdapter.qualify(

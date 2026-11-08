@@ -541,12 +541,13 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
             jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
             jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_revenue_day"); // 20.9 V14
+            jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoice_payments_paid_at"); // 20.13 V17
             jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_credit_notes_issued_at");
             jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_store_revenue_day, " + q
                     + "idx_invoices_counted_issued_at, " + q + "idx_invoices_client"); // 20.14 V16
             jdbc.execute("ALTER TABLE " + q + "invoices DROP COLUMN store_id");
             jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('6', '7', '8', '9', '10', "
-                    + "'11', '12', '13', '14', '15', '16')");
+                    + "'11', '12', '13', '14', '15', '16', '17')"); // 20.13: V17
             UUID issued = UUID.randomUUID();
             jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, "
                     + "seller_legal_name, vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, "
@@ -564,7 +565,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             assertThat(rows).filteredOn(n -> n.path("id").asText().equals(issued.toString()))
                     .singleElement().satisfies(n -> assertThat(n.path("number").asText()).isEqualTo("FAC-2026-000042"));
             assertThat(jdbc.queryForObject("SELECT MAX(version::int) FROM " + q + "flyway_history_invoicing "
-                    + "WHERE success", Integer.class)).isEqualTo(16); // 20.7: V15, 20.14: V16
+                    + "WHERE success", Integer.class)).isEqualTo(17); // 20.7: V15, 20.14: V16, 20.13: V17
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? "
                     + "AND table_name = 'invoices' AND column_name = 'deleted_at'", Integer.class, old)).isEqualTo(1);
         } finally {

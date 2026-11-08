@@ -33,7 +33,9 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,22 +70,38 @@ class PlatformDashboardServiceTest {
         when(reader.accountCounts(NOV, OCT)).thenReturn(new PlatformDashboardReadPort.AccountCounts(3, 2, 1, 1, 0));
         when(reader.storeFigures(anyList(), eq(NOV))).thenReturn(new StoreFigures(4, 3, 1));
         when(reader.documentFigures(anyList())).thenReturn(new DocumentFigures(5, 1, 1, 2, 1, 2));
-        when(revenue.totals(anyList(), eq(OCT), eq(DEC), eq(Bucket.MONTH)))
-                .thenReturn(Map.of("2026-11", new Totals(15_000, 3), "2026-10", new Totals(10_000, 2)));
-        when(revenue.totals(anyList(), isNull(), isNull(), eq(Bucket.TENANT)))
-                .thenReturn(Map.of("ta", new Totals(30_000, 5), "tb", new Totals(12_000, 2)));
+        // one pass: all-time revenue by month (total = sum of the months)
+        when(revenue.totals(anyList(), isNull(), isNull(), eq(Bucket.MONTH))).thenReturn(Map.of(
+                "2026-11", new Totals(15_000, 3), "2026-10", new Totals(10_000, 2), "2025-03", new Totals(17_000, 4)));
 
         Overview o = service.getOverview();
 
         assertThat(o.users().trendPercent()).isEqualTo(50.0);
         assertThat(o.accounts().trendPercent()).isNull();
         assertThat(o.accounts().suspended()).isEqualTo(1);
-        assertThat(o.revenue().total()).isEqualTo(42_000);
+        assertThat(o.revenue().total()).isEqualTo(42_000); // 15 000 + 10 000 + 17 000
         assertThat(o.revenue().thisMonth()).isEqualTo(15_000);
         assertThat(o.revenue().lastMonth()).isEqualTo(10_000);
         assertThat(o.revenue().trendPercent()).isEqualTo(50.0);
         assertThat(o.documents().overdue()).isEqualTo(1);
-        verify(revenue).totals(eq(List.of(a, b, c)), isNull(), isNull(), eq(Bucket.TENANT));
+        verify(revenue).totals(eq(List.of(a, b, c)), isNull(), isNull(), eq(Bucket.MONTH));
+        verifyNoMoreInteractions(revenue); // a single revenue pass
+    }
+
+    @Test
+    @DisplayName("overview and growth are cached (120 s by default): a second call reads nothing")
+    void cached() {
+        PlatformDashboardService cachedService =
+                new PlatformDashboardService(reader, revenue, Clock.fixed(NOW, ZoneOffset.UTC), 120);
+        when(reader.userCounts(NOV, OCT)).thenReturn(new PlatformDashboardReadPort.UserCounts(1, 1, 0, 0));
+        when(reader.accountCounts(NOV, OCT)).thenReturn(new PlatformDashboardReadPort.AccountCounts(1, 1, 0, 0, 0));
+        when(revenue.totals(anyList(), isNull(), isNull(), eq(Bucket.MONTH))).thenReturn(Map.of());
+
+        Overview first = cachedService.getOverview();
+        Overview second = cachedService.getOverview();
+
+        assertThat(second).isSameAs(first);
+        verify(reader, times(1)).userCounts(NOV, OCT);
     }
 
     @Test

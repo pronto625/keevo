@@ -9,7 +9,8 @@ import java.util.List;
 
 /**
  * Story 20.13 — the super-admin platform dashboard (Bref {@code GET /dashboard/overview}, {@code /growth},
- * {@code /top-shops}, {@code /activity}). Raw request values; the service validates them (422 VALIDATION_ERROR, French message).
+ * {@code /top-shops} → {@code /top-accounts}, {@code /activity}). Raw request values; the service validates them
+ * (422 VALIDATION_ERROR, French message).
  */
 public interface PlatformDashboardUseCase {
 

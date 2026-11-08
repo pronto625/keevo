@@ -3,7 +3,12 @@ package com.keevo.admin.user.application.service;
 import com.keevo.admin.crosstenant.AdminParams;
 import com.keevo.admin.crosstenant.CrossTenantSql;
 import com.keevo.admin.crosstenant.CursorPage;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Bucket;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Totals;
+import com.keevo.admin.user.domain.model.AdminUserViews;
 import com.keevo.admin.user.domain.model.AdminUserViews.DeviceSession;
+import com.keevo.admin.user.domain.model.AdminUserViews.TopPerformer;
 import com.keevo.admin.user.domain.model.AdminUserViews.UserItem;
 import com.keevo.admin.user.domain.model.AdminUserViews.UserStats;
 import com.keevo.admin.user.domain.port.in.AdminUserUseCase;
@@ -17,7 +22,9 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 
 /**
@@ -32,19 +39,27 @@ public class AdminUserService implements AdminUserUseCase {
     static final int MAX_STATS_DAYS = 366;
     static final String USER_NOT_FOUND = "Utilisateur introuvable";
 
+    static final int TOP_PERFORMERS = 5;
+
     private final AdminUserReadPort reader;
     private final Clock clock;
+    private final CrossTenantSql crossTenant;
+    private final PlatformRevenuePort revenue;
 
-    public AdminUserService(AdminUserReadPort reader, Clock clock) {
+    public AdminUserService(AdminUserReadPort reader, Clock clock, CrossTenantSql crossTenant,
+                            PlatformRevenuePort revenue) {
         this.reader = reader;
         this.clock = clock;
+        this.crossTenant = crossTenant;
+        this.revenue = revenue;
     }
 
     @Override
     public CursorPage<UserItem> listUsers(UserQuery q) {
         String role = role(q.role());
         Boolean active = AdminParams.flag(q.active(), "Le filtre « actif »");
-        String tenantId = CrossTenantSql.requireUuid(q.tenantId(), CrossTenantSql.INVALID_TENANT);
+        String tenantId = q.tenantId() == null || q.tenantId().isBlank() ? null
+                : crossTenant.requireTenant(q.tenantId()).id(); // 422 malformed, 404 unknown / deleted account
         String search = AdminParams.search(q.search());
         int limit = AdminParams.limit(q.limit());
         String filters = "users|" + role + "|" + active + "|" + tenantId + "|" + search;
@@ -76,7 +91,21 @@ public class AdminUserService implements AdminUserUseCase {
         AdminUserReadPort.StatsCriteria criteria = new AdminUserReadPort.StatsCriteria(role, active,
                 from.atStartOfDay(WAT).toInstant(), to.plusDays(1).atStartOfDay(WAT).toInstant());
         AdminUserReadPort.Totals totals = reader.totals(criteria);
-        return new UserStats(totals.total(), totals.active(), totals.created(), from, to, reader.byRole(criteria));
+        // Sellers of the period from the single revenue source (20.9), chunked across tenants, summed per person.
+        Map<String, Totals> sellers = revenue.totals(crossTenant.liveTenants(), criteria.newFrom(), criteria.newTo(),
+                Bucket.SELLER);
+        long sellerRevenue = sellers.values().stream().mapToLong(Totals::revenue).sum();
+        long average = sellers.isEmpty() ? 0 : Math.round((double) sellerRevenue / sellers.size());
+        List<Map.Entry<String, Totals>> best = sellers.entrySet().stream()
+                .sorted(Comparator.<Map.Entry<String, Totals>>comparingLong(e -> e.getValue().revenue()).reversed()
+                        .thenComparing(Map.Entry::getKey))
+                .limit(TOP_PERFORMERS).toList();
+        Map<String, String> names = reader.displayNames(best.stream().map(Map.Entry::getKey).toList());
+        List<TopPerformer> top = best.stream().map(e -> new TopPerformer(e.getKey(),
+                names.getOrDefault(e.getKey(), AdminUserViews.UNNAMED_USER), e.getValue().documents(),
+                e.getValue().revenue())).toList();
+        return new UserStats(totals.total(), totals.active(), totals.created(), from, to, reader.byRole(criteria),
+                average, top);
     }
 
     @Override

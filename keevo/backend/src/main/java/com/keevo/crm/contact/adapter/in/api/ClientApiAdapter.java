@@ -1,11 +1,16 @@
 package com.keevo.crm.contact.adapter.in.api;
 
 import com.keevo.crm.api.ClientCommandPort;
+import com.keevo.crm.api.ClientProfileInput;
+import com.keevo.crm.api.CreateClientInput;
+import com.keevo.crm.api.CreatedClient;
 import com.keevo.crm.api.ClientQueryPort;
 import com.keevo.crm.api.ClientView;
 import com.keevo.crm.api.UpdateClientInput;
 import com.keevo.crm.contact.application.service.ClientAccess;
 import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
+import com.keevo.crm.contact.application.usecase.CreateClientUseCase;
+import com.keevo.crm.contact.application.usecase.SetClientMarketingConsentUseCase;
 import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
 import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
@@ -20,8 +25,9 @@ import java.util.UUID;
  * Implements the published client ports by delegating to the crm use cases and repository
  * (Story 12.2a). No transaction of its own: delegates keep theirs, or join the caller's.
  *
- * <p>Story 20.2 — a system-level API (other modules): no actor visibility rule. No creation entry point: every
- * client is created through {@code CreateClientUseCase} (store, duplicate probe).
+ * <p>Story 20.2 — a system-level API (other modules): no actor visibility rule. Story 20.13 — creation and marketing
+ * consent go through {@code CreateClientUseCase} / {@code SetClientMarketingConsentUseCase} (store, duplicate probe,
+ * audit with the calling actor), used by the super-admin API.
  */
 @Component
 class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
@@ -30,15 +36,36 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
     private final UpdateClientUseCase updateClient;
     private final ArchiveClientUseCase archiveClient;
     private final UnarchiveClientUseCase unarchiveClient;
+    private final CreateClientUseCase createClient;
+    private final SetClientMarketingConsentUseCase consent;
 
     ClientApiAdapter(ClientRepository clientRepository,
                      UpdateClientUseCase updateClient,
                      ArchiveClientUseCase archiveClient,
-                     UnarchiveClientUseCase unarchiveClient) {
+                     UnarchiveClientUseCase unarchiveClient,
+                     CreateClientUseCase createClient,
+                     SetClientMarketingConsentUseCase consent) {
         this.clientRepository = clientRepository;
         this.updateClient = updateClient;
         this.archiveClient = archiveClient;
         this.unarchiveClient = unarchiveClient;
+        this.createClient = createClient;
+        this.consent = consent;
+    }
+
+    @Override
+    public CreatedClient create(String tenantSchema, CreateClientInput in) {
+        TenantContext.requireCurrent(tenantSchema);
+        var result = createClient.execute(new CreateClientUseCase.CreateClientCommand(null, in.name(), in.phone(),
+                in.email(), in.notes(), in.profile() == null ? ClientProfileInput.NONE : in.profile(), in.storeId(),
+                ClientAccess.SYSTEM, in.actorId(), tenantSchema, true));
+        return new CreatedClient(ContactViews.of(result.client()), result.duplicates().size());
+    }
+
+    @Override
+    public ClientView setMarketingConsent(String tenantSchema, UUID clientId, boolean given, UUID actorId) {
+        TenantContext.requireCurrent(tenantSchema);
+        return ContactViews.of(consent.execute(clientId, given, actorId, tenantSchema, ClientAccess.SYSTEM));
     }
 
     @Override

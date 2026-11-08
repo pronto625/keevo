@@ -22,6 +22,8 @@ public record KeysetCursor(String tenantId, List<String> keys) {
     static final String VERSION = "v1";
     static final String SEPARATOR = "\u001f";
     static final int MAX_LENGTH = 1024;
+    /** Tenant slot of cursors over public tables (users). */
+    public static final String PLATFORM_SLOT = "public";
     static final String INVALID = "Curseur invalide : relancez la liste depuis le début";
 
     public KeysetCursor {
@@ -40,10 +42,12 @@ public record KeysetCursor(String tenantId, List<String> keys) {
     }
 
     /**
-     * Decodes a cursor issued for the same filters with {@code keyCount} sort keys; {@code null} / blank → null (first
-     * page). Anything else → 422 {@code VALIDATION_ERROR}.
+     * Decodes a cursor issued for the same filters and sort; {@code null} / blank → null (first page). Anything else —
+     * other filters, wrong key count, a key that is not a value of its type ({@link KeysetSort.Key#valid}), a tenant
+     * slot that is neither a UUID nor {@code public} — → 422 {@code VALIDATION_ERROR} « Curseur invalide », never a
+     * SQL error.
      */
-    public static KeysetCursor decode(String cursor, String filters, int keyCount) {
+    public static KeysetCursor decode(String cursor, String filters, KeysetSort sort) {
         if (cursor == null || cursor.isBlank()) {
             return null;
         }
@@ -57,11 +61,27 @@ public record KeysetCursor(String tenantId, List<String> keys) {
             throw invalid();
         }
         String[] parts = raw.split(SEPARATOR, -1);
-        if (parts.length != 3 + keyCount || !VERSION.equals(parts[0]) || !digest(filters).equals(parts[1])
-                || parts[2].isBlank() || Arrays.stream(parts).anyMatch(String::isEmpty)) {
+        if (parts.length != 3 + sort.size() || !VERSION.equals(parts[0]) || !digest(filters).equals(parts[1])
+                || Arrays.stream(parts).anyMatch(String::isEmpty) || !validTenant(parts[2])) {
             throw invalid();
         }
-        return new KeysetCursor(parts[2], List.of(parts).subList(3, parts.length));
+        List<String> keys = List.of(parts).subList(3, parts.length);
+        if (!sort.valid(keys)) {
+            throw invalid();
+        }
+        return new KeysetCursor(parts[2], keys);
+    }
+
+    private static boolean validTenant(String slot) {
+        if (PLATFORM_SLOT.equals(slot)) {
+            return true;
+        }
+        try {
+            java.util.UUID.fromString(slot);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 
     private static DomainException invalid() {

@@ -20,7 +20,10 @@ public interface PlatformRevenuePort {
         /** key = {@code yyyy-MM-dd} */
         DAY,
         /** key = {@code yyyy-MM} */
-        MONTH
+        MONTH,
+        /** key = seller user id ({@code employee_id} of the revenue document — the sale's actor, the invoice's
+         *  creator); documents without seller are left out. Totals of one person across accounts are added up. */
+        SELLER
     }
 
     /** Revenue (credit notes deducted) and number of revenue documents (sales + counted invoices). */

@@ -72,6 +72,11 @@ public class UserMembershipRepositoryAdapter implements UserMembershipRepository
         setActive(userId, tenantId, true);
     }
 
+    @Override
+    public void remove(UUID userId, UUID tenantId) {
+        springRepository.findByUserIdAndTenantId(userId, tenantId).ifPresent(springRepository::delete);
+    }
+
     private void setActive(UUID userId, UUID tenantId, boolean active) {
         springRepository.findByUserIdAndTenantId(userId, tenantId).ifPresent(m -> {
             m.setActive(active);

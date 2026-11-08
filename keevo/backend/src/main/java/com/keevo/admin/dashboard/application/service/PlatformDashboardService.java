@@ -15,9 +15,14 @@ import com.keevo.admin.dashboard.domain.port.out.PlatformDashboardReadPort;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Bucket;
 import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Totals;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -35,7 +40,8 @@ import java.util.stream.Collectors;
  * Story 20.13 — the super-admin platform dashboard inherited from Bref. Accounts = live tenants (a migrated Bref
  * owner is one tenant), users = distinct non-super-admin people, revenue = the 20.9 single source through
  * {@link PlatformRevenuePort} (a POS sale bridged to an invoice counts once): no double counting (R4). Months are
- * Africa/Douala. Every figure is one statement over all tenants (see the read port); read-only.
+ * Africa/Douala. Every figure is one statement per chunk of tenants (see the read port); overview and growth are cached
+ * {@code keevo.admin.dashboard.cache-seconds} (default 120 s) — figures may lag by that much; read-only.
  */
 @Service
 public class PlatformDashboardService implements PlatformDashboardUseCase {
@@ -54,15 +60,29 @@ public class PlatformDashboardService implements PlatformDashboardUseCase {
     private final PlatformDashboardReadPort reader;
     private final PlatformRevenuePort revenue;
     private final Clock clock;
+    /** Short-lived cache of the platform-wide figures (overview, growth): they scan every tenant. */
+    private final Cache<String, Object> cache;
 
-    public PlatformDashboardService(PlatformDashboardReadPort reader, PlatformRevenuePort revenue, Clock clock) {
+    @Autowired
+    public PlatformDashboardService(PlatformDashboardReadPort reader, PlatformRevenuePort revenue, Clock clock,
+                                    @Value("${keevo.admin.dashboard.cache-seconds:120}") long cacheSeconds) {
         this.reader = reader;
         this.revenue = revenue;
         this.clock = clock;
+        this.cache = Caffeine.newBuilder().maximumSize(64).expireAfterWrite(Duration.ofSeconds(cacheSeconds)).build();
+    }
+
+    /** Without cache (tests). */
+    public PlatformDashboardService(PlatformDashboardReadPort reader, PlatformRevenuePort revenue, Clock clock) {
+        this(reader, revenue, clock, 0);
     }
 
     @Override
     public Overview getOverview() {
+        return (Overview) cache.get("overview", k -> computeOverview());
+    }
+
+    private Overview computeOverview() {
         YearMonth month = YearMonth.from(today());
         Instant monthStart = start(month);
         Instant previousStart = start(month.minusMonths(1));
@@ -70,11 +90,11 @@ public class PlatformDashboardService implements PlatformDashboardUseCase {
 
         PlatformDashboardReadPort.UserCounts users = reader.userCounts(monthStart, previousStart);
         PlatformDashboardReadPort.AccountCounts accounts = reader.accountCounts(monthStart, previousStart);
-        Map<String, Totals> monthly = revenue.totals(tenants, previousStart, start(month.plusMonths(1)), Bucket.MONTH);
+        // One pass: all-time revenue by month — the total is the sum of the months, this / last month two keys.
+        Map<String, Totals> monthly = revenue.totals(tenants, null, null, Bucket.MONTH);
         long thisMonth = monthly.getOrDefault(month.toString(), Totals.ZERO).revenue();
         long lastMonth = monthly.getOrDefault(month.minusMonths(1).toString(), Totals.ZERO).revenue();
-        long total = revenue.totals(tenants, null, null, Bucket.TENANT).values().stream()
-                .mapToLong(Totals::revenue).sum();
+        long total = monthly.values().stream().mapToLong(Totals::revenue).sum();
 
         return new Overview(
                 new UserFigures(users.total(), users.active(), users.newThisMonth(), users.newLastMonth(),
@@ -88,8 +108,13 @@ public class PlatformDashboardService implements PlatformDashboardUseCase {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public List<GrowthPoint> getGrowth(String months) {
         int count = AdminParams.bounded(months, "Le nombre de mois", DEFAULT_MONTHS, 1, MAX_MONTHS);
+        return (List<GrowthPoint>) cache.get("growth:" + count, k -> computeGrowth(count));
+    }
+
+    private List<GrowthPoint> computeGrowth(int count) {
         YearMonth current = YearMonth.from(today());
         YearMonth first = current.minusMonths(count - 1L);
         Instant from = start(first);

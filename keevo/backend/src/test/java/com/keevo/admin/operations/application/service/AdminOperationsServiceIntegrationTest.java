@@ -107,10 +107,10 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
                 new OperationsPeriodQuery("7D", null, null), 0, 100).content();
 
         TenantActivity active = find(rows, activeTenant).orElseThrow();
-        // 20.13: GMV from the revenue source (20.9) — a sale counts at occurred_at; the legacy sale without one
-        // (created_at fallback of 9-7) is outside every window, as on the owner dashboard.
-        assertThat(active.gmv()).isEqualTo(1000L);
-        assertThat(active.orderCount()).isEqualTo(1L);
+        // 20.13: GMV from the revenue source (20.9) on COALESCE(occurred_at, created_at) — the legacy sale without
+        // occurred_at still counts at its creation time (9-7 rule kept).
+        assertThat(active.gmv()).isEqualTo(1500L);
+        assertThat(active.orderCount()).isEqualTo(2L);
         assertThat(active.tenantName()).isEqualTo("Boutique Active");
         // Seeded by the provisioner in the tenant schema (public.tenants.plan_type is FREE): proves the subscriptions read.
         assertThat(active.plan()).isEqualTo("BUSINESS_TRIAL"); // 19.7b: the seed trial plan (V43)
@@ -132,8 +132,8 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
 
         assertThat(points).hasSize(7);
         GmvTrendPoint point = points.stream().filter(p -> p.date().equals(day)).findFirst().orElseThrow();
-        assertThat(point.gmv()).isGreaterThanOrEqualTo(1000L);
-        assertThat(point.orderCount()).isGreaterThanOrEqualTo(1L);
+        assertThat(point.gmv()).isGreaterThanOrEqualTo(1500L);
+        assertThat(point.orderCount()).isGreaterThanOrEqualTo(2L);
     }
 
     @Test
@@ -141,7 +141,7 @@ class AdminOperationsServiceIntegrationTest extends PostgresIntegrationTest {
     void overview_realSql() {
         var overview = service.getOverview(new OperationsPeriodQuery("7D", null, null));
 
-        assertThat(overview.totalGmv()).isGreaterThanOrEqualTo(1000L);
+        assertThat(overview.totalGmv()).isGreaterThanOrEqualTo(1500L);
         assertThat(overview.activeTenantsCount()).isGreaterThanOrEqualTo(1);
         // active + dormant tenants are new (20.13: every ACTIVE tenant counts as new; the broken tenant has no
         // schema, so it is simply not a revenue branch)

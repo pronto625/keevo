@@ -37,11 +37,20 @@ public final class AdminUserViews {
     public record RoleCount(String role, String label, long count) {
     }
 
-    /** {@code newUsers} = accounts created between {@code from} and {@code to} (inclusive, Africa/Douala). */
+    /** A seller of the period: revenue documents (sales + counted invoices) and revenue (20.9 source), all accounts. */
+    public record TopPerformer(String userId, String displayName, long documentsCount, long totalSales) {
+    }
+
+    /**
+     * {@code newUsers} = accounts created between {@code from} and {@code to} (inclusive, Africa/Douala);
+     * {@code averageSalesPerSeller} = revenue of the period / number of sellers with revenue (0 when none);
+     * {@code topPerformers} = the 5 best sellers of the period by revenue.
+     */
     public record UserStats(long totalUsers, long activeUsers, long newUsers, LocalDate from, LocalDate to,
-                            List<RoleCount> byRole) {
+                            List<RoleCount> byRole, long averageSalesPerSeller, List<TopPerformer> topPerformers) {
         public UserStats {
             byRole = List.copyOf(byRole);
+            topPerformers = List.copyOf(topPerformers);
         }
     }
 

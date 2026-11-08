@@ -3,6 +3,7 @@ package com.keevo.admin.user.adapter.out.persistence;
 import com.keevo.admin.crosstenant.CrossTenantSql;
 import com.keevo.admin.crosstenant.CursorPage;
 import com.keevo.admin.crosstenant.KeysetCursor;
+import com.keevo.admin.crosstenant.KeysetSort;
 import com.keevo.admin.crosstenant.AdminParams;
 import com.keevo.admin.user.domain.model.AdminUserViews;
 import com.keevo.admin.user.domain.model.AdminUserViews.DeviceSession;
@@ -18,6 +19,7 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,7 +29,7 @@ import java.util.Optional;
 /**
  * Story 20.13 — platform users read from the public tables (no tenant schema, no per-tenant query).
  * <ul>
- *   <li>list: keyset on {@code (created_at DESC, id DESC)} — index {@code idx_users_created_at_id} (V60); device
+ *   <li>list: keyset on {@code (created_at DESC, id DESC)} — index {@code idx_users_created_at_id} (V59); device
  *       count and last use per row on {@code idx_refresh_tokens_live_by_user}; memberships of the page in one
  *       {@code user_id = ANY(?)} query;</li>
  *   <li>stats: one aggregate over {@code users} + one grouped count over memberships;</li>
@@ -38,8 +40,6 @@ import java.util.Optional;
 @Component
 public class JdbcAdminUserReader implements AdminUserReadPort {
 
-    /** Cursor tenant slot: users are not tenant data. */
-    static final String PLATFORM_SLOT = "public";
     static final String SUPER_ADMIN = "SUPER_ADMIN";
 
     private static final String USER_COLUMNS =
@@ -48,11 +48,14 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
             + "(SELECT COUNT(DISTINCT rt.session_id) FROM public.refresh_tokens rt WHERE rt.user_id = u.id "
             + "AND rt.revoked = false AND rt.expires_at > now()) AS device_count, "
             + "(SELECT MAX(rt.last_used_at) FROM public.refresh_tokens rt WHERE rt.user_id = u.id "
-            + "AND rt.revoked = false) AS last_seen_at, "
-            + "CAST(u.created_at AS text) AS k0 FROM public.users u ";
+            + "AND rt.revoked = false AND rt.expires_at > now()) AS last_seen_at "
+            + "FROM public.users u ";
 
-    private static final String LIVE_TENANT = "t.id <> CAST('" + CrossTenantSql.SYSTEM_TENANT_ID + "' AS uuid) "
-            + "AND t.status <> 'DELETED'";
+    /** List order: newest account first — index {@code idx_users_created_at_id} (V59). */
+    static final KeysetSort USER_SORT = new KeysetSort(List.of(
+            new KeysetSort.Key("u.created_at", "timestamptz"), new KeysetSort.Key("u.id", "uuid")), true);
+
+    private static final String LIVE_TENANT = CrossTenantSql.LIVE_TENANT;
 
     private final JdbcTemplate jdbc;
 
@@ -62,7 +65,7 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
 
     @Override
     public CursorPage<UserItem> users(UserCriteria c) {
-        KeysetCursor cursor = KeysetCursor.decode(c.cursor(), c.filters(), 2);
+        KeysetCursor cursor = KeysetCursor.decode(c.cursor(), c.filters(), USER_SORT);
         List<Object> params = new ArrayList<>();
         StringBuilder sql = new StringBuilder(USER_COLUMNS).append("WHERE ")
                 .append(filters(c.role(), c.active(), c.tenantId(), c.search(), params));
@@ -81,7 +84,8 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
         String next = null;
         if (more) {
             Row last = page.get(page.size() - 1);
-            next = KeysetCursor.encode(c.filters(), PLATFORM_SLOT, List.of(last.cursorKey(), last.id()));
+            next = KeysetCursor.encode(c.filters(), KeysetCursor.PLATFORM_SLOT,
+                    List.of(last.createdAt().toString(), last.id()));
         }
         return new CursorPage<>(items, next, more);
     }
@@ -137,9 +141,11 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
     public List<DeviceSession> devices(String userId) {
         return jdbc.query("SELECT CAST(rt.session_id AS text) AS session_id, MAX(rt.device_label) AS device_label, "
                         + "MAX(rt.last_used_at) AS last_used_at, MAX(CAST(t.id AS text)) AS tenant_id, "
-                        + "MAX(COALESCE(NULLIF(btrim(t.designation), ''), t.name)) AS tenant_name "
+                        + "MAX(COALESCE(NULLIF(btrim(t.designation), ''), NULLIF(btrim(t.name), ''))) AS tenant_name "
                         + "FROM public.refresh_tokens rt LEFT JOIN public.tenants t ON t.schema_name = rt.tenant_id "
+                        + "AND " + LIVE_TENANT + " "
                         + "WHERE rt.user_id = CAST(? AS uuid) AND rt.revoked = false AND rt.expires_at > now() "
+                        + "AND (t.id IS NOT NULL OR rt.tenant_id = 'public') "
                         + "GROUP BY rt.session_id ORDER BY MAX(rt.last_used_at) DESC NULLS LAST",
                 (rs, n) -> {
                     String label = rs.getString("device_label");
@@ -147,9 +153,25 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
                     String tenantName = rs.getString("tenant_name");
                     return new DeviceSession(rs.getString("session_id"),
                             label == null || label.isBlank() ? AdminUserViews.UNKNOWN_DEVICE : label,
-                            tenantId, tenantId == null ? AdminUserViews.PLATFORM : tenantName,
+                            tenantId, tenantId == null ? AdminUserViews.PLATFORM
+                                    : tenantName == null ? com.keevo.admin.AdminLabels.UNNAMED_TENANT : tenantName,
                             instant(rs, "last_used_at"));
                 }, userId);
+    }
+
+    @Override
+    public Map<String, String> displayNames(Collection<String> userIds) {
+        Map<String, String> names = new HashMap<>();
+        if (userIds.isEmpty()) {
+            return names;
+        }
+        jdbc.query("SELECT CAST(u.id AS text) AS id, NULLIF(btrim(concat_ws(' ', u.first_name, u.last_name)), '') "
+                        + "AS name FROM public.users u WHERE u.id = ANY (CAST(string_to_array(?, ',') AS uuid[]))",
+                rs -> {
+                    String name = rs.getString("name");
+                    names.put(rs.getString("id"), name == null ? AdminUserViews.UNNAMED_USER : name);
+                }, String.join(",", userIds));
+        return names;
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
@@ -169,8 +191,9 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
             params.add(active);
         }
         if (tenantId != null) {
-            where.append(" AND EXISTS (SELECT 1 FROM public.user_tenant_memberships m2 WHERE m2.user_id = u.id "
-                    + "AND m2.tenant_id = CAST(? AS uuid))");
+            where.append(" AND EXISTS (SELECT 1 FROM public.user_tenant_memberships m2 JOIN public.tenants t "
+                    + "ON t.id = m2.tenant_id WHERE m2.user_id = u.id AND m2.tenant_id = CAST(? AS uuid) AND "
+                    + LIVE_TENANT + ")");
             params.add(tenantId);
         }
         if (search != null) {
@@ -212,7 +235,7 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
         return new Row(rs.getString("id"), rs.getString("first_name"), rs.getString("last_name"),
                 rs.getString("phone_number"), rs.getString("email"), rs.getBoolean("is_active"),
                 rs.getBoolean("super_admin"), rs.getLong("device_count"), instant(rs, "last_seen_at"),
-                instant(rs, "created_at"), rs.getString("k0"));
+                instant(rs, "created_at"));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -221,8 +244,7 @@ public class JdbcAdminUserReader implements AdminUserReadPort {
     }
 
     private record Row(String id, String firstName, String lastName, String phone, String email, boolean active,
-                       boolean superAdmin, long deviceCount, Instant lastSeenAt, Instant createdAt,
-                       String cursorKey) {
+                       boolean superAdmin, long deviceCount, Instant lastSeenAt, Instant createdAt) {
         UserItem item(List<Membership> memberships) {
             String name = String.join(" ", firstName == null ? "" : firstName.trim(),
                     lastName == null ? "" : lastName.trim()).trim();

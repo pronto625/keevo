@@ -25,7 +25,7 @@ public final class CrossAccountViews {
                                  String email, String storeId, String storeName, String clientType,
                                  String clientTypeLabel, String niu, String rccm, String address, String contactName,
                                  String website, LocalDate birthDate, String notes, boolean archived,
-                                 boolean marketingConsent, Instant marketingConsentAt, Instant marketingOptOutAt,
+                                 String statusLabel, boolean marketingConsent, Instant marketingConsentAt, Instant marketingOptOutAt,
                                  Instant createdAt, Instant updatedAt) {
     }
 
@@ -36,7 +36,8 @@ public final class CrossAccountViews {
 
     public record ProductDetail(String tenantId, String tenantName, String id, String name, String description,
                                 long price, long buyPrice, int stockQuantity, int minimumThreshold,
-                                boolean trackStock, String status, String statusLabel, String categoryName,
+                                boolean trackStock, String status, String statusLabel, boolean archived,
+                                boolean merged, String categoryName,
                                 String barcode, Instant createdAt, Instant updatedAt) {
     }
 
@@ -51,16 +52,27 @@ public final class CrossAccountViews {
                                 String createdByName, Instant createdAt, Instant updatedAt) {
     }
 
-    /** An expense page and the total amount of every expense matching the filters (Bref {@code totalAmount}). */
+    /**
+     * An expense page and the total amount of every expense matching the filters (Bref {@code totalAmount}) — given on
+     * the first page only ({@code null} on the next pages: the filters, hence the total, are the same).
+     */
     public record ExpensePage(CursorPage<ExpenseItem> page, BigDecimal totalAmount) {
     }
 
-    /** French label of a product state: archived wins, then draft, else active. */
-    public static String productStatusLabel(String status, boolean archived) {
+    /** French label of a product state: merged wins, then archived, then draft, else active. */
+    public static String productStatusLabel(String status, boolean archived, boolean merged) {
+        if (merged) {
+            return "Fusionné";
+        }
         if (archived) {
             return "Archivé";
         }
         return "DRAFT".equals(status) ? "Brouillon" : "Actif";
+    }
+
+    /** French label of a client state. */
+    public static String customerStatusLabel(boolean archived) {
+        return archived ? "Archivé" : "Actif";
     }
 
     /** French label of a client type ({@code PERSON} / {@code COMPANY}, case-insensitive); null when none. */

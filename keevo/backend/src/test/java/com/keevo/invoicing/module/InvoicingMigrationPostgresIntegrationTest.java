@@ -131,15 +131,15 @@ class InvoicingMigrationPostgresIntegrationTest {
     void trialTenantNoRow() {
         assertThat(tables(A)).isEmpty();
         assertThat(migrations.currentVersion(A, "invoicing")).isNull();
-        assertThat(migrations.latestVersion("invoicing")).isEqualTo("16");
+        assertThat(migrations.latestVersion("invoicing")).isEqualTo("17");
 
         ProvisioningResult result = provisioner.provision(A, "invoicing");
 
-        // V14 = 20-9 (revenue indexes), V15 = 20-7, V16 = 20-14: every script on the classpath is applied
+        // V14 = 20-9 (revenue indexes), V15 = 20-7, V16 = 20-14, V17 = 20-13: every script on the classpath is applied
         assertThat(result.migrationsApplied()).isEqualTo(invoicingScripts());
-        assertThat(result.toVersion()).isEqualTo("16");
+        assertThat(result.toVersion()).isEqualTo("17");
         assertThat(tables(A)).containsExactlyElementsOf(TABLES);
-        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("16");
+        assertThat(migrations.currentVersion(A, "invoicing")).isEqualTo("17");
         // Story 15.5b — the keyset index of the invoices sync pull, as SyncKeysetIndexJob expects it
         assertThat(jdbc.queryForObject("SELECT indexdef FROM pg_indexes WHERE schemaname = ? AND indexname = ?",
                 String.class, A, "idx_invoices_sync_keyset"))
@@ -158,7 +158,7 @@ class InvoicingMigrationPostgresIntegrationTest {
                 + "VALUES (?, 'invoicing', 'ACTIVE', 'PREMIUM')", IDS.get(A));
         provisioner.provision(A, "invoicing");
         assertThat(jdbc.queryForObject("SELECT provisioned_version FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("16");
+                + "AND module_id = 'invoicing'", String.class, IDS.get(A))).isEqualTo("17");
     }
 
     @Test

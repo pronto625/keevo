@@ -6,7 +6,9 @@ import com.keevo.admin.user.domain.model.AdminUserViews.RoleCount;
 import com.keevo.admin.user.domain.model.AdminUserViews.UserItem;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -36,4 +38,7 @@ public interface AdminUserReadPort {
     List<RoleCount> byRole(StatsCriteria criteria);
 
     List<DeviceSession> devices(String userId);
+
+    /** Display name per user id (« Utilisateur sans nom » when none) — one query. */
+    Map<String, String> displayNames(Collection<String> userIds);
 }

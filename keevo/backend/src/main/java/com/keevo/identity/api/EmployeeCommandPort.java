@@ -18,4 +18,16 @@ public interface EmployeeCommandPort {
     void deactivate(String tenantSchema, UUID actorId, UUID employeeId);
 
     void reactivate(String tenantSchema, UUID actorId, UUID employeeId);
+
+    /** Story 20.13 — adds a member (owner creation rules) with an optional role. */
+    CreatedMember createMember(String tenantSchema, CreateMemberInput input);
+
+    /** Story 20.13 — updates a member's name / phone / store, then its role when given. */
+    void updateMember(String tenantSchema, UpdateMemberInput input);
+
+    /**
+     * Story 20.13 — removes a member from the account: the deactivation rules (sessions of this account revoked),
+     * then the membership is deleted; the employee record stays (inactive) for the history. Never the owner.
+     */
+    void remove(String tenantSchema, UUID actorId, UUID employeeId);
 }

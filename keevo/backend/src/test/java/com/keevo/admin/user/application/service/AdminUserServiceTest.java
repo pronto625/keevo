@@ -1,6 +1,11 @@
 package com.keevo.admin.user.application.service;
 
+import com.keevo.admin.crosstenant.AdminParams;
+import com.keevo.admin.crosstenant.CrossTenantSql;
 import com.keevo.admin.crosstenant.CursorPage;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Bucket;
+import com.keevo.admin.platformrevenue.domain.port.out.PlatformRevenuePort.Totals;
 import com.keevo.admin.user.domain.model.AdminUserViews;
 import com.keevo.admin.user.domain.model.AdminUserViews.RoleCount;
 import com.keevo.admin.user.domain.model.AdminUserViews.UserItem;
@@ -23,12 +28,14 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -43,12 +50,14 @@ class AdminUserServiceTest {
     private static final String USER = "0b6e3f1c-8a8d-4c51-9a0e-1d2f3a4b5c6d";
 
     @Mock AdminUserReadPort reader;
+    @Mock CrossTenantSql crossTenant;
+    @Mock PlatformRevenuePort revenue;
 
     AdminUserService service;
 
     @BeforeEach
     void setUp() {
-        service = new AdminUserService(reader, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new AdminUserService(reader, Clock.fixed(NOW, ZoneOffset.UTC), crossTenant, revenue);
     }
 
     @Test
@@ -70,6 +79,7 @@ class AdminUserServiceTest {
     @Test
     @DisplayName("bad role / flag / account → 400")
     void invalidParams() {
+        when(crossTenant.requireTenant("x")).thenThrow(AdminParams.invalid("Compte invalide"));
         assertCode(() -> service.listUsers(new UserQuery("BOSS", null, null, null, null, null)), ErrorCode.VALIDATION_ERROR);
         assertCode(() -> service.listUsers(new UserQuery(null, "yes", null, null, null, null)), ErrorCode.VALIDATION_ERROR);
         assertCode(() -> service.listUsers(new UserQuery(null, null, "x", null, null, null)), ErrorCode.VALIDATION_ERROR);
@@ -95,6 +105,29 @@ class AdminUserServiceTest {
         verify(reader).totals(c.capture());
         assertThat(c.getValue().newFrom()).isEqualTo(Instant.parse("2026-10-31T23:00:00Z"));
         assertThat(c.getValue().newTo()).isEqualTo(Instant.parse("2026-11-08T23:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("A5: average revenue per seller and top 5 sellers from the revenue source, names resolved once")
+    void sellerFigures() {
+        when(reader.totals(any())).thenReturn(new AdminUserReadPort.Totals(3, 3, 0));
+        when(reader.byRole(any())).thenReturn(List.of());
+        when(crossTenant.liveTenants()).thenReturn(List.of());
+        Map<String, Totals> sellers = new java.util.HashMap<>();
+        for (int i = 1; i <= 6; i++) {
+            sellers.put("u" + i, new Totals(i * 1_000L, i));
+        }
+        when(revenue.totals(any(), any(), any(), eq(Bucket.SELLER))).thenReturn(sellers);
+        when(reader.displayNames(List.of("u6", "u5", "u4", "u3", "u2"))).thenReturn(Map.of("u6", "Awa Ngo"));
+
+        UserStats stats = service.getStats(new StatsQuery(null, null, null, null));
+
+        assertThat(stats.averageSalesPerSeller()).isEqualTo(3_500); // 21 000 / 6
+        assertThat(stats.topPerformers()).extracting(AdminUserViews.TopPerformer::userId)
+                .containsExactly("u6", "u5", "u4", "u3", "u2");
+        assertThat(stats.topPerformers().get(0).displayName()).isEqualTo("Awa Ngo");
+        assertThat(stats.topPerformers().get(0).documentsCount()).isEqualTo(6);
+        assertThat(stats.topPerformers().get(1).displayName()).isEqualTo("Utilisateur sans nom");
     }
 
     @Test

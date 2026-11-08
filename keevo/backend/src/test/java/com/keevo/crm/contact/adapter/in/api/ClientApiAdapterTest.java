@@ -45,6 +45,8 @@ class ClientApiAdapterTest {
     @Mock private UpdateClientUseCase updateClient;
     @Mock private ArchiveClientUseCase archiveClient;
     @Mock private UnarchiveClientUseCase unarchiveClient;
+    @Mock private com.keevo.crm.contact.application.usecase.CreateClientUseCase createClient;
+    @Mock private com.keevo.crm.contact.application.usecase.SetClientMarketingConsentUseCase consent;
 
     private ClientApiAdapter adapter;
 
@@ -55,7 +57,8 @@ class ClientApiAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new ClientApiAdapter(clientRepository, updateClient, archiveClient, unarchiveClient);
+        adapter = new ClientApiAdapter(clientRepository, updateClient, archiveClient, unarchiveClient, createClient,
+                consent);
     }
 
     @Test
@@ -81,6 +84,33 @@ class ClientApiAdapterTest {
                 ID, "Alice B", "+237690000002", null, "n", ACTOR, com.keevo.crm.api.ClientProfileInput.NONE, null,
                 com.keevo.crm.contact.application.service.ClientAccess.SYSTEM, TENANT));
         assertThat(view.name()).isEqualTo("Alice B");
+    }
+
+    @Test
+    void create_20_13_mapsOntoTheUseCaseWithTheActorAndReturnsTheDuplicateCount() {
+        Client created = new Client(ID, "Alice", "+237690000001", null, null, false, T0, T0);
+        Client other = new Client(UUID.randomUUID(), "Alice bis", "+237690000001", null, null, false, T0, T0);
+        when(createClient.execute(any())).thenReturn(
+                new com.keevo.crm.contact.application.usecase.CreateClientUseCase.CreateClientResult(created,
+                        java.util.List.of(other)));
+        UUID store = UUID.randomUUID();
+
+        com.keevo.crm.api.CreatedClient result = adapter.create(TENANT, new com.keevo.crm.api.CreateClientInput(
+                "Alice", "+237690000001", null, null, null, store, ACTOR));
+
+        verify(createClient).execute(new com.keevo.crm.contact.application.usecase.CreateClientUseCase.CreateClientCommand(
+                null, "Alice", "+237690000001", null, null, com.keevo.crm.api.ClientProfileInput.NONE, store,
+                com.keevo.crm.contact.application.service.ClientAccess.SYSTEM, ACTOR, TENANT, true));
+        assertThat(result.client().id()).isEqualTo(ID);
+        assertThat(result.duplicates()).isEqualTo(1);
+    }
+
+    @Test
+    void marketingConsent_20_13_delegatesWithTheActor() {
+        when(consent.execute(ID, true, ACTOR, TENANT, com.keevo.crm.contact.application.service.ClientAccess.SYSTEM))
+                .thenReturn(new Client(ID, "Alice", "+237690000001", null, null, false, T0, T0));
+
+        assertThat(adapter.setMarketingConsent(TENANT, ID, true, ACTOR).id()).isEqualTo(ID);
     }
 
     @Test

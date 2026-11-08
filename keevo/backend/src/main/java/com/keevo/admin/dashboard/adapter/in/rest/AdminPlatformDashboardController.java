@@ -21,7 +21,7 @@ import java.util.List;
 
 /**
  * Story 20.13 — super-admin platform dashboard inherited from Bref ({@code GET /dashboard/overview}, {@code /growth},
- * {@code /top-shops}, {@code /activity}). Read-only; SUPER_ADMIN checked explicitly behind the SecurityConfig URL rule;
+ * {@code /top-shops} → {@code /top-accounts}, {@code /activity}). Read-only; SUPER_ADMIN checked explicitly behind the SecurityConfig URL rule;
  * parameter validation in the service.
  */
 @Tag(name = "Admin — Platform dashboard", description = "Super Admin platform figures (Bref dashboard)")

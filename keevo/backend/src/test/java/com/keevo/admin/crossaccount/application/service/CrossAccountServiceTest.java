@@ -123,9 +123,11 @@ class CrossAccountServiceTest {
     @Test
     @DisplayName("labels: product state and client type in French")
     void labels() {
-        assertThat(CrossAccountViews.productStatusLabel("ACTIVE", true)).isEqualTo("Archivé");
-        assertThat(CrossAccountViews.productStatusLabel("DRAFT", false)).isEqualTo("Brouillon");
-        assertThat(CrossAccountViews.productStatusLabel("ACTIVE", false)).isEqualTo("Actif");
+        assertThat(CrossAccountViews.productStatusLabel("ACTIVE", true, false)).isEqualTo("Archivé");
+        assertThat(CrossAccountViews.productStatusLabel("DRAFT", false, false)).isEqualTo("Brouillon");
+        assertThat(CrossAccountViews.productStatusLabel("ACTIVE", false, false)).isEqualTo("Actif");
+        assertThat(CrossAccountViews.productStatusLabel("ACTIVE", true, true)).isEqualTo("Fusionné");
+        assertThat(CrossAccountViews.customerStatusLabel(true)).isEqualTo("Archivé");
         assertThat(CrossAccountViews.clientTypeLabel("company")).isEqualTo("Entreprise");
         assertThat(CrossAccountViews.clientTypeLabel("PERSON")).isEqualTo("Particulier");
         assertThat(CrossAccountViews.clientTypeLabel(null)).isNull();
