@@ -1055,9 +1055,9 @@ So that **mes rapports quotidiens, hebdomadaires et par boutique comptent aussi 
 
 Scope: invoices (and quotes, credit notes through their invoice) carry the establishment they were made in, so that every store-scoped revenue figure of 20.9 (end-of-day and weekly reports, store overviews, store comparison, store-filtered leaderboard and profitability) includes documents; the last revenue readers still on `sales` only move to the single revenue source.
 
-- [ ] [Deferred-from: review 20-9, 2026-11-08] Invoices have no store: store-scoped reports never include documents [reporting/revenue/adapter/out/persistence/RevenueRelations.java] — add nullable `invoices.store_id` (invoicing module migration), set at creation (member → assigned store, owner → requested or oldest active store, quote conversion copies it, POS bridge → the sale's store), expose it additively, and use it in `RevenueRelations`; 24.4 fills it from Bref `shopId` on import
-- [ ] [Deferred-from: review 20-9, 2026-11-08] `ClientsExportDatasetProvider` computes total_spent / sales_count / last_purchase from sales only — read them from the single revenue source
-- [ ] [Deferred-from: review 20-9, 2026-11-08] `SalesTrendDetectionScheduler` reads sales only — read the single revenue source
+- [x] [Deferred-from: review 20-9, 2026-11-08] (done in 20-14) Invoices have no store: store-scoped reports never include documents [reporting/revenue/adapter/out/persistence/RevenueRelations.java] — add nullable `invoices.store_id` (invoicing module migration), set at creation (member → assigned store, owner → requested or oldest active store, quote conversion copies it, POS bridge → the sale's store), expose it additively, and use it in `RevenueRelations`; 24.4 fills it from Bref `shopId` on import
+- [x] [Deferred-from: review 20-9, 2026-11-08] (done in 20-14) `ClientsExportDatasetProvider` computes total_spent / sales_count / last_purchase from sales only — read them from the single revenue source
+- [x] [Deferred-from: review 20-9, 2026-11-08] (done in 20-14) `SalesTrendDetectionScheduler` reads sales only — read the single revenue source
 
 Interim AC: Given an EMPLOYEE of store B issuing an invoice, When the end-of-day report of store B is built, Then the invoice's revenue is in it once, and the tenant-wide figures are unchanged.
 

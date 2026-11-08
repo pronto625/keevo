@@ -369,6 +369,7 @@ development_status:
   m20-9-reporting-multi-source: backlog  # API 8d228140+891771ab — CA unique caisse + factures (dashboard, rapports, classement, rentabilité), GET /reporting/profitability/summary (marge inconnue), chiffres par boutique encore ventes seules (20-14)
   m20-10-module-expenses: backlog  # API 362becd6+88070a4f — module premium expenses : /api/v1/expenses (liste curseur + totaux, options, CRUD, rejeu 200), sync CREATE_/UPDATE_/DELETE_EXPENSE (refus en français), pull expenses + tombstones, storeName, contrat expense-sync-payloads.json
   m20-7-modeles-signatures-liens-publics: backlog  # API 487a8ec5+51d426dc — 8 modèles Bref (PUT /invoices/{id}/layout, ?template=&ticketWidth=), signatures client/vendeur, POST /invoices/{id}/public-link (+/rotate), réglages /invoicing/settings/documents, devis envoyable, bloc paiements sur PDF, anciens liens Bref
+  m20-14-boutique-des-documents: backlog  # API b5b41077+676dc274+d1cdf583 — storeId/storeName sur les documents (création, liste ?storeId= propriétaire seul), visibilité par rôle (employé = ses documents, gérant/lecteur = sa boutique, 404 hors portée), chiffres par boutique avec factures
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -462,7 +463,7 @@ development_status:
   20-9-reporting-multi-source: done  # 2026-11-08 build-auto parallèle (spec-20-9) — revue 5 couches, 44 constats (18 corrigés, 2 routés → 20-14, 24-12, GMV → 20-13), suite complète 6 287 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-10-module-expenses: done  # 2026-11-08 build-auto parallèle (spec-20-10) — revue 5 couches, 41 constats (28 corrigés, 3 routés → 22-5, 19-5b, 20-13), suite complète 6 329 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-11-module-finance: backlog
-  20-14-boutique-des-documents: backlog  # 2026-11-08 revue 20-9 — 3 items (boutique des factures à la création, rapports par boutique et exports clients/tendances sur la source unique)
+  20-14-boutique-des-documents: done  # 2026-11-08 build-auto parallèle (spec-20-14) — revue 5 couches, 37 constats (12 medium corrigés, 2 routés → 17-9, 22-5), + décision utilisateur visibilité des documents par rôle (comme Bref), suite complète 6 436 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-13-api-super-admin-heritee-bref: backlog  # 2026-11-01 décision utilisateur — l'API Keevo absorbe toute l'API Bref, partie dashboard comprise (FUS-FR38)
   20-12-acceptation-parcours-bref: backlog  # 2026-11-06 revue 20-3 — 1 item (que faire d un devis dont la facture convertie est annulée : dupliquer / re-devis, selon Bref)
   epic-20-retrospective: optional
