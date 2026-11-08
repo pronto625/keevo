@@ -553,10 +553,10 @@ So that **chacun voit et fait seulement ce qui le concerne (équivalent admin/se
 
 - [ ] [Deferred-from: review 20-3, 2026-11-06] Who may end a quote: delete needs INVOICE_CREATE while cancel needs INVOICE_MANAGE (owner), so an employee can delete but not cancel with a reason [InvoicingModule permissions] — decide the permission for cancelling a never-numbered quote
 
-- [ ] [Deferred-from: review 20-10, 2026-11-08] Who may see and record expenses: Bref keeps expenses owner-only (« elles révèlent les marges »), Keevo 20.10 gives MANAGER/EMPLOYEE VIEW+CREATE and VIEWER VIEW on their store (manifest `keevo/modules/expenses/module.json` rolePermissions) — owner decision: keep, or restrict to owner/manager
+- [x] [Deferred-from: review 20-10, 2026-11-08] (decided 2026-11-08: owner-only like Bref — fix(20-10)) Who may see and record expenses: Bref keeps expenses owner-only (« elles révèlent les marges »), Keevo 20.10 gives MANAGER/EMPLOYEE VIEW+CREATE and VIEWER VIEW on their store (manifest `keevo/modules/expenses/module.json` rolePermissions) — owner decision: keep, or restrict to owner/manager
 
-- [ ] [Deferred-from: review 20-7, 2026-11-08] An EMPLOYEE may rotate a document's public link (INVOICE_SEND) — owner decision: keep or restrict to owner/manager
-- [ ] [Deferred-from: review 20-14, 2026-11-08] Invoice reads (`GET /invoices`, pull) are not filtered by store for store members, although creation is store-scoped — decide whether members see only their store's documents
+- [x] [Deferred-from: review 20-7, 2026-11-08] (decided 2026-11-08: an employee acts only on the documents they created, like Bref — 20-14) An EMPLOYEE may rotate a document's public link (INVOICE_SEND) — owner decision: keep or restrict to owner/manager
+- [x] [Deferred-from: review 20-14, 2026-11-08] (decided 2026-11-08: employee = own documents, manager/viewer = their store, owner = all, like Bref — 20-14) Invoice reads (`GET /invoices`, pull) are not filtered by store for store members, although creation is store-scoped — decide whether members see only their store's documents
 
 ### Story 19.6 : Une personne, plusieurs rôles dans plusieurs entreprises
 
