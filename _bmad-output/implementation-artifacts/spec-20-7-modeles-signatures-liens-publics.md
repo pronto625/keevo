@@ -5,7 +5,7 @@ created: '2026-11-07'
 status: 'done'
 baseline_revision: '72839aef13a2cc3c85e4a611aadedf1f8b831a6f'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-20-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-20-5-remise-livraison-tva-echeance.md'
@@ -88,6 +88,39 @@ Paths under `keevo/backend/src/main/` unless stated.
 ## Spec Change Log
 
 ## Review Triage Log
+
+### 2026-11-08 — Review pass (5 layers: blind, edge case, verification gap, intent, patterns)
+- verdicts: 43 findings — high 1, medium 16, low 16, false 5, maybe-false 5 (grouped by root cause)
+- findings:
+  - `[high]` `[patch]` Edge: rotate / public-link on a draft, cancelled or converted document produced a working link — `assertSendable`, 409.
+  - `[medium]` `[patch]` Edge/blind: legacy registry `ON CONFLICT` could move a token to another tenant; re-attach left the old token live; controller trusted the registry row alone — refused move, unregister, `assertLegacyCurrent`.
+  - `[medium]` `[patch]` Blind/patterns: legacy route rate-limited before resolution, random UUIDs evicted real counters — resolved tokens only + per-IP failure limiter.
+  - `[low]` `[patch]` Edge: imported invoice without number sent as « null » — `reference()` fallback.
+  - `[medium]` `[patch]` Edge/blind: very long tickets unbounded — fitted height capped, paginated beyond 1 000 mm, test.
+  - `[low]` `[patch]` Edge: frozen signature with a missing file could never be re-added — allowed when the file is absent.
+  - `[low]` `[patch]` Edge/blind: draft deletion left signature files — deleted after commit.
+  - `[medium]` `[patch]` Blind: quote conversion dropped layout and signatures — copied in one UPDATE … FROM.
+  - `[medium]` `[patch]` Blind: a sent quote's client signature could be swapped — locked once sent (`send_count` / `link_shared_at`).
+  - `[medium]` `[patch]` Blind: sign / layout / rotate / settings not audited; quote sending audited as an invoice — four events + French audit labels, `InvoiceSentEvent.quote`.
+  - `[medium]` `[patch]` Blind: PUT layout / settings reset absent fields — partial request DTOs.
+  - `[low]` `[patch]` Blind: size check before downscale, three config sources — 2 MB raw, 200 KB after re-encode, one properties source.
+  - `[low]` `[patch]` Blind/patterns: duplicated response assembly and parsers; findAll without deleted_at — assembler reused, `InvoiceLayoutParams`, `= ANY(?)`.
+  - `[low]` `[patch]` Patterns: double reads on shared link and rotate — version checked in the PDF read, `RETURNING` reused.
+  - `[low]` `[reject]` Patterns: Thymeleaf runs twice for fitted tickets — bounded by document size, documented.
+  - `[low]` `[reject]` Patterns: presentation row read separately from the invoice row — O(1) primary-key reads.
+  - `[low]` `[patch]` Edge (claim): every layout prints the payment block — spec corrected (Keevo layout only with payments, V1 parity).
+  - `[medium]` `[patch]` Verification: RGPD deletion of `invoice_legacy_links` untested — test added.
+  - `[medium]` `[patch]` Verification: list and sync pull presentation fields untested — list + pull-from-cursor test.
+  - `[medium]` `[patch]` Verification: signing cancelled / converted documents untested — 409 tests.
+  - `[medium]` `[patch]` Blind: role checks, cross-tenant isolation, 14.2 token end to end, legacy 404/429, signed quote conversion untested — tests added.
+  - `[maybe-false]` `[defer]` Intent: automatic 90-day lifetime for imported tenants — set by the import, routed to 24.4.
+  - `[false]` `[reject]` Intent: old Bref link returns a PDF where Bref returned JSON — the redirected browser link displays the document; Bref's JSON was for its own web viewer.
+  - `[maybe-false]` `[reject]` Intent: visual comparison not automated — 3 documents × 8 layouts rendered and checked by eye (pdftoppm), text/size assertions in tests.
+  - `[false]` `[reject]` Intent: merchant UI — API-only repo, mobile key m20-7.
+  - `[low]` `[reject]` Intent: BRF reference when no legal number — `reference()` falls back to BRF-, covered by the sending fallback.
+  - `[maybe-false]` `[defer]` Patches: EMPLOYEE may rotate a link (INVOICE_SEND) — permission decision, 19-5b.
+  - `[maybe-false]` `[reject]` Patches: per-IP limiter behind the proxy — relies on forwarded headers already applied by the existing filters.
+
 
 ## Design Notes
 
