@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 289 — gated: 138, exempt: 151.
+Handlers: 311 — gated: 138, exempt: 173.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -59,6 +59,26 @@ Handlers: 289 — gated: 138, exempt: 151.
 | GET | `/api/v1/admin/notifications/global/estimate` | — | — | — | super-admin | AdminGlobalNotificationController#estimate |
 | GET | `/api/v1/admin/notifications/global/tenants` | — | — | — | super-admin | AdminGlobalNotificationController#tenants |
 | POST | `/api/v1/admin/notifications/global/{id}/cancel` | — | — | — | super-admin | AdminGlobalNotificationController#cancel |
+| GET | `/api/v1/admin/offers` | — | — | — | super-admin | AdminOfferController#catalogue |
+| GET | `/api/v1/admin/offers/changes` | — | — | — | super-admin | AdminOfferController#changes |
+| POST | `/api/v1/admin/offers/cycles` | — | — | — | super-admin | AdminOfferController#createCycle |
+| PUT | `/api/v1/admin/offers/cycles/{code}` | — | — | — | super-admin | AdminOfferController#updateCycle |
+| POST | `/api/v1/admin/offers/cycles/{code}/archive` | — | — | — | super-admin | AdminOfferController#archiveCycle |
+| POST | `/api/v1/admin/offers/cycles/{code}/unarchive` | — | — | — | super-admin | AdminOfferController#unarchiveCycle |
+| GET | `/api/v1/admin/offers/discounts` | — | — | — | super-admin | AdminOfferController#discounts |
+| POST | `/api/v1/admin/offers/discounts` | — | — | — | super-admin | AdminOfferController#createDiscount |
+| PUT | `/api/v1/admin/offers/discounts/{id}` | — | — | — | super-admin | AdminOfferController#updateDiscount |
+| POST | `/api/v1/admin/offers/discounts/{id}/archive` | — | — | — | super-admin | AdminOfferController#archiveDiscount |
+| POST | `/api/v1/admin/offers/plans` | — | — | — | super-admin | AdminOfferController#createPlan |
+| PUT | `/api/v1/admin/offers/plans/order` | — | — | — | super-admin | AdminOfferController#reorderPlans |
+| PUT | `/api/v1/admin/offers/plans/{code}` | — | — | — | super-admin | AdminOfferController#updatePlan |
+| POST | `/api/v1/admin/offers/plans/{code}/archive` | — | — | — | super-admin | AdminOfferController#archivePlan |
+| POST | `/api/v1/admin/offers/plans/{code}/unarchive` | — | — | — | super-admin | AdminOfferController#unarchivePlan |
+| GET | `/api/v1/admin/offers/prices/history` | — | — | — | super-admin | AdminOfferController#priceHistory |
+| DELETE | `/api/v1/admin/offers/prices/{planCode}/{cycleCode}` | — | — | — | super-admin | AdminOfferController#deletePrice |
+| PUT | `/api/v1/admin/offers/prices/{planCode}/{cycleCode}` | — | — | — | super-admin | AdminOfferController#setPrice |
+| GET | `/api/v1/admin/offers/quote` | — | — | — | super-admin | AdminOfferController#quote |
+| PUT | `/api/v1/admin/offers/settings` | — | — | — | super-admin | AdminOfferController#updateSettings |
 | GET | `/api/v1/admin/operations/inactive-tenants` | — | — | — | super-admin | AdminOperationsController#listInactiveTenants |
 | GET | `/api/v1/admin/operations/overview` | — | — | — | super-admin | AdminOperationsController#getOverview |
 | GET | `/api/v1/admin/operations/tenants` | — | — | — | super-admin | AdminOperationsController#listTenantActivity |
@@ -67,6 +87,7 @@ Handlers: 289 — gated: 138, exempt: 151.
 | GET | `/api/v1/admin/plan-profiles/{planType}` | — | — | — | super-admin | AdminPlanProfileController#get |
 | PUT | `/api/v1/admin/plan-profiles/{planType}` | — | — | — | super-admin | AdminPlanProfileController#update |
 | GET | `/api/v1/admin/products` | — | — | — | super-admin | AdminCrossAccountController#listProducts |
+| GET | `/api/v1/admin/revenue/by-plan` | — | — | — | super-admin | AdminRevenueController#getByPlan |
 | GET | `/api/v1/admin/revenue/churn` | — | — | — | super-admin | AdminRevenueController#getChurn |
 | GET | `/api/v1/admin/revenue/churn/export` | — | — | — | super-admin | AdminRevenueController#exportChurn |
 | GET | `/api/v1/admin/revenue/summary` | — | — | — | super-admin | AdminRevenueController#getSummary |
@@ -277,6 +298,7 @@ Handlers: 289 — gated: 138, exempt: 151.
 | PUT | `/api/v1/stores/{storeId}/logo` | `store` | WRITE | — |  | StoreLogoController#upload |
 | PATCH | `/api/v1/stores/{storeId}/reactivate` | `store` | WRITE | — |  | StoreController#reactivateStore |
 | GET | `/api/v1/subscription/me` | — | — | — | core: abonnement | SubscriptionController#getMySubscription |
+| GET | `/api/v1/subscription/offers` | — | — | — | core: abonnement | OffersController#offers |
 | GET | `/api/v1/suppliers` | `crm` | READ | — |  | SupplierController#listSuppliers |
 | POST | `/api/v1/suppliers` | `crm` | WRITE | — |  | SupplierController#createSupplier |
 | DELETE | `/api/v1/suppliers/{id}` | `crm` | WRITE | — |  | SupplierController#archiveSupplier |

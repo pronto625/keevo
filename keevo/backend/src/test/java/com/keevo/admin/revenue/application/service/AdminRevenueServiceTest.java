@@ -274,6 +274,48 @@ class AdminRevenueServiceTest {
         assertThat(report.churnRate()).isZero();
     }
 
+    // ── By plan (Story 21.10) ─────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("21.10 by plan: MRR / paying today and collected in the range per plan × cycle, French labels, "
+            + "legacy payments « Plan non précisé » / « Durée libre », catalogue order")
+    void byPlan() throws SQLException {
+        payments.add(new RevenuePayment(A, 5_500, Instant.parse("2026-10-01T09:00:00Z"),
+                LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 30), "TEAM", "MONTHLY"));
+        payments.add(new RevenuePayment(B, 32_760, Instant.parse("2026-10-05T09:00:00Z"),
+                LocalDate.of(2026, 10, 5), LocalDate.of(2027, 10, 4), "PRO", "ANNUAL"));
+        UUID legacy = UUID.randomUUID();
+        payments.add(new RevenuePayment(legacy, 10_000, Instant.parse("2026-09-15T09:00:00Z"),
+                LocalDate.of(2026, 9, 15), LocalDate.of(2026, 10, 14)));
+        com.keevo.subscription.api.OfferAdministration offers =
+                mock(com.keevo.subscription.api.OfferAdministration.class);
+        when(offers.cycles()).thenReturn(List.of(
+                new com.keevo.subscription.api.OfferAdministration.CycleItem("MONTHLY", "Mensuel", 1, 10, false, null),
+                new com.keevo.subscription.api.OfferAdministration.CycleItem("ANNUAL", "Annuel", 12, 30, false, null)));
+        AdminRevenueService withCycles = new AdminRevenueService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC),
+                com.keevo.shared.capability.entitlement.PlanCatalog.SEED, offers);
+
+        List<PlanCycleRevenue> rows = withCycles.getByPlan(new RevenueRangeQuery(null, null));
+
+        assertThat(rows).containsExactly(
+                new PlanCycleRevenue("PRO", "Pro", "ANNUAL", "Annuel", 2_693, 1, 32_760, 1),
+                new PlanCycleRevenue("TEAM", "Team", "MONTHLY", "Mensuel", 5_500, 1, 5_500, 1),
+                new PlanCycleRevenue(null, "Plan non précisé", null, "Durée libre", 10_000, 1, 0, 0));
+        // same totals as the summary
+        RevenueSummary summary = service.getSummary(new RevenueRangeQuery(null, null));
+        assertThat(rows.stream().mapToLong(PlanCycleRevenue::mrr).sum()).isEqualTo(summary.mrr());
+        assertThat(rows.stream().mapToLong(PlanCycleRevenue::revenueCollected).sum())
+                .isEqualTo(summary.revenueCollected());
+    }
+
+    @Test
+    @DisplayName("21.10 by plan: an invalid range → 422 (summary rules)")
+    void byPlan_invalidRange() {
+        assertThatThrownBy(() -> service.getByPlan(new RevenueRangeQuery("2026-10-31", "2026-10-01")))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+    }
+
     private void stubTenantLookup(UUID id, String name, String schema) throws SQLException {
         ResultSet rs = mock(ResultSet.class);
         when(rs.getString("id")).thenReturn(id.toString());

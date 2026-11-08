@@ -63,8 +63,8 @@ public class JdbcPlanCatalog implements PlanCatalog, PlanCatalogStore {
             FROM public.plans ORDER BY sort_order, code""";
 
     static final String SETTINGS_SQL =
-            "SELECT free_plan_code, trial_plan_code, trial_months, default_paid_plan_code FROM public.plan_settings "
-            + "WHERE id = 1";
+            "SELECT free_plan_code, trial_plan_code, trial_months, default_paid_plan_code, trial_enabled "
+            + "FROM public.plan_settings WHERE id = 1";
 
     static final String UPSERT_PLAN_SQL = """
             INSERT INTO public.plans (code, label, description, sort_order, visible, kind, archived_at)
@@ -74,11 +74,13 @@ public class JdbcPlanCatalog implements PlanCatalog, PlanCatalogStore {
                 archived_at = EXCLUDED.archived_at, updated_at = now()""";
 
     static final String UPSERT_SETTINGS_SQL = """
-            INSERT INTO public.plan_settings (id, free_plan_code, trial_plan_code, trial_months, default_paid_plan_code)
-            VALUES (1, ?, ?, ?, ?)
+            INSERT INTO public.plan_settings (id, free_plan_code, trial_plan_code, trial_months, default_paid_plan_code,
+                trial_enabled)
+            VALUES (1, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET free_plan_code = EXCLUDED.free_plan_code,
                 trial_plan_code = EXCLUDED.trial_plan_code, trial_months = EXCLUDED.trial_months,
-                default_paid_plan_code = EXCLUDED.default_paid_plan_code, updated_at = now()""";
+                default_paid_plan_code = EXCLUDED.default_paid_plan_code, trial_enabled = EXCLUDED.trial_enabled,
+                updated_at = now()""";
 
     /**
      * A loaded catalogue, the instant (nanos) until which it is fresh, and whether it is the built-in fallback. A
@@ -158,7 +160,7 @@ public class JdbcPlanCatalog implements PlanCatalog, PlanCatalogStore {
         requireLive(settings.trialPlan(), PlanKind.TRIAL, "trial");
         requireLive(settings.defaultPaidPlan(), PlanKind.PAID, "default paid");
         jdbc.update(UPSERT_SETTINGS_SQL, settings.freePlan().code(), settings.trialPlan().code(),
-                settings.trialMonths(), settings.defaultPaidPlan().code());
+                settings.trialMonths(), settings.defaultPaidPlan().code(), settings.trialEnabled());
         invalidateNowAndAfterCommit();
     }
 
@@ -272,7 +274,7 @@ public class JdbcPlanCatalog implements PlanCatalog, PlanCatalogStore {
                     }
                     settings = new PlanSettings(PlanType.of(rs.getString("free_plan_code")),
                             PlanType.of(rs.getString("trial_plan_code")), rs.getInt("trial_months"),
-                            PlanType.of(rs.getString("default_paid_plan_code")));
+                            PlanType.of(rs.getString("default_paid_plan_code")), rs.getBoolean("trial_enabled"));
                 }
             }
             return PlanCatalog.of(plans, settings);

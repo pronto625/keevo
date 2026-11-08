@@ -115,6 +115,52 @@ public final class RevenueMetrics {
         return Set.copyOf(countedPayments(day).keySet());
     }
 
+    /**
+     * Story 21.10 — MRR and paying tenants on {@code day}, and revenue collected in {@code from..to}, split by
+     * (plan, cycle) of the payment (same definitions as {@link #mrrAt}, {@link #payingAt} and
+     * {@link #revenueCollected}). Keys are {@code [planCode, cycleCode]}, either {@code null} when unknown. Cost: that
+     * of {@link #countedPayments} — O(payments × plan events of the tenant) — plus O(payments).
+     */
+    public Map<List<String>, Totals> byPlanAndCycle(LocalDate day, LocalDate from, LocalDate to) {
+        Map<List<String>, Totals> totals = new LinkedHashMap<>();
+        for (RevenuePayment p : countedPayments(day).values()) {
+            totals.computeIfAbsent(key(p), k -> new Totals()).addCounted(monthlyValue(p));
+        }
+        for (RevenuePayment p : payments) {
+            if (inRange(watDate(p.paidAt()), from, to)) {
+                totals.computeIfAbsent(key(p), k -> new Totals()).addCollected(p.amountXaf());
+            }
+        }
+        return totals;
+    }
+
+    private static List<String> key(RevenuePayment p) {
+        return Arrays.asList(p.planCode(), p.cycleCode()); // nulls allowed (unknown plan / free-form cycle)
+    }
+
+    /** Story 21.10 — running totals of one (plan, cycle). */
+    public static final class Totals {
+        private long mrr;
+        private int paying;
+        private long collected;
+        private int payments;
+
+        void addCounted(long monthly) {
+            mrr += monthly;
+            paying++;
+        }
+
+        void addCollected(long amount) {
+            collected += amount;
+            payments++;
+        }
+
+        public long mrr() { return mrr; }
+        public int paying() { return paying; }
+        public long collected() { return collected; }
+        public int payments() { return payments; }
+    }
+
     /** Tenants whose first-ever payment was made (WAT date of {@code paid_at}) in {@code from..to}. */
     public Set<UUID> newPayingTenants(LocalDate from, LocalDate to) {
         Map<UUID, Instant> first = new HashMap<>();

@@ -23,5 +23,10 @@ public final class AdminLabels {
     /** Company deleted (or unknown) — its feedback stays readable. */
     public static final String DELETED_TENANT = "Entreprise supprimée";
 
+    /** Story 21.10 — payment whose plan is unknown (legacy row). */
+    public static final String UNKNOWN_PLAN = "Plan non précisé";
+    /** Story 21.10 — payment without a billing cycle (free-form period). */
+    public static final String FREE_FORM_CYCLE = "Durée libre";
+
     private AdminLabels() {}
 }

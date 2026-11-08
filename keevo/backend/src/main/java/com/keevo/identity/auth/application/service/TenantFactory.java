@@ -7,6 +7,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanChangeRecorder;
+import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanSettings;
 import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.application.port.PlanModuleRowSync;
@@ -101,13 +102,17 @@ public class TenantFactory {
         // 2. Create and persist tenant domain object
         // SPEC CHANGE 2026-03-06: new tenants start on a trial (Story 1.6 handles expiry). Story 19.7a: which plan and
         // for how long is data (public.plan_settings), read once here and handed to the schema seed.
-        PlanSettings trial = catalog.settings();
+        // Story 21.10: with the trial switched off (plan_settings.trial_enabled) the registration starts on the free
+        // plan, with no end date.
+        PlanSettings settings = catalog.settings();
+        PlanType startPlan = settings.registrationPlan();
+        Integer startMonths = settings.registrationMonths();
         Tenant tenant = new Tenant(
             UUID.randomUUID(),
             code,
             schemaName,
             TenantStatus.ACTIVE,
-            trial.trialPlan(),
+            startPlan,
             Instant.now()
         );
         Tenant savedTenant = tenantRepository.save(tenant);
@@ -119,9 +124,8 @@ public class TenantFactory {
         //    Story 9-2 — plan history starts with the trial (same registration transaction); inside
         //    the try so a failure also drops the provisioned schema.
         try {
-            schemaProvisioner.provision(savedTenant.getId().toString(), schemaName, trial.trialPlan(),
-                    trial.trialMonths());
-            planChangeRecorder.recordEvent(savedTenant.getId(), null, trial.trialPlan(),
+            schemaProvisioner.provision(savedTenant.getId().toString(), schemaName, startPlan, startMonths);
+            planChangeRecorder.recordEvent(savedTenant.getId(), null, startPlan,
                     PlanChangeCause.REGISTRATION, null, null);
             // Story 16.5 — the paid modules get their TRIAL rows (trial end = subscription end) in the
             // registration transaction, before the module provisioning that runs after commit

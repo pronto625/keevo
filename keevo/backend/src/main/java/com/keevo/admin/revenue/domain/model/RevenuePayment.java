@@ -10,5 +10,14 @@ import java.util.UUID;
  *
  * @param periodStart first day covered (inclusive)
  * @param periodEnd   last day covered (inclusive)
+ * @param planCode    Story 21.10 — plan paid for, {@code null} when unknown (legacy row)
+ * @param cycleCode   Story 21.10 — billing cycle paid for, {@code null} when free-form
  */
-public record RevenuePayment(UUID tenantId, long amountXaf, Instant paidAt, LocalDate periodStart, LocalDate periodEnd) {}
+public record RevenuePayment(UUID tenantId, long amountXaf, Instant paidAt, LocalDate periodStart, LocalDate periodEnd,
+                             String planCode, String cycleCode) {
+
+    /** Plan and cycle unknown. */
+    public RevenuePayment(UUID tenantId, long amountXaf, Instant paidAt, LocalDate periodStart, LocalDate periodEnd) {
+        this(tenantId, amountXaf, paidAt, periodStart, periodEnd, null, null);
+    }
+}

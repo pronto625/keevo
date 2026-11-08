@@ -21,12 +21,12 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
 
     static final String INSERT_SQL =
             "INSERT INTO public.tenant_payments "
-            + "(id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by) "
-            + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            + "(id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by, plan_code, "
+            + "cycle_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     private static final String COLUMNS =
             "id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by, "
-            + "voided_at, void_reason ";
+            + "voided_at, void_reason, plan_code, cycle_code ";
 
     static final String FIND_BY_TENANT_SQL =
             "SELECT " + COLUMNS
@@ -50,7 +50,7 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
         jdbc.update(INSERT_SQL,
                 p.id(), p.tenantId(), Math.toIntExact(p.amountXaf()), p.method().name(),
                 Timestamp.from(p.paidAt()), Date.valueOf(p.periodStart()), Date.valueOf(p.periodEnd()),
-                p.note(), p.recordedBy());
+                p.note(), p.recordedBy(), p.planCode(), p.cycleCode());
     }
 
     @Override
@@ -82,6 +82,8 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
                 rs.getString("note"),
                 UUID.fromString(rs.getString("recorded_by")),
                 voidedAt != null ? voidedAt.toInstant() : null,
-                rs.getString("void_reason"));
+                rs.getString("void_reason"),
+                rs.getString("plan_code"),
+                rs.getString("cycle_code"));
     }
 }

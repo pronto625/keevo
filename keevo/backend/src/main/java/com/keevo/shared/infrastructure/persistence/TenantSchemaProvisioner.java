@@ -113,14 +113,15 @@ public class TenantSchemaProvisioner {
      */
     public void provision(String tenantId, String schemaName) {
         PlanSettings settings = catalog.settings();
-        provision(tenantId, schemaName, settings.trialPlan(), settings.trialMonths());
+        provision(tenantId, schemaName, settings.registrationPlan(), settings.registrationMonths());
     }
 
     /**
      * Same, the subscription seeded on {@code trialPlan} for {@code trialMonths} months (Story 19.7a: the caller read
-     * them once from {@code public.plan_settings}, so the tenant row and the subscription agree).
+     * them once from {@code public.plan_settings}, so the tenant row and the subscription agree). Story 21.10:
+     * {@code trialMonths} {@code null} = no end date (trial switched off: the free plan).
      */
-    public void provision(String tenantId, String schemaName, PlanType trialPlan, int trialMonths) {
+    public void provision(String tenantId, String schemaName, PlanType trialPlan, Integer trialMonths) {
         try {
             TenantSchema.validate(schemaName);
         } catch (IllegalArgumentException e) {
@@ -261,7 +262,7 @@ public class TenantSchemaProvisioner {
         }
     }
 
-    private void seedData(Connection conn, String schemaName, PlanType trialPlan, int trialMonths)
+    private void seedData(Connection conn, String schemaName, PlanType trialPlan, Integer trialMonths)
             throws SQLException {
         TenantSchema.validate(schemaName); // provision() already validated it; re-checked at use
         try (Statement stmt = conn.createStatement()) {
@@ -277,7 +278,11 @@ public class TenantSchemaProvisioner {
                         seed.setString(i++, trialPlan.code());
                     }
                 }
-                seed.setInt(i, trialMonths);
+                if (trialMonths == null) {
+                    seed.setNull(i, java.sql.Types.INTEGER); // make_interval(NULL) → expires_at NULL (no end)
+                } else {
+                    seed.setInt(i, trialMonths);
+                }
                 seed.execute();
             }
             stmt.execute(SEED_STORE);

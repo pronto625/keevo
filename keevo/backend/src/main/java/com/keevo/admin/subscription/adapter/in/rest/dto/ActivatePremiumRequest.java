@@ -19,6 +19,8 @@ import jakarta.validation.constraints.Size;
  * @param note      optional, 500 chars max
  * @param planCode  Story 19.7b — optional paid plan code of the catalogue (kind PAID, not archived); absent → the
  *                  default paid plan of {@code plan_settings}
+ * @param cycleCode Story 21.10 — optional billing cycle paid for (a live cycle of the catalogue), stored with the
+ *                  payment for the revenue per plan and cycle; absent or empty = free-form period
  */
 public record ActivatePremiumRequest(
         @NotBlank(message = "Date d'expiration requise")
@@ -40,5 +42,15 @@ public record ActivatePremiumRequest(
         String note,
 
         @Pattern(regexp = "^[A-Za-z][A-Za-z0-9_]{1,29}$", message = "Code de plan invalide")
-        String planCode
-) {}
+        String planCode,
+
+        @Pattern(regexp = "^$|^[A-Za-z][A-Za-z0-9_]{1,29}$", message = "Code de durée invalide")
+        String cycleCode
+) {
+
+    /** Without a billing cycle (clients before Story 21.10). */
+    public ActivatePremiumRequest(String expiresAt, Long amountXaf, String method, String paidAt, String note,
+                                  String planCode) {
+        this(expiresAt, amountXaf, method, paidAt, note, planCode, null);
+    }
+}

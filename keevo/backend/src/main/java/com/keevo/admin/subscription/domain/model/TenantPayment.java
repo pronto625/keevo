@@ -13,6 +13,8 @@ import java.util.UUID;
  * @param periodEnd   last day covered (WAT), the Premium expiry date
  * @param voidedAt    when the payment was voided, null when it counts
  * @param voidReason  reason of the void, null when it counts
+ * @param planCode    Story 21.10 — the plan the payment paid for, null for a legacy row the backfill could not tie
+ * @param cycleCode   Story 21.10 — the billing cycle it paid for, null when free-form (« Durée libre »)
  */
 public record TenantPayment(
         UUID id,
@@ -25,13 +27,31 @@ public record TenantPayment(
         String note,
         UUID recordedBy,
         Instant voidedAt,
-        String voidReason
+        String voidReason,
+        String planCode,
+        String cycleCode
 ) {
 
-    /** A new (non-voided) payment. */
+    /** A new (non-voided) payment, plan and cycle unknown. */
     public TenantPayment(UUID id, UUID tenantId, long amountXaf, PaymentMethod method, Instant paidAt,
                          LocalDate periodStart, LocalDate periodEnd, String note, UUID recordedBy) {
         this(id, tenantId, amountXaf, method, paidAt, periodStart, periodEnd, note, recordedBy, null, null);
+    }
+
+    /** Story 21.10 — a new (non-voided) payment for a plan and an optional cycle. */
+    public static TenantPayment forPlan(UUID id, UUID tenantId, long amountXaf, PaymentMethod method, Instant paidAt,
+                                        LocalDate periodStart, LocalDate periodEnd, String note, UUID recordedBy,
+                                        String planCode, String cycleCode) {
+        return new TenantPayment(id, tenantId, amountXaf, method, paidAt, periodStart, periodEnd, note, recordedBy,
+                null, null, planCode, cycleCode);
+    }
+
+    /** A payment as stored before Story 21.10 (plan and cycle unknown). */
+    public TenantPayment(UUID id, UUID tenantId, long amountXaf, PaymentMethod method, Instant paidAt,
+                         LocalDate periodStart, LocalDate periodEnd, String note, UUID recordedBy, Instant voidedAt,
+                         String voidReason) {
+        this(id, tenantId, amountXaf, method, paidAt, periodStart, periodEnd, note, recordedBy, voidedAt, voidReason,
+                null, null);
     }
 
     public boolean isVoided() {

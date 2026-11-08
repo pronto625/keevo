@@ -1,5 +1,6 @@
 package com.keevo.admin.revenue.application.service;
 
+import com.keevo.admin.revenue.domain.model.PlanCycleRevenue;
 import com.keevo.admin.revenue.domain.model.ChurnReport;
 import com.keevo.admin.revenue.domain.model.RevenueSummary;
 import com.keevo.admin.revenue.domain.model.RevenueTrendPoint;
@@ -38,7 +39,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * classes may share the database). Runs outside the test transaction, as in production.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({AdminRevenueService.class, AdminRevenueServiceIntegrationTest.FixedClock.class})
+@Import({AdminRevenueService.class, AdminRevenueServiceIntegrationTest.FixedClock.class,
+        com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class,
+        com.keevo.subscription.offer.adapter.out.persistence.JdbcOfferStore.class,
+        com.keevo.subscription.offer.application.service.OfferCatalogService.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("AdminRevenueService on PostgreSQL (9-3)")
 class AdminRevenueServiceIntegrationTest extends PostgresIntegrationTest {
@@ -220,6 +224,38 @@ class AdminRevenueServiceIntegrationTest extends PostgresIntegrationTest {
                 id, "KV-" + suffix.toUpperCase(), schema, status, name);
         tenantIds.add(id);
         return id;
+    }
+
+    @Test
+    @DisplayName("21.10 by plan on PostgreSQL: a payment carrying plan + cycle lands in its row with French labels; "
+            + "the legacy payment of A (no plan) in « Plan non précisé » / « Durée libre »")
+    void byPlan_realSql() {
+        java.util.function.Function<List<PlanCycleRevenue>, java.util.Map<String, PlanCycleRevenue>> byKey = rows -> {
+            java.util.Map<String, PlanCycleRevenue> map = new java.util.HashMap<>();
+            rows.forEach(r -> map.put(r.planLabel() + "/" + r.cycleLabel(), r));
+            return map;
+        };
+        java.util.Map<String, PlanCycleRevenue> before = byKey.apply(service.getByPlan(new RevenueRangeQuery(null, null)));
+        UUID f = tenant("Revenus Team", "ACTIVE", true);
+        plan(f, "TEAM");
+        jdbc.update("INSERT INTO public.tenant_payments (tenant_id, amount_xaf, method, paid_at, period_start, "
+                        + "period_end, recorded_by, plan_code, cycle_code) VALUES (?, 5500, 'CASH', ?, ?, ?, ?, "
+                        + "'TEAM', 'MONTHLY')", f, Timestamp.from(Instant.parse("2031-06-10T10:00:00Z")),
+                Date.valueOf(LocalDate.of(2031, 6, 10)), Date.valueOf(LocalDate.of(2031, 7, 9)), UUID.randomUUID());
+
+        java.util.Map<String, PlanCycleRevenue> after = byKey.apply(service.getByPlan(new RevenueRangeQuery(null, null)));
+
+        PlanCycleRevenue team = after.get("Team/Mensuel");
+        PlanCycleRevenue teamBefore = before.getOrDefault("Team/Mensuel",
+                new PlanCycleRevenue("TEAM", "Team", "MONTHLY", "Mensuel", 0, 0, 0, 0));
+        assertThat(team.planCode()).isEqualTo("TEAM");
+        assertThat(team.cycleCode()).isEqualTo("MONTHLY");
+        assertThat(team.mrr() - teamBefore.mrr()).isEqualTo(5_500);
+        assertThat(team.payingTenants() - teamBefore.payingTenants()).isEqualTo(1);
+        assertThat(team.revenueCollected() - teamBefore.revenueCollected()).isEqualTo(5_500);
+        PlanCycleRevenue legacy = after.get("Plan non précisé/Durée libre");
+        assertThat(legacy.planCode()).isNull();
+        assertThat(legacy.revenueCollected()).isGreaterThanOrEqualTo(15_000); // A's June payment
     }
 
     private void plan(UUID tenant, String plan) {

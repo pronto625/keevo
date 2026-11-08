@@ -381,6 +381,83 @@ class AdminPlanServiceTest {
         verify(changePlan, never()).changePlan(any());
     }
 
+    /** Story 21.10 — the service with the offer port (billing cycles). */
+    private AdminPlanService withOffers(com.keevo.subscription.api.OfferAdministration offers) {
+        return new AdminPlanService(lookup, SubscriptionApiTestSupport.administrationPort(null, changePlan), payments,
+                publisher, jdbc, Clock.fixed(NOW, ZoneOffset.UTC),
+                com.keevo.shared.capability.entitlement.PlanCatalog.SEED, offers);
+    }
+
+    private static com.keevo.subscription.api.OfferAdministration.CycleItem cycle(String code, boolean archived) {
+        return new com.keevo.subscription.api.OfferAdministration.CycleItem(code, code, 3, 20, archived,
+                archived ? NOW : null);
+    }
+
+    @Test
+    @DisplayName("21.10: the payment stores the plan granted and the billing cycle paid for (code normalised)")
+    void activate_storesPlanAndCycle() {
+        tenant("ACTIVE");
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(PlanType.FREE, null)));
+        when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(PlanType.FREE, null));
+        com.keevo.subscription.api.OfferAdministration offers =
+                mock(com.keevo.subscription.api.OfferAdministration.class);
+        when(offers.cycle("QUARTERLY")).thenReturn(Optional.of(cycle("QUARTERLY", false)));
+
+        withOffers(offers).activatePremium(new ActivatePremiumCommand(ACTOR, TENANT, TODAY.plusDays(90), 15_000,
+                PaymentMethod.CASH, null, null, "team", " quarterly "));
+
+        ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
+        verify(payments).insert(payment.capture());
+        assertThat(payment.getValue().planCode()).isEqualTo("TEAM");
+        assertThat(payment.getValue().cycleCode()).isEqualTo("QUARTERLY");
+    }
+
+    @Test
+    @DisplayName("21.10: without a cycle the payment keeps a free-form period (cycle null), the default plan stored")
+    void activate_withoutCycle_storesDefaultPlan() {
+        tenant("ACTIVE");
+        when(changePlan.currentPlan(SCHEMA)).thenReturn(Optional.of(new CurrentPlan(PlanType.FREE, null)));
+        when(changePlan.changePlan(any())).thenReturn(new CurrentPlan(PlanType.FREE, null));
+
+        service.activatePremium(activation(TODAY.plusDays(30), 10_000, PaymentMethod.CASH));
+
+        ArgumentCaptor<TenantPayment> payment = ArgumentCaptor.forClass(TenantPayment.class);
+        verify(payments).insert(payment.capture());
+        assertThat(payment.getValue().planCode()).isEqualTo("TEAM");
+        assertThat(payment.getValue().cycleCode()).isNull();
+    }
+
+    @Test
+    @DisplayName("21.10: an unknown or archived cycle → 422 « Cette durée ne peut pas être choisie », nothing written")
+    void activate_badCycle() {
+        com.keevo.subscription.api.OfferAdministration offers =
+                mock(com.keevo.subscription.api.OfferAdministration.class);
+        when(offers.cycle("WEEKLY")).thenReturn(Optional.empty());
+        when(offers.cycle("OLD")).thenReturn(Optional.of(cycle("OLD", true)));
+        AdminPlanService withCycles = withOffers(offers);
+
+        for (String code : List.of("weekly", "old")) {
+            assertThatThrownBy(() -> withCycles.activatePremium(new ActivatePremiumCommand(ACTOR, TENANT,
+                    TODAY.plusDays(30), 10_000, PaymentMethod.CASH, null, null, null, code)))
+                    .isInstanceOfSatisfying(DomainException.class, e -> {
+                        assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+                        assertThat(e.getUserMessage()).isEqualTo("Cette durée ne peut pas être choisie");
+                    });
+        }
+        verifyNoInteractions(lookup, payments, publisher);
+    }
+
+    @Test
+    @DisplayName("21.10 (pins 19.7b): the archived PREMIUM of the seeded catalogue cannot be activated → 422")
+    void activate_archivedPremium_refused() {
+        assertThatThrownBy(() -> service.activatePremium(activation(TODAY.plusDays(30), "PREMIUM")))
+                .isInstanceOfSatisfying(DomainException.class, e -> {
+                    assertThat(e.getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR);
+                    assertThat(e.getUserMessage()).isEqualTo("Ce plan ne peut pas être attribué");
+                });
+        verifyNoInteractions(lookup, payments, publisher);
+    }
+
     @Test
     @DisplayName("19.7a: downgrading a tenant already on a plan of kind FREE (data) → INVALID_STATE, nothing written")
     void downgrade_alreadyOnADataFreePlan() {

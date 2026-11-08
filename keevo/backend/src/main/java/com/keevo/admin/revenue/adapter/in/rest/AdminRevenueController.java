@@ -5,6 +5,7 @@ import com.keevo.admin.revenue.adapter.in.rest.dto.RevenueSummaryDto;
 import com.keevo.admin.revenue.adapter.in.rest.dto.RevenueTrendPointDto;
 import com.keevo.admin.revenue.application.service.AdminRevenueService;
 import com.keevo.admin.revenue.domain.model.ChurnReport;
+import com.keevo.admin.revenue.domain.model.PlanCycleRevenue;
 import com.keevo.admin.revenue.domain.port.in.RevenueRangeQuery;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
@@ -48,6 +49,17 @@ public class AdminRevenueController {
         CurrentActor.requireSuperAdmin();
         return ResponseEntity.ok(ApiResponseWrapper.ok(RevenueSummaryDto.from(
                 revenueService.getSummary(new RevenueRangeQuery(from, to)))));
+    }
+
+    @Operation(summary = "Story 21.10 — MRR and paying tenants today, revenue collected over the range (default "
+            + "current month), per plan × billing cycle with French labels (« Plan non précisé » / « Durée libre » "
+            + "for legacy payments)", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/by-plan")
+    public ResponseEntity<ApiResponseWrapper<List<PlanCycleRevenue>>> getByPlan(
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to) {
+        CurrentActor.requireSuperAdmin();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(revenueService.getByPlan(new RevenueRangeQuery(from, to))));
     }
 
     @Operation(summary = "MRR, paying tenants, conversions and churn of the last 12 months",

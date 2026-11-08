@@ -63,6 +63,7 @@ class AdminTenantPlanControllerTest {
     @MockitoBean ListTenantPaymentsUseCase listPayments;
     @MockitoBean ListPlanAlertsUseCase listAlerts;
     @MockitoBean VoidTenantPaymentUseCase voidPayment;
+    @MockitoBean com.keevo.subscription.api.OfferAdministration offers; // Story 21.10 — cycle labels of payments
     @MockitoBean JwtAuthFilter jwtAuthFilter;
 
     private static final UUID ADMIN_ID = UUID.randomUUID();
@@ -284,6 +285,42 @@ class AdminTenantPlanControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].voidedAt").value("2026-10-14T09:00:00Z"))
                 .andExpect(jsonPath("$.data[0].voidReason").value("Erreur de saisie"));
+    }
+
+    @Test
+    @DisplayName("Story 21.10 — GET /payments → plan and cycle paid for, codes and French labels (additive)")
+    void payments_planAndCycle() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(listPayments.listPayments(TENANT)).thenReturn(List.of(TenantPayment.forPlan(UUID.randomUUID(), TENANT,
+                5_500, PaymentMethod.CASH, Instant.parse("2026-10-13T09:00:00Z"), LocalDate.of(2026, 10, 13),
+                LocalDate.of(2026, 11, 12), null, UUID.randomUUID(), "TEAM", "MONTHLY")));
+        when(offers.cycles()).thenReturn(List.of(new com.keevo.subscription.api.OfferAdministration.CycleItem(
+                "MONTHLY", "Mensuel", 1, 10, false, null)));
+
+        mockMvc.perform(get(BASE + "/payments", TENANT))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].planCode").value("TEAM"))
+                .andExpect(jsonPath("$.data[0].planLabel").value("Team"))
+                .andExpect(jsonPath("$.data[0].cycleCode").value("MONTHLY"))
+                .andExpect(jsonPath("$.data[0].cycleLabel").value("Mensuel"));
+    }
+
+    @Test
+    @DisplayName("Story 21.10 — POST /plan/premium passes the optional cycleCode to the command")
+    void activate_cycleCode() throws Exception {
+        as("ROLE_SUPER_ADMIN");
+        when(activatePremium.activatePremium(any())).thenReturn(new CurrentPlan(PlanType.of("TEAM"),
+                Instant.parse("2026-12-31T22:59:59Z")));
+
+        mockMvc.perform(post(BASE + "/plan/premium", TENANT).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"expiresAt\":\"2026-12-31\",\"amountXaf\":5500,\"method\":\"CASH\","
+                                + "\"planCode\":\"TEAM\",\"cycleCode\":\"MONTHLY\"}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ActivatePremiumCommand> cmd = ArgumentCaptor.forClass(ActivatePremiumCommand.class);
+        verify(activatePremium).activatePremium(cmd.capture());
+        assertThat(cmd.getValue().planCode()).isEqualTo("TEAM");
+        assertThat(cmd.getValue().cycleCode()).isEqualTo("MONTHLY");
     }
 
     // ── Void payment ──────────────────────────────────────────────────────────

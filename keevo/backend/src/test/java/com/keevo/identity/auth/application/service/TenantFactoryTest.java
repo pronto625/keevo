@@ -86,6 +86,32 @@ class TenantFactoryTest {
     }
 
     @Test
+    @DisplayName("Story 21.10: trial switched off → the free plan, no end date (null months), REGISTRATION to it")
+    void create_trialOff_startsOnFreePlan() {
+        com.keevo.shared.capability.entitlement.PlanCatalog seed = com.keevo.shared.capability.entitlement.PlanCatalog.SEED;
+        com.keevo.shared.capability.entitlement.PlanSettings on = seed.settings();
+        com.keevo.shared.capability.entitlement.PlanCatalog trialOff = com.keevo.shared.capability.entitlement.PlanCatalog
+                .of(seed.all(), new com.keevo.shared.capability.entitlement.PlanSettings(on.freePlan(),
+                        on.trialPlan(), on.trialMonths(), on.defaultPaidPlan(), false));
+        TenantFactory factory = new TenantFactory(codeGenerator, tenantRepository, schemaProvisioner,
+                planChangeRecorder, null, null, trialOff);
+        String code = "KV-FREE21";
+        UUID id = UUID.randomUUID();
+        when(codeGenerator.generate()).thenReturn(code);
+        when(tenantRepository.save(any(Tenant.class))).thenAnswer(inv -> {
+            Tenant t = inv.getArgument(0);
+            assertThat(t.getPlanType()).isEqualTo(PlanType.FREE);
+            return new Tenant(id, code, t.getSchemaName(), TenantStatus.ACTIVE, t.getPlanType(), Instant.now());
+        });
+
+        factory.create();
+
+        verify(schemaProvisioner).provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(PlanType.FREE),
+                org.mockito.ArgumentMatchers.isNull());
+        verify(planChangeRecorder).recordEvent(id, null, PlanType.FREE, PlanChangeCause.REGISTRATION, null, null);
+    }
+
+    @Test
     @DisplayName("Story 16.5: create() syncs the plan-module rows after the REGISTRATION event, before module provisioning")
     void create_syncsPlanModuleRows() {
         com.keevo.shared.module.ModuleProvisioner moduleProvisioner = mock(com.keevo.shared.module.ModuleProvisioner.class);

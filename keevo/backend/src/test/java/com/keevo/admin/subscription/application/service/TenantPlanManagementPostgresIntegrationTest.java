@@ -66,6 +66,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
     @Autowired JdbcTemplate jdbc;
     @Autowired TenantSchemaProvisioner provisioner;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog planCatalog;
 
     private final List<UUID> tenantIds = new ArrayList<>();
     private final List<String> schemas = new ArrayList<>();
@@ -146,6 +147,32 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         assertThat(jdbc.queryForObject("SELECT max_products FROM \"kv_pm9202\".subscriptions", Integer.class)).isEqualTo(500);
         assertThat(publicPlan(t)).isEqualTo("FREE");
         assertThat(events(t)).containsExactly("BUSINESS_TRIAL>TEAM:ADMIN_ACTIVATION", "TEAM>FREE:ADMIN_DOWNGRADE");
+    }
+
+    @Test
+    @DisplayName("21.10: activation with planCode + cycleCode stores both codes on the payment (round trip)")
+    void activateWithPlanAndCycle() {
+        UUID t = tenant("kv_pm9221", "KV-PM9221", "PREMIUM_TRIAL");
+        com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog catalog = planCatalog;
+        com.keevo.subscription.offer.application.service.OfferCatalogService offers =
+                new com.keevo.subscription.offer.application.service.OfferCatalogService(catalog, catalog,
+                        new com.keevo.subscription.offer.adapter.out.persistence.JdbcOfferStore(jdbc), clock);
+        JdbcPlanChangeRecorder recorder = new JdbcPlanChangeRecorder(jdbc);
+        AdminPlanService service = new AdminPlanService(new TargetTenantLookup(jdbc),
+                SubscriptionApiTestSupport.administrationPort(null, new ChangeTenantPlanService(jdbc, recorder,
+                        planModuleRows(), com.keevo.shared.capability.entitlement.TestPlanProfiles.DEFAULTS)),
+                new JdbcTenantPaymentRepository(jdbc), publisher, jdbc, clock, catalog, offers);
+        LocalDate today = LocalDate.now(clock.withZone(com.keevo.shared.domain.time.KeevoZones.WAT));
+
+        service.activatePremium(new ActivatePremiumCommand(UUID.randomUUID(), t, today.plusDays(90), 15_000,
+                PaymentMethod.CASH, null, null, "PRO", "quarterly"));
+
+        List<TenantPayment> payments = new JdbcTenantPaymentRepository(jdbc).findByTenant(t);
+        assertThat(payments).singleElement().satisfies(p -> {
+            assertThat(p.planCode()).isEqualTo("PRO");
+            assertThat(p.cycleCode()).isEqualTo("QUARTERLY");
+        });
+        assertThat(publicPlan(t)).isEqualTo("PRO");
     }
 
     // ── Suspension ────────────────────────────────────────────────────────────

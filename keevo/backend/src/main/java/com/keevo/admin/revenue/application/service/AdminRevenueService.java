@@ -1,6 +1,8 @@
 package com.keevo.admin.revenue.application.service;
 
 import com.keevo.identity.api.PlanKind;
+import com.keevo.shared.capability.entitlement.PlanCatalog;
+import com.keevo.subscription.api.OfferAdministration;
 import com.keevo.admin.revenue.domain.model.*;
 import com.keevo.admin.revenue.domain.port.in.*;
 import com.keevo.shared.domain.exception.DomainException;
@@ -57,7 +59,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             "t.status <> 'DELETED' AND t.id <> '" + SYSTEM_TENANT_ID + "'::uuid";
 
     static final String PAYMENTS_SQL =
-            "SELECT p.tenant_id, p.amount_xaf, p.paid_at, p.period_start, p.period_end "
+            "SELECT p.tenant_id, p.amount_xaf, p.paid_at, p.period_start, p.period_end, p.plan_code, p.cycle_code "
             + "FROM public.tenant_payments p JOIN public.tenants t ON t.id = p.tenant_id WHERE " + IN_SCOPE
             + " AND p.voided_at IS NULL"; // a voided payment (9-2 correction) never counts
 
@@ -83,12 +85,70 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             "SELECT COALESCE(SUM(total_amount), 0) FROM \"%s\".sales WHERE status = 'COMPLETED' "
             + "AND COALESCE(occurred_at, created_at) >= ? AND COALESCE(occurred_at, created_at) < ?";
 
+    static final String UNKNOWN_PLAN = com.keevo.admin.AdminLabels.UNKNOWN_PLAN;
+    static final String FREE_FORM_CYCLE = com.keevo.admin.AdminLabels.FREE_FORM_CYCLE;
+
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final PlanCatalog catalog;
+    /** Story 21.10 — labels and order of the billing cycles (owner: subscription.offer); null = no cycle known. */
+    private final OfferAdministration offers;
 
+    /** With the seeded plan catalogue and no billing cycle (tests). */
     public AdminRevenueService(JdbcTemplate jdbc, Clock clock) {
+        this(jdbc, clock, PlanCatalog.SEED, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminRevenueService(JdbcTemplate jdbc, Clock clock, PlanCatalog catalog, OfferAdministration offers) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.catalog = catalog;
+        this.offers = offers;
+    }
+
+    // ── By plan (Story 21.10) ─────────────────────────────────────────────────
+
+    /**
+     * MRR and paying tenants today, revenue collected over the range (default current month), split per plan ×
+     * billing cycle of the payments, with French labels; legacy payments without plan → « Plan non précisé », without
+     * cycle → « Durée libre ». Rows in catalogue order (plan display order, then cycle order, unknowns last). Cost: the
+     * payments and events queries of the summary + one cycles read (offer port); plan labels from the catalogue
+     * cache; sorting with precomputed positions.
+     */
+    public List<PlanCycleRevenue> getByPlan(RevenueRangeQuery query) {
+        LocalDate today = today();
+        LocalDate[] range = resolveRange(query, today);
+        Map<List<String>, RevenueMetrics.Totals> totals = loadMetrics().byPlanAndCycle(today, range[0], range[1]);
+        Map<String, String> cycleLabels = new LinkedHashMap<>();
+        if (offers != null) {
+            offers.cycles().forEach(c -> cycleLabels.put(c.code(), c.label()));
+        }
+        Map<String, Integer> cycleOrder = positions(new ArrayList<>(cycleLabels.keySet()));
+        Map<String, Integer> planOrder = positions(catalog.all().stream().map(p -> p.code().code()).toList());
+        List<PlanCycleRevenue> rows = new ArrayList<>();
+        totals.forEach((key, t) -> {
+            String plan = key.get(0);
+            String cycle = key.get(1);
+            rows.add(new PlanCycleRevenue(plan, plan == null ? UNKNOWN_PLAN : catalog.label(plan, UNKNOWN_PLAN),
+                    cycle, cycle == null ? FREE_FORM_CYCLE : cycleLabels.getOrDefault(cycle, FREE_FORM_CYCLE),
+                    t.mrr(), t.paying(), t.collected(), t.payments()));
+        });
+        rows.sort(Comparator.comparingInt((PlanCycleRevenue r) -> rank(planOrder, r.planCode()))
+                .thenComparingInt(r -> rank(cycleOrder, r.cycleCode())));
+        return rows;
+    }
+
+    private static Map<String, Integer> positions(List<String> codes) {
+        Map<String, Integer> positions = new HashMap<>();
+        for (int i = 0; i < codes.size(); i++) {
+            positions.put(codes.get(i), i);
+        }
+        return positions;
+    }
+
+    private static int rank(Map<String, Integer> positions, String code) {
+        return code == null ? Integer.MAX_VALUE : positions.getOrDefault(code, Integer.MAX_VALUE);
     }
 
     // ── Summary ───────────────────────────────────────────────────────────────
@@ -246,7 +306,9 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                 rs.getLong("amount_xaf"),
                 rs.getTimestamp("paid_at").toInstant(),
                 rs.getDate("period_start").toLocalDate(),
-                rs.getDate("period_end").toLocalDate()));
+                rs.getDate("period_end").toLocalDate(),
+                rs.getString("plan_code"),
+                rs.getString("cycle_code")));
         List<PlanChange> events = jdbc.query(EVENTS_SQL, (rs, i) -> new PlanChange(
                 UUID.fromString(rs.getString("tenant_id")),
                 rs.getString("from_plan"),

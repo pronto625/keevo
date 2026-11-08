@@ -26,7 +26,10 @@ import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
+import com.keevo.admin.AdminLabels;
 import com.keevo.subscription.api.CurrentPlan;
+import com.keevo.subscription.api.OfferAdministration;
+import com.keevo.admin.subscription.domain.model.TenantPayment;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,6 +46,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -69,6 +73,7 @@ public class AdminTenantPlanController {
     private final ListPlanAlertsUseCase listPlanAlertsUseCase;
     private final VoidTenantPaymentUseCase voidTenantPaymentUseCase;
     private final PlanCatalog catalog;
+    private final OfferAdministration offers;
 
     public AdminTenantPlanController(ActivatePremiumUseCase activatePremiumUseCase,
                                      DowngradeToFreeUseCase downgradeToFreeUseCase,
@@ -77,8 +82,10 @@ public class AdminTenantPlanController {
                                      ListTenantPaymentsUseCase listTenantPaymentsUseCase,
                                      ListPlanAlertsUseCase listPlanAlertsUseCase,
                                      VoidTenantPaymentUseCase voidTenantPaymentUseCase,
-                                     PlanCatalog catalog) {
+                                     PlanCatalog catalog,
+                                     OfferAdministration offers) {
         this.catalog = catalog;
+        this.offers = offers;
         this.activatePremiumUseCase = activatePremiumUseCase;
         this.downgradeToFreeUseCase = downgradeToFreeUseCase;
         this.suspendTenantUseCase = suspendTenantUseCase;
@@ -103,7 +110,8 @@ public class AdminTenantPlanController {
                 PaymentMethod.valueOf(request.method()),
                 parsePaidAt(request.paidAt()),
                 request.note(),
-                request.planCode()));
+                request.planCode(),
+                request.cycleCode()));
         return ResponseEntity.ok(ApiResponseWrapper.ok(
                 new PlanStateDto(plan.planType().name(), plan.expiresAt())));
     }
@@ -146,8 +154,20 @@ public class AdminTenantPlanController {
     @GetMapping("/tenants/{tenantId}/payments")
     public ResponseEntity<ApiResponseWrapper<List<TenantPaymentDto>>> payments(@PathVariable UUID tenantId) {
         CurrentActor.requireSuperAdmin();
-        return ResponseEntity.ok(ApiResponseWrapper.ok(
-                listTenantPaymentsUseCase.listPayments(tenantId).stream().map(TenantPaymentDto::from).toList()));
+        List<TenantPayment> payments = listTenantPaymentsUseCase.listPayments(tenantId);
+        // Story 21.10 — labels of the plan and cycle paid for (catalogue cache + one cycles query when needed)
+        // (same French fallbacks as the revenue by plan: « Plan non précisé » / « Durée libre »)
+        Map<String, String> cycles = new HashMap<>();
+        if (payments.stream().anyMatch(p -> p.cycleCode() != null)) {
+            offers.cycles().forEach(c -> cycles.put(c.code(), c.label()));
+        }
+        return ResponseEntity.ok(ApiResponseWrapper.ok(payments.stream()
+                .map(p -> TenantPaymentDto.from(p,
+                        p.planCode() == null ? AdminLabels.UNKNOWN_PLAN
+                                : catalog.label(p.planCode(), AdminLabels.UNKNOWN_PLAN),
+                        p.cycleCode() == null ? AdminLabels.FREE_FORM_CYCLE
+                                : cycles.getOrDefault(p.cycleCode(), AdminLabels.FREE_FORM_CYCLE)))
+                .toList()));
     }
 
     @Operation(summary = "Void a payment entered by mistake (kept in the history, excluded from every count)",

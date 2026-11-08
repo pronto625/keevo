@@ -26,6 +26,7 @@ import com.keevo.shared.event.catalog.plan.PlanDowngradedEvent;
 import com.keevo.subscription.api.ChangePlanInput;
 import com.keevo.subscription.api.PlanAdministrationPort;
 import com.keevo.subscription.api.CurrentPlan;
+import com.keevo.subscription.api.OfferAdministration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
@@ -118,6 +119,8 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     private final JdbcTemplate jdbc;
     private final Clock clock;
     private final PlanCatalog catalog;
+    /** Story 21.10 — the billing cycles (owner: subscription.offer); null in tests without the catalogue. */
+    private final OfferAdministration offers;
 
     /** With the seeded plan catalogue (tests). */
     public AdminPlanService(TargetTenantLookup tenantLookup,
@@ -129,7 +132,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         this(tenantLookup, changeTenantPlan, paymentRepository, eventPublisher, jdbc, clock, PlanCatalog.SEED);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    /** Without the offer catalogue (tests): any billing cycle is refused. */
     public AdminPlanService(TargetTenantLookup tenantLookup,
                             PlanAdministrationPort changeTenantPlan,
                             TenantPaymentRepository paymentRepository,
@@ -137,7 +140,20 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                             JdbcTemplate jdbc,
                             Clock clock,
                             PlanCatalog catalog) {
+        this(tenantLookup, changeTenantPlan, paymentRepository, eventPublisher, jdbc, clock, catalog, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminPlanService(TargetTenantLookup tenantLookup,
+                            PlanAdministrationPort changeTenantPlan,
+                            TenantPaymentRepository paymentRepository,
+                            ApplicationEventPublisher eventPublisher,
+                            JdbcTemplate jdbc,
+                            Clock clock,
+                            PlanCatalog catalog,
+                            OfferAdministration offers) {
         this.catalog = catalog;
+        this.offers = offers;
         this.tenantLookup = tenantLookup;
         this.changeTenantPlan = changeTenantPlan;
         this.paymentRepository = paymentRepository;
@@ -155,6 +171,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         LocalDate today = LocalDate.ofInstant(now, WAT);
         validateActivation(cmd, today, now);
         PlanType granted = paidPlan(cmd.planCode()); // 19.7b: the chosen plan, else plan_settings default
+        String cycle = billingCycle(cmd.cycleCode()); // 21.10: optional cycle paid for, stored with the payment
 
         TargetTenant tenant = tenantLookup.load(cmd.tenantId());
         requireNotDeleted(tenant);
@@ -179,10 +196,10 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         }
 
         Instant expiresAt = endOfDayWat(cmd.expiresAt());
-        paymentRepository.insert(new TenantPayment(
+        paymentRepository.insert(TenantPayment.forPlan(
                 UUID.randomUUID(), tenant.id(), cmd.amountXaf(), cmd.method(),
                 cmd.paidAt() != null ? cmd.paidAt() : now,
-                periodStart, cmd.expiresAt(), blankToNull(cmd.note()), cmd.actorId()));
+                periodStart, cmd.expiresAt(), blankToNull(cmd.note()), cmd.actorId(), granted.code(), cycle));
 
         CurrentPlan previous = changeTenantPlan.changePlan(new ChangePlanInput(
                 tenant.id(), tenant.schemaName(), granted, expiresAt,
@@ -208,6 +225,24 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                 .filter(p -> p.kind() == PlanKind.PAID && !p.archived())
                 .orElseThrow(() -> validation("planCode", "Ce plan ne peut pas être attribué"));
         return plan.code();
+    }
+
+    /**
+     * Story 21.10 — the billing cycle a payment paid for: {@code null} when none is given (free-form period), else a
+     * live cycle of the catalogue (read through the offer port, owner of the cycles).
+     *
+     * @throws DomainException VALIDATION_ERROR (422) « Cette durée ne peut pas être choisie »
+     */
+    private String billingCycle(String cycleCode) {
+        String code = cycleCode == null || cycleCode.isBlank() ? null : cycleCode.trim().toUpperCase(Locale.ROOT);
+        if (code == null) {
+            return null;
+        }
+        boolean live = offers != null && offers.cycle(code).filter(c -> !c.archived()).isPresent();
+        if (!live) {
+            throw validation("cycleCode", "Cette durée ne peut pas être choisie");
+        }
+        return code;
     }
 
     // ── Downgrade to FREE ─────────────────────────────────────────────────────

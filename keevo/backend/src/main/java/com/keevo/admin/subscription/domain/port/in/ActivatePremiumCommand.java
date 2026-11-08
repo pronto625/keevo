@@ -12,6 +12,7 @@ import java.util.UUID;
  * @param expiresAt last Premium day (WAT), must be after today
  * @param paidAt    payment time, null → now
  * @param planCode  Story 19.7b — the paid plan granted; null → {@code plan_settings.default_paid_plan_code}
+ * @param cycleCode Story 21.10 — the billing cycle paid for, null = free-form period
  */
 public record ActivatePremiumCommand(
         UUID actorId,
@@ -21,12 +22,19 @@ public record ActivatePremiumCommand(
         PaymentMethod method,
         Instant paidAt,
         String note,
-        String planCode
+        String planCode,
+        String cycleCode
 ) {
+
+    /** A chosen paid plan, no billing cycle. */
+    public ActivatePremiumCommand(UUID actorId, UUID tenantId, LocalDate expiresAt, long amountXaf,
+                                  PaymentMethod method, Instant paidAt, String note, String planCode) {
+        this(actorId, tenantId, expiresAt, amountXaf, method, paidAt, note, planCode, null);
+    }
 
     /** The default paid plan ({@code plan_settings.default_paid_plan_code}). */
     public ActivatePremiumCommand(UUID actorId, UUID tenantId, LocalDate expiresAt, long amountXaf,
                                   PaymentMethod method, Instant paidAt, String note) {
-        this(actorId, tenantId, expiresAt, amountXaf, method, paidAt, note, null);
+        this(actorId, tenantId, expiresAt, amountXaf, method, paidAt, note, null, null);
     }
 }
