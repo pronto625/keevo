@@ -128,6 +128,7 @@ const auditEntityTypeLabels = <String, String>{
 
 /// French label of each before/after field key.
 const auditFieldLabels = <String, String>{
+  'channel': 'Canal d\'envoi',
   // Story 13.8a/b — module activation / deactivation payload.
   'module': 'Module',
   'statut': 'Statut',
@@ -237,6 +238,9 @@ const auditFieldLabels = <String, String>{
 
 /// French label of each code value (statuses, types, roles, sectors…).
 const auditValueLabels = <String, String>{
+  'EMAIL': 'E-mail',
+  'SMS': 'SMS',
+  'WHATSAPP': 'WhatsApp',
   'ACTIVE': 'Actif',
   'ADJUSTMENT': 'Ajustement',
   'BACKGROUND': 'Préparé en arrière-plan',
@@ -311,6 +315,7 @@ const auditHiddenKeys = <String>{
 
 /// Keys whose string values are codes (translated, else humanized).
 const auditCodeKeys = <String>{
+  'channel',
   'mode',
   'movementType',
   'newRole',
