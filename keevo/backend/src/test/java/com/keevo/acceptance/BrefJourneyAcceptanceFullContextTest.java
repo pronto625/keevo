@@ -3,6 +3,7 @@ package com.keevo.acceptance;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceOverdueJob;
+import com.keevo.invoicing.invoice.application.service.channel.SmsInvoiceChannel;
 import com.keevo.invoicing.invoice.domain.port.out.InvoicePaymentRepository;
 import com.keevo.shared.capability.notification.DeliveryResult;
 import com.keevo.shared.capability.notification.SmsMessage;
@@ -20,7 +21,6 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -75,7 +75,7 @@ import static org.awaitility.Awaitility.await;
  *   <li>deposit → instalment;</li>
  *   <li>overdue job at a fixed clock (the next morning) → « En retard » + the owner's « Factures en retard »;</li>
  *   <li>instalment settled → PAID;</li>
- *   <li>SMS sending — <b>needs Story 20-8</b>, disabled until it is merged;</li>
+ *   <li>SMS sending (Story 20-8, fake provider): the public link in the text opens the PDF, SMS quota counted;</li>
  *   <li>expense → finance summary (exact revenue excl. VAT, expenses, result, margin) and dashboard revenue;</li>
  *   <li>public link → the PDF opens without login;</li>
  *   <li>routed item (review 20-3): a quote whose invoice is cancelled stays CONVERTED — as in Bref, where the quote
@@ -128,7 +128,6 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
     private final List<UUID> tenants = new ArrayList<>();
     private String adminToken;
     private int passed;
-    private boolean smsSent;
 
     // Bref tenant
     private Owner bref;
@@ -325,12 +324,13 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
     // ── 6. SMS (Story 20-8) ─────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Needs Story 20-8 ({@code POST /invoices/{id}/send} with {@code channel: "SMS"}, bean {@code smsInvoiceChannel}).
-     * A capturing fake SMS sender replaces the provider (never a real SMS). Enabled when 20-8 is merged.
+     * Story 20-8 — {@code POST /invoices/{id}/send} with {@code channel: "SMS"}, synchronous, through
+     * {@link SmsInvoiceChannel} → {@link TenantMessaging}. A capturing fake SMS sender replaces the provider in both
+     * (as {@code InvoiceSmsEmailSendingFullContextTest}): never a real SMS. The link base is the request's (online
+     * send), so no {@code keevo.public-base-url} is needed — and none is set, to keep the shared cached context.
      */
     @Test
     @Order(6)
-    @Disabled("Story 20-8 (envoi SMS / e-mail) pas encore fusionnée : à activer au rebase sur 20-8")
     @DisplayName("6 — Envoi par SMS : texte avec le lien public, quota SMS décompté après succès du fournisseur")
     void step06_sendBySms() throws Exception {
         requirePrevious(5, "Étape 6");
@@ -338,7 +338,7 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
         FakeSms sms = new FakeSms();
         Map<Object, Object> originals = new LinkedHashMap<>();
         Object messaging = AopTestUtils.getUltimateTargetObject(context.getBean(TenantMessaging.class));
-        Object channel = AopTestUtils.getUltimateTargetObject(context.getBean("smsInvoiceChannel"));
+        Object channel = AopTestUtils.getUltimateTargetObject(context.getBean(SmsInvoiceChannel.class));
         try {
             for (Object target : List.of(messaging, channel)) {
                 originals.put(target, ReflectionTestUtils.getField(target, "smsSender"));
@@ -349,6 +349,10 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
                     200);
             assertThat(sent.path("sendCount").asInt()).as(s).isEqualTo(1);
             assertThat(sent.path("lastSentChannel").asText()).as(s).isEqualTo("SMS");
+            assertThat(sent.path("lastSentChannelLabel").asText()).as(s).isEqualTo("SMS");
+            assertThat(jdbc.queryForList("SELECT status FROM \"" + bref.schema + "\".invoice_send_requests WHERE "
+                    + "invoice_id = ?::uuid", String.class, invoiceId)).as(s + " — envoi journalisé")
+                    .containsExactly("SENT");
             assertThat(sms.sent).as(s + " — un SMS parti").hasSize(1);
             SmsMessage message = sms.sent.get(0);
             assertThat(message.to()).as(s).isEqualTo("+237690001212");
@@ -356,8 +360,8 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
             String link = message.text().substring(message.text().indexOf("/api/v1/")).split("\\s")[0];
             assertThat(pdfText(call(null, HttpMethod.GET, link, null))).as(s + " — le lien du SMS ouvre le PDF")
                     .contains(invoiceNumber);
-            smsSent = true;
             assertQuotas(s + " — SMS décompté après succès", bref, 1, 1);
+            passed = 6;
         } finally {
             originals.forEach((target, original) -> ReflectionTestUtils.setField(target, "smsSender", original));
         }
@@ -370,7 +374,7 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
     @DisplayName("7 — Dépense « Loyer » de 30 000 → résumé finance exact (CA HT, dépenses, résultat, marge) et CA du "
             + "tableau de bord")
     void step07_expenseThenFinance() throws Exception {
-        requirePrevious(5, "Étape 7");
+        requirePrevious(6, "Étape 7");
         String s = "Étape 7";
         Map<String, Object> expense = new LinkedHashMap<>();
         expense.put("amount", EXPENSE);
@@ -444,7 +448,7 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
                 document("QUOTE", "Awa Traoré", "+237690003434", "Faïence cuisine (révisé)", 35_000)), 201);
         assertThat(fresh.path("status").asText()).as(s).isEqualTo("DRAFT");
         assertQuotas(s + " — la conversion annulée a consommé un document, le nouveau devis aucun", bref, 2,
-                smsSent ? 1 : 0);
+                1);
         assertBrefRevenue(s + " — facture annulée et devis hors CA");
         passed = 9;
     }
@@ -457,7 +461,7 @@ class BrefJourneyAcceptanceFullContextTest extends FullContextIntegrationTest {
     void step10_endOfDayCounters() throws Exception {
         requirePrevious(9, "Étape 10");
         String s = "Étape 10";
-        assertQuotas(s, bref, 2, smsSent ? 1 : 0);
+        assertQuotas(s, bref, 2, 1);
         JsonNode list = data(s + " — factures", call(bref.token, HttpMethod.GET, "/api/v1/invoices?size=100", null),
                 200);
         List<String> numbers = new ArrayList<>();

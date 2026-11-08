@@ -46,7 +46,7 @@ deferred: []
 | Deposit + instalment | 50 000 received, 69 250 due today | PARTIAL, two rows | — |
 | Overdue | job at D+1 08:00 WAT | OVERDUE, listed under `?paymentState=OVERDUE`, inbox « Factures en retard » « 1 facture(s) en retard de paiement : FAC-… » | — |
 | Payment | settle the instalment | PAID, amountPaid 119 250 | — |
-| SMS (20-8) | `send {channel: SMS}` | one SMS carrying the public link (the link opens the PDF), sendCount 1, SMS used 1 | disabled until 20-8 is merged |
+| SMS (20-8) | `send {channel: SMS}` | one SMS carrying the public link (the link opens the PDF), sendCount 1, SMS used 1 | — |
 | Expense + finance | rent 30 000 today | CA TTC 119 250, VAT 19 250, CA HT 100 000, paid 119 250, expenses 30 000, result 70 000, margin 70 %, expense ratio 30 %; dashboard todayCA 119 250 | — |
 | Public link | `public-link`, anonymous GET | PDF with the number and the client | — |
 | Converted quote, invoice cancelled | 2nd quote → convert → cancel the invoice | quote stays CONVERTED and points to the cancelled `FAC-…-000002`; convert → 200, same invoice; cancelling the quote → 409; a new quote is created; revenue unchanged; documents used 2 | — |
@@ -96,12 +96,13 @@ deferred: []
 ## Verification
 
 **Commands:**
-- `cd keevo/backend && bash kmvn.sh -o -q test -Dtest='BrefJourneyAcceptanceFullContextTest' -Dsurefire.failIfNoSpecifiedTests=false` -- expected: 11 run, 0 failures, 1 skipped (SMS, until 20-8).
-- `cd keevo/backend && bash kmvn.sh -o -q test -Dtest='com/keevo/acceptance/**/*Test*'` -- expected: pass (run 2026-11-08: ModularVision 4/4, BrefJourney 11 run, 1 skipped).
+- `cd keevo/backend && bash kmvn.sh -o -q test -Dtest='BrefJourneyAcceptanceFullContextTest' -Dsurefire.failIfNoSpecifiedTests=false` -- expected: 11 run, 0 failures, 0 skipped.
+- `cd keevo/backend && bash kmvn.sh -o -q test -Dtest='com/keevo/acceptance/**/*Test*'` -- expected: pass (run 2026-11-08 after 20-8: ModularVision 4/4, BrefJourney 11/11).
+- `cd keevo/backend && bash kmvn.sh -o -q test -Dtest='com/keevo/invoicing/**/*Test*'` -- expected: pass.
 
 ## Auto Run Result
 
-`BrefJourneyAcceptanceFullContextTest`, run 2026-11-08: 11 run, 0 failures, 1 skipped. The skipped test is step 6 (SMS), which waits for 20-8.
+`BrefJourneyAcceptanceFullContextTest`, run 2026-11-08 after rebasing onto 20-8 / 20-13 (`0ff80d02`): 11 run, 0 failures, 0 skipped.
 
 | # | Journey step | Assertions | Result |
 |---|---|---|---|
@@ -110,13 +111,16 @@ deferred: []
 | 3 | Deposit 50 000 + instalment 69 250 due today | PARTIAL, 2 rows, amountDue 119 250 | ✅ |
 | 4 | Overdue job at D+1 08:00 WAT (fixed clock) | OVERDUE « En retard », `?paymentState=OVERDUE` = this invoice, inbox « Factures en retard » « 1 facture(s) en retard de paiement : FAC-… »; a second run sends no second notification | ✅ |
 | 5 | Instalment settled | PAID, amountPaid 119 250, `paidAt` set | ✅ |
-| 6 | SMS sending (20-8) | one SMS to the given number, link in the text opens the PDF, sendCount 1, SMS used 1 | ⏸ disabled until 20-8 is merged |
+| 6 | SMS sending (20-8), REST `send {channel: SMS}`, fake provider | one SMS to the given number, link in the text opens the PDF, sendCount 1, `lastSentChannel` SMS, one `invoice_send_requests` row SENT, SMS used 1 | ✅ |
 | 7 | Rent expense 30 000 → finance + dashboard | TTC 119 250, VAT 19 250, CA HT 100 000, paid 119 250, unpaid 0, 1 invoice, expenses 30 000, result 70 000, margin 70 %, expenses 30 %, « Loyer »; dashboard todayCA 119 250 | ✅ |
 | 8 | Public link | 30 days, anonymous PDF with `FAC-…-000001` and « Société Ndolo » | ✅ |
 | 9 | Converted quote whose invoice is cancelled (routed item) | `FAC-…-000002` cancelled with its number kept; quote stays CONVERTED and points to it; convert → 200, same invoice; cancelling the quote → 409; new DRAFT quote; documents 2; revenue unchanged | ✅ |
-| 10 | End of day | documents 2, SMS 0 (1 once 20-8 is in); invoices `000001 PAID` + `000002 CANCELLED`; quotes CONVERTED, CONVERTED, DRAFT; finance and dashboard unchanged | ✅ |
+| 10 | End of day | documents 2, SMS 1; invoices `000001 PAID` + `000002 CANCELLED`; quotes CONVERTED, CONVERTED, DRAFT; finance and dashboard unchanged | ✅ |
 | K | Keevo POS: sale 2 × 1 000 → automatic invoice → day closure | invoice PAID 2 000 `FAC-…-000001` in the sale's store; closure 1 sale / 2 000; dashboard todayCA 2 000 (not 4 000); finance TTC 2 000, 1 transaction; documents 0 | ✅ |
 
 **Bugs found:** none. The journey passed with no production change. One test-side finding: a day closure deliberately leaves out sales received in the previous 5 seconds (`ClosureWindow.COMMIT_SAFETY_MARGIN`, v1s-13-13). The next closure counts them as late arrivals. This is intended, so the POS scenario closes the day after that margin, as at the end of a real day.
 
-**When 20-8 is merged:** remove `@Disabled` from `step06_sendBySms`. Check the bean name `smsInvoiceChannel` and its field `smsSender`, and the response fields `sendCount` / `lastSentChannel`. Steps 9 and 10 then expect 1 SMS.
+**After 20-8 was merged:**
+- Step 6 is enabled. The fake SMS sender is swapped into `SmsInvoiceChannel` and `TenantMessaging` (field `smsSender`), as in `InvoiceSmsEmailSendingFullContextTest`.
+- Steps 9 and 10 expect 1 SMS.
+- No `keevo.public-base-url` property is set. An online REST send builds the link from the request (`PublicBaseUrl`), which gives an absolute `http://localhost/…` link. `InvoiceSmsEmailSendingFullContextTest` does not set the property either; it overrides `publicBaseUrl` only on the outbox, for the offline path. A test property would also start a second Spring context, which this machine cannot afford.
