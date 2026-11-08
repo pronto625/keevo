@@ -4,6 +4,8 @@ import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.DocumentScope;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceDelivery;
+import com.keevo.invoicing.invoice.domain.model.SendChannel;
+import com.keevo.invoicing.invoice.domain.model.SendStatus;
 import com.keevo.invoicing.invoice.domain.model.InvoiceKind;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
 import com.keevo.invoicing.invoice.domain.model.InvoiceStatus;
@@ -52,9 +54,10 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             java.util.Collections.nCopies(COLUMNS.split(",").length, "?"));
     /**
      * Story 14.7 — read only: set by {@link #markSuperseded}, never inserted. Story 20.3: the conversion link of a
-     * quote, set by {@link #markConverted}.
+     * quote, set by {@link #markConverted}. Story 20.8: the channel of the last sending, set by {@link #markSent}.
      */
-    private static final String SELECT_COLUMNS = COLUMNS + ", superseded_at, converted_invoice_id, converted_at";
+    private static final String SELECT_COLUMNS = COLUMNS + ", superseded_at, converted_invoice_id, converted_at, "
+            + "last_sent_channel, last_send_status, last_send_status_channel, last_send_error_code";
 
     private final JdbcTemplate jdbc;
 
@@ -236,10 +239,22 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
     public void markSent(Invoice sent) {
         // Story 15.5b — updated_at moves too (never backwards): the sync pull sends the new sending count
         expectOne(jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
-                        + " SET last_sent_at = ?, last_sent_to = ?, send_count = send_count + 1, "
+                        + " SET last_sent_at = ?, last_sent_to = ?, last_sent_channel = ?, send_count = send_count + 1, "
+                        + "last_send_status = 'SENT', last_send_status_channel = ?, "
+                        + "last_send_error_code = NULL, updated_at = GREATEST(updated_at, ?) WHERE id = ?",
+                ts(sent.delivery().lastSentAt()), sent.delivery().lastSentTo(),
+                // Story 20.8 — the channel of this sending (V18)
+                sent.delivery().channel() == null ? null : sent.delivery().channel().name(),
+                sent.delivery().channel() == null ? null : sent.delivery().channel().name(),
+                ts(sent.delivery().lastSentAt()), sent.id()), "sending");
+    }
+
+    @Override
+    public void markSendStatus(UUID id, SendStatus status, SendChannel channel, String errorCode, Instant now) {
+        jdbc.update("UPDATE " + InvoicingTables.qualified(InvoicingTables.INVOICES)
+                        + " SET last_send_status = ?, last_send_status_channel = ?, last_send_error_code = ?, "
                         + "updated_at = GREATEST(updated_at, ?) WHERE id = ?",
-                ts(sent.delivery().lastSentAt()), sent.delivery().lastSentTo(), ts(sent.delivery().lastSentAt()),
-                sent.id()), "sending");
+                status.name(), channel == null ? null : channel.name(), errorCode, ts(now), id);
     }
 
     /** Story 20.5 — the document terms and copied client fields written by a draft edit (V11 columns). */
@@ -525,7 +540,11 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                 instant(rs, "issued_at"), instant(rs, "paid_at"), rs.getString("payment_method"),
                 instant(rs, "cancelled_at"), rs.getString("cancellation_reason"),
                 rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
-                new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count")),
+                new InvoiceDelivery(instant(rs, "last_sent_at"), rs.getString("last_sent_to"), rs.getInt("send_count"),
+                        SendChannel.fromStored(rs.getString("last_sent_channel")),
+                        SendStatus.fromStored(rs.getString("last_send_status")),
+                        SendChannel.fromStored(rs.getString("last_send_status_channel")),
+                        rs.getString("last_send_error_code")),
                 rs.getObject("source_sale_id", UUID.class), instant(rs, "superseded_at"), kind,
                 rs.getObject("converted_invoice_id", UUID.class), instant(rs, "converted_at"),
                 rs.getObject("source_quote_id", UUID.class), terms, rs.getObject("store_id", UUID.class));

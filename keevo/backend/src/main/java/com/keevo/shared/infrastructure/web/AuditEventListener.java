@@ -1049,7 +1049,8 @@ public class AuditEventListener {
 
     /**
      * Story 14.2 — label = the invoice number, detail = the masked WhatsApp number (never the full one). Story 20.7:
-     * a quote is audited « Devis envoyé » on the quote, label {@code DV-…}.
+     * a quote is audited « Devis envoyé » on the quote, label {@code DV-…}. Story 20.8: the channel ({@code channel}
+     * = WHATSAPP / SMS / EMAIL, shown « WhatsApp » / « SMS » / « E-mail ») and the masked phone or email.
      */
     @EventListener
     public void on(InvoiceSentEvent event) {
@@ -1057,10 +1058,11 @@ public class AuditEventListener {
                 event.quote() ? "Quote" : "Invoice", event.invoiceId(),
                 null, map(event.quote() ? "quoteReference" : "invoiceNumber", event.number(),
                         "clientName", event.clientName(),
-                        "totalAmount", event.totalTtc(), "sentTo", event.maskedPhone()),
+                        "totalAmount", event.totalTtc(), "sentTo", event.maskedPhone(),
+                        "channel", event.channelOrDefault()),
                 null, event.number(), null, null);
-        log.info("AUDIT: invoice_sent number={} tenantId={} actorId={}", event.number(), event.tenantId(),
-                event.actorId());
+        log.info("AUDIT: invoice_sent channel={} number={} tenantId={} actorId={}", event.channelOrDefault(),
+                event.number(), event.tenantId(), event.actorId());
     }
 
     /** Story 14.2 — the company identity (designation / logo) shown on invoices and export documents. */

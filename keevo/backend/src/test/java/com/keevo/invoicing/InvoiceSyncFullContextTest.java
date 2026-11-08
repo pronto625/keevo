@@ -536,7 +536,8 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
                     + "DROP COLUMN client_website, DROP COLUMN invoice_template, DROP COLUMN ticket_width, "
                     + "DROP COLUMN signature_client_path, DROP COLUMN signature_seller_path, "
                     + "DROP COLUMN public_link_version, DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference, "
-                    + "DROP COLUMN link_shared_at");
+                    + "DROP COLUMN link_shared_at, DROP COLUMN last_sent_channel"); // 20.8 V18
+            jdbc.execute("ALTER TABLE " + q + "invoices ALTER COLUMN last_sent_to TYPE VARCHAR(20)");
             jdbc.execute("DROP TABLE " + q + "invoicing_document_preferences"); // 20.7 V15
             jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
             jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
@@ -547,7 +548,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
                     + "idx_invoices_counted_issued_at, " + q + "idx_invoices_client"); // 20.14 V16
             jdbc.execute("ALTER TABLE " + q + "invoices DROP COLUMN store_id");
             jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('6', '7', '8', '9', '10', "
-                    + "'11', '12', '13', '14', '15', '16', '17')"); // 20.13: V17
+                    + "'11', '12', '13', '14', '15', '16', '17', '18')"); // 20.13: V17, 20.8: V18
             UUID issued = UUID.randomUUID();
             jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, "
                     + "seller_legal_name, vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, "
@@ -565,7 +566,7 @@ class InvoiceSyncFullContextTest extends FullContextIntegrationTest {
             assertThat(rows).filteredOn(n -> n.path("id").asText().equals(issued.toString()))
                     .singleElement().satisfies(n -> assertThat(n.path("number").asText()).isEqualTo("FAC-2026-000042"));
             assertThat(jdbc.queryForObject("SELECT MAX(version::int) FROM " + q + "flyway_history_invoicing "
-                    + "WHERE success", Integer.class)).isEqualTo(17); // 20.7: V15, 20.14: V16, 20.13: V17
+                    + "WHERE success", Integer.class)).isEqualTo(18); // 20.7: V15, 20.14: V16, 20.13: V17, 20.8: V18
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? "
                     + "AND table_name = 'invoices' AND column_name = 'deleted_at'", Integer.class, old)).isEqualTo(1);
         } finally {

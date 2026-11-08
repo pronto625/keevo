@@ -113,7 +113,8 @@ class FailoverSmsSenderTest {
                 List.of(provider("mboasms", true, SendOutcome.UNKNOWN), provider("infobip", true, SendOutcome.DELIVERED)),
                 "BrefPoint");
 
-        assertThat(sender.send(SmsMessage.of(PHONE, TEXT))).isEqualTo(DeliveryResult.notDelivered());
+        // Story 20.8 — reported uncertain (never delivered, never counted, not retried automatically)
+        assertThat(sender.send(SmsMessage.of(PHONE, TEXT))).isEqualTo(DeliveryResult.uncertain("mboasms"));
         assertThat(calls).extracting(c -> c.split(":")[0]).containsExactly("mboasms");
     }
 

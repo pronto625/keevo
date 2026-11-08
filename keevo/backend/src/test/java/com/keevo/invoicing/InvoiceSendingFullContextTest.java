@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner;
-import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -60,7 +59,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
     @Autowired TenantFactory tenantFactory;
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
-    @Autowired SendInvoiceUseCase sendInvoiceUseCase;
+    @Autowired com.keevo.invoicing.invoice.application.service.channel.WhatsAppInvoiceChannel whatsAppChannel;
     @Autowired InvoiceLinkSigner signer;
 
     /** Captures what would be sent; {@code fail} simulates a provider error. */
@@ -116,7 +115,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
     }
 
     private Object target() {
-        return AopTestUtils.getUltimateTargetObject(sendInvoiceUseCase);
+        return AopTestUtils.getUltimateTargetObject(whatsAppChannel);
     }
 
     private void useFakeWhatsApp() {
@@ -461,7 +460,8 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
                 // 20.7 V15
                 + "DROP COLUMN invoice_template, DROP COLUMN ticket_width, DROP COLUMN signature_client_path, "
                 + "DROP COLUMN signature_seller_path, DROP COLUMN public_link_version, "
-                + "DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference, DROP COLUMN link_shared_at");
+                + "DROP COLUMN legacy_public_token, DROP COLUMN legacy_reference, DROP COLUMN link_shared_at, "
+                + "DROP COLUMN last_sent_channel"); // 20.8 V18
         jdbc.execute("DROP TABLE " + q + "invoicing_document_preferences");
         jdbc.execute("ALTER TABLE " + q + "invoice_items DROP COLUMN product_id, DROP COLUMN reference");
         jdbc.execute("ALTER TABLE " + q + "invoicing_settings DROP COLUMN derive_from_documents"); // 20.6 V13
@@ -473,7 +473,7 @@ class InvoiceSendingFullContextTest extends FullContextIntegrationTest {
         jdbc.execute("ALTER TABLE " + q + "invoices DROP COLUMN store_id");
         jdbc.execute("DROP INDEX IF EXISTS " + q + "idx_invoices_sync_keyset");
         jdbc.update("DELETE FROM " + q + "flyway_history_invoicing WHERE version IN ('2', '3', '4', '5', '6', '7', '8', '9', '10', "
-                + "'11', '12', '13', '14', '15', '16', '17')"); // 20.13: V17
+                + "'11', '12', '13', '14', '15', '16', '17', '18')"); // 20.13: V17, 20.8: V18
         UUID id = UUID.randomUUID();
         jdbc.update("INSERT INTO " + q + "invoices (id, number, status, issue_date, client_name, seller_legal_name, "
                 + "vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, total_ttc, issued_at) VALUES "

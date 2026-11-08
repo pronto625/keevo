@@ -448,7 +448,8 @@ class SyncModuleGuardPostgresIntegrationTest extends FullContextIntegrationTest 
                 "REACTIVATE_EMPLOYEE", "SUBMIT_FEEDBACK"));
         // Story 15.5b: offline invoices (paid module)
         put.apply("invoicing").accept(List.of("CREATE_INVOICE", "UPDATE_INVOICE", "ISSUE_INVOICE", "PAY_INVOICE",
-                "CANCEL_INVOICE", "CONVERT_QUOTE", "ADD_INVOICE_PAYMENT", "SETTLE_INVOICE_PAYMENT"));
+                "CANCEL_INVOICE", "CONVERT_QUOTE", "ADD_INVOICE_PAYMENT", "SETTLE_INVOICE_PAYMENT",
+                "SEND_INVOICE")); // Story 20.8
         // Story 20.10: offline expenses (paid module)
         put.apply("expenses").accept(List.of("CREATE_EXPENSE", "UPDATE_EXPENSE", "DELETE_EXPENSE"));
 

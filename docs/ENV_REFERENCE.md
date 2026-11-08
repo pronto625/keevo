@@ -58,6 +58,7 @@
 | `WASSENDER_API_URL` | `https://www.wasenderapi.com` | `https://www.wasenderapi.com` |
 | `WASSENDER_API_TOKEN` | `628d5b5845e63ce015ad22f4e9915a2c19d7506dac270440e28c024c2fee6573` | ⚠️ **Régénérer le token** |
 | `ACME_EMAIL` | *(non défini)* | **Requis** — email pour Let's Encrypt |
+| `KEEVO_PUBLIC_BASE_URL` | *(vide = déduit de la requête)* | ⚠️ **Obligatoire** — `https://keevo.ad2s.cm` (sans `/` final). Base absolue des liens publics envoyés aux clients (facture / devis par WhatsApp, SMS, e-mail). Sans elle, les envois mis en file hors ligne (`SEND_INVOICE`, story 20.8) échouent avec « Adresse publique de l'application non configurée » (code `PUBLIC_BASE_URL_MISSING`, ligne de log `INVOICE_SEND_NO_PUBLIC_BASE`) : le poller n'a pas de requête pour déduire l'adresse |
 | `KEEVO_EXPORT_LINK_SECRET` | *(vide = aléatoire au démarrage)* | ⚠️ `openssl rand -hex 32` (≥ 32 caractères) — sinon les liens d'export expirent à chaque redémarrage |
 | `KEEVO_HELP_TUTORIAL_VENDRE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Vendre » — vide = « Bientôt disponible » |
 | `KEEVO_HELP_TUTORIAL_CATALOGUE_URL` | *(vide)* | Lien http(s) (YouTube…) de la vidéo « Catalogue & stock » — vide = « Bientôt disponible » |
@@ -106,6 +107,9 @@ LOG_LEVEL=INFO
 
 # FCM Push
 KEEVO_FCM_ENABLED=true
+
+# Liens publics des documents envoyés (obligatoire : envois SMS / e-mail / WhatsApp hors ligne, story 20.8)
+KEEVO_PUBLIC_BASE_URL=https://keevo.ad2s.cm
 
 # WhatsApp (WasenderAPI)
 KEEVO_WHATSAPP_PROVIDER=wassender

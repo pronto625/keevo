@@ -72,9 +72,9 @@ public class FailoverSmsSender implements SmsSender {
                 return DeliveryResult.deliveredBy(provider.name());
             }
             if (outcome == SendOutcome.UNKNOWN) {
-                // the provider may have accepted it: no failover (no double send), reported not delivered
+                // the provider may have accepted it: no failover (no double send), reported uncertain (Story 20.8)
                 log.warn("[SMS] {} outcome unknown for {} — not retried elsewhere", provider.name(), Recipients.maskPhone(phone.get()));
-                return DeliveryResult.notDelivered();
+                return DeliveryResult.uncertain(provider.name());
             }
         }
         log.warn("[SMS] not delivered to {} — every provider failed", Recipients.maskPhone(phone.get()));

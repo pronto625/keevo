@@ -85,7 +85,10 @@ class SchedulerLockCoverageTest {
             Map.entry(com.keevo.messaging.notification.application.service.NotificationRetentionJob.class,
                     Duration.ofDays(1)), // 19.11
             Map.entry(com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceOverdueJob.class,
-                    Duration.ofDays(1))); // 20.4
+                    Duration.ofDays(1)), // 20.4
+            // 20.8 — send outbox poller every 30 s; lockAtMostFor 10 min for a slow provider batch (claims are atomic)
+            Map.entry(com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceSendOutboxJob.class,
+                    Duration.ofMinutes(15)));
 
     /**
      * Per-instance sweeps: must run on every instance → never locked. Includes the 11.2 sync-lag

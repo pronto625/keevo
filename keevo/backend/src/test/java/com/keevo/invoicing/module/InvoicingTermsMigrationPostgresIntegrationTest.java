@@ -141,6 +141,7 @@ class InvoicingTermsMigrationPostgresIntegrationTest {
             assertThat(row.get("store_id")).isNull();
         }
 
+        script("V18__invoice_send_channel.sql"); // 20.8: the repository reads last_sent_channel
         TenantContext.setCurrentTenant(SCHEMA);
         JdbcInvoiceRepository repository = new JdbcInvoiceRepository(jdbc);
         Invoice ttc = repository.findById(issuedTtc).orElseThrow();

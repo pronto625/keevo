@@ -82,10 +82,20 @@ public interface InvoiceRepository {
     void markConverted(Invoice convertedQuote);
 
     /**
-     * Story 14.2 — records one WhatsApp sending already delivered: {@code last_sent_at}, {@code last_sent_to},
-     * {@code send_count + 1} only, whatever the current status (checked before the delivery).
+     * Story 14.2 — records one sending already delivered: {@code last_sent_at}, {@code last_sent_to},
+     * {@code send_count + 1} only, whatever the current status (checked before the delivery). Story 20.8: and
+     * {@code last_sent_channel} (WhatsApp, SMS or email).
      */
     void markSent(Invoice sent);
+
+    /**
+     * Story 20.8 — the outcome of the last queued request ({@code last_send_status}, its channel and error code), with
+     * {@code updated_at} moved forward so the sync pull carries it. Never touches the legal content nor the sending
+     * count.
+     */
+    void markSendStatus(java.util.UUID id, com.keevo.invoicing.invoice.domain.model.SendStatus status,
+                        com.keevo.invoicing.invoice.domain.model.SendChannel channel, String errorCode,
+                        java.time.Instant now);
 
     /**
      * Deletes a DRAFT; returns false when no draft has this id. Story 15.5b: a soft delete ({@code deleted_at},

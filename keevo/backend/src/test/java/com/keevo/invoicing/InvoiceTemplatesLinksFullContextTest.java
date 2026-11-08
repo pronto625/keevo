@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.invoicing.invoice.application.usecase.InvoicePublicLinkUseCase;
-import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -67,7 +66,7 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     @Autowired TenantFactory tenantFactory;
     @Autowired TransactionTemplate tx;
     @Autowired JdbcTemplate jdbc;
-    @Autowired SendInvoiceUseCase sendInvoiceUseCase;
+    @Autowired com.keevo.invoicing.invoice.application.service.channel.WhatsAppInvoiceChannel whatsAppChannel;
     @Autowired InvoicePublicLinkUseCase links;
     @Autowired com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner signer;
     @Autowired com.keevo.invoicing.invoice.adapter.out.storage.InvoiceSignatureProperties signatureProperties;
@@ -125,7 +124,7 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     }
 
     private Object target() {
-        return AopTestUtils.getUltimateTargetObject(sendInvoiceUseCase);
+        return AopTestUtils.getUltimateTargetObject(whatsAppChannel);
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────────────

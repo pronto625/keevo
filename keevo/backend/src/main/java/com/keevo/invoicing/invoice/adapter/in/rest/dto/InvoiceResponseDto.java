@@ -1,6 +1,6 @@
 package com.keevo.invoicing.invoice.adapter.in.rest.dto;
 
-import com.keevo.invoicing.invoice.application.service.InvoicePhones;
+import com.keevo.invoicing.invoice.application.service.InvoiceRecipients;
 import com.keevo.invoicing.invoice.domain.model.ClientInfo;
 import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.InvoiceLine;
@@ -53,6 +53,13 @@ import java.util.UUID;
  *
  * <p>Story 20.14 (additive): {@code storeId} / {@code storeName} = the store the document was made in ({@code null}
  * for a document made before, or outside any store); a credit note belongs to its invoice's store.
+ *
+ * <p>Story 20.8 (additive): {@code lastSentChannel} ({@code WHATSAPP} | {@code SMS} | {@code EMAIL}, {@code null} =
+ * never sent; a sending before 20.8 reads WHATSAPP) and its French {@code lastSentChannelLabel} (« WhatsApp »,
+ * « SMS », « E-mail »); {@code lastSentTo} is a masked phone or a masked email (« c***@ndolo.cm »). Outbox of an
+ * offline sending ({@code SEND_INVOICE}): {@code lastSendStatus} ({@code PENDING} | {@code SENT} | {@code FAILED} |
+ * {@code UNKNOWN}, {@code null} = none queued) with its French {@code lastSendStatusLabel}, the channel
+ * ({@code lastSendStatusChannel}) and, on failure, {@code lastSendErrorCode} and its French {@code lastSendError}.
  */
 public record InvoiceResponseDto(
         UUID id,
@@ -108,7 +115,14 @@ public record InvoiceResponseDto(
         boolean sellerSigned,
         String legacyReference,
         UUID storeId,
-        String storeName) {
+        String storeName,
+        String lastSentChannel,
+        String lastSentChannelLabel,
+        String lastSendStatus,
+        String lastSendStatusLabel,
+        String lastSendStatusChannel,
+        String lastSendErrorCode,
+        String lastSendError) {
 
     /** Story 20.4 — a payment received ({@code paidAt}) or an instalment ({@code dueDate}, unpaid while no paidAt). */
     public record Payment(UUID id, long amount, LocalDate dueDate, Instant paidAt, String method, String note,
@@ -167,6 +181,7 @@ public record InvoiceResponseDto(
         PaymentStateCalculator.Collection paid = java.util.Objects.requireNonNull(collection, "collection");
         ClientInfo c = i.client();
         SellerSnapshot s = i.seller();
+        com.keevo.invoicing.invoice.domain.model.InvoiceDelivery d = i.delivery();
         return new InvoiceResponseDto(i.id(), i.number(), i.status().name(), i.status().label(i.kind()),
                 i.issueDate(),
                 new Client(c.clientId(), c.name(), c.niu(), c.address(), c.phone(), c.rccm(), c.email(),
@@ -178,7 +193,7 @@ public record InvoiceResponseDto(
                 i.totals().totalHt(), i.totals().totalVat(), i.totals().totalTtc(), i.issuedAt(), i.paidAt(),
                 i.paymentMethod(), i.cancelledAt(), i.cancellationReason(), i.createdAt(), i.updatedAt(),
                 i.complianceWarnings(currentSettings), i.delivery().lastSentAt(),
-                InvoicePhones.mask(i.delivery().lastSentTo()), i.delivery().sendCount(), i.sourceSaleId(),
+                InvoiceRecipients.mask(i.delivery().lastSentTo()), i.delivery().sendCount(), i.sourceSaleId(),
                 credited, fullyCredited, notes, i.supersededAt(), i.kind().name(), i.quoteReference(),
                 i.convertedInvoiceId(), i.convertedAt(), i.sourceQuoteId(),
                 paid.state() == null ? null : paid.state().name(), paid.stateLabel(), paid.amountPaid(),
@@ -189,7 +204,15 @@ public record InvoiceResponseDto(
                 look.template() == null ? null : look.template().name(),
                 look.ticketWidth() == null ? null : look.ticketWidth().code(),
                 look.signed(SignatureRole.CLIENT), look.signed(SignatureRole.SELLER), look.legacyReference(),
-                i.storeId(), i.storeId() == null ? null : storeName);
+                i.storeId(), i.storeId() == null ? null : storeName,
+                i.delivery().channel() == null ? null : i.delivery().channel().name(),
+                i.delivery().channel() == null ? null : i.delivery().channel().label(),
+                d.lastSendStatus() == null ? null : d.lastSendStatus().name(),
+                d.lastSendStatus() == null ? null : d.lastSendStatus().label(),
+                d.lastSendStatusChannel() == null ? null : d.lastSendStatusChannel().name(),
+                d.lastSendErrorCode(),
+                d.lastSendErrorCode() == null ? null
+                        : com.keevo.shared.infrastructure.web.ErrorMessages.of(d.lastSendErrorCode(), "Envoi impossible"));
     }
 
     private static Line line(InvoiceLine l) {

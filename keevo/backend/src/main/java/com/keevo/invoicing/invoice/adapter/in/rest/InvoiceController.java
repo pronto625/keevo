@@ -1,6 +1,7 @@
 package com.keevo.invoicing.invoice.adapter.in.rest;
 
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.SendInvoiceRequestDto;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.SendResultsDto;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceClientResolver;
 import com.keevo.invoicing.invoice.application.usecase.InvoiceDocumentUseCase;
 import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
@@ -357,18 +358,27 @@ public class InvoiceController {
 
 
     /**
-     * POST /api/v1/invoices/{id}/send {@code {phone?}} — Story 14.2: WhatsApp message with a signed link to the PDF
-     * (ISSUED / PAID only; the client's phone by default).
+     * POST /api/v1/invoices/{id}/send {@code {phone?, channel?, email?}} — Story 14.2: WhatsApp message with a signed
+     * link to the PDF (ISSUED / PAID only; the client's phone by default). Story 20.7: a quote waiting too. Story 20.8:
+     * {@code channel} = WHATSAPP (default) | SMS | EMAIL; SMS / email counted on the tenant quota after delivery; Bref's
+     * {@code channels} → {@link SendResultsDto} (one result per channel).
      */
     @RequiresPermission(InvoicingModule.INVOICE_SEND)
     @RequiresEntitlement(InvoicingModule.ID)
     @PostMapping("/{id}/send")
-    public ResponseEntity<ApiResponseWrapper<InvoiceResponseDto>> send(
+    public ResponseEntity<ApiResponseWrapper<?>> send(
             @PathVariable UUID id, @Valid @RequestBody(required = false) SendInvoiceRequestDto request,
             HttpServletRequest http) {
         access.requireInvoice(id); // Story 20.14 — out of the actor's scope → 404
-        Invoice sent = sending.send(id, request == null ? null : request.phone(), publicBaseUrl.resolve(http),
-                CurrentActor.actorId(), TenantContext.getCurrentTenant());
+        SendInvoiceUseCase.SendRequest send = SendInvoiceRequestDto.toRequest(request);
+        if (request != null && request.multiChannel()) {
+            // Story 20.8 — Bref's channels: one result per channel, 200 even when some failed
+            SendInvoiceUseCase.Results results = sending.sendAll(id, send, publicBaseUrl.resolve(http),
+                    CurrentActor.actorId(), TenantContext.getCurrentTenant());
+            return ResponseEntity.ok(ApiResponseWrapper.ok(SendResultsDto.of(results, this::dto)));
+        }
+        Invoice sent = sending.send(id, send, publicBaseUrl.resolve(http), CurrentActor.actorId(),
+                TenantContext.getCurrentTenant());
         return ResponseEntity.ok(ApiResponseWrapper.ok(dto(sent)));
     }
 

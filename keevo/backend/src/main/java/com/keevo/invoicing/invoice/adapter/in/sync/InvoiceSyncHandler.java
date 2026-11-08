@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.AddInvoicePaymentRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.CancelInvoiceRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.SettleInvoicePaymentRequestDto;
+import com.keevo.invoicing.invoice.application.service.InvoiceSendOutbox;
+import com.keevo.invoicing.invoice.adapter.in.rest.dto.SendInvoiceRequestDto;
+import com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase;
 import com.keevo.invoicing.invoice.application.usecase.InvoicePaymentUseCase;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.ConvertQuoteRequestDto;
 import com.keevo.invoicing.invoice.adapter.in.rest.dto.InvoiceRequestDto;
@@ -65,6 +68,12 @@ import java.util.UUID;
  *   <li>Story 20.14 — visibility (user decision 2026-11-08, as Bref): an EMPLOYEE acts only on the documents they
  *       created, a MANAGER / VIEWER on those of their store; any other document → {@code REJECTED
  *       INVOICE_NOT_FOUND} (never disclosed); a member without store → {@code REJECTED FORBIDDEN}.</li>
+ *   <li>Story 20.8 — {@code SEND_INVOICE} {@code {invoiceId, channel? | channels?, phone?, email?}} (entity = the
+ *       document): validated (sendable, recipient of each channel, French refusals) and QUEUED — one
+ *       {@code invoice_send_requests} row per channel keyed on the {@code operationId}, in this per-operation
+ *       transaction — then APPLIED. Nothing is sent inside the push: the outbox sends after commit (worker) or at the
+ *       next poll, with retries. A pushed again operation queues nothing (DUPLICATE from the operation log, and the
+ *       unique key). The outcome reaches the app through the pull ({@code lastSendStatus}, {@code lastSentChannel}).</li>
  * </ul>
  * Payloads are validated with the REST request DTOs (same French messages, {@code VALIDATION_ERROR}); permissions are
  * those of the matching endpoint ({@code @RequiresPermission} is not applied to sync handlers, so it is checked here
@@ -89,6 +98,8 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     public static final String ADD_PAYMENT = "ADD_INVOICE_PAYMENT";
     /** Story 20.4 — a scheduled instalment paid. */
     public static final String SETTLE_PAYMENT = "SETTLE_INVOICE_PAYMENT";
+    /** Story 20.8 — the document sent to its client (WhatsApp, SMS or email), once per operationId. */
+    public static final String SEND = "SEND_INVOICE";
 
     /** The permission of each operation: the one of its REST endpoint. */
     private static final Map<String, String> PERMISSIONS = Map.of(
@@ -99,12 +110,15 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             CANCEL, InvoicingModule.INVOICE_MANAGE,
             CONVERT_QUOTE, InvoicingModule.INVOICE_SEND,
             ADD_PAYMENT, InvoicingModule.INVOICE_SEND,
-            SETTLE_PAYMENT, InvoicingModule.INVOICE_SEND);
+            SETTLE_PAYMENT, InvoicingModule.INVOICE_SEND,
+            SEND, InvoicingModule.INVOICE_SEND);
 
     private final ManageDraftInvoiceUseCase drafts;
     private final InvoiceLifecycleUseCase lifecycle;
     private final ConvertQuoteUseCase conversions;
     private final InvoicePaymentUseCase payments;
+    private final SendInvoiceUseCase sending;
+    private final InvoiceSendOutbox outbox;
     private final ModuleProvisioner provisioner;
     private final ModulePermissions permissions;
     private final ObjectMapper objectMapper;
@@ -116,9 +130,12 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
     public InvoiceSyncHandler(ManageDraftInvoiceUseCase drafts, InvoiceLifecycleUseCase lifecycle,
                               ModuleProvisioner provisioner, ModulePermissions permissions,
                               ObjectMapper objectMapper, Validator validator, ConvertQuoteUseCase conversions,
-                              InvoicePaymentUseCase payments, DocumentAccess access) {
+                              InvoicePaymentUseCase payments, DocumentAccess access, SendInvoiceUseCase sending,
+                              InvoiceSendOutbox outbox) {
         this.access = access;
         this.drafts = drafts;
+        this.sending = sending;
+        this.outbox = outbox;
         this.payments = payments;
         this.conversions = conversions;
         this.lifecycle = lifecycle;
@@ -157,6 +174,10 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
             if (p.get("invoiceId") != null && parseUuid(p.get("invoiceId")) == null) {
                 throw new IllegalArgumentException("Invalid field: invoiceId");
             }
+        }
+        if (SEND.equals(operation.operationType()) && operation.entityId() != null
+                && !parseUuid(p.get("invoiceId")).equals(parseUuid(operation.entityId()))) {
+            throw new IllegalArgumentException("entityId does not match invoiceId");
         }
         if ((ADD_PAYMENT.equals(operation.operationType()) || SETTLE_PAYMENT.equals(operation.operationType()))
                 && parseUuid(p.get("paymentId")) == null) {
@@ -210,6 +231,14 @@ public class InvoiceSyncHandler extends AbstractSyncOperationHandler {
                 SettleInvoicePaymentRequestDto request = read(p, SettleInvoicePaymentRequestDto.class);
                 yield payments.settle(invoiceId(p), parseUuid(p.get("paymentId")), request.paidAt(),
                         request.method(), actorId, tenantId).invoice();
+            }
+            case SEND -> {
+                SendInvoiceRequestDto request = read(p, SendInvoiceRequestDto.class);
+                SendInvoiceUseCase.Queued queued = sending.enqueue(invoiceId(p),
+                        SendInvoiceRequestDto.toRequest(request), operation.operationId(), actorId, tenantId);
+                outbox.dispatchAfterCommit(tenantId,
+                        queued.inserted().stream().map(r -> r.id()).toList());
+                yield queued.invoice();
             }
             default -> null;
         };

@@ -609,9 +609,14 @@ public record Invoice(
      * concurrent cancellation between the check and the delivery never loses the record of what was sent.
      */
     public Invoice recordSending(String phone, Instant now) {
+        return recordSending(phone, SendChannel.WHATSAPP, now);
+    }
+
+    /** Story 20.8 — same, for a sending by {@code channel} to {@code recipient} (E.164 number or email address). */
+    public Invoice recordSending(String recipient, SendChannel channel, Instant now) {
         return new Invoice(id, number, status, issueDate, client, seller, vatRegistered, vatRate, pricesIncludeVat,
                 vatMention, lines, totals, issuedAt, paidAt, paymentMethod, cancelledAt, cancellationReason,
-                createdBy, createdAt, updatedAt, delivery.sentTo(phone, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
+                createdBy, createdAt, updatedAt, delivery.sentTo(recipient, channel, now), sourceSaleId, supersededAt, kind, convertedInvoiceId, convertedAt, sourceQuoteId, terms, storeId);
     }
 
     private DomainException invalidTransition() {

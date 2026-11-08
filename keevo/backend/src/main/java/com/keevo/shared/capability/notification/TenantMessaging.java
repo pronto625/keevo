@@ -28,4 +28,12 @@ public interface TenantMessaging {
 
     /** Same, for an email ({@code EMAILS} metric). */
     DeliveryResult sendEmail(String tenantSchema, EmailMessage message);
+
+    /**
+     * Story 20.8 — same, the email built only after the quota probe passed (e.g. a PDF attachment rendered only when
+     * the email may leave). An exception of {@code message} propagates; nothing is sent nor counted.
+     */
+    default DeliveryResult sendEmail(String tenantSchema, java.util.function.Supplier<EmailMessage> message) {
+        return sendEmail(tenantSchema, message.get());
+    }
 }

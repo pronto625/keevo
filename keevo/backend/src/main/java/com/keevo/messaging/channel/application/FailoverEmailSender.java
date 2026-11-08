@@ -71,9 +71,9 @@ public class FailoverEmailSender implements EmailSender {
                 return DeliveryResult.deliveredBy(provider.name());
             }
             if (outcome == SendOutcome.UNKNOWN) {
-                // the provider may have accepted it: no failover (no double send), reported not delivered
+                // the provider may have accepted it: no failover (no double send), reported uncertain (Story 20.8)
                 log.warn("[Email] {} outcome unknown for {} — not retried elsewhere", provider.name(), Recipients.maskEmail(normalized.to()));
-                return DeliveryResult.notDelivered();
+                return DeliveryResult.uncertain(provider.name());
             }
         }
         log.warn("[Email] not delivered to {} — every provider failed", Recipients.maskEmail(normalized.to()));

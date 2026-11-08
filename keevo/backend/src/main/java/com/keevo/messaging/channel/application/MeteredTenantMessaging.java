@@ -58,6 +58,12 @@ public class MeteredTenantMessaging implements TenantMessaging {
         return metered(tenantSchema, UsageMetric.EMAILS, () -> emailSender.send(message));
     }
 
+    /** Story 20.8 — the message is built after the probe (step 1), still before the send. */
+    @Override
+    public DeliveryResult sendEmail(String tenantSchema, Supplier<EmailMessage> message) {
+        return metered(tenantSchema, UsageMetric.EMAILS, () -> emailSender.send(message.get()));
+    }
+
     private DeliveryResult metered(String tenantSchema, UsageMetric metric, Supplier<DeliveryResult> send) {
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
             throw new IllegalStateException("TenantMessaging must be called outside a transaction: the provider "
@@ -71,7 +77,7 @@ public class MeteredTenantMessaging implements TenantMessaging {
         // 2. send, no transaction open
         DeliveryResult result = send.get();
         if (result == null || !result.delivered()) {
-            return result == null ? DeliveryResult.notDelivered() : result;
+            return result == null ? DeliveryResult.notDelivered() : result; // uncertain kept (Story 20.8), not counted
         }
         // 3. count the delivered unit
         try {

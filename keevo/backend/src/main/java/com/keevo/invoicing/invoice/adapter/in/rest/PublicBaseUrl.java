@@ -1,5 +1,6 @@
 package com.keevo.invoicing.invoice.adapter.in.rest;
 
+import com.keevo.invoicing.invoice.application.usecase.InvoicePublicLinkUseCase;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -24,7 +25,7 @@ public class PublicBaseUrl {
 
     public String resolve(HttpServletRequest request) {
         if (!configured.isEmpty()) {
-            return configured.endsWith("/") ? configured.substring(0, configured.length() - 1) : configured;
+            return InvoicePublicLinkUseCase.stripTrailingSlash(configured);
         }
         ServletServerHttpRequest server = new ServletServerHttpRequest(request);
         HttpHeaders headers = server.getHeaders();

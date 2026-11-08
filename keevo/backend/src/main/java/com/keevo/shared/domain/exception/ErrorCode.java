@@ -202,6 +202,17 @@ public enum ErrorCode {
     CREDIT_NOTE_NOT_FOUND,      // HTTP 404 — credit note id unknown in the tenant
     CREDIT_NOTE_INVALID,        // HTTP 422 — empty selection, unknown line, bad / excessive quantity (details.reason)
     WHATSAPP_UNAVAILABLE,       // HTTP 503 — no WhatsApp provider configured (NoOp): nothing sent, nothing recorded
+    // ── Document sending by SMS / email (Story 20.8) ──────────────────────
+    INVOICE_SMS_PHONE_REQUIRED, // HTTP 422 — SMS: no number given and the client has none
+    INVOICE_SMS_PHONE_INVALID,  // HTTP 422 — SMS: the number is not a valid phone number
+    INVOICE_EMAIL_REQUIRED,     // HTTP 422 — email: no address given and the client has none
+    INVOICE_EMAIL_INVALID,      // HTTP 422 — email: the address is malformed
+    SMS_UNAVAILABLE,            // HTTP 503 — no SMS provider configured: nothing sent, nothing counted
+    EMAIL_UNAVAILABLE,          // HTTP 503 — no email provider configured: nothing sent, nothing counted
+    SMS_DELIVERY_FAILED,        // HTTP 502 — every SMS provider failed: nothing recorded, nothing counted
+    EMAIL_DELIVERY_FAILED,      // HTTP 502 — every email provider failed: nothing recorded, nothing counted
+    INVOICE_SEND_UNCERTAIN,     // HTTP 409 — the provider did not answer (maybe delivered): not counted, never retried automatically
+    PUBLIC_BASE_URL_MISSING,    // HTTP 503 — no absolute public base (keevo.public-base-url) for the link: nothing sent
     COMPANY_LOGO_INVALID,       // HTTP 422 — not a PNG / JPEG image (or corrupt)
     COMPANY_LOGO_TOO_LARGE,     // HTTP 422 — logo over keevo.company-logo.max-bytes
     COMPANY_LOGO_TOO_HEAVY,     // HTTP 422 — re-encoded logo still over 300 KB (inlined in every PDF)

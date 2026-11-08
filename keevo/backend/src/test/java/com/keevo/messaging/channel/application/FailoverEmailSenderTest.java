@@ -75,7 +75,9 @@ class FailoverEmailSenderTest {
         FailoverEmailSender sender = new FailoverEmailSender(List.of(provider("resend", true, SendOutcome.UNKNOWN),
                 provider("infobip", true, SendOutcome.DELIVERED)), "noreply@x.cm", null);
 
-        assertThat(sender.send(EmailMessage.of("a@b.cm", "S", "T")).delivered()).isFalse();
+        DeliveryResult result = sender.send(EmailMessage.of("a@b.cm", "S", "T"));
+        assertThat(result.delivered()).isFalse();
+        assertThat(result.uncertain()).isTrue(); // Story 20.8
         assertThat(calls).extracting(c -> c.split("\\|")[0]).containsExactly("resend");
     }
 

@@ -95,7 +95,7 @@ class RegistryEventSerializationTest {
         // Story 20.7 — audited invoicing events (layouts, signatures, links, document defaults, quote sending)
         f.put(com.keevo.shared.event.catalog.invoicing.InvoiceSentEvent.class,
                 new com.keevo.shared.event.catalog.invoicing.InvoiceSentEvent(A, "DV-1A2B3C4D", "Société Ndolo",
-                        23_850, "+237 6•• ••• 111", B, TENANT, T0, true));
+                        23_850, "c***@ndolo.cm", B, TENANT, T0, true, "EMAIL")); // Story 20.8: channel
         f.put(com.keevo.shared.event.catalog.invoicing.InvoiceSignatureChangedEvent.class,
                 new com.keevo.shared.event.catalog.invoicing.InvoiceSignatureChangedEvent(A, "FAC-2026-000042", false,
                         "Signature client", false, B, TENANT, T0));

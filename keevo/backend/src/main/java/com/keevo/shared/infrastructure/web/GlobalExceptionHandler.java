@@ -339,6 +339,10 @@ public class GlobalExceptionHandler {
                  "CREDIT_NOTE_INVALID",
                  "INVOICE_PHONE_REQUIRED",
                  "INVOICE_PHONE_INVALID",
+                 "INVOICE_SMS_PHONE_REQUIRED",  // Story 20.8
+                 "INVOICE_SMS_PHONE_INVALID",
+                 "INVOICE_EMAIL_REQUIRED",
+                 "INVOICE_EMAIL_INVALID",
                  "COMPANY_LOGO_INVALID",
                  "COMPANY_LOGO_TOO_LARGE",
                  "COMPANY_LOGO_TOO_HEAVY",
@@ -355,7 +359,10 @@ public class GlobalExceptionHandler {
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE",
                  "PRODUCT_QUOTA_UNAVAILABLE",
-                 "WHATSAPP_UNAVAILABLE" -> HttpStatus.SERVICE_UNAVAILABLE;
+                 "WHATSAPP_UNAVAILABLE",
+                 "SMS_UNAVAILABLE",       // Story 20.8
+                 "EMAIL_UNAVAILABLE",
+                 "PUBLIC_BASE_URL_MISSING" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
             case "JUSTIFICATION_REQUIRED",
@@ -397,7 +404,10 @@ public class GlobalExceptionHandler {
                  "OTP_TOO_MANY_REQUESTS",
                  "INVOICE_LINK_RATE_LIMITED",
                  "EXPORT_QUEUE_FULL" -> HttpStatus.TOO_MANY_REQUESTS;
-            case "WHATSAPP_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream WhatsApp failure
+            case "WHATSAPP_DELIVERY_FAILED",
+                 "SMS_DELIVERY_FAILED",     // Story 20.8 — every SMS provider failed
+                 "EMAIL_DELIVERY_FAILED" -> HttpStatus.BAD_GATEWAY;  // upstream provider failure (WhatsApp, SMS, email)
+            case "INVOICE_SEND_UNCERTAIN" -> HttpStatus.CONFLICT;  // 20.8 — maybe delivered: never retried automatically
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

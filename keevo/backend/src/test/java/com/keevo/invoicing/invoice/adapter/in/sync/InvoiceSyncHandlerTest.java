@@ -62,6 +62,10 @@ class InvoiceSyncHandlerTest {
     private final InvoiceLifecycleUseCase lifecycle = mock(InvoiceLifecycleUseCase.class);
     private final ConvertQuoteUseCase conversions = mock(ConvertQuoteUseCase.class);
     private final InvoicePaymentUseCase payments = mock(InvoicePaymentUseCase.class);
+    private final com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase sending =
+            mock(com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.class);
+    private final com.keevo.invoicing.invoice.application.service.InvoiceSendOutbox outbox =
+            mock(com.keevo.invoicing.invoice.application.service.InvoiceSendOutbox.class);
     private final ModuleProvisioner provisioner = mock(ModuleProvisioner.class);
     private final ModulePermissions permissions = mock(ModulePermissions.class);
     private final ObjectMapper objectMapper = JsonMapper.builder().findAndAddModules()
@@ -75,7 +79,8 @@ class InvoiceSyncHandlerTest {
     void setUp() {
         handler = new InvoiceSyncHandler(drafts, lifecycle, provisioner, permissions, objectMapper, validator,
                 conversions, payments,
-                org.mockito.Mockito.mock(com.keevo.invoicing.invoice.application.usecase.DocumentAccess.class));
+                org.mockito.Mockito.mock(com.keevo.invoicing.invoice.application.usecase.DocumentAccess.class),
+                sending, outbox);
         as("OWNER", ALL);
     }
 
@@ -118,7 +123,7 @@ class InvoiceSyncHandlerTest {
     void contract() {
         assertThat(handler.supportedTypes()).containsExactlyInAnyOrder("CREATE_INVOICE", "UPDATE_INVOICE",
                 "ISSUE_INVOICE", "PAY_INVOICE", "CANCEL_INVOICE", "CONVERT_QUOTE", "ADD_INVOICE_PAYMENT",
-                "SETTLE_INVOICE_PAYMENT");
+                "SETTLE_INVOICE_PAYMENT", "SEND_INVOICE");
         assertThat(handler.moduleId()).isEqualTo("invoicing");
     }
 
@@ -382,6 +387,28 @@ class InvoiceSyncHandlerTest {
         assertThat(withTerms.getValue().terms()).isEqualTo(new com.keevo.invoicing.invoice.domain.model.InvoiceTerms(
                 0, 1_500, new java.math.BigDecimal("18.00"), true, null));
 
+        // Story 20.8 — SEND_INVOICE of the Bref app: validated and queued (never sent in the push)
+        when(sending.enqueue(eq(id), any(com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest.class), any(), eq(ACTOR), eq(TENANT)))
+                .thenReturn(new com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.Queued(any, List.of()));
+        for (com.fasterxml.jackson.databind.JsonNode op : contract.path("sendOperations")) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = objectMapper.convertValue(op.path("payload"), Map.class);
+            String type = op.path("operationType").asText();
+            types.add(type);
+            SyncOperationResult r = handler.handle(new SyncOperation(UUID.randomUUID().toString(), type,
+                    op.path("entityId").asText(), payload, Instant.now()), ACTOR, TENANT);
+            assertThat(r.status()).as("%s: %s", op.path("name").asText(), r.reason())
+                    .isEqualTo(SyncOperationStatus.APPLIED);
+        }
+        ArgumentCaptor<com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest> sent = ArgumentCaptor.forClass(com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest.class);
+        verify(sending, org.mockito.Mockito.times(4)).enqueue(eq(id), sent.capture(), any(), eq(ACTOR), eq(TENANT));
+        assertThat(sent.getAllValues()).containsExactly(
+                new com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest(com.keevo.invoicing.invoice.domain.model.SendChannel.SMS, null, null),
+                new com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest(com.keevo.invoicing.invoice.domain.model.SendChannel.EMAIL, null, "compta@ndolo.cm"),
+                new com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest(com.keevo.invoicing.invoice.domain.model.SendChannel.WHATSAPP, "+237690000001", null),
+                new com.keevo.invoicing.invoice.application.usecase.SendInvoiceUseCase.SendRequest(List.of(com.keevo.invoicing.invoice.domain.model.SendChannel.SMS, com.keevo.invoicing.invoice.domain.model.SendChannel.EMAIL), null, null));
+        verify(outbox, org.mockito.Mockito.times(4)).dispatchAfterCommit(eq(TENANT), any());
+
         assertThat(types).isEqualTo(handler.supportedTypes());
         ArgumentCaptor<ManageDraftInvoiceUseCase.DraftContent> content =
                 ArgumentCaptor.forClass(ManageDraftInvoiceUseCase.DraftContent.class);
@@ -484,5 +511,29 @@ class InvoiceSyncHandlerTest {
         SyncOperationResult r = handler.handle(op("UPDATE_INVOICE", p), ACTOR, TENANT);
         assertThat(r.status()).isEqualTo(SyncOperationStatus.REJECTED);
         assertThat(r.reason()).isEqualTo("OPTIMISTIC_LOCK");
+    }
+
+    @Test
+    @DisplayName("SEND_INVOICE bad payloads: unknown channel, address without EMAIL, number with EMAIL only, empty "
+            + "channels → VALIDATION_ERROR; entityId ≠ invoiceId → REJECTED; nothing queued")
+    void sendInvoiceBadPayloads() {
+        String id = invoiceId.toString();
+        Map<String, Object> fax = new LinkedHashMap<>(Map.of("invoiceId", id, "channel", "FAX"));
+        Map<String, Object> mailOnSms = new LinkedHashMap<>(Map.of("invoiceId", id, "channel", "SMS",
+                "email", "a@b.cm"));
+        Map<String, Object> phoneOnMail = new LinkedHashMap<>(Map.of("invoiceId", id, "channel", "EMAIL",
+                "phone", "690000001"));
+        Map<String, Object> noChannel = new LinkedHashMap<>(Map.of("invoiceId", id, "channels", List.of()));
+        Map<String, Object> badList = new LinkedHashMap<>(Map.of("invoiceId", id, "channels", List.of("sms", "pigeon")));
+        for (Map<String, Object> p : List.of(fax, mailOnSms, phoneOnMail, noChannel, badList)) {
+            SyncOperationResult r = handler.handle(op("SEND_INVOICE", p), ACTOR, TENANT);
+            assertThat(r.status()).as(p.toString()).isEqualTo(SyncOperationStatus.REJECTED);
+            assertThat(r.reason()).as(p.toString()).isEqualTo("VALIDATION_ERROR");
+        }
+        SyncOperationResult other = handler.handle(new SyncOperation(UUID.randomUUID().toString(), "SEND_INVOICE",
+                UUID.randomUUID().toString(), Map.of("invoiceId", id, "channel", "SMS"), Instant.now()), ACTOR, TENANT);
+        assertThat(other.status()).isEqualTo(SyncOperationStatus.REJECTED);
+        assertThat(other.reason()).contains("entityId");
+        verifyNoInteractions(sending, outbox);
     }
 }

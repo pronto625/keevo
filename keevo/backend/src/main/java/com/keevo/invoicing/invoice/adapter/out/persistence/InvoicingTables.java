@@ -20,6 +20,8 @@ final class InvoicingTables {
     static final String SALE_STATES = "sale_invoice_states";
     /** Story 20.4 — payments received and scheduled instalments. */
     static final String PAYMENTS = "invoice_payments";
+    /** Story 20.8 — the send outbox (V18). */
+    static final String SEND_REQUESTS = "invoice_send_requests";
 
     private InvoicingTables() {
     }

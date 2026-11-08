@@ -281,5 +281,53 @@
         "dueDate": null
       }
     }
+  ],
+  "sendDescription": "Story 20.8 — SEND_INVOICE, queued by the Bref React Native app (the Flutter V1 test client does not queue it): the document invoiceId (issued or paid invoice, or quote waiting for validation; entityId = invoiceId) is sent to its client. channel: WHATSAPP (default when absent or blank), SMS or EMAIL (case-insensitive), or Bref's channels: [...] (several, each processed independently; merged with channel); phone: WhatsApp / SMS number (absent or null = the client phone; refused when EMAIL is the only channel); email: EMAIL address (absent or null = the client email; refused without the EMAIL channel). The push only VALIDATES and QUEUES the sending (one request per channel keyed on the operationId) and answers APPLIED = queued; the server sends it after commit or at its next poll (every 30 s), retrying a provider failure up to 5 attempts (backoff 30 s, 1, 2, 4 min). The outcome reaches the app through the invoices pull: lastSendStatus PENDING | SENT | FAILED | UNKNOWN (+ lastSendStatusLabel, lastSendStatusChannel, lastSendErrorCode, lastSendError) and, once sent, sendCount / lastSentAt / lastSentChannel. UNKNOWN = the provider did not answer (maybe delivered): never retried, the user checks with the client before sending again. Pushed again with the same operationId: DUPLICATE, nothing queued nor sent again. Refused at push time (REJECTED with the code, nothing queued): INVOICE_SMS_PHONE_REQUIRED, INVOICE_SMS_PHONE_INVALID, INVOICE_EMAIL_REQUIRED, INVOICE_EMAIL_INVALID, the 14.2 WhatsApp codes INVOICE_PHONE_REQUIRED / INVOICE_PHONE_INVALID, INVOICE_INVALID_TRANSITION, INVOICE_NOT_FOUND, VALIDATION_ERROR (unknown channel, address without EMAIL, number with EMAIL only, entityId other than invoiceId). Quota (QUOTA_EXCEEDED), provider and configuration failures (PUBLIC_BASE_URL_MISSING…) arrive later as lastSendStatus FAILED. serverEntityId = the invoice id.",
+  "sendOperations": [
+    {
+      "name": "sendBySms",
+      "operationType": "SEND_INVOICE",
+      "entityId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "channel": "SMS",
+        "phone": null,
+        "email": null
+      }
+    },
+    {
+      "name": "sendByEmailTo",
+      "operationType": "SEND_INVOICE",
+      "entityId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "channel": "EMAIL",
+        "phone": null,
+        "email": "compta@ndolo.cm"
+      }
+    },
+    {
+      "name": "sendByWhatsAppDefault",
+      "operationType": "SEND_INVOICE",
+      "entityId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "phone": "+237690000001"
+      }
+    },
+    {
+      "name": "sendBrefChannels",
+      "operationType": "SEND_INVOICE",
+      "entityId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+      "payload": {
+        "invoiceId": "3f0c6a52-6d1e-4b7a-9c55-2a8e0f1b7d44",
+        "channels": [
+          "sms",
+          "email"
+        ],
+        "phone": null,
+        "email": null
+      }
+    }
   ]
 }

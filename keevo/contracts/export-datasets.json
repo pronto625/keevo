@@ -1181,6 +1181,7 @@
       "cataloguePrice" : "Prix catalogue",
       "categoriesCreated" : "Catégories créées",
       "category" : "Catégorie",
+      "channel" : "Canal d'envoi",
       "clientName" : "Client",
       "costPrice" : "Prix de revient",
       "country" : "Pays",
@@ -1287,6 +1288,7 @@
       "DIRECT_INCOMPLETE" : "Téléchargement interrompu",
       "DRAFT" : "Brouillon",
       "ELECTRONICS" : "Électronique & Smartphones",
+      "EMAIL" : "E-mail",
       "EMPLOYEE" : "Employé",
       "FOOD_GROCERY" : "Alimentation",
       "FULL" : "Complet",
@@ -1307,13 +1309,15 @@
       "PURCHASE" : "Réception",
       "SALE" : "Vente",
       "SALE_CANCELLED" : "Annulation de vente",
+      "SMS" : "SMS",
       "STOCK_ENTRY" : "Entrée de stock",
       "STORE" : "Boutique",
       "TRANSFER_IN" : "Transfert (entrée)",
       "TRANSFER_OUT" : "Transfert (sortie)",
       "VALIDATED" : "Validé",
       "VIEWER" : "Lecteur",
-      "WAREHOUSE" : "Entrepôt"
+      "WAREHOUSE" : "Entrepôt",
+      "WHATSAPP" : "WhatsApp"
     },
     "context" : {
       "destinationStoreName" : "Vers",
@@ -1339,6 +1343,7 @@
       "tenantId"
     ],
     "codeKeys" : [
+      "channel",
       "mode",
       "movementType",
       "newRole",

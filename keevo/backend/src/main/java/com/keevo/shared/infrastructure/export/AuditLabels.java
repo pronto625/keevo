@@ -255,6 +255,7 @@ public final class AuditLabels {
             entry("paymentMethod", "Mode de paiement"),
             // Invoice sending, company identity (Story 14.2)
             entry("sentTo", "Envoyée au"),
+            entry("channel", "Canal d'envoi"),             // Story 20.8 — WhatsApp, SMS or e-mail
             entry("designation", "Désignation"),
             entry("logo", "Logo"),
             // Stores — Bref fields, default sale flow (Story 19.12)
@@ -310,7 +311,11 @@ public final class AuditLabels {
             // Export modes (DataExportedEvent.MODE_*)
             entry("DIRECT", "Téléchargement direct"),
             entry("DIRECT_INCOMPLETE", "Téléchargement interrompu"),
-            entry("BACKGROUND", "Préparé en arrière-plan"));
+            entry("BACKGROUND", "Préparé en arrière-plan"),
+            // Document sending channels (Story 20.8, InvoiceSentEvent.channel)
+            entry("WHATSAPP", "WhatsApp"),
+            entry("SMS", "SMS"),
+            entry("EMAIL", "E-mail"));
 
     /** French label of each context key (metadata, or the context keys of legacy value_after). */
     public static final Map<String, String> CONTEXT = Map.ofEntries(
@@ -345,5 +350,5 @@ public final class AuditLabels {
     /** Keys whose string values are codes (translated through {@link #VALUES}, else humanized). */
     public static final Set<String> CODE_KEYS = Set.of(
             "status", "type", "movementType", "role", "scope", "source", "previousRole", "newRole",
-            "storeType", "sectorType", "mode");
+            "storeType", "sectorType", "mode", "channel");
 }

@@ -188,7 +188,8 @@ public class InvoicePublicLinkUseCase {
         return new DomainException(ErrorCode.INVOICE_LINK_INVALID, "Invoice link not valid");
     }
 
-    static String stripTrailingSlash(String base) {
+    /** {@code https://x/} → {@code https://x}; null → empty. Shared with {@code PublicBaseUrl} (Story 20.8). */
+    public static String stripTrailingSlash(String base) {
         if (base == null) return "";
         return base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
     }
