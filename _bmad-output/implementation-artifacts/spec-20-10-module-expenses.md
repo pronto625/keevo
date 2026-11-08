@@ -160,9 +160,11 @@ Status: done
 
 **Residual risks:** an expense moved by the owner out of an employee's store sends that employee no tombstone (same gap as clients, routed to 22.5); V1 applies lazily per tenant on the first gated call / sync operation / pull; the trigram indexes are skipped (warning) on a database without pg_trgm in public.
 
+**Verification (orchestrator):** full suite package by package on the rebased branch (clean build): 6 329 tests, 0 failures. Live on keevo_dev (WhatsApp noop, FCM/Expo off), test tenant with `expenses` activated for the check then deactivated: options (10 categories, 5 payment methods), create 201 with `storeName`, replay 200, filtered list total 12 500, date 1999-12-31 → 422 French message, delete 204, replay of the deleted id → 404 « Dépense introuvable ».
+
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée sur la branche de la story (commit à reporter à la fusion) — mobile à faire. Conventions générales (enveloppes, `domainCode`, authentification) : spec-16-11 ; protocole de synchro (push / pull, curseur, `DUPLICATE`, conflits) : spec-16-10.
+**Statut :** API livrée (commits `362becd6` + `88070a4f`, refonte/modulaire / develop) — mobile à faire. Conventions générales (enveloppes, `domainCode`, authentification) : spec-16-11 ; protocole de synchro (push / pull, curseur, `DUPLICATE`, conflits) : spec-16-10.
 
 **Ce qui est fait côté API :** les dépenses de Bref existent dans Keevo, par boutique et par catégorie, en ligne et hors ligne. Mêmes règles que Bref : 10 catégories, 5 modes de paiement, montant de 0,01 à 999 999 999 999 avec au plus 2 décimales, date réelle au format AAAA-MM-JJ, au plus demain (UTC), pas avant le 1er janvier 2000 ; si absente : aujourd'hui (UTC) pour une création en ligne, le jour où la dépense a été saisie hors ligne (heure de Douala) pour une création synchronisée, la date actuelle pour une modification. Le propriétaire voit toutes ses boutiques (ou une seule) ; un employé, un gérant ou un lecteur ne voit et n'enregistre que les dépenses de sa boutique. Module premium « Dépenses » (inclus à partir de Pro) ; désactivé par défaut pour les comptes existants (le propriétaire l'active dans Paramètres › Mes modules).
 

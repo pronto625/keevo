@@ -367,6 +367,7 @@ development_status:
   m20-5-remise-livraison-tva-echeance: backlog  # API 3ef5e1d6 — discountAmount/deliveryFee/vatRate/vatExempt/dueDate + client rccm/email/contactName/website + ligne productId/reference (REST et CREATE_/UPDATE_INVOICE), subtotal/vatRateOverride en lecture, taux par pays, avoir total seulement si remise/livraison, cas contracts/invoice-calculation-cases.json
   m20-6-derivation-catalogue-crm: backlog  # API 79f032c2 — préférence deriveFromDocuments (réglages facturation), client + articles créés/liés à l émission (client.clientId, lines[].productId), GET /clients?limit=&cursor= (meta.nextCursor), recherche échappée
   m20-9-reporting-multi-source: backlog  # API 8d228140+891771ab — CA unique caisse + factures (dashboard, rapports, classement, rentabilité), GET /reporting/profitability/summary (marge inconnue), chiffres par boutique encore ventes seules (20-14)
+  m20-10-module-expenses: backlog  # API 362becd6+88070a4f — module premium expenses : /api/v1/expenses (liste curseur + totaux, options, CRUD, rejeu 200), sync CREATE_/UPDATE_/DELETE_EXPENSE (refus en français), pull expenses + tombstones, storeName, contrat expense-sync-payloads.json
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
@@ -456,7 +457,7 @@ development_status:
   20-7-modeles-signatures-liens-publics: backlog  # 2026-11-06 revue 20-4 — +1 item (PDF et lien public : acompte, paiements, reste dû, échéancier) | 2026-11-06 revue 20-3 — 1 item (envoi d un devis au client : lien public / WhatsApp)
   20-8-envoi-sms-email: backlog
   20-9-reporting-multi-source: done  # 2026-11-08 build-auto parallèle (spec-20-9) — revue 5 couches, 44 constats (18 corrigés, 2 routés → 20-14, 24-12, GMV → 20-13), suite complète 6 287 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
-  20-10-module-expenses: backlog
+  20-10-module-expenses: done  # 2026-11-08 build-auto parallèle (spec-20-10) — revue 5 couches, 41 constats (28 corrigés, 3 routés → 22-5, 19-5b, 20-13), suite complète 6 329 tests verts, contrôle live keevo_dev OK ; revue de suivi recommandée
   20-11-module-finance: backlog
   20-14-boutique-des-documents: backlog  # 2026-11-08 revue 20-9 — 3 items (boutique des factures à la création, rapports par boutique et exports clients/tendances sur la source unique)
   20-13-api-super-admin-heritee-bref: backlog  # 2026-11-01 décision utilisateur — l'API Keevo absorbe toute l'API Bref, partie dashboard comprise (FUS-FR38)
