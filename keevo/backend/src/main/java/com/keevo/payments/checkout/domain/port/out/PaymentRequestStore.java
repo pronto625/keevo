@@ -14,12 +14,16 @@ import java.util.UUID;
 /**
  * Story 21.1 — {@code public.payment_requests} and the ledger row of a confirmed payment
  * ({@code public.tenant_payments}). Every state change is one guarded statement ({@code … WHERE status IN (…)}).
+ *
+ * <p>Story 21.3 — every transition out of the in-flight states (expiry, failure, cancellation) gives the account credit
+ * reserved by the request back to the company IN THE SAME STATEMENT (balance + journal row {@code PAYMENT_RELEASE}),
+ * so a transition and its release can never diverge.
  */
 public interface PaymentRequestStore {
 
     /**
-     * Expires the stale in-flight requests of a company (one UPDATE): INITIATING last touched before
-     * {@code initiatingBefore}, PENDING before {@code pendingBefore}.
+     * Expires the stale in-flight requests of a company (one statement, credit released): INITIATING last touched
+     * before {@code initiatingBefore}, PENDING before {@code pendingBefore}.
      */
     int expireStale(UUID tenantId, Instant initiatingBefore, Instant pendingBefore, String reason);
 
@@ -36,11 +40,20 @@ public interface PaymentRequestStore {
     /** Next step after an accepted OTP (PENDING only). */
     void recordStep(UUID id, NextStep nextStep, String ussdCode, String providerStatus);
 
-    /** {@code from} → FAILED with a French reason; false when the request was in none of those states. */
+    /**
+     * {@code from} (in-flight states only) → FAILED with a French reason, credit released; false when the request was
+     * in none of those states.
+     */
     boolean markFailed(UUID id, Set<PaymentStatus> from, String reason, String providerStatus);
 
-    /** In flight → CANCELLED (company checked); false otherwise. */
+    /** In flight → CANCELLED (company checked), credit released; false otherwise. */
     boolean cancel(UUID id, UUID tenantId, String reason);
+
+    /**
+     * Story 21.3 — a payment received late was added to the account credit instead of being applied: the request keeps
+     * its status, the reason tells the owner (never on a CONFIRMED request).
+     */
+    void markCredited(UUID id, String reason);
 
     Optional<PaymentRequest> find(UUID id);
 
@@ -68,7 +81,10 @@ public interface PaymentRequestStore {
     /** Whether the company already took this free offer (a CONFIRMED 0 FCFA request with this discount). */
     boolean freeOfferTaken(UUID tenantId, UUID discountId);
 
-    /** CONFIRMED with the covered period, the ledger row (null for a free offer) and the instant. */
+    /**
+     * CONFIRMED with the covered period ({@code null} for a pack), the ledger row ({@code null} when nothing was
+     * collected or for a pack) and the instant.
+     */
     void confirm(UUID id, UUID tenantPaymentId, PlanPeriod period, Instant at);
 
     /** The ledger row of a confirmed paid request ({@code tenant_payments}, MOBILE_MONEY, plan and cycle). */

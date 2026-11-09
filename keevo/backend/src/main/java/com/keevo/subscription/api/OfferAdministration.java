@@ -79,18 +79,46 @@ public interface OfferAdministration {
      */
     StoreProductView saveStoreProduct(String productId, StoreProductInput input, UUID actorId);
 
+    /** Story 21.3 — the usage packs (inactive included), in display order. */
+    List<UsagePackView> usagePacks();
+
+    /**
+     * Story 21.3 — creates or updates a usage pack (absent fields of an existing pack are kept; a new pack needs label,
+     * metric, quantity and price); journaled; applies to the next checkout (a payment already started keeps its price).
+     * 422 {@code VALIDATION_ERROR} with {@code details.<field>} on a bad code, label, metric, quantity, price or order.
+     */
+    UsagePackView saveUsagePack(String code, UsagePackInput input, UUID actorId);
+
     // ── views ─────────────────────────────────────────────────────────────────
 
     /**
      * @param storeProducts Story 21.2 — the App Store products with the gap between the Apple price and the grid
      */
     record CatalogueView(List<PlanItem> plans, List<CycleItem> cycles, SettingsView settings,
-                         List<StoreProductView> storeProducts) {
+                         List<StoreProductView> storeProducts, List<UsagePackView> usagePacks) {
 
         /** Without App Store products (before Story 21.2). */
         public CatalogueView(List<PlanItem> plans, List<CycleItem> cycles, SettingsView settings) {
-            this(plans, cycles, settings, List.of());
+            this(plans, cycles, settings, List.of(), List.of());
         }
+
+        /** Without usage packs (before Story 21.3). */
+        public CatalogueView(List<PlanItem> plans, List<CycleItem> cycles, SettingsView settings,
+                             List<StoreProductView> storeProducts) {
+            this(plans, cycles, settings, storeProducts, List.of());
+        }
+    }
+
+    /**
+     * Story 21.3 — a usage pack of the catalogue.
+     *
+     * @param metric      {@code DOCUMENTS | SMS | EMAILS | AI_CREDITS}
+     * @param metricLabel French name of the metric
+     * @param unitPriceXaf price per unit, rounded half-up (display aid)
+     * @param active      offered to owners
+     */
+    record UsagePackView(String code, String label, String metric, String metricLabel, int quantity, long priceXaf,
+                         long unitPriceXaf, boolean active, int sortOrder, Instant updatedAt) {
     }
 
     /**
@@ -217,5 +245,18 @@ public interface OfferAdministration {
      * @param active           offered to new buyers ({@code null} = true)
      */
     record StoreProductInput(String planCode, String cycleCode, Long declaredPriceXaf, Boolean active) {
+    }
+
+    /**
+     * Story 21.3 — a usage pack to create or update ({@code null} = kept on an update).
+     *
+     * @param metric   {@code DOCUMENTS | SMS | EMAILS | AI_CREDITS}
+     * @param quantity 1..1 000 000 units
+     * @param priceXaf 1..100 000 000 FCFA
+     * @param active   offered to owners ({@code null} = true on a creation)
+     * @param sortOrder display order (0..100 000)
+     */
+    record UsagePackInput(String label, String metric, Integer quantity, Long priceXaf, Boolean active,
+                          Integer sortOrder) {
     }
 }

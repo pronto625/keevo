@@ -58,6 +58,12 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
     private static final String IN_SCOPE =
             "t.status <> 'DELETED' AND t.id <> '" + SYSTEM_TENANT_ID + "'::uuid";
 
+    /** Story 21.3 — usage packs paid in a range (partial index on confirmed_at of confirmed pack requests). */
+    static final String PACK_SALES_SQL = "SELECT count(*), COALESCE(sum(p.amount_due_xaf), 0) "
+            + "FROM public.payment_requests p JOIN public.tenants t ON t.id = p.tenant_id "
+            + "WHERE p.kind = 'USAGE_PACK' AND p.status = 'CONFIRMED' AND p.confirmed_at >= ? AND p.confirmed_at < ? "
+            + "AND " + IN_SCOPE;
+
     static final String PAYMENTS_SQL =
             "SELECT p.tenant_id, p.amount_xaf, p.paid_at, p.period_start, p.period_end, p.plan_code, p.cycle_code "
             + "FROM public.tenant_payments p JOIN public.tenants t ON t.id = p.tenant_id WHERE " + IN_SCOPE
@@ -168,6 +174,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
         RevenueMetrics.Conversion conversion = metrics.conversion(from, to);
         PlanCounts plans = countCurrentPlans();
         Set<UUID> payingToday = metrics.payingTenantsAt(today);
+        Long[] packs = packSales(from, to);
         int premiumWithoutPayment = (int) plans.premiumTenantIds().stream()
                 .filter(id -> !payingToday.contains(id)).count();
 
@@ -179,7 +186,15 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                 metrics.newPayingTenants(from, to).size(),
                 churned, churnBase, RevenueMetrics.rate(churned, churnBase),
                 conversion.converted(), conversion.trialsEnded(), conversion.rate(),
-                metrics.revenueCollected(from, to));
+                metrics.revenueCollected(from, to), Math.toIntExact(packs[0]), packs[1]);
+    }
+
+    /** Story 21.3 — {count, cash collected} of the usage packs paid between two WAT dates (inclusive). */
+    private Long[] packSales(LocalDate from, LocalDate to) {
+        Long[] sales = jdbc.queryForObject(PACK_SALES_SQL, (rs, i) -> new Long[] {rs.getLong(1), rs.getLong(2)},
+                Timestamp.from(from.atStartOfDay(WAT).toInstant()),
+                Timestamp.from(to.plusDays(1).atStartOfDay(WAT).toInstant()));
+        return sales == null ? new Long[] {0L, 0L} : sales;
     }
 
     // ── Trend ─────────────────────────────────────────────────────────────────

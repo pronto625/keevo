@@ -5,6 +5,7 @@ import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanDefinition;
 import com.keevo.shared.module.PlanProfileAdmin;
 import com.keevo.subscription.api.OfferPricing;
+import com.keevo.subscription.api.UsagePacks;
 import com.keevo.subscription.offer.domain.model.BillingCycle;
 import com.keevo.subscription.offer.domain.model.Discount;
 import com.keevo.subscription.offer.domain.model.DiscountScope;
@@ -46,12 +47,22 @@ public class OfferPricingService implements OfferPricing {
     private final OfferStore store;
     private final PlanProfileAdmin profiles;
     private final Clock clock;
+    /** Story 21.3 — the packs listed with the offers ({@code null}: none listed). */
+    private final UsagePacks usagePacks;
 
-    public OfferPricingService(PlanCatalog catalog, OfferStore store, PlanProfileAdmin profiles, Clock clock) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public OfferPricingService(PlanCatalog catalog, OfferStore store, PlanProfileAdmin profiles, Clock clock,
+                               UsagePacks usagePacks) {
         this.catalog = catalog;
         this.store = store;
         this.profiles = profiles;
         this.clock = clock;
+        this.usagePacks = usagePacks;
+    }
+
+    /** Without usage packs (unit tests of the 21.10 pricing). */
+    public OfferPricingService(PlanCatalog catalog, OfferStore store, PlanProfileAdmin profiles, Clock clock) {
+        this(catalog, store, profiles, clock, null);
     }
 
     @Override
@@ -150,7 +161,7 @@ public class OfferPricingService implements OfferPricing {
                             tenant.tenantId());
                     return new PlanRef(tenant.planCode(), "Plan inconnu", null);
                 });
-        return new OffersView(current, promoStatus, plans);
+        return new OffersView(current, promoStatus, plans, usagePacks == null ? List.of() : usagePacks.offered());
     }
 
     private static boolean promoMatched(List<Discount> candidates, String promo) {

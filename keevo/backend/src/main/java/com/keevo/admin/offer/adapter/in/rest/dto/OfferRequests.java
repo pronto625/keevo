@@ -70,4 +70,17 @@ public final class OfferRequests {
      */
     public record StoreProductRequest(String planCode, String cycleCode, Long declaredPriceXaf, Boolean active) {
     }
+
+    /**
+     * Story 21.3 — a usage pack to create or update (absent fields of an existing pack are kept).
+     *
+     * @param metric    {@code DOCUMENTS | SMS | EMAILS | AI_CREDITS}
+     * @param quantity  1..1 000 000 units
+     * @param priceXaf  1..100 000 000 FCFA
+     * @param active    offered to owners (default true on a creation)
+     * @param sortOrder display order 0..100 000
+     */
+    public record UsagePackRequest(String label, String metric, Integer quantity, Long priceXaf, Boolean active,
+                                   Integer sortOrder) {
+    }
 }

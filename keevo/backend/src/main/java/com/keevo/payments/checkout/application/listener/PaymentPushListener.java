@@ -1,5 +1,6 @@
 package com.keevo.payments.checkout.application.listener;
 
+import com.keevo.payments.checkout.domain.event.PaymentNoticeEvent;
 import com.keevo.payments.checkout.domain.event.PlanPaymentConfirmedEvent;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
@@ -45,6 +46,19 @@ public class PaymentPushListener {
                     DEEP_LINK, Map.of()));
         } catch (RuntimeException e) {
             log.warn("Payment confirmation push failed for tenant {} ({})", event.schemaName(),
+                    e.getClass().getSimpleName());
+        }
+    }
+
+    /** Story 21.3 — a pack credited, a late payment added to the credit: same channel, same guarantees. */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    @DeliverOnce
+    public void onNotice(PaymentNoticeEvent event) {
+        try {
+            pushNotifier.notifyOwners(event.schemaName(), NotificationPayload.of(event.type(), event.title(),
+                    event.body(), DEEP_LINK, Map.of()));
+        } catch (RuntimeException e) {
+            log.warn("Payment notice push failed for tenant {} ({})", event.schemaName(),
                     e.getClass().getSimpleName());
         }
     }

@@ -70,7 +70,7 @@ public class PaymentWebhookService {
         }
         if (callback.status() == ProviderStatus.SUCCESS) {
             return switch (settlement.settle(request)) {
-                case CONFIRMED, ALREADY_CONFIRMED, FAILED -> Result.ACCEPTED;
+                case CONFIRMED, ALREADY_CONFIRMED, FAILED, CREDITED -> Result.ACCEPTED;
                 case PROVIDER_UNREACHABLE -> Result.RETRY;
                 case NOT_VERIFIED, PENDING -> Result.REJECTED;
             };

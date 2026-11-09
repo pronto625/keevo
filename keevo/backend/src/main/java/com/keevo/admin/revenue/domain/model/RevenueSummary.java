@@ -23,6 +23,8 @@ import java.time.LocalDate;
  * @param trialsEnded        tenants whose trial ended (expiry or first activation) in the range
  * @param conversionRate     converted / trialsEnded, 0 when trialsEnded is 0
  * @param revenueCollected   sum of the payments made in the range (XAF)
+ * @param packsSold          Story 21.3 — usage packs paid in the range (confirmed pack requests)
+ * @param packsCollectedXaf  Story 21.3 — cash collected for those packs (XAF; the account credit used is excluded)
  */
 public record RevenueSummary(
         LocalDate from,
@@ -43,5 +45,19 @@ public record RevenueSummary(
         int convertedTenants,
         int trialsEnded,
         double conversionRate,
-        long revenueCollected
-) {}
+        long revenueCollected,
+        int packsSold,
+        long packsCollectedXaf
+) {
+
+    /** Without pack sales (before Story 21.3). */
+    public RevenueSummary(LocalDate from, LocalDate to, long mrr, long arr, long mrrPreviousMonth,
+                          Double mrrTrendPercent, int payingTenants, int freeTenants, int trialTenants,
+                          int premiumTenants, int premiumWithoutPayment, int newPayingTenants, int churnedTenants,
+                          int churnBase, double churnRate, int convertedTenants, int trialsEnded,
+                          double conversionRate, long revenueCollected) {
+        this(from, to, mrr, arr, mrrPreviousMonth, mrrTrendPercent, payingTenants, freeTenants, trialTenants,
+                premiumTenants, premiumWithoutPayment, newPayingTenants, churnedTenants, churnBase, churnRate,
+                convertedTenants, trialsEnded, conversionRate, revenueCollected, 0, 0L);
+    }
+}

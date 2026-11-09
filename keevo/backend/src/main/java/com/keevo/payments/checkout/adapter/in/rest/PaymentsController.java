@@ -45,6 +45,9 @@ public class PaymentsController {
             Mobile Money collection starts on phoneNumber with method ORANGE_MONEY or MTN_MOMO: status PENDING and
             nextStep OTP (send the SMS code to /authorize) or USSD (validate on the phone, dial ussdCode when given),
             then poll GET /payments/{id}. One payment in flight per company: 409 PAYMENT_IN_PROGRESS.
+            Story 21.3: packCode (instead of planCode/cycleCode) buys a usage pack at its catalogue price (no promo
+            code); useCredit=true applies the account credit first (creditAppliedXaf), the provider collects the rest
+            (amountXaf); a price fully covered by the credit is confirmed at once (method and phone not required).
             """, security = @SecurityRequirement(name = "bearerAuth"))
     @PostMapping("/checkout")
     public ResponseEntity<ApiResponseWrapper<PaymentView>> checkout(
@@ -52,7 +55,8 @@ public class PaymentsController {
         UUID actor = owner();
         CheckoutRequest b = body == null ? new CheckoutRequest(null, null, null, null, null) : body;
         return ok(checkout.start(new CheckoutService.StartCommand(TenantContext.getCurrentTenant(), actor,
-                b.planCode(), b.cycleCode(), b.promoCode(), b.method(), b.phoneNumber())));
+                b.planCode(), b.cycleCode(), b.promoCode(), b.method(), b.phoneNumber(), b.packCode(),
+                b.useCredit())));
     }
 
     @Operation(summary = "Send the code received by SMS (nextStep OTP)",

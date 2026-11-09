@@ -4,6 +4,7 @@ import com.keevo.identity.api.TenantQueryPort;
 import com.keevo.identity.api.TenantView;
 import com.keevo.payments.checkout.domain.model.MobileMoneyMethod;
 import com.keevo.payments.checkout.domain.model.NextStep;
+import com.keevo.payments.checkout.domain.model.PaymentKind;
 import com.keevo.payments.checkout.domain.model.PaymentProvider;
 import com.keevo.payments.checkout.domain.model.PaymentRequest;
 import com.keevo.payments.checkout.domain.model.PaymentStatus;
@@ -13,10 +14,15 @@ import com.keevo.payments.checkout.domain.port.out.MobileMoneyGateway.GatewayExc
 import com.keevo.payments.checkout.domain.port.out.MobileMoneyGateway.PayinResult;
 import com.keevo.payments.checkout.domain.port.out.MobileMoneyGateway.ProviderStatus;
 import com.keevo.payments.checkout.domain.port.out.PaymentRequestStore;
+import com.keevo.payments.credit.domain.port.out.AccountCreditStore;
+import com.keevo.shared.capability.entitlement.QuotaPeriod;
+import com.keevo.shared.capability.entitlement.UsageMetric;
+import com.keevo.shared.capability.entitlement.UsageQuotaPort;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.subscription.api.OfferPricing;
+import com.keevo.subscription.api.UsagePacks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
@@ -46,6 +52,11 @@ import java.util.regex.Pattern;
  *   <li><b>cancel</b>: releases the lock; a payment the provider confirms later is still honoured.</li>
  * </ol>
  * Cost per call: constant (indexed reads/updates, ≤ 1 HTTP call).
+ *
+ * <p>Story 21.3 — the same path buys a usage pack ({@code packCode}, catalogue price frozen on the request, no
+ * discount) and may apply the account credit first ({@code useCredit}): in the insert transaction the balance is read
+ * {@code FOR UPDATE} (after the stale requests released theirs), {@code min(balance, price)} is reserved with the
+ * request and the provider is asked for the rest; a price fully covered is confirmed at once without the provider.
  */
 @Service
 public class CheckoutService {
@@ -64,30 +75,46 @@ public class CheckoutService {
     /**
      * @param tenantSchema the caller's company ({@code TenantContext})
      * @param actorId      the owner
-     * @param method       {@code ORANGE_MONEY | MTN_MOMO}; not required for a free offer
-     * @param phoneNumber  number charged; not required for a free offer
+     * @param planCode     plan bought (with {@code cycleCode}); {@code null} when a pack is bought
+     * @param packCode     Story 21.3 — usage pack bought; {@code null} when a plan is bought
+     * @param method       {@code ORANGE_MONEY | MTN_MOMO}; not required when nothing is left to collect
+     * @param phoneNumber  number charged; not required when nothing is left to collect
+     * @param useCredit    Story 21.3 — apply the account credit first ({@code null} = no)
      */
     public record StartCommand(String tenantSchema, UUID actorId, String planCode, String cycleCode, String promoCode,
-                               String method, String phoneNumber) {
+                               String method, String phoneNumber, String packCode, Boolean useCredit) {
+
+        /** A plan checkout without credit (Story 21.1 callers). */
+        public StartCommand(String tenantSchema, UUID actorId, String planCode, String cycleCode, String promoCode,
+                            String method, String phoneNumber) {
+            this(tenantSchema, actorId, planCode, cycleCode, promoCode, method, phoneNumber, null, null);
+        }
     }
 
     private final OfferPricing pricing;
+    private final UsagePacks packs;
     private final TenantQueryPort tenants;
     private final PaymentRequestStore store;
+    private final AccountCreditStore credits;
     private final MobileMoneyGateway gateway;
     private final PaymentConfirmationService confirmation;
     private final PaymentSettlementService settlement;
     private final PaymentSettings settings;
     private final TransactionOperations tx;
     private final Clock clock;
+    /** Story 21.3 — the plan's quotas (a pack is sold only when the plan limits its metric); null in unit tests. */
+    private final UsageQuotaPort quotas;
 
-    public CheckoutService(OfferPricing pricing, TenantQueryPort tenants, PaymentRequestStore store,
-                           MobileMoneyGateway gateway, PaymentConfirmationService confirmation,
-                           PaymentSettlementService settlement, PaymentSettings settings, TransactionOperations tx,
-                           Clock clock) {
+    public CheckoutService(OfferPricing pricing, UsagePacks packs, TenantQueryPort tenants, PaymentRequestStore store,
+                           AccountCreditStore credits, MobileMoneyGateway gateway,
+                           PaymentConfirmationService confirmation, PaymentSettlementService settlement,
+                           PaymentSettings settings, TransactionOperations tx, Clock clock, UsageQuotaPort quotas) {
+        this.quotas = quotas;
         this.pricing = pricing;
+        this.packs = packs;
         this.tenants = tenants;
         this.store = store;
+        this.credits = credits;
         this.gateway = gateway;
         this.confirmation = confirmation;
         this.settlement = settlement;
@@ -102,55 +129,110 @@ public class CheckoutService {
         if (store.countSince(tenant.id(), now.minus(Duration.ofHours(1))) >= settings.maxCheckoutsPerHour()) {
             throw DomainException.userFacing(ErrorCode.RATE_LIMIT_EXCEEDED, PaymentText.TOO_MANY_CHECKOUTS);
         }
-        OfferPricing.Quote quote = pricing.quote(tenant.id(), cmd.planCode(), cmd.cycleCode(), cmd.promoCode());
+        boolean pack = cmd.packCode() != null && !cmd.packCode().isBlank();
+        if (pack && cmd.planCode() != null && !cmd.planCode().isBlank()) {
+            throw PaymentText.invalid("packCode", PaymentText.PLAN_OR_PACK);
+        }
         Instant initiatingBefore = now.minus(settings.initiatingTimeout());
         Instant pendingBefore = now.minus(settings.pendingTimeout());
         UUID id = UUID.randomUUID();
+        PaymentRequest priced = pack ? packRequest(id, tenant, cmd, now)
+                : planRequest(id, tenant, cmd, pricing.quote(tenant.id(), cmd.planCode(), cmd.cycleCode(),
+                        cmd.promoCode()), now);
 
-        if (quote.effectiveXaf() == 0) { // free offer: no provider, confirmed at once
-            PaymentRequest free = request(id, tenant, cmd.actorId(), quote, cmd.promoCode(), PaymentProvider.NONE,
-                    null, null, now);
+        if (priced.freeOffer()) { // free offer: no provider, no credit, confirmed at once
+            PaymentRequest free = withPayment(priced, 0, PaymentProvider.NONE, null, null);
             try {
                 confirmation.confirmFree(free, initiatingBefore, pendingBefore);
             } catch (DuplicateKeyException e) {
                 throw inProgress();
             }
-            log.info("Free offer taken: tenant={} request={} plan={}", tenant.id(), id, quote.planCode());
+            log.info("Free offer taken: tenant={} request={} plan={}", tenant.id(), id, free.planCode());
             return view(id, tenant.id());
         }
 
-        if (!gateway.available()) {
-            throw DomainException.userFacing(ErrorCode.PAYMENT_UNAVAILABLE,
-                    "Le paiement Mobile Money est momentanément indisponible");
+        boolean useCredit = Boolean.TRUE.equals(cmd.useCredit());
+        if (!useCredit && !gateway.available()) {
+            throw unavailable();
         }
-        MobileMoneyMethod method = MobileMoneyMethod.parse(cmd.method())
+        // method and phone are checked before any write when given (or when the credit cannot cover everything)
+        MobileMoneyMethod method = cmd.method() == null || cmd.method().isBlank() ? null
+                : MobileMoneyMethod.parse(cmd.method())
                 .orElseThrow(() -> PaymentText.invalid("method", PaymentText.METHOD_REQUIRED));
-        String phone = phone(cmd.phoneNumber());
-        PaymentRequest request = request(id, tenant, cmd.actorId(), quote, cmd.promoCode(), gateway.provider(),
-                method, phone, now);
+        String phone = cmd.phoneNumber() == null || cmd.phoneNumber().isBlank() ? null : phone(cmd.phoneNumber());
+        if (!useCredit) {
+            requireProvider(method, phone);
+        }
+        PaymentRequest request;
         try {
-            tx.executeWithoutResult(status -> {
-                store.expireStale(tenant.id(), initiatingBefore, pendingBefore, PaymentText.EXPIRED);
-                store.insert(request);
+            request = tx.execute(status -> {
+                store.expireStale(tenant.id(), initiatingBefore, pendingBefore, PaymentText.EXPIRED); // releases credit
+                long price = priced.baseXaf() - priced.reductionXaf();
+                long credit = useCredit ? Math.min(credits.lockBalance(tenant.id()), price) : 0L;
+                if (credit == price) { // fully covered by the account credit: confirmed at once, no provider
+                    PaymentRequest covered = withPayment(priced, credit, PaymentProvider.NONE, null, null);
+                    confirmation.confirmCovered(covered);
+                    return covered;
+                }
+                requireProvider(method, phone);
+                PaymentRequest paid = withPayment(priced, credit, gateway.provider(), method, phone);
+                store.insert(paid);
+                confirmation.reserve(paid);
+                return paid;
             });
         } catch (DuplicateKeyException e) {
             throw inProgress();
+        }
+        if (request.free()) {
+            log.info("Checkout covered by the account credit: tenant={} request={} item={} creditXaf={}",
+                    tenant.id(), id, request.pack() ? request.packCode() : request.planCode(),
+                    request.creditAppliedXaf());
+            return view(id, tenant.id());
         }
 
         PayinResult answer;
         try {
             answer = gateway.initiate(new MobileMoneyGateway.Payin(request.amountDueXaf(), CURRENCY, phone, method,
-                    request.appTransactionRef(), "Abonnement " + quote.planLabel() + " — " + quote.cycleLabel()));
+                    request.appTransactionRef(), payinReason(request)));
         } catch (GatewayException | IllegalStateException e) {
-            store.markFailed(id, PaymentStatus.IN_FLIGHT, PaymentText.START_FAILED, null);
+            store.markFailed(id, PaymentStatus.IN_FLIGHT, PaymentText.START_FAILED, null); // releases the credit
             throw DomainException.userFacing(ErrorCode.PAYMENT_PROVIDER_ERROR,
                     "Le paiement n'a pas pu démarrer. Vérifiez le numéro et réessayez.");
         }
         NextStep step = answer.status() == ProviderStatus.REQUIRE_OTP ? NextStep.OTP : NextStep.USSD;
         store.recordProviderAnswer(id, answer.providerRef(), answer.status().name(), step, answer.ussdCode());
-        log.info("Checkout started: tenant={} request={} plan={} cycle={} amountXaf={} step={}", tenant.id(), id,
-                quote.planCode(), quote.cycleCode(), request.amountDueXaf(), step);
+        log.info("Checkout started: tenant={} request={} kind={} item={} amountXaf={} creditXaf={} step={}",
+                tenant.id(), id, request.kind(), request.pack() ? request.packCode() : request.planCode() + "/"
+                        + request.cycleCode(), request.amountDueXaf(), request.creditAppliedXaf(), step);
         return view(id, tenant.id());
+    }
+
+    /** Story 21.3 — a late payment already added to the credit: nothing more to ask the provider. */
+    private boolean settledToCredit(PaymentRequest r) {
+        return r.creditAppliedXaf() > 0 && !PaymentStatus.IN_FLIGHT.contains(r.status())
+                && credits.convertedToCredit(r.id());
+    }
+
+    /** The provider must collect something: gateway on, method and phone given. */
+    private void requireProvider(MobileMoneyMethod method, String phone) {
+        if (!gateway.available()) {
+            throw unavailable();
+        }
+        if (method == null) {
+            throw PaymentText.invalid("method", PaymentText.METHOD_REQUIRED);
+        }
+        if (phone == null) {
+            throw PaymentText.invalid("phoneNumber", PaymentText.PHONE_INVALID);
+        }
+    }
+
+    private static DomainException unavailable() {
+        return DomainException.userFacing(ErrorCode.PAYMENT_UNAVAILABLE,
+                "Le paiement Mobile Money est momentanément indisponible");
+    }
+
+    private static String payinReason(PaymentRequest r) {
+        return r.pack() ? r.packLabel() : "Abonnement " + r.planLabel() + " — " + r.cycleLabel();
     }
 
     /** Sends the OTP of a PENDING request waiting for one. */
@@ -189,7 +271,8 @@ public class CheckoutService {
         TenantView tenant = company(tenantSchema);
         PaymentRequest r = owned(id, tenant.id());
         if (r.status() != PaymentStatus.CONFIRMED && r.providerTransactionRef() != null
-                && r.createdAt().isAfter(clock.instant().minus(Duration.ofHours(RECHECK_HOURS)))) {
+                && r.createdAt().isAfter(clock.instant().minus(Duration.ofHours(RECHECK_HOURS)))
+                && !settledToCredit(r)) {
             settlement.settle(r);
         }
         return view(id, tenant.id());
@@ -243,17 +326,53 @@ public class CheckoutService {
                 "Un paiement est déjà en cours. Terminez-le ou annulez-le.", Map.of());
     }
 
-    private static PaymentRequest request(UUID id, TenantView tenant, UUID actorId, OfferPricing.Quote q,
-                                          String promoCode, PaymentProvider provider, MobileMoneyMethod method, String phone,
-                                          Instant now) {
+    /** A plan request priced by the catalogue (provider, credit, method and phone set later). */
+    private static PaymentRequest planRequest(UUID id, TenantView tenant, StartCommand cmd, OfferPricing.Quote q,
+                                              Instant now) {
         OfferPricing.AppliedDiscount d = q.discount();
-        boolean free = q.effectiveXaf() == 0;
-        return new PaymentRequest(id, tenant.id(), tenant.schemaName(), actorId, provider, method, phone,
-                q.planCode(), q.planLabel(), q.cycleCode(), q.cycleLabel(), q.months(), q.baseXaf(),
+        String promoCode = cmd.promoCode();
+        return new PaymentRequest(id, tenant.id(), tenant.schemaName(), cmd.actorId(), PaymentProvider.NONE, null,
+                null, q.planCode(), q.planLabel(), q.cycleCode(), q.cycleLabel(), q.months(), q.baseXaf(),
                 q.reductionXaf(), q.effectiveXaf(), CURRENCY, q.discountId(), d == null ? null : d.label(),
                 d != null && "PROMO_CODE".equals(d.scope()) && promoCode != null
                         ? promoCode.trim().toUpperCase(java.util.Locale.ROOT) : null, q.pricedAt(),
-                PaymentStatus.INITIATING, free ? NextStep.NONE : null, null,
-                APP_REF_PREFIX + id.toString().replace("-", ""), null, null, null, null, null, null, null, now);
+                PaymentStatus.INITIATING, null, null, APP_REF_PREFIX + id.toString().replace("-", ""), null, null,
+                null, null, null, null, null, now, PaymentKind.PLAN, 0L, null, null, null, 0);
+    }
+
+    /** Story 21.3 — a pack request at the catalogue price (no discount, no promo code). */
+    private PaymentRequest packRequest(UUID id, TenantView tenant, StartCommand cmd, Instant now) {
+        if (cmd.promoCode() != null && !cmd.promoCode().isBlank()) {
+            throw PaymentText.invalid("promoCode", PaymentText.PACK_NO_PROMO);
+        }
+        UsagePacks.UsagePackOffer p = packs.offered(cmd.packCode())
+                .orElseThrow(() -> PaymentText.invalid("packCode", PaymentText.PACK_NOT_OFFERED));
+        UsageMetric metric = UsageMetric.valueOf(p.metric());
+        if (quotas != null && !packUsable(tenant.schemaName(), metric)) {
+            // packs pay only once a MONTH or LIFETIME quota is used up: without one the units would never be used
+            throw PaymentText.invalid("packCode", PaymentText.PACK_USELESS);
+        }
+        return new PaymentRequest(id, tenant.id(), tenant.schemaName(), cmd.actorId(), PaymentProvider.NONE, null,
+                null, null, null, null, null, 0, p.priceXaf(), 0L, p.priceXaf(), CURRENCY, null, null, null, now,
+                PaymentStatus.INITIATING, null, null, APP_REF_PREFIX + id.toString().replace("-", ""), null, null,
+                null, null, null, null, null, now, PaymentKind.USAGE_PACK, 0L, p.code(), p.label(),
+                metric, p.quantity());
+    }
+
+    /** Whether the company's plan limits this metric by month or for life (one status read). */
+    private boolean packUsable(String tenantSchema, UsageMetric metric) {
+        return quotas.statusForSchema(tenantSchema).quotas().stream()
+                .anyMatch(q -> q.metric() == metric && q.limit() != null && q.period() != QuotaPeriod.DAY);
+    }
+
+    /** The priced request with the credit applied, the provider and the number charged. */
+    private static PaymentRequest withPayment(PaymentRequest r, long credit, PaymentProvider provider,
+                                              MobileMoneyMethod method, String phone) {
+        long due = r.baseXaf() - r.reductionXaf() - credit;
+        return new PaymentRequest(r.id(), r.tenantId(), r.tenantSchema(), r.requestedBy(), provider, method, phone,
+                r.planCode(), r.planLabel(), r.cycleCode(), r.cycleLabel(), r.months(), r.baseXaf(), r.reductionXaf(),
+                due, r.currency(), r.discountId(), r.discountLabel(), r.promoCode(), r.pricedAt(), r.status(),
+                due == 0 ? NextStep.NONE : null, null, r.appTransactionRef(), null, null, null, null, null, null,
+                null, r.createdAt(), r.kind(), credit, r.packCode(), r.packLabel(), r.packMetric(), r.packQuantity());
     }
 }

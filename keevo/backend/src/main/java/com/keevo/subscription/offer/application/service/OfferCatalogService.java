@@ -78,20 +78,23 @@ public class OfferCatalogService implements OfferAdministration {
     private final Clock clock;
     /** Story 21.2 — App Store products ({@code null} in the unit tests built without it). */
     private final StoreProductService storeProducts;
+    /** Story 21.3 — usage packs ({@code null} in the unit tests built without it). */
+    private final UsagePackService usagePacks;
 
     @org.springframework.beans.factory.annotation.Autowired
     public OfferCatalogService(PlanCatalog catalog, PlanCatalogStore catalogStore, OfferStore store, Clock clock,
-                               StoreProductService storeProducts) {
+                               StoreProductService storeProducts, UsagePackService usagePacks) {
         this.catalog = catalog;
         this.catalogStore = catalogStore;
         this.store = store;
         this.clock = clock;
         this.storeProducts = storeProducts;
+        this.usagePacks = usagePacks;
     }
 
-    /** Without App Store products (unit tests of the 21.10 catalogue). */
+    /** Without App Store products nor usage packs (unit tests of the 21.10 catalogue). */
     public OfferCatalogService(PlanCatalog catalog, PlanCatalogStore catalogStore, OfferStore store, Clock clock) {
-        this(catalog, catalogStore, store, clock, null);
+        this(catalog, catalogStore, store, clock, null, null);
     }
 
     // ── catalogue ─────────────────────────────────────────────────────────────
@@ -109,7 +112,8 @@ public class OfferCatalogService implements OfferAdministration {
                         pricesByPlan.getOrDefault(p.code().code(), List.of()), cyclesByCode))
                 .toList();
         return new CatalogueView(plans, cycles.stream().map(OfferCatalogService::cycleItem).toList(),
-                settingsView(catalog.settings()), storeProducts == null ? List.of() : storeProducts.views());
+                settingsView(catalog.settings()), storeProducts == null ? List.of() : storeProducts.views(),
+                usagePacks == null ? List.of() : usagePacks.views());
     }
 
     @Override
@@ -510,6 +514,23 @@ public class OfferCatalogService implements OfferAdministration {
             throw new IllegalStateException("Store products not wired");
         }
         return storeProducts.save(productId, input, actorId);
+    }
+
+    // ── usage packs (Story 21.3) ──────────────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UsagePackView> usagePacks() {
+        return usagePacks == null ? List.of() : usagePacks.views();
+    }
+
+    @Override
+    @Transactional
+    public UsagePackView saveUsagePack(String code, UsagePackInput input, UUID actorId) {
+        if (usagePacks == null) {
+            throw new IllegalStateException("Usage packs not wired");
+        }
+        return usagePacks.save(code, input, actorId);
     }
 
     // ── journal ───────────────────────────────────────────────────────────────

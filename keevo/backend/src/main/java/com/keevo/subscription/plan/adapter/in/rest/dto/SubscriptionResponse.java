@@ -17,6 +17,9 @@ import java.util.Map;
  *
  * <p>Story 19.8 — additive fields: {@code quotas} (per metric and quota: limit, used, remaining, reset instant; an
  * unlimited metric appears once, MONTH, limit {@code null}) and {@code credits} (pack units remaining per metric).
+ *
+ * <p>Story 21.3 — additive field {@code packsUsedThisMonth}: pack units consumed since the 1st of the month (WAT), by
+ * metric (shown next to the month quota; the detail is {@code GET /subscription/me/pack-movements}).
  */
 public record SubscriptionResponse(
         String planType,           // V1 code of the plan's kind (19.7a): FREE | PREMIUM_TRIAL | PREMIUM
@@ -33,8 +36,19 @@ public record SubscriptionResponse(
         String planKind,           // 19.7b: FREE | TRIAL | PAID
         Integer maxEmployeesPerStore, // 19.7b: null = unlimited
         List<Quota> quotas,          // 19.8: usage quotas of the plan
-        Map<String, Long> credits    // 19.8: pack units remaining, by metric
+        Map<String, Long> credits,   // 19.8: pack units remaining, by metric
+        Map<String, Long> packsUsedThisMonth // 21.3: pack units consumed this month, by metric
 ) {
+
+    /** The 19.8 fields (no month pack consumption). */
+    public SubscriptionResponse(String planType, String status, String expiresAt, Integer maxStores,
+                                Integer maxProducts, Integer maxEmployees, int currentStores,
+                                Integer currentProducts, int currentEmployees, String planCode, String planLabel,
+                                String planKind, Integer maxEmployeesPerStore, List<Quota> quotas,
+                                Map<String, Long> credits) {
+        this(planType, status, expiresAt, maxStores, maxProducts, maxEmployees, currentStores, currentProducts,
+                currentEmployees, planCode, planLabel, planKind, maxEmployeesPerStore, quotas, credits, null);
+    }
 
     /** The 19.7b fields, without usage (quotas and credits null). */
     public SubscriptionResponse(String planType, String status, String expiresAt, Integer maxStores,
@@ -42,7 +56,7 @@ public record SubscriptionResponse(
                                 Integer currentProducts, int currentEmployees, String planCode, String planLabel,
                                 String planKind, Integer maxEmployeesPerStore) {
         this(planType, status, expiresAt, maxStores, maxProducts, maxEmployees, currentStores, currentProducts,
-                currentEmployees, planCode, planLabel, planKind, maxEmployeesPerStore, null, null);
+                currentEmployees, planCode, planLabel, planKind, maxEmployeesPerStore, null, null, null);
     }
 
     /** The V1 fields only (additive fields null). */
@@ -81,9 +95,18 @@ public record SubscriptionResponse(
 
     /** Story 19.8 — pack credits by metric name, in metric order. */
     public static Map<String, Long> credits(UsageStatus status) {
-        Map<String, Long> credits = new LinkedHashMap<>();
-        status.credits().entrySet().stream().sorted(Map.Entry.comparingByKey())
-                .forEach(e -> credits.put(e.getKey().name(), e.getValue()));
-        return credits;
+        return byMetric(status.credits());
+    }
+
+    /** Story 21.3 — pack units consumed this month by metric name, in metric order. */
+    public static Map<String, Long> packsUsedThisMonth(UsageStatus status) {
+        return byMetric(status.packsConsumedThisMonth());
+    }
+
+    private static Map<String, Long> byMetric(Map<com.keevo.shared.capability.entitlement.UsageMetric, Long> values) {
+        Map<String, Long> out = new LinkedHashMap<>();
+        values.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .forEach(e -> out.put(e.getKey().name(), e.getValue()));
+        return out;
     }
 }

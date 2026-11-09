@@ -53,6 +53,26 @@ public final class CurrentActor {
         return UUID.fromString(principal.toString());
     }
 
+    /**
+     * Story 21.3 — the authenticated actor's user id, or {@code null} outside an authenticated request (scheduled job,
+     * asynchronous send, anonymous principal). Never throws.
+     */
+    public static UUID actorIdOrNull() {
+        Authentication auth = authentication();
+        if (auth == null || auth.getPrincipal() == null) {
+            return null;
+        }
+        Object principal = auth.getPrincipal();
+        if (principal instanceof UUID id) {
+            return id;
+        }
+        try {
+            return UUID.fromString(principal.toString());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
     /** Spring authority name for a role: {@code "ROLE_" + role.name()}. */
     public static String authority(Role role) {
         return ROLE_PREFIX + role.name();

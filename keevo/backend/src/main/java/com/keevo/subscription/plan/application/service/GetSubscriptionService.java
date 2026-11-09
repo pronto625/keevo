@@ -104,7 +104,8 @@ public class GetSubscriptionService implements GetSubscriptionUseCase {
                 kind.name(),
                 profile.maxEmployeesPerStore(),
                 SubscriptionResponse.quotas(quotas), // 19.8: additive fields
-                SubscriptionResponse.credits(quotas)
+                SubscriptionResponse.credits(quotas),
+                SubscriptionResponse.packsUsedThisMonth(quotas) // 21.3: additive field
         );
     }
 

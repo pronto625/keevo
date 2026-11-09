@@ -22,7 +22,9 @@ public record RevenueSummaryDto(
         int convertedTenants,
         int trialsEnded,
         double conversionRate,
-        long revenueCollected
+        long revenueCollected,
+        int packsSold,           // Story 21.3: usage packs paid in the range
+        long packsCollectedXaf   // Story 21.3: cash collected for them (XAF)
 ) {
     public static RevenueSummaryDto from(RevenueSummary m) {
         return new RevenueSummaryDto(
@@ -32,6 +34,6 @@ public record RevenueSummaryDto(
                 m.premiumTenants(), m.premiumWithoutPayment(),
                 m.newPayingTenants(), m.churnedTenants(), m.churnBase(), m.churnRate(),
                 m.convertedTenants(), m.trialsEnded(), m.conversionRate(),
-                m.revenueCollected());
+                m.revenueCollected(), m.packsSold(), m.packsCollectedXaf());
     }
 }

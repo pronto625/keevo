@@ -18,20 +18,29 @@ import java.util.UUID;
  * @param amountXaf     price charged (frozen at initiation); 0 = free offer
  * @param message       what to tell the owner now (next step, failure reason or confirmation), French
  * @param planExpiresAt new plan expiry once CONFIRMED, else {@code null}
+ * @param kind          Story 21.3 — {@code PLAN | USAGE_PACK}
+ * @param packCode      Story 21.3 — the pack bought (with {@code packLabel}, {@code packMetric},
+ *                      {@code packMetricLabel}, {@code packQuantity}); {@code null} for a plan (whose plan fields are
+ *                      then {@code null} for a pack)
+ * @param creditAppliedXaf Story 21.3 — account credit used; {@code amountXaf} is what the provider collects
  */
 public record PaymentView(UUID id, String status, String statusLabel, String nextStep, String ussdCode,
                           String method, String methodLabel, String planCode, String planLabel, String cycleCode,
-                          String cycleLabel, int months, long baseXaf, long reductionXaf, long amountXaf,
+                          String cycleLabel, Integer months, long baseXaf, long reductionXaf, long amountXaf,
                           String discountLabel, String message, Instant createdAt, Instant confirmedAt,
-                          Instant planExpiresAt) {
+                          Instant planExpiresAt, String kind, String packCode, String packLabel, String packMetric,
+                          String packMetricLabel, Integer packQuantity, long creditAppliedXaf) {
 
     public static PaymentView of(PaymentRequest r) {
+        boolean pack = r.pack();
         return new PaymentView(r.id(), r.status().name(), r.status().label(),
                 r.nextStep() == null ? null : r.nextStep().name(), r.ussdCode(),
                 r.method() == null ? null : r.method().name(), r.method() == null ? null : r.method().label(),
-                r.planCode(), r.planLabel(), r.cycleCode(), r.cycleLabel(), r.months(), r.baseXaf(),
+                r.planCode(), r.planLabel(), r.cycleCode(), r.cycleLabel(), pack ? null : r.months(), r.baseXaf(),
                 r.reductionXaf(), r.amountDueXaf(), r.discountLabel(), message(r), r.createdAt(), r.confirmedAt(),
-                r.status() == PaymentStatus.CONFIRMED ? r.expiresAt() : null);
+                r.status() == PaymentStatus.CONFIRMED && !pack ? r.expiresAt() : null, r.kind().name(),
+                r.packCode(), r.packLabel(), pack ? r.packMetric().name() : null,
+                pack ? r.packMetric().label() : null, pack ? r.packQuantity() : null, r.creditAppliedXaf());
     }
 
     static String message(PaymentRequest r) {
@@ -40,7 +49,8 @@ public record PaymentView(UUID id, String status, String statusLabel, String nex
             case PENDING -> r.nextStep() == NextStep.OTP ? PaymentText.ENTER_CODE
                     : r.ussdCode() != null ? PaymentText.dialThenValidate(r.ussdCode())
                     : PaymentText.VALIDATE_ON_PHONE;
-            case CONFIRMED -> r.expiresAt() == null ? PaymentStatus.CONFIRMED.label()
+            case CONFIRMED -> r.pack() ? PaymentText.packAdded(r)
+                    : r.expiresAt() == null ? PaymentStatus.CONFIRMED.label()
                     : PaymentText.activeUntil(r.planLabel(), r.expiresAt());
             case FAILED, CANCELLED, EXPIRED -> r.failureReason() != null ? r.failureReason() : r.status().label();
         };

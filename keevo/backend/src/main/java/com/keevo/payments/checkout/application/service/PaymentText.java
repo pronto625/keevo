@@ -29,6 +29,13 @@ final class PaymentText {
     static final String FREE_OFFER_TAKEN = "Vous avez déjà profité de cette offre";
     static final String PROMO_USED_UP = "Code promo invalide ou expiré";
     static final String TOO_MANY_CHECKOUTS = "Trop de tentatives de paiement. Réessayez dans une heure.";
+    static final String PLAN_OR_PACK = "Choisissez un plan ou un pack, pas les deux";
+    static final String PACK_NOT_OFFERED = "Ce pack n'est pas proposé";
+    static final String PACK_USELESS =
+            "Votre offre ne limite pas cette consommation : ce pack ne vous servirait pas";
+    static final String PACK_NO_PROMO = "Les codes promo ne s'appliquent pas aux packs";
+    static final String PAYMENT_RECEIVED = "Paiement reçu";
+    static final String PACK_CREDITED = "Pack crédité";
 
     private static final DateTimeFormatter FR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(WAT);
 
@@ -41,6 +48,32 @@ final class PaymentText {
 
     static String activeUntil(String planLabel, Instant expiresAt) {
         return "Votre plan " + planLabel + " est actif jusqu'au " + FR_DATE.format(expiresAt);
+    }
+
+    /** « 100 SMS ajoutés à votre compte » */
+    static String packAdded(com.keevo.payments.checkout.domain.model.PaymentRequest r) {
+        return r.packQuantity() + " " + r.packMetric().label()
+                + (r.packQuantity() > 1 ? " ajoutés à votre compte" : " ajouté à votre compte");
+    }
+
+    /** « 100 SMS ajoutés à votre compte. » (notification) */
+    static String packCredited(com.keevo.payments.checkout.domain.model.PaymentRequest r) {
+        return packAdded(r) + ".";
+    }
+
+    /** Reason of a late payment added to the credit (« Paiement reçu après l'annulation : 2 500 FCFA … »). */
+    static String creditedLate(com.keevo.payments.checkout.domain.model.PaymentStatus status, long amountXaf) {
+        String after = switch (status) {
+            case CANCELLED -> "après l'annulation";
+            case EXPIRED -> "après l'expiration du délai";
+            default -> "après l'échec du paiement";
+        };
+        return "Paiement reçu " + after + " : " + xaf(amountXaf) + " ajoutés à votre crédit";
+    }
+
+    /** {@code 3 500 FCFA}. */
+    static String xaf(long amount) {
+        return com.keevo.payments.credit.application.service.AccountCreditService.xaf(amount);
     }
 
     static String date(Instant at) {

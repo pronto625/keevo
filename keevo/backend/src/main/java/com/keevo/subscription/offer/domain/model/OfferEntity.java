@@ -8,7 +8,9 @@ public enum OfferEntity {
     SETTINGS("Réglages"),
     DISCOUNT("Remise"),
     /** Story 21.2 — an App Store product mapping. */
-    STORE_PRODUCT("Produit App Store");
+    STORE_PRODUCT("Produit App Store"),
+    /** Story 21.3 — a usage pack (SMS…). */
+    USAGE_PACK("Pack");
 
     private final String label;
 

@@ -120,6 +120,13 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
         jdbc.update("INSERT INTO public.usage_counters (tenant_id, metric, period, period_key, used) "
                 + "VALUES (?, 'DOCUMENTS', 'MONTH', '2026-11', 3)", tenantId);
         jdbc.update("INSERT INTO public.usage_credits (tenant_id, metric, remaining) VALUES (?, 'SMS', 10)", tenantId);
+        // Story 21.3 — account credit, its journal (support reason) and the pack journal (actor)
+        jdbc.update("INSERT INTO public.tenant_credits (tenant_id, balance_xaf) VALUES (?, 500)", tenantId);
+        jdbc.update("INSERT INTO public.tenant_credit_movements (id, tenant_id, amount_xaf, balance_after_xaf, kind, "
+                + "actor_id, reason) VALUES (gen_random_uuid(), ?, 500, 500, 'ADMIN_ADJUSTMENT', gen_random_uuid(), "
+                + "'Geste commercial')", tenantId);
+        jdbc.update("INSERT INTO public.usage_credit_movements (id, tenant_id, metric, delta, remaining_after, source, "
+                + "actor_id) VALUES (gen_random_uuid(), ?, 'SMS', 10, 10, 'MIGRATION', gen_random_uuid())", tenantId);
     }
 
     /**
@@ -196,6 +203,11 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
         assertThat(count("SELECT count(*) FROM public.sync_silence_notices WHERE tenant_id = ?", seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.usage_counters WHERE tenant_id = ?", seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.usage_credits WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.tenant_credits WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.tenant_credit_movements WHERE tenant_id = ?", seed.tenantId()))
+                .isZero();
+        assertThat(count("SELECT count(*) FROM public.usage_credit_movements WHERE tenant_id = ?", seed.tenantId()))
+                .isZero();
         assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ?", seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.refresh_tokens WHERE tenant_id = ?", seed.schema())).isZero();
         assertThat(count("SELECT count(*) FROM public.global_notifications WHERE target_tenant_id = ?", seed.tenantId())).isZero();
@@ -287,6 +299,11 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
         assertThat(count("SELECT count(*) FROM public.user_daily_activity WHERE tenant_id = ?", other.getId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.usage_counters WHERE tenant_id = ?", other.getId())).isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.usage_credits WHERE tenant_id = ?", other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.tenant_credits WHERE tenant_id = ?", other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.tenant_credit_movements WHERE tenant_id = ?", other.getId()))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.usage_credit_movements WHERE tenant_id = ?", other.getId()))
+                .isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.tenant_modules WHERE tenant_id = ? AND module_id = 'rgpd-test'",
                 other.getId())).isEqualTo(1);
         assertThat(status(other.getId())).isEqualTo("ACTIVE");

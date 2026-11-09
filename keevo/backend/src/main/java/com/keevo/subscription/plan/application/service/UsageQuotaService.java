@@ -11,6 +11,7 @@ import com.keevo.shared.capability.entitlement.UsageStatus.QuotaUsage;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.domain.time.KeevoZones;
+import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.subscription.plan.domain.port.out.UsageCounterStore;
 import com.keevo.subscription.plan.domain.port.out.UsageCounterStore.TenantQuotas;
 import com.keevo.subscription.plan.domain.port.out.UsageCounterStore.Usage;
@@ -48,6 +49,10 @@ import java.util.UUID;
  * <p><b>Cost of an increment:</b> one indexed read (the tenant's plan and its quota rows for the metric, primary
  * keys), two or three upserts (primary key), at most one pack update; a refusal adds one primary-key read for its
  * {@code used} detail. Periods are those of {@link KeevoZones#WAT} at the injected {@link Clock}.
+ *
+ * <p><b>Pack journal (Story 21.3):</b> a pack-paid increment journals the units taken, the exhausted period and the
+ * actor of the request ({@code null} for a scheduled or asynchronous send) in the same statement as the debit; a pack
+ * credit journals its source. {@link #status} adds the units consumed from packs this month (same single query).
  *
  * <p>The tenant's current plan is {@code public.tenants.plan_type}: the global plan view every plan change updates in
  * its own transaction (Story 9-2, {@code PlanChangeRecorder}); its French name comes from the catalogue. A missing
@@ -98,9 +103,12 @@ public class UsageQuotaService implements UsageQuotaPort, UsageCredits {
 
     @Override
     @Transactional(propagation = Propagation.MANDATORY)
-    public long add(UUID tenantId, UsageMetric metric, int n) {
+    public long add(UUID tenantId, UsageMetric metric, int n, Grant grant) {
         requireArguments(metric, n);
-        return store.addCredits(tenantId, metric, n);
+        if (grant == null) {
+            throw new IllegalArgumentException("grant is required");
+        }
+        return store.addCredits(tenantId, metric, n, grant);
     }
 
     // ── increment ─────────────────────────────────────────────────────────────
@@ -137,7 +145,8 @@ public class UsageQuotaService implements UsageQuotaPort, UsageCredits {
             }
             // exhausted: the DAY cap is never paid from a pack; MONTH / LIFETIME fall back on it (once per increment)
             if (period.payableFromCredits()
-                    && (paidByCredits || store.consumeCredits(tenant.tenantId(), metric, n))) {
+                    && (paidByCredits || store.consumeCredits(tenant.tenantId(), metric, n, period,
+                    CurrentActor.actorIdOrNull()))) {
                 paidByCredits = true;
                 continue;
             }
@@ -169,7 +178,8 @@ public class UsageQuotaService implements UsageQuotaPort, UsageCredits {
         for (QuotaPeriod period : QuotaPeriod.values()) {
             keys.add(period.key(today));
         }
-        Usage usage = store.usage(tenant.tenantId(), keys);
+        Instant monthStart = today.withDayOfMonth(1).atStartOfDay(KeevoZones.WAT).toInstant();
+        Usage usage = store.usage(tenant.tenantId(), keys, monthStart);
         List<QuotaUsage> quotas = new ArrayList<>();
         for (UsageMetric metric : UsageMetric.values()) {
             Map<QuotaPeriod, Integer> limits = limitsOf(tenant.quotas(), metric);
@@ -181,7 +191,7 @@ public class UsageQuotaService implements UsageQuotaPort, UsageCredits {
                 }
             }
         }
-        return new UsageStatus(quotas, usage.credits());
+        return new UsageStatus(quotas, usage.credits(), usage.packsConsumed());
     }
 
     private static QuotaUsage usage(UsageMetric metric, QuotaPeriod period, Integer limit, Map<String, Long> counters,

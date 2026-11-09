@@ -25,7 +25,11 @@ public class PaymentSettlementService {
     private static final Logger log = LoggerFactory.getLogger(PaymentSettlementService.class);
 
     /** What the provider said about a request. */
-    public enum Settlement { CONFIRMED, ALREADY_CONFIRMED, FAILED, PENDING, NOT_VERIFIED, PROVIDER_UNREACHABLE }
+    public enum Settlement {
+        CONFIRMED, ALREADY_CONFIRMED, FAILED, PENDING, NOT_VERIFIED, PROVIDER_UNREACHABLE,
+        /** Story 21.3 — paid late, the credit no longer covered the rest: the money went to the account credit. */
+        CREDITED
+    }
 
     private final MobileMoneyGateway gateway;
     private final PaymentRequestStore store;
@@ -69,6 +73,7 @@ public class PaymentSettlementService {
             return switch (confirmation.confirm(request.id())) {
                 case CONFIRMED -> Settlement.CONFIRMED;
                 case ALREADY_CONFIRMED -> Settlement.ALREADY_CONFIRMED;
+                case CREDITED -> Settlement.CREDITED;
                 case NOT_FOUND -> Settlement.PENDING; // purged meanwhile
             };
         }

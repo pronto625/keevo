@@ -43,4 +43,26 @@ class PaymentPushListenerTest {
         new PaymentPushListener(push).onConfirmed(new PlanPaymentConfirmedEvent("kv_abc123", UUID.randomUUID(),
                 "Pro", Instant.parse("2027-02-28T22:59:59Z")));
     }
+
+    @Test
+    @DisplayName("21.3 — pack credited / late payment added to the credit: the notice as given, deep link /plan; a "
+            + "failure is swallowed")
+    void notice() {
+        PushNotifier push = mock(PushNotifier.class);
+        PaymentPushListener listener = new PaymentPushListener(push);
+        listener.onNotice(new com.keevo.payments.checkout.domain.event.PaymentNoticeEvent("kv_abc123",
+                UUID.randomUUID(), com.keevo.payments.checkout.domain.event.PaymentNoticeEvent.PACK_CREDITED,
+                "Pack crédité", "100 SMS ajoutés à votre compte."));
+        ArgumentCaptor<NotificationPayload> payload = ArgumentCaptor.forClass(NotificationPayload.class);
+        verify(push).notifyOwners(eq("kv_abc123"), payload.capture());
+        assertThat(payload.getValue().type()).isEqualTo("USAGE_PACK_CREDITED");
+        assertThat(payload.getValue().title()).isEqualTo("Pack crédité");
+        assertThat(payload.getValue().body()).isEqualTo("100 SMS ajoutés à votre compte.");
+        assertThat(payload.getValue().deepLink()).isEqualTo("/plan");
+
+        PushNotifier failing = mock(PushNotifier.class);
+        doThrow(new IllegalStateException("down")).when(failing).notifyOwners(any(), any());
+        new PaymentPushListener(failing).onNotice(new com.keevo.payments.checkout.domain.event.PaymentNoticeEvent(
+                "kv_abc123", UUID.randomUUID(), "PAYMENT_CREDITED", "Paiement reçu", "2 500 FCFA ajoutés."));
+    }
 }

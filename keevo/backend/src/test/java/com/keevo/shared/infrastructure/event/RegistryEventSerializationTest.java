@@ -152,6 +152,10 @@ class RegistryEventSerializationTest {
         // 21.1: push « Paiement reçu » after an online payment
         f.put(com.keevo.payments.checkout.domain.event.PlanPaymentConfirmedEvent.class,
                 new com.keevo.payments.checkout.domain.event.PlanPaymentConfirmedEvent(TENANT, A, "Pro", T1));
+        f.put(com.keevo.payments.checkout.domain.event.PaymentNoticeEvent.class,
+                new com.keevo.payments.checkout.domain.event.PaymentNoticeEvent(TENANT, A,
+                        com.keevo.payments.checkout.domain.event.PaymentNoticeEvent.PACK_CREDITED, "Pack crédité",
+                        "100 SMS ajoutés à votre compte."));
         // 21.2: push after an App Store subscription change
         f.put(com.keevo.payments.appstore.domain.event.AppStoreSubscriptionNotice.class,
                 new com.keevo.payments.appstore.domain.event.AppStoreSubscriptionNotice(TENANT, "evt-1",

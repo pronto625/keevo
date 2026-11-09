@@ -223,7 +223,7 @@ class UsageQuotaPostgresIntegrationTest {
     @DisplayName("pack fallback: MONTH used up → the pack pays (counter not pushed past its limit), then refusal")
     void packAfterMonth() {
         quota("SMS", "MONTH", 1);
-        tx.executeWithoutResult(s -> assertThat(service.add(tenant, UsageMetric.SMS, 2)).isEqualTo(2L));
+        tx.executeWithoutResult(s -> assertThat(service.add(tenant, UsageMetric.SMS, 2, com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration())).isEqualTo(2L));
         increment(UsageMetric.SMS, 1);
         increment(UsageMetric.SMS, 1);
         assertThat(credits(UsageMetric.SMS)).isEqualTo(1);
@@ -243,7 +243,7 @@ class UsageQuotaPostgresIntegrationTest {
         assertThat(e.getDetails()).containsEntry("period", "LIFETIME").containsEntry("limit", 5)
                 .containsEntry("used", 5L).containsEntry("resetAt", null)
                 .containsEntry("metric", "SMS").containsEntry("planCode", PLAN).containsEntry("planLabel", "Test quotas");
-        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 10));
+        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 10, com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration()));
         increment(UsageMetric.SMS, 1);
         assertThat(credits(UsageMetric.SMS)).isEqualTo(9);
         assertThat(used(UsageMetric.SMS, QuotaPeriod.LIFETIME_KEY)).isEqualTo(5);
@@ -253,7 +253,7 @@ class UsageQuotaPostgresIntegrationTest {
     @DisplayName("daily cap: never paid from a pack — refused, pack untouched")
     void dayNeverPaidByPack() {
         quota("AI_CREDITS", "DAY", 1);
-        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.AI_CREDITS, 50));
+        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.AI_CREDITS, 50, com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration()));
         increment(UsageMetric.AI_CREDITS, 1);
         assertThat(refused(UsageMetric.AI_CREDITS, 1).getDetails()).containsEntry("period", "DAY");
         assertThat(credits(UsageMetric.AI_CREDITS)).isEqualTo(50);
@@ -298,7 +298,7 @@ class UsageQuotaPostgresIntegrationTest {
     void packPaidOnceForMonthAndLifetime() {
         quota("SMS", "MONTH", 1);
         quota("SMS", "LIFETIME", 1);
-        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 2));
+        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 2, com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration()));
         increment(UsageMetric.SMS, 1); // both quotas reach their limit
         assertThat(credits(UsageMetric.SMS)).isEqualTo(2L);
         increment(UsageMetric.SMS, 1);
@@ -379,7 +379,7 @@ class UsageQuotaPostgresIntegrationTest {
         quota("SMS", "LIFETIME", 5);
         increment(UsageMetric.AI_CREDITS, 3);
         increment(UsageMetric.DOCUMENTS, 1);
-        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 7));
+        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 7, com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration()));
 
         UsageStatus status = service.status(tenant);
         assertThat(status.quotas()).extracting(q -> q.metric() + "/" + q.period() + "/" + q.limit() + "/"
@@ -439,6 +439,72 @@ class UsageQuotaPostgresIntegrationTest {
         } finally {
             jdbc.update("UPDATE public.plan_quotas SET quota_limit = 300 WHERE plan_type = 'FREE' "
                     + "AND metric = 'DOCUMENTS'");
+        }
+    }
+
+    // ── Story 21.3: pack journal ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("21.3 — a pack unit paid after the MONTH quota is journaled (period MONTH, no actor outside a "
+            + "request), counted in the month's pack consumption; a migration grant is journaled too")
+    void packConsumptionJournaled() {
+        quota("SMS", "MONTH", 1);
+        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 3,
+                com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration()));
+        increment(UsageMetric.SMS, 1); // within the quota: no pack movement
+        increment(UsageMetric.SMS, 2); // paid by the pack
+        assertThat(credits(UsageMetric.SMS)).isEqualTo(1);
+        List<String> rows = jdbc.queryForList("SELECT source || '/' || COALESCE(period, '-') || '/' || delta || '/' "
+                + "|| remaining_after || '/' || COALESCE(actor_id::text, 'none') FROM public.usage_credit_movements "
+                + "WHERE tenant_id = ? ORDER BY created_at", String.class, tenant);
+        assertThat(rows).containsExactly("MIGRATION/-/3/3/none", "CONSUMPTION/MONTH/-2/1/none");
+        assertThat(tx.execute(s -> service.status(tenant)).packsConsumedThisMonth())
+                .containsEntry(UsageMetric.SMS, 2L);
+    }
+
+    @Test
+    @DisplayName("21.3 — a refused increment leaves no pack movement; a purchase credited twice for one payment is "
+            + "refused by the journal's unique index")
+    void packJournalGuards() {
+        quota("SMS", "MONTH", 0);
+        refused(UsageMetric.SMS, 1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.usage_credit_movements WHERE tenant_id = ?",
+                Integer.class, tenant)).isZero();
+        UUID request = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.payment_requests (id, tenant_id, tenant_schema, requested_by, provider, "
+                + "base_xaf, amount_due_xaf, priced_at, status, app_transaction_ref, kind, pack_code, pack_label, "
+                + "pack_metric, pack_quantity) SELECT ?, id, schema_name, ?, 'NONE', 2000, 2000, now(), 'PENDING', ?, "
+                + "'USAGE_PACK', 'SMS_100', 'Pack 100 SMS', 'SMS', 100 FROM public.tenants WHERE id = ?",
+                request, UUID.randomUUID(), "KV-" + request, tenant);
+        var grant = com.keevo.shared.capability.entitlement.UsageCredits.Grant.purchase(request, null);
+        tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 100, grant));
+        assertThatThrownBy(() -> tx.executeWithoutResult(s -> service.add(tenant, UsageMetric.SMS, 100, grant)))
+                .isInstanceOf(org.springframework.dao.DuplicateKeyException.class);
+        assertThat(credits(UsageMetric.SMS)).isEqualTo(100);
+        assertThatThrownBy(() -> jdbc.update("UPDATE public.usage_credit_movements SET delta = 1 WHERE tenant_id = ?",
+                tenant)).hasStackTraceContaining("append-only");
+    }
+
+    @Test
+    @DisplayName("21.3 — V63 re-run changes nothing (an edited pack keeps its price)")
+    void v63Idempotent() throws Exception {
+        jdbc.update("UPDATE public.usage_packs SET price_xaf = 2100 WHERE code = 'SMS_100'");
+        try {
+            String sql;
+            try (var in = getClass().getResourceAsStream("/db/migration/V63__account_credit_usage_packs.sql")) {
+                sql = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            try (Connection c = dataSource.getConnection(); var st = c.createStatement()) {
+                c.setAutoCommit(false);
+                st.execute(sql);
+                c.commit();
+            }
+            assertThat(jdbc.queryForObject("SELECT price_xaf FROM public.usage_packs WHERE code = 'SMS_100'",
+                    Long.class)).isEqualTo(2100L);
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM public.usage_packs WHERE code LIKE 'SMS\\_%'",
+                    Integer.class)).isEqualTo(4);
+        } finally {
+            jdbc.update("UPDATE public.usage_packs SET price_xaf = 2000 WHERE code = 'SMS_100'");
         }
     }
 }

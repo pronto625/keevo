@@ -307,6 +307,11 @@ public class TenantDeletionService {
         // Story 19.8 — usage counters and packs (ON DELETE CASCADE too, but the tenant row is kept)
         jdbcTemplate.update("DELETE FROM public.usage_counters WHERE tenant_id = ?", (Object) tenantId);
         jdbcTemplate.update("DELETE FROM public.usage_credits WHERE tenant_id = ?", (Object) tenantId);
+        // Story 21.3 — pack journal (actors), account credit and its journal (support reasons): the cash trace stays
+        // in tenant_payments / payment_requests
+        jdbcTemplate.update("DELETE FROM public.usage_credit_movements WHERE tenant_id = ?", (Object) tenantId);
+        jdbcTemplate.update("DELETE FROM public.tenant_credit_movements WHERE tenant_id = ?", (Object) tenantId);
+        jdbcTemplate.update("DELETE FROM public.tenant_credits WHERE tenant_id = ?", (Object) tenantId);
         // Free text not mapped by the JPA entity (company designation, admin suspension reason)
         jdbcTemplate.update("UPDATE public.tenants SET designation = NULL, suspended_reason = NULL WHERE id = ?",
                 (Object) tenantId);

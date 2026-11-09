@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 323 — gated: 138, exempt: 185.
+Handlers: 329 — gated: 138, exempt: 191.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -81,6 +81,8 @@ Handlers: 323 — gated: 138, exempt: 185.
 | PUT | `/api/v1/admin/offers/settings` | — | — | — | super-admin | AdminOfferController#updateSettings |
 | GET | `/api/v1/admin/offers/store-products` | — | — | — | super-admin | AdminOfferController#storeProducts |
 | PUT | `/api/v1/admin/offers/store-products/{productId:.+}` | — | — | — | super-admin | AdminOfferController#saveStoreProduct |
+| GET | `/api/v1/admin/offers/usage-packs` | — | — | — | super-admin | AdminOfferController#usagePacks |
+| PUT | `/api/v1/admin/offers/usage-packs/{code}` | — | — | — | super-admin | AdminOfferController#saveUsagePack |
 | GET | `/api/v1/admin/operations/inactive-tenants` | — | — | — | super-admin | AdminOperationsController#listInactiveTenants |
 | GET | `/api/v1/admin/operations/overview` | — | — | — | super-admin | AdminOperationsController#getOverview |
 | GET | `/api/v1/admin/operations/tenants` | — | — | — | super-admin | AdminOperationsController#listTenantActivity |
@@ -102,6 +104,8 @@ Handlers: 323 — gated: 138, exempt: 185.
 | GET | `/api/v1/admin/tenants` | — | — | — | super-admin | AdminTenantController#listTenants |
 | POST | `/api/v1/admin/tenants/{tenantId}/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#apply |
 | POST | `/api/v1/admin/tenants/{tenantId}/cancel-deletion` | — | — | — | super-admin | AdminTenantController#cancelDeletion |
+| GET | `/api/v1/admin/tenants/{tenantId}/credit` | — | — | — | super-admin | AdminAccountCreditController#credit |
+| POST | `/api/v1/admin/tenants/{tenantId}/credit/adjustments` | — | — | — | super-admin | AdminAccountCreditController#adjust |
 | POST | `/api/v1/admin/tenants/{tenantId}/customers` | — | — | — | super-admin | AdminTenantWriteController#createCustomer |
 | GET | `/api/v1/admin/tenants/{tenantId}/customers/{customerId}` | — | — | — | super-admin | AdminCrossAccountController#getCustomer |
 | PATCH | `/api/v1/admin/tenants/{tenantId}/customers/{customerId}` | — | — | — | super-admin | AdminTenantWriteController#updateCustomer |
@@ -251,6 +255,7 @@ Handlers: 323 — gated: 138, exempt: 185.
 | GET | `/api/v1/payments/app-store/subscription` | — | — | — | core: abonnement | AppStoreController#subscription |
 | POST | `/api/v1/payments/app-store/sync` | — | — | — | core: abonnement | AppStoreController#sync |
 | POST | `/api/v1/payments/checkout` | — | — | — | core: abonnement | PaymentsController#checkout |
+| GET | `/api/v1/payments/credit` | — | — | — | core: abonnement | AccountCreditController#credit |
 | GET | `/api/v1/payments/current` | — | — | — | core: abonnement | PaymentsController#current |
 | POST | `/api/v1/payments/webhook/mycoolpay/{hash}` | — | — | — | rappel du fournisseur de paiement — public, secret d'URL et signature | PaymentWebhookController#myCoolPay |
 | POST | `/api/v1/payments/webhook/revenuecat` | — | — | — | rappel du fournisseur de paiement — public, secret dans l'en-tête Authorization | RevenueCatWebhookController#revenueCat |
@@ -310,6 +315,7 @@ Handlers: 323 — gated: 138, exempt: 185.
 | PUT | `/api/v1/stores/{storeId}/logo` | `store` | WRITE | — |  | StoreLogoController#upload |
 | PATCH | `/api/v1/stores/{storeId}/reactivate` | `store` | WRITE | — |  | StoreController#reactivateStore |
 | GET | `/api/v1/subscription/me` | — | — | — | core: abonnement | SubscriptionController#getMySubscription |
+| GET | `/api/v1/subscription/me/pack-movements` | — | — | — | core: abonnement | PackMovementsController#packMovements |
 | GET | `/api/v1/subscription/offers` | — | — | — | core: abonnement | OffersController#offers |
 | GET | `/api/v1/suppliers` | `crm` | READ | — |  | SupplierController#listSuppliers |
 | POST | `/api/v1/suppliers` | `crm` | WRITE | — |  | SupplierController#createSupplier |

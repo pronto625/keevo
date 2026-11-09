@@ -199,7 +199,7 @@ class MeteredTenantMessagingPostgresIntegrationTest {
     void packAfterMonth() {
         preUse(UsageMetric.SMS, 5);
         new TransactionTemplate(new DataSourceTransactionManager(dataSource))
-                .executeWithoutResult(s -> quotas.add(tenant, UsageMetric.SMS, 2));
+                .executeWithoutResult(s -> quotas.add(tenant, UsageMetric.SMS, 2, com.keevo.shared.capability.entitlement.UsageCredits.Grant.migration()));
 
         providerSucceeds = false;
         assertThat(messaging.sendSms(schema, SmsMessage.of("+237699000123", "Bonjour")).delivered()).isFalse();

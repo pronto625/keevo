@@ -2,14 +2,18 @@ package com.keevo.payments.checkout.application.service;
 
 import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.PlanType;
+import com.keevo.payments.checkout.domain.event.PaymentNoticeEvent;
 import com.keevo.payments.checkout.domain.event.PlanPaymentConfirmedEvent;
 import com.keevo.payments.checkout.domain.model.PaymentRequest;
 import com.keevo.payments.checkout.domain.model.PaymentStatus;
 import com.keevo.payments.checkout.domain.model.PlanPeriod;
 import com.keevo.payments.checkout.domain.port.out.PaymentRequestStore;
+import com.keevo.payments.credit.domain.model.CreditMovementKind;
+import com.keevo.payments.credit.domain.port.out.AccountCreditStore;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanDefinition;
+import com.keevo.shared.capability.entitlement.UsageCredits;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.event.catalog.plan.PlanActivatedEvent;
@@ -21,6 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
@@ -40,6 +45,13 @@ import java.util.UUID;
  *
  * <p>Callers verify the payment with the provider BEFORE calling (no HTTP inside this transaction). Cost: constant —
  * 2 locked reads, ≤ 1 ledger INSERT, the plan change, ≤ 1 counter UPDATE, 1 request UPDATE.
+ *
+ * <p>Story 21.3 — a request buys a plan or a usage pack (the pack confirmation credits {@code usage_credits} and journals
+ * the purchase in one statement, no plan change, no {@code tenant_payments} row). The account credit reserved by a
+ * request is spent with it; when the request had ended unpaid (its credit given back) and the provider confirms it
+ * later, the credit is taken again — or, when the balance no longer covers it, the money received is added to the
+ * credit ({@code PAYMENT_TO_CREDIT}, at most once per request) and nothing is applied: never a negative balance, never
+ * a plan or pack paid only in part.
  */
 @Service
 public class PaymentConfirmationService {
@@ -47,7 +59,7 @@ public class PaymentConfirmationService {
     private static final Logger log = LoggerFactory.getLogger(PaymentConfirmationService.class);
 
     /** What a confirmation did. */
-    public enum Outcome { CONFIRMED, ALREADY_CONFIRMED, NOT_FOUND }
+    public enum Outcome { CONFIRMED, ALREADY_CONFIRMED, NOT_FOUND, CREDITED }
 
     private final PaymentRequestStore store;
     private final PlanAdministrationPort plans;
@@ -55,15 +67,20 @@ public class PaymentConfirmationService {
     private final PlanCatalog catalog;
     private final ApplicationEventPublisher events;
     private final Clock clock;
+    private final AccountCreditStore credits;
+    private final UsageCredits usageCredits;
 
     public PaymentConfirmationService(PaymentRequestStore store, PlanAdministrationPort plans, OfferPricing pricing,
-                                      PlanCatalog catalog, ApplicationEventPublisher events, Clock clock) {
+                                      PlanCatalog catalog, ApplicationEventPublisher events, Clock clock,
+                                      AccountCreditStore credits, UsageCredits usageCredits) {
         this.store = store;
         this.plans = plans;
         this.pricing = pricing;
         this.catalog = catalog;
         this.events = events;
         this.clock = clock;
+        this.credits = credits;
+        this.usageCredits = usageCredits;
     }
 
     /** Confirms a request the provider reported paid (verified by the caller). */
@@ -76,9 +93,60 @@ public class PaymentConfirmationService {
         if (request.status() == PaymentStatus.CONFIRMED) {
             return Outcome.ALREADY_CONFIRMED;
         }
+        if (request.creditAppliedXaf() > 0 && !PaymentStatus.IN_FLIGHT.contains(request.status())) {
+            // the request ended unpaid and its credit went back: take it again, or keep the money as credit
+            if (credits.convertedToCredit(request.id())) {
+                return Outcome.CREDITED; // a replay of the first delivery: same outcome, nothing written
+            }
+            if (credits.debit(request.tenantId(), request.creditAppliedXaf(), CreditMovementKind.PAYMENT_USE,
+                    request.id(), request.requestedBy(), null).isEmpty()) {
+                return toCredit(request);
+            }
+        }
         pricing.recordRedemption(request.discountId(), false); // money received: always counted (soft cap)
         apply(request);
         return Outcome.CONFIRMED;
+    }
+
+    /**
+     * Story 21.3 — a price fully covered by the account credit: stored, credit taken and applied in the caller's
+     * transaction (which holds the credit row lock since it read the balance), without the provider. A capped promo
+     * code is taken within its cap (nothing is stored when it is used up meanwhile).
+     *
+     * @throws org.springframework.dao.DuplicateKeyException when a request of the company is in flight
+     * @throws DomainException 422 when the promo code is used up
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void confirmCovered(PaymentRequest request) {
+        if (!pricing.recordRedemption(request.discountId(), true)) {
+            throw PaymentText.invalid("promoCode", PaymentText.PROMO_USED_UP);
+        }
+        store.insert(request);
+        reserve(request);
+        apply(request);
+    }
+
+    /**
+     * Story 21.3 — takes the credit applied to a request just inserted ({@code PAYMENT_USE}). The caller's transaction
+     * read the balance {@code FOR UPDATE}, so the guarded debit cannot miss.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void reserve(PaymentRequest request) {
+        if (request.creditAppliedXaf() > 0 && credits.debit(request.tenantId(), request.creditAppliedXaf(),
+                CreditMovementKind.PAYMENT_USE, request.id(), request.requestedBy(), null).isEmpty()) {
+            throw new IllegalStateException("Credit changed under its row lock");
+        }
+    }
+
+    private Outcome toCredit(PaymentRequest r) {
+        credits.credit(r.tenantId(), r.amountDueXaf(), CreditMovementKind.PAYMENT_TO_CREDIT, r.id(), r.requestedBy(),
+                null);
+        store.markCredited(r.id(), PaymentText.creditedLate(r.status(), r.amountDueXaf()));
+        log.info("[PAYMENT] Late payment added to the account credit: tenant={} request={} amountXaf={}",
+                r.tenantId(), r.id(), r.amountDueXaf());
+        events.publishEvent(new PaymentNoticeEvent(r.tenantSchema(), r.id(), PaymentNoticeEvent.PAYMENT_CREDITED,
+                PaymentText.PAYMENT_RECEIVED, PaymentText.xaf(r.amountDueXaf()) + " ajoutés à votre crédit."));
+        return Outcome.CREDITED;
     }
 
     /**
@@ -104,6 +172,17 @@ public class PaymentConfirmationService {
 
     private void apply(PaymentRequest r) {
         Instant now = clock.instant();
+        if (r.pack()) {
+            long remaining = usageCredits.add(r.tenantId(), r.packMetric(), r.packQuantity(),
+                    UsageCredits.Grant.purchase(r.id(), r.requestedBy()));
+            store.confirm(r.id(), null, null, now);
+            log.info("[PAYMENT] Pack paid online: tenant={} request={} pack={} units={} remaining={} amountXaf={} "
+                    + "creditXaf={}", r.tenantId(), r.id(), r.packCode(), r.packQuantity(), remaining,
+                    r.amountDueXaf(), r.creditAppliedXaf());
+            events.publishEvent(new PaymentNoticeEvent(r.tenantSchema(), r.id(), PaymentNoticeEvent.PACK_CREDITED,
+                    PaymentText.PACK_CREDITED, PaymentText.packCredited(r)));
+            return;
+        }
         CurrentPlan current = plans.currentPlan(r.tenantSchema())
                 .orElseThrow(() -> new DomainException(ErrorCode.SUBSCRIPTION_NOT_FOUND,
                         "No subscription for tenant " + r.tenantId()));
@@ -113,7 +192,7 @@ public class PaymentConfirmationService {
         PlanPeriod period = PlanPeriod.of(renewal, current.expiresAt(), now, r.months());
 
         UUID ledgerId = null;
-        if (!r.free()) {
+        if (!r.free()) { // cash collected only (the credit part is in the credit journal)
             ledgerId = UUID.randomUUID();
             store.insertLedger(ledgerId, r, period, now);
         }

@@ -73,8 +73,15 @@ public interface OfferPricing {
      * @param currentPlan the company's plan
      * @param promoCode   the typed code and whether it is valid, {@code null} when none was typed
      * @param plans       offered plans in display order
+     * @param usagePacks  Story 21.3 — the packs the company can buy (SMS…), in display order (no discount applies)
      */
-    record OffersView(PlanRef currentPlan, PromoCodeStatus promoCode, List<OfferPlan> plans) {
+    record OffersView(PlanRef currentPlan, PromoCodeStatus promoCode, List<OfferPlan> plans,
+                      List<UsagePacks.UsagePackOffer> usagePacks) {
+
+        /** Without usage packs (before Story 21.3). */
+        public OffersView(PlanRef currentPlan, PromoCodeStatus promoCode, List<OfferPlan> plans) {
+            this(currentPlan, promoCode, plans, List.of());
+        }
     }
 
     /** @param kind {@code FREE | TRIAL | PAID}; {@code null} for a plan the catalogue does not know */

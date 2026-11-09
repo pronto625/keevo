@@ -58,7 +58,8 @@ class PaymentSettlementServiceTest {
         return new PaymentRequest(UUID.randomUUID(), UUID.randomUUID(), "kv_abc123", UUID.randomUUID(),
                 PaymentProvider.MYCOOLPAY, MobileMoneyMethod.MTN_MOMO, "+237677000111", "PRO", "Pro", "MONTHLY",
                 "Mensuel", 1, 3500, 0, 3500, "XAF", null, null, null, NOW, status, NextStep.USSD, null,
-                "KV-abc", providerRef, null, null, null, null, null, null, NOW);
+                "KV-abc", providerRef, null, null, null, null, null, null, NOW,
+                com.keevo.payments.checkout.domain.model.PaymentKind.PLAN, 0L, null, null, null, 0);
     }
 
     private void signedCallback(String ref, ProviderStatus status, String appRef) {

@@ -2,13 +2,19 @@ package com.keevo.subscription.plan.adapter.out.persistence.impl;
 
 import com.keevo.shared.capability.entitlement.PlanQuota;
 import com.keevo.shared.capability.entitlement.QuotaPeriod;
+import com.keevo.shared.capability.entitlement.UsageCredits;
 import com.keevo.shared.capability.entitlement.UsageMetric;
+import com.keevo.shared.capability.entitlement.UsagePackSource;
 import com.keevo.subscription.plan.domain.port.out.UsageCounterStore;
+import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.sql.Types;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
@@ -64,25 +70,67 @@ public class JdbcUsageCounterStore implements UsageCounterStore {
     static final String USED_SQL =
             "SELECT used FROM public.usage_counters WHERE tenant_id = ? AND metric = ? AND period_key = ?";
 
+    /**
+     * Story 21.3 — the guarded pack debit and its journal row in ONE statement: the movement exists exactly when the
+     * units were taken (a rolled-back probe leaves neither).
+     */
     static final String CONSUME_CREDITS_SQL = """
-            UPDATE public.usage_credits SET remaining = remaining - ?, updated_at = now()
-            WHERE tenant_id = ? AND metric = ? AND remaining >= ?
-            RETURNING remaining
+            WITH c AS (
+                UPDATE public.usage_credits SET remaining = remaining - ?, updated_at = now()
+                WHERE tenant_id = ? AND metric = ? AND remaining >= ?
+                RETURNING tenant_id, metric, remaining
+            ), logged AS (
+                INSERT INTO public.usage_credit_movements
+                    (id, tenant_id, metric, period, delta, remaining_after, source, actor_id)
+                SELECT ?, c.tenant_id, c.metric, ?, ?, c.remaining, 'CONSUMPTION', ? FROM c
+            )
+            SELECT remaining FROM c
             """;
 
+    /** The pack credit (upsert) and its journal row in ONE statement. */
     static final String ADD_CREDITS_SQL = """
-            INSERT INTO public.usage_credits AS c (tenant_id, metric, remaining, updated_at)
-            VALUES (?, ?, ?, now())
-            ON CONFLICT (tenant_id, metric) DO UPDATE SET remaining = c.remaining + EXCLUDED.remaining,
-                updated_at = now()
-            RETURNING c.remaining
+            WITH c AS (
+                INSERT INTO public.usage_credits AS u (tenant_id, metric, remaining, updated_at)
+                VALUES (?, ?, ?, now())
+                ON CONFLICT (tenant_id, metric) DO UPDATE SET remaining = u.remaining + EXCLUDED.remaining,
+                    updated_at = now()
+                RETURNING u.tenant_id, u.metric, u.remaining
+            ), logged AS (
+                INSERT INTO public.usage_credit_movements
+                    (id, tenant_id, metric, period, delta, remaining_after, source, payment_request_id, actor_id)
+                SELECT ?, c.tenant_id, c.metric, NULL, ?, c.remaining, ?, ?, ? FROM c
+            )
+            SELECT remaining FROM c
             """;
 
+    /** Counters, packs and (Story 21.3) the pack units consumed since an instant — one query, three index scans. */
     static final String USAGE_SQL = """
-            SELECT metric, period_key, used, NULL::bigint AS remaining
+            SELECT metric, 'C' AS kind, period_key, used AS amount
             FROM public.usage_counters WHERE tenant_id = ? AND period_key = ANY (?)
             UNION ALL
-            SELECT metric, NULL, NULL, remaining FROM public.usage_credits WHERE tenant_id = ?
+            SELECT metric, 'P', NULL, remaining FROM public.usage_credits WHERE tenant_id = ?
+            UNION ALL
+            SELECT metric, 'M', NULL, -sum(delta) FROM public.usage_credit_movements
+            WHERE tenant_id = ? AND source = 'CONSUMPTION' AND created_at >= ? GROUP BY metric
+            """;
+
+    /**
+     * Story 21.3 — the pack journal, newest first (keyset); the actor's name is the store member's (the company's
+     * {@code employees}, by the {@code user_id} index) or else the platform user's (primary key) — joined per page row,
+     * no N+1.
+     */
+    static final String PACK_MOVEMENTS_SQL = """
+            SELECT m.id, m.metric, m.period, m.delta, m.remaining_after, m.source, m.actor_id,
+                   COALESCE(NULLIF(btrim(concat_ws(' ', em.first_name, em.last_name)), ''),
+                            NULLIF(btrim(concat_ws(' ', u.first_name, u.last_name)), '')) AS actor_name,
+                   m.created_at
+            FROM public.usage_credit_movements m
+            LEFT JOIN LATERAL (SELECT x.first_name, x.last_name FROM %1$s.employees x WHERE x.user_id = m.actor_id
+                               ORDER BY x.created_at LIMIT 1) em ON true
+            LEFT JOIN public.users u ON u.id = m.actor_id
+            WHERE m.tenant_id = (SELECT t.id FROM public.tenants t WHERE t.schema_name = ?) %2$s %3$s
+            ORDER BY m.created_at DESC, m.id DESC
+            LIMIT ?
             """;
 
     /** ISO keys of one period kind compare as text; served by {@code ix_usage_counters_period_key}. */
@@ -147,39 +195,87 @@ public class JdbcUsageCounterStore implements UsageCounterStore {
     }
 
     @Override
-    public boolean consumeCredits(UUID tenantId, UsageMetric metric, int n) {
-        return !jdbc.queryForList(CONSUME_CREDITS_SQL, Long.class, (long) n, tenantId, metric.name(), (long) n)
-                .isEmpty();
+    public boolean consumeCredits(UUID tenantId, UsageMetric metric, int n, QuotaPeriod period, UUID actorId) {
+        return !jdbc.query(CONSUME_CREDITS_SQL, ps -> {
+            ps.setLong(1, n);
+            ps.setObject(2, tenantId, Types.OTHER);
+            ps.setString(3, metric.name());
+            ps.setLong(4, n);
+            ps.setObject(5, UUID.randomUUID(), Types.OTHER);
+            ps.setString(6, period == null ? null : period.name());
+            ps.setInt(7, -n);
+            ps.setObject(8, actorId, Types.OTHER);
+        }, (rs, i) -> rs.getLong(1)).isEmpty();
     }
 
     @Override
-    public long addCredits(UUID tenantId, UsageMetric metric, int n) {
-        return jdbc.queryForObject(ADD_CREDITS_SQL, Long.class, tenantId, metric.name(), (long) n);
+    public long addCredits(UUID tenantId, UsageMetric metric, int n, UsageCredits.Grant grant) {
+        List<Long> remaining = jdbc.query(ADD_CREDITS_SQL, ps -> {
+            ps.setObject(1, tenantId, Types.OTHER);
+            ps.setString(2, metric.name());
+            ps.setLong(3, n);
+            ps.setObject(4, UUID.randomUUID(), Types.OTHER);
+            ps.setInt(5, n);
+            ps.setString(6, grant.source().name());
+            ps.setObject(7, grant.paymentRequestId(), Types.OTHER);
+            ps.setObject(8, grant.actorId(), Types.OTHER);
+        }, (rs, i) -> rs.getLong(1));
+        return remaining.get(0);
     }
 
     @Override
-    public Usage usage(UUID tenantId, Collection<String> periodKeys) {
+    public Usage usage(UUID tenantId, Collection<String> periodKeys, Instant consumedSince) {
         Map<UsageMetric, Map<String, Long>> counters = new EnumMap<>(UsageMetric.class);
         Map<UsageMetric, Long> credits = new EnumMap<>(UsageMetric.class);
+        Map<UsageMetric, Long> consumed = new EnumMap<>(UsageMetric.class);
         jdbc.query(con -> {
             var ps = con.prepareStatement(USAGE_SQL);
             ps.setObject(1, tenantId);
             ps.setArray(2, con.createArrayOf("varchar", periodKeys.toArray()));
             ps.setObject(3, tenantId);
+            ps.setObject(4, tenantId);
+            ps.setTimestamp(5, Timestamp.from(consumedSince));
             return ps;
-        }, (ResultSet rs) -> read(rs, counters, credits));
-        return new Usage(counters, credits);
+        }, (ResultSet rs) -> read(rs, counters, credits, consumed));
+        return new Usage(counters, credits, consumed);
     }
 
     private static void read(ResultSet rs, Map<UsageMetric, Map<String, Long>> counters,
-                             Map<UsageMetric, Long> credits) throws SQLException {
+                             Map<UsageMetric, Long> credits, Map<UsageMetric, Long> consumed) throws SQLException {
         UsageMetric metric = UsageMetric.valueOf(rs.getString(1));
-        String key = rs.getString(2);
-        if (key != null) {
-            counters.computeIfAbsent(metric, m -> new HashMap<>()).put(key, rs.getLong(3));
-        } else {
-            credits.put(metric, rs.getLong(4));
+        switch (rs.getString(2)) {
+            case "C" -> counters.computeIfAbsent(metric, m -> new HashMap<>()).put(rs.getString(3), rs.getLong(4));
+            case "P" -> credits.put(metric, rs.getLong(4));
+            default -> consumed.put(metric, rs.getLong(4));
         }
+    }
+
+    @Override
+    public List<PackMovementRow> packMovements(String tenantSchema, UsageMetric metric, Instant beforeAt,
+                                               UUID beforeId, int limit) {
+        boolean keyset = beforeAt != null && beforeId != null;
+        String schema = TenantSchema.validate(tenantSchema);
+        String sql = PACK_MOVEMENTS_SQL.formatted("\"" + schema + "\"", metric != null ? "AND m.metric = ?" : "",
+                keyset ? "AND (m.created_at, m.id) < (?, ?)" : "");
+        return jdbc.query(sql, ps -> {
+            int i = 1;
+            ps.setString(i++, schema);
+            if (metric != null) {
+                ps.setString(i++, metric.name());
+            }
+            if (keyset) {
+                ps.setTimestamp(i++, Timestamp.from(beforeAt));
+                ps.setObject(i++, beforeId, Types.OTHER);
+            }
+            ps.setInt(i, limit);
+        }, (rs, row) -> {
+            String period = rs.getString("period");
+            return new PackMovementRow(rs.getObject("id", UUID.class), UsageMetric.valueOf(rs.getString("metric")),
+                    period == null ? null : QuotaPeriod.valueOf(period), rs.getInt("delta"),
+                    rs.getLong("remaining_after"), UsagePackSource.valueOf(rs.getString("source")),
+                    rs.getObject("actor_id", UUID.class), rs.getString("actor_name"),
+                    rs.getTimestamp("created_at").toInstant());
+        });
     }
 
     @Override

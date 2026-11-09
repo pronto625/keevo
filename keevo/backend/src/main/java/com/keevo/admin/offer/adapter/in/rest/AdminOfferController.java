@@ -8,6 +8,7 @@ import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.PlanUpdateRequest
 import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.PriceRequest;
 import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.SettingsRequest;
 import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.StoreProductRequest;
+import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.UsagePackRequest;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
@@ -27,6 +28,8 @@ import com.keevo.subscription.api.OfferAdministration.SettingsInput;
 import com.keevo.subscription.api.OfferAdministration.SettingsView;
 import com.keevo.subscription.api.OfferAdministration.StoreProductInput;
 import com.keevo.subscription.api.OfferAdministration.StoreProductView;
+import com.keevo.subscription.api.OfferAdministration.UsagePackInput;
+import com.keevo.subscription.api.OfferAdministration.UsagePackView;
 import com.keevo.subscription.api.OfferPricing;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -290,6 +293,27 @@ public class AdminOfferController {
         CurrentActor.requireSuperAdmin();
         return ok(offers.saveStoreProduct(productId, body == null ? null : new StoreProductInput(body.planCode(),
                 body.cycleCode(), body.declaredPriceXaf(), body.active()), CurrentActor.actorId()));
+    }
+
+    // ── usage packs (Story 21.3) ──────────────────────────────────────────────
+
+    @Operation(summary = "Usage packs (inactive included): label, content (metric, quantity), price, unit price, "
+            + "active, display order", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/usage-packs")
+    public ResponseEntity<ApiResponseWrapper<List<UsagePackView>>> usagePacks() {
+        CurrentActor.requireSuperAdmin();
+        return ok(offers.usagePacks());
+    }
+
+    @Operation(summary = "Create or update a usage pack (code: upper-case letters, digits, _; a new pack needs label, "
+            + "metric, quantity and priceXaf; absent fields of an existing pack are kept; active false = no longer "
+            + "offered). Applies to the next checkout; journaled", security = @SecurityRequirement(name = "bearerAuth"))
+    @PutMapping("/usage-packs/{code}")
+    public ResponseEntity<ApiResponseWrapper<UsagePackView>> saveUsagePack(
+            @PathVariable String code, @RequestBody(required = false) UsagePackRequest body) {
+        CurrentActor.requireSuperAdmin();
+        return ok(offers.saveUsagePack(code, body == null ? null : new UsagePackInput(body.label(), body.metric(),
+                body.quantity(), body.priceXaf(), body.active(), body.sortOrder()), CurrentActor.actorId()));
     }
 
     // ── mapping ───────────────────────────────────────────────────────────────

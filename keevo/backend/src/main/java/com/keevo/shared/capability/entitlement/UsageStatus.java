@@ -11,17 +11,26 @@ import java.util.Objects;
  * @param quotas  per metric: one entry per quota of the plan, or one MONTH entry without limit for a metric without
  *                any quota (its usage is still counted)
  * @param credits pack units remaining per metric (metrics without a pack absent)
+ * @param packsConsumedThisMonth Story 21.3 — pack units consumed since the 1st of the month (WAT) per metric (metrics
+ *                               without consumption absent)
  */
-public record UsageStatus(List<QuotaUsage> quotas, Map<UsageMetric, Long> credits) {
+public record UsageStatus(List<QuotaUsage> quotas, Map<UsageMetric, Long> credits,
+                          Map<UsageMetric, Long> packsConsumedThisMonth) {
 
     public UsageStatus {
         quotas = List.copyOf(quotas);
         credits = Map.copyOf(credits);
+        packsConsumedThisMonth = Map.copyOf(packsConsumedThisMonth);
+    }
+
+    /** Without the month's pack consumption (before Story 21.3). */
+    public UsageStatus(List<QuotaUsage> quotas, Map<UsageMetric, Long> credits) {
+        this(quotas, credits, Map.of());
     }
 
     /** No usage known. */
     public static UsageStatus empty() {
-        return new UsageStatus(List.of(), Map.of());
+        return new UsageStatus(List.of(), Map.of(), Map.of());
     }
 
     /**
