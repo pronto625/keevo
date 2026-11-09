@@ -1129,7 +1129,7 @@ As a **owner**,
 I want **retrouver et utiliser mon crédit et mes SMS achetés**,
 So that **je ne perds pas d'argent dans la fusion (FUS-FR10, R9)**.
 
-> **Routé depuis la revue 19.8 (04/11/2026) :** - [ ] [Deferred-from: revue 19.8, 2026-11-04] la consommation payée par un pack n'est enregistrée nulle part (`usage_credits.remaining` baisse seulement) : ajouter l'historique des consommations de packs (qui, quand, quel compteur) et l'afficher dans « Mon plan » à côté du quota du mois.
+> **Routé depuis la revue 19.8 (04/11/2026) :** - [x] (fait en 21-3, 2026-11-09 : journal `usage_credit_movements` — achat et chaque unité consommée avec l'auteur et le quota épuisé ; `GET /api/v1/subscription/me/pack-movements` et `packsUsedThisMonth` dans `GET /api/v1/subscription/me`) [Deferred-from: revue 19.8, 2026-11-04] la consommation payée par un pack n'est enregistrée nulle part (`usage_credits.remaining` baisse seulement) : ajouter l'historique des consommations de packs (qui, quand, quel compteur) et l'afficher dans « Mon plan » à côté du quota du mois.
 
 **Acceptance Criteria:**
 
@@ -1809,6 +1809,7 @@ So that **personne ne perd ce qu'il a payé (FUS-MIG8)**.
 
 **Éléments routés vers 24.5 (story 21.2, 2026-11-09) :**
 - [ ] [Deferred-from: 21.2 review, 2026-11-09] Import des événements RevenueCat déjà traités par api-bref [keevo/backend/src/main/resources/db/migration/V62__app_store_subscriptions.sql] — la table Keevo `revenuecat_webhook_event` a des colonnes différentes de celle de Bref (`id`, `type`, `app_user_id`, `original_transaction_id`, `environment`, `event_timestamp_ms`, `tenant_id`, `outcome`, détails d'achat, `processed_at` contre `subjectKey`, `eventTimestampMs`, `processedAt`, `createdAt` côté Bref) : l'import doit faire la correspondance (`subjectKey` → `original_transaction_id` quand c'est un identifiant de transaction, `outcome = 'APPLIED'`, `processed_at`) et créer les `external_subscriptions` des abonnements Apple en vigueur (`granted_expires_at` = `expires_at` importé, `last_event_ms` = dernier événement importé) pour qu'aucun événement ne soit rejoué ni qu'un événement ancien soit appliqué. Réglé par un test d'import sur une copie de la base Bref.
+- [ ] [Deferred-from: 21.3 review, 2026-11-09] Plans payés avec le crédit du compte dans les revenus super-admin [keevo/backend/src/main/java/com/keevo/payments/checkout/application/service/PaymentConfirmationService.java apply / admin/revenue/domain/model/RevenueMetrics] — `tenant_payments` ne reçoit que l'argent encaissé (la part payée par le crédit n'y est pas, un plan entièrement couvert par le crédit n'a pas de ligne) : un owner ex-Bref qui renouvelle avec son crédit importé compte comme « premium sans paiement » et hors MRR ; un paiement tardif versé au crédit (`PAYMENT_TO_CREDIT`) n'apparaît pas comme encaissement. À trancher avec l'import du crédit Bref : enregistrer la part crédit (colonne `credit_xaf` ou méthode `ACCOUNT_CREDIT`, exclue de l'encaissé mais comptée dans le MRR) et afficher l'encours de crédit. Réglé par un test de RevenueMetrics sur un plan payé 100 % crédit.
 
 ### Story 24.6 : Import des données annexes et index du portail
 

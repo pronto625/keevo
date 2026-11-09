@@ -374,12 +374,14 @@ development_status:
   m20-8-envoi-sms-email: backlog  # API 26ab9513 — POST /invoices/{id}/send {channel|channels[], phone?, email?} (SMS, EMAIL, WHATSAPP), SEND_INVOICE hors ligne mis en file (outbox, 5 essais), lastSentChannel / lastSendStatus dans le pull, statut incertain 409
   m21-1-payments-mobile-money: backlog  # API 1eafeb25 — « Mon plan » : payer par Orange Money / MTN (checkout, code OTP, suivi, annulation, offre gratuite)
   m21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — « Mon plan » : GET /subscription/offers (plans, plafonds, prix par durée, prix barré + fin de promotion, code promo)
+  m21-3-credit-packs-sms: backlog  # API 4792f2b6 — « Mon plan » : solde et historique du crédit, case « Utiliser mon crédit », achat de packs SMS, packs restants/consommés et historique des packs
   m21-2-storekit-revenuecat: backlog  # API 21973fdf — « Mon plan » iOS : achat App Store RevenueCat (logIn id Keevo, attribut keevo_tenant), sync après achat, état de l'abonnement
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
   d21-1-payments-mobile-money: backlog  # API 1eafeb25 — paiements en ligne (badge, auteur) ; plafond et compteur des codes promo
   d21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — écran « Offre » : plans, durées, grille de prix + historique, essai, remises, journal ; revenus par plan ; durée à l'activation
+  d21-3-credit-packs-sms: backlog  # API 4792f2b6 — onglet « Packs » de l'offre, bloc « Crédit » de la fiche entreprise (ajustements avec raison), ventes de packs dans les revenus
   d21-2-storekit-revenuecat: backlog  # API 21973fdf — écran « Offre » : produits App Store (plan, durée, prix Apple, écart avec la grille) ; badge App Store dans les paiements
   # Directives : section « ## Dashboard super-admin (autre dépôt) » à la fin de chaque spec.
   # Statuts : backlog → in-progress → review (livré, à tester ici) → done (testé ici). d16-11 (session) et d16-4 (conventions admin, tâches de fond) à lire en premier.
@@ -480,7 +482,7 @@ development_status:
   epic-21: in-progress  # P1b Monétisation & engagement — 2026-11-09 21-10 done, 21-1 done
   21-1-payments-mobile-money: done  # 2026-11-09 build-auto (spec-21-1-payments-mobile-money.md) — module payments (V61), checkout Mobile Money MyCoolPay derrière un port (sandbox dev/test, désactivé par défaut), webhook signé idempotent ; revue 5 couches (55 constats, corrigés dont 5 high, rejetés motivés, 0 reporté), tests verts (payments 39, subscription 145, architecture 134, admin 688, identity 866, shared 1 321), live keevo_dev OK ; revue de suivi recommandée | 2026-11-09 21-10 — 3 items faits (prix figé, compteur + plafond des codes promo, plan/cycle du paiement)
   21-2-storekit-revenuecat: done  # 2026-11-09 build-auto (spec-21-2-storekit-revenuecat.md) — achats App Store via RevenueCat (V62 : external_subscriptions, revenuecat_webhook_event, store_products), webhook authentifié (secret Authorization) idempotent en une transaction, bac à sable filtré, grâce Apple, remboursement, TRANSFER, même activation que 21-1 ; revue 5 couches (45 constats, 0 high, corrigés, rejetés motivés, 1 routé vers 24-5), tests verts (payments 69, subscription 146, admin 688, architecture 135, identity 866, shared/infrastructure/event 41 — shared complet arrêté faute de mémoire), live keevo_dev OK ; revue de suivi recommandée | 2026-11-09 21-10 — 1 item fait (écart prix App Store / grille dans le catalogue)
-  21-3-credit-packs-sms: backlog
+  21-3-credit-packs-sms: done  # 2026-11-09 build-auto (spec-21-3-credit-packs-sms.md) — crédit du compte (V63 : tenant_credits + journal append-only) imputé au choix sur le paiement 21-1 (réservé, rendu à l'échec, couverture totale sans opérateur, paiement tardif repris ou versé au crédit), packs SMS en données d'offre (usage_packs, super-admin) achetés par le même paiement, journal des packs (achats, consommations : qui, quand, quel quota) + packsUsedThisMonth ; revue 5 couches (38 constats, 1 high + 5 medium corrigés, 1 routé vers 24-5), tests verts (payments 84, subscription 153, admin 690, architecture 135, identity 866, messaging 370, shared 1 321), live keevo_dev OK ; revue de suivi recommandée | 2026-11-09 19-8 — 1 item fait (historique des consommations de packs)
   21-4-ai-assistant: backlog  # 2026-11-02 réécrite : assistant par outils (21-8), parité Bref Point, pas de SQL généré
   21-5-whatsapp-cloud: backlog  # 2026-11-04 revue 19.9b — 1 item (factures par le modèle Meta bref_facture depuis le WABA de l'owner)
   21-6-campagnes: backlog
@@ -531,7 +533,7 @@ development_status:
   24-2-migration-identite-boutiques-membres: backlog
   24-3-import-produits-clients: backlog
   24-4-import-documents-paiements-depenses: backlog  # 2026-11-08 revue 20-7 — 1 item (liens 90 j, anciens liens Bref, papiers 53/110 mm à l import) | 2026-11-08 revue 20-9 — boutique des factures importées (shopId) via 20-14
-  24-5-import-monetisation: backlog  # 2026-11-09 revue 21-2 — 1 item (correspondance revenuecat_webhook_event Bref → Keevo, external_subscriptions à l'import)
+  24-5-import-monetisation: backlog  # 2026-11-09 revue 21-3 — +1 item (plans payés avec le crédit dans le MRR / encours de crédit) | 2026-11-09 revue 21-2 — 1 item (correspondance revenuecat_webhook_event Bref → Keevo, external_subscriptions à l'import)
   24-6-import-annexes-index-portail: backlog
   24-7-bridge-identite-collisions: backlog  # 2026-11-04 revue 19.3 — 1 item (import social_id Bref → user_authenticators)
   24-8-reconciliation-bloquante: backlog
