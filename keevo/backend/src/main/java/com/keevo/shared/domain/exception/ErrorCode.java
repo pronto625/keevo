@@ -224,6 +224,11 @@ public enum ErrorCode {
     STORE_LOGO_NOT_FOUND,       // HTTP 404 — the store has no logo
     // ── Expenses (Story 20.10) ────────────────────────────────────────────
     EXPENSE_NOT_FOUND,          // HTTP 404 — expense unknown, deleted or of a store the actor does not see
+    // ── Self-service payments (Story 21.1) ────────────────────────────────
+    PAYMENT_IN_PROGRESS,        // HTTP 409 — a checkout of the company is already in flight (one at a time)
+    PAYMENT_NOT_FOUND,          // HTTP 404 — payment request unknown or of another company
+    PAYMENT_UNAVAILABLE,        // HTTP 503 — no Mobile Money gateway configured: nothing stored
+    PAYMENT_PROVIDER_ERROR,     // HTTP 502 — the provider refused or failed to start the payment: the request is FAILED
     // ── Notification inbox (Story 19.9) ───────────────────────────────────
     NOTIFICATION_NOT_FOUND,     // HTTP 404 — notification unknown or of another user
     // ── Generic ───────────────────────────────────────────────────

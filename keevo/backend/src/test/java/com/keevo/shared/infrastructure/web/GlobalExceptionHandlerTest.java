@@ -38,6 +38,22 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("21.1: payment codes map to 409 / 404 / 503 / 502 with their French messages")
+    void paymentCodes() {
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.PAYMENT_IN_PROGRESS, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.PAYMENT_NOT_FOUND, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        ResponseEntity<ApiResponseWrapper<Void>> unavailable =
+                handler.handleDomainException(new DomainException(ErrorCode.PAYMENT_UNAVAILABLE, "x"));
+        assertThat(unavailable.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(unavailable.getBody().error())
+                .isEqualTo("Le paiement Mobile Money est momentanément indisponible");
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.PAYMENT_PROVIDER_ERROR, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+    }
+
+    @Test
     @DisplayName("16.8: PRODUCT_QUOTA_UNAVAILABLE maps to 503 with the French quota message")
     void productQuotaUnavailable_mapsTo503() {
         ResponseEntity<ApiResponseWrapper<Void>> resp = handler.handleDomainException(

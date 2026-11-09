@@ -73,7 +73,7 @@ public class JdbcOfferStore implements OfferStore {
 
     private static final String DISCOUNT_COLUMNS = "d.id, d.scope, d.label, d.percent_off, d.amount_off_xaf, "
             + "d.plan_codes, d.cycle_codes, d.starts_at, d.ends_at, d.tenant_id, d.promo_code, d.archived_at, "
-            + "d.created_at";
+            + "d.created_at, d.max_redemptions, d.redemption_count";
     static final String DISCOUNTS_SQL = "SELECT " + DISCOUNT_COLUMNS + " FROM public.discounts d "
             + "ORDER BY d.created_at DESC, d.id LIMIT ?";
     static final String LIVE_DISCOUNTS_SQL = "SELECT " + DISCOUNT_COLUMNS + " FROM public.discounts d "
@@ -83,17 +83,24 @@ public class JdbcOfferStore implements OfferStore {
     static final String CANDIDATES_SQL = "SELECT " + DISCOUNT_COLUMNS + " FROM public.discounts d "
             + "WHERE d.archived_at IS NULL AND (d.starts_at IS NULL OR d.starts_at <= ?) "
             + "AND (d.ends_at IS NULL OR d.ends_at > ?) "
+            + "AND (d.max_redemptions IS NULL OR d.redemption_count < d.max_redemptions) "
             + "AND (d.scope = 'PROMOTION' "
             + "OR (d.scope = 'TENANT' AND d.tenant_id = CAST(? AS uuid)) "
             + "OR (d.scope = 'PROMO_CODE' AND upper(d.promo_code) = upper(CAST(? AS text))))";
     static final String PROMO_TAKEN_SQL = "SELECT EXISTS (SELECT 1 FROM public.discounts WHERE promo_code IS NOT NULL "
             + "AND archived_at IS NULL AND upper(promo_code) = upper(?) AND id IS DISTINCT FROM CAST(? AS uuid))";
     static final String INSERT_DISCOUNT_SQL = "INSERT INTO public.discounts (scope, label, percent_off, amount_off_xaf, "
-            + "plan_codes, cycle_codes, starts_at, ends_at, tenant_id, promo_code, archived_at, created_by, "
-            + "updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
+            + "plan_codes, cycle_codes, starts_at, ends_at, tenant_id, promo_code, archived_at, max_redemptions, "
+            + "created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
     static final String UPDATE_DISCOUNT_SQL = "UPDATE public.discounts SET scope = ?, label = ?, percent_off = ?, "
             + "amount_off_xaf = ?, plan_codes = ?, cycle_codes = ?, starts_at = ?, ends_at = ?, tenant_id = ?, "
-            + "promo_code = ?, archived_at = ?, updated_by = ?, updated_at = now() WHERE id = ?";
+            + "promo_code = ?, archived_at = ?, max_redemptions = ?, updated_by = ?, updated_at = now() WHERE id = ?";
+    /** Story 21.1 — one confirmed use (never touched by the CRUD). */
+    static final String REDEMPTION_SQL =
+            "UPDATE public.discounts SET redemption_count = redemption_count + 1 WHERE id = ?";
+    /** Story 21.1 — same, only while the use cap is not reached (atomic check-and-take). */
+    static final String REDEMPTION_WITHIN_CAP_SQL = REDEMPTION_SQL
+            + " AND (max_redemptions IS NULL OR redemption_count < max_redemptions)";
 
     static final String JOURNAL_SQL = "INSERT INTO public.offer_change_log (entity, entity_key, summary, actor_id) "
             + "VALUES (?, ?, ?, ?)";
@@ -245,7 +252,7 @@ public class JdbcOfferStore implements OfferStore {
                 rs.getBigDecimal("percent_off"), amountOff, codes(rs.getArray("plan_codes")),
                 codes(rs.getArray("cycle_codes")), instant(rs, "starts_at"), instant(rs, "ends_at"),
                 uuid(rs, "tenant_id"), rs.getString("promo_code"), instant(rs, "archived_at"),
-                instant(rs, "created_at"));
+                instant(rs, "created_at"), (Integer) rs.getObject("max_redemptions"), rs.getInt("redemption_count"));
     };
 
     @Override
@@ -306,7 +313,13 @@ public class JdbcOfferStore implements OfferStore {
         });
     }
 
-    /** Binds the 11 data columns of a discount; returns the next parameter index. */
+    @Override
+    public boolean recordRedemption(UUID discountId, boolean withinCap) {
+        return jdbc.update(withinCap ? REDEMPTION_WITHIN_CAP_SQL : REDEMPTION_SQL,
+                ps -> ps.setObject(1, discountId, Types.OTHER)) == 1;
+    }
+
+    /** Binds the 12 data columns of a discount; returns the next parameter index. */
     private static int bindDiscount(java.sql.PreparedStatement ps, Discount d, java.sql.Connection con)
             throws SQLException {
         int i = 1;
@@ -329,6 +342,11 @@ public class JdbcOfferStore implements OfferStore {
         ps.setObject(i++, d.tenantId(), Types.OTHER);
         ps.setString(i++, d.promoCode());
         ps.setTimestamp(i++, ts(d.archivedAt()));
+        if (d.maxRedemptions() == null) {
+            ps.setNull(i++, Types.INTEGER);
+        } else {
+            ps.setInt(i++, d.maxRedemptions());
+        }
         return i;
     }
 

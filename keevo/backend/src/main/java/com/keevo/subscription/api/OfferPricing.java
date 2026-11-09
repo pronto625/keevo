@@ -28,15 +28,37 @@ public interface OfferPricing {
     OffersView offersFor(UUID tenantId, String promoCode);
 
     /**
+     * Story 21.1 — one confirmed payment used this discount: its use counter goes up by one (a promo code whose cap is
+     * reached is no longer offered). Must run inside the caller's transaction (the payment confirmation).
+     *
+     * @param withinCap {@code true} (free offer, nothing paid yet): the use is taken only while the cap is not reached,
+     *                  atomically; {@code false} (a payment the provider collected): always counted — the cap is soft
+     *                  for money already received
+     * @return false when {@code withinCap} and the cap is reached (nothing counted)
+     */
+    boolean recordRedemption(UUID discountId, boolean withinCap);
+
+    /**
      * @param baseXaf      catalogue price
      * @param reductionXaf reduction of the discount applied (0 when none)
      * @param effectiveXaf price to charge
      * @param perMonthXaf  effective price per month (rounded half-up)
      * @param discount     the discount applied, {@code null} when none
      * @param pricedAt     the instant of the quote
+     * @param discountId   Story 21.1 — id of the discount applied (stored with the payment, its use is counted at
+     *                     confirmation), {@code null} when none; never serialized
      */
     record Quote(String planCode, String planLabel, String cycleCode, String cycleLabel, int months, long baseXaf,
-                 long reductionXaf, long effectiveXaf, long perMonthXaf, AppliedDiscount discount, Instant pricedAt) {
+                 long reductionXaf, long effectiveXaf, long perMonthXaf, AppliedDiscount discount, Instant pricedAt,
+                 @com.fasterxml.jackson.annotation.JsonIgnore UUID discountId) {
+
+        /** Without the discount id (tests, before Story 21.1). */
+        public Quote(String planCode, String planLabel, String cycleCode, String cycleLabel, int months, long baseXaf,
+                     long reductionXaf, long effectiveXaf, long perMonthXaf, AppliedDiscount discount,
+                     Instant pricedAt) {
+            this(planCode, planLabel, cycleCode, cycleLabel, months, baseXaf, reductionXaf, effectiveXaf, perMonthXaf,
+                    discount, pricedAt, null);
+        }
     }
 
     /**

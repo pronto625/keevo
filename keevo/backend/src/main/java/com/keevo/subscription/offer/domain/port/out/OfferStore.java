@@ -74,7 +74,8 @@ public interface OfferStore {
 
     /**
      * One query: the discounts live at {@code now} a customer may get — every promotion, the discounts of
-     * {@code tenantId} (when not null) and the promo code {@code promoCode} (case-insensitive, when not null).
+     * {@code tenantId} (when not null) and the promo code {@code promoCode} (case-insensitive, when not null); a promo
+     * code whose use cap is reached is not a candidate (21.1).
      */
     List<Discount> liveCandidates(UUID tenantId, String promoCode, Instant now);
 
@@ -84,8 +85,16 @@ public interface OfferStore {
     /** Inserts a discount and returns its id. */
     UUID insertDiscount(Discount discount, UUID actorId);
 
-    /** Replaces every field of a discount (archive instant included). */
+    /** Replaces every field of a discount (archive instant included) — never its use counter. */
     void updateDiscount(Discount discount, UUID actorId);
+
+    /**
+     * Story 21.1 — one confirmed use of the discount: {@code redemption_count + 1} in one statement; with
+     * {@code withinCap} only while {@code max_redemptions} is not reached.
+     *
+     * @return whether the use was counted
+     */
+    boolean recordRedemption(UUID discountId, boolean withinCap);
 
     // ── journal ──
 

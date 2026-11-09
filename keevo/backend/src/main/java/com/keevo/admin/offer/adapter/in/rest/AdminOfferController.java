@@ -278,7 +278,7 @@ public class AdminOfferController {
     private static DiscountInput discountInput(DiscountRequest body) {
         return body == null ? null : new DiscountInput(body.scope(), body.label(), body.percentOff(),
                 body.amountOffXaf(), body.planCodes(), body.cycleCodes(), body.startsAt(), body.endsAt(),
-                body.tenantId(), body.promoCode());
+                body.tenantId(), body.promoCode(), body.maxRedemptions());
     }
 
     private static <T> ResponseEntity<ApiResponseWrapper<T>> ok(T value) {

@@ -20,10 +20,13 @@ import java.util.UUID;
  * @param tenantId     the company of a {@link DiscountScope#TENANT} discount, {@code null} otherwise
  * @param promoCode    the code of a {@link DiscountScope#PROMO_CODE} discount (upper case), {@code null} otherwise
  * @param archivedAt   archive instant, {@code null} when not archived
+ * @param maxRedemptions Story 21.1 — cap of confirmed uses of a {@link DiscountScope#PROMO_CODE}, {@code null} = no cap
+ * @param redemptionCount Story 21.1 — confirmed payments that used it (written by the payment confirmation only)
  */
 public record Discount(UUID id, DiscountScope scope, String label, BigDecimal percentOff, Long amountOffXaf,
                        Set<String> planCodes, Set<String> cycleCodes, Instant startsAt, Instant endsAt,
-                       UUID tenantId, String promoCode, Instant archivedAt, Instant createdAt) {
+                       UUID tenantId, String promoCode, Instant archivedAt, Instant createdAt,
+                       Integer maxRedemptions, int redemptionCount) {
 
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
@@ -34,13 +37,29 @@ public record Discount(UUID id, DiscountScope scope, String label, BigDecimal pe
         cycleCodes = cycleCodes == null ? Set.of() : Set.copyOf(cycleCodes);
     }
 
+    /** A discount without use cap nor use (before Story 21.1, tests). */
+    public Discount(UUID id, DiscountScope scope, String label, BigDecimal percentOff, Long amountOffXaf,
+                    Set<String> planCodes, Set<String> cycleCodes, Instant startsAt, Instant endsAt,
+                    UUID tenantId, String promoCode, Instant archivedAt, Instant createdAt) {
+        this(id, scope, label, percentOff, amountOffXaf, planCodes, cycleCodes, startsAt, endsAt, tenantId, promoCode,
+                archivedAt, createdAt, null, 0);
+    }
+
+    /** Story 21.1 — the cap is reached: the code is no longer offered. */
+    public boolean exhausted() {
+        return maxRedemptions != null && redemptionCount >= maxRedemptions;
+    }
+
     public boolean archived() {
         return archivedAt != null;
     }
 
-    /** Not archived and inside its window at {@code now} ({@code starts_at <= now < ends_at}). */
+    /**
+     * Not archived, not {@link #exhausted()} (21.1) and inside its window at {@code now}
+     * ({@code starts_at <= now < ends_at}).
+     */
     public boolean liveAt(Instant now) {
-        return archivedAt == null && (startsAt == null || !startsAt.isAfter(now))
+        return archivedAt == null && !exhausted() && (startsAt == null || !startsAt.isAfter(now))
                 && (endsAt == null || endsAt.isAfter(now));
     }
 
@@ -66,6 +85,6 @@ public record Discount(UUID id, DiscountScope scope, String label, BigDecimal pe
 
     public Discount withArchivedAt(Instant at) {
         return new Discount(id, scope, label, percentOff, amountOffXaf, planCodes, cycleCodes, startsAt, endsAt,
-                tenantId, promoCode, at, createdAt);
+                tenantId, promoCode, at, createdAt, maxRedemptions, redemptionCount);
     }
 }

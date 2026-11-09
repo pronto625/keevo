@@ -15,6 +15,8 @@ import java.util.UUID;
  * @param voidReason  reason of the void, null when it counts
  * @param planCode    Story 21.10 — the plan the payment paid for, null for a legacy row the backfill could not tie
  * @param cycleCode   Story 21.10 — the billing cycle it paid for, null when free-form (« Durée libre »)
+ * @param online      Story 21.1 — written by a confirmed online payment of the owner (module {@code payments}), not by
+ *                    the super admin
  */
 public record TenantPayment(
         UUID id,
@@ -29,8 +31,17 @@ public record TenantPayment(
         Instant voidedAt,
         String voidReason,
         String planCode,
-        String cycleCode
+        String cycleCode,
+        boolean online
 ) {
+
+    /** A payment recorded by the super admin (Story 21.10 shape). */
+    public TenantPayment(UUID id, UUID tenantId, long amountXaf, PaymentMethod method, Instant paidAt,
+                         LocalDate periodStart, LocalDate periodEnd, String note, UUID recordedBy, Instant voidedAt,
+                         String voidReason, String planCode, String cycleCode) {
+        this(id, tenantId, amountXaf, method, paidAt, periodStart, periodEnd, note, recordedBy, voidedAt, voidReason,
+                planCode, cycleCode, false);
+    }
 
     /** A new (non-voided) payment, plan and cycle unknown. */
     public TenantPayment(UUID id, UUID tenantId, long amountXaf, PaymentMethod method, Instant paidAt,

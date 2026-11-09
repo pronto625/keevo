@@ -26,7 +26,7 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
 
     private static final String COLUMNS =
             "id, tenant_id, amount_xaf, method, paid_at, period_start, period_end, note, recorded_by, "
-            + "voided_at, void_reason, plan_code, cycle_code ";
+            + "voided_at, void_reason, plan_code, cycle_code, payment_request_id IS NOT NULL AS online ";
 
     static final String FIND_BY_TENANT_SQL =
             "SELECT " + COLUMNS
@@ -84,6 +84,7 @@ public class JdbcTenantPaymentRepository implements TenantPaymentRepository {
                 voidedAt != null ? voidedAt.toInstant() : null,
                 rs.getString("void_reason"),
                 rs.getString("plan_code"),
-                rs.getString("cycle_code"));
+                rs.getString("cycle_code"),
+                rs.getBoolean("online"));
     }
 }

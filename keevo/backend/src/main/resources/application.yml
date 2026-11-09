@@ -324,6 +324,19 @@ keevo:
       vapid-public-key: ${VAPID_PUBLIC_KEY:}
       vapid-private-key: ${VAPID_PRIVATE_KEY:}
       subject: ${VAPID_SUBJECT:mailto:admin@brefpoint.app}
+  # Story 21.1 — self-service plan payment (module payments). gateway: disabled (default: Mobile Money refused with 503,
+  # free offers still work) | sandbox (simulated provider, dev/test profiles only) | mycoolpay (every key
+  # below required). The webhook URL given to MyCoolPay is <public base>/api/v1/payments/webhook/mycoolpay/<callback-hash>.
+  payments:
+    gateway: ${KEEVO_PAYMENTS_GATEWAY:disabled}
+    initiating-timeout: ${KEEVO_PAYMENTS_INITIATING_TIMEOUT:PT2M}
+    pending-timeout: ${KEEVO_PAYMENTS_PENDING_TIMEOUT:PT10M}
+    max-checkouts-per-hour: ${KEEVO_PAYMENTS_MAX_CHECKOUTS_PER_HOUR:5}
+    mycoolpay:
+      base-url: ${MYCOOLPAY_BASE_URL:https://my-coolpay.com}
+      public-key: ${MYCOOLPAY_PUBLIC_KEY:}
+      private-key: ${MYCOOLPAY_PRIVATE_KEY:}
+      callback-hash: ${MYCOOLPAY_CALLBACK_HASH:}
 
 # Springdoc OpenAPI / Swagger UI
 springdoc:

@@ -68,6 +68,8 @@ public class OfferCatalogService implements OfferAdministration {
     static final int MAX_DISCOUNTS = 500;
     private static final Set<String> RESERVED_CODES = Set.of("ALL", "PAID");
     private static final Pattern PROMO_CODE = Pattern.compile("^[A-Z0-9_-]{3,40}$");
+    /** Story 21.1 — highest use cap of a promo code. */
+    static final int MAX_REDEMPTIONS = 1_000_000;
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     private final PlanCatalog catalog;
@@ -447,7 +449,7 @@ public class OfferCatalogService implements OfferAdministration {
         }
         Discount saved = new Discount(id, draft.scope(), draft.label(), draft.percentOff(), draft.amountOffXaf(),
                 draft.planCodes(), draft.cycleCodes(), draft.startsAt(), draft.endsAt(), draft.tenantId(),
-                draft.promoCode(), null, clock.instant());
+                draft.promoCode(), null, clock.instant(), draft.maxRedemptions(), 0);
         store.journal(OfferEntity.DISCOUNT, id.toString(), discountSummary(saved, "créée"), actorId);
         return views(List.of(saved)).get(0);
     }
@@ -459,7 +461,7 @@ public class OfferCatalogService implements OfferAdministration {
         if (current.archived()) {
             throw conflict("Cette remise est archivée");
         }
-        Discount updated = validDiscount(in, current.id(), current.createdAt());
+        Discount updated = withCount(validDiscount(in, current.id(), current.createdAt()), current.redemptionCount());
         try {
             store.updateDiscount(updated, actorId);
         } catch (DuplicateKeyException e) {
@@ -557,8 +559,22 @@ public class OfferCatalogService implements OfferAdministration {
                 throw conflict(DUPLICATE_CODE);
             }
         }
+        Integer cap = in.maxRedemptions();
+        if (cap != null && scope != DiscountScope.PROMO_CODE) {
+            throw invalid("maxRedemptions", "Seul un code promo peut avoir un nombre d'utilisations maximal");
+        }
+        if (cap != null && (cap < 1 || cap > MAX_REDEMPTIONS)) {
+            throw invalid("maxRedemptions", "Le nombre d'utilisations doit être compris entre 1 et 1 000 000");
+        }
         return new Discount(id, scope, label, percent == null ? null : percent.stripTrailingZeros(), amount, plans,
-                cycleCodes, in.startsAt(), in.endsAt(), tenantId, promo, null, createdAt);
+                cycleCodes, in.startsAt(), in.endsAt(), tenantId, promo, null, createdAt, cap, 0);
+    }
+
+    /** The validated discount with the stored use counter (the CRUD never writes it). */
+    private static Discount withCount(Discount d, int redemptionCount) {
+        return new Discount(d.id(), d.scope(), d.label(), d.percentOff(), d.amountOffXaf(), d.planCodes(),
+                d.cycleCodes(), d.startsAt(), d.endsAt(), d.tenantId(), d.promoCode(), d.archivedAt(), d.createdAt(),
+                d.maxRedemptions(), redemptionCount);
     }
 
     private String discountSummary(Discount d, String verb) {
@@ -576,6 +592,9 @@ public class OfferCatalogService implements OfferAdministration {
         }
         if (d.endsAt() != null) {
             s.append(", jusqu'au ").append(date(d.endsAt()));
+        }
+        if (d.maxRedemptions() != null) { // 21.1
+            s.append(", ").append(d.maxRedemptions()).append(" utilisation(s) au plus");
         }
         return s.toString();
     }
@@ -736,7 +755,8 @@ public class OfferCatalogService implements OfferAdministration {
                     cycleCodes, cycleCodes.stream()
                             .map(c -> cycles.containsKey(c) ? cycles.get(c).label() : CYCLE_NOT_FOUND).toList(),
                     d.startsAt(), d.endsAt(), d.tenantId(), d.tenantId() == null ? null : names.get(d.tenantId()),
-                    d.promoCode(), d.archived(), d.archivedAt(), d.liveAt(now), d.createdAt());
+                    d.promoCode(), d.archived(), d.archivedAt(), d.liveAt(now), d.createdAt(), d.maxRedemptions(),
+                    d.redemptionCount());
         }).toList();
     }
 

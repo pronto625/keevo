@@ -18,3 +18,12 @@ logging:
     org.springframework.security: DEBUG
     org.hibernate.SQL: DEBUG
     org.hibernate.type.descriptor.sql: TRACE
+
+# Story 21.1 — local runs pay on the simulated Mobile Money provider (never MyCoolPay); its webhook secret and signing
+# key are fixed dev values (sign a simulated callback with md5(ref + type + amount + currency + operator + private key)).
+keevo:
+  payments:
+    gateway: ${KEEVO_PAYMENTS_GATEWAY:sandbox}
+    mycoolpay:
+      private-key: ${MYCOOLPAY_PRIVATE_KEY:sandbox-private-key}
+      callback-hash: ${MYCOOLPAY_CALLBACK_HASH:sandbox-callback}

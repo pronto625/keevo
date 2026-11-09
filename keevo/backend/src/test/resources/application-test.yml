@@ -21,6 +21,12 @@ logging:
 keevo:
   scheduling:
     enabled: false
+  # Story 21.1 — the simulated Mobile Money provider: no test ever reaches MyCoolPay
+  payments:
+    gateway: sandbox
+    mycoolpay:
+      private-key: test-private-key
+      callback-hash: test-callback
   product-photo:
     storage-dir: ${java.io.tmpdir}/keevo-test-product-photos
   company-logo:

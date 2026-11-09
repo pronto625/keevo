@@ -106,11 +106,14 @@ public interface OfferAdministration {
      * @param scope       {@code PROMOTION | TENANT | PROMO_CODE}
      * @param live        not archived and inside its window now
      * @param tenantName  the company of a TENANT discount
+     * @param maxRedemptions  Story 21.1 — cap of confirmed uses (promo codes), {@code null} = no cap
+     * @param redemptionCount Story 21.1 — confirmed payments that used it
      */
     record DiscountView(UUID id, String scope, String scopeLabel, String label, BigDecimal percentOff,
                         Long amountOffXaf, List<String> planCodes, List<String> planLabels, List<String> cycleCodes,
                         List<String> cycleLabels, Instant startsAt, Instant endsAt, UUID tenantId, String tenantName,
-                        String promoCode, boolean archived, Instant archivedAt, boolean live, Instant createdAt) {
+                        String promoCode, boolean archived, Instant archivedAt, boolean live, Instant createdAt,
+                        Integer maxRedemptions, int redemptionCount) {
     }
 
     /**
@@ -149,9 +152,19 @@ public interface OfferAdministration {
     /**
      * @param planCodes  empty or null = every plan
      * @param cycleCodes empty or null = every cycle
+     * @param maxRedemptions Story 21.1 — cap of confirmed uses of a promo code, {@code null} = no cap (promo codes
+     *                       only)
      */
     record DiscountInput(String scope, String label, BigDecimal percentOff, Long amountOffXaf, List<String> planCodes,
                          List<String> cycleCodes, Instant startsAt, Instant endsAt, UUID tenantId,
-                         String promoCode) {
+                         String promoCode, Integer maxRedemptions) {
+
+        /** Without use cap (before Story 21.1). */
+        public DiscountInput(String scope, String label, BigDecimal percentOff, Long amountOffXaf,
+                             List<String> planCodes, List<String> cycleCodes, Instant startsAt, Instant endsAt,
+                             UUID tenantId, String promoCode) {
+            this(scope, label, percentOff, amountOffXaf, planCodes, cycleCodes, startsAt, endsAt, tenantId, promoCode,
+                    null);
+        }
     }
 }

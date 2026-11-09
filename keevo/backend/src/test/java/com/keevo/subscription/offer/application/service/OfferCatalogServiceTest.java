@@ -356,6 +356,55 @@ class OfferCatalogServiceTest {
     }
 
     @Test
+    @DisplayName("21.1 — use cap: promo codes only, 1..1 000 000, stored; the update keeps the stored use counter")
+    void discount_useCap() {
+        Instant later = NOW.plus(10, ChronoUnit.DAYS);
+        assertThatThrownBy(() -> service.createDiscount(new DiscountInput("PROMOTION", "X", BigDecimal.TEN, null,
+                null, null, null, later, null, null, 5), ACTOR))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getDetails()).containsKey("maxRedemptions"));
+        assertThatThrownBy(() -> service.createDiscount(new DiscountInput("PROMO_CODE", "X", BigDecimal.TEN, null,
+                null, null, null, null, null, "CAP0", 0), ACTOR))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getDetails()).containsKey("maxRedemptions"));
+        assertThatThrownBy(() -> service.createDiscount(new DiscountInput("PROMO_CODE", "X", BigDecimal.TEN, null,
+                null, null, null, null, null, "CAPBIG", 1_000_001), ACTOR))
+                .isInstanceOfSatisfying(DomainException.class,
+                        e -> assertThat(e.getDetails()).containsKey("maxRedemptions"));
+
+        when(store.insertDiscount(any(), eq(ACTOR))).thenReturn(UUID.randomUUID());
+        var view = service.createDiscount(new DiscountInput("PROMO_CODE", "Lancement", BigDecimal.TEN, null, null,
+                null, null, null, null, "LANCE", 3), ACTOR);
+        ArgumentCaptor<Discount> saved = ArgumentCaptor.forClass(Discount.class);
+        verify(store).insertDiscount(saved.capture(), eq(ACTOR));
+        assertThat(saved.getValue().maxRedemptions()).isEqualTo(3);
+        assertThat(view.maxRedemptions()).isEqualTo(3);
+        assertThat(view.redemptionCount()).isZero();
+        verify(store).journal(eq(OfferEntity.DISCOUNT), anyString(), contains("3 utilisation(s) au plus"), eq(ACTOR));
+
+        UUID id = UUID.randomUUID();
+        when(store.discount(id)).thenReturn(Optional.of(new Discount(id, com.keevo.subscription.offer.domain.model
+                .DiscountScope.PROMO_CODE, "Lancement", BigDecimal.TEN, null, null, null, null, null, null, "LANCE",
+                null, STORED_AT, 3, 2)));
+        var updated = service.updateDiscount(id, new DiscountInput("PROMO_CODE", "Lancement", BigDecimal.TEN, null,
+                null, null, null, null, null, "LANCE", 5), ACTOR);
+        assertThat(updated.redemptionCount()).isEqualTo(2);
+        assertThat(updated.maxRedemptions()).isEqualTo(5);
+        assertThat(updated.live()).isTrue();
+    }
+
+    @Test
+    @DisplayName("21.1 — a promo code whose cap is reached is exhausted, hence not live")
+    void discount_exhaustedNotLive() {
+        Discount used = new Discount(UUID.randomUUID(), com.keevo.subscription.offer.domain.model.DiscountScope
+                .PROMO_CODE, "Lancement", BigDecimal.TEN, null, null, null, null, null, null, "LANCE", null,
+                STORED_AT, 2, 2);
+        assertThat(used.exhausted()).isTrue();
+        assertThat(used.liveAt(NOW)).isFalse();
+        assertThat(used.withArchivedAt(null).redemptionCount()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("update of an archived discount → 409; archive twice → 409")
     void discount_archived() {
         UUID id = UUID.randomUUID();

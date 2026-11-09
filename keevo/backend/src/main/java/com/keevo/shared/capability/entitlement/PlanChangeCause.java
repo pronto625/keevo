@@ -22,5 +22,10 @@ public enum PlanChangeCause {
      * Story 19.7b — one-shot data migration of the merged offer by {@code PlanMigrationJob} (Keevo PREMIUM → TEAM,
      * same end date, ADR-06): not a commercial change (no churn, no conversion).
      */
-    PLAN_MIGRATION
+    PLAN_MIGRATION,
+    /**
+     * Story 21.1 — the owner paid the plan online (Mobile Money, module {@code payments}) or took a free offer (100 %
+     * discount): a commercial activation, counted like {@link #ADMIN_ACTIVATION} by the revenue metrics.
+     */
+    SELF_SERVICE_PAYMENT
 }

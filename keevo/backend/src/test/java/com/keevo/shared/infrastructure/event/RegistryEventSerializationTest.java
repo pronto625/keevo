@@ -149,6 +149,9 @@ class RegistryEventSerializationTest {
                 new ModuleLicencesChangedEvent.Transition("alerts", "Alertes",
                         ModuleLicencesChangedEvent.Origin.PLAN, ModuleLicencesChangedEvent.NewStatus.DISABLED, null)),
                 null, T0));
+        // 21.1: push « Paiement reçu » after an online payment
+        f.put(com.keevo.payments.checkout.domain.event.PlanPaymentConfirmedEvent.class,
+                new com.keevo.payments.checkout.domain.event.PlanPaymentConfirmedEvent(TENANT, A, "Pro", T1));
         return f;
     }
 

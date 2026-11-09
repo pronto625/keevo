@@ -76,7 +76,13 @@ public class OfferPricingService implements OfferPricing {
         PricedOffer priced = OfferPricer.price(price.amountXaf(), plan.code().code(), cycle.code(), candidates, now);
         return new Quote(plan.code().code(), plan.label(), cycle.code(), cycle.label(), cycle.months(),
                 priced.baseXaf(), priced.reductionXaf(), priced.effectiveXaf(), priced.perMonthXaf(cycle.months()),
-                applied(priced.discount()), now);
+                applied(priced.discount()), now, priced.discount() == null ? null : priced.discount().id());
+    }
+
+    @Override
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.MANDATORY)
+    public boolean recordRedemption(UUID discountId, boolean withinCap) {
+        return discountId == null || store.recordRedemption(discountId, withinCap);
     }
 
     @Override

@@ -53,9 +53,10 @@ public final class OfferRequests {
      * @param endsAt     ISO instant (exclusive), required for a PROMOTION
      * @param tenantId   the company of a TENANT discount
      * @param promoCode  the code of a PROMO_CODE discount (3..40 letters, digits, - or _; case-insensitive)
+     * @param maxRedemptions Story 21.1 — cap of confirmed uses of a promo code (1..1 000 000), absent = no cap
      */
     public record DiscountRequest(String scope, String label, BigDecimal percentOff, Long amountOffXaf,
                                   List<String> planCodes, List<String> cycleCodes, Instant startsAt, Instant endsAt,
-                                  UUID tenantId, String promoCode) {
+                                  UUID tenantId, String promoCode, Integer maxRedemptions) {
     }
 }
