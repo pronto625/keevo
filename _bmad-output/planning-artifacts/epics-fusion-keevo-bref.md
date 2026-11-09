@@ -1100,9 +1100,9 @@ So that **mon abonnement s'active sans attendre le support (FUS-FR9)**.
 **Then** il est ignoré sans erreur (owner inconnu)
 
 **Éléments routés vers 21.1 (story 21.10, 2026-11-09) :**
-- [ ] [Deferred-from: 21.10, 2026-11-09] Prix figé à l'initiation : appeler le port `subscription.api.OfferPricing.quote(tenant, plan, cycle, promoCode)` à l'initiation du paiement et enregistrer le prix remisé obtenu (montant de base, remise appliquée, montant dû) avec la demande ; la confirmation (webhook) applique ce prix enregistré, jamais le prix du moment — critère « un paiement déjà initié garde le prix affiché » de 21.10. Un devis à 0 FCFA (remise de 100 % ou montant ≥ prix) est une offre gratuite : l'activer sans passer par MyCoolPay.
-- [ ] [Deferred-from: 21.10, 2026-11-09] Compter les utilisations d'un code promo (et un éventuel plafond d'utilisations) au paiement confirmé — 21.10 applique le code sans compteur faute de paiement.
-- [ ] [Deferred-from: 21.10, 2026-11-09] Écrire `tenant_payments.plan_code` et `cycle_code` (colonnes ajoutées par 21.10, V60) à la confirmation, pour la ventilation des revenus par plan et cycle.
+- [x] [Deferred-from: 21.10, 2026-11-09] (fait en 21-1, 2026-11-09) Prix figé à l'initiation : appeler le port `subscription.api.OfferPricing.quote(tenant, plan, cycle, promoCode)` à l'initiation du paiement et enregistrer le prix remisé obtenu (montant de base, remise appliquée, montant dû) avec la demande ; la confirmation (webhook) applique ce prix enregistré, jamais le prix du moment — critère « un paiement déjà initié garde le prix affiché » de 21.10. Un devis à 0 FCFA (remise de 100 % ou montant ≥ prix) est une offre gratuite : l'activer sans passer par MyCoolPay.
+- [x] [Deferred-from: 21.10, 2026-11-09] (fait en 21-1, 2026-11-09) Compter les utilisations d'un code promo (et un éventuel plafond d'utilisations) au paiement confirmé — 21.10 applique le code sans compteur faute de paiement.
+- [x] [Deferred-from: 21.10, 2026-11-09] (fait en 21-1, 2026-11-09) Écrire `tenant_payments.plan_code` et `cycle_code` (colonnes ajoutées par 21.10, V60) à la confirmation, pour la ventilation des revenus par plan et cycle.
 
 ### Story 21.2 : Achats intégrés iOS (StoreKit / RevenueCat) et abonnements externes
 

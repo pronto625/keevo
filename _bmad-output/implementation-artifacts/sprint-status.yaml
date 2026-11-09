@@ -372,10 +372,12 @@ development_status:
   m20-14-boutique-des-documents: backlog  # API b5b41077+676dc274+d1cdf583 — storeId/storeName sur les documents (création, liste ?storeId= propriétaire seul), visibilité par rôle (employé = ses documents, gérant/lecteur = sa boutique, 404 hors portée), chiffres par boutique avec factures
   m20-11-module-finance: backlog  # API 04620d05 — GET /api/v1/finance/summary (period=AAAA-MM|AAAA ou startDate/endDate, storeId) : CA HT, dépenses, résultat, marge, comparaison, séries, byStore ; propriétaire seul ; contrat finance-math-cases.json
   m20-8-envoi-sms-email: backlog  # API 26ab9513 — POST /invoices/{id}/send {channel|channels[], phone?, email?} (SMS, EMAIL, WHATSAPP), SEND_INVOICE hors ligne mis en file (outbox, 5 essais), lastSentChannel / lastSendStatus dans le pull, statut incertain 409
+  m21-1-payments-mobile-money: backlog  # API 1eafeb25 — « Mon plan » : payer par Orange Money / MTN (checkout, code OTP, suivi, annulation, offre gratuite)
   m21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — « Mon plan » : GET /subscription/offers (plans, plafonds, prix par durée, prix barré + fin de promotion, code promo)
 
   # ─────────────────────────────────────────────────────────
   # DASHBOARD — parties super-admin des stories livrées côté API (dashboard livré depuis un autre dépôt)
+  d21-1-payments-mobile-money: backlog  # API 1eafeb25 — paiements en ligne (badge, auteur) ; plafond et compteur des codes promo
   d21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — écran « Offre » : plans, durées, grille de prix + historique, essai, remises, journal ; revenus par plan ; durée à l'activation
   # Directives : section « ## Dashboard super-admin (autre dépôt) » à la fin de chaque spec.
   # Statuts : backlog → in-progress → review (livré, à tester ici) → done (testé ici). d16-11 (session) et d16-4 (conventions admin, tâches de fond) à lire en premier.
@@ -473,8 +475,8 @@ development_status:
   20-12-acceptation-parcours-bref: done  # 2026-11-08 BrefJourneyAcceptanceFullContextTest — journée Bref de bout en bout sur l API Keevo (OTP → devis → conversion → acompte → échéance → retard → paiement → SMS → dépense → finance → lien public) + scénario caisse Keevo, 11/11 verts, aucun correctif de production ; devis converti dont la facture est annulée : Bref n offre rien, Keevo identique (duplication proposée, non construite)
   epic-20-retrospective: optional
 
-  epic-21: in-progress  # P1b Monétisation & engagement — 2026-11-09 21-10 done
-  21-1-payments-mobile-money: backlog  # 2026-11-09 21-10 — 3 items (prix figé à l'initiation via OfferPricing.quote, compteur des codes promo, plan/cycle du paiement)
+  epic-21: in-progress  # P1b Monétisation & engagement — 2026-11-09 21-10 done, 21-1 done
+  21-1-payments-mobile-money: done  # 2026-11-09 build-auto (spec-21-1-payments-mobile-money.md) — module payments (V61), checkout Mobile Money MyCoolPay derrière un port (sandbox dev/test, désactivé par défaut), webhook signé idempotent ; revue 5 couches (55 constats, corrigés dont 5 high, rejetés motivés, 0 reporté), tests verts (payments 39, subscription 145, architecture 134, admin 688, identity 866, shared 1 321), live keevo_dev OK ; revue de suivi recommandée | 2026-11-09 21-10 — 3 items faits (prix figé, compteur + plafond des codes promo, plan/cycle du paiement)
   21-2-storekit-revenuecat: backlog  # 2026-11-09 21-10 — 1 item (écart prix App Store / grille affiché au super-admin)
   21-3-credit-packs-sms: backlog
   21-4-ai-assistant: backlog  # 2026-11-02 réécrite : assistant par outils (21-8), parité Bref Point, pas de SQL généré
