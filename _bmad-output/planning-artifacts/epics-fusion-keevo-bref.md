@@ -1121,7 +1121,7 @@ So that **mon abonnement Apple actuel continue après la migration (FUS-FR9, FUS
 **Then** il reste valide car les UUID utilisateur sont conservés (FUS-MIG2) — vérifié en sandbox avant la vague Apple
 
 **Éléments routés vers 21.2 (story 21.10, 2026-11-09) :**
-- [ ] [Deferred-from: 21.10, 2026-11-09] Écart de prix App Store : les prix Apple se règlent dans App Store Connect ; lire les produits StoreKit (RevenueCat) et afficher au super-admin, dans le catalogue d'offres (`GET /api/v1/admin/offers`), l'écart entre le prix Apple et la grille configurable par plan et cycle.
+- [x] [Deferred-from: 21.10, 2026-11-09] (fait en 21-2, 2026-11-09 : produits App Store dans le catalogue, prix Apple saisi ou constaté sur un achat RevenueCat, écart avec la grille dans `GET /api/v1/admin/offers` → `storeProducts`) Écart de prix App Store : les prix Apple se règlent dans App Store Connect ; lire les produits StoreKit (RevenueCat) et afficher au super-admin, dans le catalogue d'offres (`GET /api/v1/admin/offers`), l'écart entre le prix Apple et la grille configurable par plan et cycle.
 
 ### Story 21.3 : Crédit de compte et packs SMS
 
@@ -1806,6 +1806,9 @@ So that **personne ne perd ce qu'il a payé (FUS-MIG8)**.
 **Given** les abonnements, demandes de paiement, transactions Apple, crédit, packs SMS et compteurs du mois
 **When** ils sont importés
 **Then** le profil du tenant est celui que donne `SUBSCRIPTION_IN_FORCE` à la date de migration (grâce Apple incluse ; un owner sans abonnement en vigueur arrive en FREE, sans grâce supplémentaire : ADR-07), `expires_at` = fin de la période payée, `external_subscriptions` et `tenant_payments` sont alimentés, crédit et packs reportés au franc près, et `tenant_plan_events` reçoit `MIGRATION_BREF`
+
+**Éléments routés vers 24.5 (story 21.2, 2026-11-09) :**
+- [ ] [Deferred-from: 21.2 review, 2026-11-09] Import des événements RevenueCat déjà traités par api-bref [keevo/backend/src/main/resources/db/migration/V62__app_store_subscriptions.sql] — la table Keevo `revenuecat_webhook_event` a des colonnes différentes de celle de Bref (`id`, `type`, `app_user_id`, `original_transaction_id`, `environment`, `event_timestamp_ms`, `tenant_id`, `outcome`, détails d'achat, `processed_at` contre `subjectKey`, `eventTimestampMs`, `processedAt`, `createdAt` côté Bref) : l'import doit faire la correspondance (`subjectKey` → `original_transaction_id` quand c'est un identifiant de transaction, `outcome = 'APPLIED'`, `processed_at`) et créer les `external_subscriptions` des abonnements Apple en vigueur (`granted_expires_at` = `expires_at` importé, `last_event_ms` = dernier événement importé) pour qu'aucun événement ne soit rejoué ni qu'un événement ancien soit appliqué. Réglé par un test d'import sur une copie de la base Bref.
 
 ### Story 24.6 : Import des données annexes et index du portail
 
