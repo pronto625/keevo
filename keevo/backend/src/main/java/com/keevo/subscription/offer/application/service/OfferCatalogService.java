@@ -76,12 +76,22 @@ public class OfferCatalogService implements OfferAdministration {
     private final PlanCatalogStore catalogStore;
     private final OfferStore store;
     private final Clock clock;
+    /** Story 21.2 — App Store products ({@code null} in the unit tests built without it). */
+    private final StoreProductService storeProducts;
 
-    public OfferCatalogService(PlanCatalog catalog, PlanCatalogStore catalogStore, OfferStore store, Clock clock) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public OfferCatalogService(PlanCatalog catalog, PlanCatalogStore catalogStore, OfferStore store, Clock clock,
+                               StoreProductService storeProducts) {
         this.catalog = catalog;
         this.catalogStore = catalogStore;
         this.store = store;
         this.clock = clock;
+        this.storeProducts = storeProducts;
+    }
+
+    /** Without App Store products (unit tests of the 21.10 catalogue). */
+    public OfferCatalogService(PlanCatalog catalog, PlanCatalogStore catalogStore, OfferStore store, Clock clock) {
+        this(catalog, catalogStore, store, clock, null);
     }
 
     // ── catalogue ─────────────────────────────────────────────────────────────
@@ -99,7 +109,7 @@ public class OfferCatalogService implements OfferAdministration {
                         pricesByPlan.getOrDefault(p.code().code(), List.of()), cyclesByCode))
                 .toList();
         return new CatalogueView(plans, cycles.stream().map(OfferCatalogService::cycleItem).toList(),
-                settingsView(catalog.settings()));
+                settingsView(catalog.settings()), storeProducts == null ? List.of() : storeProducts.views());
     }
 
     @Override
@@ -483,6 +493,23 @@ public class OfferCatalogService implements OfferAdministration {
         store.journal(OfferEntity.DISCOUNT, id.toString(), "Remise " + quoted(current.label()) + " archivée",
                 actorId);
         return views(List.of(archived)).get(0);
+    }
+
+    // ── App Store products (Story 21.2) ───────────────────────────────────────
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StoreProductView> storeProducts() {
+        return storeProducts == null ? List.of() : storeProducts.views();
+    }
+
+    @Override
+    @Transactional
+    public StoreProductView saveStoreProduct(String productId, StoreProductInput input, UUID actorId) {
+        if (storeProducts == null) {
+            throw new IllegalStateException("Store products not wired");
+        }
+        return storeProducts.save(productId, input, actorId);
     }
 
     // ── journal ───────────────────────────────────────────────────────────────

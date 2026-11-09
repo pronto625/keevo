@@ -5,5 +5,7 @@ public enum PaymentMethod {
     MOBILE_MONEY,
     CASH,
     BANK_TRANSFER,
-    OTHER
+    OTHER,
+    /** Story 21.2 — an App Store purchase of the owner (RevenueCat event), never entered by the super-admin. */
+    APP_STORE
 }

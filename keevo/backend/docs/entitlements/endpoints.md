@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 317 — gated: 138, exempt: 179.
+Handlers: 323 — gated: 138, exempt: 185.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -79,6 +79,8 @@ Handlers: 317 — gated: 138, exempt: 179.
 | PUT | `/api/v1/admin/offers/prices/{planCode}/{cycleCode}` | — | — | — | super-admin | AdminOfferController#setPrice |
 | GET | `/api/v1/admin/offers/quote` | — | — | — | super-admin | AdminOfferController#quote |
 | PUT | `/api/v1/admin/offers/settings` | — | — | — | super-admin | AdminOfferController#updateSettings |
+| GET | `/api/v1/admin/offers/store-products` | — | — | — | super-admin | AdminOfferController#storeProducts |
+| PUT | `/api/v1/admin/offers/store-products/{productId:.+}` | — | — | — | super-admin | AdminOfferController#saveStoreProduct |
 | GET | `/api/v1/admin/operations/inactive-tenants` | — | — | — | super-admin | AdminOperationsController#listInactiveTenants |
 | GET | `/api/v1/admin/operations/overview` | — | — | — | super-admin | AdminOperationsController#getOverview |
 | GET | `/api/v1/admin/operations/tenants` | — | — | — | super-admin | AdminOperationsController#listTenantActivity |
@@ -245,9 +247,13 @@ Handlers: 317 — gated: 138, exempt: 179.
 | GET | `/api/v1/notifications/unread-count` | `messaging` | READ | — |  | NotificationController#unreadCount |
 | PATCH | `/api/v1/notifications/{id}/read` | `messaging` | WRITE | — |  | NotificationController#markRead |
 | POST | `/api/v1/onboarding/complete` | — | — | — | inscription / onboarding | OnboardingController#complete |
+| GET | `/api/v1/payments/app-store/products` | — | — | — | core: abonnement | AppStoreController#products |
+| GET | `/api/v1/payments/app-store/subscription` | — | — | — | core: abonnement | AppStoreController#subscription |
+| POST | `/api/v1/payments/app-store/sync` | — | — | — | core: abonnement | AppStoreController#sync |
 | POST | `/api/v1/payments/checkout` | — | — | — | core: abonnement | PaymentsController#checkout |
 | GET | `/api/v1/payments/current` | — | — | — | core: abonnement | PaymentsController#current |
 | POST | `/api/v1/payments/webhook/mycoolpay/{hash}` | — | — | — | rappel du fournisseur de paiement — public, secret d'URL et signature | PaymentWebhookController#myCoolPay |
+| POST | `/api/v1/payments/webhook/revenuecat` | — | — | — | rappel du fournisseur de paiement — public, secret dans l'en-tête Authorization | RevenueCatWebhookController#revenueCat |
 | GET | `/api/v1/payments/{id}` | — | — | — | core: abonnement | PaymentsController#status |
 | POST | `/api/v1/payments/{id}/authorize` | — | — | — | core: abonnement | PaymentsController#authorize |
 | POST | `/api/v1/payments/{id}/cancel` | — | — | — | core: abonnement | PaymentsController#cancel |

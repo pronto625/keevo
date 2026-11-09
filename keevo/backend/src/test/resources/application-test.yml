@@ -27,6 +27,12 @@ keevo:
     mycoolpay:
       private-key: test-private-key
       callback-hash: test-callback
+    app-store:
+      webhook-secret: test-revenuecat-secret
+      accept-sandbox: false
+      review-account-email: review@keevo.test
+      revenuecat:
+        mode: fake
   product-photo:
     storage-dir: ${java.io.tmpdir}/keevo-test-product-photos
   company-logo:

@@ -42,7 +42,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Import({AdminRevenueService.class, AdminRevenueServiceIntegrationTest.FixedClock.class,
         com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class,
         com.keevo.subscription.offer.adapter.out.persistence.JdbcOfferStore.class,
-        com.keevo.subscription.offer.application.service.OfferCatalogService.class})
+        com.keevo.subscription.offer.application.service.OfferCatalogService.class,
+        com.keevo.subscription.offer.application.service.StoreProductService.class,
+        com.keevo.subscription.offer.adapter.out.persistence.JdbcStoreProductStore.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("AdminRevenueService on PostgreSQL (9-3)")
 class AdminRevenueServiceIntegrationTest extends PostgresIntegrationTest {

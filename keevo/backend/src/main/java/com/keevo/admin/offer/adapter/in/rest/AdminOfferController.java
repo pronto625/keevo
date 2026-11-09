@@ -7,6 +7,7 @@ import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.PlanRequest;
 import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.PlanUpdateRequest;
 import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.PriceRequest;
 import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.SettingsRequest;
+import com.keevo.admin.offer.adapter.in.rest.dto.OfferRequests.StoreProductRequest;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.module.EntitlementExempt;
@@ -24,6 +25,8 @@ import com.keevo.subscription.api.OfferAdministration.PriceChangeView;
 import com.keevo.subscription.api.OfferAdministration.PriceItem;
 import com.keevo.subscription.api.OfferAdministration.SettingsInput;
 import com.keevo.subscription.api.OfferAdministration.SettingsView;
+import com.keevo.subscription.api.OfferAdministration.StoreProductInput;
+import com.keevo.subscription.api.OfferAdministration.StoreProductView;
 import com.keevo.subscription.api.OfferPricing;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -267,6 +270,26 @@ public class AdminOfferController {
             @RequestParam(required = false) String promoCode) {
         CurrentActor.requireSuperAdmin();
         return ok(pricing.quote(tenantId, planCode, cycleCode, promoCode));
+    }
+
+    // ── App Store products (Story 21.2) ───────────────────────────────────────
+
+    @Operation(summary = "App Store products (inactive included): plan and cycle granted, Apple price (declared or "
+            + "observed on a purchase), grid price and gap", security = @SecurityRequirement(name = "bearerAuth"))
+    @GetMapping("/store-products")
+    public ResponseEntity<ApiResponseWrapper<List<StoreProductView>>> storeProducts() {
+        CurrentActor.requireSuperAdmin();
+        return ok(offers.storeProducts());
+    }
+
+    @Operation(summary = "Create or replace the mapping of an App Store product (planCode: live paid plan, cycleCode, "
+            + "declaredPriceXaf optional, active default true)", security = @SecurityRequirement(name = "bearerAuth"))
+    @PutMapping("/store-products/{productId:.+}")
+    public ResponseEntity<ApiResponseWrapper<StoreProductView>> saveStoreProduct(
+            @PathVariable String productId, @RequestBody(required = false) StoreProductRequest body) {
+        CurrentActor.requireSuperAdmin();
+        return ok(offers.saveStoreProduct(productId, body == null ? null : new StoreProductInput(body.planCode(),
+                body.cycleCode(), body.declaredPriceXaf(), body.active()), CurrentActor.actorId()));
     }
 
     // ── mapping ───────────────────────────────────────────────────────────────

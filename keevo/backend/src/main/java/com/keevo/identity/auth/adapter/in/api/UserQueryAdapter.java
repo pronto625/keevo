@@ -1,5 +1,6 @@
 package com.keevo.identity.auth.adapter.in.api;
 
+import com.keevo.identity.api.OwnedTenantRef;
 import com.keevo.identity.api.UserQueryPort;
 import com.keevo.identity.auth.domain.model.User;
 import com.keevo.identity.auth.domain.model.UserMembershipInfo;
@@ -39,5 +40,18 @@ class UserQueryAdapter implements UserQueryPort {
         return userRepository.findMembershipsWithTenantInfo(userId).stream()
                 .map(UserMembershipInfo::schemaName)
                 .toList();
+    }
+
+    @Override
+    public List<OwnedTenantRef> findOwnedTenants(UUID userId) {
+        return userRepository.findMembershipsWithTenantInfo(userId).stream()
+                .filter(m -> "OWNER".equals(m.role()))
+                .map(m -> new OwnedTenantRef(m.tenantCode(), m.schemaName()))
+                .toList();
+    }
+
+    @Override
+    public Optional<String> findEmail(UUID userId) {
+        return userRepository.findById(userId).map(User::getEmail).filter(e -> !e.isBlank());
     }
 }

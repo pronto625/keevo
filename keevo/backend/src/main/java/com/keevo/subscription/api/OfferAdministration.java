@@ -69,9 +69,51 @@ public interface OfferAdministration {
      */
     List<ChangeView> changes(Instant before, UUID beforeId, Integer limit);
 
+    /** Story 21.2 — the App Store products (inactive included) with the Apple price, the grid price and the gap. */
+    List<StoreProductView> storeProducts();
+
+    /**
+     * Story 21.2 — creates or replaces the mapping of an App Store product (plan × cycle, declared Apple price,
+     * active); journaled. 422 {@code VALIDATION_ERROR} with {@code details.<field>} on a bad product id, plan, cycle or
+     * price.
+     */
+    StoreProductView saveStoreProduct(String productId, StoreProductInput input, UUID actorId);
+
     // ── views ─────────────────────────────────────────────────────────────────
 
-    record CatalogueView(List<PlanItem> plans, List<CycleItem> cycles, SettingsView settings) {
+    /**
+     * @param storeProducts Story 21.2 — the App Store products with the gap between the Apple price and the grid
+     */
+    record CatalogueView(List<PlanItem> plans, List<CycleItem> cycles, SettingsView settings,
+                         List<StoreProductView> storeProducts) {
+
+        /** Without App Store products (before Story 21.2). */
+        public CatalogueView(List<PlanItem> plans, List<CycleItem> cycles, SettingsView settings) {
+            this(plans, cycles, settings, List.of());
+        }
+    }
+
+    /**
+     * Story 21.2 — an App Store product of the catalogue.
+     *
+     * @param productId          the product identifier typed in App Store Connect
+     * @param storeLabel         « App Store »
+     * @param declaredPriceXaf   Apple price entered by the super-admin, {@code null} when not entered
+     * @param observedPrice      price of the last purchase seen in a RevenueCat event, in {@code observedCurrency}
+     * @param observedPriceXaf   its XAF equivalent when known (XAF, or EUR at the fixed peg)
+     * @param applePriceXaf      the Apple price used for the gap: declared, else observed in XAF, else {@code null}
+     * @param applePriceSource   {@code DECLARED | OBSERVED | NONE}
+     * @param applePriceSourceLabel French: « Saisi » / « Constaté sur un achat » / « Prix App Store non renseigné »
+     * @param gridPriceXaf       the configurable grid price of the plan × cycle, {@code null} when none
+     * @param gapXaf             {@code applePriceXaf - gridPriceXaf}, {@code null} when one of them is unknown
+     * @param gapLabel           French: « 1 000 FCFA de moins que la grille », « Identique à la grille », …
+     */
+    record StoreProductView(String store, String storeLabel, String productId, String planCode, String planLabel,
+                            String cycleCode, String cycleLabel, boolean active, Long declaredPriceXaf,
+                            BigDecimal observedPrice, String observedCurrency, Long observedPriceXaf,
+                            Instant observedAt, Long applePriceXaf, String applePriceSource,
+                            String applePriceSourceLabel, Long gridPriceXaf, Long gapXaf, String gapLabel,
+                            Instant updatedAt) {
     }
 
     /**
@@ -166,5 +208,14 @@ public interface OfferAdministration {
             this(scope, label, percentOff, amountOffXaf, planCodes, cycleCodes, startsAt, endsAt, tenantId, promoCode,
                     null);
         }
+    }
+
+    /**
+     * Story 21.2 — the mapping of an App Store product.
+     *
+     * @param declaredPriceXaf Apple price read in App Store Connect, {@code null} = not entered
+     * @param active           offered to new buyers ({@code null} = true)
+     */
+    record StoreProductInput(String planCode, String cycleCode, Long declaredPriceXaf, Boolean active) {
     }
 }

@@ -337,6 +337,15 @@ keevo:
       public-key: ${MYCOOLPAY_PUBLIC_KEY:}
       private-key: ${MYCOOLPAY_PRIVATE_KEY:}
       callback-hash: ${MYCOOLPAY_CALLBACK_HASH:}
+    # Story 21.2 — App Store in-app purchases through RevenueCat (secrets from the environment only)
+    app-store:
+      webhook-secret: ${REVENUECAT_WEBHOOK_SECRET:}
+      accept-sandbox: false
+      review-account-email: ${REVIEW_ACCOUNT_EMAIL:}
+      revenuecat:
+        base-url: ${REVENUECAT_BASE_URL:https://api.revenuecat.com}
+        secret-key: ${REVENUECAT_SECRET_KEY:}
+        project-id: ${REVENUECAT_PROJECT_ID:}
 
 # Springdoc OpenAPI / Swagger UI
 springdoc:

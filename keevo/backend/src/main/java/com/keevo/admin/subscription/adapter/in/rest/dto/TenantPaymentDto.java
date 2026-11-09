@@ -34,11 +34,21 @@ public record TenantPaymentDto(
     public static final String SUPER_ADMIN_LABEL = "Super admin";
     /** Story 21.1 — recorder label of an online payment of the owner. */
     public static final String ONLINE_LABEL = "Paiement en ligne (Mobile Money)";
+    /** Story 21.2 — recorder label of an App Store purchase of the owner. */
+    public static final String APP_STORE_LABEL = "Paiement en ligne (App Store)";
 
     /** Story 21.10 — with the French labels of the plan and of the cycle paid for. */
     public static TenantPaymentDto from(TenantPayment p, String planLabel, String cycleLabel) {
         return new TenantPaymentDto(p.id(), p.paidAt(), p.amountXaf(), p.method().name(),
-                p.periodStart(), p.periodEnd(), p.note(), p.online() ? ONLINE_LABEL : SUPER_ADMIN_LABEL, p.voidedAt(),
+                p.periodStart(), p.periodEnd(), p.note(), recorder(p), p.voidedAt(),
                 p.voidReason(), p.planCode(), planLabel, p.cycleCode(), cycleLabel, p.online());
+    }
+
+    private static String recorder(TenantPayment p) {
+        if (!p.online()) {
+            return SUPER_ADMIN_LABEL;
+        }
+        return p.method() == com.keevo.admin.subscription.domain.model.PaymentMethod.APP_STORE ? APP_STORE_LABEL
+                : ONLINE_LABEL;
     }
 }

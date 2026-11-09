@@ -6,7 +6,9 @@ public enum OfferEntity {
     CYCLE("Durée"),
     PRICE("Prix"),
     SETTINGS("Réglages"),
-    DISCOUNT("Remise");
+    DISCOUNT("Remise"),
+    /** Story 21.2 — an App Store product mapping. */
+    STORE_PRODUCT("Produit App Store");
 
     private final String label;
 

@@ -54,7 +54,9 @@ public class JdbcOfferStore implements OfferStore {
 
     static final String PRICES_SQL = "SELECT plan_code, cycle_code, amount_xaf, updated_at FROM public.plan_prices";
     static final String CYCLE_IN_USE_SQL = "SELECT EXISTS (SELECT 1 FROM public.plan_prices WHERE cycle_code = ?) "
-            + "OR EXISTS (SELECT 1 FROM public.tenant_payments WHERE cycle_code = ?)";
+            + "OR EXISTS (SELECT 1 FROM public.tenant_payments WHERE cycle_code = ?) "
+            // Story 21.2 — an App Store product has a fixed Apple duration (index ix_store_products_cycle)
+            + "OR EXISTS (SELECT 1 FROM public.store_products WHERE cycle_code = ?)";
     static final String LOCK_PLAN_SQL = "SELECT code FROM public.plans WHERE code = ? FOR UPDATE";
     static final String INSERT_PLAN_SQL = "INSERT INTO public.plans (code, label, description, sort_order, visible, "
             + "kind, archived_at) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (code) DO NOTHING";
@@ -169,7 +171,7 @@ public class JdbcOfferStore implements OfferStore {
 
     @Override
     public boolean cycleInUse(String code) {
-        return Boolean.TRUE.equals(jdbc.queryForObject(CYCLE_IN_USE_SQL, Boolean.class, code, code));
+        return Boolean.TRUE.equals(jdbc.queryForObject(CYCLE_IN_USE_SQL, Boolean.class, code, code, code));
     }
 
     // ── prices ────────────────────────────────────────────────────────────────

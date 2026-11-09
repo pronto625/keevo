@@ -59,4 +59,15 @@ public final class OfferRequests {
                                   List<String> planCodes, List<String> cycleCodes, Instant startsAt, Instant endsAt,
                                   UUID tenantId, String promoCode, Integer maxRedemptions) {
     }
+
+    /**
+     * Story 21.2 — the mapping of an App Store product.
+     *
+     * @param planCode         paid plan granted by the product
+     * @param cycleCode        billing cycle of the product
+     * @param declaredPriceXaf Apple price read in App Store Connect (1..100 000 000), absent = not entered
+     * @param active           offered to new buyers (default true; an inactive product still renews)
+     */
+    public record StoreProductRequest(String planCode, String cycleCode, Long declaredPriceXaf, Boolean active) {
+    }
 }

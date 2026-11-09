@@ -27,3 +27,8 @@ keevo:
     mycoolpay:
       private-key: ${MYCOOLPAY_PRIVATE_KEY:sandbox-private-key}
       callback-hash: ${MYCOOLPAY_CALLBACK_HASH:sandbox-callback}
+    app-store:
+      webhook-secret: ${REVENUECAT_WEBHOOK_SECRET:dev-revenuecat-secret}
+      accept-sandbox: true
+      revenuecat:
+        mode: ${REVENUECAT_MODE:fake}

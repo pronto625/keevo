@@ -19,4 +19,13 @@ public interface UserQueryPort {
      * user has no membership.
      */
     List<String> findMembershipSchemas(UUID userId);
+
+    /**
+     * Story 21.2 — the companies the user owns (active OWNER memberships), not tenant-scoped; empty if none (an
+     * unknown user included).
+     */
+    List<OwnedTenantRef> findOwnedTenants(UUID userId);
+
+    /** Story 21.2 — the user's email, empty when the user is unknown or has none. */
+    Optional<String> findEmail(UUID userId);
 }
