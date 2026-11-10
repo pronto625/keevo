@@ -11,21 +11,26 @@ import com.keevo.identity.employee.domain.port.in.DeactivateEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.domain.port.out.MemberDataPurger;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -45,13 +50,14 @@ class RemoveEmployeeServiceTest {
     @Mock UserMembershipRepository memberships;
     @Mock TenantRepository tenants;
     @Mock DeactivateEmployeeUseCase deactivate;
+    @Mock MemberDataPurger purger;
 
     RemoveEmployeeService service;
 
     @BeforeEach
     void setUp() {
         TenantContext.setCurrentTenant(SCHEMA);
-        service = new RemoveEmployeeService(employees, memberships, tenants, deactivate);
+        service = new RemoveEmployeeService(employees, memberships, tenants, deactivate, List.of(purger));
         Tenant tenant = mock(Tenant.class);
         when(tenant.getId()).thenReturn(tenantId);
         when(tenants.findBySchemaName(SCHEMA)).thenReturn(Optional.of(tenant));
@@ -70,8 +76,21 @@ class RemoveEmployeeServiceTest {
 
         service.execute(actor, employeeId);
 
-        verify(deactivate).execute(new DeactivateEmployeeCommand(actor, employeeId));
-        verify(memberships).remove(userId, tenantId);
+        InOrder order = inOrder(deactivate, memberships, purger);
+        order.verify(deactivate).execute(new DeactivateEmployeeCommand(actor, employeeId));
+        order.verify(memberships).remove(userId, tenantId);
+        // 16.6 reprise — the member's personal module data (assistant conversations) of this company
+        order.verify(purger).purgeMember(SCHEMA, userId);
+    }
+
+    @Test
+    @DisplayName("16.6 reprise — a purger failure propagates (the transactional removal is rolled back)")
+    void purgerFailurePropagates() {
+        employee(EmployeeStatus.INACTIVE);
+        membership("EMPLOYEE");
+        doThrow(new IllegalStateException("boom")).when(purger).purgeMember(SCHEMA, userId);
+
+        assertThatThrownBy(() -> service.execute(actor, employeeId)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -98,6 +117,7 @@ class RemoveEmployeeServiceTest {
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.FORBIDDEN);
         verify(deactivate, never()).execute(any());
         verify(memberships, never()).remove(any(), any());
+        verify(purger, never()).purgeMember(any(), any());
     }
 
     private void employee(EmployeeStatus status) {

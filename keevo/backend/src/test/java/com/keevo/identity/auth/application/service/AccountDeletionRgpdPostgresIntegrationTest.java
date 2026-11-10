@@ -127,6 +127,69 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
                 + "'Geste commercial')", tenantId);
         jdbc.update("INSERT INTO public.usage_credit_movements (id, tenant_id, metric, delta, remaining_after, source, "
                 + "actor_id) VALUES (gen_random_uuid(), ?, 'SMS', 10, 10, 'MIGRATION', gen_random_uuid())", tenantId);
+        insertLaterPublicRows(tenantId, schema, userId);
+    }
+
+    private static String digits(int n) {
+        StringBuilder s = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            s.append(ThreadLocalRandom.current().nextInt(10));
+        }
+        return s.toString();
+    }
+
+    /**
+     * 16.6 reprise (2026-11-10) — the tables added after V40 (19.9b–21.10): WhatsApp Business account (21.5), MCP token
+     * (21.9), tool-call journal (21.8), module activation (19.13), company discount + its catalogue journal + a payment
+     * request using it with the payer's phone (21.10 / 21.1), Expo ticket and browser push subscription (19.9b).
+     */
+    private void insertLaterPublicRows(UUID tenantId, String schema, UUID userId) {
+        jdbc.update("INSERT INTO public.whatsapp_accounts (tenant_id, waba_id, phone_number_id, display_phone_number, "
+                + "verified_name, access_token_enc, connected_by) VALUES (?, ?, ?, '+237 699 00 00 00', 'Ets Jean', "
+                + "decode(md5(random()::text) || md5(random()::text) || md5(random()::text), 'hex'), ?)", tenantId, digits(15), digits(15), userId);
+        jdbc.update("INSERT INTO public.mcp_access_tokens (id, tenant_id, user_id, name, token_hash, hint, tools, "
+                + "expires_at) VALUES (gen_random_uuid(), ?, ?, 'Claude de Jean', decode(md5(random()::text) || md5(random()::text), 'hex'), 'abcd', "
+                + "ARRAY['sales_summary'], now() + interval '30 days')", tenantId, userId);
+        jdbc.update("INSERT INTO public.ai_tool_calls (tenant_id, actor_id, tool, channel, outcome, duration_ms) "
+                + "VALUES (?, ?, 'sales_summary', 'ASSISTANT', 'OK', 12)", tenantId, userId);
+        jdbc.update("INSERT INTO public.tenant_module_activation (tenant_id, module_id, activated, updated_by) "
+                + "VALUES (?, 'rgpd-test', true, ?) ON CONFLICT (tenant_id, module_id) DO NOTHING", tenantId, userId);
+        UUID discountId = jdbc.queryForObject("INSERT INTO public.discounts (scope, label, percent_off, tenant_id) "
+                + "VALUES ('TENANT', ?, 10, ?) RETURNING id", UUID.class, "Remise de Jean, " + schema, tenantId);
+        jdbc.update("INSERT INTO public.offer_change_log (entity, entity_key, summary) VALUES ('DISCOUNT', ?, ?)",
+                discountId.toString(), "Remise « Remise de Jean, " + schema + " » créée, pour « Ets Jean " + schema + " »");
+        jdbc.update("INSERT INTO public.payment_requests (id, tenant_id, tenant_schema, requested_by, provider, method, "
+                + "phone, plan_code, cycle_code, plan_label, cycle_label, months, base_xaf, reduction_xaf, "
+                + "amount_due_xaf, discount_id, discount_label, priced_at, status, next_step, app_transaction_ref, "
+                + "failure_reason) "
+                + "VALUES (gen_random_uuid(), ?, ?, ?, 'SANDBOX', 'MTN_MOMO', '+237670000000', 'FREE', 'MONTHLY', "
+                + "'Gratuit', 'Mensuel', 1, 5000, 500, 4500, ?, ?, now(), 'FAILED', 'NONE', ?, 'Solde insuffisant sur le +237670000000')",
+                tenantId, schema, userId, discountId, "Remise de Jean, " + schema, "KVT-" + UUID.randomUUID());
+        jdbc.update("INSERT INTO public.expo_push_tickets (ticket_id, token, tenant_schema) VALUES (?, ?, ?)",
+                UUID.randomUUID().toString(), "ExponentPushToken[" + digits(12) + "]", schema);
+        jdbc.update("INSERT INTO public.web_push_subscriptions (id, user_id, endpoint, p256dh, auth, user_agent) "
+                + "VALUES (gen_random_uuid(), ?, ?, 'p256dh', 'auth', 'Mozilla/5.0 (Jean)')",
+                userId, "https://push.example.test/" + UUID.randomUUID());
+    }
+
+    /** 16.6 reprise — every later-table row of the deleted tenant gone; the payment request kept, redacted. */
+    private void assertLaterPublicRowsGone(Seed seed) {
+        assertThat(count("SELECT count(*) FROM public.whatsapp_accounts WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.mcp_access_tokens WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.ai_tool_calls WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.tenant_module_activation WHERE tenant_id = ?", seed.tenantId()))
+                .isZero();
+        assertThat(count("SELECT count(*) FROM public.discounts WHERE tenant_id = ?", seed.tenantId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.expo_push_tickets WHERE tenant_schema = ?", seed.schema())).isZero();
+        assertThat(count("SELECT count(*) FROM public.offer_change_log WHERE summary LIKE ?", "%" + seed.schema() + "%"))
+                .isZero();
+        Map<String, Object> request = jdbc.queryForMap("SELECT phone, failure_reason, discount_id, discount_label, amount_due_xaf "
+                + "FROM public.payment_requests WHERE tenant_id = ?", seed.tenantId());
+        assertThat(request.get("phone")).isNull();
+        assertThat(request.get("failure_reason")).isNull();
+        assertThat(request.get("discount_id")).isNull();
+        assertThat(request.get("discount_label")).isEqualTo("Remise");
+        assertThat(((Number) request.get("amount_due_xaf")).longValue()).isEqualTo(4500L);
     }
 
     /**
@@ -223,6 +286,7 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
                 seed.tenantId())).isZero();
         assertThat(count("SELECT count(*) FROM public.tenant_plan_events WHERE tenant_id = ? AND cause = 'ADMIN_ACTIVATION'",
                 seed.tenantId())).isEqualTo(1);
+        assertLaterPublicRowsGone(seed);
     }
 
     // ── Matrix ────────────────────────────────────────────────────────────────────────────────
@@ -245,6 +309,8 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
         assertThat(count("SELECT count(*) FROM public.users WHERE id IN (?, ?)", seed.ownerId(), seed.employeeId())).isZero();
         assertThat(count("SELECT count(*) FROM public.password_reset_tokens WHERE user_id = ?", seed.employeeId())).isZero();
         assertThat(count("SELECT count(*) FROM public.password_reset_tokens WHERE phone_number = ?", seed.employeePhone())).isZero();
+        // 16.6 reprise — the orphan's browser push subscription (no FK to users) is gone too
+        assertThat(count("SELECT count(*) FROM public.web_push_subscriptions WHERE user_id = ?", seed.employeeId())).isZero();
         // Anonymised kept row: code, schema, DELETED, billing kept; no name / designation / free text
         Map<String, Object> row = jdbc.queryForMap("SELECT code, schema_name, status, name, designation, "
                 + "suspended_reason, deletion_scheduled_at FROM public.tenants WHERE id = ?", seed.tenantId());
@@ -306,10 +372,28 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
                 .isEqualTo(1);
         assertThat(count("SELECT count(*) FROM public.tenant_modules WHERE tenant_id = ? AND module_id = 'rgpd-test'",
                 other.getId())).isEqualTo(1);
+        // 16.6 reprise — tenant B's later-table rows and the shared user's push subscriptions are untouched
+        assertThat(count("SELECT count(*) FROM public.whatsapp_accounts WHERE tenant_id = ?", other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.mcp_access_tokens WHERE tenant_id = ? AND user_id = ?",
+                other.getId(), seed.employeeId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.ai_tool_calls WHERE tenant_id = ?", other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.tenant_module_activation WHERE tenant_id = ? "
+                + "AND module_id = 'rgpd-test'", other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.discounts WHERE tenant_id = ?", other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.offer_change_log WHERE summary LIKE ?",
+                "%" + other.getSchemaName() + "%")).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.payment_requests WHERE tenant_id = ? AND phone IS NOT NULL",
+                other.getId())).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.expo_push_tickets WHERE tenant_schema = ?", other.getSchemaName()))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.web_push_subscriptions WHERE user_id = ?", seed.employeeId()))
+                .isEqualTo(2);
         assertThat(status(other.getId())).isEqualTo("ACTIVE");
         assertThat(schemaExists(other.getSchemaName())).isTrue();
         // test row only: never leave an unknown module id in the shared database
         jdbc.update("DELETE FROM public.tenant_modules WHERE tenant_id = ? AND module_id = 'rgpd-test'", other.getId());
+        jdbc.update("DELETE FROM public.tenant_module_activation WHERE tenant_id = ? AND module_id = 'rgpd-test'",
+                other.getId());
     }
 
     @Test

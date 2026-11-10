@@ -62,6 +62,12 @@ public class TenantDeletionService {
     /** Story 16.6 (RGPD) — replaces the free-text reason of a voided payment of a deleted tenant. */
     static final String VOID_REASON_REDACTED = "Motif supprimé (RGPD)";
 
+    /** Story 16.6 reprise — replaces a company-specific discount label copied on a kept payment request. */
+    static final String DISCOUNT_LABEL_REDACTED = "Remise";
+
+    /** Story 16.6 reprise — replaces the catalogue journal summary of a deleted company's discount. */
+    static final String DISCOUNT_JOURNAL_REDACTED = "Remise réservée à une entreprise supprimée";
+
     static final String FINAL_WHATSAPP_MESSAGE =
             "Votre compte Keevo a été supprimé. Merci d'avoir utilisé Keevo.";
 
@@ -292,6 +298,9 @@ public class TenantDeletionService {
         if (!orphanedUserIds.isEmpty()) {
             jdbcTemplate.update("DELETE FROM public.device_tokens WHERE user_id = ANY(?::uuid[])",
                     (Object) orphanedUserIds.toArray(new UUID[0]));
+            // 16.6 reprise — browser push subscriptions (endpoint, user agent; no FK to users, story 19.9b)
+            jdbcTemplate.update("DELETE FROM public.web_push_subscriptions WHERE user_id = ANY(?::uuid[])",
+                    (Object) orphanedUserIds.toArray(new UUID[0]));
         }
 
         // 9. Story 16.6 (RGPD): the tenant's other public rows. Tenant columns differ per table:
@@ -325,6 +334,7 @@ public class TenantDeletionService {
         // Push announcements written for this tenant only (title/body); no table references them
         jdbcTemplate.update("DELETE FROM public.global_notifications WHERE target_tenant_id = ?",
                 (Object) tenantId);
+        purgeLaterPublicRows(tenantId, schemaName);
 
         // 10. Durable, non-personal trace — same transaction: rolled back with a failed purge
         deletionLog.record(tenantId, AccountDeletionLogRepository.Event.EXECUTED,
@@ -337,6 +347,36 @@ public class TenantDeletionService {
         log.info("[TenantDeletionService] Tenant {} ({}) fully deleted: {} users orphaned, schema dropped.",
                 tenantId, schemaName, orphanedUserIds.size());
         return ownerPhones;
+    }
+
+    /**
+     * Story 16.6 reprise (2026-11-10) — the tenant's rows in the public tables added after V40 (stories 19.9b–21.10).
+     * They are declared {@code ON DELETE CASCADE} on {@code tenants}, but the deletion keeps the (anonymised) tenant
+     * row, so nothing cascades. One set-based statement per table, FK-safe order: the company-specific discount labels
+     * are redacted where they were copied (payment requests, catalogue journal — whose summary also quotes the company
+     * name) BEFORE the discounts go. Payment requests stay (payment trace) without the payer's phone.
+     */
+    private void purgeLaterPublicRows(UUID tenantId, String schemaName) {
+        jdbcTemplate.update("UPDATE public.payment_requests p SET discount_label = ? FROM public.discounts d "
+                + "WHERE d.id = p.discount_id AND d.tenant_id = ? AND p.tenant_id = ?",
+                DISCOUNT_LABEL_REDACTED, tenantId, tenantId);
+        jdbcTemplate.update("UPDATE public.offer_change_log SET summary = ? WHERE entity = 'DISCOUNT' "
+                + "AND entity_key IN (SELECT id::text FROM public.discounts WHERE tenant_id = ?)",
+                DISCOUNT_JOURNAL_REDACTED, tenantId);
+        jdbcTemplate.update("DELETE FROM public.discounts WHERE tenant_id = ?", (Object) tenantId);
+        // payer phone and the provider's free-text failure message (may echo the number) cleared; amounts, refs kept
+        jdbcTemplate.update("UPDATE public.payment_requests SET phone = NULL, failure_reason = NULL WHERE tenant_id = ? "
+                + "AND (phone IS NOT NULL OR failure_reason IS NOT NULL)", (Object) tenantId);
+        // 21.5 — encrypted WhatsApp Business token, WABA and number ids (the inbox went with the schema)
+        jdbcTemplate.update("DELETE FROM public.whatsapp_accounts WHERE tenant_id = ?", (Object) tenantId);
+        // 21.9 — MCP personal access tokens (a multi-tenant owner keeps the user row, so no user cascade)
+        jdbcTemplate.update("DELETE FROM public.mcp_access_tokens WHERE tenant_id = ?", (Object) tenantId);
+        // 21.8 — tool-call journal (actor ids)
+        jdbcTemplate.update("DELETE FROM public.ai_tool_calls WHERE tenant_id = ?", (Object) tenantId);
+        // 19.13 — owner module activations (actor id)
+        jdbcTemplate.update("DELETE FROM public.tenant_module_activation WHERE tenant_id = ?", (Object) tenantId);
+        // 19.9b — Expo tickets (device push tokens) of the dropped schema
+        jdbcTemplate.update("DELETE FROM public.expo_push_tickets WHERE tenant_schema = ?", (Object) schemaName);
     }
 
     private static boolean isDeletable(Map<String, Object> row, boolean requireExpired, Instant now) {

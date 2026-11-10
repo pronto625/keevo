@@ -12,10 +12,12 @@ import com.keevo.identity.employee.domain.port.in.RemoveEmployeeUseCase;
 import com.keevo.identity.employee.domain.port.out.EmployeeRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.keevo.shared.domain.port.out.MemberDataPurger;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -24,6 +26,10 @@ import java.util.UUID;
  * closed, refresh tokens of this account revoked, access tokens cut, event audited), then the membership row is
  * deleted so the person is no longer a member of the account. The employee record stays, inactive, for the history
  * (sales, invoices, expenses keep their author).
+ *
+ * <p>Story 16.6 (RGPD, reprise 2026-11-10) — then every {@link MemberDataPurger} deletes the personal data its module
+ * keeps for this member in this company (the assistant's conversations…), in the same transaction: a failure rolls the
+ * removal back. A deactivation alone (reversible) purges nothing.
  */
 @Service
 public class RemoveEmployeeService implements RemoveEmployeeUseCase {
@@ -34,13 +40,16 @@ public class RemoveEmployeeService implements RemoveEmployeeUseCase {
     private final UserMembershipRepository membershipRepository;
     private final TenantRepository tenantRepository;
     private final DeactivateEmployeeUseCase deactivate;
+    private final List<MemberDataPurger> memberDataPurgers;
 
     public RemoveEmployeeService(EmployeeRepository employeeRepository, UserMembershipRepository membershipRepository,
-                                 TenantRepository tenantRepository, DeactivateEmployeeUseCase deactivate) {
+                                 TenantRepository tenantRepository, DeactivateEmployeeUseCase deactivate,
+                                 List<MemberDataPurger> memberDataPurgers) {
         this.employeeRepository = employeeRepository;
         this.membershipRepository = membershipRepository;
         this.tenantRepository = tenantRepository;
         this.deactivate = deactivate;
+        this.memberDataPurgers = memberDataPurgers != null ? List.copyOf(memberDataPurgers) : List.of();
     }
 
     @Override
@@ -60,5 +69,8 @@ public class RemoveEmployeeService implements RemoveEmployeeUseCase {
             deactivate.execute(new DeactivateEmployeeCommand(actorId, employeeId));
         }
         membershipRepository.remove(employee.getUserId(), tenantId);
+        for (MemberDataPurger purger : memberDataPurgers) {
+            purger.purgeMember(schema, employee.getUserId());
+        }
     }
 }

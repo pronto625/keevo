@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.assistant.chat.adapter.out.model.ScriptedAssistantModel;
 import com.keevo.assistant.chat.domain.port.out.AssistantModel;
+import com.keevo.assistant.conversation.adapter.out.persistence.AiConversationMemberPurger;
+import com.keevo.identity.api.EmployeeCommandPort;
 import com.keevo.identity.auth.application.service.TenantFactory;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
@@ -59,6 +61,8 @@ class AiAssistantFullContextTest extends FullContextIntegrationTest {
     @Autowired JdbcTemplate jdbc;
     @Autowired ModuleRegistry moduleRegistry;
     @Autowired AssistantModel assistantModel;
+    @Autowired EmployeeCommandPort employeeCommands;
+    @Autowired AiConversationMemberPurger memberPurger;
 
     record Member(UUID user, String role, UUID store, String token) {
     }
@@ -187,6 +191,59 @@ class AiAssistantFullContextTest extends FullContextIntegrationTest {
 
     private static Map<String, Object> question(String text) {
         return Map.of("message", text);
+    }
+
+    // ── Story 16.6 reprise (RGPD) — member removal ───────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("16.6 reprise — removing a member (super-admin port) erases their conversations; the others' stay")
+    void memberRemovalErasesTheirConversations() throws Exception {
+        data(http(owner, HttpMethod.POST, "/api/v1/ai/conversations", Map.of("firstMessage", "Point du jour")), 201);
+        for (String q : List.of("Mes ventes du client Awa +237690000011", "Mes impayés")) {
+            data(http(employee, HttpMethod.POST, "/api/v1/ai/conversations", Map.of("firstMessage", q)), 201);
+        }
+        String table = "\"" + schema + "\".ai_conversations";
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE user_id = ?", Integer.class,
+                employee.user())).isEqualTo(2);
+        UUID employeeId = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".employees WHERE user_id = ?",
+                UUID.class, employee.user());
+        // a former owner's MCP token for this company (McpTokenMemberPurger)
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, password_hash, "
+                + "phone_number, role) VALUES (?, now(), now(), true, 0, 'hash', ?, 'EMPLOYEE') ON CONFLICT (id) DO NOTHING",
+                employee.user(), "+2376" + String.format("%08d", java.util.concurrent.ThreadLocalRandom.current()
+                        .nextInt(100_000_000)));
+        jdbc.update("INSERT INTO public.mcp_access_tokens (id, tenant_id, user_id, name, token_hash, hint, tools, "
+                + "expires_at) SELECT gen_random_uuid(), t.id, ?, 'Claude', decode(md5(random()::text) "
+                + "|| md5(random()::text), 'hex'), 'abcd', ARRAY['sales_summary'], now() + interval '30 days' "
+                + "FROM public.tenants t WHERE t.schema_name = ?", employee.user(), schema);
+
+        TenantContext.setCurrentTenant(schema);
+        try {
+            employeeCommands.remove(schema, owner.user(), employeeId);
+        } finally {
+            TenantContext.clear();
+        }
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE user_id = ?", Integer.class,
+                employee.user())).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.mcp_access_tokens WHERE user_id = ?", Integer.class,
+                employee.user())).isZero();
+        assertThat(data(http(owner, HttpMethod.GET, "/api/v1/ai/conversations", null), 200)).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("16.6 reprise — a company where the assistant never stored anything: the member purge is a no-op")
+    void memberPurgeWithoutModuleTable() {
+        String fresh = newTenant();
+        // a new company may get the module table at provisioning: drop it to stand for a never-provisioned one
+        jdbc.execute("DROP TABLE IF EXISTS \"" + fresh + "\".ai_conversations");
+        assertThat(jdbc.queryForObject("SELECT to_regclass(?)::text", String.class,
+                "\"" + fresh + "\".ai_conversations")).isNull();
+
+        memberPurger.purgeMember(fresh, UUID.randomUUID());
+
+        assertThat(jdbc.queryForObject("SELECT to_regclass(?)::text", String.class,
+                "\"" + fresh + "\".ai_conversations")).isNull();
     }
 
     // ── conversations ────────────────────────────────────────────────────────────────────────────────────

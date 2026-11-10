@@ -226,6 +226,7 @@ class TenantDeletionServiceTest {
 
         verify(jdbcTemplate).queryForList(contains("NOT EXISTS"), eq(UUID.class), any(Object.class));
         verify(jdbcTemplate, never()).update(startsWith("DELETE FROM public.device_tokens"), any(Object.class));
+        verify(jdbcTemplate, never()).update(startsWith("DELETE FROM public.web_push_subscriptions"), any(Object.class));
         verify(tenantRepository).save(argThat(t -> t.getStatus() == TenantStatus.DELETED));
     }
 
@@ -438,6 +439,21 @@ class TenantDeletionServiceTest {
                 eq(TenantDeletionService.VOID_REASON_REDACTED), eq(tenantId));
         verify(jdbcTemplate).update("UPDATE public.tenant_plan_events SET reason = NULL WHERE tenant_id = ?", (Object) tenantId);
         verify(jdbcTemplate).update("DELETE FROM public.global_notifications WHERE target_tenant_id = ?", (Object) tenantId);
+        // 16.6 reprise (2026-11-10): tables added after V40 — redactions before the discounts go, then the deletes
+        order = inOrder(jdbcTemplate, deletionLog);
+        order.verify(jdbcTemplate).update(startsWith("UPDATE public.payment_requests p SET discount_label"),
+                eq(TenantDeletionService.DISCOUNT_LABEL_REDACTED), eq(tenantId), eq(tenantId));
+        order.verify(jdbcTemplate).update(startsWith("UPDATE public.offer_change_log SET summary"),
+                eq(TenantDeletionService.DISCOUNT_JOURNAL_REDACTED), eq(tenantId));
+        order.verify(jdbcTemplate).update("DELETE FROM public.discounts WHERE tenant_id = ?", (Object) tenantId);
+        order.verify(deletionLog).record(tenantId, AccountDeletionLogRepository.Event.EXECUTED,
+                AccountDeletionLogRepository.Source.SYSTEM, null);
+        verify(jdbcTemplate).update(startsWith("UPDATE public.payment_requests SET phone = NULL"), eq((Object) tenantId));
+        verify(jdbcTemplate).update("DELETE FROM public.whatsapp_accounts WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.mcp_access_tokens WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.ai_tool_calls WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.tenant_module_activation WHERE tenant_id = ?", (Object) tenantId);
+        verify(jdbcTemplate).update("DELETE FROM public.expo_push_tickets WHERE tenant_schema = ?", (Object) schemaName);
     }
 
     @Test
