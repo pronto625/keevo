@@ -375,6 +375,7 @@ development_status:
   m21-1-payments-mobile-money: backlog  # API 1eafeb25 — « Mon plan » : payer par Orange Money / MTN (checkout, code OTP, suivi, annulation, offre gratuite)
   m21-10-catalogue-offres-configurable: backlog  # API 14c773c3 — « Mon plan » : GET /subscription/offers (plans, plafonds, prix par durée, prix barré + fin de promotion, code promo)
   m21-3-credit-packs-sms: backlog  # API 4792f2b6 — « Mon plan » : solde et historique du crédit, case « Utiliser mon crédit », achat de packs SMS, packs restants/consommés et historique des packs
+  m21-9-serveur-mcp-externe: backlog  # API 7e98bea5 — écran Paramètres « Accès IA externe » (owner) : créer (jeton affiché une fois + adresse MCP), lister, révoquer
   m21-4-ai-assistant: backlog  # API 82085cd2 — onglet Assistant : sujets guidés GET /ai/topics, questions libres POST /ai/chat, conversations (CRUD + suppression groupée)
   m21-2-storekit-revenuecat: backlog  # API 21973fdf — « Mon plan » iOS : achat App Store RevenueCat (logIn id Keevo, attribut keevo_tenant), sync après achat, état de l'abonnement
 
@@ -489,7 +490,7 @@ development_status:
   21-6-campagnes: backlog
   21-7-client-portal: backlog
   21-8-couche-outils-ia-mcp: done  # 2026-11-10 build-auto done (spec-21-8-couche-outils-ia-mcp.md) — Spring AI 1.1.8 (spring-ai-model), 16 outils lecture seule dans 9 beans *McpTools, registre (liste par session, appel par nom JSON, ToolCallback), mêmes contrôles que le REST, audit ai_tool_calls (V64), AiToolCoverageTest + docs/ai/tools.md ; 42 constats (26 corrigés) ; routés → 21-4, 21-9, 16-13 ; pas de partie mobile ni dashboard
-  21-9-serveur-mcp-externe: backlog  # 2026-11-02 FUS-FR39 — après 21-4
+  21-9-serveur-mcp-externe: done  # 2026-11-10 build-auto (spec-21-9-serveur-mcp-externe.md) — module payant mcp-access (V66 : TEAM, BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL ; désactivé par l owner pour l existant), POST /api/v1/mcp Streamable HTTP sans état (SDK MCP 0.18.3 de Spring AI 1.1.8 câblé à la main), jetons personnels kvp_ hachés SHA-256 (affichés une fois, limités à des outils, 7/30/90/365 j, 10 par owner, révocation immédiate), session owner par requête (SPI CredentialAuthenticator, contrôles 16-11), limites 30/jeton 60/société 20 échecs/IP par minute, 1 crédit IA par appel servi ; revue 5 couches (43 constats, 15 corrigés, 0 routé), tests verts (mcp 24, architecture 139, assistant 40, identity 866, shared 1 349), live keevo_dev OK ; revue de suivi recommandée | 2026-11-02 FUS-FR39
   21-10-catalogue-offres-configurable: done  # 2026-11-09 build-auto (spec-21-10-catalogue-offres-configurable.md) — revue 5 couches (39 constats, 26 corrigés, 13 rejetés, 0 reporté), tests verts (subscription 143, architecture 131, admin 688, shared 1 320, identity 866), live keevo_dev OK ; routés → 21-1 (3), 21-2 (1), 16-7 (1) ; revue de suivi recommandée | 2026-11-03 ADR-05 : rien de l'offre figé dans le code (plans, modules, plafonds, quotas, cycles, prix, essais, remises) — dashboard super-admin, FUS-FR40
   epic-21-retrospective: optional
 
