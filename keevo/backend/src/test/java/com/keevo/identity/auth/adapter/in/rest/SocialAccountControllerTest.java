@@ -96,6 +96,7 @@ class SocialAccountControllerTest {
         assertThat(cmd.getValue().token()).isEqualTo("tok");
         assertThat(cmd.getValue().authorizationCode()).isEqualTo("code");
         assertThat(cmd.getValue().nonce()).isEqualTo("0123456789abcdef");
+        assertThat(cmd.getValue().clientIp()).isEqualTo("127.0.0.1");
     }
 
     @Test
@@ -135,5 +136,17 @@ class SocialAccountControllerTest {
                 .andExpect(jsonPath("$.error").value("Impossible de retirer votre seul moyen de connexion"));
 
         mockMvc.perform(delete("/api/v1/auth/social/accounts/facebook")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("POST google, provider already linked → 409 SOCIAL_PROVIDER_ALREADY_LINKED; blank nonce accepted as absent")
+    void providerAlreadyLinked() throws Exception {
+        when(socialAccounts.link(any())).thenThrow(new DomainException(ErrorCode.SOCIAL_PROVIDER_ALREADY_LINKED));
+
+        mockMvc.perform(post("/api/v1/auth/social/accounts/google").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idToken\":\"tok\",\"nonce\":\"\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.domainCode").value("SOCIAL_PROVIDER_ALREADY_LINKED"))
+                .andExpect(jsonPath("$.error").value("Un compte de ce fournisseur est déjà lié. Retirez-le d'abord"));
     }
 }

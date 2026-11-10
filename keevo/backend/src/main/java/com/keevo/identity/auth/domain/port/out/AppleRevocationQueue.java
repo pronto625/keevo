@@ -19,6 +19,12 @@ public interface AppleRevocationQueue {
         }
     }
 
+    /**
+     * Queues one token directly (its authenticator row is already gone: unlinked or deleted while the Apple code was
+     * being exchanged). {@code contextId} is the id the blob was encrypted with.
+     */
+    void enqueue(UUID contextId, String clientId, byte[] encryptedToken);
+
     /** At most {@code limit} rows due now, oldest due first (index on {@code next_attempt_at}). */
     List<PendingRevocation> findDue(int limit);
 

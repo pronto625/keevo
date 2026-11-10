@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.adapter.in.rest.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -10,7 +11,7 @@ import jakarta.validation.constraints.Size;
 public record AppleLinkDto(
         @NotBlank @Size(max = 8192) String identityToken,
         @Size(max = 2048) String authorizationCode,
-        @Size(min = 16, max = 128) String nonce
+        @Pattern(regexp = "^$|^.{16,128}$", message = "le nonce doit contenir entre 16 et 128 caractères") String nonce
 ) {
     @Override
     public String toString() {

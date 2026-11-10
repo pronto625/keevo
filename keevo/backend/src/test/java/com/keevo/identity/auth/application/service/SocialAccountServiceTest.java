@@ -218,4 +218,30 @@ class SocialAccountServiceTest {
     void unknownUser() {
         assertCode(() -> service.unlink(UUID.randomUUID(), SocialProvider.APPLE), ErrorCode.USER_NOT_FOUND);
     }
+
+    @Test
+    @DisplayName("link hands provider, token, nonce and client IP to the identity verifier")
+    void linkPassesVerificationInputs() {
+        proven(SocialProvider.GOOGLE, "g1");
+        service.link(new LinkCommand(member.getId(), SocialProvider.GOOGLE, "tok", "nonce-0123456789", null,
+                "10.0.0.7"));
+        verify(verifier).verify(SocialProvider.GOOGLE, "tok", "nonce-0123456789", "10.0.0.7");
+        verify(appleTokenStore, never()).storeIfPossible(any(), any());
+    }
+
+    @Test
+    @DisplayName("Apple relay email is not a way in once Apple is unlinked → LAST_SIGN_IN_METHOD; still one for Google")
+    void appleRelayEmail() {
+        User relay = new User(UUID.randomUUID(), null, null, Role.OWNER, true, NOW, 0, null,
+                "abc123@privaterelay.appleid.com", null, null, null, NOW, null);
+        when(users.lockById(relay.getId())).thenReturn(true);
+        when(users.findById(relay.getId())).thenReturn(Optional.of(relay));
+        when(authenticators.findByUser(relay.getId())).thenReturn(List.of(row(SocialProvider.APPLE, "a1")));
+        assertCode(() -> service.unlink(relay.getId(), SocialProvider.APPLE), ErrorCode.LAST_SIGN_IN_METHOD);
+
+        when(authenticators.findByUser(relay.getId()))
+                .thenReturn(List.of(row(SocialProvider.APPLE, "a1"), row(SocialProvider.GOOGLE, "g1")));
+        service.unlink(relay.getId(), SocialProvider.GOOGLE);
+        verify(authenticators).unlink(relay.getId(), SocialProvider.GOOGLE);
+    }
 }

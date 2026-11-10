@@ -1,6 +1,7 @@
 package com.keevo.identity.auth.adapter.in.rest.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -12,7 +13,7 @@ public record AppleSignInDto(
         @Size(max = 100) String firstName,
         @Size(max = 100) String lastName,
         // Story 19.3b — clear nonce whose SHA-256 hex the app gave Apple (replay protection), optional
-        @Size(min = 16, max = 128) String nonce,
+        @Pattern(regexp = "^$|^.{16,128}$", message = "le nonce doit contenir entre 16 et 128 caractères") String nonce,
         // Story 19.3b — Apple authorization code, kept (as a refresh token) to revoke the link at account deletion
         @Size(max = 2048) String authorizationCode
 ) {

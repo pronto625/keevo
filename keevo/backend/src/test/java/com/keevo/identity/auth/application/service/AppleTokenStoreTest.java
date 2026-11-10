@@ -38,6 +38,7 @@ class AppleTokenStoreTest {
 
     @Mock AppleTokenClient client;
     @Mock UserAuthenticatorRepository authenticators;
+    @Mock com.keevo.identity.auth.domain.port.out.AppleRevocationQueue queue;
 
     private final SecretCipher cipher = new SecretCipher(KEY);
     private AppleTokenStore store;
@@ -47,7 +48,8 @@ class AppleTokenStoreTest {
 
     @BeforeEach
     void setUp() {
-        store = new AppleTokenStore(client, authenticators, cipher);
+        store = new AppleTokenStore(client, authenticators, cipher, queue);
+        when(authenticators.storeRevocationToken(any(), any(), any())).thenReturn(true);
         when(client.enabled()).thenReturn(true);
         when(authenticators.findId(SocialProvider.APPLE, "a-sub")).thenReturn(Optional.of(ROW));
     }
@@ -86,7 +88,7 @@ class AppleTokenStoreTest {
         store.storeIfPossible(APPLE, " ");
         store.storeIfPossible(new SocialIdentity(SocialProvider.GOOGLE, "g", null, false, null, null, "c", null, null),
                 "code");
-        new AppleTokenStore(client, authenticators, new SecretCipher("")).storeIfPossible(APPLE, "code");
+        new AppleTokenStore(client, authenticators, new SecretCipher(""), queue).storeIfPossible(APPLE, "code");
         when(client.enabled()).thenReturn(false);
         store.storeIfPossible(APPLE, "code");
 
@@ -99,5 +101,26 @@ class AppleTokenStoreTest {
         when(client.enabled()).thenReturn(false);
         store.storeIfPossible(APPLE, "code");
         verifyNoInteractions(authenticators);
+    }
+
+    @Test
+    @DisplayName("link removed during the exchange (row gone, or UPDATE on 0 rows) → token queued for revocation")
+    void rowGoneQueuesRevocation() {
+        when(client.exchange("com.keevo.app", "code")).thenReturn(Optional.of(new AppleGrant("rt-9", "a-sub")));
+        when(authenticators.findId(SocialProvider.APPLE, "a-sub")).thenReturn(Optional.empty());
+        store.storeIfPossible(APPLE, "code");
+
+        when(authenticators.findId(SocialProvider.APPLE, "a-sub")).thenReturn(Optional.of(ROW));
+        when(authenticators.storeRevocationToken(any(), any(), any())).thenReturn(false);
+        store.storeIfPossible(APPLE, "code");
+
+        ArgumentCaptor<UUID> context = ArgumentCaptor.forClass(UUID.class);
+        ArgumentCaptor<byte[]> blob = ArgumentCaptor.forClass(byte[].class);
+        verify(queue, org.mockito.Mockito.times(2)).enqueue(context.capture(),
+                org.mockito.ArgumentMatchers.eq("com.keevo.app"), blob.capture());
+        for (int i = 0; i < 2; i++) {
+            assertThat(cipher.decrypt(blob.getAllValues().get(i), context.getAllValues().get(i).toString()))
+                    .isEqualTo("rt-9");
+        }
     }
 }

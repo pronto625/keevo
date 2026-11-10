@@ -179,6 +179,7 @@ keevo:
           key-id: ${APPLE_KEY_ID:}
           private-key: ${APPLE_PRIVATE_KEY:}
           client-ids: ${APPLE_REVOCATION_CLIENT_IDS:}   # default: the Apple audiences
+          web-redirect-uris: ${APPLE_REVOCATION_WEB_REDIRECT_URIS:}   # <services id>=<redirect uri>,… (web flow)
       # Story 19.3b — refuse tokens sent without nonce (true once every app in stores sends one).
       require-nonce: ${SOCIAL_REQUIRE_NONCE:false}
   # Story 19.10 — app versions. Public check limited per IP. Legacy-role guard: an auth request without the

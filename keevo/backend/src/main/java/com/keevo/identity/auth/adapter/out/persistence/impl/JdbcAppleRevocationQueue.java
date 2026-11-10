@@ -18,6 +18,8 @@ public class JdbcAppleRevocationQueue implements AppleRevocationQueue {
     static final String FIND_DUE_SQL =
             "SELECT id, authenticator_id, client_id, token, attempts FROM public.apple_token_revocations "
             + "WHERE next_attempt_at <= now() ORDER BY next_attempt_at LIMIT ?";
+    static final String ENQUEUE_SQL =
+            "INSERT INTO public.apple_token_revocations (authenticator_id, client_id, token) VALUES (?, ?, ?)";
     static final String DELETE_SQL = "DELETE FROM public.apple_token_revocations WHERE id = ANY(?::uuid[])";
     /** Backoff: 2^attempts minutes after this failure, at most one day. */
     static final String RECORD_FAILURES_SQL =
@@ -31,6 +33,11 @@ public class JdbcAppleRevocationQueue implements AppleRevocationQueue {
 
     public JdbcAppleRevocationQueue(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public void enqueue(UUID contextId, String clientId, byte[] encryptedToken) {
+        jdbcTemplate.update(ENQUEUE_SQL, contextId, clientId, encryptedToken);
     }
 
     @Override

@@ -194,4 +194,42 @@ class HttpAppleTokenClientTest {
         assertThatThrownBy(() -> AppleRevocationConfig.create(base, cipher, om, clock))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("client-ids");
     }
+
+    @Test
+    @DisplayName("web Services ID: exchange sends its redirect_uri; native bundle: none")
+    void webRedirectUri() {
+        HttpAppleTokenClient web = new HttpAppleTokenClient(restTemplate, new ObjectMapper(), "TEAM123", "KEY456",
+                keyPair.getPrivate(), Set.of(CLIENT, "com.keevo.web"),
+                Map.of("com.keevo.web", "https://app.keevo.cm/auth/apple"), new MutableTestClock(NOW));
+        server.expect(requestTo(HttpAppleTokenClient.TOKEN_URL))
+                .andExpect(request -> assertThat(form(((org.springframework.mock.http.client.MockClientHttpRequest)
+                        request).getBodyAsString())).containsEntry("redirect_uri", "https://app.keevo.cm/auth/apple"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(HttpAppleTokenClient.TOKEN_URL))
+                .andExpect(request -> assertThat(form(((org.springframework.mock.http.client.MockClientHttpRequest)
+                        request).getBodyAsString())).doesNotContainKey("redirect_uri"))
+                .andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));
+
+        web.exchange("com.keevo.web", "c1");
+        web.exchange(CLIENT, "c2");
+        server.verify();
+    }
+
+    @Test
+    @DisplayName("config: web-redirect-uris parsed; malformed entry → startup fails")
+    void configWebRedirects() {
+        MockEnvironment env = new MockEnvironment()
+                .withProperty(AppleRevocationConfig.PREFIX + "enabled", "true")
+                .withProperty(AppleRevocationConfig.PREFIX + "team-id", "TEAM123")
+                .withProperty(AppleRevocationConfig.PREFIX + "key-id", "KEY456")
+                .withProperty(AppleRevocationConfig.PREFIX + "private-key", pem())
+                .withProperty(AppleRevocationConfig.PREFIX + "client-ids", CLIENT + ",com.keevo.web")
+                .withProperty(AppleRevocationConfig.PREFIX + "web-redirect-uris", "com.keevo.web=https://x/cb");
+        assertThat(AppleRevocationConfig.create(env, cipher, new ObjectMapper(), new MutableTestClock(NOW)))
+                .isInstanceOf(HttpAppleTokenClient.class);
+        env.setProperty(AppleRevocationConfig.PREFIX + "web-redirect-uris", "com.keevo.web");
+        assertThatThrownBy(() -> AppleRevocationConfig.create(env, cipher, new ObjectMapper(),
+                new MutableTestClock(NOW))).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("web-redirect-uris");
+    }
 }

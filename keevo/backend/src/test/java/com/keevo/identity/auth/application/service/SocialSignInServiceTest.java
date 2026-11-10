@@ -443,4 +443,16 @@ class SocialSignInServiceTest {
                 "code-2")), ErrorCode.SOCIAL_TOKEN_INVALID);
         verify(appleTokenStore, never()).storeIfPossible(any(), eq("code-2"));
     }
+
+    @Test
+    @DisplayName("19.3b — nonce refusals count toward the per-IP limit: the 31st call is RATE_LIMIT_EXCEEDED")
+    void nonceRefusalsCounted() {
+        google.identity = withNonce(SocialProvider.GOOGLE, "g1", SocialNonceChecker.sha256Hex("the-real-nonce-123"));
+        SocialSignInCommand wrong = new SocialSignInCommand(SocialProvider.GOOGLE, "t", null, null, "10.0.0.66",
+                "another-nonce-456789", null);
+        for (int i = 0; i < 30; i++) {
+            assertCode(() -> service.signIn(wrong), ErrorCode.SOCIAL_TOKEN_INVALID);
+        }
+        assertCode(() -> service.signIn(wrong), ErrorCode.RATE_LIMIT_EXCEEDED);
+    }
 }

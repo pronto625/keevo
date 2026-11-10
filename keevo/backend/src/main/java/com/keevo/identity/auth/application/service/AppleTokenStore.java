@@ -2,6 +2,7 @@ package com.keevo.identity.auth.application.service;
 
 import com.keevo.identity.auth.domain.model.SocialIdentity;
 import com.keevo.identity.auth.domain.model.SocialProvider;
+import com.keevo.identity.auth.domain.port.out.AppleRevocationQueue;
 import com.keevo.identity.auth.domain.port.out.AppleTokenClient;
 import com.keevo.identity.auth.domain.port.out.UserAuthenticatorRepository;
 import com.keevo.shared.infrastructure.security.crypto.SecretCipher;
@@ -23,6 +24,10 @@ import java.util.UUID;
  * adapter, no code, no cipher key, Apple refusal, a grant for another Apple user or any failure → nothing stored, a
  * log line with the kind only (never the code, token or subject), and the sign-in is not affected.
  *
+ * <p>A link removed while the code was being exchanged (unlink, account deletion) leaves no row to store on: the new
+ * token goes straight to the revocation outbox, so no live Apple token is ever forgotten. Runs on its own executor
+ * ({@code appleTokenExecutor}).
+ *
  * <p>Cost: 1 network call + 1 lookup + 1 UPDATE, both on the {@code (provider, subject)} unique index / primary key.
  */
 @Component
@@ -36,9 +41,11 @@ public class AppleTokenStore {
     private final AppleTokenClient appleTokenClient;
     private final UserAuthenticatorRepository authenticators;
     private final SecretCipher cipher;
+    private final AppleRevocationQueue revocationQueue;
 
     public AppleTokenStore(AppleTokenClient appleTokenClient, UserAuthenticatorRepository authenticators,
-                           SecretCipher cipher) {
+                           SecretCipher cipher, AppleRevocationQueue revocationQueue) {
+        this.revocationQueue = revocationQueue;
         this.appleTokenClient = appleTokenClient;
         this.authenticators = authenticators;
         this.cipher = cipher;
@@ -48,7 +55,7 @@ public class AppleTokenStore {
      * @param identity          verified Apple identity (subject + audience = client id)
      * @param authorizationCode the code sent by the app, or null
      */
-    @Async
+    @Async("appleTokenExecutor")
     public void storeIfPossible(SocialIdentity identity, String authorizationCode) {
         if (identity.provider() != SocialProvider.APPLE || authorizationCode == null || authorizationCode.isBlank()
                 || authorizationCode.length() > CODE_MAX || !appleTokenClient.enabled()) {
@@ -70,11 +77,17 @@ public class AppleTokenStore {
                 return;
             }
             Optional<UUID> rowId = authenticators.findId(SocialProvider.APPLE, identity.subject());
-            if (rowId.isEmpty()) {
-                return;
+            if (rowId.isPresent()) {
+                byte[] blob = cipher.encrypt(grant.get().refreshToken(), rowId.get().toString());
+                if (authenticators.storeRevocationToken(rowId.get(), identity.audience(), blob)) {
+                    return;
+                }
             }
-            byte[] blob = cipher.encrypt(grant.get().refreshToken(), rowId.get().toString());
-            authenticators.storeRevocationToken(rowId.get(), identity.audience(), blob);
+            // The link was removed (unlink, account deletion) while Apple issued this token: revoke it too.
+            UUID context = UUID.randomUUID();
+            revocationQueue.enqueue(context, identity.audience(),
+                    cipher.encrypt(grant.get().refreshToken(), context.toString()));
+            log.info("[social] APPLE token of a removed link queued for revocation");
         } catch (RuntimeException e) {
             log.warn("[social] APPLE token not kept ({})", e.getClass().getSimpleName());
         }

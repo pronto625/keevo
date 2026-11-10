@@ -40,8 +40,12 @@ public interface UserAuthenticatorRepository {
     /** Row id of the identity, if linked (unique-index lookup). */
     Optional<UUID> findId(SocialProvider provider, String subject);
 
-    /** Stores the encrypted Apple refresh token of the row and the client id it was issued for. */
-    void storeRevocationToken(UUID authenticatorId, String clientId, byte[] encryptedToken);
+    /**
+     * Stores the encrypted Apple refresh token of the row and the client id it was issued for.
+     *
+     * @return false when the row no longer exists (unlinked or deleted meanwhile)
+     */
+    boolean storeRevocationToken(UUID authenticatorId, String clientId, byte[] encryptedToken);
 
     /**
      * Unlinks every identity of {@code provider} from the account: copies their stored revocation tokens to the

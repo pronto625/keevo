@@ -31,7 +31,7 @@ import java.util.UUID;
  *       concurrent link). Never changes the account's email, names or roles. The Apple code is exchanged after
  *       commit ({@link AppleTokenStore}).</li>
  *   <li>unlink: same lock; refused with {@code LAST_SIGN_IN_METHOD} when the account would keep no password, phone,
- *       email nor identity of another provider; the stored Apple tokens go to the revocation outbox in the same
+ *       usable email (an Apple relay address stops working with Apple) nor identity of another provider; the stored Apple tokens go to the revocation outbox in the same
  *       transaction.</li>
  * </ul>
  * The super-admin never links ({@code SOCIAL_TOKEN_INVALID}, as at sign-in).
@@ -92,7 +92,9 @@ public class SocialAccountService implements SocialAccountUseCase {
             }
             return list(user.getId());
         });
-        appleTokenStore.storeIfPossible(identity, command.authorizationCode());
+        if (command.authorizationCode() != null) {
+            appleTokenStore.storeIfPossible(identity, command.authorizationCode());
+        }
         return result;
     }
 
@@ -105,13 +107,29 @@ public class SocialAccountService implements SocialAccountUseCase {
                 return;
             }
             boolean otherWayIn = user.getPasswordHash() != null || user.getPhoneNumber() != null
-                    || user.getEmail() != null || linked.stream().anyMatch(l -> l.provider() != provider);
+                    || emailStaysUsable(user.getEmail(), provider)
+                    || linked.stream().anyMatch(l -> l.provider() != provider);
             if (!otherWayIn) {
                 throw new DomainException(ErrorCode.LAST_SIGN_IN_METHOD);
             }
             int removed = authenticators.unlink(userId, provider);
             log.info("[social] {} identity unlinked from account {} ({} row(s))", provider, userId, removed);
         });
+    }
+
+    /** Domain of Apple's « Hide my email » relay addresses. */
+    static final String APPLE_RELAY_DOMAIN = "@privaterelay.appleid.com";
+
+    /**
+     * An email is a way in (sign-in code), except Apple's private relay address once Apple is unlinked: Apple stops
+     * forwarding to it when the link is revoked.
+     */
+    static boolean emailStaysUsable(String email, SocialProvider unlinked) {
+        if (email == null) {
+            return false;
+        }
+        return unlinked != SocialProvider.APPLE
+                || !email.toLowerCase(java.util.Locale.ROOT).endsWith(APPLE_RELAY_DOMAIN);
     }
 
     private User lockedUser(UUID userId) {

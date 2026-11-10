@@ -73,8 +73,8 @@ public class JdbcUserAuthenticatorRepository implements UserAuthenticatorReposit
     }
 
     @Override
-    public void storeRevocationToken(UUID authenticatorId, String clientId, byte[] encryptedToken) {
-        jdbcTemplate.update(STORE_TOKEN_SQL, encryptedToken, clientId, authenticatorId);
+    public boolean storeRevocationToken(UUID authenticatorId, String clientId, byte[] encryptedToken) {
+        return jdbcTemplate.update(STORE_TOKEN_SQL, encryptedToken, clientId, authenticatorId) == 1;
     }
 
     @Override

@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestTemplate;
 
 import java.security.KeyFactory;
@@ -18,15 +19,20 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.time.Clock;
 import java.util.Base64;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
 
 /**
  * Story 19.3b — chooses the {@link AppleTokenClient} adapter. Disabled by default ({@link DisabledAppleTokenClient}).
  * With {@code keevo.auth.social.apple.revocation.enabled=true} ({@code APPLE_REVOCATION_ENABLED}) the HTTP adapter is
  * built from {@code team-id} ({@code APPLE_TEAM_ID}), {@code key-id} ({@code APPLE_KEY_ID}), {@code private-key}
  * ({@code APPLE_PRIVATE_KEY}: the PKCS#8 PEM of the {@code .p8} key, literal {@code \n} accepted) and the client ids
- * allowed ({@code APPLE_REVOCATION_CLIENT_IDS}, default the Apple sign-in audiences). Enabled with a missing or
+ * allowed ({@code APPLE_REVOCATION_CLIENT_IDS}, default the Apple sign-in audiences); web Services IDs list the
+ * redirect URI their codes were issued with in {@code web-redirect-uris} ({@code APPLE_REVOCATION_WEB_REDIRECT_URIS},
+ * {@code <services id>=<redirect uri>,…}). Enabled with a missing or
  * invalid value, or without {@code KEEVO_SECRETS_ENCRYPTION_KEY} (tokens are stored encrypted) → startup fails.
  */
 @Configuration
@@ -37,6 +43,27 @@ public class AppleRevocationConfig {
     static final String PREFIX = "keevo.auth.social.apple.revocation.";
     static final int CONNECT_TIMEOUT_MS = 5_000;
     static final int READ_TIMEOUT_MS = 10_000;
+
+    /** Executor of {@code AppleTokenStore} (Apple code exchange, best effort). */
+    public static final String APPLE_TOKEN_EXECUTOR = "appleTokenExecutor";
+
+    /**
+     * Story 19.3b — the Apple code exchange runs on its own small pool, never on the notification executor: a slow
+     * Apple cannot delay notifications, and a full queue drops the exchange (logged) instead of running it on the
+     * sign-in thread — the step is best effort.
+     */
+    @Bean(APPLE_TOKEN_EXECUTOR)
+    public Executor appleTokenExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(2);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("apple-token-");
+        executor.setRejectedExecutionHandler((task, pool) ->
+                log.warn("[social] APPLE token not kept (exchange queue full)"));
+        executor.initialize();
+        return executor;
+    }
 
     @Bean
     public AppleTokenClient appleTokenClient(Environment env, SecretCipher cipher, ObjectMapper objectMapper,
@@ -71,7 +98,17 @@ public class AppleRevocationConfig {
         factory.setConnectTimeout(CONNECT_TIMEOUT_MS);
         factory.setReadTimeout(READ_TIMEOUT_MS);
         log.info("[social] Apple token revocation enabled for {} client id(s)", clientIds.size());
-        return new HttpAppleTokenClient(new RestTemplate(factory), objectMapper, teamId, keyId, key, clientIds, clock);
+        Map<String, String> webRedirects = new LinkedHashMap<>();
+        for (String entry : SocialAuthConfig.commaList(env.getProperty(PREFIX + "web-redirect-uris"))) {
+            int eq = entry.indexOf('=');
+            if (eq <= 0 || eq == entry.length() - 1) {
+                throw new IllegalStateException(PREFIX + "web-redirect-uris (APPLE_REVOCATION_WEB_REDIRECT_URIS) must "
+                        + "be a comma list of <services id>=<redirect uri>");
+            }
+            webRedirects.put(entry.substring(0, eq).strip(), entry.substring(eq + 1).strip());
+        }
+        return new HttpAppleTokenClient(new RestTemplate(factory), objectMapper, teamId, keyId, key, clientIds,
+                webRedirects, clock);
     }
 
     private static String required(Environment env, String name) {

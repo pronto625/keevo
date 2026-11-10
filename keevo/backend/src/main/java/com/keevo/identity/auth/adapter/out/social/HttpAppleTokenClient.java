@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -45,16 +46,25 @@ public class HttpAppleTokenClient implements AppleTokenClient {
     private final String keyId;
     private final PrivateKey privateKey;
     private final Set<String> allowedClientIds;
+    /** Web (Services ID) client id → the redirect_uri its codes were issued with (Apple requires it back). */
+    private final Map<String, String> webRedirectUris;
     private final Clock clock;
 
     public HttpAppleTokenClient(RestTemplate restTemplate, ObjectMapper objectMapper, String teamId, String keyId,
                                 PrivateKey privateKey, Set<String> allowedClientIds, Clock clock) {
+        this(restTemplate, objectMapper, teamId, keyId, privateKey, allowedClientIds, Map.of(), clock);
+    }
+
+    public HttpAppleTokenClient(RestTemplate restTemplate, ObjectMapper objectMapper, String teamId, String keyId,
+                                PrivateKey privateKey, Set<String> allowedClientIds,
+                                Map<String, String> webRedirectUris, Clock clock) {
         this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.teamId = teamId;
         this.keyId = keyId;
         this.privateKey = privateKey;
         this.allowedClientIds = Set.copyOf(allowedClientIds);
+        this.webRedirectUris = Map.copyOf(webRedirectUris);
         this.clock = clock;
     }
 
@@ -71,6 +81,11 @@ public class HttpAppleTokenClient implements AppleTokenClient {
         MultiValueMap<String, String> form = baseForm(clientId);
         form.add("code", authorizationCode);
         form.add("grant_type", "authorization_code");
+        // Codes of the web flow (Services ID) must be exchanged with the redirect_uri they were issued for.
+        String redirectUri = webRedirectUris.get(clientId);
+        if (redirectUri != null) {
+            form.add("redirect_uri", redirectUri);
+        }
         String body;
         try {
             body = post(TOKEN_URL, form).getBody();

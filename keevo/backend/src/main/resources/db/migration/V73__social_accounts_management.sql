@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS public.social_nonces (
     provider   VARCHAR(16)  NOT NULL,
     nonce      VARCHAR(128) NOT NULL,
     expires_at TIMESTAMPTZ  NOT NULL,
-    CONSTRAINT pk_social_nonces PRIMARY KEY (provider, nonce)
+    CONSTRAINT pk_social_nonces PRIMARY KEY (provider, nonce),
+    CONSTRAINT social_nonces_provider_check CHECK (provider IN ('GOOGLE', 'APPLE'))
 );
 
 CREATE INDEX IF NOT EXISTS ix_social_nonces_expires ON public.social_nonces (expires_at);

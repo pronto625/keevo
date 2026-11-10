@@ -31,7 +31,8 @@ public class AppleTokenRevocationJob {
 
     private static final Logger log = LoggerFactory.getLogger(AppleTokenRevocationJob.class);
 
-    static final int BATCH = 100;
+    /** 50 × (5 s connect + 10 s read) is at most about 12 min, well under the 30 min lock. */
+    static final int BATCH = 50;
     static final int MAX_ATTEMPTS = 20;
 
     private final AppleRevocationQueue queue;

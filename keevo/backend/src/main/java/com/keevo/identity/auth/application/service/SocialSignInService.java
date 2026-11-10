@@ -99,7 +99,9 @@ public class SocialSignInService implements SocialSignInUseCase {
             return new LoginSessionResult(jwtTokenProvider.generateLoginToken(user.getId()), memberships);
         });
         // Story 19.3b — committed: the authenticator row exists; the Apple code exchange runs asynchronously.
-        appleTokenStore.storeIfPossible(identity, command.authorizationCode());
+        if (command.authorizationCode() != null) {
+            appleTokenStore.storeIfPossible(identity, command.authorizationCode());
+        }
         return result;
     }
 

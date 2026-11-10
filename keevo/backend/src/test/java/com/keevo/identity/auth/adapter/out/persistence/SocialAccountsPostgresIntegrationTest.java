@@ -86,7 +86,7 @@ class SocialAccountsPostgresIntegrationTest extends PostgresIntegrationTest {
                 .containsExactly(SocialProvider.APPLE, SocialProvider.GOOGLE);
         UUID appleRow = authenticators.findId(SocialProvider.APPLE, apple).orElseThrow();
         assertThat(appleRow).isEqualTo(linked.get(0).id());
-        authenticators.storeRevocationToken(appleRow, "com.keevo.app", new byte[]{1, 2, 3});
+        assertThat(authenticators.storeRevocationToken(appleRow, "com.keevo.app", new byte[]{1, 2, 3})).isTrue();
 
         assertThat(authenticators.unlink(a.getId(), SocialProvider.APPLE)).isEqualTo(1);
 
@@ -102,6 +102,11 @@ class SocialAccountsPostgresIntegrationTest extends PostgresIntegrationTest {
         assertThat(authenticators.unlink(a.getId(), SocialProvider.GOOGLE)).isEqualTo(1);
         assertThat(queue.findDue(10)).hasSize(1);
         assertThat(authenticators.unlink(a.getId(), SocialProvider.GOOGLE)).isZero();
+        // Row gone: storing reports it, and the token can be queued directly.
+        assertThat(authenticators.storeRevocationToken(appleRow, "com.keevo.app", new byte[]{4})).isFalse();
+        UUID context = UUID.randomUUID();
+        queue.enqueue(context, "com.keevo.app", new byte[]{4});
+        assertThat(queue.findDue(10)).extracting(PendingRevocation::authenticatorId).contains(context);
     }
 
     @Test
