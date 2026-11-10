@@ -58,6 +58,17 @@ public class TenantDeletionService {
     static final String LOCK_TENANT_SQL =
             "SELECT status, deletion_scheduled_at FROM public.tenants WHERE id = ? FOR UPDATE";
 
+    /**
+     * Story 19.3b — copies the stored Apple tokens of the users about to be deleted (no membership left) to the
+     * revocation outbox. Same orphan predicate as the users DELETE; set-based on the {@code user_id} index.
+     */
+    static final String QUEUE_APPLE_REVOCATIONS_SQL =
+            "INSERT INTO public.apple_token_revocations (authenticator_id, client_id, token) " +
+            "SELECT a.id, a.revocation_client_id, a.revocation_token FROM public.user_authenticators a " +
+            "WHERE a.user_id = ANY(?::uuid[]) " +
+            "AND a.revocation_token IS NOT NULL AND a.revocation_client_id IS NOT NULL " +
+            "AND NOT EXISTS (SELECT 1 FROM public.user_tenant_memberships m WHERE m.user_id = a.user_id)";
+
     /** Story 16.6 (RGPD) — name kept on the anonymised {@code public.tenants} row. */
     static final String DELETED_TENANT_NAME = "Commerce supprimé";
 
@@ -281,6 +292,9 @@ public class TenantDeletionService {
                     "WHERE p.user_id = ANY(?::uuid[]) " +
                     "AND NOT EXISTS (SELECT 1 FROM public.user_tenant_memberships m WHERE m.user_id = p.user_id)",
                     (Object) affectedUserIds.toArray(new UUID[0]));
+            // Story 19.3b (App Store) — the orphans' Sign in with Apple tokens go to the revocation outbox in this
+            // transaction, before their authenticators cascade away with them (drained by AppleTokenRevocationJob).
+            jdbcTemplate.update(QUEUE_APPLE_REVOCATIONS_SQL, (Object) affectedUserIds.toArray(new UUID[0]));
             List<UUID> deletedIds = jdbcTemplate.queryForList(
                     "DELETE FROM public.users u " +
                     "WHERE u.id = ANY(?::uuid[]) " +

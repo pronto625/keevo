@@ -10,8 +10,15 @@ import jakarta.validation.constraints.Size;
 public record GoogleSignInDto(
         @NotBlank @Size(max = 8192) String idToken,
         @Size(max = 100) String firstName,
-        @Size(max = 100) String lastName
+        @Size(max = 100) String lastName,
+        // Story 19.3b — clear nonce whose SHA-256 hex the app gave Google (replay protection), optional
+        @Size(min = 16, max = 128) String nonce
 ) {
+    /** Without nonce (19.3 shape). */
+    public GoogleSignInDto(String idToken, String firstName, String lastName) {
+        this(idToken, firstName, lastName, null);
+    }
+
     @Override
     public String toString() {
         return "GoogleSignInDto{}";

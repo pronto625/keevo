@@ -3,6 +3,7 @@ package com.keevo.identity.auth.application.service;
 import com.keevo.identity.auth.domain.port.out.OtpChallengeRepository;
 import com.keevo.identity.auth.domain.port.out.PasswordResetTokenRepository;
 import com.keevo.identity.auth.domain.port.out.RefreshTokenRepository;
+import com.keevo.identity.auth.domain.port.out.SocialNonceRepository;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +25,9 @@ import java.time.Instant;
  *
  * <p>Story 19.2 — also deletes {@code public.otp_challenges} rows created more than 24 h ago (one set-based
  * {@code DELETE}): past the daily failure window they are never read again.
+ *
+ * <p>Story 19.3b — also deletes the expired {@code public.social_nonces} (one set-based {@code DELETE} on the
+ * {@code expires_at} index): a token past its expiry is refused anyway, its nonce is no longer needed.
  */
 @Component
 public class AuthTokenCleanupJob {
@@ -35,15 +39,18 @@ public class AuthTokenCleanupJob {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final OtpChallengeRepository otpChallengeRepository;
+    private final SocialNonceRepository socialNonceRepository;
     private final Clock clock;
 
     public AuthTokenCleanupJob(PasswordResetTokenRepository passwordResetTokenRepository,
                                RefreshTokenRepository refreshTokenRepository,
                                OtpChallengeRepository otpChallengeRepository,
+                               SocialNonceRepository socialNonceRepository,
                                Clock clock) {
         this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.refreshTokenRepository = refreshTokenRepository;
         this.otpChallengeRepository = otpChallengeRepository;
+        this.socialNonceRepository = socialNonceRepository;
         this.clock = clock;
     }
 
@@ -69,6 +76,12 @@ public class AuthTokenCleanupJob {
             log.info("AuthTokenCleanupJob: purged {} sign-in code challenges created before {}", deleted, otpCutoff);
         } catch (RuntimeException e) {
             log.warn("AuthTokenCleanupJob: sign-in code challenge purge failed", e);
+        }
+        try {
+            int deleted = socialNonceRepository.purgeExpiredBefore(clock.instant());
+            log.info("AuthTokenCleanupJob: purged {} expired social sign-in nonces", deleted);
+        } catch (RuntimeException e) {
+            log.warn("AuthTokenCleanupJob: social sign-in nonce purge failed", e);
         }
     }
 }

@@ -624,6 +624,25 @@ class AuthControllerTest {
     }
 
     @Test
+    @DisplayName("19.3b POST /social/apple: nonce and authorizationCode passed to the use case; too short nonce → 422")
+    void socialAppleNonceAndCode() throws Exception {
+        when(socialSignInUseCase.signIn(any())).thenReturn(new LoginSessionResult("login-tok", List.of()));
+        mockMvc.perform(post("/api/v1/auth/social/apple").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"identityToken\":\"a-token\",\"nonce\":\"0123456789abcdef\","
+                                + "\"authorizationCode\":\"c-1\"}"))
+                .andExpect(status().isOk());
+        org.mockito.ArgumentCaptor<com.keevo.identity.auth.domain.port.in.SocialSignInCommand> captor =
+                org.mockito.ArgumentCaptor.forClass(com.keevo.identity.auth.domain.port.in.SocialSignInCommand.class);
+        org.mockito.Mockito.verify(socialSignInUseCase).signIn(captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().nonce()).isEqualTo("0123456789abcdef");
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().authorizationCode()).isEqualTo("c-1");
+
+        mockMvc.perform(post("/api/v1/auth/social/google").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idToken\":\"g\",\"nonce\":\"short\"}"))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
     @DisplayName("19.5 — V1 vocabulary: login memberships and tokens show MANAGER/VIEWER as EMPLOYEE, memberRole real "
             + "(19.10: app declaring its version)")
     void storeMemberRoles_shownInV1Vocabulary() throws Exception {

@@ -171,6 +171,16 @@ keevo:
       apple:
         audiences: ${APPLE_BUNDLE_IDS:}
         bundle-id: ${APPLE_BUNDLE_ID:}   # Bref's single value, used when audiences is empty
+        # Story 19.3b — Sign in with Apple token revocation (App Store account deletion). Disabled by default (no
+        # network call, no token kept); enabled: team-id, key-id, private-key and KEEVO_SECRETS_ENCRYPTION_KEY required.
+        revocation:
+          enabled: ${APPLE_REVOCATION_ENABLED:false}
+          team-id: ${APPLE_TEAM_ID:}
+          key-id: ${APPLE_KEY_ID:}
+          private-key: ${APPLE_PRIVATE_KEY:}
+          client-ids: ${APPLE_REVOCATION_CLIENT_IDS:}   # default: the Apple audiences
+      # Story 19.3b — refuse tokens sent without nonce (true once every app in stores sends one).
+      require-nonce: ${SOCIAL_REQUIRE_NONCE:false}
   # Story 19.10 — app versions. Public check limited per IP. Legacy-role guard: an auth request without the
   # X-App-Version header comes from the Flutter V1 app, which knows only OWNER / EMPLOYEE: MANAGER / VIEWER
   # memberships are hidden from its login lists and refused at select-tenant / refresh (APP_UPDATE_REQUIRED).

@@ -343,6 +343,59 @@ class AccountDeletionRgpdPostgresIntegrationTest extends FullContextIntegrationT
                 "id", "tenant_id", "tenant_code", "event", "source", "scheduled_for", "occurred_at");
     }
 
+    /** Story 19.3b — an Apple link with a stored (encrypted) refresh token; returns the authenticator id. */
+    private UUID insertAppleLink(UUID userId, com.keevo.shared.infrastructure.security.crypto.SecretCipher cipher,
+                                 String refreshToken) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.user_authenticators (id, user_id, provider, subject, revocation_token, "
+                + "revocation_client_id) VALUES (?, ?, 'APPLE', ?, ?, 'com.keevo.app')",
+                id, userId, "apple-sub-" + id, cipher.encrypt(refreshToken, id.toString()));
+        return id;
+    }
+
+    @Test
+    @DisplayName("19.3b — deleted owner's Apple link: authenticator gone, token queued then revoked once by the job; "
+            + "a user shared with tenant B keeps its link and nothing is queued for it")
+    void appleTokensOfDeletedUsersAreRevoked() throws Exception {
+        var cipher = new com.keevo.shared.infrastructure.security.crypto.SecretCipher(
+                java.util.Base64.getEncoder().encodeToString(new byte[32]));
+        Seed seed = seedRequestedAndExpired();
+        UUID ownerLink = insertAppleLink(seed.ownerId(), cipher, "rt-owner");
+        Tenant other = tx.execute(s -> tenantFactory.create());
+        insertMembership(other.getId(), seed.employeeId(), "EMPLOYEE");
+        UUID sharedLink = insertAppleLink(seed.employeeId(), cipher, "rt-shared");
+
+        assertThat(scheduler(jdbc).runTenantDeletion(seed.tenantId(), true)).isTrue();
+
+        assertThat(count("SELECT count(*) FROM public.user_authenticators WHERE user_id = ?", seed.ownerId())).isZero();
+        assertThat(count("SELECT count(*) FROM public.user_authenticators WHERE id = ?", sharedLink)).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.apple_token_revocations WHERE authenticator_id = ?", ownerLink))
+                .isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.apple_token_revocations WHERE authenticator_id = ?", sharedLink))
+                .isZero();
+
+        // The job drains the outbox through the port (fake: records calls, never the network).
+        List<String> revoked = new java.util.ArrayList<>();
+        var fakeApple = new com.keevo.identity.auth.domain.port.out.AppleTokenClient() {
+            @Override public boolean enabled() { return true; }
+            @Override public java.util.Optional<AppleGrant> exchange(String clientId, String code) {
+                return java.util.Optional.empty();
+            }
+            @Override public void revoke(String clientId, String refreshToken) {
+                revoked.add(clientId + ":" + refreshToken);
+            }
+        };
+        jdbc.update("DELETE FROM public.apple_token_revocations WHERE authenticator_id <> ?", ownerLink);
+        new AppleTokenRevocationJob(
+                new com.keevo.identity.auth.adapter.out.persistence.impl.JdbcAppleRevocationQueue(jdbc), fakeApple,
+                cipher).run();
+
+        assertThat(revoked).containsExactly("com.keevo.app:rt-owner");
+        assertThat(count("SELECT count(*) FROM public.apple_token_revocations WHERE authenticator_id = ?", ownerLink))
+                .isZero();
+        jdbc.update("DELETE FROM public.user_authenticators WHERE id = ?", sharedLink);
+    }
+
     @Test
     @DisplayName("a user also member of tenant B keeps the account, the B membership, B's data and the reset token")
     void sharedUserKeepsEverythingOfTheOtherTenant() throws Exception {

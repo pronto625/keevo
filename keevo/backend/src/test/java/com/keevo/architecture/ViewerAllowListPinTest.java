@@ -26,6 +26,10 @@ class ViewerAllowListPinTest {
             "POST /api/v1/auth/change-password",
             "DELETE /api/v1/auth/sessions",
             "DELETE /api/v1/auth/sessions/{sessionId}",
+            // Story 19.3b — the viewer's own Google / Apple links
+            "POST /api/v1/auth/social/accounts/google",
+            "POST /api/v1/auth/social/accounts/apple",
+            "DELETE /api/v1/auth/social/accounts/{provider}",
             "POST /api/v1/devices/token",
             "DELETE /api/v1/devices/token",
             "POST /api/v1/web-push/subscribe",

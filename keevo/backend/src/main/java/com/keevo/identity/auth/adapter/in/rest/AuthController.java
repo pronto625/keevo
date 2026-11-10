@@ -555,6 +555,8 @@ public class AuthController {
             calls /auth/create-company with the loginToken).
 
             firstName / lastName (optional) override Google's names for a new account.
+            nonce (optional, Story 19.3b): the clear nonce whose SHA-256 hex was given to Google; the token must
+            carry that hash, and a nonce is accepted once. A token carrying a nonce claim requires it.
             Refused token or unverified Google email → 401 SOCIAL_TOKEN_INVALID. Email of a team member or
             never verified → 409 EMAIL_ALREADY_EXISTS. More than 30 calls per hour from one IP → 429.
             """
@@ -572,7 +574,7 @@ public class AuthController {
     public ResponseEntity<LoginSessionResponse> signInWithGoogle(@Valid @RequestBody GoogleSignInDto request,
                                                                  HttpServletRequest httpRequest) {
         LoginSessionResult result = socialSignInUseCase.signIn(new SocialSignInCommand(SocialProvider.GOOGLE,
-                request.idToken(), request.firstName(), request.lastName(), clientIp(httpRequest)));
+                request.idToken(), request.firstName(), request.lastName(), clientIp(httpRequest), request.nonce(), null));
         return ResponseEntity.ok(toLoginSessionResponse(result, httpRequest));
     }
 
@@ -583,7 +585,8 @@ public class AuthController {
             audience among the configured bundle ids, expiry) and answers exactly like /auth/login. Apple may
             omit the email after the first consent: the account is then found by its Apple identity; a new one
             without email is created without company. firstName / lastName: send the names Apple gives at the
-            first consent.
+            first consent. nonce (optional, Story 19.3b): as for Google. authorizationCode (optional, Story 19.3b):
+            kept, as an Apple refresh token, to revoke the Apple link when the account is deleted.
 
             Refused token → 401 SOCIAL_TOKEN_INVALID. Email of a team member or never verified → 409
             EMAIL_ALREADY_EXISTS. More than 30 calls per hour from one IP → 429.
@@ -602,7 +605,8 @@ public class AuthController {
     public ResponseEntity<LoginSessionResponse> signInWithApple(@Valid @RequestBody AppleSignInDto request,
                                                                 HttpServletRequest httpRequest) {
         LoginSessionResult result = socialSignInUseCase.signIn(new SocialSignInCommand(SocialProvider.APPLE,
-                request.identityToken(), request.firstName(), request.lastName(), clientIp(httpRequest)));
+                request.identityToken(), request.firstName(), request.lastName(), clientIp(httpRequest), request.nonce(),
+                request.authorizationCode()));
         return ResponseEntity.ok(toLoginSessionResponse(result, httpRequest));
     }
 

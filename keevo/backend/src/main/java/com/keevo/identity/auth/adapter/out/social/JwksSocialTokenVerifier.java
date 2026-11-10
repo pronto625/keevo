@@ -59,6 +59,8 @@ public class JwksSocialTokenVerifier implements SocialTokenVerifier {
     static final Duration STALE_GRACE = Duration.ofHours(24);
     /** {@code user_authenticators.subject} is varchar(255). */
     static final int SUBJECT_MAX = 255;
+    /** Story 19.3b — {@code social_nonces.nonce} is varchar(128) (a SHA-256 hex is 64). */
+    static final int NONCE_MAX = 128;
 
     /** How the provider's email claim is treated. */
     public enum EmailRule {
@@ -156,8 +158,19 @@ public class JwksSocialTokenVerifier implements SocialTokenVerifier {
         if (email != null && !emailVerified && emailRule == EmailRule.REJECT_UNVERIFIED) {
             throw refused("email not verified");
         }
+        // Story 19.3b — the matched audience (Apple: client_id of the authorization code), the nonce claim and expiry.
+        String matchedAudience = aud.stream().filter(audiences::contains).sorted().findFirst().orElseThrow();
+        if (provider == SocialProvider.GOOGLE && aud.size() > 1) {
+            matchedAudience = text(claims.get("azp"));
+        }
+        Object nonceClaim = claims.get("nonce");
+        String nonce = text(nonceClaim);
+        if (nonceClaim != null && (nonce == null || nonce.length() > NONCE_MAX)) {
+            throw refused("nonce");
+        }
         return new SocialIdentity(provider, subject.strip(), email, emailVerified,
-                text(claims.get("given_name")), text(claims.get("family_name")));
+                text(claims.get("given_name")), text(claims.get("family_name")), matchedAudience, nonce,
+                claims.getExpiration().toInstant());
     }
 
     // ── Keys ─────────────────────────────────────────────────────────────────

@@ -32,6 +32,9 @@ public enum ErrorCode {
     PUSH_ENDPOINT_OWNED,         // Story 19.9b — HTTP 409: the browser push endpoint is linked to another account (other keys)
     COMPANY_ALREADY_EXISTS,      // Story 19.2 — HTTP 409: create-company by a user who already owns a company
     SOCIAL_TOKEN_INVALID,        // Story 19.3 — HTTP 401: Google / Apple ID token refused (signature, issuer, audience, expiry, email)
+    SOCIAL_ACCOUNT_LINKED_ELSEWHERE, // Story 19.3b — HTTP 409: this Google / Apple identity is linked to another account
+    SOCIAL_PROVIDER_ALREADY_LINKED,  // Story 19.3b — HTTP 409: the account already has another identity of this provider
+    LAST_SIGN_IN_METHOD,             // Story 19.3b — HTTP 409: unlinking would leave the account without any way to sign in
     APP_UPDATE_REQUIRED,         // Story 19.10 — HTTP 403: MANAGER / VIEWER session refused to a legacy (V1, no X-App-Version) app
     APP_VERSION_INVALID,         // Story 19.10 — HTTP 422: invalid super-admin app version edit (nothing saved)
     APP_VERSION_NOT_FOUND,       // Story 19.10 — HTTP 404: no app version row for this identity and platform

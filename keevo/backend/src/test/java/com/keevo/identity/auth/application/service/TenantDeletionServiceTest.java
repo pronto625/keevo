@@ -128,6 +128,21 @@ class TenantDeletionServiceTest {
     }
 
     @Test
+    @DisplayName("19.3b — the orphans' Apple tokens are queued for revocation before the users DELETE")
+    void appleRevocationsQueuedBeforeUsersDelete() {
+        Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);
+        when(tenantRepository.findDeletionsDueBy(any())).thenReturn(List.of(tenant));
+        stubPending(tenant, "+243812345678");
+
+        scheduler.executeDeletions();
+
+        InOrder order = inOrder(jdbcTemplate);
+        order.verify(jdbcTemplate).update(eq(TenantDeletionService.QUEUE_APPLE_REVOCATIONS_SQL), any(Object.class));
+        order.verify(jdbcTemplate).queryForList(startsWith("DELETE FROM public.users"), eq(UUID.class),
+                any(Object.class));
+    }
+
+    @Test
     @DisplayName("final WhatsApp failure after commit: deletion still succeeds, the other owners are still notified")
     void deleteNow_whatsAppFailureAfterCommit_isNonBlocking() {
         Tenant tenant = createTenant(TenantStatus.DELETION_PENDING, expiredDate);

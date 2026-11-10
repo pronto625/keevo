@@ -329,4 +329,33 @@ class JwksSocialTokenVerifierTest {
 
         assertThat(config.appleTokenVerifier("", "", jwks, clock).isConfigured()).isFalse();
     }
+
+    @Test
+    @DisplayName("19.3b — nonce claim, matched audience (Apple bundle, Google azp) and expiry are exposed")
+    void nonceAudienceExpiryExposed() {
+        String hash = "a".repeat(64);
+        SocialIdentity apple = apple().verify(provider.token(APPLE_ISS, BUNDLE, "a", NOW.plusSeconds(600),
+                Map.of("nonce", hash)));
+        assertThat(apple.nonce()).isEqualTo(hash);
+        assertThat(apple.audience()).isEqualTo(BUNDLE);
+        assertThat(apple.expiresAt()).isEqualTo(NOW.plusSeconds(600));
+
+        SocialIdentity noNonce = apple().verify(provider.token(APPLE_ISS, BUNDLE, "a", NOW.plusSeconds(600), Map.of()));
+        assertThat(noNonce.nonce()).isNull();
+
+        String multi = provider.token(GOOGLE_ISS, List.of("other-client", CLIENT), "s", NOW.plusSeconds(600),
+                Map.of("azp", CLIENT), "RS256");
+        assertThat(google(List.of(CLIENT)).verify(multi).audience()).isEqualTo(CLIENT);
+    }
+
+    @Test
+    @DisplayName("19.3b — nonce claim longer than 128 chars, blank or not a string → refused")
+    void badNonceClaim() {
+        assertRefused(() -> apple().verify(provider.token(APPLE_ISS, BUNDLE, "a", NOW.plusSeconds(600),
+                Map.of("nonce", "x".repeat(129)))));
+        assertRefused(() -> apple().verify(provider.token(APPLE_ISS, BUNDLE, "a", NOW.plusSeconds(600),
+                Map.of("nonce", "  "))));
+        assertRefused(() -> apple().verify(provider.token(APPLE_ISS, BUNDLE, "a", NOW.plusSeconds(600),
+                Map.of("nonce", 42))));
+    }
 }

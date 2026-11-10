@@ -293,6 +293,7 @@ public class GlobalExceptionHandler {
                  "PORTAL_SESSION_INVALID",     // 21.7 — client portal session token
                  "SESSION_REVOKED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
+                 "SOCIAL_ACCOUNT_LINKED_ELSEWHERE", "SOCIAL_PROVIDER_ALREADY_LINKED", "LAST_SIGN_IN_METHOD", // 19.3b
                  "USERNAME_ALREADY_EXISTS",
                  "COMPANY_ALREADY_EXISTS",
                  "TENANT_ALREADY_EXISTS",

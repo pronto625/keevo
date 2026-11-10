@@ -8,7 +8,6 @@ import com.keevo.identity.auth.domain.model.UserMembershipInfo;
 import com.keevo.identity.auth.domain.port.in.LoginSessionResult;
 import com.keevo.identity.auth.domain.port.in.SocialSignInCommand;
 import com.keevo.identity.auth.domain.port.in.SocialSignInUseCase;
-import com.keevo.identity.auth.domain.port.out.SocialTokenVerifier;
 import com.keevo.identity.auth.domain.port.out.UserAuthenticatorRepository;
 import com.keevo.identity.auth.domain.port.out.UserMembershipRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
@@ -25,19 +24,17 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.EnumMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 
 /**
  * Story 19.3 — Google / Apple sign-in (port of Bref's {@code findOrCreateSocialUser}), ending in login step 1 exactly
  * like {@code /auth/login}.
  *
- * <p>Façade: per-IP limit on refused tokens → token verified by the provider's {@link SocialTokenVerifier} (Strategy; may fetch the JWKS,
- * so it runs outside any transaction) → account resolution in one transaction:
+ * <p>Façade: token proven by {@link SocialIdentityVerifier} (per-IP limit on refused tokens, provider Strategy, nonce —
+ * outside any transaction: it may fetch the JWKS) → account resolution in one transaction:
  * <ol>
  *   <li>known {@code (provider, subject)} → that account; a verified email is added when the account has none and no
  *       other account holds it;</li>
@@ -61,29 +58,26 @@ public class SocialSignInService implements SocialSignInUseCase {
     static final int[] USERNAME_HEX_LENGTHS = {12, 20, 28, 36};
     static final int NAME_MAX = 100;
 
-    private final Map<SocialProvider, SocialTokenVerifier> verifiers = new EnumMap<>(SocialProvider.class);
-    private final SocialSignInRateLimiter rateLimiter;
+    private final SocialIdentityVerifier identityVerifier;
     private final UserRepository userRepository;
     private final UserAuthenticatorRepository authenticatorRepository;
     private final UserMembershipRepository membershipRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final TransactionTemplate transactionTemplate;
+    /** Story 19.3b — Apple refresh token kept for revocation (after commit, asynchronous, best effort). */
+    private final AppleTokenStore appleTokenStore;
     private final Clock clock;
 
-    public SocialSignInService(List<SocialTokenVerifier> verifiers,
-                               SocialSignInRateLimiter rateLimiter,
+    public SocialSignInService(SocialIdentityVerifier identityVerifier,
                                UserRepository userRepository,
                                UserAuthenticatorRepository authenticatorRepository,
                                UserMembershipRepository membershipRepository,
                                JwtTokenProvider jwtTokenProvider,
                                TransactionTemplate transactionTemplate,
+                               AppleTokenStore appleTokenStore,
                                Clock clock) {
-        for (SocialTokenVerifier v : verifiers) {
-            if (this.verifiers.putIfAbsent(v.provider(), v) != null) {
-                throw new IllegalStateException("Two social token verifiers for " + v.provider());
-            }
-        }
-        this.rateLimiter = rateLimiter;
+        this.identityVerifier = identityVerifier;
+        this.appleTokenStore = appleTokenStore;
         this.userRepository = userRepository;
         this.authenticatorRepository = authenticatorRepository;
         this.membershipRepository = membershipRepository;
@@ -94,26 +88,19 @@ public class SocialSignInService implements SocialSignInUseCase {
 
     @Override
     public LoginSessionResult signIn(SocialSignInCommand command) {
-        rateLimiter.checkAllowed(command.provider(), command.clientIp());
-        SocialTokenVerifier verifier = verifiers.get(command.provider());
-        if (verifier == null) {
-            throw new DomainException(ErrorCode.SOCIAL_TOKEN_INVALID);
-        }
         // Outside any transaction: verification may fetch the provider's keys over HTTP. Only refusals are counted.
-        SocialIdentity identity;
-        try {
-            identity = verifier.verify(command.token());
-        } catch (DomainException e) {
-            rateLimiter.recordFailure(command.provider(), command.clientIp());
-            throw e;
-        }
+        SocialIdentity identity = identityVerifier.verify(command.provider(), command.token(), command.nonce(),
+                command.clientIp());
         String firstName = firstNonBlank(command.firstName(), identity.firstName());
         String lastName = firstNonBlank(command.lastName(), identity.lastName());
-        return transactionTemplate.execute(status -> {
+        LoginSessionResult result = transactionTemplate.execute(status -> {
             User user = resolve(identity, firstName, lastName, clock.instant());
             List<UserMembershipInfo> memberships = userRepository.findMembershipsWithTenantInfo(user.getId());
             return new LoginSessionResult(jwtTokenProvider.generateLoginToken(user.getId()), memberships);
         });
+        // Story 19.3b — committed: the authenticator row exists; the Apple code exchange runs asynchronously.
+        appleTokenStore.storeIfPossible(identity, command.authorizationCode());
+        return result;
     }
 
     private User resolve(SocialIdentity identity, String firstName, String lastName, Instant now) {

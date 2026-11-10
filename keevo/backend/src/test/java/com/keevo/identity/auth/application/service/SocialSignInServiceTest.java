@@ -53,6 +53,8 @@ class SocialSignInServiceTest {
     @Mock com.keevo.identity.auth.domain.port.out.UserMembershipRepository memberships;
     @Mock JwtTokenProvider jwt;
     @Mock PlatformTransactionManager txManager;
+    @Mock com.keevo.identity.auth.domain.port.out.SocialNonceRepository nonces;
+    @Mock AppleTokenStore appleTokenStore;
 
     /** Verifier stub per provider: returns the identity set by the test, or throws its failure. */
     static final class StubVerifier implements SocialTokenVerifier {
@@ -77,8 +79,10 @@ class SocialSignInServiceTest {
     @BeforeEach
     void setUp() {
         MutableTestClock clock = new MutableTestClock(NOW);
-        service = new SocialSignInService(List.of(google, apple), new SocialSignInRateLimiter(clock, 30), users,
-                authenticators, memberships, jwt, new TransactionTemplate(txManager), clock);
+        service = new SocialSignInService(new SocialIdentityVerifier(List.of(google, apple),
+                new SocialSignInRateLimiter(clock, 30), new SocialNonceChecker(nonces, false, clock)), users,
+                authenticators, memberships, jwt, new TransactionTemplate(txManager), appleTokenStore, clock);
+        when(nonces.consume(any(), anyString(), any())).thenReturn(true);
         when(jwt.generateLoginToken(any())).thenReturn("login-tok");
         when(users.findMembershipsWithTenantInfo(any())).thenReturn(List.of());
         when(users.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -365,9 +369,9 @@ class SocialSignInServiceTest {
     @DisplayName("two verifiers for one provider → IllegalStateException at construction")
     void duplicateVerifier() {
         MutableTestClock clock = new MutableTestClock(NOW);
-        assertThatThrownBy(() -> new SocialSignInService(List.of(google, new StubVerifier(SocialProvider.GOOGLE)),
-                new SocialSignInRateLimiter(clock, 30), users, authenticators, memberships, jwt,
-                new TransactionTemplate(txManager), clock)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> new SocialIdentityVerifier(List.of(google, new StubVerifier(SocialProvider.GOOGLE)),
+                new SocialSignInRateLimiter(clock, 30), new SocialNonceChecker(nonces, false, clock)))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
@@ -404,5 +408,39 @@ class SocialSignInServiceTest {
         verify(authenticators).insertIfAbsent(id, SocialProvider.GOOGLE, "g1");
         verify(authenticators).insertIfAbsent(id, SocialProvider.APPLE, "a1");
         verify(jwt, times(2)).generateLoginToken(eq(id));
+    }
+
+    // ── Story 19.3b ──────────────────────────────────────────────────────────
+
+    private static SocialIdentity withNonce(SocialProvider p, String sub, String nonceClaim) {
+        return new SocialIdentity(p, sub, null, false, null, null, "com.keevo.app", nonceClaim,
+                NOW.plusSeconds(600));
+    }
+
+    @Test
+    @DisplayName("19.3b — nonce matching the claim is consumed once, then the replay is refused and counted")
+    void nonceConsumedOnceThenReplayRefused() {
+        String clear = "0123456789abcdef-nonce";
+        apple.identity = withNonce(SocialProvider.APPLE, "a1", SocialNonceChecker.sha256Hex(clear));
+        when(nonces.consume(eq(SocialProvider.APPLE), anyString(), any())).thenReturn(true, false);
+        SocialSignInCommand cmd = new SocialSignInCommand(SocialProvider.APPLE, "t", null, null, "10.0.0.9", clear,
+                null);
+
+        assertThat(service.signIn(cmd).loginToken()).isEqualTo("login-tok");
+        verify(nonces).consume(SocialProvider.APPLE, SocialNonceChecker.sha256Hex(clear), NOW.plusSeconds(660));
+        assertCode(() -> service.signIn(cmd), ErrorCode.SOCIAL_TOKEN_INVALID);
+    }
+
+    @Test
+    @DisplayName("19.3b — Apple code handed to the token store after the committed sign-in; not on a refused one")
+    void appleCodeStoredAfterCommit() {
+        apple.identity = identity(SocialProvider.APPLE, "a1", null, false);
+        service.signIn(new SocialSignInCommand(SocialProvider.APPLE, "t", null, null, null, null, "code-1"));
+        verify(appleTokenStore).storeIfPossible(apple.identity, "code-1");
+
+        apple.failure = new DomainException(ErrorCode.SOCIAL_TOKEN_INVALID);
+        assertCode(() -> service.signIn(new SocialSignInCommand(SocialProvider.APPLE, "t", null, null, null, null,
+                "code-2")), ErrorCode.SOCIAL_TOKEN_INVALID);
+        verify(appleTokenStore, never()).storeIfPossible(any(), eq("code-2"));
     }
 }

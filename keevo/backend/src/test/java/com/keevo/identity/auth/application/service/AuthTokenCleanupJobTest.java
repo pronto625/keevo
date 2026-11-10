@@ -28,12 +28,13 @@ class AuthTokenCleanupJobTest {
     @Mock PasswordResetTokenRepository resetRepo;
     @Mock RefreshTokenRepository refreshRepo;
     @Mock com.keevo.identity.auth.domain.port.out.OtpChallengeRepository otpRepo;
+    @Mock com.keevo.identity.auth.domain.port.out.SocialNonceRepository nonceRepo;
 
     AuthTokenCleanupJob job;
 
     @BeforeEach
     void setUp() {
-        job = new AuthTokenCleanupJob(resetRepo, refreshRepo, otpRepo, Clock.fixed(NOW, ZoneOffset.UTC));
+        job = new AuthTokenCleanupJob(resetRepo, refreshRepo, otpRepo, nonceRepo, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -46,6 +47,17 @@ class AuthTokenCleanupJobTest {
 
         verify(resetRepo).purgeExpiredBefore(CUTOFF);
         verify(refreshRepo).purgeExpiredBefore(CUTOFF);
+    }
+
+    @Test
+    @DisplayName("Story 19.3b — purges the social nonces expired before now, even when another purge fails")
+    void purgesExpiredNonces() {
+        when(otpRepo.purgeCreatedBefore(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new DataAccessResourceFailureException("down"));
+
+        job.cleanup();
+
+        verify(nonceRepo).purgeExpiredBefore(NOW);
     }
 
     @Test
