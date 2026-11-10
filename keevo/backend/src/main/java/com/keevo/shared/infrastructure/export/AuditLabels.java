@@ -81,6 +81,9 @@ public final class AuditLabels {
             entry("DEVICE_SESSION_CLOSED", "Appareil déconnecté"),
             entry("DEVICE_SESSIONS_CLOSED", "Toutes les autres sessions fermées"),
             entry("DEVICE_SESSION_REPLAY_REVOKED", "Session coupée par sécurité"),
+            // External AI access (Story 21.9)
+            entry("MCP_TOKEN_CREATED", "Accès IA externe créé"),
+            entry("MCP_TOKEN_REVOKED", "Accès IA externe révoqué"),
             // Sales
             entry("SALE_COMPLETED", "Vente enregistrée"),
             entry("SALE_PENDING_VALIDATION", "Vente en attente"),
@@ -143,6 +146,7 @@ public final class AuditLabels {
             entry("Store", "Boutique"),
             entry("Employee", "Employé"),
             entry("User", "Compte utilisateur"),
+            entry("McpAccessToken", "Accès IA externe"),
             entry("Tenant", "Compte"),
             entry("DayClosure", "Clôture de journée"),
             entry("InventorySession", "Inventaire"),

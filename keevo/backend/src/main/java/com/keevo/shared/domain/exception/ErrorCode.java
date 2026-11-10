@@ -238,6 +238,10 @@ public enum ErrorCode {
     AI_ANSWER_FAILED,           // HTTP 503 — a tool failed or the answer exceeded its limits: nothing counted
     AI_CONVERSATION_NOT_FOUND,  // HTTP 404 — conversation unknown or of another user
     AI_CONVERSATION_LIMIT,      // HTTP 409 — the user already keeps the maximum number of conversations
+    // ── External MCP server (Story 21.9) ──────────────────────────────────
+    MCP_TOKEN_INVALID,          // HTTP 401 — personal access token missing, unknown, expired, revoked or no longer the owner's
+    MCP_TOKEN_LIMIT,            // HTTP 409 — the owner already holds the maximum number of access tokens
+    MCP_TOKEN_NOT_FOUND,        // HTTP 404 — access token unknown or of another user
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

@@ -334,6 +334,12 @@ keevo:
     model: ${KEEVO_AI_MODEL:}
     base-url: ${KEEVO_AI_BASE_URL:}
     fake-script: ${KEEVO_AI_FAKE_SCRIPT:}
+  # Story 21.9 — external MCP server (POST /api/v1/mcp, module mcp-access): requests per minute per personal access
+  # token and per company (all its tokens); beyond → 429 RATE_LIMIT_EXCEEDED.
+  mcp:
+    rate-limit:
+      token-per-minute: ${KEEVO_MCP_TOKEN_PER_MINUTE:30}
+      tenant-per-minute: ${KEEVO_MCP_TENANT_PER_MINUTE:60}
   # Story 21.1 — self-service plan payment (module payments). gateway: disabled (default: Mobile Money refused with 503,
   # free offers still work) | sandbox (simulated provider, dev/test profiles only) | mycoolpay (every key
   # below required). The webhook URL given to MyCoolPay is <public base>/api/v1/payments/webhook/mycoolpay/<callback-hash>.

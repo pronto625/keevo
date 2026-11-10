@@ -4,6 +4,10 @@ import com.keevo.identity.api.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.observability.PrometheusScrapeAuthFilter;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
+import com.keevo.shared.infrastructure.security.access.AccessStateService;
+import com.keevo.shared.module.ModuleProvisioner;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
@@ -96,11 +100,27 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final ObjectMapper objectMapper;
     private final Environment environment;
+    /** Story 21.9 — credentials replacing the JWT on their own paths (MCP personal access tokens). */
+    private final ObjectProvider<CredentialAuthenticator> credentialAuthenticators;
+    private final ObjectProvider<AccessStateService> accessStates;
+    private final ObjectProvider<ModuleProvisioner> moduleProvisioner;
 
+    /** Without credential authenticators (unit tests of the CORS / chain configuration). */
     public SecurityConfig(JwtAuthFilter jwtAuthFilter, ObjectMapper objectMapper, Environment environment) {
+        this(jwtAuthFilter, objectMapper, environment, null, null, null);
+    }
+
+    @Autowired
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter, ObjectMapper objectMapper, Environment environment,
+                          ObjectProvider<CredentialAuthenticator> credentialAuthenticators,
+                          ObjectProvider<AccessStateService> accessStates,
+                          ObjectProvider<ModuleProvisioner> moduleProvisioner) {
         this.jwtAuthFilter = jwtAuthFilter;
         this.objectMapper = objectMapper;
         this.environment = environment;
+        this.credentialAuthenticators = credentialAuthenticators;
+        this.accessStates = accessStates;
+        this.moduleProvisioner = moduleProvisioner;
     }
 
     @Bean
@@ -158,6 +178,10 @@ public class SecurityConfig {
                                 environment.getProperty(PROMETHEUS_TOKEN_PROPERTY)),
                         UsernamePasswordAuthenticationFilter.class)
 
+                // ── Story 21.9 — personal access tokens (MCP server): same anchor, added before the JWT filter, so it
+                //    runs first and marks its requests for the JWT filter to skip. Absent without an authenticator.
+                .addFilterBefore(credentialAuthFilter(), UsernamePasswordAuthenticationFilter.class)
+
                 // ── JWT filter: runs before Spring's authentication filter ────
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
 
@@ -166,6 +190,17 @@ public class SecurityConfig {
                 .addFilterBefore(new ViewerWriteGuardFilter(objectMapper), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /** Story 21.9 — the credential filter over every {@link CredentialAuthenticator} bean (none = never filters). */
+    private CredentialAuthFilter credentialAuthFilter() {
+        List<CredentialAuthenticator> authenticators = credentialAuthenticators == null ? List.of()
+                : credentialAuthenticators.orderedStream().toList();
+        if (authenticators.isEmpty()) {
+            return new CredentialAuthFilter(List.of(), null, null, objectMapper);
+        }
+        return new CredentialAuthFilter(authenticators, accessStates.getObject(), moduleProvisioner.getObject(),
+                objectMapper);
     }
 
     /**

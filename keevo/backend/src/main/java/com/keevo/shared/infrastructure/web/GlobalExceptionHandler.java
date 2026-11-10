@@ -276,6 +276,7 @@ public class GlobalExceptionHandler {
                  "PAYMENT_NOT_FOUND",          // 21.1
                  "EXPENSE_NOT_FOUND",          // 20.10
                  "AI_CONVERSATION_NOT_FOUND",  // 21.4
+                 "MCP_TOKEN_NOT_FOUND",        // 21.9
                  "APP_VERSION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
@@ -286,6 +287,7 @@ public class GlobalExceptionHandler {
                  "REFRESH_TOKEN_INVALID",
                  "ACCOUNT_INACTIVE",
                  "STORE_REASSIGNED",
+                 "MCP_TOKEN_INVALID",          // 21.9 — personal access token of the MCP server
                  "SESSION_REVOKED" -> HttpStatus.UNAUTHORIZED;
             case "EMAIL_ALREADY_EXISTS", "USER_ALREADY_EXISTS",
                  "USERNAME_ALREADY_EXISTS",
@@ -325,6 +327,7 @@ public class GlobalExceptionHandler {
                  "PUSH_ENDPOINT_OWNED",
                  "PAYMENT_IN_PROGRESS",     // 21.1 — one checkout in flight per company
                  "AI_CONVERSATION_LIMIT",   // 21.4 — conversations kept per user
+                 "MCP_TOKEN_LIMIT",         // 21.9 — access tokens kept per owner
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",

@@ -1,0 +1,175 @@
+{
+  "description": "Story 21.9 — « Accès IA externe » (module mcp-access): the owner creates personal access tokens that let an external AI client (Claude, ChatGPT, an accountant's assistant) read the company's data through the Keevo MCP server. Owner only (other roles: 403 FORBIDDEN). Module mcp-access (plans TEAM, BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL; owner-disabled for companies that existed before it: « Mes modules ») gates GET /tools and POST /tokens; GET /tokens and DELETE /tokens/{id} stay open to the owner whatever the plan (an access can always be seen and revoked). Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. The clear token is returned once, by the creation: the app shows it with a copy button and never stores it. Tool 'name' values are API handles: show 'label' only. Change this file only with both sides.",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/mcp/tools",
+      "auth": "owner JWT",
+      "module": "mcp-access (READ)",
+      "response": {
+        "data": [
+          {
+            "name": "revenue_summary",
+            "label": "Chiffre d'affaires et marge",
+            "available": true
+          }
+        ]
+      },
+      "notes": "The tools the owner may put in an access now (their plan's modules); offer them as checkboxes."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/mcp/tokens",
+      "auth": "owner JWT",
+      "module": "none (always open to the owner)",
+      "response": {
+        "data": [
+          {
+            "id": "uuid (handle, never shown)",
+            "name": "Claude du comptable",
+            "hint": "x9Qa",
+            "tools": [
+              {
+                "name": "revenue_summary",
+                "label": "Chiffre d'affaires et marge",
+                "available": true
+              }
+            ],
+            "createdAt": "ISO-8601",
+            "expiresAt": "ISO-8601",
+            "lastUsedAt": "ISO-8601 or null",
+            "expired": false
+          }
+        ]
+      },
+      "notes": "Newest first, at most 10. 'hint' = last 4 characters of the token (show as « …x9Qa »). Expired accesses stay listed 30 days (« Expiré »), then disappear. 'available': false = the owner's plan or modules no longer allow this data: it stays in the access but the AI client neither sees nor reads it (show « Indisponible avec votre offre »). Accesses cut by « Déconnecter tous les appareils » or a suspension are removed from the list."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/mcp/tokens",
+      "auth": "owner JWT",
+      "module": "mcp-access (WRITE)",
+      "body": {
+        "name": "string 1–60 (required)",
+        "tools": [
+          "1–16 tool names from GET /tools (required)"
+        ],
+        "expiresInDays": "7 | 30 | 90 | 365 (optional, default 90)"
+      },
+      "response": {
+        "status": 201,
+        "data": {
+          "accessToken": "same shape as a GET /tokens item",
+          "token": "kvp_ + 43 characters — shown ONCE",
+          "mcpUrl": "KEEVO_PUBLIC_BASE_URL + /api/v1/mcp (else the request's address)"
+        }
+      },
+      "errors": [
+        {
+          "status": 400,
+          "domainCode": "VALIDATION_ERROR",
+          "error": "La durée de validité doit être de 7, 30, 90 ou 365 jours | Une des données choisies n'est pas disponible pour votre compte | Choisissez entre 1 et 16 données accessibles | Le nom de l'accès est obligatoire (60 caractères au plus)"
+        },
+        {
+          "status": 422,
+          "domainCode": "VALIDATION_ERROR",
+          "error": "body validation (blank name, empty tools)"
+        },
+        {
+          "status": 409,
+          "domainCode": "MCP_TOKEN_LIMIT",
+          "error": "Vous avez atteint le nombre maximum d'accès IA externes : révoquez-en un avant d'en créer un autre."
+        },
+        {
+          "status": 403,
+          "domainCode": "MODULE_NOT_ENTITLED | MODULE_DISABLED_BY_OWNER | FORBIDDEN"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/mcp/tokens/{id}",
+      "auth": "owner JWT",
+      "module": "none (always open to the owner)",
+      "response": {
+        "status": 204
+      },
+      "errors": [
+        {
+          "status": 404,
+          "domainCode": "MCP_TOKEN_NOT_FOUND",
+          "error": "Accès IA externe introuvable"
+        }
+      ],
+      "notes": "Revoked at once: the AI client's next request is refused."
+    }
+  ],
+  "mcpServer": {
+    "url": "POST /api/v1/mcp",
+    "transport": "MCP Streamable HTTP, stateless (protocol 2025-03-26, 2025-06-18, 2025-11-25). Only POST serves MCP; a GET with a valid access answers 405 (no SSE stream); any method without a valid access answers 401.",
+    "headers": {
+      "Authorization": "Bearer kvp_…",
+      "Accept": "application/json, text/event-stream",
+      "Content-Type": "application/json"
+    },
+    "methods": [
+      "initialize",
+      "ping",
+      "tools/list (the access's tools still allowed to the owner)",
+      "tools/call (one AI credit per successful call)"
+    ],
+    "httpRefusals": [
+      {
+        "status": 401,
+        "domainCode": "MCP_TOKEN_INVALID",
+        "error": "Accès refusé : ce jeton Keevo est invalide, expiré ou révoqué. Créez-en un nouveau dans l'application.",
+        "notes": "also when the owner is no longer the owner or after « Déconnecter tous les appareils » (access created before)"
+      },
+      {
+        "status": 401,
+        "domainCode": "ACCOUNT_INACTIVE",
+        "notes": "owner membership off or company deleted"
+      },
+      {
+        "status": 403,
+        "domainCode": "MODULE_NOT_ENTITLED | MODULE_DISABLED_BY_OWNER",
+        "notes": "the module's read-only grace after an expired subscription still serves (reads only)"
+      },
+      {
+        "status": 429,
+        "domainCode": "RATE_LIMIT_EXCEEDED",
+        "error": "Trop de requêtes, veuillez patienter",
+        "headers": {
+          "Retry-After": "60"
+        },
+        "notes": "30 requests per minute per access, 60 per company, and 20 failed authentications per minute per address"
+      },
+      {
+        "status": 503,
+        "domainCode": "SERVICE_UNAVAILABLE",
+        "headers": {
+          "Retry-After": "seconds"
+        }
+      },
+      {
+        "status": 500,
+        "domainCode": "INTERNAL_ERROR"
+      }
+    ],
+    "toolErrors": "A refused call is a tools/call result with isError=true and a French text (out of the access's scope, quota of AI credits used up, module or role refusal of the tool).",
+    "jsonRpcErrors": [
+      {
+        "code": -32601,
+        "message": "Méthode non prise en charge par le serveur Keevo"
+      },
+      {
+        "code": -32602,
+        "message": "Paramètres de la requête invalides"
+      },
+      {
+        "code": -32603,
+        "message": "Une erreur est survenue. Réessayez dans un instant."
+      }
+    ]
+  }
+}

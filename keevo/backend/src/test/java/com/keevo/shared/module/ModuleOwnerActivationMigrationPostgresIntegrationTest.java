@@ -92,15 +92,19 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
             + "re-run keeps an owner choice and an edited DOCUMENT default set")
     void backfillAndRerun() throws Exception {
         // Story 20.10 — V56 owner-disables the new expenses module the same way; 20.11 — V58 the finance module;
-        // 21.4 — V65 the ai-assistant module
-        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false));
+        // 21.4 — V65 the ai-assistant module; 21.9 — V66 the mcp-access module
+        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false));
         assertThat(jdbc.queryForObject("SELECT granted FROM public.profile_modules WHERE plan_type = 'FREE' "
                 + "AND module_id = 'invoicing'", Boolean.class)).isTrue();
         // Story 21.4 — V65 grants the assistant to every plan, FREE included (guided topics are free)
         assertThat(jdbc.queryForList("SELECT p.plan_type FROM public.plan_profiles p LEFT JOIN public.profile_modules m "
                 + "ON m.plan_type = p.plan_type AND m.module_id = 'ai-assistant' AND m.granted WHERE m.plan_type IS NULL",
                 String.class)).as("plans without ai-assistant").isEmpty();
+        // Story 21.9 — V66 grants the external MCP access to the top tiers only
+        assertThat(jdbc.queryForList("SELECT plan_type FROM public.profile_modules WHERE module_id = 'mcp-access' "
+                + "AND granted ORDER BY plan_type", String.class))
+                .containsExactly("BUSINESS", "BUSINESS_TRIAL", "PREMIUM", "PREMIUM_TRIAL", "TEAM");
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "multi-store", "pos");
 
@@ -113,8 +117,8 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
 
         rerunV50();
 
-        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", true));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false));
+        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", true), Map.entry("mcp-access", false));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false));
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "pos");
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.module_activation_rule_sets", Integer.class))

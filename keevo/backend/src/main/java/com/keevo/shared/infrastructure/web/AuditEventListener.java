@@ -7,6 +7,7 @@ import com.keevo.shared.event.catalog.auth.AccountDeletionCancelledEvent;
 import com.keevo.shared.event.catalog.auth.AccountDeletionRequestedEvent;
 import com.keevo.shared.event.catalog.auth.UserAuthenticatedEvent;
 import com.keevo.shared.event.catalog.auth.DeviceSessionClosedEvent;
+import com.keevo.shared.event.catalog.auth.McpAccessTokenChangedEvent;
 import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetRequestedEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
@@ -615,6 +616,23 @@ public class AuditEventListener {
         log.info("AUDIT: {} targetUser={} sessions={} tenantId={} actorId={}",
                 action.toLowerCase(java.util.Locale.ROOT), event.targetUserId(), event.sessions(),
                 event.tenantId(), event.actorId());
+    }
+
+    static final String ACTION_MCP_TOKEN_CREATED = "MCP_TOKEN_CREATED";
+    static final String ACTION_MCP_TOKEN_REVOKED = "MCP_TOKEN_REVOKED";
+
+    /**
+     * Story 21.9 — « Accès IA externe créé » / « Accès IA externe révoqué »: the token's name only (never the token
+     * nor its hash).
+     */
+    @EventListener
+    public void on(McpAccessTokenChangedEvent event) {
+        String action = event.change() == McpAccessTokenChangedEvent.Change.CREATED
+                ? ACTION_MCP_TOKEN_CREATED : ACTION_MCP_TOKEN_REVOKED;
+        write(event.actorId(), event.tenantId(), action, "McpAccessToken", event.tokenId(),
+                null, null, null, event.tokenName(), null, null);
+        log.info("AUDIT: {} tenantId={} actorId={}", action.toLowerCase(java.util.Locale.ROOT), event.tenantId(),
+                event.actorId());
     }
 
     // ── Account deletion events (Story 14.5, FR91) ──────────────────────────

@@ -72,7 +72,7 @@ class ModuleExpiryMaterializerPostgresIntegrationTest {
     private static final Instant T0 = Instant.now().truncatedTo(ChronoUnit.SECONDS);
     private static final Duration GRACE = Duration.ofDays(7);
     private static final List<String> PAID = List.of("advanced-reports", "ai-assistant", "alerts", "counting", "expenses",
-            "exports", "finance", "invoicing", "multi-store", "profitability", "report-config"); // 21.4: + ai-assistant
+            "exports", "finance", "invoicing", "mcp-access", "multi-store", "profitability", "report-config"); // 21.4, 21.9
 
     private static final Tenant ADMIN_ROW = new Tenant("kv_mxad01", "KV-MXAD01");
     private static final Tenant DOWNGRADED = new Tenant("kv_mxdg02", "KV-MXDG02");
@@ -282,7 +282,7 @@ class ModuleExpiryMaterializerPostgresIntegrationTest {
         jdbc.update("INSERT INTO public.tenant_plan_events (tenant_id, from_plan, to_plan, cause, occurred_at) "
                 + "VALUES (?, 'PREMIUM_TRIAL', 'FREE', 'EXPIRY', ?)", DOWNGRADED.id(), ts(downgrade));
         SyncResult written = rowSync(T0.minus(Duration.ofDays(9))).sync(DOWNGRADED.id(), DOWNGRADED.schema());
-        assertThat(written.inserted()).isEqualTo(11);
+        assertThat(written.inserted()).isEqualTo(12);
         for (String id : PAID) {
             assertThat(rows(DOWNGRADED).get(id)).startsWith("EXPIRED/PLAN/");
         }
@@ -290,20 +290,20 @@ class ModuleExpiryMaterializerPostgresIntegrationTest {
 
         Report report = job(T0).materialize();
 
-        assertThat(report.disabled()).isEqualTo(11);
+        assertThat(report.disabled()).isEqualTo(12);
         for (String id : PAID) {
             assertThat(rows(DOWNGRADED)).containsEntry(id,
                     row("DISABLED", "PLAN", downgrade, downgrade.plus(GRACE), T0));
         }
         assertThat(licenceEvents()).singleElement().satisfies(e -> assertThat(e.transitions())
-                .hasSize(11).allMatch(t -> t.status() == NewStatus.DISABLED && t.origin() == Origin.PLAN));
+                .hasSize(12).allMatch(t -> t.status() == NewStatus.DISABLED && t.origin() == Origin.PLAN));
         // bookkeeping only: the effective states were already DISABLED
         assertThat(registry(T0).moduleStates(DOWNGRADED.schema())).isEqualTo(before);
 
         // a later plan write for this FREE tenant: the sync sees the same DISABLED rows → 0 writes
         SyncResult after = rowSync(T0.plus(Duration.ofHours(1))).sync(DOWNGRADED.id(), DOWNGRADED.schema());
         assertThat(after.inserted() + after.updated()).isZero();
-        assertThat(after.unchanged()).isEqualTo(11);
+        assertThat(after.unchanged()).isEqualTo(12);
         assertThat(rows(DOWNGRADED).get("invoicing")).isEqualTo(
                 row("DISABLED", "PLAN", downgrade, downgrade.plus(GRACE), T0)); // disabled_at kept
         // no table of the tenant was dropped
@@ -329,12 +329,12 @@ class ModuleExpiryMaterializerPostgresIntegrationTest {
 
         SyncResult result = rowSync(T0).sync(DOWNGRADED.id(), DOWNGRADED.schema());
 
-        assertThat(result.updated()).isEqualTo(11);
+        assertThat(result.updated()).isEqualTo(12);
         assertThat(rows(DOWNGRADED)).containsEntry("invoicing",
                 row("DISABLED", "PLAN", downgrade, downgrade.plus(GRACE), T0));
         assertThat(licenceEvents()).singleElement().satisfies(e -> {
             assertThat(e.tenantId()).isEqualTo(DOWNGRADED.schema());
-            assertThat(e.transitions()).hasSize(11).contains(new Transition("invoicing", "Facturation", Origin.PLAN,
+            assertThat(e.transitions()).hasSize(12).contains(new Transition("invoicing", "Facturation", Origin.PLAN,
                     NewStatus.DISABLED, downgrade.plus(GRACE)));
         });
 

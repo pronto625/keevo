@@ -73,6 +73,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     static final String MDC_TENANT_ID = "tenantId";
     static final String MDC_USER_ID = "userId";
 
+    /**
+     * Story 21.9 — request attribute set by {@link CredentialAuthFilter} on a request it owns (personal access token of
+     * the MCP server): that request carries no JWT and this filter skips it (in the security chain and as a servlet
+     * filter alike). Only server code sets request attributes.
+     */
+    public static final String ALTERNATE_CREDENTIAL_ATTRIBUTE =
+            "com.keevo.shared.infrastructure.security.JwtAuthFilter.alternateCredential";
+
     /** Paths where passwordChangeRequired check is skipped (employee CAN access these). */
     private static final Set<String> PASSWORD_CHANGE_ALLOWED = Set.of(
             "/api/v1/auth/change-password"
@@ -111,6 +119,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      */
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
+        if (request.getAttribute(ALTERNATE_CREDENTIAL_ATTRIBUTE) != null) {
+            return true;
+        }
         String path = request.getRequestURI();
         return PUBLIC_PATHS.stream().anyMatch(p -> PATH_MATCHER.match(p, path));
     }

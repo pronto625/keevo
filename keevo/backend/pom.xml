@@ -26,6 +26,8 @@
         <!-- Downgrade from 1.21.0 (Linux Docker CE regression) to stable 1.20.4 -->
         <testcontainers.version>1.20.4</testcontainers.version>
         <docker-java.version>3.4.1</docker-java.version>
+        <!-- Story 21.9: MCP Java SDK, the version Spring AI 1.1.8 (spring-ai-mcp) pins -->
+        <mcp-sdk.version>0.18.3</mcp-sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -70,6 +72,25 @@
                 <exclusion>
                     <groupId>io.swagger.core.v3</groupId>
                     <artifactId>swagger-annotations-jakarta</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- ── External MCP server (Story 21.9): the MCP Java SDK transport of the Spring AI 1.1.8 line (the version
+             spring-ai-mcp 1.1.8 pins; not in the BOM), wired by hand — no MCP starter, no auto-configuration ── -->
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-spring-webmvc</artifactId>
+            <version>${mcp-sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.modelcontextprotocol.sdk</groupId>
+            <artifactId>mcp-json-jackson2</artifactId>
+            <version>${mcp-sdk.version}</version>
+            <exclusions>
+                <!-- JSON schema validation of tool outputs is not used -->
+                <exclusion>
+                    <groupId>com.networknt</groupId>
+                    <artifactId>json-schema-validator</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

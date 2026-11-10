@@ -348,7 +348,7 @@ class JdbcPlanCatalogPostgresIntegrationTest {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.profile_modules WHERE plan_type = 'PRO' "
                 + "AND NOT granted", Integer.class)).as("the other paid modules explicitly withheld").isEqualTo(5);
         List<String> all = List.of("advanced-reports", "ai-assistant", "alerts", "counting", "expenses", "exports",
-                "finance", "invoicing", "multi-store", "profitability", "report-config");
+                "finance", "invoicing", "mcp-access", "multi-store", "profitability", "report-config"); // 21.9 (V66)
         for (String plan : List.of("TEAM", "BUSINESS", "BUSINESS_TRIAL")) {
             assertThat(granted(plan)).as(plan).isEqualTo(all);
         }

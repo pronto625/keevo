@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 338 — gated: 147, exempt: 191.
+Handlers: 342 — gated: 149, exempt: 193.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -253,6 +253,10 @@ Handlers: 338 — gated: 147, exempt: 191.
 | PUT | `/api/v1/invoicing/settings` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoicingSettingsController#update |
 | GET | `/api/v1/invoicing/settings/documents` | `invoicing` | READ | `INVOICE_VIEW` |  | InvoicePresentationController#preferences |
 | PUT | `/api/v1/invoicing/settings/documents` | `invoicing` | WRITE | `INVOICE_MANAGE` |  | InvoicePresentationController#updatePreferences |
+| GET | `/api/v1/mcp/tokens` | — | — | — | accès IA externes du propriétaire — consultables et révocables même sans le module | McpAccessTokenController#list |
+| POST | `/api/v1/mcp/tokens` | `mcp-access` | WRITE | — |  | McpAccessTokenController#create |
+| DELETE | `/api/v1/mcp/tokens/{id}` | — | — | — | révocation d'un accès IA externe — toujours possible | McpAccessTokenController#revoke |
+| GET | `/api/v1/mcp/tools` | `mcp-access` | READ | — |  | McpAccessTokenController#tools |
 | GET | `/api/v1/messaging/status` | `messaging` | READ | — |  | MessagingStatusController#getStatus |
 | GET | `/api/v1/notifications` | `messaging` | READ | — |  | NotificationController#list |
 | GET | `/api/v1/notifications/announcements` | — | — | — | core: annonces de la plateforme | AnnouncementController#list |

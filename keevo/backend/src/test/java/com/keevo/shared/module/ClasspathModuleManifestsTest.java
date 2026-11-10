@@ -23,10 +23,10 @@ class ClasspathModuleManifestsTest {
                 .collect(Collectors.toMap(ModuleManifest::id, Function.identity()));
 
         List<String> paid = List.of("multi-store", "counting", "advanced-reports", "report-config", "alerts",
-                "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant");
+                "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant", "mcp-access");
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
                 "messaging", "sync", "admin", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
-                "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant");
+                "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant", "mcp-access");
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
             // 14.4: pos publishes sale.completed (1.3.0), invoicing consumes it (1.1.0)
@@ -105,6 +105,11 @@ class ClasspathModuleManifestsTest {
         assertThat(byId.get("ai-assistant").category()).isEqualTo(ModuleCategory.PREMIUM);
         assertThat(byId.get("ai-assistant").displayName()).isEqualTo("Assistant IA");
         assertThat(byId.get("ai-assistant").free()).isFalse();
+        // 21.9: mcp-access — premium (paid) (TEAM, BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL by V66), core only
+        assertThat(byId.get("mcp-access").requires()).containsExactly("core");
+        assertThat(byId.get("mcp-access").category()).isEqualTo(ModuleCategory.PREMIUM);
+        assertThat(byId.get("mcp-access").displayName()).isEqualTo("Accès IA externe (MCP)");
+        assertThat(byId.get("mcp-access").free()).isFalse();
         assertThat(byId.values()).filteredOn(m -> !m.id().equals("invoicing") && !m.id().equals("expenses")
                         && !m.id().equals("finance"))
                 .allSatisfy(m -> assertThat(m.permissions()).isEmpty());
