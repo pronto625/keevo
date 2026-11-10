@@ -1220,6 +1220,11 @@ So that **les campagnes Bref sont reprises (FUS-FR28, FR32)**.
 **When** elle cible un segment (plan, pays, activité)
 **Then** elle part par les canaux choisis (push, WhatsApp, SMS, email) avec audit
 
+**Éléments reportés routés vers 21.6 (revue 21.5, 2026-11-10) :**
+- [ ] [Deferred-from: revue 21.5, 2026-11-10] mots-clés STOP / START reçus sur le numéro WhatsApp Business de l'entreprise → consentement marketing du client (20.2) et confirmation au client (Bref `handleIncomingMessage` :623-667, une confirmation par numéro et par minute) [whatsappcloud/webhook/application/WhatsAppWebhookService] — le webhook 21.5 stocke le message mais ne touche pas au consentement.
+- [ ] [Deferred-from: revue 21.5, 2026-11-10] envoi des modèles à en-tête média (IMAGE / VIDEO / DOCUMENT) : paramètre média à l'envoi (lien ou média déposé) [whatsappcloud/inbox/application/WhatsAppInboxService.sendTemplate] — 21.5 les crée et les fait valider, mais l'envoi depuis la messagerie les refuse (« il s'envoie depuis une campagne »).
+- [ ] [Deferred-from: revue 21.5, 2026-11-10] messagerie du numéro plateforme (Bref Point) pour le super-admin : messages reçus sur le numéro plateforme (aujourd'hui ignorés par le webhook 21.5, numéro inconnu) et réponses depuis le dashboard (Bref `ownerId NULL`).
+
 ### Story 21.7 : Module `client-portal`
 
 As a **client final**,
