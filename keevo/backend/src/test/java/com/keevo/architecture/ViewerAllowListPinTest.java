@@ -33,7 +33,14 @@ class ViewerAllowListPinTest {
             "PATCH /api/v1/notifications/read-all",
             "PATCH /api/v1/notifications/{id}/read",
             "POST /api/v1/feedback",
-            "POST /api/v1/sync/push");
+            "POST /api/v1/sync/push",
+            // Story 21.4 — the assistant: a question reads data (tools keep the VIEWER read-only), conversations
+            // are the viewer's own
+            "POST /api/v1/ai/chat",
+            "POST /api/v1/ai/conversations",
+            "PUT /api/v1/ai/conversations/{id}",
+            "DELETE /api/v1/ai/conversations/{id}",
+            "DELETE /api/v1/ai/conversations/batch");
 
     /** Every write verb of a handler: its declared verbs, or all four for an unrestricted ({@code ANY}) mapping. */
     static List<String> writeVerbs(String verb) {

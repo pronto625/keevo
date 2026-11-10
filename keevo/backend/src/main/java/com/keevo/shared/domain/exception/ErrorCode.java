@@ -231,6 +231,13 @@ public enum ErrorCode {
     PAYMENT_PROVIDER_ERROR,     // HTTP 502 — the provider refused or failed to start the payment: the request is FAILED
     // ── Notification inbox (Story 19.9) ───────────────────────────────────
     NOTIFICATION_NOT_FOUND,     // HTTP 404 — notification unknown or of another user
+    // ── AI assistant (Story 21.4) ─────────────────────────────────────────
+    AI_QUESTION_IN_PROGRESS,    // HTTP 429 — a free-text question of the company is already being answered (one at a time)
+    AI_UNAVAILABLE,             // HTTP 503 — no model provider configured: free text off, guided topics still work; nothing counted
+    AI_PROVIDER_ERROR,          // HTTP 502 — the model provider failed or timed out: nothing counted
+    AI_ANSWER_FAILED,           // HTTP 503 — a tool failed or the answer exceeded its limits: nothing counted
+    AI_CONVERSATION_NOT_FOUND,  // HTTP 404 — conversation unknown or of another user
+    AI_CONVERSATION_LIMIT,      // HTTP 409 — the user already keeps the maximum number of conversations
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

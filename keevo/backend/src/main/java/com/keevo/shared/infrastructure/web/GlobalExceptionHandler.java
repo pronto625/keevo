@@ -275,6 +275,7 @@ public class GlobalExceptionHandler {
                  "NOTIFICATION_NOT_FOUND",
                  "PAYMENT_NOT_FOUND",          // 21.1
                  "EXPENSE_NOT_FOUND",          // 20.10
+                 "AI_CONVERSATION_NOT_FOUND",  // 21.4
                  "APP_VERSION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
@@ -323,6 +324,7 @@ public class GlobalExceptionHandler {
                  "OVERPAYMENT",
                  "PUSH_ENDPOINT_OWNED",
                  "PAYMENT_IN_PROGRESS",     // 21.1 — one checkout in flight per company
+                 "AI_CONVERSATION_LIMIT",   // 21.4 — conversations kept per user
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
@@ -365,6 +367,8 @@ public class GlobalExceptionHandler {
                  "SMS_UNAVAILABLE",       // Story 20.8
                  "EMAIL_UNAVAILABLE",
                  "PAYMENT_UNAVAILABLE",     // 21.1 — no Mobile Money gateway configured
+                 "AI_UNAVAILABLE",          // 21.4 — no model provider configured
+                 "AI_ANSWER_FAILED",        // 21.4 — tool failure or answer limits: nothing counted
                  "PUBLIC_BASE_URL_MISSING" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
@@ -406,11 +410,13 @@ public class GlobalExceptionHandler {
                  "OTP_TOO_MANY_ATTEMPTS",
                  "OTP_TOO_MANY_REQUESTS",
                  "INVOICE_LINK_RATE_LIMITED",
-                 "EXPORT_QUEUE_FULL" -> HttpStatus.TOO_MANY_REQUESTS;
+                 "EXPORT_QUEUE_FULL",
+                 "AI_QUESTION_IN_PROGRESS" -> HttpStatus.TOO_MANY_REQUESTS;  // 21.4 — one question at a time per company
             case "WHATSAPP_DELIVERY_FAILED",
                  "SMS_DELIVERY_FAILED",     // Story 20.8 — every SMS provider failed
                  "EMAIL_DELIVERY_FAILED",
-                 "PAYMENT_PROVIDER_ERROR" -> HttpStatus.BAD_GATEWAY;  // upstream provider failure (WhatsApp, SMS, email, Mobile Money)
+                 "PAYMENT_PROVIDER_ERROR",
+                 "AI_PROVIDER_ERROR" -> HttpStatus.BAD_GATEWAY;  // upstream provider failure (WhatsApp, SMS, email, Mobile Money)
             case "INVOICE_SEND_UNCERTAIN" -> HttpStatus.CONFLICT;  // 20.8 — maybe delivered: never retried automatically
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };

@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 329 — gated: 138, exempt: 191.
+Handlers: 338 — gated: 147, exempt: 191.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -133,6 +133,15 @@ Handlers: 329 — gated: 138, exempt: 191.
 | GET | `/api/v1/admin/users/stats` | — | — | — | super-admin | AdminUserController#getStats |
 | GET | `/api/v1/admin/users/{userId}` | — | — | — | super-admin | AdminUserController#getUser |
 | GET | `/api/v1/admin/users/{userId}/devices` | — | — | — | super-admin | AdminUserController#listDevices |
+| POST | `/api/v1/ai/chat` | `ai-assistant` | WRITE | — |  | AiChatController#chat |
+| GET | `/api/v1/ai/conversations` | `ai-assistant` | READ | — |  | AiConversationController#list |
+| POST | `/api/v1/ai/conversations` | `ai-assistant` | WRITE | — |  | AiConversationController#create |
+| DELETE | `/api/v1/ai/conversations/batch` | `ai-assistant` | WRITE | — |  | AiConversationController#deleteBatch |
+| DELETE | `/api/v1/ai/conversations/{id}` | `ai-assistant` | WRITE | — |  | AiConversationController#delete |
+| GET | `/api/v1/ai/conversations/{id}` | `ai-assistant` | READ | — |  | AiConversationController#get |
+| PUT | `/api/v1/ai/conversations/{id}` | `ai-assistant` | WRITE | — |  | AiConversationController#save |
+| GET | `/api/v1/ai/topics` | `ai-assistant` | READ | — |  | GuidedTopicController#topics |
+| GET | `/api/v1/ai/topics/{topic}` | `ai-assistant` | READ | — |  | GuidedTopicController#topic |
 | GET | `/api/v1/app-version/check` | — | — | — | version d'application — public | AppVersionCheckController#check |
 | GET | `/api/v1/audit` | — | — | — | core: journal d'audit | AuditController#getAuditHistory |
 | DELETE | `/api/v1/audit/{id}` | — | — | — | core: journal d'audit | AuditController#delete |

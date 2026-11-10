@@ -1,0 +1,26 @@
+{
+  "description": "Story 21.4 — script of the fake assistant model (keevo.ai.provider=fake, dev and test profiles only): a few questions answered by real tool calls, never a network call. The parity corpus of keevo/contracts/ai-assistant.json uses the same rule format.",
+  "rules": [
+    {
+      "keywords": ["chiffre d'affaires"],
+      "steps": [{ "tool": "revenue_summary", "args": {} }],
+      "answer": "Sur les 30 derniers jours, votre chiffre d'affaires est de **{{revenue_summary:/revenue}} FCFA**, avec une marge brute de {{revenue_summary:/grossMargin}} FCFA."
+    },
+    {
+      "keywords": ["impay"],
+      "steps": [{ "tool": "unpaid_call_list", "args": { "limit": 5 } }],
+      "answer": "{{unpaid_call_list:/clientsOwing}} clients vous doivent au total **{{unpaid_call_list:/totalDue}} FCFA** ({{unpaid_call_list:/unpaidInvoices}} factures non soldées). Relancez en premier {{unpaid_call_list:/clients/0/client}}."
+    },
+    {
+      "keywords": ["encaiss"],
+      "steps": [{ "tool": "invoice_collections", "args": {} }],
+      "answer": "Sur les 30 derniers jours, vous avez encaissé **{{invoice_collections:/amount}} FCFA** sur vos factures ({{invoice_collections:/payments}} paiements)."
+    },
+    {
+      "keywords": ["boutiques"],
+      "steps": [{ "tool": "list_stores", "args": {} }],
+      "answer": "Votre première boutique est {{list_stores:/0/name}} ({{list_stores:/0/storeId}})."
+    }
+  ],
+  "fallback": "Je suis l'assistant simulé de Keevo (mode développement) : demandez votre chiffre d'affaires, vos impayés, vos encaissements ou vos boutiques."
+}

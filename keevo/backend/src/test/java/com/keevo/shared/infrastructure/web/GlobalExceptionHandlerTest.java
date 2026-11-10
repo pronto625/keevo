@@ -54,6 +54,26 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("21.4: AI codes map to 429 / 503 / 502 / 503 / 404 / 409 with their French messages")
+    void aiCodes() {
+        ResponseEntity<ApiResponseWrapper<Void>> busy =
+                handler.handleDomainException(new DomainException(ErrorCode.AI_QUESTION_IN_PROGRESS, "x"));
+        assertThat(busy.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(busy.getBody().error())
+                .isEqualTo("Une question est déjà en cours. Attendez la réponse avant d'en poser une autre.");
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.AI_UNAVAILABLE, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.AI_PROVIDER_ERROR, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.AI_ANSWER_FAILED, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.AI_CONVERSATION_NOT_FOUND, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(handler.handleDomainException(new DomainException(ErrorCode.AI_CONVERSATION_LIMIT, "x"))
+                .getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    }
+
+    @Test
     @DisplayName("16.8: PRODUCT_QUOTA_UNAVAILABLE maps to 503 with the French quota message")
     void productQuotaUnavailable_mapsTo503() {
         ResponseEntity<ApiResponseWrapper<Void>> resp = handler.handleDomainException(

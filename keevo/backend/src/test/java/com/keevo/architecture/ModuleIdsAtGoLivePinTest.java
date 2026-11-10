@@ -26,7 +26,8 @@ class ModuleIdsAtGoLivePinTest {
             "crm", "exports", "inventory", "invoicing", "messaging", "multi-store", "pos", "profitability",
             "report-config", "reporting", "store", "sync",
             "expenses", // 20.10 — owner-disabled for existing tenants by V56
-            "finance"); // 20.11 — owner-disabled for existing tenants by V58
+            "finance", // 20.11 — owner-disabled for existing tenants by V58
+            "ai-assistant"); // 21.4 — owner-disabled for existing tenants by V65
 
     @Test
     @DisplayName("every shipped module id is pinned (a new module ships its owner-disabling migration first)")

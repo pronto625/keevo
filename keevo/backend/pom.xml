@@ -62,6 +62,17 @@
                 </exclusion>
             </exclusions>
         </dependency>
+        <!-- ── AI assistant (Story 21.4): OpenAI-compatible chat model (OpenAI, Gemini, Ollama), no auto-config ── -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.swagger.core.v3</groupId>
+                    <artifactId>swagger-annotations-jakarta</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
 
         <!-- ── Web ─────────────────────────────────────────────── -->
         <dependency>

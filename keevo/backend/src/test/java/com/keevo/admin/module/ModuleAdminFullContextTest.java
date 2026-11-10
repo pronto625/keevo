@@ -126,7 +126,7 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
 
         List<Map<String, Object>> rows = jdbc.queryForList("SELECT status, tier, origin, expires_at "
                 + "FROM public.tenant_modules WHERE tenant_id = ? AND origin = 'PLAN'", tenantId);
-        assertThat(rows).hasSize(10).allSatisfy(r -> { // 10 paid modules since 20.11
+        assertThat(rows).hasSize(11).allSatisfy(r -> { // 11 paid modules since 21.4
             assertThat(r).containsEntry("status", "ACTIVE").containsEntry("tier", "PREMIUM");
             assertThat(((java.sql.Timestamp) r.get("expires_at")).toInstant()).isEqualTo(until);
         });
@@ -137,7 +137,8 @@ class ModuleAdminFullContextTest extends FullContextIntegrationTest {
             + "transaction as the JPA tenant row, before it is flushed)")
     void registrationWritesTrialRows() {
         assertThat(registrationPlanRows).containsExactly(
-                "advanced-reports:TRIAL:PREMIUM:true", "alerts:TRIAL:PREMIUM:true", "counting:TRIAL:PREMIUM:true",
+                "advanced-reports:TRIAL:PREMIUM:true", "ai-assistant:TRIAL:PREMIUM:true", "alerts:TRIAL:PREMIUM:true",
+                "counting:TRIAL:PREMIUM:true",
                 "expenses:TRIAL:PREMIUM:true", "exports:TRIAL:PREMIUM:true", "finance:TRIAL:PREMIUM:true", "invoicing:TRIAL:PREMIUM:true", "multi-store:TRIAL:PREMIUM:true",
                 "profitability:TRIAL:PREMIUM:true", "report-config:TRIAL:PREMIUM:true");
     }

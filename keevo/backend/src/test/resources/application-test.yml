@@ -21,6 +21,9 @@ logging:
 keevo:
   scheduling:
     enabled: false
+  # Story 21.4 — the scripted assistant model: no test ever calls a real model
+  ai:
+    provider: fake
   # Story 21.1 — the simulated Mobile Money provider: no test ever reaches MyCoolPay
   payments:
     gateway: sandbox

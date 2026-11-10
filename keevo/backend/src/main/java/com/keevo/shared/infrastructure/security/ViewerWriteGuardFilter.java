@@ -29,7 +29,7 @@ import java.util.Set;
  * here and refused operation by operation ({@code REJECTED/FORBIDDEN}) by the push service.
  *
  * <p>Registered in {@link SecurityConfig} right after {@link JwtAuthFilter} (not a bean: never a second servlet
- * filter). Cost O(1) per request: a method check, then — for a VIEWER write only — a match against a constant list of 11.
+ * filter). Cost O(1) per request: a method check, then — for a VIEWER write only — a match against a constant list of 16.
  */
 public class ViewerWriteGuardFilter extends OncePerRequestFilter {
 
@@ -41,7 +41,8 @@ public class ViewerWriteGuardFilter extends OncePerRequestFilter {
     }
 
     /**
-     * The writes a VIEWER may still make — its own session, devices, notifications, feedback and sync plumbing. Every
+     * The writes a VIEWER may still make — its own session, devices, notifications, feedback, sync plumbing and
+     * assistant (21.4). Every
      * entry is an endpoint that exists; the set is pinned against the scanned handlers by
      * {@code ViewerAllowListPinTest}. (Public auth endpoints carry no authentication and never reach this rule.)
      */
@@ -56,7 +57,14 @@ public class ViewerWriteGuardFilter extends OncePerRequestFilter {
             new AllowedWrite("PATCH", "/api/v1/notifications/read-all"),
             new AllowedWrite("PATCH", "/api/v1/notifications/{id}/read"),
             new AllowedWrite("POST", "/api/v1/feedback"),
-            new AllowedWrite("POST", "/api/v1/sync/push"));
+            new AllowedWrite("POST", "/api/v1/sync/push"),
+            // Story 21.4 — the assistant: asking a question only reads (every tool is read-only and keeps its own
+            // gates); the conversations saved are the viewer's own
+            new AllowedWrite("POST", "/api/v1/ai/chat"),
+            new AllowedWrite("POST", "/api/v1/ai/conversations"),
+            new AllowedWrite("PUT", "/api/v1/ai/conversations/{id}"),
+            new AllowedWrite("DELETE", "/api/v1/ai/conversations/{id}"),
+            new AllowedWrite("DELETE", "/api/v1/ai/conversations/batch"));
 
     private static final Set<String> READ_METHODS = Set.of("GET", "HEAD", "OPTIONS");
     private static final String VIEWER_AUTHORITY = "ROLE_" + Role.VIEWER.name();
