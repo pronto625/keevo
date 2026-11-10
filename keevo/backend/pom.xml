@@ -28,6 +28,11 @@
         <docker-java.version>3.4.1</docker-java.version>
         <!-- Story 21.9: MCP Java SDK, the version Spring AI 1.1.8 (spring-ai-mcp) pins -->
         <mcp-sdk.version>0.18.3</mcp-sdk.version>
+        <!-- Story 21.4.2: official Anthropic Java SDK (native Claude provider of the assistant) -->
+        <anthropic-java.version>3.3.0</anthropic-java.version>
+        <!-- Story 21.4.2: tests calling a real model (tag real-model) never run by default (CI never pays); run them
+             with -Dsurefire.excludedGroups=none -Dgroups=real-model and ANTHROPIC_API_KEY set -->
+        <surefire.excludedGroups>real-model</surefire.excludedGroups>
     </properties>
 
     <dependencyManagement>
@@ -74,6 +79,13 @@
                     <artifactId>swagger-annotations-jakarta</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <!-- ── AI assistant (Story 21.4.2): native Anthropic provider (Claude) through the official Anthropic Java SDK
+             (OkHttp client; Kotlin 1.9 / Jackson 2.19 like Boot 3.5) — no Spring AI Anthropic module, no auto-config ── -->
+        <dependency>
+            <groupId>com.anthropic</groupId>
+            <artifactId>anthropic-java</artifactId>
+            <version>${anthropic-java.version}</version>
         </dependency>
         <!-- ── External MCP server (Story 21.9): the MCP Java SDK transport of the Spring AI 1.1.8 line (the version
              spring-ai-mcp 1.1.8 pins; not in the BOM), wired by hand — no MCP starter, no auto-configuration ── -->
@@ -333,6 +345,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                     <environmentVariables>
                         <DOCKER_HOST>unix:///var/run/docker.sock</DOCKER_HOST>
                         <TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>/var/run/docker.sock</TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE>

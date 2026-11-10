@@ -79,7 +79,8 @@ public class InvoicingMcpTools {
             + "les plus récentes d'abord, par pages : numéro, client et téléphone, dates d'émission et d'échéance, "
             + "total, déjà payé, reste dû, état. Filtres : recherche (numéro ou nom du client), en retard seulement, "
             + "boutique (propriétaire seulement). Un employé ne voit que ses factures, un gérant celles de sa "
-            + "boutique. Montants en FCFA.")
+            + "boutique. Pour le nombre de factures non soldées, le total dû ou qui relancer, utiliser plutôt "
+            + "unpaid_call_list. Montants en FCFA.")
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     public UnpaidInvoices unpaidInvoices(
@@ -118,10 +119,11 @@ public class InvoicingMcpTools {
     public record CallList(long clientsOwing, long unpaidInvoices, long totalDue, List<ClientToCall> clients) {
     }
 
-    @Tool(name = "unpaid_call_list", description = "Liste d'appel des impayés : les clients qui doivent le plus, avec "
-            + "téléphone, nombre de factures non soldées (dont en retard), montant total restant dû et plus ancienne "
-            + "échéance, du plus gros montant au plus petit ; plus le nombre de clients débiteurs, de factures non "
-            + "soldées et le total dû. Même visibilité que les factures. Montants en FCFA.")
+    @Tool(name = "unpaid_call_list", description = "Impayés et liste d'appel : combien les clients doivent au total "
+            + "(totalDue), combien de clients doivent de l'argent, combien de factures sont non soldées "
+            + "(unpaidInvoices) ; puis les clients qui doivent le plus, avec téléphone, nombre de factures non soldées "
+            + "(dont en retard), montant restant dû et plus ancienne échéance, du plus gros montant au plus petit. "
+            + "Même visibilité que les factures. Montants en FCFA.")
     @RequiresPermission(InvoicingModule.INVOICE_VIEW)
     @RequiresEntitlement(value = InvoicingModule.ID, access = RequiresEntitlement.Access.READ)
     public CallList unpaidCallList(

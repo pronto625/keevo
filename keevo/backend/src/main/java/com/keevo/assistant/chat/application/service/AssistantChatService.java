@@ -34,6 +34,7 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -44,13 +45,17 @@ import java.util.regex.Pattern;
  * <p><b>Pattern:</b> bounded agent loop (the model asks for tools, the service runs them through
  * {@link AiToolRegistry} on the calling thread — the HTTP request's, so the session's actor and tenant are the
  * request's and every REST gate applies — and hands the results back) with hard caps on rounds, calls and the text
- * fed to the model; the provider is a port (strategy). One question at a time per company (in-memory guard, the
- * application runs as one instance like Bref's API).
+ * fed to the model; the provider is a port (strategy). One question at a time per account — the user in their company,
+ * like Bref (21.4.2: per company before) — by an in-memory guard (the application runs as one instance like Bref's
+ * API); members of one company may ask at the same time.
  *
  * <p><b>Quota (19.8):</b> one {@code AI_CREDITS} unit per answered question. Checked before the model is called by
  * the very increment of 19.8 inside a transaction that is rolled back (exact refusal, nothing kept), consumed after
  * the answer in its own transaction. A disabled provider, a refused quota, a provider failure, a tool failure, a loop
- * over its limits or a concurrent question count nothing.
+ * over its limits or a concurrent question count nothing. Members of one company asking at once stay exact: each
+ * consumption is one guarded upsert of 19.8 (never beyond the quota, never lost); when the last credit goes to another
+ * member during a question, that answer is delivered uncounted (it is already paid to the provider) — at most one per
+ * member asking at that moment.
  *
  * <p><b>Cost:</b> 1 rolled-back quota transaction, at most {@value #MAX_ROUNDS} provider calls and
  * {@value #MAX_TOOL_CALLS} tool calls (each a bounded use case of 21.8 + one audit row), 1 quota transaction and 1
@@ -122,13 +127,14 @@ public class AssistantChatService {
     }
 
     /**
-     * Answers {@code question} for the session's actor in company {@code tenantSchema}.
+     * Answers {@code question} for the session's actor {@code userId} in company {@code tenantSchema}.
      *
-     * @param role the actor's role (prompt context only)
+     * @param userId the asking user (one question at a time each)
+     * @param role   the actor's role (prompt context only)
      * @throws DomainException {@code AI_UNAVAILABLE}, {@code AI_QUESTION_IN_PROGRESS}, {@code QUOTA_EXCEEDED},
      *                         {@code AI_PROVIDER_ERROR}, {@code AI_ANSWER_FAILED}, {@code VALIDATION_ERROR}
      */
-    public Answer ask(String tenantSchema, String role, String question, List<HistoryEntry> history) {
+    public Answer ask(String tenantSchema, UUID userId, String role, String question, List<HistoryEntry> history) {
         String text = question == null ? "" : question.strip();
         if (text.isEmpty() || text.length() > MAX_MESSAGE_CHARS) {
             throw new InvalidRequestParameterException("message", "message blank or too long",
@@ -137,8 +143,9 @@ public class AssistantChatService {
         if (!model.available()) {
             throw new DomainException(ErrorCode.AI_UNAVAILABLE, "no AI provider configured");
         }
-        if (!inFlight.add(tenantSchema)) {
-            throw new DomainException(ErrorCode.AI_QUESTION_IN_PROGRESS, "a question of the company is in flight");
+        String account = tenantSchema + '/' + userId;
+        if (!inFlight.add(account)) {
+            throw new DomainException(ErrorCode.AI_QUESTION_IN_PROGRESS, "a question of this user is in flight");
         }
         long started = System.nanoTime();
         int[] counters = new int[2]; // rounds, tool calls
@@ -153,7 +160,7 @@ public class AssistantChatService {
             outcome = e.getDomainCode();
             throw e;
         } finally {
-            inFlight.remove(tenantSchema);
+            inFlight.remove(account);
             log.info("[AI] question {} rounds={} tools={} durationMs={}", outcome, counters[0], counters[1],
                     (System.nanoTime() - started) / 1_000_000);
         }

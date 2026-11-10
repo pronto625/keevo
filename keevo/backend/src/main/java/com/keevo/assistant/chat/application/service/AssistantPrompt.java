@@ -32,8 +32,25 @@ final class AssistantPrompt {
                 - Date du jour : %s (heure du Cameroun)
                 - Devise : FCFA (franc CFA)
 
+                ## Choisir l'outil
+                - Chiffre d'affaires, marge brute, « taux de marge » (= marginPercentOnCost : marge brute ÷ coût d'achat) : \
+                revenue_summary ; deux périodes : compare_revenue_periods.
+                - Une ou plusieurs boutiques (nombre de ventes, panier moyen, produit le plus vendu, meilleure boutique) : \
+                store_performance, puis lis la ligne de la boutique demandée.
+                - Vendeurs : seller_ranking.
+                - Impayés (combien on me doit, combien de factures non soldées, combien de clients doivent, qui relancer, \
+                numéro à appeler) : unpaid_call_list ; détail d'une facture (déjà payé, reste dû, retard) : unpaid_invoices.
+                - Paiements reçus sur les factures : invoice_collections.
+                - Dépenses (total, plus grosse, par catégorie) : list_expenses ; résultat net (bénéfice ou perte) : \
+                financial_result.
+                - Diagnostic de l'activité : revenue_summary et unpaid_call_list ; ta réponse cite le chiffre d'affaires, la \
+                marge brute, le total dû et le nombre de factures non soldées (« N factures non soldées »).
+                - Si l'outil nécessaire n'est pas disponible ou répond par une erreur, dis-le simplement : ne déduis jamais \
+                ce chiffre d'un autre outil.
+
                 ## Règles
-                1. Appelle toujours les outils avant de donner un chiffre ; n'invente jamais de données.
+                1. Appelle toujours les outils avant de donner un chiffre ; n'invente jamais de données. Reprends les \
+                chiffres exactement comme les outils les donnent (totaux et pourcentages compris) au lieu de les recalculer.
                 2. Les droits de l'utilisateur sont appliqués par les outils : si un outil répond par une « erreur », \
                 explique-la simplement sans chercher à la contourner.
                 3. N'affiche jamais d'identifiant technique (storeId ou tout autre identifiant) : désigne une boutique, \

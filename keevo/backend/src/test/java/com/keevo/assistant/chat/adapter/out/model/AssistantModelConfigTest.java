@@ -1,6 +1,7 @@
 package com.keevo.assistant.chat.adapter.out.model;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.assistant.chat.domain.port.out.AssistantModel;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
@@ -60,6 +61,34 @@ class AssistantModelConfigTest {
         assertThat(AssistantModelConfig.settings(cloud)).isEqualTo(new AssistantModelConfig.Settings("ollama",
                 "https://ollama.com", "/v1/chat/completions", "o-key", "qwen3", false));
         assertThat(AssistantModelConfig.settings(env("openai", null))).isNull();
+    }
+
+    @Test
+    @DisplayName("anthropic: key required (missing → disabled), Claude Haiku 5.5 by default, model overridable")
+    void anthropic() throws Exception {
+        assertThat(AssistantModelConfig.create(env("anthropic", ""), MAPPER)).isInstanceOf(DisabledAssistantModel.class);
+        AssistantModel haiku = AssistantModelConfig.create(env("ANTHROPIC", "test-key"), MAPPER);
+        assertThat(haiku).isInstanceOf(AnthropicAssistantModel.class);
+        assertThat(((AnthropicAssistantModel) haiku).model()).isEqualTo("claude-haiku-5-5");
+        ((AnthropicAssistantModel) haiku).close();
+        MockEnvironment other = env("anthropic", "test-key");
+        other.setProperty("keevo.ai.model", "claude-sonnet-5-5");
+        other.setProperty("keevo.ai.base-url", "https://proxy.example/");
+        AssistantModel sonnet = AssistantModelConfig.create(other, MAPPER);
+        assertThat(((AnthropicAssistantModel) sonnet).model()).isEqualTo("claude-sonnet-5-5");
+        ((AnthropicAssistantModel) sonnet).close();
+    }
+
+    @Test
+    @DisplayName("timeout of a question call: keevo.ai.timeout-seconds (default 45 s), bounded 1..120")
+    void timeout() {
+        assertThat(AssistantModelConfig.readTimeoutMs(env(null, null))).isEqualTo(45_000);
+        MockEnvironment shorter = env("anthropic", "k");
+        shorter.setProperty("keevo.ai.timeout-seconds", "5");
+        assertThat(AssistantModelConfig.readTimeoutMs(shorter)).isEqualTo(5_000);
+        shorter.setProperty("keevo.ai.timeout-seconds", "0");
+        assertThatThrownBy(() -> AssistantModelConfig.readTimeoutMs(shorter)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("keevo.ai.timeout-seconds");
     }
 
     @Test

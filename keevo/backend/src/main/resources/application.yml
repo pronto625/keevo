@@ -325,14 +325,16 @@ keevo:
       vapid-private-key: ${VAPID_PRIVATE_KEY:}
       subject: ${VAPID_SUBJECT:mailto:admin@brefpoint.app}
   # Story 21.4 — model of the AI assistant (module ai-assistant). provider: disabled (default: free-text questions
-  # answer 503, guided topics and conversations work) | fake (scripted, dev/test profiles only) | openai | gemini |
-  # ollama (OpenAI-compatible chat completions, like Bref's AI_PROVIDER). The key comes from the environment only;
-  # openai / gemini without a key → disabled with a warning. Model and base URL default per provider.
+  # answer 503, guided topics and conversations work) | fake (scripted, dev/test profiles only) | anthropic (Claude,
+  # official SDK, 21.4.2) | openai | gemini | ollama (OpenAI-compatible chat completions, like Bref's AI_PROVIDER).
+  # The key comes from the environment only; anthropic / openai / gemini without a key → disabled with a warning.
+  # Model (anthropic: claude-haiku-5-5) and base URL default per provider; timeout-seconds per provider call (1..120).
   ai:
     provider: ${KEEVO_AI_PROVIDER:disabled}
     api-key: ${KEEVO_AI_API_KEY:}
     model: ${KEEVO_AI_MODEL:}
     base-url: ${KEEVO_AI_BASE_URL:}
+    timeout-seconds: ${KEEVO_AI_TIMEOUT_SECONDS:45}
     fake-script: ${KEEVO_AI_FAKE_SCRIPT:}
   # Story 21.9 — external MCP server (POST /api/v1/mcp, module mcp-access): requests per minute per personal access
   # token and per company (all its tokens); beyond → 429 RATE_LIMIT_EXCEEDED.

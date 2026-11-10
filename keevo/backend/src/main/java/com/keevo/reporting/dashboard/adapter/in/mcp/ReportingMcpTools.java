@@ -139,9 +139,9 @@ public class ReportingMcpTools {
     }
 
     @Tool(name = "revenue_summary", description = "Chiffre d'affaires d'une période (ventes en caisse et factures, "
-            + "avoirs déduits) avec la marge brute des lignes dont le coût est connu et la part sans marge connue. "
-            + "Toutes les boutiques, ou une seule avec storeId. Par défaut les 30 derniers jours. Montants en FCFA. "
-            + "Réservé au propriétaire.")
+            + "avoirs déduits) avec la marge brute des lignes dont le coût est connu et la part sans marge connue ; "
+            + "marginPercentOnCost est le taux de marge (marge brute ÷ coût d'achat, en %). Toutes les boutiques, ou "
+            + "une seule avec storeId. Par défaut les 30 derniers jours. Montants en FCFA. Réservé au propriétaire.")
     @PreAuthorize("hasRole('OWNER')")
     @RequiresEntitlement(value = "profitability", access = RequiresEntitlement.Access.READ)
     public RevenueSummary revenueSummary(
@@ -196,10 +196,12 @@ public class ReportingMcpTools {
                             String bestSellingProduct, Double changePercentVsPreviousPeriod) {
     }
 
-    @Tool(name = "store_performance", description = "Classement des boutiques sur une période : chiffre d'affaires, "
-            + "nombre de ventes, panier moyen, produit le plus vendu et évolution par rapport à la période précédente "
-            + "de même durée. Critère de classement : CA (défaut), SALES_COUNT ou AVG_BASKET. Par défaut les 30 "
-            + "derniers jours. Montants en FCFA. Réservé au propriétaire.")
+    @Tool(name = "store_performance", description = "Chiffres de chaque boutique sur une période, en un seul appel : "
+            + "chiffre d'affaires, nombre de ventes, panier moyen, produit le plus vendu et évolution par rapport à la "
+            + "période précédente de même durée, boutiques classées. À utiliser aussi pour une question sur une seule "
+            + "boutique (son nombre de ventes, son panier moyen, son produit phare) : lire sa ligne. Critère de "
+            + "classement : CA (défaut), SALES_COUNT ou AVG_BASKET. Par défaut les 30 derniers jours. Montants en FCFA. "
+            + "Réservé au propriétaire.")
     @PreAuthorize("hasRole('OWNER')")
     @RequiresEntitlement(value = "profitability", access = RequiresEntitlement.Access.READ)
     public List<StoreRank> storePerformance(

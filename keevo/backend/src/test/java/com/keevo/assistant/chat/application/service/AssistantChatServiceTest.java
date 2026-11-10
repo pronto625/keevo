@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -52,11 +53,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@DisplayName("21.4 — AssistantChatService: bounded tool loop, quota once per answer, one question per company")
+@DisplayName("21.4 — AssistantChatService: bounded tool loop, quota once per answer, one question per user")
 class AssistantChatServiceTest {
 
     static final String TENANT = "kv_ai0001";
     static final String STORE_ID = "3f2b8c1e-9d4a-4e6b-8c2d-1a2b3c4d5e6f";
+    static final UUID USER = UUID.fromString("0b6e3a52-7c1d-4f0e-9a8b-2c3d4e5f6a7b");
+    static final UUID OTHER_USER = UUID.fromString("5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a");
 
     private AssistantModel model;
     private AiToolRegistry tools;
@@ -113,7 +116,7 @@ class AssistantChatServiceTest {
         script(call("unpaid_call_list", "{}"), AssistantTurn.answer("Vos clients doivent **70 000 FCFA** (" + STORE_ID
                 + ")."));
 
-        var answer = service.ask(TENANT, "OWNER", "Combien me doit-on ?", List.of());
+        var answer = service.ask(TENANT, USER, "OWNER", "Combien me doit-on ?", List.of());
 
         assertThat(answer.reply()).isEqualTo("Vos clients doivent **70 000 FCFA**.");
         assertThat(answer.creditsRemaining()).isEqualTo(17L);
@@ -135,7 +138,7 @@ class AssistantChatServiceTest {
     @DisplayName("provider disabled: AI_UNAVAILABLE, nothing checked nor counted")
     void disabled() {
         when(model.available()).thenReturn(false);
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "Bonjour", List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Bonjour", List.of()))
                 .isInstanceOf(DomainException.class).hasMessageContaining("AI_UNAVAILABLE");
         verify(quota, never()).assertAndIncrementForSchema(anyString(), any(), any(Integer.class));
     }
@@ -145,7 +148,7 @@ class AssistantChatServiceTest {
     void quotaExceeded() {
         doThrow(new DomainException(ErrorCode.QUOTA_EXCEEDED, "AI_CREDITS DAY quota reached"))
                 .when(quota).assertAndIncrementForSchema(TENANT, UsageMetric.AI_CREDITS, 1);
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "Bonjour", List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Bonjour", List.of()))
                 .isInstanceOf(DomainException.class).hasMessageContaining("QUOTA_EXCEEDED");
         verify(model, never()).respond(any());
         assertThat(committed.get()).isZero();
@@ -155,7 +158,7 @@ class AssistantChatServiceTest {
     @DisplayName("provider failure: AI_PROVIDER_ERROR, not counted")
     void providerFailure() {
         when(model.respond(any())).thenThrow(new AssistantModelException("timeout"));
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "Bonjour", List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Bonjour", List.of()))
                 .isInstanceOf(DomainException.class).hasMessageContaining("AI_PROVIDER_ERROR");
         assertThat(committed.get()).isZero();
     }
@@ -166,7 +169,7 @@ class AssistantChatServiceTest {
         when(tools.call(anyString(), anyString(), eq(AiToolChannel.ASSISTANT)))
                 .thenReturn(AiToolResult.failure(AiToolResult.Outcome.ERROR, "INTERNAL_ERROR", "Erreur"));
         script(call("unpaid_call_list", "{}"), AssistantTurn.answer("jamais"));
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "Impayés ?", List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Impayés ?", List.of()))
                 .isInstanceOf(DomainException.class).hasMessageContaining("AI_ANSWER_FAILED");
         assertThat(committed.get()).isZero();
     }
@@ -177,7 +180,7 @@ class AssistantChatServiceTest {
         when(tools.call("financial_result", "{}", AiToolChannel.ASSISTANT)).thenReturn(AiToolResult.failure(
                 AiToolResult.Outcome.REFUSED, "FORBIDDEN", "Vous n'avez pas les droits nécessaires"));
         script(call("financial_result", "{}"), AssistantTurn.answer("Vous n'avez pas accès au résultat."));
-        assertThat(service.ask(TENANT, "EMPLOYEE", "Mon résultat ?", List.of()).reply())
+        assertThat(service.ask(TENANT, USER, "EMPLOYEE", "Mon résultat ?", List.of()).reply())
                 .isEqualTo("Vous n'avez pas accès au résultat.");
         Message results = exchanges.get(1).messages().get(exchanges.get(1).messages().size() - 1);
         assertThat(results.toolResults().get(0).content())
@@ -191,7 +194,7 @@ class AssistantChatServiceTest {
     void roundLimit() {
         when(tools.call(anyString(), anyString(), any())).thenReturn(AiToolResult.ok("{}"));
         script(call("unpaid_call_list", "{}"));
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "Boucle", List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Boucle", List.of()))
                 .isInstanceOf(DomainException.class).hasMessageContaining("AI_ANSWER_FAILED");
         assertThat(exchanges).hasSize(AssistantChatService.MAX_ROUNDS);
         assertThat(exchanges.get(AssistantChatService.MAX_ROUNDS - 1).tools()).isEmpty();
@@ -206,7 +209,7 @@ class AssistantChatServiceTest {
             calls.add(new ToolCall("c" + i, "unpaid_call_list", "{}"));
         }
         script(new AssistantTurn(null, calls), AssistantTurn.answer("Je réponds sans outil."));
-        assertThat(service.ask(TENANT, "OWNER", "Beaucoup", List.of()).reply()).isEqualTo("Je réponds sans outil.");
+        assertThat(service.ask(TENANT, USER, "OWNER", "Beaucoup", List.of()).reply()).isEqualTo("Je réponds sans outil.");
         verify(tools, never()).call(anyString(), anyString(), any());
         assertThat(exchanges.get(1).tools()).isEmpty();
     }
@@ -216,7 +219,7 @@ class AssistantChatServiceTest {
     void tooLarge() {
         when(tools.call(anyString(), anyString(), any())).thenReturn(AiToolResult.ok("x".repeat(10_000)));
         script(call("unpaid_call_list", "{}"), AssistantTurn.answer("ok"));
-        service.ask(TENANT, "OWNER", "Gros résultat", List.of());
+        service.ask(TENANT, USER, "OWNER", "Gros résultat", List.of());
         String content = exchanges.get(1).messages().get(exchanges.get(1).messages().size() - 1).toolResults().get(0)
                 .content();
         assertThat(content).isEqualTo(AssistantChatService.TOO_LARGE);
@@ -231,7 +234,7 @@ class AssistantChatServiceTest {
             calls.add(new ToolCall("c" + i, "unpaid_call_list", "{\"page\":" + i + "}"));
         }
         script(new AssistantTurn(null, calls), AssistantTurn.answer("Synthèse."));
-        assertThat(service.ask(TENANT, "OWNER", "Tout", List.of()).reply()).isEqualTo("Synthèse.");
+        assertThat(service.ask(TENANT, USER, "OWNER", "Tout", List.of()).reply()).isEqualTo("Synthèse.");
         verify(tools, times(4)).call(anyString(), anyString(), any());
         List<AssistantExchange.ToolResult> fed = exchanges.get(1).messages()
                 .get(exchanges.get(1).messages().size() - 1).toolResults();
@@ -248,15 +251,16 @@ class AssistantChatServiceTest {
                 .doThrow(new DomainException(ErrorCode.QUOTA_EXCEEDED, "AI_CREDITS MONTH quota reached"))
                 .when(quota).assertAndIncrementForSchema(TENANT, UsageMetric.AI_CREDITS, 1);
         script(AssistantTurn.answer("Réponse payée."));
-        AssistantChatService.Answer answer = service.ask(TENANT, "OWNER", "Course", List.of());
+        AssistantChatService.Answer answer = service.ask(TENANT, USER, "OWNER", "Course", List.of());
         assertThat(answer.reply()).isEqualTo("Réponse payée.");
         assertThat(answer.creditsRemaining()).isZero();
         assertThat(service.hasCredit(TENANT)).isFalse();
     }
 
     @Test
-    @DisplayName("one question at a time per company: a concurrent question is refused, the guard is released after")
-    void oneAtATime() throws Exception {
+    @DisplayName("one question at a time per user: their concurrent question is refused, another member of the company "
+            + "and another company are not blocked, the guard is released after")
+    void oneAtATimePerUser() throws Exception {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         when(model.respond(any())).thenAnswer(i -> {
@@ -266,29 +270,57 @@ class AssistantChatServiceTest {
         });
         ExecutorService pool = Executors.newSingleThreadExecutor();
         try {
-            Future<AssistantChatService.Answer> first = pool.submit(() -> service.ask(TENANT, "OWNER", "Une", List.of()));
+            Future<AssistantChatService.Answer> first = pool.submit(() -> service.ask(TENANT, USER, "OWNER", "Une",
+                    List.of()));
             assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
-            assertThatThrownBy(() -> service.ask(TENANT, "MANAGER", "Deux", List.of()))
+            assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Deux", List.of()))
                     .isInstanceOf(DomainException.class).hasMessageContaining("AI_QUESTION_IN_PROGRESS");
-            // another company is not blocked
+            // another member of the same company and another company are not blocked
             org.mockito.Mockito.doReturn(AssistantTurn.answer("autre")).when(model).respond(any());
-            assertThat(service.ask("kv_ai0002", "OWNER", "Autre", List.of()).reply()).isEqualTo("autre");
+            assertThat(service.ask(TENANT, OTHER_USER, "MANAGER", "Collègue", List.of()).reply()).isEqualTo("autre");
+            assertThat(service.ask("kv_ai0002", USER, "OWNER", "Autre", List.of()).reply()).isEqualTo("autre");
             release.countDown();
             assertThat(first.get(5, TimeUnit.SECONDS).reply()).isEqualTo("première");
         } finally {
             pool.shutdownNow();
         }
-        assertThat(service.ask(TENANT, "OWNER", "Trois", List.of()).reply()).isEqualTo("autre");
-        // counted once per answer (3), never for the refused one
-        assertThat(committed.get()).isEqualTo(3);
+        assertThat(service.ask(TENANT, USER, "OWNER", "Trois", List.of()).reply()).isEqualTo("autre");
+        // counted once per answer (4), never for the refused one
+        assertThat(committed.get()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("two members of one company at once: both answered, each consumption its own increment (exact)")
+    void twoMembersAtOnce() throws Exception {
+        CountDownLatch bothIn = new CountDownLatch(2);
+        when(model.respond(any())).thenAnswer(i -> {
+            bothIn.countDown();
+            bothIn.await(5, TimeUnit.SECONDS); // both questions are in flight together
+            return AssistantTurn.answer("ok");
+        });
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Future<AssistantChatService.Answer> a = pool.submit(() -> service.ask(TENANT, USER, "OWNER", "A",
+                    List.of()));
+            Future<AssistantChatService.Answer> b = pool.submit(() -> service.ask(TENANT, OTHER_USER, "EMPLOYEE", "B",
+                    List.of()));
+            assertThat(a.get(5, TimeUnit.SECONDS).reply()).isEqualTo("ok");
+            assertThat(b.get(5, TimeUnit.SECONDS).reply()).isEqualTo("ok");
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(bothIn.getCount()).isZero();
+        verify(quota, times(4)).assertAndIncrementForSchema(TENANT, UsageMetric.AI_CREDITS, 1); // 2 checks + 2 uses
+        assertThat(committed.get()).isEqualTo(2);
+        assertThat(rolledBack.get()).isEqualTo(2);
     }
 
     @Test
     @DisplayName("blank or too long question: 400 before anything")
     void validation() {
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "  ", List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "  ", List.of()))
                 .isInstanceOf(InvalidRequestParameterException.class);
-        assertThatThrownBy(() -> service.ask(TENANT, "OWNER", "x".repeat(2001), List.of()))
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "x".repeat(2001), List.of()))
                 .isInstanceOf(InvalidRequestParameterException.class);
         verify(model, never()).respond(any());
     }

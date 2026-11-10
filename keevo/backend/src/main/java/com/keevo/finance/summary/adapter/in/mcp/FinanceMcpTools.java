@@ -24,7 +24,10 @@ import java.util.UUID;
 /**
  * Story 21.8 — AI tools of the {@code finance} module, mirroring {@code FinanceController#summary} (permission
  * {@code FINANCE_VIEW}, module {@code finance} READ, same period forms and the same {@link FinanceAccess}). The
- * result is the REST summary without store ids.
+ * result is the REST summary without store ids; Story 21.4.2: the revenue block is renamed for a model — the REST
+ * {@code invoiceCount} counts sales <em>and</em> invoices, {@code paid} / {@code unpaid} are totals of fully settled /
+ * not fully settled documents (Bref's « payé »), not client debts — which a real model read as « factures » and
+ * « reste dû ».
  */
 @Component
 public class FinanceMcpTools {
@@ -43,19 +46,37 @@ public class FinanceMcpTools {
     public record CategoryShare(String category, BigDecimal amount, BigDecimal sharePct) {
     }
 
-    public record FinancialResult(FinanceSummary.PeriodInfo period, FinanceSummary.Revenue revenue,
+    /**
+     * The revenue of the period, named for a model: {@code fullyPaidDocumentsTotal} / {@code
+     * notFullyPaidDocumentsTotal} are whole documents (a partly paid invoice counts in full in the second), never what
+     * clients still owe ({@code unpaid_call_list}).
+     */
+    public record RevenueFigures(BigDecimal revenueInclVat, BigDecimal vat, BigDecimal revenueExclVat,
+                                 BigDecimal fullyPaidDocumentsTotal, BigDecimal notFullyPaidDocumentsTotal,
+                                 long salesAndInvoicesCount) {
+
+        static RevenueFigures of(FinanceSummary.Revenue r) {
+            return r == null ? null : new RevenueFigures(r.ttc(), r.tax(), r.excludingTax(), r.paid(), r.unpaid(),
+                    r.invoiceCount());
+        }
+    }
+
+    public record FinancialResult(FinanceSummary.PeriodInfo period, RevenueFigures revenue,
                                   FinanceSummary.Expenses expenses, FinanceSummary.Result result,
                                   FinanceSummary.Comparison comparisonWithPreviousPeriod,
                                   List<CategoryShare> expensesByCategory, List<FinanceSummary.SeriesPoint> series,
                                   List<StoreResult> byStore) {
     }
 
-    @Tool(name = "financial_result", description = "Résultat financier d'une période : chiffre d'affaires TTC, TVA, "
-            + "HT, encaissé et restant dû, nombre de documents ; dépenses (total, nombre, moyenne par jour) ; "
-            + "résultat net, marge et part des dépenses ; comparaison avec la période précédente de même durée ; "
-            + "dépenses par catégorie ; évolution par jour ou par mois ; résultat par boutique. Période : period = "
-            + "AAAA-MM ou AAAA, ou startDate et endDate (AAAA-MM-JJ) ; par défaut le mois en cours. Réservé au "
-            + "propriétaire. Montants en FCFA.")
+    @Tool(name = "financial_result", description = "Résultat financier (bénéfice ou perte) d'une période : chiffre "
+            + "d'affaires TTC, TVA et HT ; total des documents entièrement réglés et des documents pas encore "
+            + "entièrement réglés (montants complets des documents, pas ce que doivent les clients : voir "
+            + "unpaid_call_list) ; nombre de ventes en caisse et de factures confondues ; dépenses (total, nombre, "
+            + "moyenne par jour) ; résultat net (CA HT − dépenses), marge nette et part des dépenses ; comparaison "
+            + "avec la période précédente de même durée ; dépenses par catégorie ; évolution par jour ou par mois ; "
+            + "résultat par boutique. Pour le détail des dépenses, utiliser list_expenses ; pour la marge brute, "
+            + "revenue_summary. Période : period = AAAA-MM ou AAAA, ou startDate et endDate (AAAA-MM-JJ) ; par défaut "
+            + "le mois en cours. Réservé au propriétaire. Montants en FCFA.")
     @RequiresPermission(FinanceModule.FINANCE_VIEW)
     @RequiresEntitlement(value = FinanceModule.ID, access = RequiresEntitlement.Access.READ)
     public FinancialResult financialResult(
@@ -74,7 +95,7 @@ public class FinanceMcpTools {
         FinanceAccess access = CurrentActor.isOwner() ? FinanceAccess.OWNER
                 : FinanceAccess.member(CurrentActor.assignedStoreIdOrNull());
         FinanceSummary s = summaries.summary(resolved, storeId, access, TenantContext.getCurrentTenant());
-        return new FinancialResult(s.period(), s.revenue(), s.expenses(), s.result(), s.comparison(),
+        return new FinancialResult(s.period(), RevenueFigures.of(s.revenue()), s.expenses(), s.result(), s.comparison(),
                 s.byCategory() == null ? List.of() : s.byCategory().stream()
                         .map(c -> new CategoryShare(c.categoryLabel(), c.amount(), c.sharePct())).toList(),
                 s.series() == null ? List.of() : s.series(),

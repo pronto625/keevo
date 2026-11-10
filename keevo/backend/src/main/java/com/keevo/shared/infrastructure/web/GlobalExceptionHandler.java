@@ -414,7 +414,7 @@ public class GlobalExceptionHandler {
                  "OTP_TOO_MANY_REQUESTS",
                  "INVOICE_LINK_RATE_LIMITED",
                  "EXPORT_QUEUE_FULL",
-                 "AI_QUESTION_IN_PROGRESS" -> HttpStatus.TOO_MANY_REQUESTS;  // 21.4 — one question at a time per company
+                 "AI_QUESTION_IN_PROGRESS" -> HttpStatus.TOO_MANY_REQUESTS;  // 21.4 — one question at a time per user
             case "WHATSAPP_DELIVERY_FAILED",
                  "SMS_DELIVERY_FAILED",     // Story 20.8 — every SMS provider failed
                  "EMAIL_DELIVERY_FAILED",

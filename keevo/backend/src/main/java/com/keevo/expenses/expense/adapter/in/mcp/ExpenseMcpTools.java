@@ -50,8 +50,9 @@ public class ExpenseMcpTools {
     public record ExpensesPage(Long matching, BigDecimal totalAmount, List<ExpenseRow> expenses, String nextCursor) {
     }
 
-    @Tool(name = "list_expenses", description = "Dépenses d'une période (date, catégorie, montant, libellé, moyen de "
-            + "paiement, boutique), avec sur la première page le nombre et le total de toutes les dépenses filtrées. "
+    @Tool(name = "list_expenses", description = "Dépenses d'une période (combien ai-je dépensé, plus grosse dépense, "
+            + "dépenses d'une catégorie) : date, catégorie, montant, libellé, moyen de paiement, boutique, avec sur la "
+            + "première page le nombre et le total de toutes les dépenses filtrées. "
             + "Filtres : dates, catégorie (goods_purchase, rent, salaries, transport, utilities, telecom, marketing, "
             + "taxes, maintenance, other), recherche dans le libellé, boutique (propriétaire). Tri : recent (défaut), "
             + "oldest, amount_desc, amount_asc. Par pages avec nextCursor (mêmes filtres). Montants en FCFA.")

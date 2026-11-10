@@ -24,7 +24,7 @@ import java.util.List;
 /**
  * Story 21.4 — free-text questions to the assistant (Bref Point's {@code POST /v1/ai/chat}): the model answers by
  * calling the AI tools allowed to the session (never SQL); one AI credit (19.8) per answered question, one question at
- * a time per company. Every member role; module {@code ai-assistant} (WRITE: refused in the read-only grace).
+ * a time per user. Every member role; module {@code ai-assistant} (WRITE: refused in the read-only grace).
  */
 @RestController
 @RequestMapping("/api/v1/ai")
@@ -69,8 +69,8 @@ public class AiChatController {
     public ResponseEntity<ApiResponseWrapper<ChatResponse>> chat(@Valid @RequestBody ChatRequest request) {
         List<HistoryEntry> history = request.history() == null ? List.of() : request.history().stream()
                 .map(h -> new HistoryEntry(h.role(), h.content())).toList();
-        AssistantChatService.Answer answer = chat.ask(TenantContext.getCurrentTenant(), CurrentActor.role(),
-                request.message(), history);
+        AssistantChatService.Answer answer = chat.ask(TenantContext.getCurrentTenant(), CurrentActor.actorId(),
+                CurrentActor.role(), request.message(), history);
         return ResponseEntity.ok(ApiResponseWrapper.ok(new ChatResponse(answer.reply(), answer.creditsRemaining())));
     }
 }

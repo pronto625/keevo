@@ -1,5 +1,7 @@
 package com.keevo.assistant.chat.adapter.out.model;
 
+import com.anthropic.client.AnthropicClient;
+import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.assistant.chat.domain.port.out.AssistantModel;
 import org.slf4j.Logger;
@@ -21,6 +23,7 @@ import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.util.Locale;
 
 /**
@@ -31,8 +34,12 @@ import java.util.Locale;
  *   <li>{@code fake} — scripted model, under the {@code dev} / {@code test} profiles only (never {@code prod} /
  *       {@code staging}); script {@code keevo.ai.fake-script} (file) or the classpath default;</li>
  *   <li>{@code openai} / {@code gemini} — key {@code KEEVO_AI_API_KEY} required (missing → disabled with a warning,
- *       the application still starts); {@code ollama} — local server without key, Ollama Cloud with one.</li>
+ *       the application still starts); {@code ollama} — local server without key, Ollama Cloud with one;</li>
+ *   <li>{@code anthropic} (21.4.2) — Claude through the official Anthropic SDK, key {@code KEEVO_AI_API_KEY} required
+ *       (missing → disabled with a warning), default model {@code claude-haiku-5-5}.</li>
  * </ul>
+ * Questions wait {@code keevo.ai.timeout-seconds} (default 45 s) per provider call, with one retry on a transient
+ * failure; titles wait 10 s without retry.
  * Model ({@code KEEVO_AI_MODEL}) and base URL ({@code KEEVO_AI_BASE_URL}) default per provider (Bref's defaults). The
  * key comes from the environment only and is never logged; errors name the variable, never its value.
  */
@@ -45,6 +52,7 @@ public class AssistantModelConfig {
     static final String DEFAULT_SCRIPT = "keevo/ai/fake-assistant-script.json";
     static final int CONNECT_TIMEOUT_MS = 10_000;
     static final int READ_TIMEOUT_MS = 45_000;
+    static final String TIMEOUT = "keevo.ai.timeout-seconds";
     static final int TITLE_READ_TIMEOUT_MS = 10_000;
 
     static final String GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai";
@@ -81,10 +89,21 @@ public class AssistantModelConfig {
                 if (!env.acceptsProfiles(Profiles.of("dev", "test"))
                         || env.acceptsProfiles(Profiles.of("prod", "staging"))) {
                     throw new IllegalStateException(PROVIDER + "=fake is allowed under the dev and test profiles only: "
-                            + "set KEEVO_AI_PROVIDER=openai, gemini, ollama or disabled");
+                            + "set KEEVO_AI_PROVIDER=anthropic, openai, gemini, ollama or disabled");
                 }
                 log.warn("[AI] assistant model FAKE: scripted answers, no model called");
                 return new ScriptedAssistantModel(script(env.getProperty("keevo.ai.fake-script", ""), mapper), mapper);
+            }
+            case "anthropic" -> {
+                String key = env.getProperty("keevo.ai.api-key", "").trim();
+                if (key.isEmpty()) {
+                    log.warn("[AI] {}=anthropic without KEEVO_AI_API_KEY: assistant model disabled, free-text "
+                            + "questions answer 503", PROVIDER);
+                    return new DisabledAssistantModel();
+                }
+                return anthropic(key, or(env.getProperty("keevo.ai.model", "").trim(),
+                        AnthropicAssistantModel.DEFAULT_MODEL), env.getProperty("keevo.ai.base-url", "").trim(),
+                        readTimeoutMs(env), mapper);
             }
             default -> {
                 Settings settings = settings(env);
@@ -93,7 +112,7 @@ public class AssistantModelConfig {
                             + "answer 503", PROVIDER, kind);
                     return new DisabledAssistantModel();
                 }
-                return openAi(settings);
+                return openAi(settings, readTimeoutMs(env));
             }
         }
     }
@@ -118,15 +137,46 @@ public class AssistantModelConfig {
             case "ollama" -> new Settings(kind, host(or(baseUrl, key.isEmpty() ? OLLAMA_LOCAL_BASE_URL
                     : OLLAMA_CLOUD_BASE_URL)), "/v1/chat/completions", key.isEmpty() ? "ollama" : key,
                     or(model, "llama3.2"), false);
-            default -> throw new IllegalStateException(PROVIDER + " must be disabled, fake, openai, gemini or ollama");
+            default -> throw new IllegalStateException(PROVIDER + " must be disabled, fake, anthropic, openai, gemini "
+                    + "or ollama");
         };
     }
 
-    private static AssistantModel openAi(Settings s) {
+    /** Per provider call of a question: {@code keevo.ai.timeout-seconds} (1..120), default 45 s. */
+    static int readTimeoutMs(Environment env) {
+        int seconds = env.getProperty(TIMEOUT, Integer.class, READ_TIMEOUT_MS / 1_000);
+        if (seconds < 1 || seconds > 120) {
+            throw new IllegalStateException(TIMEOUT + " must be between 1 and 120");
+        }
+        return seconds * 1_000;
+    }
+
+    /**
+     * Claude through the official SDK: questions with one retry on a transient failure (408, 409, 429, 5xx, network,
+     * timeout — the SDK's own policy), titles with a short timeout and no retry. The key is given explicitly (never
+     * read from the SDK's own environment variables).
+     */
+    static AssistantModel anthropic(String key, String model, String baseUrl, int readTimeoutMs, ObjectMapper mapper) {
+        AnthropicClient chat = anthropicClient(key, baseUrl, readTimeoutMs, 1);
+        AnthropicClient titles = anthropicClient(key, baseUrl, TITLE_READ_TIMEOUT_MS, 0);
+        log.info("[AI] assistant model provider: anthropic (model {})", model);
+        return new AnthropicAssistantModel(chat, titles, model, mapper);
+    }
+
+    private static AnthropicClient anthropicClient(String key, String baseUrl, int timeoutMs, int retries) {
+        AnthropicOkHttpClient.Builder b = AnthropicOkHttpClient.builder().apiKey(key)
+                .timeout(Duration.ofMillis(timeoutMs)).maxRetries(retries);
+        if (!baseUrl.isBlank()) {
+            b.baseUrl(trimSlash(baseUrl));
+        }
+        return b.build();
+    }
+
+    private static AssistantModel openAi(Settings s, int readTimeoutMs) {
         // questions: one retry on a transient failure (5xx, network), bounded again by the assistant's deadline
         RetryTemplate retry = RetryTemplate.builder().maxAttempts(2).fixedBackoff(1_500)
                 .retryOn(TransientAiException.class).retryOn(ResourceAccessException.class).build();
-        OpenAiChatModel chat = chatModel(s, READ_TIMEOUT_MS, retry);
+        OpenAiChatModel chat = chatModel(s, readTimeoutMs, retry);
         // titles: short timeout, no retry (a title falls back to the first words of the question)
         OpenAiChatModel titles = chatModel(s, TITLE_READ_TIMEOUT_MS, RetryTemplate.builder().maxAttempts(1).build());
         log.info("[AI] assistant model provider: {} (model {})", s.kind(), s.model());

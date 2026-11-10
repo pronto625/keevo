@@ -19,7 +19,7 @@
     { "domainCode": "FORBIDDEN / MODULE_NOT_ENTITLED", "status": 403, "when": "GET /topics/{topic}: none of the topic's data is allowed to this user (French message of the refusing gate)", "counted": false },
     { "domainCode": "AI_CONVERSATION_NOT_FOUND", "status": 404, "when": "GET / PUT of an unknown conversation or another user's", "counted": false },
     { "domainCode": "AI_CONVERSATION_LIMIT", "status": 409, "when": "the user already keeps 200 conversations", "counted": false },
-    { "domainCode": "AI_QUESTION_IN_PROGRESS", "status": 429, "when": "a question of the same company is being answered", "counted": false },
+    { "domainCode": "AI_QUESTION_IN_PROGRESS", "status": 429, "when": "a question of the same user (in this company) is being answered — other members may ask at the same time", "counted": false },
     { "domainCode": "AI_PROVIDER_ERROR", "status": 502, "when": "the model provider failed or timed out", "counted": false },
     { "domainCode": "AI_UNAVAILABLE", "status": 503, "when": "no model provider configured (free text off; topics and conversations work)", "counted": false },
     { "domainCode": "AI_ANSWER_FAILED", "status": 503, "when": "a tool failed or the answer went over its limits", "counted": false }
