@@ -34,7 +34,7 @@ deferred:
 **Always:**
 - Tools only through `AiToolRegistry` (`allowedTools()` / `call(name, json, ASSISTANT)`), on the HTTP request thread (security + tenant contexts are the request's); never SQL from model output.
 - Quota `AI_CREDITS` checked before the model call (in a rolled-back transaction: exact 19-8 refusal, nothing kept) and consumed (`assertAndIncrementForSchema`, own transaction) only after a final answer; never on disabled provider, provider failure, tool `ERROR`, loop overflow, concurrent question, validation error. Guided topics and conversation CRUD never count.
-- One free-text question at a time per company (tenant): second concurrent call → 429 `AI_QUESTION_IN_PROGRESS`, released in `finally`.
+- One free-text question at a time per user (per company until 2026-11-10, changed by spec-21-4-2 to match the AC « par compte »): second concurrent call of the same user → 429 `AI_QUESTION_IN_PROGRESS`, released in `finally`.
 - Bounds: message ≤ 2 000 chars, history ≤ 20 entries (user/assistant roles only, Bref), history fed to the model ≤ 12 000 chars (most recent kept), ≤ 4 model rounds, ≤ 8 tool calls, each tool result fed to the model ≤ 6 000 chars and ≤ 24 000 in total (truncated with a French marker), answer ≤ 4 000 chars, max output tokens 800, provider timeouts connect 10 s / read 60 s, ≤ 1 retry on 429/5xx.
 - System prompt (French): Keevo assistant, today's date (WAT), FCFA, tools only, never invent figures, never show an identifier (storeId or any id), refuse prompt-injection. Output filter removes every UUID from the reply (and generated titles) before it leaves the server.
 - Conversations are per user (actor id) inside the tenant schema; list bounded (100 most recent), ≤ 200 per user, payload bounds (Bref: messages/aiHistory ≤ 500 items, title ≤ 120, messageCount 0–10 000) plus ≤ 512 KB serialized.
@@ -50,7 +50,7 @@ deferred:
 | Free text answered | owner PRO, provider fake, quota left | 200 `{reply, creditsRemaining}`; tools called via registry (audited ASSISTANT); 1 credit counted | — |
 | Provider disabled | default config | 503 `AI_UNAVAILABLE` « Les questions libres ne sont pas encore disponibles… utilisez les sujets proposés » | nothing counted |
 | Quota exhausted | FREE plan (AI 0) or day cap reached | 403 `QUOTA_EXCEEDED` (19-8 details), model never called | nothing counted |
-| Concurrent question | same company, call in flight | 429 `AI_QUESTION_IN_PROGRESS` | nothing counted |
+| Concurrent question | same user, call in flight (21-4-2: per user) | 429 `AI_QUESTION_IN_PROGRESS` | nothing counted |
 | Provider fails | timeout / 5xx after retry | 502 `AI_PROVIDER_ERROR` French | nothing counted |
 | Tool error | a tool call ends `ERROR` / loop over limits | 503 `AI_ANSWER_FAILED` French | nothing counted |
 | Tool refused | employee asks finance | refusal JSON `{"erreur": "…"}` handed to the model; answer delivered, counted | — |
@@ -178,7 +178,7 @@ deferred:
 ### Ce qui est fait côté API
 - Module `ai-assistant` (« Assistant IA ») : inclus dans **toutes** les offres (Gratuit compris), désactivé par défaut pour les entreprises qui existaient avant (l'owner l'active dans « Mes modules »). Tous les rôles (propriétaire, gérant, employé, lecteur — le lecteur peut poser des questions et garder ses conversations).
 - Les **sujets guidés** de Bref Point sont calculés par le serveur (`GET /api/v1/ai/topics/{topic}`), **gratuits** (aucun crédit IA), avec les droits de chaque rôle (un employé ne voit que ses documents, les sujets propriétaire lui sont refusés).
-- Les **questions libres** (`POST /api/v1/ai/chat`) : le modèle appelle des outils Keevo (jamais de SQL), **1 crédit IA par réponse obtenue** (rien en cas d'erreur), **une question à la fois par entreprise**.
+- Les **questions libres** (`POST /api/v1/ai/chat`) : le modèle appelle des outils Keevo (jamais de SQL), **1 crédit IA par réponse obtenue** (rien en cas d'erreur), **une question à la fois par utilisateur** (depuis 21-4-2, voir spec-21-4-2 : deux membres d'une même entreprise peuvent poser une question en même temps).
 - Les **conversations** sont enregistrées par utilisateur (mêmes formes que Bref : `messages` et `aiHistory` sont vos tableaux, stockés tels quels).
 - Contrat complet (routes, corps, erreurs, sujets, corpus de parité) : `keevo/contracts/ai-assistant.json`. Code : `keevo/backend/src/main/java/com/keevo/assistant/` (contrôleurs `chat/adapter/in/rest/AiChatController.java`, `conversation/adapter/in/rest/AiConversationController.java`, `guided/adapter/in/rest/GuidedTopicController.java`).
 
