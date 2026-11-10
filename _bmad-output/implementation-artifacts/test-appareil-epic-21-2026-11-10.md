@@ -29,7 +29,7 @@
 
 **Observations (sans action) :**
 - L'écran Abonnement de l'app V1 ne se recharge pas quand le plan change pendant la session : il faut relancer l'app. Comportement existant de l'app (fournisseur gardé en mémoire), indépendant de l'epic 21.
-- Cas combiné provoqué par le test : un Pro payé en Mobile Money (jusqu'au 09/12) puis un achat App Store du même plan (jusqu'au 10/12) puis une EXPIRATION App Store → retour au plan gratuit, la période Mobile Money étant couverte par la période Apple. C'est la règle écrite dans la spec 21.2 (« un paiement Mobile Money *postérieur* n'est jamais coupé ») ; cas peu réaliste (Android paie en Mobile Money, iPhone par l'App Store).
+- Cas combiné provoqué par le test : un Pro payé en Mobile Money (jusqu'au 09/12) puis un achat App Store du même plan (jusqu'au 10/12) puis une EXPIRATION App Store → retour au plan gratuit, la période Mobile Money étant couverte par la période Apple. C'est la règle écrite dans la spec 21.2 (« un paiement Mobile Money *postérieur* n'est jamais coupé ») ; cas peu réaliste (Android paie en Mobile Money, iPhone par l'App Store). **Corrigé le 10/11/2026 (commit `fix(21-2)` 6ae49b0e) :** la fin de l'abonnement App Store rend désormais la période Mobile Money encore en cours (plan gratuit seulement s'il ne reste aucune période payée).
 
 ## Données restaurées
 
