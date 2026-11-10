@@ -47,3 +47,12 @@ Tenants created afterwards follow the initial activation rules (`public.module_a
 super-admin). A module the owner must never disable declares `"ownerToggleable": false` in its manifest. Never write
 `tenant_module_activation` from `tenant_modules` code paths (plan sync, admin lifecycle, expiry job): the owner's choice
 is orthogonal to the entitlement.
+
+Shipped so far (each pinned in `ModuleIdsAtGoLivePinTest`, which fails when a new module ships without its line): `expenses`
+(V56), `finance` (V58), `ai-assistant` (V65), `mcp-access` (V66), `whatsapp-cloud` (V68).
+
+## Paid modules with tables (lazy provisioning)
+
+A paid module's tables (e.g. `ai-assistant`, `whatsapp-cloud`) are created only for the tenants that use it, on their
+first gated call (`ModuleProvisioner.ensureProvisioned`). Code that writes to them outside a gated request (a webhook,
+a job) must call `ensureProvisioned(schema, moduleId)` itself before writing (`whatsapp-cloud`'s Meta webhook does).

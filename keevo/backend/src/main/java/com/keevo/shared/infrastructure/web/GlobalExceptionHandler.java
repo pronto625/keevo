@@ -277,6 +277,7 @@ public class GlobalExceptionHandler {
                  "EXPENSE_NOT_FOUND",          // 20.10
                  "AI_CONVERSATION_NOT_FOUND",  // 21.4
                  "MCP_TOKEN_NOT_FOUND",        // 21.9
+                 "WHATSAPP_TEMPLATE_NOT_FOUND", // 21.5
                  "APP_VERSION_NOT_FOUND",
                  "NOT_FOUND" -> HttpStatus.NOT_FOUND;
             case "UNAUTHORIZED", "TOKEN_EXPIRED",
@@ -328,6 +329,12 @@ public class GlobalExceptionHandler {
                  "PAYMENT_IN_PROGRESS",     // 21.1 — one checkout in flight per company
                  "AI_CONVERSATION_LIMIT",   // 21.4 — conversations kept per user
                  "MCP_TOKEN_LIMIT",         // 21.9 — access tokens kept per owner
+                 "WHATSAPP_NUMBER_ALREADY_CONNECTED", // 21.5 — one company per WhatsApp number
+                 "WHATSAPP_NOT_CONNECTED",
+                 "WHATSAPP_SEND_UNCERTAIN",
+                 "WHATSAPP_TEMPLATE_NAME_TAKEN",
+                 "WHATSAPP_TEMPLATE_LIMIT",
+                 "WHATSAPP_TEMPLATE_NOT_APPROVED",
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
@@ -363,6 +370,7 @@ public class GlobalExceptionHandler {
                  "MODULE_ACTIVATION_RULE_INVALID",
                  "APP_VERSION_INVALID",
                  "BUNDLE_NOT_APPLICABLE",
+                 "WHATSAPP_REPLY_WINDOW_CLOSED", // 21.5 — 24-hour window of Meta
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE",
                  "PRODUCT_QUOTA_UNAVAILABLE",
@@ -372,6 +380,7 @@ public class GlobalExceptionHandler {
                  "PAYMENT_UNAVAILABLE",     // 21.1 — no Mobile Money gateway configured
                  "AI_UNAVAILABLE",          // 21.4 — no model provider configured
                  "AI_ANSWER_FAILED",        // 21.4 — tool failure or answer limits: nothing counted
+                 "WHATSAPP_CLOUD_UNAVAILABLE", // 21.5 — no Meta app configured
                  "PUBLIC_BASE_URL_MISSING" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;
@@ -419,7 +428,8 @@ public class GlobalExceptionHandler {
                  "SMS_DELIVERY_FAILED",     // Story 20.8 — every SMS provider failed
                  "EMAIL_DELIVERY_FAILED",
                  "PAYMENT_PROVIDER_ERROR",
-                 "AI_PROVIDER_ERROR" -> HttpStatus.BAD_GATEWAY;  // upstream provider failure (WhatsApp, SMS, email, Mobile Money)
+                 "AI_PROVIDER_ERROR",
+                 "WHATSAPP_CLOUD_META_ERROR" -> HttpStatus.BAD_GATEWAY;  // upstream provider failure (WhatsApp, SMS, email, Mobile Money)
             case "INVOICE_SEND_UNCERTAIN" -> HttpStatus.CONFLICT;  // 20.8 — maybe delivered: never retried automatically
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };

@@ -25,6 +25,14 @@ public interface InvoiceSendChannel {
     void assertAvailable();
 
     /**
+     * Story 21.5 — {@link #assertAvailable()} for a company: a channel whose availability depends on the company (the
+     * WhatsApp of the owner's own number) overrides it.
+     */
+    default void assertAvailable(String tenantSchema) {
+        assertAvailable();
+    }
+
+    /**
      * Sends the message. Called with no transaction open (SMS / email are counted on the tenant quota only after the
      * provider accepted them). Only provider outcomes are mapped; a programming error propagates as is.
      *

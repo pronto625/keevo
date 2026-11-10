@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 342 — gated: 149, exempt: 193.
+Handlers: 356 — gated: 160, exempt: 196.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -351,3 +351,17 @@ Handlers: 342 — gated: 149, exempt: 193.
 | DELETE | `/api/v1/web-push/subscribe` | — | — | — | notifications du navigateur — compte | WebPushController#unsubscribe |
 | POST | `/api/v1/web-push/subscribe` | — | — | — | notifications du navigateur — compte | WebPushController#subscribe |
 | GET | `/api/v1/web-push/vapid-public-key` | — | — | — | notifications du navigateur — compte | WebPushController#vapidPublicKey |
+| DELETE | `/api/v1/whatsapp/account` | — | — | — | déconnexion du WhatsApp Business — toujours possible pour le propriétaire, même sans le module | WhatsAppAccountController#disconnect |
+| GET | `/api/v1/whatsapp/account` | `whatsapp-cloud` | READ | — |  | WhatsAppAccountController#status |
+| POST | `/api/v1/whatsapp/account` | `whatsapp-cloud` | WRITE | — |  | WhatsAppAccountController#connect |
+| GET | `/api/v1/whatsapp/conversations` | `whatsapp-cloud` | READ | — |  | WhatsAppConversationController#conversations |
+| GET | `/api/v1/whatsapp/conversations/unread-count` | `whatsapp-cloud` | READ | — |  | WhatsAppConversationController#unreadCount |
+| GET | `/api/v1/whatsapp/conversations/{phone}/messages` | `whatsapp-cloud` | READ | — |  | WhatsAppConversationController#messages |
+| POST | `/api/v1/whatsapp/conversations/{phone}/messages` | `whatsapp-cloud` | WRITE | — |  | WhatsAppConversationController#reply |
+| POST | `/api/v1/whatsapp/conversations/{phone}/template` | `whatsapp-cloud` | WRITE | — |  | WhatsAppConversationController#sendTemplate |
+| GET | `/api/v1/whatsapp/my-templates` | `whatsapp-cloud` | READ | — |  | WhatsAppTemplateController#list |
+| POST | `/api/v1/whatsapp/my-templates` | `whatsapp-cloud` | WRITE | — |  | WhatsAppTemplateController#create |
+| POST | `/api/v1/whatsapp/my-templates/media` | `whatsapp-cloud` | WRITE | — |  | WhatsAppTemplateController#media |
+| DELETE | `/api/v1/whatsapp/my-templates/{id}` | `whatsapp-cloud` | WRITE | — |  | WhatsAppTemplateController#delete |
+| GET | `/api/v1/whatsapp/webhook` | — | — | — | webhook de Meta — public, signature X-Hub-Signature-256, routé vers l'entreprise par numéro | MetaWebhookController#verify |
+| POST | `/api/v1/whatsapp/webhook` | — | — | — | webhook de Meta — public, signature X-Hub-Signature-256, routé vers l'entreprise par numéro | MetaWebhookController#receive |

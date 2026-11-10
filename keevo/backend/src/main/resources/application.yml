@@ -345,6 +345,18 @@ keevo:
   # Story 21.1 — self-service plan payment (module payments). gateway: disabled (default: Mobile Money refused with 503,
   # free offers still work) | sandbox (simulated provider, dev/test profiles only) | mycoolpay (every key
   # below required). The webhook URL given to MyCoolPay is <public base>/api/v1/payments/webhook/mycoolpay/<callback-hash>.
+  # Story 21.5 — the companies' own WhatsApp Business (module whatsapp-cloud): the Keevo Meta app (embedded signup,
+  # one webhook /api/v1/whatsapp/webhook for every company number). graph: disabled | fake (dev/test only) | meta.
+  whatsapp-cloud:
+    graph: ${KEEVO_WHATSAPP_CLOUD_GRAPH:disabled}
+    app-id: ${KEEVO_WHATSAPP_CLOUD_APP_ID:}
+    app-secret: ${KEEVO_WHATSAPP_CLOUD_APP_SECRET:}
+    verify-token: ${KEEVO_WHATSAPP_CLOUD_VERIFY_TOKEN:}
+    graph-url: ${KEEVO_WHATSAPP_CLOUD_GRAPH_URL:https://graph.facebook.com/v21.0}
+  # Story 21.5 (FUS-NFR4) — AES-256-GCM key of the third-party secrets stored by Keevo (base64 of 32 random bytes,
+  # e.g. `openssl rand -base64 32`); never in the database. Unset = WhatsApp Business cannot be connected.
+  secrets:
+    encryption-key: ${KEEVO_SECRETS_ENCRYPTION_KEY:}
   payments:
     gateway: ${KEEVO_PAYMENTS_GATEWAY:disabled}
     initiating-timeout: ${KEEVO_PAYMENTS_INITIATING_TIMEOUT:PT2M}

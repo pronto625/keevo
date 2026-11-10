@@ -22,6 +22,13 @@ logging:
 # Story 21.1 — local runs pay on the simulated Mobile Money provider (never MyCoolPay); its webhook secret and signing
 # key are fixed dev values (sign a simulated callback with md5(ref + type + amount + currency + operator + private key)).
 keevo:
+  # Story 21.5 — fake Meta Graph API (nothing reaches Meta), dev-only webhook secrets and encryption key
+  whatsapp-cloud:
+    graph: ${KEEVO_WHATSAPP_CLOUD_GRAPH:fake}
+    app-secret: ${KEEVO_WHATSAPP_CLOUD_APP_SECRET:dev-whatsapp-app-secret}
+    verify-token: ${KEEVO_WHATSAPP_CLOUD_VERIFY_TOKEN:dev-whatsapp-verify-token}
+  secrets:
+    encryption-key: ${KEEVO_SECRETS_ENCRYPTION_KEY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
   payments:
     gateway: ${KEEVO_PAYMENTS_GATEWAY:sandbox}
     mycoolpay:

@@ -53,7 +53,8 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
     // 20.10 (V56): + expenses; 21.4 (V65): + ai-assistant
     private static final List<String> PAID = List.of("advanced-reports", "ai-assistant", "alerts", "counting", "expenses",
-            "exports", "finance", "invoicing", "mcp-access", "multi-store", "profitability", "report-config");
+            "exports", "finance", "invoicing", "mcp-access", "multi-store", "profitability", "report-config",
+            "whatsapp-cloud"); // 21.5 (V68)
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
@@ -205,8 +206,11 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
                 .containsExactly("BUSINESS:∞/∞/∞", "BUSINESS_TRIAL:∞/∞/∞", "FREE:1/500/1", "PREMIUM:∞/∞/∞",
                         "PREMIUM_TRIAL:∞/∞/∞", "PRO:3/∞/∞", "TEAM:8/∞/∞");
         for (String type : List.of("PREMIUM_TRIAL", "PREMIUM", "TEAM", "BUSINESS", "BUSINESS_TRIAL")) {
+            // 21.5 (V68): whatsapp-cloud for the BUSINESS tiers and the complete plans, not TEAM
+            List<String> expected = type.equals("TEAM")
+                    ? PAID.stream().filter(m -> !m.equals("whatsapp-cloud")).toList() : PAID;
             assertThat(jdbc.queryForList("SELECT module_id FROM public.profile_modules WHERE plan_type = ? "
-                    + "AND granted ORDER BY module_id", String.class, type)).containsExactlyElementsOf(PAID);
+                    + "AND granted ORDER BY module_id", String.class, type)).containsExactlyElementsOf(expected);
         }
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.profile_modules WHERE plan_type = 'FREE' "
                 + "AND granted", Integer.class)).isZero();

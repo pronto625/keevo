@@ -1,0 +1,256 @@
+{
+  "description": "Story 21.5 — « WhatsApp Business » (module whatsapp-cloud): the company connects its own WhatsApp Business number (Meta embedded signup), reads and answers its WhatsApp conversations, manages its message templates (Meta review), and its invoices / quotes sent by WhatsApp leave from its own number with the approved template bref_facture (PDF attached), the platform WhatsApp text with the link being the fallback. Plans: BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL (owner-disabled for companies that existed before it: « Mes modules »). Module refused → 403 MODULE_NOT_ENTITLED / MODULE_DISABLED_BY_OWNER. Owner only except GET /account (every member). Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. Shapes of conversations, messages and templates are Bref's (bref/features/whatsapp-inbox, whatsapp-marketing). Ids are API handles, never shown; show statusLabel, never status. Change this file only with both sides.",
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/account",
+      "auth": "member JWT (any role)",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": {
+          "connected": true,
+          "displayPhoneNumber": "+237 6 90 00 12 34 (or null)",
+          "verifiedName": "Boutique Awa (or null)",
+          "connectedAt": "ISO-8601 or null"
+        }
+      },
+      "notes": "Offer « WhatsApp » for invoices / the inbox menu from connected. Bref GET /whatsapp/shops/:shopId/status."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/account",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": {
+        "code": "one-time code of Meta's embedded signup (FB.login, response.authResponse.code)",
+        "wabaId": "WA_EMBEDDED_SIGNUP message data.waba_id",
+        "phoneNumberId": "WA_EMBEDDED_SIGNUP message data.phone_number_id"
+      },
+      "response": {
+        "data": {
+          "connected": true,
+          "displayPhoneNumber": "…",
+          "verifiedName": "…",
+          "connectedAt": "ISO-8601"
+        }
+      },
+      "errors": [
+        "400 VALIDATION_ERROR (code / ids missing)",
+        "409 WHATSAPP_NUMBER_ALREADY_CONNECTED",
+        "502 WHATSAPP_CLOUD_META_ERROR (Meta refused: start again)",
+        "503 WHATSAPP_CLOUD_UNAVAILABLE"
+      ],
+      "notes": "Connecting again replaces the account. The invoice template and the draft templates are submitted to Meta right after."
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/whatsapp/account",
+      "auth": "owner JWT",
+      "module": "none (always open to the owner)",
+      "response": "204",
+      "notes": "Idempotent. Messages and templates are kept."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/conversations",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": [
+          {
+            "contactPhone": "237690112233 (digits, country code)",
+            "contactName": "Awa or null",
+            "lastMessage": "text or null",
+            "lastType": "text|image|document|template|…",
+            "lastDirection": "in|out",
+            "lastAt": "ISO-8601",
+            "unreadCount": 1,
+            "replyWindowEndsAt": "ISO-8601 or null (contact never wrote)"
+          }
+        ]
+      },
+      "notes": "200 most recent. Free reply possible while now < replyWindowEndsAt, else only an approved template."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/conversations/unread-count",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": {
+          "count": 3
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/conversations/{phone}/messages",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "query": {
+        "before": "ISO-8601, optional: older page"
+      },
+      "response": {
+        "data": [
+          {
+            "id": "uuid (handle)",
+            "contactPhone": "237690112233",
+            "direction": "in|out",
+            "type": "text",
+            "body": "text or null",
+            "status": "sent|delivered|read|failed (out) or null",
+            "createdAt": "ISO-8601"
+          }
+        ]
+      },
+      "errors": [
+        "400 VALIDATION_ERROR (phone not 8–15 digits)"
+      ],
+      "notes": "200 latest (or before 'before'), oldest → newest. Opening the latest page marks the received messages read."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/conversations/{phone}/messages",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": {
+        "text": "1..4096 chars"
+      },
+      "response": "same as GET messages",
+      "errors": [
+        "422 WHATSAPP_REPLY_WINDOW_CLOSED",
+        "409 WHATSAPP_NOT_CONNECTED",
+        "409 WHATSAPP_SEND_UNCERTAIN (maybe sent: refresh, never resend automatically)",
+        "502 WHATSAPP_CLOUD_META_ERROR"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/conversations/{phone}/template",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": {
+        "templateId": "uuid of an APPROVED template",
+        "variables": [
+          "one value per {{n}} of the body, in order"
+        ]
+      },
+      "response": "same as GET messages",
+      "errors": [
+        "404 WHATSAPP_TEMPLATE_NOT_FOUND",
+        "409 WHATSAPP_TEMPLATE_NOT_APPROVED",
+        "400 VALIDATION_ERROR (variable count, media header)",
+        "409 WHATSAPP_NOT_CONNECTED",
+        "409 WHATSAPP_SEND_UNCERTAIN",
+        "502 WHATSAPP_CLOUD_META_ERROR"
+      ],
+      "notes": "Works at any time (reopens the conversation). Templates with a media header are sent from campaigns (21.6), not here."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/my-templates",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": [
+          {
+            "id": "uuid (handle)",
+            "name": "promo_rentree",
+            "status": "DRAFT|PENDING|APPROVED|REJECTED|PAUSED|DISABLED",
+            "statusLabel": "Brouillon|En cours de validation|Approuvé|Refusé|En pause|Désactivé",
+            "category": "MARKETING|UTILITY",
+            "language": "fr",
+            "components": [
+              {
+                "type": "HEADER",
+                "format": "TEXT",
+                "text": "…"
+              },
+              {
+                "type": "BODY",
+                "text": "Bonjour {{1}}"
+              },
+              {
+                "type": "FOOTER",
+                "text": "…"
+              }
+            ],
+            "rejected_reason": "Meta reason or null",
+            "submitError": "French/Meta note when the submission failed, or null"
+          }
+        ]
+      },
+      "notes": "Newest first; the invoice template bref_facture is never listed."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/my-templates",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": {
+        "name": "^[a-z0-9_]{1,512}$ (not bref_facture)",
+        "category": "MARKETING|UTILITY",
+        "language": "fr | en_US …",
+        "headerFormat": "NONE|TEXT|IMAGE|VIDEO|DOCUMENT (optional)",
+        "headerText": "≤ 60, TEXT header",
+        "headerHandle": "from POST /media, media header",
+        "bodyText": "≤ 1024, variables {{1}}, {{2}}… numbered in order",
+        "bodyExamples": [
+          "one per variable, ≤ 200 chars"
+        ],
+        "footerText": "≤ 60, optional"
+      },
+      "response": "201 {data: template} — DRAFT (not connected) or PENDING (submitted)",
+      "errors": [
+        "400 VALIDATION_ERROR (French message)",
+        "409 WHATSAPP_TEMPLATE_NAME_TAKEN",
+        "409 WHATSAPP_TEMPLATE_LIMIT (100)"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/my-templates/media",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": "multipart 'file': image/jpeg or image/png ≤ 5 MB, video/mp4 or application/pdf ≤ 10 MB",
+      "response": {
+        "data": {
+          "headerHandle": "opaque Meta handle"
+        }
+      },
+      "errors": [
+        "400 VALIDATION_ERROR",
+        "409 WHATSAPP_NOT_CONNECTED",
+        "502 WHATSAPP_CLOUD_META_ERROR"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/whatsapp/my-templates/{id}",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "response": "204",
+      "errors": [
+        "404 WHATSAPP_TEMPLATE_NOT_FOUND",
+        "502 WHATSAPP_CLOUD_META_ERROR (Meta refused: nothing deleted)"
+      ]
+    },
+    {
+      "method": "GET|POST",
+      "path": "/api/v1/whatsapp/webhook",
+      "auth": "none (Meta: verify token / X-Hub-Signature-256)",
+      "module": "none",
+      "notes": "Meta only, never called by the app."
+    }
+  ],
+  "push": {
+    "type": "WHATSAPP_MESSAGE_RECEIVED",
+    "title": "Nouveau message WhatsApp | N nouveaux messages WhatsApp",
+    "body": "<name or +phone> : <beginning of the message>",
+    "deepLink": "/whatsapp/conversations/<contactPhone>",
+    "metadata": {
+      "contactPhone": "237690112233"
+    }
+  },
+  "invoiceSending": "POST /api/v1/invoices/{id}/send (channel WHATSAPP) is unchanged for the app: when the company number is connected and bref_facture is approved, the client receives the PDF from the company number; otherwise the platform text with the link."
+}

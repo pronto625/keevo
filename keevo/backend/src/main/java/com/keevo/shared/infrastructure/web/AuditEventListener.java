@@ -8,6 +8,7 @@ import com.keevo.shared.event.catalog.auth.AccountDeletionRequestedEvent;
 import com.keevo.shared.event.catalog.auth.UserAuthenticatedEvent;
 import com.keevo.shared.event.catalog.auth.DeviceSessionClosedEvent;
 import com.keevo.shared.event.catalog.auth.McpAccessTokenChangedEvent;
+import com.keevo.shared.event.catalog.auth.WhatsAppAccountChangedEvent;
 import com.keevo.shared.event.catalog.auth.UserRegisteredEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetRequestedEvent;
 import com.keevo.shared.event.catalog.auth.PasswordResetEvent;
@@ -631,6 +632,23 @@ public class AuditEventListener {
                 ? ACTION_MCP_TOKEN_CREATED : ACTION_MCP_TOKEN_REVOKED;
         write(event.actorId(), event.tenantId(), action, "McpAccessToken", event.tokenId(),
                 null, null, null, event.tokenName(), null, null);
+        log.info("AUDIT: {} tenantId={} actorId={}", action.toLowerCase(java.util.Locale.ROOT), event.tenantId(),
+                event.actorId());
+    }
+
+    // ── WhatsApp Business of the company (Story 21.5) ───────────────────────
+
+    static final String ACTION_WHATSAPP_ACCOUNT_CONNECTED = "WHATSAPP_ACCOUNT_CONNECTED";
+    static final String ACTION_WHATSAPP_ACCOUNT_DISCONNECTED = "WHATSAPP_ACCOUNT_DISCONNECTED";
+
+    /** Story 21.5 — the number as Meta displays it is the label; the access token is never part of the event. */
+    @EventListener
+    public void on(WhatsAppAccountChangedEvent event) {
+        String action = event.change() == WhatsAppAccountChangedEvent.Change.CONNECTED
+                ? ACTION_WHATSAPP_ACCOUNT_CONNECTED : ACTION_WHATSAPP_ACCOUNT_DISCONNECTED;
+        write(event.actorId(), event.tenantId(), action, "WhatsAppAccount", event.accountId(),
+                null, null, null, event.displayPhoneNumber() == null ? "WhatsApp Business"
+                        : event.displayPhoneNumber(), null, null);
         log.info("AUDIT: {} tenantId={} actorId={}", action.toLowerCase(java.util.Locale.ROOT), event.tenantId(),
                 event.actorId());
     }

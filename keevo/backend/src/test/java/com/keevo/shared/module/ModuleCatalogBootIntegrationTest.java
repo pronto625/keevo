@@ -43,10 +43,10 @@ class ModuleCatalogBootIntegrationTest extends FullContextIntegrationTest {
 
         assertThat(seeder.seed(ModuleManifestLoader.loadFromClasspath(resources)).changedRows()).isZero();
         // 13.2: the context holds the validated set once; it is the one the seed used
-        assertThat(catalog.manifests()).hasSize(22);
+        assertThat(catalog.manifests()).hasSize(23);
         assertThat(seeder.seed(catalog.loaded()).changedRows()).isZero();
         // 13.2: the registry is wired on the same set and works outside a request (no request-scope proxy)
-        assertThat(registry.installed()).hasSize(22);
+        assertThat(registry.installed()).hasSize(23);
         assertThat(registry.activeModules("kv_nobody")).containsExactly("core");
         assertThat(GlobalTableStrayCopiesReporter.GLOBAL_ONLY_TABLES).contains("module_definitions", "tenant_modules");
     }

@@ -1,0 +1,27 @@
+{
+  "id": "whatsapp-cloud",
+  "version": "1.0.0",
+  "displayName": "WhatsApp Business",
+  "category": "premium",
+  "requires": [
+    "core"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
+  "entitlement": "module.whatsapp-cloud",
+  "free": false
+}

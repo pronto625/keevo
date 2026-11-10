@@ -275,7 +275,7 @@ public class SendInvoiceUseCase {
             invoice = invoices.findById(id).orElseThrow(InvoiceQueryUseCase::notFound);
             invoice.assertSendable();
             to = channel.recipient(invoice, override);
-            channel.assertAvailable();
+            channel.assertAvailable(tenantSchema);
             String base = absoluteBase(baseUrl, tenantSchema);
             rateLimiter.acquire(tenantSchema);
             slot = true;

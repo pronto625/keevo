@@ -349,8 +349,11 @@ class JdbcPlanCatalogPostgresIntegrationTest {
                 + "AND NOT granted", Integer.class)).as("the other paid modules explicitly withheld").isEqualTo(5);
         List<String> all = List.of("advanced-reports", "ai-assistant", "alerts", "counting", "expenses", "exports",
                 "finance", "invoicing", "mcp-access", "multi-store", "profitability", "report-config"); // 21.9 (V66)
-        for (String plan : List.of("TEAM", "BUSINESS", "BUSINESS_TRIAL")) {
-            assertThat(granted(plan)).as(plan).isEqualTo(all);
+        assertThat(granted("TEAM")).isEqualTo(all);
+        List<String> business = new java.util.ArrayList<>(all);
+        business.add("whatsapp-cloud"); // 21.5 (V68): BUSINESS tiers only
+        for (String plan : List.of("BUSINESS", "BUSINESS_TRIAL")) {
+            assertThat(granted(plan)).as(plan).isEqualTo(business);
         }
         assertThatThrownBy(() -> jdbc.update("UPDATE public.plan_profiles SET max_employees_per_store = 0 "
                 + "WHERE plan_type = 'PRO'")).isInstanceOf(DataIntegrityViolationException.class);

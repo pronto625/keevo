@@ -25,6 +25,13 @@ keevo:
   ai:
     provider: fake
   # Story 21.1 — the simulated Mobile Money provider: no test ever reaches MyCoolPay
+  # Story 21.5 — the fake Meta Graph API: no test ever reaches Meta
+  whatsapp-cloud:
+    graph: fake
+    app-secret: test-whatsapp-app-secret
+    verify-token: test-whatsapp-verify-token
+  secrets:
+    encryption-key: ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoM=
   payments:
     gateway: sandbox
     mycoolpay:

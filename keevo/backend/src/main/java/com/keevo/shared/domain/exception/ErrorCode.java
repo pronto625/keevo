@@ -242,6 +242,17 @@ public enum ErrorCode {
     MCP_TOKEN_INVALID,          // HTTP 401 — personal access token missing, unknown, expired, revoked or no longer the owner's
     MCP_TOKEN_LIMIT,            // HTTP 409 — the owner already holds the maximum number of access tokens
     MCP_TOKEN_NOT_FOUND,        // HTTP 404 — access token unknown or of another user
+    // ── WhatsApp Business of the company (Story 21.5) ─────────────────
+    WHATSAPP_CLOUD_UNAVAILABLE,       // HTTP 503 — no Meta app configured (or no encryption key): connecting refused
+    WHATSAPP_CLOUD_META_ERROR,        // HTTP 502 — Meta refused or could not be reached: nothing done
+    WHATSAPP_NUMBER_ALREADY_CONNECTED, // HTTP 409 — this WhatsApp number is connected to another company
+    WHATSAPP_NOT_CONNECTED,           // HTTP 409 — the company has not connected its WhatsApp Business
+    WHATSAPP_REPLY_WINDOW_CLOSED,     // HTTP 422 — the contact has not written for 24 h: only an approved template
+    WHATSAPP_SEND_UNCERTAIN,          // HTTP 409 — Meta did not answer in time: maybe delivered, never resent
+    WHATSAPP_TEMPLATE_NOT_FOUND,      // HTTP 404 — template unknown (or a system template)
+    WHATSAPP_TEMPLATE_NAME_TAKEN,     // HTTP 409 — a template already has this name in this language
+    WHATSAPP_TEMPLATE_LIMIT,          // HTTP 409 — the company already keeps the maximum number of templates
+    WHATSAPP_TEMPLATE_NOT_APPROVED,   // HTTP 409 — the template is not approved by Meta (yet)
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

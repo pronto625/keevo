@@ -119,7 +119,7 @@ class PlanModuleRowsTest {
         Map<String, Desired> rows = PlanModuleRows.compute(new Plan("PREMIUM_TRIAL", "ACTIVE",
                 NOW.plus(Duration.ofDays(40))), NOW, shipped.manifests());
         assertThat(rows.keySet()).containsExactlyInAnyOrder("advanced-reports", "alerts", "counting", "exports",
-                "invoicing", "multi-store", "profitability", "report-config", "expenses", "finance", "ai-assistant", "mcp-access"); // 20.10; 20.11; 21.4; 21.9
+                "invoicing", "multi-store", "profitability", "report-config", "expenses", "finance", "ai-assistant", "mcp-access", "whatsapp-cloud"); // 20.10; 20.11; 21.4; 21.9; 21.5
         assertThat(rows.values()).allMatch(r -> r.status() == TenantModuleStatus.TRIAL);
         assertThat(PlanModuleRows.compute(Plan.NONE, NOW, testCatalog().manifests()).keySet())
                 .containsExactly("invoicing");
@@ -145,7 +145,7 @@ class PlanModuleRowsTest {
         Map<String, Desired> freeRows = PlanModuleRows.compute(free, NOW, shipped.manifests(),
                 PlanProfile.of(PlanType.FREE, 1, 500, 2, Set.of("exports")));
         assertThat(freeRows.get("exports").status()).isEqualTo(TenantModuleStatus.ACTIVE);
-        assertThat(freeRows).hasSize(12); // 20.10: + expenses; 20.11: + finance; 21.4: + ai-assistant; 21.9: + mcp-access
+        assertThat(freeRows).hasSize(13); // 20.10: + expenses; 20.11: + finance; 21.4: + ai-assistant; 21.9: + mcp-access; 21.5: + whatsapp-cloud
         assertThat(freeRows.entrySet()).filteredOn(e -> !e.getKey().equals("exports"))
                 .allMatch(e -> e.getValue().status() == TenantModuleStatus.DISABLED);
         Map<String, Desired> premiumRows = PlanModuleRows.compute(premium, NOW, shipped.manifests(),

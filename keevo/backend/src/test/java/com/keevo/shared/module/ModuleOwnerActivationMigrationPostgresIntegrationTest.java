@@ -92,9 +92,9 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
             + "re-run keeps an owner choice and an edited DOCUMENT default set")
     void backfillAndRerun() throws Exception {
         // Story 20.10 — V56 owner-disables the new expenses module the same way; 20.11 — V58 the finance module;
-        // 21.4 — V65 the ai-assistant module; 21.9 — V66 the mcp-access module
-        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false));
+        // 21.4 — V65 the ai-assistant module; 21.9 — V66 the mcp-access module; 21.5 — V68 whatsapp-cloud
+        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false), Map.entry("whatsapp-cloud", false));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false), Map.entry("whatsapp-cloud", false));
         assertThat(jdbc.queryForObject("SELECT granted FROM public.profile_modules WHERE plan_type = 'FREE' "
                 + "AND module_id = 'invoicing'", Boolean.class)).isTrue();
         // Story 21.4 — V65 grants the assistant to every plan, FREE included (guided topics are free)
@@ -105,6 +105,10 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
         assertThat(jdbc.queryForList("SELECT plan_type FROM public.profile_modules WHERE module_id = 'mcp-access' "
                 + "AND granted ORDER BY plan_type", String.class))
                 .containsExactly("BUSINESS", "BUSINESS_TRIAL", "PREMIUM", "PREMIUM_TRIAL", "TEAM");
+        // Story 21.5 — V68 grants WhatsApp Business to the BUSINESS tiers (and the complete archived plans)
+        assertThat(jdbc.queryForList("SELECT plan_type FROM public.profile_modules WHERE module_id = 'whatsapp-cloud' "
+                + "AND granted ORDER BY plan_type", String.class))
+                .containsExactly("BUSINESS", "BUSINESS_TRIAL", "PREMIUM", "PREMIUM_TRIAL");
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "multi-store", "pos");
 
@@ -117,8 +121,8 @@ class ModuleOwnerActivationMigrationPostgresIntegrationTest {
 
         rerunV50();
 
-        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", true), Map.entry("mcp-access", false));
-        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false));
+        assertThat(rows(FIRST)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", true), Map.entry("mcp-access", false), Map.entry("whatsapp-cloud", false));
+        assertThat(rows(SECOND)).containsExactly(Map.entry("ai-assistant", false), Map.entry("expenses", false), Map.entry("finance", false), Map.entry("invoicing", false), Map.entry("mcp-access", false), Map.entry("whatsapp-cloud", false));
         assertThat(ruleModules("DOCUMENT")).containsExactly("counting", "inventory", "pos");
         assertThat(ruleModules("POS")).containsExactly("invoicing");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.module_activation_rule_sets", Integer.class))
