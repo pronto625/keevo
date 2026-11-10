@@ -43,4 +43,16 @@ class PlanPeriodTest {
         assertThat(PlanPeriod.of(true, null, NOW, 12).end()).isEqualTo(LocalDate.of(2027, 11, 8));
         assertThatThrownBy(() -> PlanPeriod.of(false, null, NOW, 0)).isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    @DisplayName("21.2 correctif: a confirmed period's last day → the same 23:59:59 WAT expiry; running through that day")
+    void paidPlanPeriod() {
+        PaidPlanPeriod p = new PaidPlanPeriod("TEAM", LocalDate.of(2026, 12, 8));
+        assertThat(p.expiresAt()).isEqualTo(PlanPeriod.of(false, null, NOW, 1).expiresAt())
+                .isEqualTo(PlanPeriod.expiryOf(LocalDate.of(2026, 12, 8)));
+        assertThat(p.runningOn(LocalDate.of(2026, 12, 8))).isTrue();
+        assertThat(p.runningOn(LocalDate.of(2026, 12, 9))).isFalse();
+        assertThatThrownBy(() -> new PaidPlanPeriod(" ", LocalDate.of(2026, 12, 8)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 }

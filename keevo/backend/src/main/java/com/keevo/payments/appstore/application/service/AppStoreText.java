@@ -20,6 +20,7 @@ final class AppStoreText {
     static final String REFUND_PLAN_REASON = "Abonnement App Store remboursé";
     static final String TRANSFER_REASON = "Abonnement App Store transféré vers un autre compte";
     static final String SOURCE = "App Store";
+    static final String MOBILE_MONEY_RESUMED = "Fin de l'abonnement App Store : retour à la période payée par Mobile Money";
 
     private static final DateTimeFormatter FR_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy").withZone(WAT);
 

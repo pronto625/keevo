@@ -16,6 +16,8 @@ import static com.keevo.shared.domain.time.KeevoZones.WAT;
  */
 public record PlanPeriod(LocalDate start, LocalDate end, Instant expiresAt) {
 
+    private static final LocalTime LAST_SECOND = LocalTime.of(23, 59, 59);
+
     /**
      * @param currentPaid   the payment renews the company's current plan, of kind PAID
      * @param currentExpiry its expiry, {@code null} when none
@@ -33,6 +35,14 @@ public record PlanPeriod(LocalDate start, LocalDate end, Instant expiresAt) {
             }
         }
         LocalDate end = start.plusMonths(months).minusDays(1);
-        return new PlanPeriod(start, end, end.atTime(LocalTime.of(23, 59, 59)).atZone(WAT).toInstant());
+        return new PlanPeriod(start, end, expiryOf(end));
+    }
+
+    /**
+     * The plan expiry of a period ending on {@code lastDay}: 23:59:59 (WAT) of that day. The one conversion of a
+     * covered period into a plan expiry (21.1 confirmation, 21.2 return to a running Mobile Money period).
+     */
+    public static Instant expiryOf(LocalDate lastDay) {
+        return lastDay.atTime(LAST_SECOND).atZone(WAT).toInstant();
     }
 }

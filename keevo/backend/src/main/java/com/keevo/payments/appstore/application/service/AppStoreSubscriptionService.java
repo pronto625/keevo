@@ -18,6 +18,8 @@ import com.keevo.payments.appstore.domain.port.out.ExternalSubscriptionStore.Pen
 import com.keevo.payments.appstore.domain.port.out.RevenueCatClient;
 import com.keevo.payments.appstore.domain.port.out.RevenueCatClient.RevenueCatUnavailableException;
 import com.keevo.payments.appstore.domain.port.out.RevenueCatClient.StoreSubscription;
+import com.keevo.payments.checkout.domain.model.PaidPlanPeriod;
+import com.keevo.payments.checkout.domain.port.out.PaidPlanPeriods;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanChangeCause;
 import com.keevo.shared.capability.entitlement.PlanDefinition;
@@ -61,9 +63,11 @@ import static com.keevo.shared.domain.time.KeevoZones.WAT;
  * payments of 21.1.
  *
  * <p>Grant: the plan of the product until Apple's expiry (grace end during a billing issue), unless the same plan
- * already runs at least as long (no duplicate plan event). Revocation (expiration, refund, transfer): back to the free
- * plan only when the company's plan is still the one this subscription granted, never shortening a later Mobile Money
- * payment. Cost per event: constant (see the spec's Design Notes); no loop over tenants.
+ * already runs at least as long (no duplicate plan event). Revocation (expiration, refund, transfer): only when the
+ * company's plan is still the one this subscription granted (never shortening a later Mobile Money payment), the company
+ * goes back to the period of its latest confirmed Mobile Money plan payment while that period still runs (correctif
+ * post-test appareil du 10/11/2026: the Mobile Money days are never lost), else to the free plan. Cost per event:
+ * constant (see the spec's Design Notes; one indexed read of the payments on a revocation); no loop over tenants.
  */
 @Service
 public class AppStoreSubscriptionService {
@@ -92,6 +96,7 @@ public class AppStoreSubscriptionService {
     private final StoreProducts products;
     private final PlanAdministrationPort plans;
     private final PlanCatalog catalog;
+    private final PaidPlanPeriods paidPeriods;
     private final TenantQueryPort tenants;
     private final UserQueryPort users;
     private final RevenueCatClient revenueCat;
@@ -101,14 +106,15 @@ public class AppStoreSubscriptionService {
     private final Clock clock;
 
     public AppStoreSubscriptionService(ExternalSubscriptionStore store, StoreProducts products,
-                                       PlanAdministrationPort plans, PlanCatalog catalog, TenantQueryPort tenants,
-                                       UserQueryPort users, RevenueCatClient revenueCat, AppStoreSettings settings,
-                                       ApplicationEventPublisher events, PlatformTransactionManager txManager,
-                                       Clock clock) {
+                                       PlanAdministrationPort plans, PlanCatalog catalog, PaidPlanPeriods paidPeriods,
+                                       TenantQueryPort tenants, UserQueryPort users, RevenueCatClient revenueCat,
+                                       AppStoreSettings settings, ApplicationEventPublisher events,
+                                       PlatformTransactionManager txManager, Clock clock) {
         this.store = store;
         this.products = products;
         this.plans = plans;
         this.catalog = catalog;
+        this.paidPeriods = paidPeriods;
         this.tenants = tenants;
         this.users = users;
         this.revenueCat = revenueCat;
@@ -442,7 +448,17 @@ public class AppStoreSubscriptionService {
         return sub.withGranted(until);
     }
 
-    /** Back to the free plan when the company's plan is still this subscription's grant. */
+    /**
+     * When the company's plan is still this subscription's grant: back to the running Mobile Money period, else to the
+     * free plan.
+     *
+     * <p>The period restored is the one of the LATEST confirmed Mobile Money plan payment, not the one ending last: a
+     * payment of another plan starts that day and ends the previous plan (21.1, ADR-06), so an older period of another
+     * plan is no longer the company's even if it ends later; renewals of one plan are chained, so the latest confirmed
+     * payment also carries the last day of its plan. The restore is the effect of that self-service payment (cause
+     * SELF_SERVICE_PAYMENT, like its confirmation: neither a churn nor an expiry downgrade); the revenue metrics count
+     * the ledger rows, never this event.
+     */
     private void revoke(ExternalSubscription sub, String reason) {
         if (sub.grantedExpiresAt() == null) {
             return;
@@ -451,6 +467,20 @@ public class AppStoreSubscriptionService {
         if (current == null || !sub.planCode().equals(current.planType().code()) || current.expiresAt() == null
                 || current.expiresAt().isAfter(sub.grantedExpiresAt().plus(GRANT_TOLERANCE))) {
             return; // another plan or a longer payment took over
+        }
+        LocalDate today = LocalDate.ofInstant(clock.instant(), WAT);
+        Optional<PaidPlanPeriod> paid = paidPeriods.latestConfirmed(sub.tenantId())
+                .filter(p -> p.runningOn(today));
+        if (paid.isPresent()) {
+            PaidPlanPeriod p = paid.get();
+            if (p.planCode().equals(current.planType().code()) && p.expiresAt().equals(current.expiresAt())) {
+                return; // already on the Mobile Money period (nothing to write, no plan event)
+            }
+            plans.changePlan(new ChangePlanInput(sub.tenantId(), sub.tenantSchema(), PlanType.of(p.planCode()),
+                    p.expiresAt(), PlanChangeCause.SELF_SERVICE_PAYMENT, null, AppStoreText.MOBILE_MONEY_RESUMED));
+            log.info("[AppStore] Subscription revoked, Mobile Money period resumed: tenant={} plan={} until={}",
+                    sub.tenantId(), p.planCode(), p.end());
+            return;
         }
         plans.changePlan(new ChangePlanInput(sub.tenantId(), sub.tenantSchema(), catalog.freePlan(), null,
                 PlanChangeCause.EXPIRY, null, reason));

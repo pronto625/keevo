@@ -8,6 +8,7 @@ import com.keevo.payments.appstore.domain.event.AppStoreSubscriptionNotice;
 import com.keevo.payments.appstore.domain.event.AppStoreSubscriptionNotice.Kind;
 import com.keevo.payments.appstore.domain.port.out.RevenueCatClient;
 import com.keevo.payments.appstore.domain.port.out.RevenueCatClient.StoreSubscription;
+import com.keevo.payments.checkout.domain.model.PlanPeriod;
 import com.keevo.shared.infrastructure.persistence.FullContextIntegrationTest;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.JwtTokenProvider;
@@ -34,6 +35,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -56,7 +58,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * Story 21.2 — App Store purchases end to end in the real application context (RevenueCat simulated in memory, never
  * called): authenticated webhook, purchase / renewal / replay / stale / expiration, sandbox filter and review account,
  * tenant resolution (single company, attribute, several companies), unknown user / product / store, cancellation,
- * refund, billing issue with and without grace, expiration after a longer Mobile Money payment, TRANSFER, concurrent
+ * refund, billing issue with and without grace, expiration after a longer Mobile Money payment, return to a running
+ * Mobile Money period on expiration (correctif post-test appareil du 10/11/2026), TRANSFER, concurrent
  * duplicates, owner sync, owner products, and the super-admin App Store gap. Each test cleans its rows.
  */
 @AutoConfigureMockMvc
@@ -108,6 +111,7 @@ class AppStoreFullContextTest extends FullContextIntegrationTest {
     void cleanUp() {
         for (UUID tenant : tenants) {
             jdbc.update("DELETE FROM public.tenant_payments WHERE tenant_id = ?", tenant);
+            jdbc.update("DELETE FROM public.payment_requests WHERE tenant_id = ?", tenant);
             jdbc.update("DELETE FROM public.external_subscriptions WHERE tenant_id = ?", tenant);
             String s = jdbc.queryForObject("SELECT schema_name FROM public.tenants WHERE id = ?", String.class, tenant);
             jdbc.update("UPDATE \"" + s + "\".subscriptions SET plan_type = 'FREE', expires_at = NULL");
@@ -456,6 +460,125 @@ class AppStoreFullContextTest extends FullContextIntegrationTest {
         assertThat(subStatus(ot)).isEqualTo("EXPIRED");
         assertThat(plan(schema)).isEqualTo("PRO");
         assertThat(planExpiry(schema)).isEqualTo(momo);
+    }
+
+    // ── return to a running Mobile Money period (correctif post-test appareil du 10/11/2026) ──────────────────
+
+    private static LocalDate todayWat() {
+        return LocalDate.now(com.keevo.shared.domain.time.KeevoZones.WAT);
+    }
+
+    /** A CONFIRMED Mobile Money plan payment (21.1) of {@code plan} covering {@code start..end}, created at {@code at}. */
+    private void mobileMoney(String plan, LocalDate start, LocalDate end, Instant at) {
+        jdbc.update("INSERT INTO public.payment_requests (id, tenant_id, tenant_schema, requested_by, provider, method, "
+                + "phone, plan_code, cycle_code, plan_label, cycle_label, months, base_xaf, reduction_xaf, "
+                + "amount_due_xaf, priced_at, status, next_step, app_transaction_ref, period_start, period_end, "
+                + "expires_at, confirmed_at, created_at) VALUES (?, ?, ?, ?, 'SANDBOX', 'MTN_MOMO', '+237670000000', ?, "
+                + "'MONTHLY', ?, 'Mensuel', 1, 5000, 0, 5000, ?, 'CONFIRMED', 'NONE', ?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID(), tenantId, schema, ownerId, plan, plan, Timestamp.from(at),
+                "KVT-" + UUID.randomUUID(), java.sql.Date.valueOf(start), java.sql.Date.valueOf(end),
+                Timestamp.from(PlanPeriod.expiryOf(end)), Timestamp.from(at), Timestamp.from(at));
+    }
+
+    /** The company is on {@code plan} until {@code until} (what the 21.1 confirmation left). */
+    private void onPlan(String plan, Instant until) {
+        jdbc.update("UPDATE \"" + schema + "\".subscriptions SET plan_type = ?, expires_at = ?", plan,
+                Timestamp.from(until));
+        jdbc.update("UPDATE public.tenants SET plan_type = ? WHERE id = ?", plan, tenantId);
+    }
+
+    @Test
+    @DisplayName("Mobile Money TEAM running, then App Store PRO, then Apple EXPIRATION → back to TEAM until the last "
+            + "paid day 23:59:59 WAT (the latest confirmed payment, not an older one ending later), never the free plan")
+    void expirationResumesMobileMoney() throws Exception {
+        LocalDate end = todayWat().plusDays(40);
+        // an older payment of another plan ending even later: ended by the TEAM payment (21.1, ADR-06), never restored
+        mobileMoney("PRO", todayWat().minusDays(20), todayWat().plusDays(90), Instant.now().minus(20, ChronoUnit.DAYS));
+        mobileMoney("TEAM", todayWat().minusDays(2), end, Instant.now().minus(2, ChronoUnit.DAYS));
+        onPlan("TEAM", PlanPeriod.expiryOf(end));
+
+        String ot = original();
+        Instant apple = days(10);
+        send(event("1", "INITIAL_PURCHASE", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(plan(schema)).isEqualTo("PRO");
+        assertThat(planExpiry(schema)).isEqualTo(apple);
+
+        send(event("2", "EXPIRATION", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(outcome("2")).isEqualTo("APPLIED");
+        assertThat(subStatus(ot)).isEqualTo("EXPIRED");
+        assertThat(plan(schema)).isEqualTo("TEAM");
+        assertThat(planExpiry(schema)).isEqualTo(PlanPeriod.expiryOf(end));
+        assertThat(jdbc.queryForObject("SELECT plan_type FROM public.tenants WHERE id = ?", String.class, tenantId))
+                .isEqualTo("TEAM");
+        assertThat(planEvents(tenantId, "EXPIRY")).isZero();
+        assertThat(planEvents(tenantId, "SELF_SERVICE_PAYMENT")).isEqualTo(2); // Apple grant + return to TEAM
+        assertThat(jdbc.queryForObject("SELECT reason FROM public.tenant_plan_events WHERE tenant_id = ? "
+                + "ORDER BY occurred_at DESC LIMIT 1", String.class, tenantId))
+                .isEqualTo("Fin de l'abonnement App Store : retour à la période payée par Mobile Money");
+        assertThat(notices()).containsExactly(Kind.ACTIVE, Kind.EXPIRED);
+    }
+
+    @Test
+    @DisplayName("device case: Pro paid by Mobile Money, then App Store Pro ending one day later, then an early Apple "
+            + "EXPIRATION → Pro until the last Mobile Money day")
+    void expirationResumesMobileMoneyOfSamePlan() throws Exception {
+        LocalDate end = todayWat().plusDays(29);
+        mobileMoney("PRO", todayWat(), end, Instant.now().minus(1, ChronoUnit.HOURS));
+        onPlan("PRO", PlanPeriod.expiryOf(end));
+
+        String ot = original();
+        Instant apple = PlanPeriod.expiryOf(end).plus(1, ChronoUnit.DAYS);
+        send(event("1", "INITIAL_PURCHASE", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(planExpiry(schema)).isEqualTo(apple);
+
+        send(event("2", "EXPIRATION", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(plan(schema)).isEqualTo("PRO");
+        assertThat(planExpiry(schema)).isEqualTo(PlanPeriod.expiryOf(end));
+        assertThat(planEvents(tenantId, "EXPIRY")).isZero();
+    }
+
+    @Test
+    @DisplayName("Mobile Money period ended yesterday, then Apple EXPIRATION → free plan")
+    void expirationAfterEndedMobileMoney() throws Exception {
+        mobileMoney("TEAM", todayWat().minusDays(31), todayWat().minusDays(1), Instant.now().minus(31,
+                ChronoUnit.DAYS));
+        String ot = original();
+        Instant apple = days(10);
+        send(event("1", "INITIAL_PURCHASE", ot, PRO_MONTH, apple, Map.of()));
+        send(event("2", "EXPIRATION", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(plan(schema)).isEqualTo("FREE");
+        assertThat(planEvents(tenantId, "EXPIRY")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("no Mobile Money payment, then Apple EXPIRATION → free plan")
+    void expirationWithoutMobileMoney() throws Exception {
+        String ot = original();
+        Instant apple = days(10);
+        send(event("1", "INITIAL_PURCHASE", ot, PRO_MONTH, apple, Map.of()));
+        send(event("2", "EXPIRATION", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(plan(schema)).isEqualTo("FREE");
+        assertThat(planEvents(tenantId, "EXPIRY")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("App Store PRO, then a Mobile Money TEAM payment took over, then Apple EXPIRATION → TEAM untouched")
+    void expirationAfterAnotherPlanTookOver() throws Exception {
+        String ot = original();
+        Instant apple = days(10);
+        send(event("1", "INITIAL_PURCHASE", ot, PRO_MONTH, apple, Map.of()));
+        LocalDate end = todayWat().plusDays(29);
+        mobileMoney("TEAM", todayWat(), end, Instant.now());
+        onPlan("TEAM", PlanPeriod.expiryOf(end));
+        int eventsBefore = jdbc.queryForObject("SELECT count(*) FROM public.tenant_plan_events WHERE tenant_id = ?",
+                Integer.class, tenantId);
+
+        send(event("2", "EXPIRATION", ot, PRO_MONTH, apple, Map.of()));
+        assertThat(subStatus(ot)).isEqualTo("EXPIRED");
+        assertThat(plan(schema)).isEqualTo("TEAM");
+        assertThat(planExpiry(schema)).isEqualTo(PlanPeriod.expiryOf(end));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM public.tenant_plan_events WHERE tenant_id = ?",
+                Integer.class, tenantId)).isEqualTo(eventsBefore);
     }
 
     @Test

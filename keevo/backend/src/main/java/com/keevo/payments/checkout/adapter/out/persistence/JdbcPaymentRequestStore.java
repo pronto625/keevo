@@ -2,11 +2,13 @@ package com.keevo.payments.checkout.adapter.out.persistence;
 
 import com.keevo.payments.checkout.domain.model.MobileMoneyMethod;
 import com.keevo.payments.checkout.domain.model.NextStep;
+import com.keevo.payments.checkout.domain.model.PaidPlanPeriod;
 import com.keevo.payments.checkout.domain.model.PaymentKind;
 import com.keevo.payments.checkout.domain.model.PaymentProvider;
 import com.keevo.payments.checkout.domain.model.PaymentRequest;
 import com.keevo.payments.checkout.domain.model.PaymentStatus;
 import com.keevo.payments.checkout.domain.model.PlanPeriod;
+import com.keevo.payments.checkout.domain.port.out.PaidPlanPeriods;
 import com.keevo.payments.checkout.domain.port.out.PaymentRequestStore;
 import com.keevo.shared.capability.entitlement.UsageMetric;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
@@ -30,9 +32,12 @@ import java.util.UUID;
  * {@code public.tenant_payments}. Every lookup goes through an index: primary key, {@code uq_payment_requests_in_flight}
  * (in-flight request of a company, stale expiry), {@code uq_payment_requests_provider_ref} (webhook routing). Every
  * transition is one guarded UPDATE.
+ *
+ * <p>Story 21.2 — also {@link PaidPlanPeriods}: the latest confirmed plan period of a company, read newest first through
+ * {@code ix_payment_requests_tenant_created} (tenant_id, created_at DESC), stopped at the first match.
  */
 @Repository
-public class JdbcPaymentRequestStore implements PaymentRequestStore {
+public class JdbcPaymentRequestStore implements PaymentRequestStore, PaidPlanPeriods {
 
     private static final String COLUMNS = "id, tenant_id, tenant_schema, requested_by, provider, method, phone, "
             + "plan_code, plan_label, cycle_code, cycle_label, months, base_xaf, reduction_xaf, amount_due_xaf, "
@@ -104,6 +109,13 @@ public class JdbcPaymentRequestStore implements PaymentRequestStore {
             + "tenant_payment_id = ?, period_start = ?, period_end = ?, expires_at = ?, next_step = 'NONE', "
             + "failure_reason = NULL, provider_status = CASE WHEN provider = 'NONE' THEN provider_status "
             + "ELSE 'SUCCESS' END, updated_at = now() WHERE id = ? AND status <> 'CONFIRMED'";
+    /**
+     * Story 21.2 — one request in flight per company, and a late payment never confirms (21.3): the newest confirmed
+     * request is the latest confirmed one.
+     */
+    static final String LATEST_PAID_PERIOD_SQL = "SELECT plan_code, period_end FROM public.payment_requests "
+            + "WHERE tenant_id = ? AND status = 'CONFIRMED' AND kind = 'PLAN' AND period_end IS NOT NULL "
+            + "ORDER BY created_at DESC LIMIT 1";
     static final String LEDGER_SQL = "INSERT INTO public.tenant_payments (id, tenant_id, amount_xaf, method, paid_at, "
             + "period_start, period_end, note, recorded_by, plan_code, cycle_code, payment_request_id) "
             + "VALUES (?, ?, ?, 'MOBILE_MONEY', ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -277,6 +289,12 @@ public class JdbcPaymentRequestStore implements PaymentRequestStore {
     @Override
     public boolean freeOfferTaken(UUID tenantId, UUID discountId) {
         return Boolean.TRUE.equals(jdbc.queryForObject(FREE_TAKEN_SQL, Boolean.class, tenantId, discountId));
+    }
+
+    @Override
+    public Optional<PaidPlanPeriod> latestConfirmed(UUID tenantId) {
+        return jdbc.query(LATEST_PAID_PERIOD_SQL, (rs, i) -> new PaidPlanPeriod(rs.getString("plan_code"),
+                rs.getDate("period_end").toLocalDate()), tenantId).stream().findFirst();
     }
 
     @Override
