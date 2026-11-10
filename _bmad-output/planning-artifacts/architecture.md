@@ -229,7 +229,7 @@ src/main/java/com/keevo/
 - `application/service/` — Use case implementations (orchestration only)
 - `adapter/in/rest/` — REST controllers *(MVP)*
 - `adapter/in/rest/dto/` — Request/Response DTOs (separate from controller for clarity)
-- `adapter/in/mcp/` — MCP Tool adapters *(placeholder — V2, Spring AI MCP Server)*
+- `adapter/in/mcp/` — AI tool adapters: one `{Module}McpTools` `@Component` with Spring AI `@Tool` methods (Story 21.8, read-only; see *AI Tool Layer and MCP*)
 - `adapter/out/persistence/` — JPA repositories, entity mappers
 - `adapter/out/external/` — External API adapters (WhatsApp, etc.)
 
@@ -964,7 +964,7 @@ Two categories of local data with distinct retention rules:
 7. ✅ Log via domain events, never `System.out.println` / `print()`
 8. ✅ Pass `ActorId` explicitly in every Command/Query — never via `SecurityContextHolder` inside a use case
 9. ✅ Keep `port/in/` interfaces free of ANY HTTP/framework type — pure Java Records only
-10. ✅ Create `adapter/in/mcp/` placeholder folder (empty `.gitkeep`) for every new module
+10. ✅ Expose a module's read use cases useful to AI as `@Tool` methods of one `{Module}McpTools` `@Component` in `adapter/in/mcp/` (Story 21.8): same `@PreAuthorize` / `@RequiresPermission` / `@RequiresEntitlement(READ)` and store / employee scope as the REST handler they mirror, no tenant / actor / role parameter, bounded French results without technical ids (`storeId` excepted); `AiToolCoverageTest` enforces it and regenerates `docs/ai/tools.md`
 11. ✅ Purge transactional Drift tables (sales, sale_items, stock_movements) only when `synced_at IS NOT NULL` — PENDING rows are never deleted
 12. ✅ ALL data mutations MUST follow Backend-First-When-Online pattern: if online → remote first → on success cache locally (synced:true, NO sync_queue). If offline → local + sync_queue
 13. ✅ sync_queue inserts belong in the Repository layer, NOT in DataSources — DataSources handle only Drift persistence
@@ -983,7 +983,7 @@ Two categories of local data with distinct retention rules:
 - ❌ Implementing a feature without GoF design pattern analysis first
 - ❌ `SecurityContextHolder.getContext()` inside a use case or domain service — ActorId must be injected
 - ❌ `HttpServletRequest` / `ResponseEntity` in any port `in/` interface or application service
-- ❌ Creating a REST controller without creating the matching `adapter/in/mcp/` placeholder folder
+- ❌ A `@Tool` method outside an `adapter/in/mcp/*McpTools` bean, without its module gate, with a write effect (no confirmation flow yet), or taking a tenant / actor / role parameter
 - ❌ Purging local Drift data without checking `synced_at IS NOT NULL` — risk of permanent data loss
 - ❌ Purging static/reference tables (products, stock_levels, categories) — these must always remain local
 - ❌ **Local-first writes when backend is reachable** — ALL mutations must attempt backend FIRST when online
@@ -1184,28 +1184,12 @@ app/
 
 The Keevo backend is designed to be **migrable to a Spring AI MCP Server** without rewriting any domain or application logic. The hexagonal architecture guarantees that adding MCP support is purely an **adapter concern** — a new `adapter/in/mcp/` folder per module, with zero changes to the domain, ports, or application services.
 
-### Target Architecture (V2)
+### Delivered (Story 21.8, 2026-11-10)
 
-When MCP migration is triggered:
-1. Add Spring AI MCP Server dependency to `pom.xml`
-2. Create `{Domain}McpTools.java` per module in `adapter/in/mcp/`
-3. Annotate use case calls with `@Tool(description = "...")`
-4. Every Command/Query Record auto-serializes to JSON Schema for MCP tool parameters
-5. Zero changes to `domain/`, `application/`, `adapter/in/rest/`, or `adapter/out/`
-
-```
-# Example: adapter/in/mcp/ProductMcpTools.java
-@Component
-public class ProductMcpTools {
-    private final CreateProductUseCase createProduct;  // same port as REST
-    private final GetProductUseCase getProduct;
-
-    @Tool(description = "Create a new product in the tenant catalogue")
-    public ProductResponse createProduct(CreateProductCommand command) {
-        return createProduct.execute(command);  // identical to REST controller
-    }
-}
-```
+1. `spring-ai-model` 1.1.8 (`spring-ai-bom`; the 1.1 line targets Boot 3.5, 2.x needs Boot 4) — annotations, JSON schema generation and the `ToolCallback` contract only: no model provider, no auto-configuration, no MCP starter yet (21.4 / 21.9 add theirs on the same BOM).
+2. One `{Module}McpTools` `@Component` per module in `adapter/in/mcp/`; each `@Tool` method mirrors a REST read handler (same gates, same scope helpers) and builds the existing `…Query` itself — the `…Query` records carry `tenantId` / actor (rule 8), so they are not exposed as tool parameters.
+3. `shared.ai.AiToolRegistry` (`AiToolRegistryService`) discovers the tools at startup, lists those the session may call (role rule, permission, module state), calls one by name with JSON arguments through the bean's proxy (the REST interceptors gate it), maps failures to the REST French messages, caps results at 64 KB and audits every call in `public.ai_tool_calls` (V64; purged after 180 days). `allowedToolCallbacks(channel)` hands Spring AI `ToolCallback`s to a chat client (21.4) or an MCP server (21.9).
+4. Tools run on the caller's thread: security and tenant contexts must be those of the session (21.4: non-streaming tool execution on the request thread, or propagate both contexts).
 
 ### Why This Works Without Rework
 
@@ -1222,7 +1206,7 @@ public class ProductMcpTools {
 - **Spring AI MCP Server** (available Spring Boot 3.3+) — transforms `@Tool`-annotated beans into MCP server tools
 - **Protocol**: MCP over stdio or SSE (configurable)
 - **Auth**: MCP has its own authorization layer — `ActorId` resolved from MCP session context instead of JWT
-- **No timeline constraint**: This is a V2 concern. The placeholder folders and port purity rules are the only MVP obligations.
+- **Status**: tool layer delivered by Story 21.8 (`docs/ai/tools.md`); the MCP transport (21.9) and the assistant (21.4) build on it.
 
 ---
 
@@ -1280,7 +1264,7 @@ public class ProductMcpTools {
 
 ### AI Tool Layer and MCP (D8, 21.8, 21.4, 21.9)
 
-- Read tools are defined **once** on existing use cases as `{Module}McpTools` beans in `adapter/in/mcp/` (Spring AI `@Tool`), parameters = existing `…Query` records. This realises the *MCP Migration Path* above and replaces `AuditMcpPlaceholder`.
+- Read tools are defined **once** on existing use cases as `{Module}McpTools` beans in `adapter/in/mcp/` (Spring AI `@Tool`); flat documented parameters from which the tool builds the existing `…Query` (the records carry tenant / actor, so they are not exposed). This realises the *MCP Migration Path* above and replaced `AuditMcpPlaceholder` (Story 21.8, done: 16 tools, `docs/ai/tools.md`).
 - Actor and tenant come from the session, never from tool parameters; entitlement (`@RequiresEntitlement` READ), role and employee scope apply; every call is audited (tool, actor, duration, no personal content); an architecture test (sibling of `EndpointEntitlementCoverageTest`) fails if a tool has no module or exposes an actor/tenant parameter. Write tools later require explicit user confirmation.
 - Consumers: the in-app assistant (`ai-assistant`, tool calling, quotas via `usage_counters`) and an external MCP server (21.9, revocable personal tokens, paid module).
 

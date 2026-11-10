@@ -319,6 +319,10 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 **When** le client rappelle
 **Then** refus immédiat (même mécanisme que les sessions 16-11)
 
+**Éléments routés vers 21.9 (story 21.8, 2026-11-10) :**
+- [ ] [Deferred-from: 21.8 review, 2026-11-10] Session MCP liée au jeton [keevo/backend/src/main/java/com/keevo/shared/ai/AiToolRegistry.java] — `allowedTools()` / `call()` lisent la session du fil courant : le transport MCP doit, pour chaque requête, poser l'authentification de l'owner du jeton (même forme que le filtre JWT : principal, rôle, détails boutique) et le tenant avant d'appeler le registre, et les effacer après (aucune fuite entre requêtes d'un pool de fils). Réglé par un test d'isolation de deux jetons de deux tenants en parallèle.
+- [ ] [Deferred-from: 21.8 review, 2026-11-10] Limite de débit et quota du canal MCP [keevo/backend/src/main/java/com/keevo/shared/ai/internal/AiToolRegistryService.java] — le registre ne limite aucun appel (chaque appel = une ligne d'audit en transaction propre + des agrégats) : limiter par jeton et par tenant et décompter le quota IA (`usage_counters`) comme l'exige l'AC de 21.9. Réglé par un test qui dépasse la limite (429 en français, aucune donnée).
+
 ## Epic 22 : App React Native — fondations et parité Keevo (P2)
 **Valeur :** les utilisateurs Keevo passent sur la nouvelle app par une simple mise à jour, sans perte, avec un hors-ligne au moins aussi fiable qu'en Flutter.
 **Exigences :** FUS-FR33–FR36, FUS-MIG7, FUS-NFR5, NFR6, NFR8, FUS-UX1–UX3.
@@ -1172,6 +1176,10 @@ So that **je retrouve l'assistant de Bref, avec des réponses justes qui respect
 **Given** le fournisseur indisponible, une erreur d'outil ou une question en cours pour le même compte
 **When** l'appel échoue ou est refusé
 **Then** le quota n'est pas consommé, un message clair en français est renvoyé, une seule question à la fois par compte (comme Bref)
+
+**Éléments routés vers 21.4 (story 21.8, 2026-11-10) :**
+- [ ] [Deferred-from: 21.8 review, 2026-11-10] Identifiant de boutique jamais affiché [keevo/backend/src/main/java/com/keevo/store/store/adapter/in/mcp/StoreMcpTools.java, StockMcpTools.java] — les outils `list_stores` / `stock_by_store` rendent `storeId` (clé de chaînage vers les autres outils), protégé seulement par la description de l'outil : le prompt système de l'assistant doit interdire d'afficher un identifiant et la réponse rédigée doit être filtrée (aucun UUID dans le texte rendu à l'app). Réglé par un test du corpus de parité qui vérifie l'absence d'UUID dans les réponses.
+- [ ] [Deferred-from: 21.8 review, 2026-11-10] Contexte de session des outils [keevo/backend/src/main/java/com/keevo/shared/ai/internal/AiToolRegistryService.java] — le registre lit l'acteur et le tenant du fil appelant (`SecurityContextHolder`, `TenantContext`) : appeler les outils sur le fil de la requête (pas de streaming ni d'exécution asynchrone des outils), ou propager les deux contextes. Réglé par un test du chat avec un fournisseur simulé qui appelle un outil.
 
 ### Story 21.5 : Module `whatsapp-cloud` — compte, boîte de réception, modèles
 
