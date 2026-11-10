@@ -132,7 +132,7 @@ public class ScriptedAssistantModel implements AssistantModel {
         if (refusal != null) {
             return AssistantTurn.answer("Je ne peux pas répondre : " + refusal);
         }
-        if (done < rule.steps().size() && !exchange.tools().isEmpty()) {
+        if (done < rule.steps().size() && exchange.toolsCallable()) {
             Step step = rule.steps().get(done);
             return new AssistantTurn(null, List.of(new ToolCall("call_" + done, step.tool(),
                     render(step.args(), results, false))));

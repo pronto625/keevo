@@ -75,12 +75,12 @@ public class ExpenseMcpTools {
                     new InvalidRequestParameterException("category", "unknown category", "Catégorie de dépense inconnue"));
         }
         AiToolArguments.checkPeriod(from, to);
-        String text = search == null || search.isBlank() ? null : search.strip();
-        if (text != null && (text.indexOf('\0') >= 0 || text.length() > MAX_SEARCH_LENGTH)) {
-            throw new InvalidRequestParameterException("search", "invalid search",
-                    "La recherche ne doit pas dépasser " + MAX_SEARCH_LENGTH + " caractères");
-        }
+        String text = AiToolArguments.search(search);
         ExpenseSort order = ExpenseSort.fromKey(sort);
+        if (sort != null && !sort.isBlank() && !order.key().equals(sort.strip())) {
+            throw new InvalidRequestParameterException("sort", "unknown sort",
+                    "Tri inconnu : choisissez recent, oldest, amount_desc ou amount_asc.");
+        }
         String filters = ExpenseCursor.filters(storeId, parsedCategory, from, to, text, order);
         ExpenseCursor after = null;
         if (cursor != null && !cursor.isBlank()) {
@@ -97,7 +97,8 @@ public class ExpenseMcpTools {
                     pageSize), CurrentExpenseAccess.get(), TenantContext.getCurrentTenant());
         } catch (DomainException e) {
             if (ExpenseStoreScope.isUnknownStore(e)) { // same 400 as the REST list
-                throw new InvalidRequestParameterException("storeId", "unknown store", e.getUserMessage());
+                throw new InvalidRequestParameterException("storeId", "unknown store",
+                        e.getUserMessage() != null ? e.getUserMessage() : "Boutique inconnue");
             }
             throw e;
         }

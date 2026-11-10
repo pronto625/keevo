@@ -60,7 +60,9 @@ class LeaderboardControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new LeaderboardController(useCase, CLOCK, preferences, entitlements))
+        mockMvc = MockMvcBuilders.standaloneSetup(new LeaderboardController(useCase, CLOCK,
+                        new com.keevo.reporting.leaderboard.application.service.LeaderboardAudience(preferences,
+                                entitlements)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         TenantContext.setCurrentTenant(TENANT);

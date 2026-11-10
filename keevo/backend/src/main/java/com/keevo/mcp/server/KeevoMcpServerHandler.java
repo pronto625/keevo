@@ -1,13 +1,12 @@
 package com.keevo.mcp.server;
 
 import com.keevo.mcp.token.application.service.McpToolLabels;
+import com.keevo.shared.ai.AiCredits;
 import com.keevo.shared.ai.AiToolChannel;
+import com.keevo.shared.ai.AiToolDescriptor;
 import com.keevo.shared.ai.AiToolRegistry;
 import com.keevo.shared.ai.AiToolResult;
-import com.keevo.shared.capability.entitlement.UsageMetric;
-import com.keevo.shared.capability.entitlement.UsageQuotaPort;
 import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.web.ErrorMessages;
 import io.modelcontextprotocol.common.McpTransportContext;
@@ -19,11 +18,13 @@ import io.modelcontextprotocol.spec.ProtocolVersions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.support.TransactionTemplate;
 import reactor.core.publisher.Mono;
 
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Story 21.9 — Keevo's MCP request handler (stateless Streamable HTTP; the SDK transport parses JSON-RPC and calls it
@@ -36,8 +37,9 @@ import java.util.Map;
  * method → JSON-RPC error {@code -32601}. Tool failures are tool results with {@code isError} and the French message
  * (what MCP clients show their model); nothing here throws (the transport would echo an exception message).
  *
- * <p>Cost: {@code tools/list} = O(tools) in memory after one module read; {@code tools/call} = 1 rolled-back quota
- * transaction + the tool's bounded use case + 1 audit insert + 1 quota transaction.
+ * <p>Cost: {@code tools/list} = O(tools) in memory after one module read (declarations built once); {@code tools/call}
+ * = 1 rolled-back quota transaction (the {@link AiCredits} reservation) + the tool's bounded use case + 1 audit insert
+ * (with the access token's id) + 1 quota transaction.
  */
 @Component
 public class KeevoMcpServerHandler implements McpStatelessServerHandler {
@@ -64,15 +66,17 @@ public class KeevoMcpServerHandler implements McpStatelessServerHandler {
     static final String INTERNAL = "Une erreur est survenue. Réessayez dans un instant.";
 
     private final AiToolRegistry tools;
-    private final UsageQuotaPort quota;
-    private final TransactionTemplate tx;
+    private final AiCredits credits;
     private final McpJsonMapper json;
+    /**
+     * The MCP declaration of each tool, built once (the registry and its schemas never change at runtime): a
+     * {@code tools/list} no longer parses every JSON schema again (21.4.2 review).
+     */
+    private volatile Map<String, McpSchema.Tool> declarations;
 
-    public KeevoMcpServerHandler(AiToolRegistry tools, UsageQuotaPort quota, TransactionTemplate tx,
-                                 McpJsonMapper keevoMcpJsonMapper) {
+    public KeevoMcpServerHandler(AiToolRegistry tools, AiCredits credits, McpJsonMapper keevoMcpJsonMapper) {
         this.tools = tools;
-        this.quota = quota;
-        this.tx = tx;
+        this.credits = credits;
         this.json = keevoMcpJsonMapper;
     }
 
@@ -128,17 +132,34 @@ public class KeevoMcpServerHandler implements McpStatelessServerHandler {
 
     /** The token's tools the owner may still call now, sorted by name. */
     List<McpSchema.Tool> listTools(McpRequestSession session) {
-        McpSchema.ToolAnnotations readOnly = new McpSchema.ToolAnnotations(null, true, false, true, false, null);
+        Map<String, McpSchema.Tool> declared = declarations();
         return tools.allowedTools().stream()
                 .filter(d -> session.tools().contains(d.name()))
-                .map(d -> McpSchema.Tool.builder()
-                        .name(d.name())
-                        .title(McpToolLabels.label(d))
-                        .description(d.description())
-                        .inputSchema(json, d.inputSchema())
-                        .annotations(readOnly)
-                        .build())
+                .map(d -> declared.get(d.name()))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(McpSchema.Tool::name))
                 .toList();
+    }
+
+    private Map<String, McpSchema.Tool> declarations() {
+        Map<String, McpSchema.Tool> built = declarations;
+        if (built == null) {
+            McpSchema.ToolAnnotations readOnly = new McpSchema.ToolAnnotations(null, true, false, true, false, null);
+            Map<String, McpSchema.Tool> map = new HashMap<>();
+            for (AiToolDescriptor d : tools.allTools()) {
+                try {
+                    map.put(d.name(), McpSchema.Tool.builder().name(d.name()).title(McpToolLabels.label(d))
+                            .description(d.description()).inputSchema(json, d.inputSchema()).annotations(readOnly)
+                            .build());
+                } catch (RuntimeException e) {
+                    // one unreadable schema never empties the whole list
+                    log.warn("MCP declaration of tool {} skipped ({})", d.name(), e.getClass().getSimpleName());
+                }
+            }
+            built = Map.copyOf(map);
+            declarations = built;
+        }
+        return built;
     }
 
     private McpSchema.JSONRPCResponse callTool(McpSchema.JSONRPCRequest request, McpRequestSession session) {
@@ -158,49 +179,26 @@ public class KeevoMcpServerHandler implements McpStatelessServerHandler {
         if (!session.tools().contains(call.name())) {
             return ok(request, toolError(OUT_OF_SCOPE));
         }
-        String schema = TenantContext.getCurrentTenant();
-        try {
-            checkQuota(schema);
-        } catch (DomainException e) {
-            return ok(request, toolError(message(e)));
-        }
         String arguments;
         try {
-            arguments = call.arguments() == null ? null : json.writeValueAsString(call.arguments());
+            // a tool without parameters is often called without arguments: an empty object
+            arguments = call.arguments() == null ? "{}" : json.writeValueAsString(call.arguments());
         } catch (java.io.IOException e) {
             return error(request, McpSchema.ErrorCodes.INVALID_PARAMS, INVALID_PARAMS);
         }
-        AiToolResult result = tools.call(call.name(), arguments, AiToolChannel.MCP);
-        if (!result.isOk()) {
-            return ok(request, toolError(result.message() != null ? result.message() : INTERNAL));
-        }
-        consume(schema);
-        return ok(request, McpSchema.CallToolResult.builder().addTextContent(result.json()).isError(false).build());
-    }
-
-    /** The 19.8 increment in a rolled-back transaction: the exact refusal ({@code QUOTA_EXCEEDED}) or nothing kept. */
-    private void checkQuota(String schema) {
-        tx.executeWithoutResult(status -> {
-            status.setRollbackOnly();
-            quota.assertAndIncrementForSchema(schema, UsageMetric.AI_CREDITS, 1);
-        });
-    }
-
-    /**
-     * One AI credit for a served call. The tool already ran: a failure here (credits used up meanwhile by another
-     * consumer, counter unavailable) never turns the served result into an error — served uncounted, logged.
-     */
-    private void consume(String schema) {
-        try {
-            tx.executeWithoutResult(status -> quota.assertAndIncrementForSchema(schema, UsageMetric.AI_CREDITS, 1));
-        } catch (DomainException e) {
-            if (e.getErrorCode() == ErrorCode.QUOTA_EXCEEDED) {
-                log.warn("[MCP] AI credits used up during a tool call: result served without counting");
-            } else {
-                log.warn("[MCP] AI credit not counted ({}): result served", e.getDomainCode());
+        String schema = TenantContext.getCurrentTenant();
+        // one AI credit reserved (exact refusal, the company's calls and questions in flight counted), consumed for
+        // an OK call only, released in any case
+        try (AiCredits.Reservation credit = credits.reserve(schema)) {
+            AiToolResult result = tools.call(call.name(), arguments, AiToolChannel.MCP, session.tokenId());
+            if (!result.isOk()) {
+                return ok(request, toolError(result.message() != null ? result.message() : INTERNAL));
             }
-        } catch (RuntimeException e) {
-            log.warn("[MCP] AI credit not counted ({}): result served", e.getClass().getSimpleName());
+            credit.consume();
+            return ok(request, McpSchema.CallToolResult.builder().addTextContent(result.json()).isError(false)
+                    .build());
+        } catch (DomainException e) {
+            return ok(request, toolError(message(e)));
         }
     }
 

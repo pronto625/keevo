@@ -136,13 +136,18 @@
         "notes": "the module's read-only grace after an expired subscription still serves (reads only)"
       },
       {
+        "status": 403,
+        "domainCode": "ACCOUNT_SUSPENDED | ACCOUNT_DELETION_PENDING",
+        "notes": "21.4.2: a suspended company, or one whose deletion is pending, is refused (as every write of the JWT path)"
+      },
+      {
         "status": 429,
         "domainCode": "RATE_LIMIT_EXCEEDED",
         "error": "Trop de requêtes, veuillez patienter",
         "headers": {
           "Retry-After": "60"
         },
-        "notes": "30 requests per minute per access, 60 per company, and 20 failed authentications per minute per address"
+        "notes": "30 requests per minute per access, 60 per company (a refused request counts nothing); an address whose authentications failed 20 times this minute gets 429 on its next failures only — a valid access is never refused because of its address (21.4.2)"
       },
       {
         "status": 503,
@@ -170,6 +175,7 @@
         "code": -32603,
         "message": "Une erreur est survenue. Réessayez dans un instant."
       }
-    ]
+    ],
+    "httpRefusalShape": "21.4.2: Keevo's error envelope {code: HTTP status name, domainCode, error: French message}"
   }
 }

@@ -1,20 +1,37 @@
 package com.keevo.assistant.chat.domain.model;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * Story 21.4 — one request to the model: the system prompt, the conversation so far (questions, answers, tool calls
- * and their results) and the tools it may call now (empty = it must answer in text).
+ * and their results) and the tools it may call.
  *
  * @param maxOutputTokens cap on the generated text of this turn
+ * @param answerOnly      Story 21.4.2 — the model must answer in text now: the tools stay declared (a conversation
+ *                        holding tool calls must keep its tools, and the cached prefix stays the same) but may not be
+ *                        called ({@code tool_choice: none}); an adapter whose provider cannot say so drops them
+ * @param timeLeft        Story 21.4.2 — what is left of the question's deadline: a provider call (retry included) never
+ *                        waits longer; {@code null} = the adapter's own timeout
  */
-public record AssistantExchange(String system, List<Message> messages, List<ToolSpec> tools, int maxOutputTokens) {
+public record AssistantExchange(String system, List<Message> messages, List<ToolSpec> tools, int maxOutputTokens,
+                                boolean answerOnly, Duration timeLeft) {
 
     public AssistantExchange {
         Objects.requireNonNull(system, "system");
         messages = List.copyOf(messages);
         tools = List.copyOf(tools);
+    }
+
+    /** A turn that may call {@code tools} (an empty list = text only), with the adapter's own timeout. */
+    public AssistantExchange(String system, List<Message> messages, List<ToolSpec> tools, int maxOutputTokens) {
+        this(system, messages, tools, maxOutputTokens, false, null);
+    }
+
+    /** Whether the model may call a tool in this turn. */
+    public boolean toolsCallable() {
+        return !answerOnly && !tools.isEmpty();
     }
 
     /** Who wrote a message. */

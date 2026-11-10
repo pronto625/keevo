@@ -75,7 +75,8 @@ public class OpenAiCompatibleAssistantModel implements AssistantModel {
             messages.add(toSpring(m));
         }
         OpenAiChatOptions.Builder options = options(exchange.maxOutputTokens());
-        if (!exchange.tools().isEmpty()) {
+        // answerOnly: the tools are not declared (tool_choice none is not honoured by every OpenAI-compatible server)
+        if (exchange.toolsCallable()) {
             options.toolCallbacks(exchange.tools().stream().map(OpenAiCompatibleAssistantModel::declaration).toList());
         }
         ChatResponse response = call(chat, new Prompt(messages, options.build()));
@@ -96,6 +97,9 @@ public class OpenAiCompatibleAssistantModel implements AssistantModel {
         if (calls.isEmpty() && text == null) {
             throw new AssistantModelException(provider + ": empty answer");
         }
+        if (truncated(response)) {
+            throw AssistantModelException.unusableAnswer(provider + ": answer cut by its token cap");
+        }
         return new AssistantTurn(text, calls);
     }
 
@@ -109,6 +113,17 @@ public class OpenAiCompatibleAssistantModel implements AssistantModel {
             throw new AssistantModelException(provider + ": empty title");
         }
         return text;
+    }
+
+    /** Story 21.4.2 — {@code finish_reason: length}: the text or a tool call was cut by the token cap. */
+    static boolean truncated(ChatResponse response) {
+        for (Generation g : response.getResults()) {
+            String reason = g.getMetadata() == null ? null : g.getMetadata().getFinishReason();
+            if (reason != null && ("length".equalsIgnoreCase(reason) || "max_tokens".equalsIgnoreCase(reason))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private OpenAiChatOptions.Builder options(int maxTokens) {

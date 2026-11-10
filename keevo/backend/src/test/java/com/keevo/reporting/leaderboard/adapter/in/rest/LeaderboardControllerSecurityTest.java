@@ -40,7 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * the leaderboard, other roles never reach the use case.
  */
 @WebMvcTest(LeaderboardController.class)
-@Import({SecurityConfig.class, ClockConfig.class})
+@Import({SecurityConfig.class, ClockConfig.class, com.keevo.reporting.leaderboard.application.service.LeaderboardAudience.class})
 @DisplayName("LeaderboardController — security slice (v1s-14-2)")
 class LeaderboardControllerSecurityTest {
 

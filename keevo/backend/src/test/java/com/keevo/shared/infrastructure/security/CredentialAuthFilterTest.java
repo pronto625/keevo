@@ -150,7 +150,15 @@ class CredentialAuthFilterTest {
         when(accessStates.get(OWNER, SCHEMA)).thenReturn(state("OWNER", true, "ACTIVE", CREATED.plusSeconds(1)));
         assertThat(run("/api/v1/mcp", "good", seen, tenant).getContentAsString()).contains("MCP_TOKEN_INVALID");
 
+        // 21.4.2: a suspended company (or one being deleted) is refused like every write of the JWT path
         when(accessStates.get(OWNER, SCHEMA)).thenReturn(state("OWNER", true, "SUSPENDED", null));
+        MockHttpServletResponse suspended = run("/api/v1/mcp", "good", seen, tenant);
+        assertThat(suspended.getStatus()).isEqualTo(403);
+        assertThat(suspended.getContentAsString()).contains("ACCOUNT_SUSPENDED").contains("\"code\":\"FORBIDDEN\"");
+        when(accessStates.get(OWNER, SCHEMA)).thenReturn(state("OWNER", true, "DELETION_PENDING", null));
+        assertThat(run("/api/v1/mcp", "good", seen, tenant).getContentAsString()).contains("ACCOUNT_DELETION_PENDING");
+
+        when(accessStates.get(OWNER, SCHEMA)).thenReturn(state("OWNER", true, "ACTIVE", null));
         after = new CredentialAuthenticator.Refusal(429, "RATE_LIMIT_EXCEEDED", null,
                 java.util.Map.of("Retry-After", "60"));
         MockHttpServletResponse limited = run("/api/v1/mcp", "good", seen, tenant);

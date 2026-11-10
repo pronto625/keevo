@@ -521,15 +521,102 @@ class McpServerFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("brake: 20 failed authentications from one address → 429 before any lookup, even with a valid token")
+    @DisplayName("brake: 20 failed authentications from one address → its next failures get 429; a valid token from "
+            + "the same address is still served (shared provider / carrier addresses, 21.4.2)")
     void failedAuthenticationBrake() throws Exception {
         String token = createToken(owner, List.of("list_stores"), null).path("token").asText();
         for (int i = 0; i < 20; i++) {
             body(mcp("kvp_" + "B".repeat(43), "ping", null), 401);
         }
-        MvcResult braked = mcp(token, "ping", null);
+        MvcResult braked = mcp("kvp_" + "C".repeat(43), "ping", null);
         assertThat(body(braked, 429).path("domainCode").asText()).isEqualTo("RATE_LIMIT_EXCEEDED");
         assertThat(braked.getResponse().getHeader("Retry-After")).isEqualTo("60");
+        body(mcp(token, "ping", null), 200);
+    }
+
+    @Test
+    @DisplayName("21.4.2: the audit names the access token; created / revoked audit actions and their French labels")
+    void auditNamesTheToken() throws Exception {
+        JsonNode created = createToken(owner, List.of("list_stores"), null);
+        String token = created.path("token").asText();
+        String id = created.path("accessToken").path("id").asText();
+        call(token, "list_stores", Map.of());
+        assertThat(jdbc.queryForObject("SELECT access_token_id::text FROM public.ai_tool_calls c JOIN public.tenants t "
+                + "ON t.id = c.tenant_id WHERE t.schema_name = ? AND c.channel = 'MCP'", String.class, schema))
+                .isEqualTo(id);
+        body(rest(owner, HttpMethod.DELETE, MCP + "/tokens/" + id, null), 204);
+        List<Map<String, Object>> audit = jdbc.queryForList("SELECT action, entity_label FROM \"" + schema
+                + "\".audit_log WHERE action LIKE 'MCP_TOKEN_%' ORDER BY occurred_at, action");
+        assertThat(audit).extracting(r -> r.get("action") + ":" + r.get("entity_label"))
+                .containsExactly("MCP_TOKEN_CREATED:Claude du comptable", "MCP_TOKEN_REVOKED:Claude du comptable");
+        assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("MCP_TOKEN_CREATED"))
+                .isEqualTo("Accès IA externe créé");
+        assertThat(com.keevo.shared.infrastructure.export.AuditLabels.ACTIONS.get("MCP_TOKEN_REVOKED"))
+                .isEqualTo("Accès IA externe révoqué");
+    }
+
+    @Test
+    @DisplayName("21.4.2: last use moves forward after a minute, not before")
+    void lastUseThrottled() throws Exception {
+        String token = createToken(owner, List.of("list_stores"), null).path("token").asText();
+        body(mcp(token, "ping", null), 200);
+        String select = "SELECT last_used_at FROM public.mcp_access_tokens WHERE tenant_id = (SELECT id FROM "
+                + "public.tenants WHERE schema_name = ?)";
+        java.sql.Timestamp first = jdbc.queryForObject(select, java.sql.Timestamp.class, schema);
+        body(mcp(token, "ping", null), 200);
+        assertThat(jdbc.queryForObject(select, java.sql.Timestamp.class, schema)).isEqualTo(first);
+        jdbc.update("UPDATE public.mcp_access_tokens SET last_used_at = now() - interval '2 minutes' WHERE tenant_id = "
+                + "(SELECT id FROM public.tenants WHERE schema_name = ?)", schema);
+        java.sql.Timestamp old = jdbc.queryForObject(select, java.sql.Timestamp.class, schema);
+        body(mcp(token, "ping", null), 200);
+        assertThat(jdbc.queryForObject(select, java.sql.Timestamp.class, schema)).isAfter(old);
+    }
+
+    @Test
+    @DisplayName("21.4.2: an encoded MCP path never reaches the tools with a JWT; GET on the endpoint → 405")
+    void pathsAndMethods() throws Exception {
+        MvcResult encoded = mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/%6Dcp")
+                .header("Authorization", "Bearer " + employee.jwt())
+                .accept(MediaType.APPLICATION_JSON, MediaType.TEXT_EVENT_STREAM).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":"
+                        + "\"list_stores\"}}")).andReturn();
+        SecurityContextHolder.clearContext();
+        TenantContext.clear();
+        // the decoded path is the MCP endpoint: the MCP credential is required (a JWT is not one) — refused, no tool
+        assertThat(encoded.getResponse().getStatus()).isIn(400, 401);
+        assertThat(mcpCalls(schema)).isEmpty();
+        String token = createToken(owner, List.of("list_stores"), null).path("token").asText();
+        MvcResult get = mockMvc.perform(MockMvcRequestBuilders.get(MCP).header("Authorization", "Bearer " + token)
+                .header("X-Forwarded-For", clientIp)).andReturn();
+        assertThat(get.getResponse().getStatus()).isEqualTo(405);
+    }
+
+    @Test
+    @DisplayName("21.4.2: a suspended company's tokens are refused (403 ACCOUNT_SUSPENDED), nothing served or counted")
+    void suspendedCompany() throws Exception {
+        String token = createToken(owner, List.of("list_stores"), null).path("token").asText();
+        jdbc.update("UPDATE public.tenants SET status = 'SUSPENDED' WHERE schema_name = ?", schema);
+        try {
+            accessStates.invalidateTenant(schema);
+            JsonNode refused = body(mcp(token, "tools/call", Map.of("name", "list_stores")), 403);
+            assertThat(refused.path("domainCode").asText()).isEqualTo("ACCOUNT_SUSPENDED");
+            assertThat(refused.path("code").asText()).isEqualTo("FORBIDDEN");
+            assertThat(mcpCalls(schema)).isEmpty();
+        } finally {
+            jdbc.update("UPDATE public.tenants SET status = 'ACTIVE' WHERE schema_name = ?", schema);
+            accessStates.invalidateTenant(schema);
+        }
+    }
+
+    @Test
+    @DisplayName("21.4.2: expired tokens never hold a place under the cap of 10")
+    void expiredTokensOutsideTheCap() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            createToken(owner, List.of("list_stores"), 7);
+        }
+        jdbc.update("UPDATE public.mcp_access_tokens SET created_at = now() - interval '10 days', expires_at = now() - "
+                + "interval '3 days' WHERE tenant_id = (SELECT id FROM public.tenants WHERE schema_name = ?)", schema);
+        createToken(owner, List.of("list_stores"), 7); // 201: the 10 expired ones are not counted
     }
 
     @Test

@@ -221,7 +221,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         assertThat(jdbc.queryForList("SELECT DISTINCT status || '/' || origin FROM public.tenant_modules "
                 + "WHERE tenant_id = ?", String.class, t)).containsExactly("EXPIRED/PLAN");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM public.tenant_modules WHERE tenant_id = ? "
-                + "AND grace_until > now() + interval '6 days'", Integer.class, t)).isEqualTo(11);
+                + "AND grace_until > now() + interval '6 days'", Integer.class, t)).isEqualTo(12); // 12 paid modules (21.9)
 
         assertThat(jdbc.queryForObject("SELECT plan_type FROM \"kv_pm9204\".subscriptions", String.class)).isEqualTo("FREE");
         assertThat(publicPlan(t)).isEqualTo("FREE");

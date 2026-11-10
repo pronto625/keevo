@@ -39,7 +39,7 @@ import java.util.Locale;
  *       (missing → disabled with a warning), default model {@code claude-haiku-5-5}.</li>
  * </ul>
  * Questions wait {@code keevo.ai.timeout-seconds} (default 45 s) per provider call, with one retry on a transient
- * failure; titles wait 10 s without retry.
+ * failure (anthropic: only within the question's deadline); titles wait 10 s without retry.
  * Model ({@code KEEVO_AI_MODEL}) and base URL ({@code KEEVO_AI_BASE_URL}) default per provider (Bref's defaults). The
  * key comes from the environment only and is never logged; errors name the variable, never its value.
  */
@@ -144,32 +144,35 @@ public class AssistantModelConfig {
 
     /** Per provider call of a question: {@code keevo.ai.timeout-seconds} (1..120), default 45 s. */
     static int readTimeoutMs(Environment env) {
-        int seconds = env.getProperty(TIMEOUT, Integer.class, READ_TIMEOUT_MS / 1_000);
+        String raw = env.getProperty(TIMEOUT, String.valueOf(READ_TIMEOUT_MS / 1_000)).strip();
+        int seconds;
+        try {
+            seconds = Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            seconds = -1;
+        }
         if (seconds < 1 || seconds > 120) {
-            throw new IllegalStateException(TIMEOUT + " must be between 1 and 120");
+            throw new IllegalStateException(TIMEOUT + " must be a whole number of seconds between 1 and 120");
         }
         return seconds * 1_000;
     }
 
     /**
-     * Claude through the official SDK: questions with one retry on a transient failure (408, 409, 429, 5xx, network,
-     * timeout — the SDK's own policy), titles with a short timeout and no retry. The key is given explicitly (never
-     * read from the SDK's own environment variables).
+     * Claude through the official SDK: one client without the SDK's own retries (the adapter retries once within the
+     * question's deadline, so a {@code retry-after} never runs past it); questions wait at most the configured
+     * timeout per call, titles 10 s without retry. The key is given explicitly (never read from the SDK's own
+     * environment variables); the base URL is a host (a trailing {@code /} or {@code /v1} is removed, the SDK adds the
+     * path).
      */
     static AssistantModel anthropic(String key, String model, String baseUrl, int readTimeoutMs, ObjectMapper mapper) {
-        AnthropicClient chat = anthropicClient(key, baseUrl, readTimeoutMs, 1);
-        AnthropicClient titles = anthropicClient(key, baseUrl, TITLE_READ_TIMEOUT_MS, 0);
-        log.info("[AI] assistant model provider: anthropic (model {})", model);
-        return new AnthropicAssistantModel(chat, titles, model, mapper);
-    }
-
-    private static AnthropicClient anthropicClient(String key, String baseUrl, int timeoutMs, int retries) {
         AnthropicOkHttpClient.Builder b = AnthropicOkHttpClient.builder().apiKey(key)
-                .timeout(Duration.ofMillis(timeoutMs)).maxRetries(retries);
+                .timeout(Duration.ofMillis(readTimeoutMs)).maxRetries(0);
         if (!baseUrl.isBlank()) {
-            b.baseUrl(trimSlash(baseUrl));
+            b.baseUrl(host(baseUrl));
         }
-        return b.build();
+        AnthropicClient client = b.build();
+        log.info("[AI] assistant model provider: anthropic (model {})", model);
+        return new AnthropicAssistantModel(client, model, Duration.ofMillis(readTimeoutMs), mapper);
     }
 
     private static AssistantModel openAi(Settings s, int readTimeoutMs) {

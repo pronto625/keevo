@@ -53,7 +53,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
     // 20.10 (V56): + expenses; 21.4 (V65): + ai-assistant
     private static final List<String> PAID = List.of("advanced-reports", "ai-assistant", "alerts", "counting", "expenses",
-            "exports", "finance", "invoicing", "multi-store", "profitability", "report-config");
+            "exports", "finance", "invoicing", "mcp-access", "multi-store", "profitability", "report-config");
 
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;

@@ -1,6 +1,5 @@
 package com.keevo.reporting.leaderboard.adapter.in.rest;
 
-import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.reporting.leaderboard.adapter.in.rest.dto.SellerLeaderboardEntryDto;
 import com.keevo.reporting.leaderboard.application.service.LeaderboardAudience;
 import com.keevo.reporting.leaderboard.domain.port.in.GetSellerLeaderboardUseCase;
@@ -10,7 +9,6 @@ import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
-import com.keevo.shared.module.EntitlementService;
 import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -63,11 +61,10 @@ public class LeaderboardController {
     private final Clock clock;
     private final LeaderboardAudience audience;
 
-    public LeaderboardController(GetSellerLeaderboardUseCase useCase, Clock clock,
-                                 TenantPreferencesQueryPort preferences, EntitlementService entitlements) {
+    public LeaderboardController(GetSellerLeaderboardUseCase useCase, Clock clock, LeaderboardAudience audience) {
         this.useCase = useCase;
         this.clock = clock;
-        this.audience = new LeaderboardAudience(preferences, entitlements);
+        this.audience = audience;
     }
 
     @Operation(summary = "Seller leaderboard for a date range (OWNER; EMPLOYEE anonymised, own store, when shared)")

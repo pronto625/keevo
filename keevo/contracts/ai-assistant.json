@@ -20,9 +20,11 @@
     { "domainCode": "AI_CONVERSATION_NOT_FOUND", "status": 404, "when": "GET / PUT of an unknown conversation or another user's", "counted": false },
     { "domainCode": "AI_CONVERSATION_LIMIT", "status": 409, "when": "the user already keeps 200 conversations", "counted": false },
     { "domainCode": "AI_QUESTION_IN_PROGRESS", "status": 429, "when": "a question of the same user (in this company) is being answered — other members may ask at the same time", "counted": false },
-    { "domainCode": "AI_PROVIDER_ERROR", "status": 502, "when": "the model provider failed or timed out", "counted": false },
+    { "domainCode": "RATE_LIMIT_EXCEEDED", "status": 429, "when": "21.4.2: too many questions running on the server at once, or this user's questions failed 20 times within an hour (failures cost the provider, never a credit); retry later", "counted": false },
+    { "domainCode": "VALIDATION_ERROR", "code": "PAYLOAD_TOO_LARGE", "status": 413, "when": "21.4.2: body of POST / PUT /api/v1/ai/** over 1 MiB, refused before it is read", "counted": false },
+    { "domainCode": "AI_PROVIDER_ERROR", "status": 502, "when": "the model provider failed or timed out (each provider call waits at most the time left to the 90 s of the question, one retry included)", "counted": false },
     { "domainCode": "AI_UNAVAILABLE", "status": 503, "when": "no model provider configured (free text off; topics and conversations work)", "counted": false },
-    { "domainCode": "AI_ANSWER_FAILED", "status": 503, "when": "a tool failed or the answer went over its limits", "counted": false }
+    { "domainCode": "AI_ANSWER_FAILED", "status": 503, "when": "a tool failed, the answer went over its limits, or the model refused or was cut by its token cap (21.4.2: not reported as a provider outage)", "counted": false }
   ],
   "topics": [
     { "id": "diagnostic", "bref": "diagnostic", "period": "month (fixed)", "tools": ["revenue_summary", "invoice_collections", "unpaid_call_list"] },

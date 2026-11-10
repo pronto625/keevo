@@ -8,6 +8,8 @@ import com.keevo.assistant.conversation.domain.model.AiConversationSummary;
 import com.keevo.assistant.conversation.domain.port.out.AiConversationRepository;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -20,9 +22,7 @@ import java.util.ArrayDeque;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Story 21.4 — the assistant conversations of a user (Bref Point's {@code /v1/ai/conversations}): list, create, read,
@@ -48,13 +48,15 @@ public class AiConversationService {
     static final int FALLBACK_TITLE_CHARS = 60;
     static final int TITLES_PER_HOUR = 20;
     /** Beyond, users idle for an hour are dropped from the title limiter (bounded memory). */
-    static final int MAX_TRACKED_USERS = 1_000;
+    static final int MAX_TRACKED_USERS = 100_000;
     static final String EMPTY_ARRAY = "[]";
 
     private final AiConversationRepository repository;
     private final AssistantModel model;
     private final Clock clock;
-    private final Map<UUID, Deque<Instant>> titleCalls = new ConcurrentHashMap<>();
+    /** Model title calls per user in the last hour; entries idle for an hour expire, bounded in size. */
+    private final Cache<UUID, Deque<Instant>> titleCalls = Caffeine.newBuilder()
+            .expireAfterAccess(Duration.ofHours(1)).maximumSize(MAX_TRACKED_USERS).build();
 
     private final AssistantChatService chat;
 
@@ -124,7 +126,7 @@ public class AiConversationService {
         String fallback = fallback(firstMessage);
         // a model title only for a company that may still ask questions (FREE has no AI credit): never metered
         String tenant = com.keevo.shared.infrastructure.persistence.TenantContext.getCurrentTenant();
-        if (!model.available() || tenant == null || !takeTitleSlot(userId) || !chat.hasCredit(tenant)) {
+        if (!model.available() || tenant == null || !chat.hasCredit(tenant) || !takeTitleSlot(userId)) {
             return fallback;
         }
         try {
@@ -137,21 +139,14 @@ public class AiConversationService {
     }
 
     /**
-     * At most {@value #TITLES_PER_HOUR} model titles per user and sliding hour. Memory stays bounded: beyond
-     * {@value #MAX_TRACKED_USERS} tracked users, those without a call in the last hour are dropped (one lock at a
-     * time, never nested).
+     * At most {@value #TITLES_PER_HOUR} model titles per user and sliding hour. Memory stays bounded by the cache
+     * (an hour idle → expired; at most {@value #MAX_TRACKED_USERS} users, least recently used dropped first), with no
+     * sweep on the request path (21.4.2 review: a full-map sweep under load and a lost-update race).
      */
     private boolean takeTitleSlot(UUID userId) {
         Instant now = clock.instant();
         Instant since = now.minus(Duration.ofHours(1));
-        if (titleCalls.size() > MAX_TRACKED_USERS) {
-            titleCalls.entrySet().removeIf(e -> {
-                synchronized (e.getValue()) {
-                    return e.getValue().isEmpty() || e.getValue().peekLast().isBefore(since);
-                }
-            });
-        }
-        Deque<Instant> calls = titleCalls.computeIfAbsent(userId, k -> new ArrayDeque<>());
+        Deque<Instant> calls = titleCalls.get(userId, k -> new ArrayDeque<>());
         synchronized (calls) {
             while (!calls.isEmpty() && calls.peekFirst().isBefore(since)) {
                 calls.pollFirst();

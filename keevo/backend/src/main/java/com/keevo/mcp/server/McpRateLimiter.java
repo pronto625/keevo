@@ -70,11 +70,20 @@ public class McpRateLimiter {
                 .build();
     }
 
-    /** Counts one request of the token in the company; {@code false} when either limit is exceeded. */
+    /**
+     * Counts one request of the token in the company; {@code false} when either limit is reached — then nothing is
+     * counted (a request refused by the company limit no longer uses up its token's window, 21.4.2 review).
+     */
     public boolean tryAcquire(UUID tokenId, String tenantSchema) {
-        if (perToken.get(tokenId, k -> new AtomicInteger()).incrementAndGet() > tokenMax) {
-            return false;
+        AtomicInteger token = perToken.get(tokenId, k -> new AtomicInteger());
+        AtomicInteger tenant = perTenant.get(tenantSchema, k -> new AtomicInteger());
+        synchronized (tenant) {
+            if (token.get() >= tokenMax || tenant.get() >= tenantMax) {
+                return false;
+            }
+            token.incrementAndGet();
+            tenant.incrementAndGet();
+            return true;
         }
-        return perTenant.get(tenantSchema, k -> new AtomicInteger()).incrementAndGet() <= tenantMax;
     }
 }

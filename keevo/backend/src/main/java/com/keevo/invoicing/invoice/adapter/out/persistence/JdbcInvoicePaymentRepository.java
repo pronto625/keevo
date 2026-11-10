@@ -202,10 +202,13 @@ public class JdbcInvoicePaymentRepository implements InvoicePaymentRepository {
             where.append(" AND i.store_id = ?");
             args.add(storeId);
         }
-        List<MethodTotal> methods = jdbc.query("SELECT p.method, COUNT(*) AS n, SUM(p.amount) AS total FROM "
+        // one bucket per method whatever its case or spacing (« Espèces », « espèces ») and one for « not given »
+        // (NULL or blank), labelled by its most frequent spelling
+        List<MethodTotal> methods = jdbc.query("SELECT mode() WITHIN GROUP (ORDER BY NULLIF(trim(p.method), '')) "
+                        + "AS method, COUNT(*) AS n, SUM(p.amount) AS total FROM "
                         + InvoicingTables.qualified(InvoicingTables.PAYMENTS) + " p JOIN "
                         + InvoicingTables.qualified(InvoicingTables.INVOICES) + " i ON i.id = p.invoice_id" + where
-                        + " GROUP BY p.method ORDER BY total DESC, p.method",
+                        + " GROUP BY lower(NULLIF(trim(p.method), '')) ORDER BY total DESC, 1",
                 (rs, n) -> new MethodTotal(rs.getString("method"), rs.getLong("n"), rs.getLong("total")),
                 args.toArray());
         long count = 0;

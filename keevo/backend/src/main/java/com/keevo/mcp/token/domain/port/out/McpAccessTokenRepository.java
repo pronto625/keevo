@@ -27,6 +27,9 @@ public interface McpAccessTokenRepository {
     /** Number of tokens the owner holds in the company (expired included until purged). */
     int count(String schema, UUID userId);
 
+    /** The owner's tokens in the company not expired at {@code now} (the cap of 21.9 counts these only). */
+    int countActive(String schema, UUID userId, java.time.Instant now);
+
     /** Deletes the owner's token and returns its name; empty when it is unknown or another user's / company's. */
     Optional<String> delete(String schema, UUID userId, UUID tokenId);
 

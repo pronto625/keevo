@@ -14,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UrlPathHelper;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -27,12 +28,12 @@ import java.util.Optional;
  * {@code CredentialAuthFilter} binds the token owner's session (same checks and shape as the JWT path) for every
  * request to {@link McpServerConfig#ENDPOINT}.
  *
- * <p>{@link #resolve}: an IP that failed authentication too often this minute is refused (429) before any lookup;
- * {@code Authorization: Bearer kvp_…} shape checked without I/O, then one lookup by SHA-256 (unique
- * index), constant-time hash comparison, expiry. Never logs the token. {@link #afterAuthentication} (session bound):
- * rate limit per token and company (429, {@code Retry-After}), module {@code mcp-access} entitled and enabled (403
- * {@code MODULE_NOT_ENTITLED} / {@code MODULE_DISABLED_BY_OWNER}, nothing served), last use recorded at most once a
- * minute per token. A revoked token is a deleted row: refused at the next request on every instance.
+ * <p>{@link #resolve}: {@code Authorization: Bearer kvp_…} shape checked without I/O, then one lookup by SHA-256
+ * (unique index), constant-time hash comparison, expiry; a failure is counted per IP and an IP that failed too often
+ * this minute gets 429 (a valid token is never refused because of its IP). Never logs the token.
+ * {@link #afterAuthentication} (session bound): module {@code mcp-access} entitled and enabled (403
+ * {@code MODULE_NOT_ENTITLED} / {@code MODULE_DISABLED_BY_OWNER}, nothing served), then rate limit per token and
+ * company (429, {@code Retry-After}), last use recorded at most once a minute per token. A revoked token is a deleted row: refused at the next request on every instance.
  */
 @Component
 public class McpTokenAuthenticator implements CredentialAuthenticator {
@@ -41,6 +42,7 @@ public class McpTokenAuthenticator implements CredentialAuthenticator {
 
     static final Duration TOUCH_EVERY = Duration.ofMinutes(1);
     static final int RETRY_AFTER_SECONDS = 60;
+    private static final UrlPathHelper PATHS = UrlPathHelper.defaultInstance;
 
     private final McpAccessTokenRepository tokens;
     private final McpRateLimiter limiter;
@@ -55,10 +57,14 @@ public class McpTokenAuthenticator implements CredentialAuthenticator {
         this.clock = clock;
     }
 
+    /**
+     * The decoded path within the application (servlet path + path info): what the router matches, so an encoded
+     * ({@code /api/v1/%6Dcp}) or context-prefixed request can never reach the MCP route without this credential, and
+     * a trailing slash (not routed) is not authenticated for nothing (21.4.2 review).
+     */
     @Override
     public boolean handles(HttpServletRequest request) {
-        String uri = request.getRequestURI();
-        return McpServerConfig.ENDPOINT.equals(uri) || (McpServerConfig.ENDPOINT + "/").equals(uri);
+        return McpServerConfig.ENDPOINT.equals(PATHS.getPathWithinApplication(request));
     }
 
     @Override
@@ -66,14 +72,19 @@ public class McpTokenAuthenticator implements CredentialAuthenticator {
         return ErrorCode.MCP_TOKEN_INVALID.name();
     }
 
+    /**
+     * The token first: a valid token is never refused because of its IP — MCP clients of one AI provider, or a mobile
+     * carrier's NAT, share their address, and one bad client must not lock every company out (21.4.2 review). Only a
+     * failed authentication is braked per IP (429 once the IP failed too often this minute).
+     */
     @Override
     public Resolution resolve(HttpServletRequest request) {
-        String ip = ClientIps.of(request);
-        if (limiter.tooManyFailures(ip)) {
-            return tooMany();
-        }
         Resolution resolution = lookup(request);
         if (resolution instanceof Refusal refusal && refusal.status() == HttpServletResponse.SC_UNAUTHORIZED) {
+            String ip = ClientIps.of(request);
+            if (limiter.tooManyFailures(ip)) {
+                return tooMany();
+            }
             limiter.recordFailure(ip);
         }
         return resolution;
@@ -109,14 +120,15 @@ public class McpTokenAuthenticator implements CredentialAuthenticator {
     @Override
     public Refusal afterAuthentication(HttpServletRequest request, Owner owner) {
         McpRequestSession session = (McpRequestSession) request.getAttribute(McpRequestSession.ATTRIBUTE);
-        if (!limiter.tryAcquire(session.tokenId(), owner.schema())) {
-            return tooMany();
-        }
+        // the module first: a refused company's retries never use up its rate windows
         try {
             entitlements.assertEnabled(owner.schema(), McpAccessModule.ID);
         } catch (DomainException e) {
             String code = e.getDomainCode() != null ? e.getDomainCode() : ErrorCode.MODULE_NOT_ENTITLED.name();
             return Refusal.of(HttpServletResponse.SC_FORBIDDEN, code);
+        }
+        if (!limiter.tryAcquire(session.tokenId(), owner.schema())) {
+            return tooMany();
         }
         touch(session);
         return null;

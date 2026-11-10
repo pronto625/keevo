@@ -17,7 +17,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
+import java.time.Duration;
+import java.util.function.BiFunction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,12 +49,15 @@ class AnthropicAssistantModelTest {
                 .formatted(content, stopReason));
     }
 
+    private final List<Duration> timeouts = new ArrayList<>();
+
     private AnthropicAssistantModel model(Message answer) {
-        Function<MessageCreateParams, Message> call = p -> {
+        BiFunction<MessageCreateParams, Duration, Message> call = (p, t) -> {
             sent.add(p);
+            timeouts.add(t);
             return answer;
         };
-        return new AnthropicAssistantModel("claude-haiku-5-5", MAPPER, call, call);
+        return new AnthropicAssistantModel("claude-haiku-5-5", Duration.ofSeconds(45), MAPPER, call, call);
     }
 
     private static JsonNode body(MessageCreateParams params) throws Exception {
@@ -71,7 +75,8 @@ class AnthropicAssistantModelTest {
         AssistantExchange exchange = new AssistantExchange("Système", List.of(
                 AssistantExchange.Message.user("Q1"), AssistantExchange.Message.assistant("R1"),
                 AssistantExchange.Message.user("Q2"),
-                AssistantExchange.Message.toolCalls(null, List.of(new ToolCall("toolu_1", "list_stores", "{}"))),
+                AssistantExchange.Message.toolCalls(null, List.of(new ToolCall("toolu_1", "revenue_summary",
+                        "{\"from\":\"2026-10-01\",\"limit\":3}"))),
                 AssistantExchange.Message.toolResults(List.of(new ToolResult("toolu_1", "list_stores", "[]")))),
                 List.of(new ToolSpec("revenue_summary", "Chiffre d'affaires", SCHEMA)), 800);
 
@@ -98,11 +103,17 @@ class AnthropicAssistantModelTest {
         JsonNode toolUse = messages.get(3).path("content").get(0);
         assertThat(toolUse.path("type").asText()).isEqualTo("tool_use");
         assertThat(toolUse.path("id").asText()).isEqualTo("toolu_1");
-        assertThat(toolUse.path("input").isObject()).isTrue();
+        // the arguments the tool really ran with are replayed as they were
+        assertThat(toolUse.path("input")).isEqualTo(MAPPER.readTree("{\"from\":\"2026-10-01\",\"limit\":3}"));
+        assertThat(toolUse.has("cache_control")).isFalse();
         JsonNode toolResult = messages.get(4).path("content").get(0);
         assertThat(toolResult.path("type").asText()).isEqualTo("tool_result");
         assertThat(toolResult.path("tool_use_id").asText()).isEqualTo("toolu_1");
         assertThat(toolResult.path("content").asText()).isEqualTo("[]");
+        // second cache breakpoint: the last block of the last message
+        assertThat(toolResult.path("cache_control").path("type").asText()).isEqualTo("ephemeral");
+        assertThat(body.has("tool_choice")).isFalse();
+        assertThat(timeouts.get(0)).isEqualTo(Duration.ofSeconds(45));
         JsonNode tool = body.path("tools").get(0);
         assertThat(tool.path("name").asText()).isEqualTo("revenue_summary");
         assertThat(tool.path("input_schema").path("type").asText()).isEqualTo("object");
@@ -130,20 +141,65 @@ class AnthropicAssistantModelTest {
     void failures() {
         AssistantExchange q = new AssistantExchange("S", List.of(AssistantExchange.Message.user("Q")), List.of(), 100);
         assertThatThrownBy(() -> model(reply("refusal", "[]")).respond(q))
-                .isInstanceOf(AssistantModelException.class).hasMessage("anthropic: refusal");
+                .isInstanceOf(AssistantModelException.class).hasMessage("anthropic: refusal")
+                .matches(e -> ((AssistantModelException) e).unusableAnswer());
+        assertThatThrownBy(() -> model(reply("max_tokens", "[{\"type\":\"text\",\"text\":\"Votre chiffre est de **1\"}]"))
+                .respond(q)).isInstanceOf(AssistantModelException.class).hasMessageContaining("max_tokens")
+                .matches(e -> ((AssistantModelException) e).unusableAnswer());
         assertThatThrownBy(() -> model(reply("end_turn", "[{\"type\":\"text\",\"text\":\"  \"}]")).respond(q))
                 .isInstanceOf(AssistantModelException.class).hasMessageStartingWith("anthropic: empty answer");
         assertThatThrownBy(() -> model(reply("max_tokens", """
                 [{"type":"tool_use","id":"t","name":"list_stores","input":{}}]""")).respond(q))
                 .isInstanceOf(AssistantModelException.class).hasMessageContaining("max_tokens");
-        AnthropicAssistantModel failing = new AnthropicAssistantModel("m", MAPPER, p -> {
+        AnthropicAssistantModel failing = new AnthropicAssistantModel("m", Duration.ofSeconds(45), MAPPER, (p, t) -> {
             throw new AnthropicIoException("timeout reading secret-body");
-        }, p -> {
+        }, (p, t) -> {
             throw new IllegalStateException("x");
         });
         assertThatThrownBy(() -> failing.respond(q)).isInstanceOf(AssistantModelException.class)
                 .hasMessage("anthropic call failed: AnthropicIoException");
         assertThatThrownBy(() -> failing.title("Q")).isInstanceOf(AssistantModelException.class)
                 .hasMessage("anthropic call failed: IllegalStateException");
+    }
+
+    @Test
+    @DisplayName("answer-only round: the same tools declared with tool_choice none (a conversation holding tool_use "
+            + "blocks must keep its tools)")
+    void answerOnly() throws Exception {
+        AnthropicAssistantModel model = model(reply("end_turn", "[{\"type\":\"text\",\"text\":\"Fin.\"}]"));
+        model.respond(new AssistantExchange("S", List.of(AssistantExchange.Message.user("Q")),
+                List.of(new ToolSpec("list_stores", "Boutiques", "{}")), 100, true, Duration.ofSeconds(30)));
+        JsonNode body = body(sent.get(0));
+        assertThat(body.path("tools")).hasSize(1);
+        assertThat(body.path("tool_choice").path("type").asText()).isEqualTo("none");
+        assertThat(timeouts.get(0)).isLessThanOrEqualTo(Duration.ofSeconds(30)); // the time left, not 45 s
+    }
+
+    @Test
+    @DisplayName("one retry on a transient failure within the time left; none when too little is left or not "
+            + "transient")
+    void retry() {
+        AssistantExchange q = new AssistantExchange("S", List.of(AssistantExchange.Message.user("Q")), List.of(), 100,
+                false, Duration.ofSeconds(60));
+        int[] attempts = {0};
+        Message ok = reply("end_turn", "[{\"type\":\"text\",\"text\":\"Oui.\"}]");
+        AnthropicAssistantModel flaky = new AnthropicAssistantModel("m", Duration.ofSeconds(45), MAPPER, (p, t) -> {
+            if (attempts[0]++ == 0) {
+                throw new AnthropicIoException("connection reset");
+            }
+            return ok;
+        }, (p, t) -> ok);
+        assertThat(flaky.respond(q).text()).isEqualTo("Oui.");
+        assertThat(attempts[0]).isEqualTo(2);
+
+        attempts[0] = 0;
+        AnthropicAssistantModel late = new AnthropicAssistantModel("m", Duration.ofSeconds(45), MAPPER, (p, t) -> {
+            attempts[0]++;
+            throw new AnthropicIoException("timeout");
+        }, (p, t) -> ok);
+        assertThatThrownBy(() -> late.respond(new AssistantExchange("S", List.of(AssistantExchange.Message.user("Q")),
+                List.of(), 100, false, Duration.ofSeconds(3)))).isInstanceOf(AssistantModelException.class);
+        assertThat(attempts[0]).isEqualTo(1); // 3 s left < the retry window
+        assertThat(AnthropicAssistantModel.transientFailure(new IllegalStateException())).isFalse();
     }
 }

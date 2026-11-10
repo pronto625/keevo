@@ -83,6 +83,9 @@ class AiAssistantRealModelTest extends FullContextIntegrationTest {
     static final Path REPORT = Path.of("target", "real-model", "assistant-report.md");
     static final Pattern UUID_TEXT = Pattern.compile(
             "[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}");
+    /** A word of another script (Cyrillic, Greek, CJK, Arabic…): a French answer never has one. */
+    static final Pattern NON_LATIN = Pattern.compile("[\\p{IsCyrillic}\\p{IsGreek}\\p{IsHan}\\p{IsArabic}"
+            + "\\p{IsHiragana}\\p{IsKatakana}\\p{IsHangul}]");
     /** Minimum corpus questions passing every check (of 32): a real model is not deterministic. */
     static final int MIN_CORPUS_PASS = Integer.getInteger("keevo.realModel.minPass", 30);
 
@@ -125,7 +128,8 @@ class AiAssistantRealModelTest extends FullContextIntegrationTest {
         AnthropicAssistantModel.Usage usage = ((AnthropicAssistantModel) assistantModel).usage();
         report.append("\n## Coût\n\nAppels modèle : ").append(usage.calls()).append(" — jetons entrée : ")
                 .append(usage.inputTokens()).append(" (dont lus du cache : ").append(usage.cachedInputTokens())
-                .append("), sortie : ").append(usage.outputTokens()).append('\n');
+                .append(", écrits dans le cache : ").append(usage.cacheWriteTokens()).append("), sortie : ")
+                .append(usage.outputTokens()).append('\n');
         if (!latencies.isEmpty()) {
             List<Long> sorted = latencies.stream().sorted().toList();
             report.append("Latence par question (ms) : moyenne ")
@@ -302,8 +306,8 @@ class AiAssistantRealModelTest extends FullContextIntegrationTest {
         AssistantChatService target = AopTestUtils.getTargetObject(chatService);
         Object original = ReflectionTestUtils.getField(target, "model");
         var fast = AnthropicOkHttpClient.builder().apiKey(System.getenv("ANTHROPIC_API_KEY"))
-                .timeout(Duration.ofMillis(300)).maxRetries(1).build();
-        var shortModel = new AnthropicAssistantModel(fast, fast, "claude-haiku-5-5", objectMapper);
+                .timeout(Duration.ofMillis(300)).maxRetries(0).build();
+        var shortModel = new AnthropicAssistantModel(fast, "claude-haiku-5-5", Duration.ofMillis(300), objectMapper);
         ReflectionTestUtils.setField(target, "model", shortModel);
         try {
             long before = f.aiUsedToday(f.schema);
@@ -355,6 +359,9 @@ class AiAssistantRealModelTest extends FullContextIntegrationTest {
         }
         if (UUID_TEXT.matcher(reply).find()) {
             problems.add("identifiant dans la réponse");
+        }
+        if (NON_LATIN.matcher(reply).find()) {
+            problems.add("mots dans une autre écriture que le français");
         }
         return new Asked(status, reply, tools, millis, problems);
     }

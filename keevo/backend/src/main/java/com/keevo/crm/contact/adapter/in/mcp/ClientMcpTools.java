@@ -1,5 +1,6 @@
 package com.keevo.crm.contact.adapter.in.mcp;
 
+import com.keevo.shared.ai.AiToolArguments;
 import com.keevo.crm.contact.adapter.in.CurrentClientAccess;
 import com.keevo.crm.contact.application.service.ClientStoreScope;
 import com.keevo.crm.contact.application.usecase.GetClientsUseCase;
@@ -50,7 +51,8 @@ public class ClientMcpTools {
     @RequiresEntitlement(value = "crm", access = RequiresEntitlement.Access.READ)
     public ClientsPage searchClients(
             @ToolParam(required = false, description = "Partie du nom ou du téléphone") String search,
-            @ToolParam(required = false, description = "true = inclure les clients archivés") Boolean includeArchived,
+            @ToolParam(required = false, description = "true = inclure les clients archivés (sans recherche : une "
+                    + "recherche ne porte que sur les clients actifs)") Boolean includeArchived,
             @ToolParam(required = false, description = "Identifiant d'une boutique (outil list_stores), "
                     + "propriétaire seulement") UUID storeId,
             @ToolParam(required = false, description = "Clients par page, 1 à 50 (défaut 20)") Integer limit,
@@ -64,7 +66,8 @@ public class ClientMcpTools {
                 throw new InvalidRequestParameterException("cursor", "cursor is malformed", INVALID_CURSOR);
             }
         }
-        var query = new GetClientsUseCase.GetClientsQuery(search, Boolean.TRUE.equals(includeArchived),
+        var query = new GetClientsUseCase.GetClientsQuery(AiToolArguments.search(search),
+                Boolean.TRUE.equals(includeArchived),
                 CurrentClientAccess.get(), storeId, TenantContext.getCurrentTenant());
         GetClientsUseCase.ClientPage page;
         try {

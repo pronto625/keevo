@@ -1,5 +1,6 @@
 package com.keevo.assistant.conversation.adapter.in.rest;
 
+import com.keevo.assistant.chat.application.service.AssistantChatService;
 import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -53,7 +54,8 @@ public class AiConversationController {
             @Size(max = AiConversationService.MAX_TITLE_CHARS, message = "Le titre ne doit pas dépasser 120 caractères")
             String title,
             @NotBlank(message = "Le premier message est obligatoire")
-            @Size(max = 2000, message = "Le premier message ne doit pas dépasser 2000 caractères") String firstMessage) {
+            @Size(max = AssistantChatService.MAX_MESSAGE_CHARS,
+                    message = "Le premier message ne doit pas dépasser 2000 caractères") String firstMessage) {
     }
 
     public record SaveRequest(

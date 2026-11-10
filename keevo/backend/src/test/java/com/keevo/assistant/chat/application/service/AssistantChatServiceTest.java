@@ -9,6 +9,7 @@ import com.keevo.assistant.chat.domain.model.AssistantExchange.ToolCall;
 import com.keevo.assistant.chat.domain.model.AssistantTurn;
 import com.keevo.assistant.chat.domain.port.out.AssistantModel;
 import com.keevo.assistant.chat.domain.port.out.AssistantModelException;
+import com.keevo.shared.ai.AiCredits;
 import com.keevo.shared.ai.AiToolChannel;
 import com.keevo.shared.ai.AiToolDescriptor;
 import com.keevo.shared.ai.AiToolRegistry;
@@ -92,7 +93,8 @@ class AssistantChatServiceTest {
         when(quota.statusForSchema(TENANT)).thenReturn(new UsageStatus(List.of(
                 new UsageStatus.QuotaUsage(UsageMetric.AI_CREDITS, QuotaPeriod.MONTH, 500, 10, 490L, null),
                 new UsageStatus.QuotaUsage(UsageMetric.AI_CREDITS, QuotaPeriod.DAY, 20, 3, 17L, null)), Map.of()));
-        service = new AssistantChatService(model, tools, quota, new TransactionTemplate(tm), new ObjectMapper(),
+        service = new AssistantChatService(model, tools, new AiCredits(quota, new TransactionTemplate(tm)), quota,
+                new ObjectMapper(),
                 Clock.fixed(Instant.parse("2026-11-10T09:00:00Z"), ZoneOffset.UTC));
     }
 
@@ -197,7 +199,8 @@ class AssistantChatServiceTest {
         assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Boucle", List.of()))
                 .isInstanceOf(DomainException.class).hasMessageContaining("AI_ANSWER_FAILED");
         assertThat(exchanges).hasSize(AssistantChatService.MAX_ROUNDS);
-        assertThat(exchanges.get(AssistantChatService.MAX_ROUNDS - 1).tools()).isEmpty();
+        assertThat(exchanges.get(AssistantChatService.MAX_ROUNDS - 1).answerOnly()).isTrue();
+        assertThat(exchanges.get(AssistantChatService.MAX_ROUNDS - 1).tools()).isNotEmpty(); // kept, tool_choice none
         assertThat(committed.get()).isZero();
     }
 
@@ -211,7 +214,7 @@ class AssistantChatServiceTest {
         script(new AssistantTurn(null, calls), AssistantTurn.answer("Je réponds sans outil."));
         assertThat(service.ask(TENANT, USER, "OWNER", "Beaucoup", List.of()).reply()).isEqualTo("Je réponds sans outil.");
         verify(tools, never()).call(anyString(), anyString(), any());
-        assertThat(exchanges.get(1).tools()).isEmpty();
+        assertThat(exchanges.get(1).answerOnly()).isTrue();
     }
 
     @Test
@@ -241,7 +244,7 @@ class AssistantChatServiceTest {
         assertThat(fed.get(4).content()).isEqualTo(AssistantChatService.BUDGET_SPENT);
         assertThat(fed.stream().mapToInt(r -> r.content().length()).sum()).isLessThanOrEqualTo(
                 AssistantChatService.MAX_TOOL_RESULTS_CHARS + AssistantChatService.BUDGET_SPENT.length());
-        assertThat(exchanges.get(1).tools()).isEmpty();
+        assertThat(exchanges.get(1).answerOnly()).isTrue();
     }
 
     @Test
@@ -310,9 +313,95 @@ class AssistantChatServiceTest {
             pool.shutdownNow();
         }
         assertThat(bothIn.getCount()).isZero();
-        verify(quota, times(4)).assertAndIncrementForSchema(TENANT, UsageMetric.AI_CREDITS, 1); // 2 checks + 2 uses
+        // two reservations (the second checks 2 units: one in flight + its own) and two uses
+        verify(quota, times(4)).assertAndIncrementForSchema(eq(TENANT), eq(UsageMetric.AI_CREDITS),
+                org.mockito.ArgumentMatchers.anyInt());
+        verify(quota).assertAndIncrementForSchema(TENANT, UsageMetric.AI_CREDITS, 2);
         assertThat(committed.get()).isEqualTo(2);
         assertThat(rolledBack.get()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("one credit left, two members at once: one answered, the other refused QUOTA_EXCEEDED (reservation)")
+    void lastCreditReservedOnce() throws Exception {
+        // the company has exactly 1 credit: a check of 2 units (one already in flight) is refused
+        org.mockito.Mockito.doThrow(new DomainException(ErrorCode.QUOTA_EXCEEDED, "AI_CREDITS DAY quota reached"))
+                .when(quota).assertAndIncrementForSchema(TENANT, UsageMetric.AI_CREDITS, 2);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        when(model.respond(any())).thenAnswer(i -> {
+            entered.countDown();
+            release.await(5, TimeUnit.SECONDS);
+            return AssistantTurn.answer("ok");
+        });
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            Future<AssistantChatService.Answer> first = pool.submit(() -> service.ask(TENANT, USER, "OWNER", "A",
+                    List.of()));
+            assertThat(entered.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThatThrownBy(() -> service.ask(TENANT, OTHER_USER, "EMPLOYEE", "B", List.of()))
+                    .isInstanceOf(DomainException.class).hasMessageContaining("QUOTA_EXCEEDED");
+            release.countDown();
+            assertThat(first.get(5, TimeUnit.SECONDS).reply()).isEqualTo("ok");
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(committed.get()).isEqualTo(1); // only the answered question counted
+    }
+
+    @Test
+    @DisplayName("deadline: a round that ends past 90 s stops the loop — AI_PROVIDER_ERROR, nothing counted; every "
+            + "call gets the time left")
+    void deadline() {
+        long[] now = {0};
+        service = new AssistantChatService(model, tools, new AiCredits(quota, new TransactionTemplate(tm)), quota,
+                new ObjectMapper(), Clock.fixed(Instant.parse("2026-11-10T09:00:00Z"), ZoneOffset.UTC), () -> now[0]);
+        when(model.respond(any())).thenAnswer(i -> {
+            exchanges.add(i.getArgument(0));
+            now[0] += AssistantChatService.MAX_DURATION.toNanos() + 1; // a slow round
+            return call("unpaid_call_list", "{}");
+        });
+        when(tools.call("unpaid_call_list", "{}", AiToolChannel.ASSISTANT)).thenReturn(AiToolResult.ok("{}"));
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Lent", List.of()))
+                .isInstanceOf(DomainException.class).hasMessageContaining("AI_PROVIDER_ERROR");
+        assertThat(exchanges).hasSize(1);
+        assertThat(exchanges.get(0).timeLeft()).isEqualTo(AssistantChatService.MAX_DURATION);
+        assertThat(committed.get()).isZero();
+    }
+
+    @Test
+    @DisplayName("unusable model answer (refusal, cut by max_tokens): AI_ANSWER_FAILED, not a provider outage")
+    void unusableAnswer() {
+        when(model.respond(any())).thenThrow(AssistantModelException.unusableAnswer("anthropic: refusal"));
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Question", List.of()))
+                .isInstanceOf(DomainException.class).hasMessageContaining("AI_ANSWER_FAILED");
+        assertThat(committed.get()).isZero();
+    }
+
+    @Test
+    @DisplayName("failed questions are free but limited: after 20 failures in an hour the account gets 429")
+    void failedQuestionsLimited() {
+        when(model.respond(any())).thenThrow(new AssistantModelException("anthropic call failed: X"));
+        for (int i = 0; i < AssistantChatService.MAX_FAILED_PER_HOUR; i++) {
+            assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Q", List.of()))
+                    .hasMessageContaining("AI_PROVIDER_ERROR");
+        }
+        assertThatThrownBy(() -> service.ask(TENANT, USER, "OWNER", "Q", List.of()))
+                .isInstanceOf(DomainException.class).hasMessageContaining("RATE_LIMIT_EXCEEDED");
+        // another member of the company is not affected
+        assertThatThrownBy(() -> service.ask(TENANT, OTHER_USER, "OWNER", "Q", List.of()))
+                .hasMessageContaining("AI_PROVIDER_ERROR");
+        assertThat(committed.get()).isZero();
+    }
+
+    @Test
+    @DisplayName("a tool OK with no JSON is handed back as {} (never a 500)")
+    void okWithoutJson() {
+        when(tools.call("unpaid_call_list", "{}", AiToolChannel.ASSISTANT)).thenReturn(AiToolResult.ok(null));
+        script(call("unpaid_call_list", "{}"), AssistantTurn.answer("Rien."));
+        assertThat(service.ask(TENANT, USER, "OWNER", "Q", List.of()).reply()).isEqualTo("Rien.");
+        Message results = exchanges.get(1).messages().get(exchanges.get(1).messages().size() - 1);
+        assertThat(results.toolResults().get(0).content()).isEqualTo("{}");
     }
 
     @Test
@@ -334,8 +423,9 @@ class AssistantChatServiceTest {
             h.add(new HistoryEntry(i % 2 == 0 ? "user" : "assistant", "m" + i));
         }
         List<Message> kept = AssistantChatService.history(h);
-        assertThat(kept).hasSize(20);
-        assertThat(kept.get(0).text()).isEqualTo("m5");
+        // the 20 last (m5…m24) start with an answer (m5): dropped, the kept history starts with a question
+        assertThat(kept).hasSize(19);
+        assertThat(kept.get(0).text()).isEqualTo("m6");
         assertThat(kept).noneMatch(m -> m.text().contains("ignore"));
 
         List<HistoryEntry> big = List.of(new HistoryEntry("user", "a".repeat(2000)),
@@ -343,8 +433,12 @@ class AssistantChatServiceTest {
                 new HistoryEntry("assistant", "d".repeat(2000)), new HistoryEntry("user", "e".repeat(2000)),
                 new HistoryEntry("assistant", "f".repeat(2000)), new HistoryEntry("user", "g".repeat(2000)));
         List<Message> bounded = AssistantChatService.history(big);
-        assertThat(bounded).hasSize(6); // 12 000 characters, most recent kept
-        assertThat(bounded.get(5).text()).startsWith("g");
+        assertThat(bounded).hasSize(5); // 12 000 characters, most recent kept, leading answer dropped
+        assertThat(bounded.get(4).text()).startsWith("g");
+        // the bound may leave an answer first: dropped, a conversation starts with a question
+        List<Message> fromAnswer = AssistantChatService.history(List.of(new HistoryEntry("assistant", "Bonjour !"),
+                new HistoryEntry("user", "Mes ventes ?")));
+        assertThat(fromAnswer).extracting(Message::role).containsExactly(Role.USER);
     }
 
     @Test
@@ -355,6 +449,17 @@ class AssistantChatServiceTest {
         assertThat(AssistantChatService.sanitize("Bonapriso (boutique " + STORE_ID + ").")).isEqualTo("Bonapriso (boutique).");
         assertThat(AssistantChatService.sanitize("id " + STORE_ID + " fin")).isEqualTo("id fin");
         assertThat(AssistantChatService.sanitize("z".repeat(5000))).hasSize(AssistantChatService.MAX_REPLY_CHARS + 2);
+        // 21.4.2: a UUID without hyphens, images, link targets, URLs and HTML never reach the app
+        assertThat(AssistantChatService.sanitize("id " + STORE_ID.replace("-", "") + " fin")).isEqualTo("id fin");
+        assertThat(AssistantChatService.sanitize("Total **70 000 FCFA** ![x](https://evil.tld/p?d=70000)"))
+                .isEqualTo("Total **70 000 FCFA**");
+        assertThat(AssistantChatService.sanitize("Voir [le détail](https://evil.tld/x) ou www.evil.tld/y <img src=x>."))
+                .isEqualTo("Voir le détail ou.");
+        // never cut inside a character (an emoji across the limit)
+        String emoji = "a".repeat(AssistantChatService.MAX_REPLY_CHARS - 1) + "😀" + "b".repeat(10);
+        assertThat(Character.isHighSurrogate(AssistantChatService.sanitize(emoji).charAt(
+                AssistantChatService.MAX_REPLY_CHARS - 2))).isFalse();
+        assertThat(AssistantChatService.sanitize(emoji)).doesNotContain("\uD83D");
     }
 
     @Test

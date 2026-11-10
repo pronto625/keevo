@@ -4,8 +4,9 @@ import com.keevo.assistant.chat.domain.model.AssistantExchange;
 import com.keevo.assistant.chat.domain.model.AssistantTurn;
 
 /**
- * Story 21.4 — the model provider behind the assistant (strategy chosen by {@code keevo.ai.provider}): an
- * OpenAI-compatible model (OpenAI, Gemini, Ollama), a scripted fake (dev / tests) or nothing (the default). The model
+ * Story 21.4 — the model provider behind the assistant (strategy chosen by {@code keevo.ai.provider}): Claude through
+ * Anthropic's SDK (21.4.2), an OpenAI-compatible model (OpenAI, Gemini, Ollama), a scripted fake (dev / tests) or
+ * nothing (the default). The model
  * never executes anything: it asks for tool calls, the assistant runs them on the request thread through the AI tool
  * registry and hands the results back.
  */

@@ -1,6 +1,7 @@
 package com.keevo.mcp.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.shared.ai.AiCredits;
 import com.keevo.shared.ai.AiToolChannel;
 import com.keevo.shared.ai.AiToolDescriptor;
 import com.keevo.shared.ai.AiToolRegistry;
@@ -65,9 +66,11 @@ class KeevoMcpServerHandlerTest {
             }
             return null;
         }).when(tm).commit(any());
+        List<AiToolDescriptor> all = List.of(tool("financial_result"), tool("list_stores"), tool("revenue_summary"));
         when(tools.allowedTools()).thenReturn(List.of(
-                tool("list_stores"), tool("revenue_summary"), tool("financial_result")));
-        handler = new KeevoMcpServerHandler(tools, quota, new TransactionTemplate(tm),
+                tool("revenue_summary"), tool("list_stores"), tool("financial_result")));
+        when(tools.allTools()).thenReturn(all);
+        handler = new KeevoMcpServerHandler(tools, new AiCredits(quota, new TransactionTemplate(tm)),
                 new JacksonMcpJsonMapper(new ObjectMapper()));
         context = McpTransportContext.create(Map.of(McpRequestSession.ATTRIBUTE,
                 new McpRequestSession(UUID.randomUUID(), Set.of("list_stores", "revenue_summary", "stock_by_store"),
@@ -93,14 +96,17 @@ class KeevoMcpServerHandlerTest {
     @DisplayName("tools/list = token scope ∩ the owner's allowed tools (a scoped tool no longer allowed is hidden)")
     void listIsIntersection() {
         McpSchema.ListToolsResult result = (McpSchema.ListToolsResult) send("tools/list", null).result();
+        // sorted by name whatever the registry's order; declarations built once from allTools()
         assertThat(result.tools()).extracting(McpSchema.Tool::name).containsExactly("list_stores", "revenue_summary");
+        send("tools/list", null);
+        verify(tools, org.mockito.Mockito.times(1)).allTools();
         assertThat(result.tools().get(0).annotations().readOnlyHint()).isTrue();
     }
 
     @Test
     @DisplayName("tools/call served: quota checked (rolled back) then one credit committed; text = the tool's JSON")
     void served() {
-        when(tools.call("list_stores", "{}", AiToolChannel.MCP)).thenReturn(AiToolResult.ok("{\"stores\":[]}"));
+        when(tools.call(eq("list_stores"), eq("{}"), eq(AiToolChannel.MCP), any())).thenReturn(AiToolResult.ok("{\"stores\":[]}"));
         McpSchema.JSONRPCResponse r = send("tools/call", Map.of("name", "list_stores", "arguments", Map.of()));
         McpSchema.CallToolResult result = (McpSchema.CallToolResult) r.result();
         assertThat(result.isError()).isFalse();
@@ -111,20 +117,32 @@ class KeevoMcpServerHandlerTest {
     }
 
     @Test
+    @DisplayName("tools/call without arguments: the tool gets {} and the access token is named in the audit")
+    void noArgumentsAndTokenAudited() {
+        when(tools.call(eq("list_stores"), eq("{}"), eq(AiToolChannel.MCP), any()))
+                .thenReturn(AiToolResult.ok("{\"stores\":[]}"));
+        McpSchema.CallToolResult result = (McpSchema.CallToolResult) send("tools/call",
+                Map.of("name", "list_stores")).result();
+        assertThat(result.isError()).isFalse();
+        UUID token = ((McpRequestSession) context.get(McpRequestSession.ATTRIBUTE)).tokenId();
+        verify(tools).call("list_stores", "{}", AiToolChannel.MCP, token);
+    }
+
+    @Test
     @DisplayName("out of scope: refused without calling the registry nor touching the quota")
     void outOfScope() {
         McpSchema.CallToolResult result = (McpSchema.CallToolResult) send("tools/call",
                 Map.of("name", "financial_result")).result();
         assertThat(result.isError()).isTrue();
         assertThat(((McpSchema.TextContent) result.content().get(0)).text()).contains("n'est pas autorisé");
-        verify(tools, never()).call(anyString(), any(), any());
+        verify(tools, never()).call(anyString(), any(), any(), any());
         assertThat(rolledBack.get() + committed.get()).isZero();
     }
 
     @Test
     @DisplayName("tool refused: the French message, nothing counted")
     void refused() {
-        when(tools.call(eq("revenue_summary"), any(), eq(AiToolChannel.MCP))).thenReturn(AiToolResult.failure(
+        when(tools.call(eq("revenue_summary"), any(), eq(AiToolChannel.MCP), any())).thenReturn(AiToolResult.failure(
                 AiToolResult.Outcome.REFUSED, "MODULE_NOT_ENTITLED", "Ce module n'est pas inclus dans votre abonnement"));
         McpSchema.CallToolResult result = (McpSchema.CallToolResult) send("tools/call",
                 Map.of("name", "revenue_summary", "arguments", Map.of("from", "2026-11-01"))).result();
@@ -142,7 +160,7 @@ class KeevoMcpServerHandlerTest {
                 Map.of("name", "list_stores")).result();
         assertThat(result.isError()).isTrue();
         assertThat(((McpSchema.TextContent) result.content().get(0)).text()).isEqualTo("Quota de votre offre atteint");
-        verify(tools, never()).call(anyString(), any(), any());
+        verify(tools, never()).call(anyString(), any(), any(), any());
     }
 
     @Test
@@ -173,7 +191,7 @@ class KeevoMcpServerHandlerTest {
     @Test
     @DisplayName("credits used up (or counter failing) during the call: the served result is still returned")
     void consumeRaceServesTheResult() {
-        when(tools.call("list_stores", "{}", AiToolChannel.MCP)).thenReturn(AiToolResult.ok("{\"stores\":[]}"));
+        when(tools.call(eq("list_stores"), eq("{}"), eq(AiToolChannel.MCP), any())).thenReturn(AiToolResult.ok("{\"stores\":[]}"));
         org.mockito.Mockito.doNothing()
                 .doThrow(new DomainException(ErrorCode.QUOTA_EXCEEDED, "AI_CREDITS DAY quota reached"))
                 .doNothing()

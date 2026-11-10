@@ -1,5 +1,6 @@
 package com.keevo.inventory.stock.adapter.in.mcp;
 
+import com.keevo.shared.ai.AiToolArguments;
 import com.keevo.inventory.stock.domain.model.StoreProductStockEntry;
 import com.keevo.inventory.stock.domain.model.StoreStockSummary;
 import com.keevo.inventory.stock.domain.port.in.GetMultiStoreOverviewQuery;
@@ -95,7 +96,7 @@ public class StockMcpTools {
             throw new InvalidRequestParameterException("storeId", "store required",
                     "Précisez la boutique (outil stock_by_store).");
         }
-        int pageNumber = page == null ? 0 : Math.max(0, page);
+        int pageNumber = AiToolArguments.page(page);
         int pageSize = size == null ? DEFAULT_SIZE : Math.max(1, Math.min(size, MAX_SIZE));
         Page<StoreProductStockEntry> result = detail.execute(new GetStoreStockDetailQuery(store, pageNumber, pageSize,
                 true, lowOnly == null || lowOnly));

@@ -90,7 +90,7 @@ public class InvoicingMcpTools {
                     + "propriétaire seulement") UUID storeId,
             @ToolParam(required = false, description = "Numéro de page, à partir de 0") Integer page,
             @ToolParam(required = false, description = "Factures par page, 1 à 50 (défaut 20)") Integer size) {
-        int pageNumber = page == null ? 0 : Math.max(0, page);
+        int pageNumber = AiToolArguments.page(page);
         int pageSize = size == null ? DEFAULT_SIZE : Math.max(1, Math.min(size, MAX_SIZE));
         Set<PaymentState> states = Boolean.TRUE.equals(overdueOnly) ? Set.of(PaymentState.OVERDUE) : OUTSTANDING;
         InvoiceRepository.Page result = queries.list(filter(search(search), states, access.forList(storeId), storeId),
@@ -185,16 +185,7 @@ public class InvoicingMcpTools {
 
     /** Same checks as the REST list: trimmed, at most 100 characters, no NUL. */
     static String search(String search) {
-        String text = search == null || search.isBlank() ? null : search.strip();
-        if (text != null && text.indexOf('\0') >= 0) {
-            throw new InvalidRequestParameterException("search", "NUL character in search",
-                    "La recherche contient un caractère non autorisé");
-        }
-        if (text != null && text.length() > MAX_SEARCH_LENGTH) {
-            throw new InvalidRequestParameterException("search", "search too long",
-                    "La recherche ne doit pas dépasser " + MAX_SEARCH_LENGTH + " caractères");
-        }
-        return text;
+        return AiToolArguments.search(search);
     }
 
     private static UnpaidInvoice row(Invoice invoice, PaymentStateCalculator.Collection c,

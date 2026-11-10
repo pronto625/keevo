@@ -79,8 +79,15 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
      * Story 20.4 — the collection state of an issued / paid invoice as listed: the stored one, else PAID for status PAID
      * and UNPAID for ISSUED (legacy rows). Same expression as the index idx_invoices_payment_state_list (V10).
      */
-    static final String PAYMENT_STATE =
-            "COALESCE(payment_state, CASE status WHEN 'PAID' THEN 'PAID' ELSE 'UNPAID' END)";
+    static final String PAYMENT_STATE = paymentState("");
+
+    /**
+     * {@link #PAYMENT_STATE} on the columns of table alias {@code alias} ({@code "i."}, or {@code ""} unqualified) —
+     * built, never patched by text replacement, so it stays the exact expression of the V10 index (21.4.2 review).
+     */
+    static String paymentState(String alias) {
+        return "COALESCE(" + alias + "payment_state, CASE " + alias + "status WHEN 'PAID' THEN 'PAID' ELSE 'UNPAID' END)";
+    }
 
     /** Story 15.5b — a soft-deleted draft is invisible to every read but {@link #findAnyById} and the delta. */
     private static final String LIVE = " AND deleted_at IS NULL";
@@ -368,7 +375,7 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         List<Object> args = new ArrayList<>();
         StringBuilder where = new StringBuilder(" WHERE i.kind = 'INVOICE' AND i.status IN ('ISSUED', 'PAID') "
                 + "AND i.deleted_at IS NULL AND i.superseded_at IS NULL AND "
-                + PAYMENT_STATE.replace("payment_state", "i.payment_state").replace("status", "i.status")
+                + paymentState("i.")
                 + " IN ('UNPAID', 'PARTIAL', 'OVERDUE')");
         if (scope != null && !scope.all()) {
             DocumentScope.Sql scoped = scope.sql("i");
@@ -380,16 +387,22 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
             args.add(storeId);
         }
         args.add(Math.max(1, limit));
-        String sql = "WITH owed AS (SELECT i.client_name, i.client_phone, i.created_at, "
+        // a client is one phone (digits only, the Cameroon prefix 237 / 00237 dropped, so « +237 690… » and « 690… »
+        // are one client), else one name, else the invoice itself (never merged into an anonymous group)
+        String sql = "WITH owed AS (SELECT i.id, i.client_name, i.client_phone, i.created_at, "
+                + "regexp_replace(COALESCE(i.client_phone, ''), '[^0-9]', '', 'g') AS digits, "
                 + "COALESCE(i.due_date, i.issue_date) AS oldest, "
-                + PAYMENT_STATE.replace("payment_state", "i.payment_state").replace("status", "i.status")
+                + paymentState("i.")
                 + " AS state, GREATEST(GREATEST(i.total_ttc - COALESCE((SELECT SUM(c.total_ttc) FROM "
                 + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " c WHERE c.invoice_id = i.id), 0), 0)"
                 + " - COALESCE((SELECT SUM(p.amount) FROM " + InvoicingTables.qualified(InvoicingTables.PAYMENTS)
                 + " p WHERE p.invoice_id = i.id AND p.paid_at IS NOT NULL), 0), 0) AS due FROM " + invoices + " i"
-                + where + "), keyed AS (SELECT owed.*, CASE WHEN regexp_replace(COALESCE(client_phone, ''), '[^0-9]', "
-                + "'', 'g') <> '' THEN 'p:' || regexp_replace(client_phone, '[^0-9]', '', 'g') "
-                + "ELSE 'n:' || lower(trim(client_name)) END AS client_key FROM owed WHERE due > 0) "
+                + where + "), keyed AS (SELECT owed.*, CASE "
+                + "WHEN length(digits) = 12 AND left(digits, 3) = '237' THEN 'p:' || right(digits, 9) "
+                + "WHEN length(digits) = 14 AND left(digits, 5) = '00237' THEN 'p:' || right(digits, 9) "
+                + "WHEN digits <> '' THEN 'p:' || digits "
+                + "WHEN NULLIF(trim(client_name), '') IS NOT NULL THEN 'n:' || lower(trim(client_name)) "
+                + "ELSE 'i:' || id::text END AS client_key FROM owed WHERE due > 0) "
                 + "SELECT (array_agg(client_name ORDER BY created_at DESC))[1] AS name, "
                 + "(array_agg(client_phone ORDER BY created_at DESC))[1] AS phone, COUNT(*) AS invoices, "
                 + "COUNT(*) FILTER (WHERE state = 'OVERDUE') AS overdue, SUM(due) AS due, MIN(oldest) AS oldest, "

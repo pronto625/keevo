@@ -55,9 +55,13 @@ public class JdbcMcpAccessTokenRepository implements McpAccessTokenRepository {
 
     @Override
     public List<McpAccessToken> list(String schema, UUID userId) {
+        // tokens cut by the owner's tokens_valid_after are dead: left out (deleted by the next creation)
         return jdbc.query("SELECT " + COLUMNS + " FROM public.mcp_access_tokens k "
-                        + "WHERE k.tenant_id = (SELECT t.id FROM public.tenants t WHERE t.schema_name = ?) "
-                        + "AND k.user_id = ? ORDER BY k.created_at DESC, k.id",
+                        + "JOIN public.tenants t ON t.id = k.tenant_id "
+                        + "LEFT JOIN public.user_tenant_memberships m ON m.tenant_id = t.id AND m.user_id = k.user_id "
+                        + "WHERE t.schema_name = ? AND k.user_id = ? "
+                        + "AND (m.tokens_valid_after IS NULL OR k.created_at >= m.tokens_valid_after) "
+                        + "ORDER BY k.created_at DESC, k.id",
                 (rs, i) -> token(rs), schema, userId);
     }
 
@@ -66,6 +70,14 @@ public class JdbcMcpAccessTokenRepository implements McpAccessTokenRepository {
         Integer n = jdbc.queryForObject("SELECT count(*) FROM public.mcp_access_tokens k "
                 + "WHERE k.tenant_id = (SELECT t.id FROM public.tenants t WHERE t.schema_name = ?) "
                 + "AND k.user_id = ?", Integer.class, schema, userId);
+        return n == null ? 0 : n;
+    }
+
+    @Override
+    public int countActive(String schema, UUID userId, Instant now) {
+        Integer n = jdbc.queryForObject("SELECT count(*) FROM public.mcp_access_tokens k "
+                + "WHERE k.tenant_id = (SELECT t.id FROM public.tenants t WHERE t.schema_name = ?) "
+                + "AND k.user_id = ? AND k.expires_at > ?", Integer.class, schema, userId, Timestamp.from(now));
         return n == null ? 0 : n;
     }
 

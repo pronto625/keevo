@@ -325,8 +325,11 @@ public class GuidedTopicService {
     /** « +12,3 % », « -4 % ». */
     static String percent(double value) {
         double rounded = Math.round(value * 10.0) / 10.0;
-        String text = rounded == Math.rint(rounded) ? String.valueOf((long) rounded)
-                : String.valueOf(rounded).replace('.', ',');
+        // never a scientific notation (String.valueOf(1.23E7)): a French decimal format, grouped by spaces
+        java.text.DecimalFormatSymbols symbols = new java.text.DecimalFormatSymbols(java.util.Locale.ROOT);
+        symbols.setGroupingSeparator(' ');
+        symbols.setDecimalSeparator(',');
+        String text = new java.text.DecimalFormat("#,##0.#", symbols).format(rounded);
         return (rounded >= 0 ? "+" : "") + text + " %";
     }
 

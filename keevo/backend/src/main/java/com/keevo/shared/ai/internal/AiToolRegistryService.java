@@ -173,10 +173,13 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
         }
     }
 
-    /** Same resolution as the runtime gates: the method's annotation, else its declaring class'. */
+    /**
+     * Same resolution as the other gates (meta-annotations and inherited declarations included): the method's
+     * annotation, else its declaring class'.
+     */
     static RequiresEntitlement gateOf(Method method, Class<?> user) {
-        RequiresEntitlement found = method.getDeclaredAnnotation(RequiresEntitlement.class);
-        return found != null ? found : user.getDeclaredAnnotation(RequiresEntitlement.class);
+        RequiresEntitlement found = AnnotationUtils.findAnnotation(method, RequiresEntitlement.class);
+        return found != null ? found : AnnotationUtils.findAnnotation(user, RequiresEntitlement.class);
     }
 
     static RequiresPermission permissionOf(Method method, Class<?> user) {
@@ -244,7 +247,7 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
     // ── call ────────────────────────────────────────────────────────────────────────────────────────────────
 
     @Override
-    public AiToolResult call(String toolName, String jsonArguments, AiToolChannel channel) {
+    public AiToolResult call(String toolName, String jsonArguments, AiToolChannel channel, UUID accessTokenId) {
         long start = System.nanoTime();
         if (channel == null) {
             channel = AiToolChannel.INTERNAL;
@@ -256,7 +259,7 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
             return AiToolResult.failure(Outcome.REFUSED, "FORBIDDEN", NO_SESSION_MESSAGE);
         }
         AiToolResult result = invoke(toolName, jsonArguments, auth, tenant);
-        record(tenant, toolName, channel, result, start);
+        record(tenant, toolName, channel, result, start, accessTokenId);
         return result;
     }
 
@@ -281,9 +284,13 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
             } catch (ResultNotSerialisable e) {
                 return failureOf(entry, e);
             } catch (Exception e) {
-                // anything else comes from the JSON → parameters conversion, before the method runs (Jackson
-                // exceptions may surface undeclared)
-                return AiToolResult.failure(Outcome.INVALID, "VALIDATION_ERROR", INVALID_ARGUMENTS_MESSAGE);
+                // not wrapped by MethodToolCallback: the JSON → parameters conversion (Jackson exceptions may surface
+                // undeclared) — an invalid argument; anything else is a bug of the tool or its proxy, never hidden as
+                // a model mistake (21.4.2 review)
+                if (conversionFailure(e)) {
+                    return AiToolResult.failure(Outcome.INVALID, "VALIDATION_ERROR", INVALID_ARGUMENTS_MESSAGE);
+                }
+                return failureOf(entry, e);
             }
             if (json != null && json.length() > MAX_RESULT_CHARS) {
                 return AiToolResult.failure(Outcome.INVALID, "RESULT_TOO_LARGE", TOO_LARGE_MESSAGE);
@@ -296,6 +303,14 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
                 return AiToolResult.failure(Outcome.ERROR, "INTERNAL_ERROR", ERROR_MESSAGE); // never throws
             }
         }
+    }
+
+    /** An exception of the JSON → parameters conversion (an invalid argument from the model). */
+    static boolean conversionFailure(Throwable e) {
+        return e instanceof JsonProcessingException || e instanceof IllegalArgumentException
+                || e instanceof java.time.DateTimeException || e instanceof ArithmeticException
+                || e instanceof org.springframework.core.convert.ConversionException
+                || e.getCause() instanceof JsonProcessingException;
     }
 
     /** Role, then permission, then module — the order of the REST interceptors. {@code null} = allowed. */
@@ -354,13 +369,14 @@ public class AiToolRegistryService implements AiToolRegistry, SmartInitializingS
         }
     }
 
-    private void record(String tenant, String tool, AiToolChannel channel, AiToolResult result, long start) {
+    private void record(String tenant, String tool, AiToolChannel channel, AiToolResult result, long start,
+                        UUID accessTokenId) {
         long durationMs = (System.nanoTime() - start) / 1_000_000L;
         UUID actor = CurrentActor.actorIdOrNull();
         try {
             audit.record(new AiToolCallAudit.AiToolCall(tenant, actor, tool == null || tool.isBlank() ? UNNAMED_TOOL
                     : tool, channel, result.outcome(),
-                    result.errorCode(), durationMs, clock.instant()));
+                    result.errorCode(), durationMs, clock.instant(), accessTokenId));
         } catch (RuntimeException e) {
             log.warn("AI tool call audit failed for {} ({}: {})", tool, e.getClass().getSimpleName(), e.getMessage());
         }

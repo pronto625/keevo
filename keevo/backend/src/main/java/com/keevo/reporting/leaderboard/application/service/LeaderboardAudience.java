@@ -17,7 +17,8 @@ import java.util.function.Supplier;
  * not turn sharing off), limited to their assigned store (any requested store ignored) and anonymised except their own
  * row. Not shared → 403 {@code FORBIDDEN} « Le classement n'est pas partagé avec les employés. ».
  */
-public final class LeaderboardAudience {
+@org.springframework.stereotype.Component
+public class LeaderboardAudience {
 
     public static final String ADVANCED_REPORTS = "advanced-reports";
     public static final String NOT_SHARED_MESSAGE = "Le classement n'est pas partagé avec les employés.";

@@ -41,7 +41,8 @@ final class KeevoToolCallback implements ToolCallback {
             return result.json();
         }
         try {
-            return mapper.writeValueAsString(Map.of("erreur", result.message()));
+            return mapper.writeValueAsString(Map.of("erreur",
+                    result.message() != null ? result.message() : "Outil indisponible"));
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return "{\"erreur\":\"Une erreur est survenue.\"}";
         }

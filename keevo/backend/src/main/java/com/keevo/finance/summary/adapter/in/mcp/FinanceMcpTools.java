@@ -61,7 +61,16 @@ public class FinanceMcpTools {
         }
     }
 
-    public record FinancialResult(FinanceSummary.PeriodInfo period, RevenueFigures revenue,
+    /** The period, its granularity in French ({@code jour} / {@code mois}: no English key reaches a model). */
+    public record PeriodView(LocalDate startDate, LocalDate endDate, long days, String granularity) {
+
+        static PeriodView of(FinanceSummary.PeriodInfo p) {
+            return p == null ? null : new PeriodView(p.startDate(), p.endDate(), p.days(),
+                    "month".equals(p.granularity()) ? "mois" : "jour");
+        }
+    }
+
+    public record FinancialResult(PeriodView period, RevenueFigures revenue,
                                   FinanceSummary.Expenses expenses, FinanceSummary.Result result,
                                   FinanceSummary.Comparison comparisonWithPreviousPeriod,
                                   List<CategoryShare> expensesByCategory, List<FinanceSummary.SeriesPoint> series,
@@ -95,7 +104,7 @@ public class FinanceMcpTools {
         FinanceAccess access = CurrentActor.isOwner() ? FinanceAccess.OWNER
                 : FinanceAccess.member(CurrentActor.assignedStoreIdOrNull());
         FinanceSummary s = summaries.summary(resolved, storeId, access, TenantContext.getCurrentTenant());
-        return new FinancialResult(s.period(), RevenueFigures.of(s.revenue()), s.expenses(), s.result(), s.comparison(),
+        return new FinancialResult(PeriodView.of(s.period()), RevenueFigures.of(s.revenue()), s.expenses(), s.result(), s.comparison(),
                 s.byCategory() == null ? List.of() : s.byCategory().stream()
                         .map(c -> new CategoryShare(c.categoryLabel(), c.amount(), c.sharePct())).toList(),
                 s.series() == null ? List.of() : s.series(),

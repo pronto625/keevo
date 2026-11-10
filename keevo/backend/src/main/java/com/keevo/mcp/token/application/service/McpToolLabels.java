@@ -29,6 +29,9 @@ public final class McpToolLabels {
             Map.entry("unpaid_call_list", "Clients à relancer"),
             Map.entry("unpaid_invoices", "Factures impayées"));
 
+    /** The label of a scope entry the catalogue no longer has (a removed or renamed tool). */
+    public static final String UNKNOWN_LABEL = "Donnée retirée de Keevo";
+
     private McpToolLabels() {
     }
 

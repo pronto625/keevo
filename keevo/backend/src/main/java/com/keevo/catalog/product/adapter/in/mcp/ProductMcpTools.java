@@ -1,5 +1,6 @@
 package com.keevo.catalog.product.adapter.in.mcp;
 
+import com.keevo.shared.ai.AiToolArguments;
 import com.keevo.catalog.api.ProductQueryPort;
 import com.keevo.catalog.api.ProductState;
 import com.keevo.catalog.api.ProductView;
@@ -51,14 +52,10 @@ public class ProductMcpTools {
             String search,
             @ToolParam(required = false, description = "Nombre de produits, 1 à 50 (défaut 20)") Integer limit) {
         int max = limit == null ? DEFAULT_LIMIT : Math.max(1, Math.min(limit, MAX_LIMIT));
-        if (search != null && (search.length() > MAX_SEARCH_LENGTH || search.indexOf('\0') >= 0)) {
-            throw new InvalidRequestParameterException("search", "invalid search",
-                    "La recherche ne doit pas dépasser " + MAX_SEARCH_LENGTH + " caractères");
-        }
+        String text = AiToolArguments.search(search);
         boolean owner = CurrentActor.isOwner();
         // one bounded query (limit + 1 rows: the extra one only tells whether more products match)
-        List<ProductView> found = products.searchActive(TenantContext.getCurrentTenant(),
-                search == null || search.isBlank() ? null : search.strip(), max + 1);
+        List<ProductView> found = products.searchActive(TenantContext.getCurrentTenant(), text, max + 1);
         List<ProductRow> rows = found.stream().limit(max)
                 .map(p -> new ProductRow(p.name(), p.sku() != null ? p.sku() : p.barcode(), p.price(),
                         owner ? p.buyPrice() : null, p.stockQuantity(), p.trackStock(), p.minimumThreshold(),

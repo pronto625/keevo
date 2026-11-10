@@ -3,6 +3,7 @@ package com.keevo.shared.ai;
 import org.springframework.ai.tool.ToolCallback;
 
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Story 21.8 — the AI tool layer (FUS-FR39, decision D8): read-only tools defined once on the Keevo use cases, as
@@ -38,5 +39,15 @@ public interface AiToolRegistry {
      * Calls one tool by name with its JSON arguments ({@code null} or blank = no argument) for the current session.
      * Never throws; audited whatever the outcome (when a tenant is bound).
      */
-    AiToolResult call(String toolName, String jsonArguments, AiToolChannel channel);
+    default AiToolResult call(String toolName, String jsonArguments, AiToolChannel channel) {
+        return call(toolName, jsonArguments, channel, null);
+    }
+
+    /**
+     * Same, naming the personal access token the call came through (21.9, channel {@code MCP}): kept in the audit row,
+     * so an owner can tell which external access read what (21.4.2 review).
+     *
+     * @param accessTokenId the MCP access token, or {@code null}
+     */
+    AiToolResult call(String toolName, String jsonArguments, AiToolChannel channel, UUID accessTokenId);
 }

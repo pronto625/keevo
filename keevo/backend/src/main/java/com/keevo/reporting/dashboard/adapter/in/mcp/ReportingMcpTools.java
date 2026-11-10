@@ -1,6 +1,5 @@
 package com.keevo.reporting.dashboard.adapter.in.mcp;
 
-import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.reporting.dashboard.domain.model.DashboardSummary;
 import com.keevo.reporting.dashboard.domain.port.in.GetDashboardSummaryUseCase;
 import com.keevo.reporting.leaderboard.application.service.LeaderboardAudience;
@@ -16,7 +15,6 @@ import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
-import com.keevo.shared.module.EntitlementService;
 import com.keevo.shared.ai.AiToolArguments;
 import com.keevo.shared.module.RequiresEntitlement;
 import org.springframework.ai.tool.annotation.Tool;
@@ -55,12 +53,12 @@ public class ReportingMcpTools {
 
     public ReportingMcpTools(GetDashboardSummaryUseCase dashboard, GetProfitabilitySummaryUseCase profitability,
                              GetStorePerformanceUseCase storePerformance, GetSellerLeaderboardUseCase leaderboard,
-                             TenantPreferencesQueryPort preferences, EntitlementService entitlements, Clock clock) {
+                             LeaderboardAudience audience, Clock clock) {
         this.dashboard = dashboard;
         this.profitability = profitability;
         this.storePerformance = storePerformance;
         this.leaderboard = leaderboard;
-        this.audience = new LeaderboardAudience(preferences, entitlements);
+        this.audience = audience;
         this.clock = clock;
     }
 
@@ -211,7 +209,7 @@ public class ReportingMcpTools {
             @ToolParam(required = false, description = "Critère : CA, SALES_COUNT ou AVG_BASKET") String metric) {
         LocalDate[] range = range(from, to);
         return storePerformance.getRanking(new GetStorePerformanceUseCase.StorePerformanceQuery(
-                        TenantContext.getCurrentTenant(), range[0], range[1], RankingMetric.fromString(metric)))
+                        TenantContext.getCurrentTenant(), range[0], range[1], metric(metric)))
                 .stream()
                 .map(e -> new StoreRank(e.rank(), e.storeName(), e.totalRevenue(), e.salesCount(), e.averageBasket(),
                         e.topProductName(), e.deltaPercent()))
@@ -251,7 +249,7 @@ public class ReportingMcpTools {
                 CurrentActor::assignedStoreId);
         UUID caller = view.anonymised() ? CurrentActor.actorId() : null;
         List<SellerLeaderboardEntry> entries = leaderboard.getLeaderboard(new GetSellerLeaderboardUseCase
-                .SellerLeaderboardQuery(tenant, dateFrom, dateTo, view.storeId(), RankingMetric.fromString(metric)));
+                .SellerLeaderboardQuery(tenant, dateFrom, dateTo, view.storeId(), metric(metric)));
         List<SellerRank> rows = entries.stream().limit(MAX_SELLERS)
                 .map(e -> sellerRow(e, view.anonymised(), caller)).toList();
         return new SellerRanking(dateFrom, dateTo, rows, entries.size() > MAX_SELLERS);
@@ -269,6 +267,23 @@ public class ReportingMcpTools {
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * The ranking criterion a model asked for: absent = CA; an unknown one is refused (never silently replaced by CA,
+     * which would present a ranking by another criterion — 21.4.2 review).
+     */
+    static RankingMetric metric(String metric) {
+        if (metric == null || metric.isBlank()) {
+            return RankingMetric.CA;
+        }
+        for (RankingMetric m : RankingMetric.values()) {
+            if (m.name().equalsIgnoreCase(metric.strip())) {
+                return m;
+            }
+        }
+        throw new InvalidRequestParameterException("metric", "unknown metric",
+                "Critère inconnu : choisissez CA, SALES_COUNT ou AVG_BASKET.");
+    }
 
     private LocalDate today() {
         return LocalDate.now(clock.withZone(KeevoZones.WAT));

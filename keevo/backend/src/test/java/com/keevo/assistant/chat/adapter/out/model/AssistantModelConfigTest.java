@@ -70,6 +70,7 @@ class AssistantModelConfigTest {
         AssistantModel haiku = AssistantModelConfig.create(env("ANTHROPIC", "test-key"), MAPPER);
         assertThat(haiku).isInstanceOf(AnthropicAssistantModel.class);
         assertThat(((AnthropicAssistantModel) haiku).model()).isEqualTo("claude-haiku-5-5");
+        assertThat(((AnthropicAssistantModel) haiku).callTimeout()).isEqualTo(java.time.Duration.ofSeconds(45));
         ((AnthropicAssistantModel) haiku).close();
         MockEnvironment other = env("anthropic", "test-key");
         other.setProperty("keevo.ai.model", "claude-sonnet-5-5");
@@ -89,6 +90,10 @@ class AssistantModelConfigTest {
         shorter.setProperty("keevo.ai.timeout-seconds", "0");
         assertThatThrownBy(() -> AssistantModelConfig.readTimeoutMs(shorter)).isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("keevo.ai.timeout-seconds");
+        shorter.setProperty("keevo.ai.timeout-seconds", "45s");
+        assertThatThrownBy(() -> AssistantModelConfig.readTimeoutMs(shorter)).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("between 1 and 120");
+        assertThat(AssistantModelConfig.host("https://api.anthropic.com/v1/")).isEqualTo("https://api.anthropic.com");
     }
 
     @Test

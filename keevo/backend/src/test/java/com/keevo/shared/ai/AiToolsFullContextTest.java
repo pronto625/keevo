@@ -398,6 +398,68 @@ class AiToolsFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
+    @DisplayName("21.4.2: one debtor whatever the phone's format; a legacy invoice without state still owes")
+    void callListKeys() throws Exception {
+        issue(owner, create(owner, "Client Dup", "+237 690 000 077"));
+        issue(owner, create(owner, "Client Dup", "690000077"));
+        issue(owner, create(owner, "Client Ancien", "+237690000078"));
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET payment_state = NULL WHERE client_name = 'Client Ancien'");
+        as(schema, owner);
+        JsonNode calls = ok("unpaid_call_list", "{}");
+        List<String> names = new ArrayList<>();
+        calls.path("clients").forEach(c -> names.add(c.path("client").asText()));
+        assertThat(names).containsOnlyOnce("Client Dup").contains("Client Ancien");
+        calls.path("clients").forEach(c -> {
+            if ("Client Dup".equals(c.path("client").asText())) {
+                assertThat(c.path("invoices").asInt()).isEqualTo(2);
+                assertThat(c.path("due").asLong()).isEqualTo(20_000);
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("21.4.2: financial_result named for a model (French granularity); activity_overview and list_expenses "
+            + "answer; unknown criteria, too long periods and NUL searches are refused")
+    void toolOutputsAndArguments() throws Exception {
+        TenantContext.clear();
+        SecurityContextHolder.clearContext();
+        data(http(owner, HttpMethod.POST, "/api/v1/expenses", Map.of("amount", 15_000, "category", "rent",
+                "expenseDate", LocalDate.now(KeevoZones.WAT).toString(), "storeId", storeA.toString(),
+                "label", "Loyer")), 201);
+        as(schema, owner);
+        JsonNode finance = ok("financial_result", "{}");
+        assertThat(finance.path("revenue").has("salesAndInvoicesCount")).isTrue();
+        assertThat(finance.path("revenue").has("fullyPaidDocumentsTotal")).isTrue();
+        assertThat(finance.path("revenue").has("notFullyPaidDocumentsTotal")).isTrue();
+        assertThat(finance.path("revenue").has("invoiceCount")).isFalse();
+        assertThat(finance.path("period").path("granularity").asText()).isIn("jour", "mois");
+        assertThat(ok("activity_overview", "{}").has("revenueToday")).isTrue();
+        JsonNode expenses = ok("list_expenses", "{}");
+        assertThat(expenses.path("matching").asLong()).isEqualTo(1);
+        assertThat(expenses.path("totalAmount").asLong()).isEqualTo(15_000);
+        assertThat(expenses.path("expenses").get(0).path("category").asText()).isNotEqualTo("rent");
+        assertThat(tools.call("list_expenses", "{\"sort\":\"biggest\"}", AiToolChannel.INTERNAL).errorCode())
+                .isEqualTo("VALIDATION_ERROR");
+        assertThat(tools.call("store_performance", "{\"metric\":\"revenue\"}", AiToolChannel.INTERNAL).errorCode())
+                .isEqualTo("VALIDATION_ERROR");
+        assertThat(tools.call("revenue_summary", "{\"from\":\"2000-01-01\",\"to\":\"2026-01-01\"}",
+                AiToolChannel.INTERNAL).errorCode()).isEqualTo("VALIDATION_ERROR");
+        assertThat(tools.call("search_clients", "{\"search\":\"a\\u0000b\"}", AiToolChannel.INTERNAL).errorCode())
+                .isEqualTo("VALIDATION_ERROR");
+    }
+
+    @Test
+    @DisplayName("21.4.2: a product is found by part of its barcode")
+    void productByBarcode() throws Exception {
+        jdbc.update("INSERT INTO \"" + schema + "\".products (id, name, sku, barcode, status, price, buy_price) "
+                + "VALUES (?, 'Lait concentré', 'KEV-LAI001', '6201234567890', 'ACTIVE', 800, 500)", UUID.randomUUID());
+        as(schema, owner);
+        JsonNode found = ok("search_products", "{\"search\":\"234567\"}");
+        assertThat(found.path("products")).hasSize(1);
+        assertThat(found.path("products").get(0).path("name").asText()).isEqualTo("Lait concentré");
+    }
+
+    @Test
     @DisplayName("products: bounded SQL search by name / reference, literal wildcards, purchase price owner-only")
     void productSearch() throws Exception {
         for (String[] p : new String[][]{{"Riz parfumé 25 kg", "KEV-RIZ025"}, {"Huile 1 L", "KEV-HUI001"},
@@ -508,7 +570,7 @@ class AiToolsFullContextTest extends FullContextIntegrationTest {
         List<String> columns = jdbc.queryForList("SELECT column_name FROM information_schema.columns WHERE "
                 + "table_schema = 'public' AND table_name = 'ai_tool_calls'", String.class);
         assertThat(columns).containsExactlyInAnyOrder("id", "tenant_id", "actor_id", "tool", "channel", "outcome",
-                "error_code", "duration_ms", "called_at");
+                "error_code", "duration_ms", "called_at", "access_token_id"); // 21.4.2: the MCP access token
 
         // retention: a row older than the cutoff goes, the fresh ones stay
         jdbc.update("INSERT INTO public.ai_tool_calls (tenant_id, tool, channel, outcome, duration_ms, called_at) "

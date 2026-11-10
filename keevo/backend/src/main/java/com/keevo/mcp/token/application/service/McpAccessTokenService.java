@@ -85,9 +85,11 @@ public class McpAccessTokenService {
         return tools.allowedTools().stream().map(d -> new ToolView(d.name(), McpToolLabels.label(d), true)).toList();
     }
 
-    /** The owner's tokens in the company, newest first. */
+    /**
+     * The owner's tokens in the company, newest first — read-only: tokens cut by a session-wide revocation are left
+     * out by the query (deleted at the next creation), 21.4.2 review.
+     */
     public List<TokenView> list(String schema, UUID ownerId) {
-        tokens.deleteCutOff(schema, ownerId);
         Map<String, AiToolDescriptor> catalogue = catalogue();
         Set<String> allowed = allowedNames();
         Instant now = clock.instant();
@@ -118,7 +120,8 @@ public class McpAccessTokenService {
         jdbc.queryForObject("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", Object.class,
                 "mcp-token:" + schema + ":" + ownerId);
         tokens.deleteCutOff(schema, ownerId);
-        if (tokens.count(schema, ownerId) >= MAX_TOKENS) {
+        // expired tokens wait 30 days for the purge: they never hold a place under the cap (21.4.2 review)
+        if (tokens.countActive(schema, ownerId, clock.instant()) >= MAX_TOKENS) {
             throw new DomainException(ErrorCode.MCP_TOKEN_LIMIT);
         }
         Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
@@ -179,8 +182,12 @@ public class McpAccessTokenService {
 
     private static TokenView view(McpAccessToken t, Map<String, AiToolDescriptor> catalogue, Set<String> allowed,
                                   Instant now) {
-        List<ToolView> scope = t.tools().stream().map(catalogue::get).filter(java.util.Objects::nonNull)
-                .map(d -> new ToolView(d.name(), McpToolLabels.label(d), allowed.contains(d.name()))).toList();
+        // a tool the catalogue no longer knows stays visible, unavailable (the owner sees the access lost it)
+        List<ToolView> scope = t.tools().stream().map(name -> {
+            AiToolDescriptor d = catalogue.get(name);
+            return d == null ? new ToolView(name, McpToolLabels.UNKNOWN_LABEL, false)
+                    : new ToolView(d.name(), McpToolLabels.label(d), allowed.contains(d.name()));
+        }).toList();
         return new TokenView(t.id(), t.name(), t.hint(), scope, t.createdAt(), t.expiresAt(), t.lastUsedAt(),
                 t.isExpired(now));
     }

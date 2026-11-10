@@ -18,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.dao.DataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -150,6 +151,12 @@ public class CredentialAuthFilter extends OncePerRequestFilter {
         if (state == null || "DELETED".equals(state.tenantStatus()) || !state.membershipActive()) {
             return unauthorized("ACCOUNT_INACTIVE");
         }
+        if ("SUSPENDED".equals(state.tenantStatus()) || "DELETION_PENDING".equals(state.tenantStatus())) {
+            // the JWT path blocks every write of such a company; a credential request (always a POST, it may count
+            // AI credits and audit rows) is refused alike (21.4.2 review)
+            return CredentialAuthenticator.Refusal.of(HttpServletResponse.SC_FORBIDDEN,
+                    "SUSPENDED".equals(state.tenantStatus()) ? "ACCOUNT_SUSPENDED" : "ACCOUNT_DELETION_PENDING");
+        }
         if (!Role.OWNER.name().equals(state.role())) {
             // the credential's owner is no longer the owner of this company: it stops working
             return unauthorized(authenticator.revokedCode());
@@ -193,6 +200,9 @@ public class CredentialAuthFilter extends OncePerRequestFilter {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");
         Map<String, String> body = new LinkedHashMap<>();
+        HttpStatus status = HttpStatus.resolve(refusal.status());
+        // Keevo's error envelope {error, code, domainCode} (21.4.2 review: code was missing)
+        body.put("code", status != null ? status.name() : String.valueOf(refusal.status()));
         body.put("domainCode", refusal.domainCode());
         body.put("error", refusal.message() != null ? refusal.message()
                 : ErrorMessages.of(refusal.domainCode(), ErrorMessages.of("UNAUTHORIZED")));

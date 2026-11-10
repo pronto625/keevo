@@ -80,9 +80,9 @@ public class SalesMcpTools {
         }
         LocalDate today = LocalDate.now(clock.withZone(KeevoZones.WAT));
         LocalDate dateTo = to != null ? to : today;
-        LocalDate dateFrom = from != null ? from : today.minusDays(DEFAULT_PERIOD_DAYS);
+        LocalDate dateFrom = from != null ? from : today.minusDays(DEFAULT_PERIOD_DAYS - 1); // 30 days, today included
         AiToolArguments.checkPeriod(dateFrom, dateTo);
-        int pageNumber = page == null ? 0 : Math.max(0, page);
+        int pageNumber = AiToolArguments.page(page);
         int pageSize = size == null ? DEFAULT_SIZE : Math.max(1, Math.min(size, MAX_SIZE));
         // same rule as SaleHistoryController: a store member only ever sees their own sales
         String role = CurrentActor.role();
@@ -101,9 +101,9 @@ public class SalesMcpTools {
                 .map(SalesMcpTools::line).toList();
         return new SaleRow(sale.getOccurredAt() == null ? null
                 : LocalDateTime.ofInstant(sale.getOccurredAt(), KeevoZones.WAT),
-                STATUS.getOrDefault(sale.getStatus().name(), sale.getStatus().name()),
+                STATUS.getOrDefault(sale.getStatus().name(), "Autre statut"),
                 sale.getPaymentMode() == null ? null
-                        : PAYMENT.getOrDefault(sale.getPaymentMode().name(), sale.getPaymentMode().name()),
+                        : PAYMENT.getOrDefault(sale.getPaymentMode().name(), "Autre moyen"),
                 sale.getTotalAmount(), sale.getDiscountAmount(), lines);
     }
 
