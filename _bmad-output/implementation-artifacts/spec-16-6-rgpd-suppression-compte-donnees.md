@@ -174,3 +174,6 @@ Deleting `feedback` rather than anonymising it: the description and screenshot a
 **Mobile / dashboard:** no section — endpoints, request bodies and responses are unchanged (V1 2.0.1 and the RN app unaffected); no new admin API.
 
 **Residual risks:** retention period of `account_deletion_log` not defined (policy decision; the table holds no personal data); serialized payloads of incomplete event publications of a deleted tenant are left to the existing outbox purge.
+
+### Deferred items routed 2026-11-10
+- [ ] [Deferred-from: 21-4 review, 2026-11-10] Assistant conversations of a removed or deleted member never purged [keevo/backend/src/main/java/com/keevo/assistant/conversation/adapter/out/persistence/JdbcAiConversationRepository.java] — `kv_x.ai_conversations` rows (free-text business questions, client names and phones copied from guided answers) stay after a member is removed from the company or deletes their account (only the tenant purge drops them); settle by deleting the user's rows in the member-removal / account-deletion path (module table present only when ai-assistant was provisioned) and a test, or by a documented retention rule.
