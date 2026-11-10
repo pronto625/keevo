@@ -52,6 +52,9 @@ public interface ProductRepository {
      * @return list of active products in current tenant
      */
     List<Product> findAllActive();
+
+    /** Story 21.8 — at most {@code limit} non-archived products matching {@code search} ({@code null} = all), by name. */
+    List<Product> searchActive(String search, int limit);
     
     /**
      * Finds a product by its unique SKU

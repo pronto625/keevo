@@ -304,6 +304,16 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
                     + PAYMENT_STATE + " = ?");
             filter.add(criteria.paymentState().name());
         }
+        if (!criteria.paymentStates().isEmpty()) {
+            // Story 21.8 — any of these states (UNPAID + PARTIAL + OVERDUE for the AI unpaid tools): the expression of
+            // idx_invoices_payment_state_list (V10) is matched (one range per state, then a top-N sort of the few
+            // outstanding rows); placeholders in a stable order
+            List<String> states = criteria.paymentStates().stream().map(Enum::name).sorted().toList();
+            conditions.add("kind = 'INVOICE' AND status IN ('ISSUED', 'PAID') AND superseded_at IS NULL AND "
+                    + PAYMENT_STATE + " IN (" + String.join(", ", java.util.Collections.nCopies(states.size(), "?"))
+                    + ")");
+            filter.addAll(states);
+        }
         if (criteria.saleId() != null) {
             conditions.add("source_sale_id = ? AND superseded_at IS NULL");
             filter.add(criteria.saleId());
@@ -347,6 +357,55 @@ public class JdbcInvoiceRepository implements InvoiceRepository {
         Map<UUID, List<InvoiceLine>> lines = rows.isEmpty() ? Map.of() : lines(rows.stream().map(Row::id).toList());
         List<Invoice> items = rows.stream().map(r -> r.with(lines.getOrDefault(r.id(), List.of()))).toList();
         return new Page(items, total == null ? 0 : total);
+    }
+
+    @Override
+    public OutstandingByClient outstandingByClient(DocumentScope scope, UUID storeId, int limit) {
+        // Story 21.8 — one statement: the outstanding invoices (ordered index idx_invoices_payment_state_list, V10),
+        // what each still owes through two correlated sums served by idx_credit_notes_invoice and
+        // idx_invoice_payments_invoice (same formula as markOverdue), grouped by client; totals by window functions
+        String invoices = InvoicingTables.qualified(InvoicingTables.INVOICES);
+        List<Object> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder(" WHERE i.kind = 'INVOICE' AND i.status IN ('ISSUED', 'PAID') "
+                + "AND i.deleted_at IS NULL AND i.superseded_at IS NULL AND "
+                + PAYMENT_STATE.replace("payment_state", "i.payment_state").replace("status", "i.status")
+                + " IN ('UNPAID', 'PARTIAL', 'OVERDUE')");
+        if (scope != null && !scope.all()) {
+            DocumentScope.Sql scoped = scope.sql("i");
+            where.append(" AND ").append(scoped.condition());
+            args.addAll(scoped.args());
+        }
+        if (storeId != null) {
+            where.append(" AND i.store_id = ?");
+            args.add(storeId);
+        }
+        args.add(Math.max(1, limit));
+        String sql = "WITH owed AS (SELECT i.client_name, i.client_phone, i.created_at, "
+                + "COALESCE(i.due_date, i.issue_date) AS oldest, "
+                + PAYMENT_STATE.replace("payment_state", "i.payment_state").replace("status", "i.status")
+                + " AS state, GREATEST(GREATEST(i.total_ttc - COALESCE((SELECT SUM(c.total_ttc) FROM "
+                + InvoicingTables.qualified(InvoicingTables.CREDIT_NOTES) + " c WHERE c.invoice_id = i.id), 0), 0)"
+                + " - COALESCE((SELECT SUM(p.amount) FROM " + InvoicingTables.qualified(InvoicingTables.PAYMENTS)
+                + " p WHERE p.invoice_id = i.id AND p.paid_at IS NOT NULL), 0), 0) AS due FROM " + invoices + " i"
+                + where + "), keyed AS (SELECT owed.*, CASE WHEN regexp_replace(COALESCE(client_phone, ''), '[^0-9]', "
+                + "'', 'g') <> '' THEN 'p:' || regexp_replace(client_phone, '[^0-9]', '', 'g') "
+                + "ELSE 'n:' || lower(trim(client_name)) END AS client_key FROM owed WHERE due > 0) "
+                + "SELECT (array_agg(client_name ORDER BY created_at DESC))[1] AS name, "
+                + "(array_agg(client_phone ORDER BY created_at DESC))[1] AS phone, COUNT(*) AS invoices, "
+                + "COUNT(*) FILTER (WHERE state = 'OVERDUE') AS overdue, SUM(due) AS due, MIN(oldest) AS oldest, "
+                + "COUNT(*) OVER () AS client_count, SUM(COUNT(*)) OVER () AS invoice_count, "
+                + "SUM(SUM(due)) OVER () AS total_due FROM keyed GROUP BY client_key "
+                + "ORDER BY SUM(due) DESC, lower((array_agg(client_name ORDER BY created_at DESC))[1]) LIMIT ?";
+        long[] totals = new long[3];
+        List<ClientOutstanding> clients = jdbc.query(sql, (rs, n) -> {
+            totals[0] = rs.getLong("client_count");
+            totals[1] = rs.getLong("invoice_count");
+            totals[2] = rs.getLong("total_due");
+            Date oldest = rs.getDate("oldest");
+            return new ClientOutstanding(rs.getString("name"), rs.getString("phone"), rs.getInt("invoices"),
+                    rs.getInt("overdue"), rs.getLong("due"), oldest == null ? null : oldest.toLocalDate());
+        }, args.toArray());
+        return new OutstandingByClient(totals[0], totals[1], totals[2], clients);
     }
 
     @Override

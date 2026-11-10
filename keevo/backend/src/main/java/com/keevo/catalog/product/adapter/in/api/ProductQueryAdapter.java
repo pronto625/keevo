@@ -56,6 +56,12 @@ class ProductQueryAdapter implements ProductQueryPort {
     }
 
     @Override
+    public List<ProductView> searchActive(String tenantSchema, String search, int limit) {
+        TenantContext.requireCurrent(tenantSchema);
+        return productRepository.searchActive(search, limit).stream().map(ProductViews::of).toList();
+    }
+
+    @Override
     public List<ProductView> findAllByIds(String tenantSchema, List<UUID> productIds) {
         TenantContext.requireCurrent(tenantSchema);
         return productRepository.findAllByIds(productIds).stream().map(ProductViews::of).toList();

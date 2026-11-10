@@ -26,6 +26,13 @@ public interface ProductQueryPort {
     /** Non-archived products. */
     List<ProductView> findAllActive(String tenantSchema);
 
+    /**
+     * Story 21.8 — at most {@code limit} non-archived products whose name, reference (SKU) or barcode contains
+     * {@code search} (case-insensitive; {@code null} or blank = every product), by name: one bounded query (the AI
+     * product search; trigram indexes of catalog V3).
+     */
+    List<ProductView> searchActive(String tenantSchema, String search, int limit);
+
     List<ProductView> findAllByIds(String tenantSchema, List<UUID> productIds);
 
     /** Active products belonging to any of the given categories. */

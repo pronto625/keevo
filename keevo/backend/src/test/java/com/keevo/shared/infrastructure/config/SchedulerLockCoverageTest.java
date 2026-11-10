@@ -82,6 +82,7 @@ class SchedulerLockCoverageTest {
             Map.entry(ModuleExpiryScheduler.class, Duration.ofDays(1)), // 16.1
             Map.entry(com.keevo.subscription.plan.adapter.in.scheduling.UsageCounterPurgeJob.class,
                     Duration.ofDays(1)), // 19.8
+            Map.entry(com.keevo.shared.ai.internal.AiToolCallPurgeJob.class, Duration.ofDays(1)), // 21.8
             Map.entry(com.keevo.messaging.notification.application.service.NotificationRetentionJob.class,
                     Duration.ofDays(1)), // 19.11
             Map.entry(com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceOverdueJob.class,

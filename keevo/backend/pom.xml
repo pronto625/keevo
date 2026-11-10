@@ -38,10 +38,31 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <!-- Story 21.8: Spring AI 1.1.x = the Boot 3.5 line (2.x targets Boot 4) -->
+                <version>1.1.8</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <dependencies>
+        <!-- ── AI tools (Story 21.8): @Tool, JSON schema, ToolCallback only — no model, no auto-config ── -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-model</artifactId>
+            <exclusions>
+                <!-- keep springdoc's swagger-annotations version (the victools swagger module works with it) -->
+                <exclusion>
+                    <groupId>io.swagger.core.v3</groupId>
+                    <artifactId>swagger-annotations-jakarta</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- ── Web ─────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

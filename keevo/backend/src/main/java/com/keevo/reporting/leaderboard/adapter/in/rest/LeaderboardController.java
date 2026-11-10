@@ -1,19 +1,16 @@
 package com.keevo.reporting.leaderboard.adapter.in.rest;
 
 import com.keevo.identity.api.TenantPreferencesQueryPort;
-import com.keevo.identity.api.TenantPreferencesView;
 import com.keevo.reporting.leaderboard.adapter.in.rest.dto.SellerLeaderboardEntryDto;
+import com.keevo.reporting.leaderboard.application.service.LeaderboardAudience;
 import com.keevo.reporting.leaderboard.domain.port.in.GetSellerLeaderboardUseCase;
 import com.keevo.reporting.leaderboard.domain.port.in.GetSellerLeaderboardUseCase.SellerLeaderboardQuery;
 import com.keevo.reporting.profitability.domain.model.RankingMetric;
-import com.keevo.shared.domain.exception.DomainException;
-import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.shared.module.EntitlementService;
-import com.keevo.shared.module.ModuleState;
 import com.keevo.shared.module.RequiresEntitlement;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -58,21 +55,19 @@ public class LeaderboardController {
     private static final ZoneId WAT = ZoneId.of("Africa/Lagos");
 
     /** Story 17.2 — employee refused while the owner has not shared the leaderboard. */
-    static final String ADVANCED_REPORTS = "advanced-reports";
+    static final String ADVANCED_REPORTS = LeaderboardAudience.ADVANCED_REPORTS;
 
-    static final String NOT_SHARED_MESSAGE = "Le classement n'est pas partagé avec les employés.";
+    static final String NOT_SHARED_MESSAGE = LeaderboardAudience.NOT_SHARED_MESSAGE;
 
     private final GetSellerLeaderboardUseCase useCase;
     private final Clock clock;
-    private final TenantPreferencesQueryPort preferences;
-    private final EntitlementService entitlements;
+    private final LeaderboardAudience audience;
 
     public LeaderboardController(GetSellerLeaderboardUseCase useCase, Clock clock,
                                  TenantPreferencesQueryPort preferences, EntitlementService entitlements) {
         this.useCase = useCase;
         this.clock = clock;
-        this.preferences = preferences;
-        this.entitlements = entitlements;
+        this.audience = new LeaderboardAudience(preferences, entitlements);
     }
 
     @Operation(summary = "Seller leaderboard for a date range (OWNER; EMPLOYEE anonymised, own store, when shared)")
@@ -92,28 +87,15 @@ public class LeaderboardController {
         }
 
         String tenant = TenantContext.getCurrentTenant();
-        if (CurrentActor.isOwner()) {
-            var query = new SellerLeaderboardQuery(tenant, dateFrom, dateTo, storeId, RankingMetric.fromString(metric));
-            var entries = useCase.getLeaderboard(query).stream()
-                    .map(SellerLeaderboardEntryDto::from)
-                    .toList();
-            return ResponseEntity.ok(ApiResponseWrapper.ok(entries));
-        }
-
-        // Story 17.2 — EMPLOYEE: only when shared, own store, anonymised. Sharing needs advanced-reports fully
-        // ENABLED: in grace (READ_ONLY) the owner cannot turn it off (PUT is WRITE), so employees are refused.
-        boolean shared = entitlements.state(tenant, ADVANCED_REPORTS) == ModuleState.ENABLED
-                && preferences.find(tenant)
-                .map(TenantPreferencesView::leaderboardVisibleToEmployees)
-                .orElse(false);
-        if (!shared) {
-            throw DomainException.userFacing(ErrorCode.FORBIDDEN, NOT_SHARED_MESSAGE);
-        }
-        UUID ownStore = CurrentActor.assignedStoreId(); // fails closed: employee token without store → 403
-        UUID caller = CurrentActor.actorId();
-        var query = new SellerLeaderboardQuery(tenant, dateFrom, dateTo, ownStore, RankingMetric.fromString(metric));
+        // Story 17.2 (rule shared with the AI tool since 21.8): OWNER as asked; anyone else only when shared, own
+        // store, anonymised. Employee token without store → 403 (assignedStoreId fails closed).
+        LeaderboardAudience.View view = audience.resolve(tenant, CurrentActor.isOwner(), storeId,
+                CurrentActor::assignedStoreId);
+        var query = new SellerLeaderboardQuery(tenant, dateFrom, dateTo, view.storeId(), RankingMetric.fromString(metric));
+        UUID caller = view.anonymised() ? CurrentActor.actorId() : null;
         var entries = useCase.getLeaderboard(query).stream()
-                .map(e -> SellerLeaderboardEntryDto.anonymisedFor(e, caller))
+                .map(e -> view.anonymised() ? SellerLeaderboardEntryDto.anonymisedFor(e, caller)
+                        : SellerLeaderboardEntryDto.from(e))
                 .toList();
         return ResponseEntity.ok(ApiResponseWrapper.ok(entries));
     }

@@ -107,6 +107,31 @@ public interface InvoiceRepository {
     Page list(Filter filter, int page, int size);
 
     /**
+     * Story 21.8 — the unpaid call list: every active issued invoice not yet paid (stored or legacy collection state
+     * UNPAID, PARTIAL or OVERDUE) within {@code scope} (20.14) and the owner's {@code storeId} filter, grouped by client
+     * (digits of the phone, else the trimmed lower-cased name), what each client still owes — total TTC minus credit
+     * notes minus received payments, as {@code PaymentStateCalculator} computes it — largest first, at most
+     * {@code limit} clients. One set-based statement.
+     */
+    OutstandingByClient outstandingByClient(com.keevo.invoicing.invoice.domain.model.DocumentScope scope, UUID storeId,
+                                            int limit);
+
+    /** The call list and its totals over every client owing something (not only the {@code clients} returned). */
+    record OutstandingByClient(long clientCount, long invoiceCount, long totalDue, List<ClientOutstanding> clients) {
+
+        public OutstandingByClient {
+            clients = clients == null ? List.of() : List.copyOf(clients);
+        }
+    }
+
+    /**
+     * @param oldestDate the earliest due date of the client's unpaid invoices (issue date when none has a due date)
+     */
+    record ClientOutstanding(String name, String phone, int invoices, int overdueInvoices, long due,
+                             java.time.LocalDate oldestDate) {
+    }
+
+    /**
      * Criteria of the invoice list, each one optional ({@code null} = not filtered): {@code status}; {@code saleId} =
      * only the active invoice created from that sale (Story 14.5 — at most one); Story 15.5: {@code search} = part of the number or of the client name,
      * case-insensitive, already trimmed; {@code from} / {@code to} = issue date range, inclusive (a draft has no issue
@@ -117,11 +142,25 @@ public interface InvoiceRepository {
      */
     /**
      * Story 20.14 — {@code scope}: the documents the actor sees ({@code null} = all), {@code storeId}: the owner's
-     * explicit store filter ({@code null} = none).
+     * explicit store filter ({@code null} = none). Story 21.8 — {@code paymentStates}: issued or paid invoices in any
+     * of these collection states ({@code null} or empty = not filtered; combined with {@code paymentState} when both
+     * are given), e.g. UNPAID + PARTIAL + OVERDUE for the AI unpaid tools.
      */
     record Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
                   java.time.LocalDate to, InvoiceKind kind, PaymentState paymentState,
-                  com.keevo.invoicing.invoice.domain.model.DocumentScope scope, UUID storeId) {
+                  com.keevo.invoicing.invoice.domain.model.DocumentScope scope, UUID storeId,
+                  java.util.Set<PaymentState> paymentStates) {
+
+        public Filter {
+            paymentStates = paymentStates == null ? java.util.Set.of() : java.util.Set.copyOf(paymentStates);
+        }
+
+        /** Before Story 21.8: one collection state at most. */
+        public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,
+                      java.time.LocalDate to, InvoiceKind kind, PaymentState paymentState,
+                      com.keevo.invoicing.invoice.domain.model.DocumentScope scope, UUID storeId) {
+            this(status, saleId, search, from, to, kind, paymentState, scope, storeId, null);
+        }
 
         /** Before Story 20.14: every document, no store filter. */
         public Filter(InvoiceStatus status, UUID saleId, String search, java.time.LocalDate from,

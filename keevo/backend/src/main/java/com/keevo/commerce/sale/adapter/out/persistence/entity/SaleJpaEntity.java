@@ -54,6 +54,9 @@ public class SaleJpaEntity {
     @Column(name = "version", nullable = false)
     private long version;
 
+    // Story 21.8 (FUS-NFR11) — a page of sales loads its lines in one batched query, not one per sale (history,
+    // AI tool sales_history); same size as the largest history page
+    @org.hibernate.annotations.BatchSize(size = 100)
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private List<SaleItemJpaEntity> items = new ArrayList<>();
 

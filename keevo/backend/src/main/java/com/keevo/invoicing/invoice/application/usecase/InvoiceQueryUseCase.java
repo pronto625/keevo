@@ -117,6 +117,25 @@ public class InvoiceQueryUseCase {
         return invoices.list(filter, page, size);
     }
 
+    /**
+     * Story 21.8 — what was collected on documents from {@code from} to {@code to} (days inclusive, by payment date
+     * in the business time zone), within {@code scope} and the owner's {@code storeId} filter.
+     */
+    @Transactional(readOnly = true)
+    public InvoicePaymentRepository.Collected collected(LocalDate from, LocalDate to,
+                                                        com.keevo.invoicing.invoice.domain.model.DocumentScope scope,
+                                                        UUID storeId) {
+        return payments.collected(from.atStartOfDay(KeevoZones.WAT).toInstant(),
+                to.plusDays(1).atStartOfDay(KeevoZones.WAT).toInstant(), scope, storeId);
+    }
+
+    /** Story 21.8 — the unpaid call list (see {@link InvoiceRepository#outstandingByClient}). */
+    @Transactional(readOnly = true)
+    public InvoiceRepository.OutstandingByClient outstandingByClient(
+            com.keevo.invoicing.invoice.domain.model.DocumentScope scope, UUID storeId, int limit) {
+        return invoices.outstandingByClient(scope, storeId, limit);
+    }
+
     static DomainException notFound() {
         return new DomainException(ErrorCode.INVOICE_NOT_FOUND, "Invoice not found");
     }

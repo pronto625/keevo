@@ -29,6 +29,21 @@ public interface ProductSpringRepository extends JpaRepository<ProductJpaEntity,
      */
     @Query("SELECT p FROM ProductJpaEntity p WHERE p.archived = false")
     List<ProductJpaEntity> findAllActive();
+
+    /** Story 21.8 — the first non-archived products by name (bounded by {@code page}). */
+    @Query("SELECT p FROM ProductJpaEntity p WHERE p.archived = false ORDER BY LOWER(p.name), p.id")
+    List<ProductJpaEntity> findActiveByName(Pageable page);
+
+    /**
+     * Story 21.8 — non-archived products whose name, SKU or barcode contains {@code pattern} ({@code %q%}, lower-cased
+     * and escaped by the adapter; trigram indexes of catalog V3), by name, bounded by {@code page}. {@code ESCAPE '\'}
+     * explicit (Hibernate 6 otherwise renders {@code escape ''}).
+     */
+    @Query("SELECT p FROM ProductJpaEntity p WHERE p.archived = false AND (LOWER(p.name) LIKE :pattern ESCAPE '\\' "
+            + "OR LOWER(p.sku) LIKE :pattern ESCAPE '\\' OR LOWER(p.barcode) LIKE :pattern ESCAPE '\\') "
+            + "ORDER BY LOWER(p.name), p.id")
+    List<ProductJpaEntity> searchActive(@org.springframework.data.repository.query.Param("pattern") String pattern,
+                                        Pageable page);
     
     /**
      * Find product by SKU (unique per tenant)

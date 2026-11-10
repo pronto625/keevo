@@ -56,6 +56,23 @@ public class ProductRepositoryAdapter implements ProductRepository {
     }
 
     @Override
+    public List<Product> searchActive(String search, int limit) {
+        org.springframework.data.domain.Pageable page = org.springframework.data.domain.PageRequest.of(0,
+                Math.max(1, limit));
+        List<ProductJpaEntity> rows = search == null || search.isBlank()
+                ? springRepository.findActiveByName(page)
+                : springRepository.searchActive(containsPattern(search.strip()), page);
+        return rows.stream().map(this::toDomain).toList();
+    }
+
+    /** {@code %search%}, lower-cased, with the user's {@code \ % _} escaped (literal). */
+    static String containsPattern(String search) {
+        String escaped = search.toLowerCase(java.util.Locale.ROOT)
+                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return "%" + escaped + "%";
+    }
+
+    @Override
     public Optional<Product> findBySku(String sku) {
         return springRepository.findBySku(sku)
                 .map(this::toDomain);

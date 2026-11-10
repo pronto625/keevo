@@ -84,4 +84,26 @@ public interface InvoicePaymentRepository {
      * catalogue query) — the others are skipped by the overdue job.
      */
     java.util.Set<String> schemasWithPayments();
+
+    /**
+     * Story 21.8 — what was collected on documents in {@code [from, to)} by payment date ({@code paid_at}): payments
+     * of active issued or paid invoices only (no draft, quote, cancelled, deleted or superseded document), within
+     * {@code scope} (20.14) and the owner's {@code storeId} filter ({@code null} = none). One aggregate query.
+     */
+    Collected collected(Instant from, Instant to, com.keevo.invoicing.invoice.domain.model.DocumentScope scope,
+                        UUID storeId);
+
+    /**
+     * Payments received, in total and per payment method (as entered; {@code null} = not given), largest first; methods
+     * beyond the returned ones are summed in {@code otherCount} / {@code otherAmount}, so the parts always add up.
+     */
+    record Collected(long count, long amount, List<MethodTotal> byMethod, long otherCount, long otherAmount) {
+
+        public Collected {
+            byMethod = byMethod == null ? List.of() : List.copyOf(byMethod);
+        }
+    }
+
+    record MethodTotal(String method, long count, long amount) {
+    }
 }

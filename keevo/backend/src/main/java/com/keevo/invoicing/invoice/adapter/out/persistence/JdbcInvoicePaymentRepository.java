@@ -181,6 +181,51 @@ public class JdbcInvoicePaymentRepository implements InvoicePaymentRepository {
                 + "AND col.column_name = 'due_date')", String.class));
     }
 
+    /** Bound on the payment methods returned (free text: a tenant could have typed many variants). */
+    static final int MAX_METHODS = 20;
+
+    @Override
+    public Collected collected(Instant from, Instant to, com.keevo.invoicing.invoice.domain.model.DocumentScope scope,
+                               UUID storeId) {
+        // Story 21.8 — one aggregate: range on paid_at (partial index idx_invoice_payments_paid_at, V17), joined to
+        // the document by primary key; scope predicate from DocumentScope (20.14), like the invoice list
+        List<Object> args = new ArrayList<>(List.of(Timestamp.from(from), Timestamp.from(to)));
+        StringBuilder where = new StringBuilder(" WHERE p.paid_at IS NOT NULL AND p.paid_at >= ? AND p.paid_at < ? "
+                + "AND i.kind = 'INVOICE' AND i.status IN ('ISSUED', 'PAID') AND i.deleted_at IS NULL "
+                + "AND i.superseded_at IS NULL");
+        if (scope != null && !scope.all()) {
+            com.keevo.invoicing.invoice.domain.model.DocumentScope.Sql scoped = scope.sql("i");
+            where.append(" AND ").append(scoped.condition());
+            args.addAll(scoped.args());
+        }
+        if (storeId != null) {
+            where.append(" AND i.store_id = ?");
+            args.add(storeId);
+        }
+        List<MethodTotal> methods = jdbc.query("SELECT p.method, COUNT(*) AS n, SUM(p.amount) AS total FROM "
+                        + InvoicingTables.qualified(InvoicingTables.PAYMENTS) + " p JOIN "
+                        + InvoicingTables.qualified(InvoicingTables.INVOICES) + " i ON i.id = p.invoice_id" + where
+                        + " GROUP BY p.method ORDER BY total DESC, p.method",
+                (rs, n) -> new MethodTotal(rs.getString("method"), rs.getLong("n"), rs.getLong("total")),
+                args.toArray());
+        long count = 0;
+        long amount = 0;
+        for (MethodTotal m : methods) {
+            count += m.count();
+            amount += m.amount();
+        }
+        if (methods.size() <= MAX_METHODS) {
+            return new Collected(count, amount, methods, 0, 0);
+        }
+        long otherCount = 0;
+        long otherAmount = 0;
+        for (MethodTotal m : methods.subList(MAX_METHODS, methods.size())) {
+            otherCount += m.count();
+            otherAmount += m.amount();
+        }
+        return new Collected(count, amount, methods.subList(0, MAX_METHODS), otherCount, otherAmount);
+    }
+
     private static InvoicePayment payment(ResultSet rs) throws SQLException {
         Date due = rs.getDate("due_date");
         Timestamp paid = rs.getTimestamp("paid_at");
