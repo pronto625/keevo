@@ -1,5 +1,5 @@
 {
-  "description": "Story 24.2 / 24.3 / 24.4 / 24.5 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
+  "description": "Story 24.2 / 24.3 / 24.4 / 24.5 / 24.6 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
   "formatVersion": 1,
   "transport": {
     "file": "owner-<owner uuid>.json in the folder keevo.migration.bref.export-dir (Keevo server)",
@@ -140,7 +140,38 @@
       "description": "24.5 — EVERY usage_counter row of the owner",
       "fields": { "id": "uuid", "ownerId": "uuid", "metric": "invoices | sms | email | ai_credits | sms_free | daily_<metric>", "periodMonth": "YYYY-MM | YYYY-MM-DD | all", "used": "integer", "updatedAt": "instant" }
     },
-    "whatsapp": "24.6 — {account, templates[], campaigns[], messages[]}", "aiConversations": "24.6", "notifications": "24.6"
+    "whatsappAccount": {
+      "description": "24.6 — the owner's whatsapp_account row (unique ownerId), or null. SECRET: accessToken is Meta's token in clear as Bref stores it — the export file must be protected like a password file and deleted after the import; Keevo encrypts it with its own key and never logs it",
+      "fields": "id, ownerId, wabaId, phoneNumberId, displayPhoneNumber, verifiedName, accessToken, status (connected | disconnected), createdAt, updatedAt"
+    },
+    "whatsappTemplates": {
+      "description": "24.6 — EVERY owner_whatsapp_template row of the owner",
+      "fields": "id, ownerId, name, category (MARKETING | UTILITY), language, headerFormat (NONE | TEXT | IMAGE | VIDEO | DOCUMENT), headerText, headerMediaUrl, bodyText, bodyExamples (string[]), footerText, status (DRAFT | PENDING | APPROVED | REJECTED | PAUSED | DISABLED), metaTemplateId, rejectedReason, submitError, createdAt, updatedAt"
+    },
+    "customerCampaigns": {
+      "description": "24.6 — EVERY customer_campaign row of the owner",
+      "fields": "id, ownerId, name, description, status (draft | scheduled | sending | sent | cancelled), targetingCriteria ({shopIds?, inactiveForDays?, purchasedWithinDays?, totalSpentMin?, totalSpentMax?, totalInvoicesMin?, totalInvoicesMax?}), whatsapp ({templateName, language, headerFormat?, headerMediaUrl?, bodyVariables: [{paramName?, source: static | customerName | shopName, value?}], bodyText?} | null), targetedCount, sentCount, deliveredCount, readCount, failedCount, scheduledAt, sentAt, createdById, createdAt, updatedAt"
+    },
+    "campaignMessages": {
+      "description": "24.6 — EVERY whatsapp_message row whose customerCampaignId is one of the owner's campaigns (platform campaign rows excluded; campaignId and userId not exported)",
+      "fields": "id, customerCampaignId, customerId, phone, templateName, waMessageId, status (pending | sent | delivered | read | failed), error, createdAt, updatedAt"
+    },
+    "whatsappChatMessages": {
+      "description": "24.6 — EVERY whatsapp_chat_message row of the owner's number (ownerId = the owner; the platform number's rows, ownerId NULL, excluded)",
+      "fields": "id, ownerId, contactPhone (digits), contactName, direction (in | out), type, body, waMessageId, status (sent | delivered | read | failed, out only), readAt, sentById, createdAt"
+    },
+    "aiConversations": {
+      "description": "24.6 — EVERY ai_conversation row whose userId is the owner or one of the members",
+      "fields": "id, userId (text), title, messageCount, messages (array, the app's shapes), aiHistory (array of {role, content}), createdAt, updatedAt"
+    },
+    "notifications": {
+      "description": "24.6 — EVERY notification row whose userId is the owner or one of the members (the in-app inbox)",
+      "fields": "id, userId (text), type (invoice | payment | reminder | alert | system | campaign), channel (push | in_app), title, message, isRead, metadata (object | null), createdAt, updatedAt"
+    },
+    "webPushSubscriptions": {
+      "description": "24.6 — EVERY web_push_subscription row whose userId is the owner or one of the members (browser notifications; the keys are personal: protect the file)",
+      "fields": "id, userId (text), endpoint, p256dh, auth, userAgent, createdAt, updatedAt"
+    }
   },
   "keevoMapping24_2": {
     "owner": "public.users (same id, bcrypt copied, phone E.164) + a new tenant SUSPENDED until activation (24.9), sale flow DOCUMENT, no « Ma Boutique »",
@@ -171,6 +202,18 @@
     "smsRechargeRequests": "completed recharges → SMS pack units (usage_credits, source MIGRATION); others not imported",
     "usageCounters": "public.usage_counters of the current WAT month, today and LIFETIME (sms_free); invoices → DOCUMENTS, sms → SMS, email → EMAILS, ai_credits → AI_CREDITS",
     "blocking": "an in-force subscription or a confirmed request whose plan or cycle has no Keevo equivalent, a negative credit (MONETISATION_INVALID)"
+  },
+  "keevoMapping24_6": {
+    "whatsappAccount": "public.whatsapp_accounts of the company when connected (token AES-256-GCM with the Keevo key, context = tenant id) + the system template bref_facture PENDING (Keevo reads Meta's status at the first invoice sending); disconnected / unreadable → not imported (note); number connected to another live company → not moved (note); no Keevo key → blocking case ANNEX_INVALID",
+    "whatsappTemplates": "whatsapp_templates (same id, status, examples, Meta id); invalid name / language / category / lengths → not imported (note); bref_facture/fr reserved (note); headerMediaUrl not ported (note on a draft media template)",
+    "customerCampaigns": "whatsapp_campaigns (same id): draft → DRAFT, scheduled → DRAFT with the date cleared (note), sending → SENT (note), sent → SENT, cancelled → CANCELLED; shops → imported stores, template by name + language, variables (customerName → CLIENT_NAME, shopName → STORE_NAME, static → STATIC), purchase criteria, counters; never a campaign job (nothing is sent)",
+    "campaignMessages": "whatsapp_campaign_recipients, one per campaign and phone (latest kept): sent | delivered | read → SENT, failed → FAILED, else UNCERTAIN",
+    "whatsappChatMessages": "whatsapp_messages (same id; no Meta id → bref:<id>) and whatsapp_conversations rebuilt (last message, unread count, last inbound)",
+    "aiConversations": "ai_conversations (same id, JSON as is) under the Keevo account of the Bref user; 200 most recent per user (note)",
+    "notifications": "notifications (same id, Bref type, metadata as data, read_at = updatedAt when read), never pushed",
+    "webPushSubscriptions": "public.web_push_subscriptions (same id) under the Keevo account of the Bref user — valid because Keevo signs with Bref's VAPID keys (19.9b); an endpoint already registered in Keevo is left as it is; the app's Expo push tokens are not exported (the new app registers its own)",
+    "portal": "public.invoice_phone_index for every imported invoice (not a quote, not deleted) with a client phone",
+    "finish": "ModuleProvisioner.provisionActiveModules, then one TENANT_IMPORTED audit entry {source: bref, counts} per company"
   },
   "example": {
     "formatVersion": 1,
@@ -290,6 +333,71 @@
       {
         "id": "6f1d2c3b-0000-4000-8000-000000000801", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
         "metric": "invoices", "periodMonth": "2026-11", "used": 12, "updatedAt": "2026-11-09T08:00:00.000Z"
+      }
+    ],
+    "whatsappAccount": {
+      "id": "6f1d2c3b-0000-4000-8000-000000000901", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+      "wabaId": "1000000000000001", "phoneNumberId": "1000000000000002", "displayPhoneNumber": "+237 6 00 00 00 00",
+      "verifiedName": "Boutique Exemple", "accessToken": "EAAG-EXEMPLE", "status": "connected",
+      "createdAt": "2026-03-01T08:00:00.000Z", "updatedAt": "2026-03-01T08:00:00.000Z"
+    },
+    "whatsappTemplates": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000911", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "name": "promo_exemple", "category": "MARKETING", "language": "fr", "headerFormat": "NONE",
+        "headerText": null, "headerMediaUrl": null, "bodyText": "Bonjour {{1}}", "bodyExamples": ["Awa"],
+        "footerText": null, "status": "APPROVED", "metaTemplateId": "9000000000000001", "rejectedReason": null,
+        "submitError": null, "createdAt": "2026-03-02T08:00:00.000Z", "updatedAt": "2026-03-02T08:00:00.000Z"
+      }
+    ],
+    "customerCampaigns": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000921", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "name": "Promo exemple", "description": null, "status": "sent",
+        "targetingCriteria": {"shopIds": ["6f1d2c3b-0000-4000-8000-000000000101"], "inactiveForDays": 30},
+        "whatsapp": {"templateName": "promo_exemple", "language": "fr", "bodyVariables": [{"source": "customerName"}]},
+        "targetedCount": 1, "sentCount": 1, "deliveredCount": 1, "readCount": 0, "failedCount": 0,
+        "scheduledAt": null, "sentAt": "2026-03-03T08:00:00.000Z", "createdById": "6f1d2c3b-0000-4000-8000-000000000001",
+        "createdAt": "2026-03-03T07:00:00.000Z", "updatedAt": "2026-03-03T08:00:00.000Z"
+      }
+    ],
+    "campaignMessages": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000931", "customerCampaignId": "6f1d2c3b-0000-4000-8000-000000000921",
+        "customerId": "6f1d2c3b-0000-4000-8000-000000000301", "phone": "237600000003", "templateName": "promo_exemple",
+        "waMessageId": "wamid.EXEMPLE1", "status": "delivered", "error": null,
+        "createdAt": "2026-03-03T08:00:00.000Z", "updatedAt": "2026-03-03T08:05:00.000Z"
+      }
+    ],
+    "whatsappChatMessages": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000941", "ownerId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "contactPhone": "237600000003", "contactName": "Cliente Exemple", "direction": "in", "type": "text",
+        "body": "Bonjour", "waMessageId": "wamid.EXEMPLE2", "status": null, "readAt": null, "sentById": null,
+        "createdAt": "2026-03-04T08:00:00.000Z"
+      }
+    ],
+    "aiConversations": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000951", "userId": "6f1d2c3b-0000-4000-8000-000000000201",
+        "title": "Ventes", "messageCount": 1, "messages": [{"id": "m1", "role": "user", "text": "Ventes ?"}],
+        "aiHistory": [{"role": "user", "content": "Ventes ?"}], "createdAt": "2026-03-05T08:00:00.000Z",
+        "updatedAt": "2026-03-05T08:00:00.000Z"
+      }
+    ],
+    "notifications": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000961", "userId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "type": "payment", "channel": "push", "title": "Paiement reçu", "message": "Paiement de 3 000 F reçu",
+        "isRead": true, "metadata": {"amount": 3000.0}, "createdAt": "2026-03-06T08:00:00.000Z",
+        "updatedAt": "2026-03-06T09:00:00.000Z"
+      }
+    ],
+    "webPushSubscriptions": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000971", "userId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "endpoint": "https://push.example.invalid/send/EXEMPLE", "p256dh": "BExempleCleP256dh", "auth": "ExempleAuth",
+        "userAgent": "Mozilla/5.0", "createdAt": "2026-03-07T08:00:00.000Z", "updatedAt": "2026-03-07T08:00:00.000Z"
       }
     ]
   }

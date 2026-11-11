@@ -53,7 +53,9 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
         DOCUMENT_INVALID("Document invalide"),
         EXPENSE_INVALID("Dépense invalide"),
         // Story 24.5
-        MONETISATION_INVALID("Abonnement ou paiement Bref non repris");
+        MONETISATION_INVALID("Abonnement ou paiement Bref non repris"),
+        // Story 24.6
+        ANNEX_INVALID("Compte WhatsApp Business non repris");
 
         private final String label;
 

@@ -4,7 +4,8 @@ package com.keevo.migration.application;
  * Story 24.2 — one step of the import pipeline (analysis §10.2). Steps run in their {@code @Order}, each in its own
  * unit of work, and are idempotent: a step finds in the {@link ImportRun} what a previous run already wrote and only
  * completes what is missing. 24.2 ships identity (10), profile (20), stores (30), logos (40), members (50); 24.3–24.6
- * append categories, products, clients (60–80), documents, expenses (90–100), monetisation (110), annexes (120).
+ * append categories, products, clients (60–80), documents, expenses (90–100), monetisation (110), annexes (120),
+ * client-portal index (130), provisioning and audit (140).
  */
 public interface ImportStep {
 

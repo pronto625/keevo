@@ -1135,6 +1135,7 @@
       "SUPPLIER_PRODUCTS_UPDATED" : "Produits du fournisseur modifiés",
       "SUPPLIER_UNARCHIVED" : "Fournisseur désarchivé",
       "SUPPLIER_UPDATED" : "Fournisseur modifié",
+      "TENANT_IMPORTED" : "Entreprise importée depuis Bref Point",
       "USER_AUTHENTICATED" : "Connexion",
       "USER_REGISTERED" : "Inscription",
       "WHATSAPP_ACCOUNT_CONNECTED" : "WhatsApp Business connecté",
@@ -1340,7 +1341,8 @@
       "VALIDATED" : "Validé",
       "VIEWER" : "Lecteur",
       "WAREHOUSE" : "Entrepôt",
-      "WHATSAPP" : "WhatsApp"
+      "WHATSAPP" : "WhatsApp",
+      "bref" : "Bref Point"
     },
     "context" : {
       "destinationStoreName" : "Vers",

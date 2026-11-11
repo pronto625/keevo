@@ -81,7 +81,34 @@ public record ImportNote(String code, String label, int count) {
         REVENUECAT_EVENT_UNREADABLE("Événement App Store illisible (type ou identifiant) : non repris"),
         REVENUECAT_EVENT_UNPROCESSED("Événement App Store non traité par Bref : il sera traité s'il est renvoyé"),
         SMS_RECHARGE_NOT_PAID("Recharge SMS non payée : non reprise"),
-        COUNTER_PAST_PERIOD("Compteur de consommation d'une période passée : non repris");
+        COUNTER_PAST_PERIOD("Compteur de consommation d'une période passée : non repris"),
+        // Story 24.6 — WhatsApp Business, AI conversations, notifications
+        WHATSAPP_ACCOUNT_DISCONNECTED("Compte WhatsApp Business déconnecté dans Bref : non repris"),
+        WHATSAPP_ACCOUNT_UNREADABLE("Compte WhatsApp Business illisible (identifiants Meta ou jeton) : à reconnecter"),
+        WHATSAPP_NUMBER_HELD("Numéro WhatsApp Business déjà relié à une autre entreprise Keevo : non repris, à "
+                + "reconnecter"),
+        WHATSAPP_FIELD_SHORTENED("Information WhatsApp trop longue, raccourcie"),
+        WHATSAPP_TEMPLATE_UNREADABLE("Modèle WhatsApp illisible (nom, langue, catégorie ou texte) : non repris"),
+        WHATSAPP_TEMPLATE_RESERVED("Modèle WhatsApp portant le nom du modèle de facture de Keevo : non repris"),
+        WHATSAPP_TEMPLATE_MEDIA_DROPPED("Exemple de média d'un modèle en brouillon non repris : à redéposer avant "
+                + "envoi"),
+        CAMPAIGN_SCHEDULE_DROPPED("Campagne programmée reprise en brouillon : à reprogrammer"),
+        CAMPAIGN_SENDING_CLOSED("Campagne en cours d'envoi lors de la migration : reprise comme envoyée"),
+        CAMPAIGN_STATUS_UNKNOWN("État de campagne inconnu : reprise en brouillon"),
+        CAMPAIGN_FIELD_DROPPED("Réglage de campagne illisible (boutique, critère, variable ou média) : non repris"),
+        CAMPAIGN_RECIPIENT_UNREADABLE("Destinataire de campagne sans numéro ou client lisible : non repris"),
+        CAMPAIGN_RECIPIENT_DUPLICATE("Destinataire présent deux fois dans une campagne : envoi le plus récent repris"),
+        CHAT_MESSAGE_UNREADABLE("Message WhatsApp illisible (numéro ou sens) : non repris"),
+        CHAT_MESSAGE_DUPLICATE("Message WhatsApp en double (même identifiant Meta) : repris une fois"),
+        AI_CONVERSATION_USER_UNKNOWN("Conversation de l'assistant d'un compte non repris : non reprise"),
+        AI_CONVERSATION_UNREADABLE("Conversation de l'assistant illisible : non reprise"),
+        AI_CONVERSATION_OVER_LIMIT("Plus de 200 conversations de l'assistant pour un compte : les plus anciennes non "
+                + "reprises"),
+        NOTIFICATION_USER_UNKNOWN("Notification d'un compte non repris : non reprise"),
+        NOTIFICATION_UNREADABLE("Notification illisible (type ou texte absent) : non reprise"),
+        NOTIFICATION_SHORTENED("Texte de notification trop long, raccourci"),
+        WEB_PUSH_USER_UNKNOWN("Abonnement aux notifications du navigateur d'un compte non repris : non repris"),
+        WEB_PUSH_UNREADABLE("Abonnement aux notifications du navigateur illisible : non repris");
 
         private final String label;
 

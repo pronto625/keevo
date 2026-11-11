@@ -36,6 +36,18 @@ public record MigrationRecord(String targetTable, UUID targetId, String sourceTa
     public static final String INVOICE_PAYMENTS = "invoice_payments";
     public static final String INVOICING_SETTINGS = "invoicing_settings";
     public static final String EXPENSES = "expenses";
+    /** Target tables written by 24.6. */
+    public static final String WHATSAPP_ACCOUNTS = "whatsapp_accounts";
+    public static final String WHATSAPP_TEMPLATES = "whatsapp_templates";
+    public static final String WHATSAPP_CAMPAIGNS = "whatsapp_campaigns";
+    /** A recipient has no id of its own: its target id is the Bref {@code whatsapp_message} id (pseudo target). */
+    public static final String WHATSAPP_RECIPIENTS = "whatsapp_campaign_recipients";
+    public static final String WHATSAPP_MESSAGES = "whatsapp_messages";
+    public static final String AI_CONVERSATIONS = "ai_conversations";
+    public static final String NOTIFICATIONS = "notifications";
+    public static final String WEB_PUSH_SUBSCRIPTIONS = "web_push_subscriptions";
+    /** The {@code TENANT_IMPORTED} audit entry of the company (pseudo target: the tenant id), written once. */
+    public static final String TENANT_IMPORTED = "tenant_imported";
 
     /** Bref source tables (24.4: invoice, invoice_item, invoice_payment, expense). */
     public static final String BREF_INVOICE = "invoice";

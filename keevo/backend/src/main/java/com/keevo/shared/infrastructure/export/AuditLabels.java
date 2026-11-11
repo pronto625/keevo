@@ -143,7 +143,8 @@ public final class AuditLabels {
             entry("ROLE_CREATED", "Rôle créé"),
             entry("ROLE_UPDATED", "Rôle modifié"),
             entry("ROLE_DELETED", "Rôle supprimé"),
-            entry("ROLE_ASSIGNED", "Rôle attribué"));
+            entry("ROLE_ASSIGNED", "Rôle attribué"),
+            entry("TENANT_IMPORTED", "Entreprise importée depuis Bref Point"));          // Story 24.6
 
     /** Singular French noun of each audited object type ({@code entityType}). */
     public static final Map<String, String> ENTITY_TYPES = Map.ofEntries(
@@ -339,7 +340,8 @@ public final class AuditLabels {
             // Document sending channels (Story 20.8, InvoiceSentEvent.channel)
             entry("WHATSAPP", "WhatsApp"),
             entry("SMS", "SMS"),
-            entry("EMAIL", "E-mail"));
+            entry("EMAIL", "E-mail"),
+            entry("bref", "Bref Point"));                                              // Story 24.6: import source
 
     /** French label of each context key (metadata, or the context keys of legacy value_after). */
     public static final Map<String, String> CONTEXT = Map.ofEntries(

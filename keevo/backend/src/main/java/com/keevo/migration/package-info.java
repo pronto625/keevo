@@ -8,9 +8,12 @@
 // Writes go through the owning modules' import ports: identity (accounts, tenant, members, sale flow, sector
 // templates), store (shops, logos), shared.module (activation rules), catalog (categories, products — 24.3), crm
 // (clients — 24.3), invoicing (documents, lines, payments, seller settings, old links — 24.4), expenses (24.4),
-// payments (checkouts, ledger, App Store, credit — 24.5), subscription (plan change, usage counters — 24.5).
+// payments (checkouts, ledger, App Store, credit — 24.5), subscription (plan change, usage counters — 24.5),
+// whatsappcloud (WABA with its token encrypted there, templates, campaigns, inbox — 24.6), assistant (AI conversations —
+// 24.6), messaging (in-app notifications, never pushed — 24.6); shared: client-portal index, module provisioning, audit.
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {"catalog :: api", "crm :: api", "expenses :: api", "identity :: api", "invoicing :: api",
-        "payments :: api", "shared", "store :: api", "subscription :: api"}
+    allowedDependencies = {"assistant :: api", "catalog :: api", "crm :: api", "expenses :: api", "identity :: api",
+        "invoicing :: api", "messaging :: api", "payments :: api", "shared", "store :: api", "subscription :: api",
+        "whatsappcloud :: api"}
 )
 package com.keevo.migration;
