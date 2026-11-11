@@ -101,6 +101,44 @@ public class MetaWhatsAppProvider implements WhatsAppProvider {
         return SendOutcome.FAILED;
     }
 
+    /**
+     * Story 19.9c — an approved platform template (single language, no fallback language: the catalogue is French).
+     * Logs the template name and the HTTP status, never the parameters.
+     */
+    @Override
+    public SendOutcome sendTemplate(String phone, String template, String language, List<String> parameters) {
+        Attempt attempt = post(templateBody(phone, template, language, parameters));
+        return switch (attempt) {
+            case SENT -> SendOutcome.DELIVERED;
+            case UNKNOWN -> {
+                log.warn("[WhatsApp] meta did not answer in time for template {} to {} — unknown outcome", template,
+                        Recipients.maskPhone(phone));
+                yield SendOutcome.UNKNOWN;
+            }
+            default -> {
+                log.warn("[WhatsApp] meta template {} not sent to {}", template, Recipients.maskPhone(phone));
+                yield SendOutcome.FAILED;
+            }
+        };
+    }
+
+    /** {@code template{name, language, components:[{type:body, parameters:[{type:text,text}…]}]}}; no component without parameters. */
+    static Map<String, Object> templateBody(String phone, String template, String language, List<String> parameters) {
+        Map<String, Object> templateNode = new LinkedHashMap<>();
+        templateNode.put("name", template);
+        templateNode.put("language", Map.of("code", language));
+        if (!parameters.isEmpty()) {
+            templateNode.put("components", List.of(Map.of("type", "body",
+                    "parameters", parameters.stream().map(p -> Map.of("type", "text", "text", p)).toList())));
+        }
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("messaging_product", "whatsapp");
+        body.put("to", digits(phone));
+        body.put("type", "template");
+        body.put("template", templateNode);
+        return body;
+    }
+
     enum Attempt { SENT, FAILED, MISSING_TRANSLATION, UNKNOWN }
 
     private Attempt post(Map<String, Object> body) {

@@ -2,6 +2,8 @@ package com.keevo.subscription.plan.application.service;
 
 import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.shared.domain.time.KeevoZones;
@@ -150,7 +152,7 @@ public class PlanExpiryReminderService implements SendPlanExpiryRemindersUseCase
             String text = expiry.kind() == PlanKind.TRIAL
                     ? PlanWhatsAppMessages.trialReminder(expiry.date())
                     : PlanWhatsAppMessages.reminder(expiry.label(), expiry.date()); // 19.7b: plan label
-            whatsAppSender.sendReport(phone.get(), text);
+            whatsAppSender.sendNotification(phone.get(), PlatformWhatsAppMessage.detail(PlatformMessageKind.PLAN_REMINDER, text));
             log.info("Plan expiry reminder ({} d) sent for tenant {}", threshold, tenantId);
             return true;
         } catch (RuntimeException e) {

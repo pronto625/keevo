@@ -94,7 +94,7 @@ public class ReportDeliveryRetryService {
 
         for (EndOfDayReport report : pendingRetries) {
             try {
-                whatsAppSender.sendReport(ownerPhone, report.getContent());
+                whatsAppSender.sendNotification(ownerPhone, ReportWhatsAppMessages.of(report));
                 report.markSent();
                 log.info("Retry succeeded for reportId={}", report.getId());
             } catch (Exception e) {

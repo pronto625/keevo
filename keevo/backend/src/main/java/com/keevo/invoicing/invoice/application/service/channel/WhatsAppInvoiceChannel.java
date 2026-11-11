@@ -7,6 +7,8 @@ import com.keevo.invoicing.invoice.domain.model.Invoice;
 import com.keevo.invoicing.invoice.domain.model.SendChannel;
 import com.keevo.shared.capability.notification.DeliveryResult;
 import com.keevo.shared.capability.notification.TenantWhatsAppBusiness;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -96,9 +98,8 @@ public class WhatsAppInvoiceChannel implements InvoiceSendChannel {
             // the company's number stopped being usable since the availability check, and no platform provider
             throw new DomainException(ErrorCode.WHATSAPP_UNAVAILABLE, "No WhatsApp provider configured");
         }
-        String text = text(m.invoice(), m.reference(), m.sellerName(), m.link());
         try {
-            whatsApp.sendReport(m.to(), text);
+            whatsApp.sendNotification(m.to(), message(m.invoice(), m.reference(), m.sellerName(), m.link()));
         } catch (DomainException e) {
             throw e;
         } catch (RuntimeException e) {
@@ -111,6 +112,16 @@ public class WhatsAppInvoiceChannel implements InvoiceSendChannel {
      * « Bonjour Awa, voici votre facture FAC-2026-000001 de Tech Centre d'un montant de 28 850 XAF : https://… »;
      * Story 20.7: « … voici votre devis DV-1A2B3C4D de … » for a quote.
      */
+    /**
+     * Story 19.9c — the platform message: template {@code keevo_document_lien} variables (customer, « facture » |
+     * « devis », reference, seller, amount, link) and {@link #text} as free text.
+     */
+    static PlatformWhatsAppMessage message(Invoice invoice, String reference, String displayName, String link) {
+        return PlatformWhatsAppMessage.of(PlatformMessageKind.DOCUMENT_LINK, text(invoice, reference, displayName, link),
+                invoice.client().name(), invoice.isQuote() ? "devis" : "facture", reference, displayName,
+                InvoiceSendMessages.amount(invoice.totals().totalTtc()), link);
+    }
+
     public static String text(Invoice invoice, String reference, String displayName, String link) {
         return "Bonjour " + invoice.client().name() + ", voici votre " + (invoice.isQuote() ? "devis " : "facture ")
                 + reference + " de " + displayName + " d'un montant de "

@@ -5,6 +5,8 @@ import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.port.out.TenantFilesPurger;
 import com.keevo.shared.infrastructure.persistence.TenantSchemaProvisioner;
@@ -408,7 +410,8 @@ public class TenantDeletionService {
     private void sendFinalWhatsApp(UUID tenantId, List<String> ownerPhones) {
         for (String phone : ownerPhones) {
             try {
-                whatsAppSender.sendReport(phone, FINAL_WHATSAPP_MESSAGE);
+                whatsAppSender.sendNotification(phone,
+                        PlatformWhatsAppMessage.fixed(PlatformMessageKind.ACCOUNT_DELETED, FINAL_WHATSAPP_MESSAGE));
             } catch (Exception e) {
                 // Non-blocking — the deletion is already committed
                 log.error("[TenantDeletionService] Failed to send final WhatsApp for tenant {}: {}",

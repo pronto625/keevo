@@ -279,6 +279,9 @@ keevo:
       access-token: ${WHATSAPP_ACCESS_TOKEN:}
       phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
       otp-template: ${WHATSAPP_OTP_TEMPLATE:bref_point_otp}
+      # Story 19.9c — platform templates approved by Meta (comma-separated names of docs/whatsapp/modeles-meta-plateforme.md).
+      # Only these messages go out as Meta templates (preset meta); every other message stays free text (Wassender/Twilio).
+      approved-templates: ${WHATSAPP_APPROVED_TEMPLATES:}
     wassender:
       api-url: ${WASSENDER_API_URL:}
       api-token: ${WASSENDER_API_TOKEN:}

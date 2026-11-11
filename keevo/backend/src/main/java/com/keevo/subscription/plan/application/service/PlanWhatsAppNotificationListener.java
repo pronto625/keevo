@@ -5,6 +5,8 @@ import com.keevo.identity.api.PlanKind;
 import com.keevo.identity.api.PlanType;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.shared.capability.entitlement.PlanDefinition;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
@@ -102,7 +104,7 @@ public class PlanWhatsAppNotificationListener {
             return;
         }
         try {
-            whatsAppSender.sendReport(phone.get(), text);
+            whatsAppSender.sendNotification(phone.get(), PlatformWhatsAppMessage.detail(PlatformMessageKind.PLAN_CHANGE, text));
         } catch (RuntimeException e) {
             // Story 12.4 (R2): rethrown — the publication stays incomplete and is retried
             log.warn("Plan {} WhatsApp failed for tenant {}: {}: {} — will be retried",

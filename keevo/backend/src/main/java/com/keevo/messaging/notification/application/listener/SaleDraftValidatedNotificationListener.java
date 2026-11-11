@@ -13,6 +13,8 @@ import com.keevo.identity.api.StockAlertChannel;
 import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.store.api.StoreView;
 import com.keevo.store.api.StoreQueryPort;
@@ -147,7 +149,7 @@ public class SaleDraftValidatedNotificationListener {
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
-                        whatsAppSender.sendReport(ownerPhone, title + "\n" + body);
+                        whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.SALE_FOLLOW_UP, title + "\n" + body));
                     } catch (Exception e) {
                         log.warn("[SALE-VALIDATED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
                         failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
@@ -233,7 +235,7 @@ public class SaleDraftValidatedNotificationListener {
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
-                        whatsAppSender.sendReport(ownerPhone, title + "\n" + body);
+                        whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.SALE_FOLLOW_UP, title + "\n" + body));
                     } catch (Exception e) {
                         log.warn("[SALE-PENDING] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
                         failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));
@@ -327,7 +329,7 @@ public class SaleDraftValidatedNotificationListener {
                         .orElse(null);
                 if (ownerPhone != null) {
                     try {
-                        whatsAppSender.sendReport(ownerPhone, title + "\n" + body);
+                        whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.SALE_FOLLOW_UP, title + "\n" + body));
                     } catch (Exception e) {
                         log.warn("[SALE-DRAFT-UPGRADED] WhatsApp failed for sale={}: {}", event.saleId(), e.getMessage());
                         failure = addFailure(failure, new DeliveryFailedException("WhatsApp send failed", e));

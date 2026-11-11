@@ -238,7 +238,7 @@ class TenantPlanManagementPostgresIntegrationTest extends PostgresIntegrationTes
         LocalDate today = LocalDate.now(clock.withZone(com.keevo.shared.domain.time.KeevoZones.WAT));
         jdbc.update("UPDATE \"kv_pm9205\".subscriptions SET plan_type = 'PREMIUM', expires_at = ?",
                 java.sql.Timestamp.from(AdminPlanService.endOfDayWat(today.plusDays(7))));
-        WhatsAppSender whatsApp = mock(WhatsAppSender.class);
+        WhatsAppSender whatsApp = com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(mock(WhatsAppSender.class));
         OwnerRecipientResolver resolver = mock(OwnerRecipientResolver.class);
         when(resolver.resolveOwnerWhatsAppPhone("kv_pm9205")).thenReturn(Optional.of("+237690009205"));
         PlanExpiryReminderService service = new PlanExpiryReminderService(jdbc, whatsApp, resolver, clock);

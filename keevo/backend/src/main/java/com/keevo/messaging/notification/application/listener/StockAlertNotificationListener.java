@@ -8,6 +8,8 @@ import com.keevo.identity.api.TenantPreferencesQueryPort;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.messaging.notification.domain.port.out.NotificationCooldownRepository;
 import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
@@ -230,7 +232,7 @@ public class StockAlertNotificationListener {
         if ((channel == StockAlertChannel.WHATSAPP || channel == StockAlertChannel.BOTH)
                 && ownerPhone != null) {
             try {
-                whatsAppSender.sendReport(ownerPhone, body);
+                whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.STOCK_ALERT, body));
             } catch (Exception e) {
                 waError = e;
             }
@@ -298,7 +300,7 @@ public class StockAlertNotificationListener {
                             .append(e.currentQuantity()).append(" unité(s) (seuil : ")
                             .append(e.threshold()).append(")\n");
                 }
-                whatsAppSender.sendReport(ownerPhone, waMessage.toString());
+                whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.STOCK_ALERT, waMessage.toString()));
             } catch (Exception e) {
                 waError = e;
             }

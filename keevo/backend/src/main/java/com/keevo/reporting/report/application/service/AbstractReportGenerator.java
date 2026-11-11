@@ -118,7 +118,7 @@ public abstract class AbstractReportGenerator {
             return;
         }
         try {
-            whatsAppSender.sendReport(ownerPhone, report.getContent());
+            whatsAppSender.sendNotification(ownerPhone, ReportWhatsAppMessages.of(report));
             report.markSent();
             reportRepository.save(report);
             log.info("Report delivered via WhatsApp: reportId={}", report.getId());

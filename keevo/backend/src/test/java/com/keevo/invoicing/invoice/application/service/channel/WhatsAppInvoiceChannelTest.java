@@ -35,7 +35,7 @@ class WhatsAppInvoiceChannelTest {
 
     @BeforeEach
     void setUp() {
-        platform = mock(WhatsAppSender.class);
+        platform = com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(mock(WhatsAppSender.class));
         business = mock(TenantWhatsAppBusiness.class);
         documents = mock(InvoiceDocumentUseCase.class);
         channel = new WhatsAppInvoiceChannel(platform, business, documents);
@@ -75,6 +75,9 @@ class WhatsAppInvoiceChannelTest {
         when(platform.isConfigured()).thenReturn(true);
         channel.deliver(message);
         verify(platform).sendReport(eq("+237690112233"), org.mockito.ArgumentMatchers.contains("https://keevo.ad2s.cm/l"));
+        verify(platform).sendNotification(eq("+237690112233"), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.DOCUMENT_LINK && m.parameters().equals(java.util.List.of("Awa", "facture", "FAC-2026-000001", "Boutique Awa",
+                com.keevo.invoicing.invoice.application.service.InvoiceSendMessages.amount(28_850L),
+                "https://keevo.ad2s.cm/l"))));
 
         when(platform.isConfigured()).thenReturn(false);
         assertThatThrownBy(() -> channel.deliver(message)).isInstanceOf(DomainException.class)
@@ -91,5 +94,16 @@ class WhatsAppInvoiceChannelTest {
         assertThatThrownBy(() -> channel.assertAvailable("kv_abc123")).isInstanceOf(DomainException.class)
                 .extracting(e -> ((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.WHATSAPP_UNAVAILABLE);
         assertThat(channel.channel().name()).isEqualTo("WHATSAPP");
+    }
+
+    @Test
+    @DisplayName("19.9c a quote names « devis » in the template parameters")
+    void quoteParameters() {
+        Invoice quote = mock(Invoice.class, Answers.RETURNS_DEEP_STUBS);
+        when(quote.client().name()).thenReturn("Awa");
+        when(quote.isQuote()).thenReturn(true);
+        when(quote.totals().totalTtc()).thenReturn(1_000L);
+        assertThat(WhatsAppInvoiceChannel.message(quote, "DV-1", "Boutique Awa", "https://k.cm/l").parameters()
+                .subList(0, 4)).containsExactly("Awa", "devis", "DV-1", "Boutique Awa");
     }
 }

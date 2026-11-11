@@ -3,6 +3,8 @@ package com.keevo.messaging.notification.application.listener;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.time.KeevoZones;
 import com.keevo.shared.event.DeliverOnce;
@@ -145,7 +147,7 @@ public class ModuleExpiryNotificationListener {
             return;
         }
         try {
-            whatsAppSender.sendReport(phone.get(), text);
+            whatsAppSender.sendNotification(phone.get(), PlatformWhatsAppMessage.detail(PlatformMessageKind.MODULE_LICENCE, text));
             log.info("Module licence WhatsApp ({}) sent for tenant {}", type, tenantSchema);
         } catch (RuntimeException e) {
             log.warn("Module licence WhatsApp ({}) failed for tenant {} ({})", type, tenantSchema,

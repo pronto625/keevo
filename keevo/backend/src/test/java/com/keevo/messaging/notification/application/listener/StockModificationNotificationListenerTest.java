@@ -60,6 +60,7 @@ class StockModificationNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         clock = new MutableClock(NOW);
         listener = new StockModificationNotificationListener(
                 pushNotifier, whatsAppSender, ownerRecipientResolver, WINDOW_MIN, clock);

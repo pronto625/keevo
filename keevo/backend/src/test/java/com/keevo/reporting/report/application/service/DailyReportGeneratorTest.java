@@ -71,6 +71,7 @@ class DailyReportGeneratorTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         generator = new DailyReportGenerator(
                 reportRepository, whatsAppSender, multiStoreSummaryService,
                 builder, formatter, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver, IdentityEmployeeApiTestSupport.queryPort(employeeRepository));

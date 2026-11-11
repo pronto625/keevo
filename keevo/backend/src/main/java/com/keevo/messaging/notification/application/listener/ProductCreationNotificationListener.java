@@ -7,6 +7,8 @@ import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.module.ModuleScoped;
 import org.slf4j.Logger;
@@ -259,7 +261,7 @@ public class ProductCreationNotificationListener {
         String ownerPhone = resolveOwnerPhone(tenantId);
         if (ownerPhone != null) {
             try {
-                whatsAppSender.sendReport(ownerPhone, whatsAppBody);
+                whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.PRODUCTS_CREATED, whatsAppBody));
             } catch (Exception e) {
                 waError = e;
             }

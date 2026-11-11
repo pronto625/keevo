@@ -6,6 +6,8 @@ import com.keevo.shared.capability.notification.EmailMessage;
 import com.keevo.shared.capability.notification.EmailSender;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,7 +81,9 @@ public class MemberAddedNotifier {
                 + "habituel, puis choisissez cette entreprise.";
         String subject = "Vous avez rejoint " + name;
         try {
-            executor.execute(() -> sendPlatformMessage(account, tenantSchema, subject, text));
+            PlatformWhatsAppMessage whatsApp =
+                    PlatformWhatsAppMessage.of(PlatformMessageKind.MEMBER_ADDED, text, name, roleLabel);
+            executor.execute(() -> sendPlatformMessage(account, tenantSchema, subject, whatsApp));
         } catch (RuntimeException e) {
             log.warn("[member-added] platform message not scheduled for tenant {}: {}", tenantSchema,
                     e.getClass().getSimpleName());
@@ -87,10 +91,11 @@ public class MemberAddedNotifier {
     }
 
     /** WhatsApp when the account has a phone and WhatsApp is configured; on failure or otherwise, verified email. */
-    void sendPlatformMessage(User account, String tenantSchema, String subject, String text) {
+    void sendPlatformMessage(User account, String tenantSchema, String subject, PlatformWhatsAppMessage message) {
+        String text = message.text();
         if (account.hasPhoneNumber() && whatsAppSender.isConfigured()) {
             try {
-                whatsAppSender.sendReport(account.getPhoneNumber(), text);
+                whatsAppSender.sendNotification(account.getPhoneNumber(), message);
                 return;
             } catch (RuntimeException e) {
                 log.warn("[member-added] WhatsApp failed for tenant {}: {} — trying email", tenantSchema,

@@ -2,7 +2,10 @@ package com.keevo.messaging.whatsapp.application;
 
 import com.keevo.messaging.channel.domain.model.SendOutcome;
 import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
+import com.keevo.messaging.whatsapp.domain.model.TemplateParameters;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppProvider;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -13,6 +16,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -55,6 +59,15 @@ class ChainWhatsAppSenderTest {
             calls.add("code:" + phone + ":" + code + ":" + language);
             return outcomes.isEmpty() ? SendOutcome.DELIVERED : outcomes.poll();
         }
+
+        @Override
+        public SendOutcome sendTemplate(String phone, String template, String language, List<String> parameters) {
+            calls.add("template:" + phone + ":" + template + ":" + language + ":" + parameters);
+            lastParameters = parameters;
+            return outcomes.isEmpty() ? SendOutcome.DELIVERED : outcomes.poll();
+        }
+
+        List<String> lastParameters;
     }
 
     private static ChainWhatsAppSender chain(WhatsAppProvider... providers) {
@@ -241,5 +254,140 @@ class ChainWhatsAppSenderTest {
         Fake noop = new Fake("noop", false);
         chain(noop).sendCode(PHONE, CODE, TEXT, "fr");
         assertThat(noop.calls).hasSize(1);
+    }
+
+    // ── Story 19.9c — platform messages through approved Meta templates ──────────────────────────────────────────
+
+    private static final String ALERT = "Riz 5 kg : 3 unité(s) restante(s) (seuil : 5) — Boutique Akwa";
+    private static final PlatformWhatsAppMessage STOCK =
+            PlatformWhatsAppMessage.detail(PlatformMessageKind.STOCK_ALERT, ALERT);
+
+    private static ChainWhatsAppSender approved(Set<String> names, WhatsAppProvider... providers) {
+        return new ChainWhatsAppSender(List.of(providers), names);
+    }
+
+    @Test
+    @DisplayName("19.9c not approved (default): free text through Wassender, Meta never called")
+    void notificationNotApprovedIsFreeText() {
+        Fake meta = new Fake("meta", true);
+        Fake wassender = new Fake("wassender", false);
+        chain(meta, wassender).sendNotification(PHONE, STOCK);
+        assertThat(meta.calls).isEmpty();
+        assertThat(wassender.calls).containsExactly("text:" + PHONE + ":" + ALERT);
+    }
+
+    @Test
+    @DisplayName("19.9c not approved, every text provider fails: WhatsAppDeliveryException as sendReport")
+    void notificationNotApprovedAllFail() {
+        assertThatThrownBy(() -> chain(new Fake("meta", true), new Fake("wassender", false, SendOutcome.FAILED))
+                .sendNotification(PHONE, STOCK)).isInstanceOf(WhatsAppDeliveryException.class);
+    }
+
+    @Test
+    @DisplayName("19.9c approved, Meta OK: one template call in fr with the alert as parameter, no free text")
+    void notificationApprovedMetaOk() {
+        Fake meta = new Fake("meta", true, SendOutcome.DELIVERED);
+        Fake wassender = new Fake("wassender", false);
+        approved(Set.of("keevo_alerte_stock"), meta, wassender).sendNotification(PHONE, STOCK);
+        assertThat(meta.calls).containsExactly("template:" + PHONE + ":keevo_alerte_stock:fr:[" + ALERT + "]");
+        assertThat(wassender.calls).isEmpty();
+    }
+
+    @Test
+    @DisplayName("19.9c another kind approved only: this kind stays free text")
+    void notificationOtherTemplateApproved() {
+        Fake meta = new Fake("meta", true);
+        Fake wassender = new Fake("wassender", false);
+        approved(Set.of("keevo_rapport_journalier"), meta, wassender).sendNotification(PHONE, STOCK);
+        assertThat(meta.calls).isEmpty();
+        assertThat(wassender.calls).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("19.9c approved, Meta fails: free text fallback, WARN with the template name, no text in logs")
+    void notificationApprovedMetaFails(CapturedOutput output) {
+        Fake meta = new Fake("meta", true, SendOutcome.FAILED);
+        Fake wassender = new Fake("wassender", false, SendOutcome.DELIVERED);
+        approved(Set.of("keevo_alerte_stock"), meta, wassender).sendNotification(PHONE, STOCK);
+        assertThat(meta.calls).hasSize(1);
+        assertThat(wassender.calls).containsExactly("text:" + PHONE + ":" + ALERT);
+        assertThat(output.getAll()).contains("keevo_alerte_stock").doesNotContain("Riz 5 kg");
+    }
+
+    @Test
+    @DisplayName("19.9c approved, Meta throws: free text fallback")
+    void notificationApprovedMetaThrows() {
+        Fake meta = new Fake("meta", true) {
+            @Override
+            public SendOutcome sendTemplate(String phone, String template, String language, List<String> p) {
+                throw new IllegalStateException("boom");
+            }
+        };
+        Fake wassender = new Fake("wassender", false);
+        approved(Set.of("keevo_alerte_stock"), meta, wassender).sendNotification(PHONE, STOCK);
+        assertThat(wassender.calls).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("19.9c approved, Meta read timeout: nothing more sent (no duplicate), WARN")
+    void notificationApprovedMetaTimeout(CapturedOutput output) {
+        Fake wassender = new Fake("wassender", false);
+        approved(Set.of("keevo_alerte_stock"), new Fake("meta", true, SendOutcome.UNKNOWN), wassender)
+                .sendNotification(PHONE, STOCK);
+        assertThat(wassender.calls).isEmpty();
+        assertThat(output.getAll()).contains("outcome unknown").contains("***080");
+    }
+
+    @Test
+    @DisplayName("19.9c approved, Meta not configured: free text, no Meta call")
+    void notificationApprovedMetaNotConfigured() {
+        Fake meta = new Fake("meta", true);
+        meta.configured = false;
+        Fake wassender = new Fake("wassender", false);
+        approved(Set.of("keevo_alerte_stock"), meta, wassender).sendNotification(PHONE, STOCK);
+        assertThat(meta.calls).isEmpty();
+        assertThat(wassender.calls).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("19.9c approved, preset without Meta (failover): free text")
+    void notificationApprovedNoTemplateProvider() {
+        Fake wassender = new Fake("wassender", false);
+        approved(Set.of("keevo_alerte_stock"), wassender, new Fake("twilio", false)).sendNotification(PHONE, STOCK);
+        assertThat(wassender.calls).containsExactly("text:" + PHONE + ":" + ALERT);
+    }
+
+    @Test
+    @DisplayName("19.9c long multi-line report: one-line parameter, rendered body ≤ 1024, ends with …")
+    void notificationLongReportFitted() {
+        String report = ("💰 Chiffre d'affaires : 85 000 FCFA\n\n• Riz 5 kg : 12\t ventes\n").repeat(80);
+        Fake meta = new Fake("meta", true);
+        approved(Set.of("keevo_rapport_journalier"), meta)
+                .sendNotification(PHONE, PlatformWhatsAppMessage.detail(PlatformMessageKind.DAILY_REPORT, report));
+        String parameter = meta.lastParameters.get(0);
+        assertThat(parameter).doesNotContain("\n").doesNotContain("\t").endsWith("…");
+        assertThat(com.keevo.messaging.whatsapp.domain.model.PlatformTemplateCatalog.DAILY
+                .render(meta.lastParameters)).hasSizeLessThanOrEqualTo(TemplateParameters.MAX_BODY);
+    }
+
+    @Test
+    @DisplayName("19.9c fixed template: no parameter")
+    void notificationFixedTemplate() {
+        Fake meta = new Fake("meta", true);
+        approved(Set.of("keevo_compte_suspendu"), meta).sendNotification(PHONE, PlatformWhatsAppMessage.fixed(
+                PlatformMessageKind.ACCOUNT_SUSPENDED, "Votre compte Keevo est suspendu. Contactez le support Keevo."));
+        assertThat(meta.calls).containsExactly("template:" + PHONE + ":keevo_compte_suspendu:fr:[]");
+    }
+
+    @Test
+    @DisplayName("19.9c structured template too long for Meta: never cut, free text instead")
+    void notificationStructuredTooLongIsFreeText() {
+        Fake meta = new Fake("meta", true);
+        Fake wassender = new Fake("wassender", false);
+        PlatformWhatsAppMessage link = PlatformWhatsAppMessage.of(PlatformMessageKind.DOCUMENT_LINK, "texte libre",
+                "Aminata", "facture", "FAC-1", "v".repeat(1000), "28 850", "https://keevo.ad2s.cm/l/abc");
+        approved(Set.of("keevo_document_lien"), meta, wassender).sendNotification(PHONE, link);
+        assertThat(meta.calls).isEmpty();
+        assertThat(wassender.calls).containsExactly("text:" + PHONE + ":texte libre");
     }
 }

@@ -59,6 +59,7 @@ class ProductCreationNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         clock = new MutableClock(NOW);
         listener = new ProductCreationNotificationListener(
                 pushNotifier, whatsAppSender, ownerRecipientResolver, WINDOW_MIN, clock);

@@ -68,7 +68,7 @@ class AccountDeletionConcurrencyPostgresIntegrationTest extends FullContextInteg
     @Autowired AccountDeletionService accountDeletionService;
     @Autowired AdminTenantService adminTenantService;
 
-    private final WhatsAppSender whatsAppSender = mock(WhatsAppSender.class);
+    private final WhatsAppSender whatsAppSender = com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(mock(WhatsAppSender.class));
 
     @AfterEach
     void clearTenantContext() {

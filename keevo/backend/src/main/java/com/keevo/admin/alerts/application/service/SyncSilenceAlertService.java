@@ -5,6 +5,8 @@ import com.keevo.admin.alerts.domain.port.in.SendSyncSilenceNoticesUseCase;
 import com.keevo.admin.alerts.domain.port.out.AlertSourcesPort;
 import com.keevo.admin.alerts.domain.port.out.SyncSilenceNoticeRepository;
 import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,7 +98,8 @@ public class SyncSilenceAlertService implements SendSyncSilenceNoticesUseCase {
         long days = ChronoUnit.DAYS.between(tenant.lastPushAt().atZone(AdminAlertService.WAT).toLocalDate(), today);
         notices.recordNotice(tenant.tenantId(), now, tenant.lastPushAt()); // claim before sending
         try {
-            whatsAppSender.sendReport(phone.get(), message(days));
+            whatsAppSender.sendNotification(phone.get(), PlatformWhatsAppMessage.of(PlatformMessageKind.SYNC_SILENCE,
+                    message(days), String.valueOf(days)));
         } catch (RuntimeException e) {
             log.warn("Sync silence notice failed for company {} — retried next run: {}",
                     tenant.tenantId(), e.getClass().getSimpleName());

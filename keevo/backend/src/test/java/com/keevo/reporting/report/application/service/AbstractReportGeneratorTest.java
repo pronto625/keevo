@@ -76,6 +76,7 @@ class AbstractReportGeneratorTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         var data = new EndOfDayReportData(
                 "Boutique Test", LocalDate.now(), LocalTime.of(20, 0), false,
                 false,

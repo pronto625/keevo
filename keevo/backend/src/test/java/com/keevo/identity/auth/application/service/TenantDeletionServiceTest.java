@@ -69,6 +69,7 @@ class TenantDeletionServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         Clock fixedClock = Clock.fixed(Instant.parse("2026-08-22T03:00:00Z"), ZoneOffset.UTC);
         scheduler = new TenantDeletionService(tenantRepository, userRepository,
                 whatsAppSender, schemaProvisioner, jdbcTemplate, transactionManager, fixedClock);

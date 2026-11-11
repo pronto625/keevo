@@ -2,6 +2,7 @@ package com.keevo.messaging.whatsapp.adapter.out.config;
 
 import com.keevo.messaging.channel.adapter.out.config.ChannelPropertiesConfig;
 import com.keevo.messaging.whatsapp.application.ChainWhatsAppSender;
+import com.keevo.messaging.whatsapp.domain.model.PlatformTemplateCatalog;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppProvider;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
@@ -10,8 +11,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Story 19.9b — the single platform {@link WhatsAppSender} (Factory): a {@link ChainWhatsAppSender} whose ordered
@@ -34,6 +38,7 @@ public class WhatsAppChainConfig {
     private static final Logger log = LoggerFactory.getLogger(WhatsAppChainConfig.class);
 
     static final String PROPERTY = "keevo.whatsapp.provider";
+    static final String APPROVED_TEMPLATES = "keevo.whatsapp.meta.approved-templates";
 
     @Bean
     public MetaWhatsAppProperties metaWhatsAppProperties(Environment env) {
@@ -48,8 +53,34 @@ public class WhatsAppChainConfig {
         String preset = env.getProperty(PROPERTY, "noop");
         List<String> names = presetProviders(preset);
         log.info("[WhatsApp] preset {} → providers {}", preset.strip().toLowerCase(Locale.ROOT), names);
+        Set<String> approved = approvedTemplates(env.getProperty(APPROVED_TEMPLATES, ""));
+        if (!approved.isEmpty()) {
+            log.info("[WhatsApp] approved platform templates: {}", approved);
+            if (!names.contains("meta")) {
+                log.warn("[WhatsApp] {} is set but the preset has no Meta provider — every message stays free text",
+                        APPROVED_TEMPLATES);
+            }
+        }
         return new ChainWhatsAppSender(ChannelPropertiesConfig.ordered(PROPERTY, names, available,
-                WhatsAppProvider::name));
+                WhatsAppProvider::name), approved);
+    }
+
+    /**
+     * Story 19.9c — the comma-separated names of the platform templates approved by Meta; names outside the catalogue
+     * are dropped with a WARN (a typo must not silently enable nothing). Blank = none (every message free text).
+     */
+    public static Set<String> approvedTemplates(String value) {
+        Set<String> approved = new LinkedHashSet<>();
+        if (value == null || value.isBlank()) return approved;
+        Arrays.stream(value.split(",")).map(String::strip).filter(n -> !n.isEmpty()).forEach(name -> {
+            if (PlatformTemplateCatalog.kindTemplateByName(name).isPresent()) {
+                approved.add(name);
+            } else {
+                log.warn("[WhatsApp] {} lists '{}', which is not a Keevo platform template — ignored",
+                        APPROVED_TEMPLATES, name);
+            }
+        });
+        return approved;
     }
 
     /** Provider names of a preset, in chain order; blank = {@code noop}. */

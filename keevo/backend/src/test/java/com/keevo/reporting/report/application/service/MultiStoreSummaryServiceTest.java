@@ -54,6 +54,7 @@ class MultiStoreSummaryServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         service = new MultiStoreSummaryService(reportRepository, StoreApiTestSupport.queryPort(storeRepository),
                 whatsAppSender, formatter, ownerRecipientResolver);
         command = new GenerateReportCommand(UUID.randomUUID(), UUID.randomUUID(),

@@ -63,6 +63,7 @@ class StockAlertNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         clock = new MutableClock(Instant.parse("2026-10-11T10:00:00Z"));
         raw = new StockAlertNotificationListener(
                 pushNotifier, whatsAppSender, cooldownRepository,

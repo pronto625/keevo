@@ -29,6 +29,11 @@ class TenantStatusWhatsAppNotificationListenerTest {
     private static final UUID TENANT = UUID.randomUUID();
 
     @Mock WhatsAppSender whatsApp;
+
+    @org.junit.jupiter.api.BeforeEach
+    void forwardWhatsAppNotifications() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsApp);
+    }
     @Mock OwnerRecipientResolver resolver;
     @InjectMocks TenantStatusWhatsAppNotificationListener listener;
 
@@ -40,6 +45,7 @@ class TenantStatusWhatsAppNotificationListenerTest {
         listener.onSuspended(new TenantSuspendedEvent(UUID.randomUUID(), TENANT, SCHEMA, "fraude", Instant.now()));
 
         verify(whatsApp).sendReport(PHONE, "Votre compte Keevo est suspendu. Contactez le support Keevo.");
+        verify(whatsApp).sendNotification(org.mockito.ArgumentMatchers.eq(PHONE), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.ACCOUNT_SUSPENDED && m.parameters().isEmpty()));
     }
 
     @Test
@@ -50,6 +56,7 @@ class TenantStatusWhatsAppNotificationListenerTest {
         listener.onReactivated(new TenantReactivatedEvent(UUID.randomUUID(), TENANT, SCHEMA, Instant.now()));
 
         verify(whatsApp).sendReport(PHONE, "Votre compte Keevo est réactivé.");
+        verify(whatsApp).sendNotification(org.mockito.ArgumentMatchers.eq(PHONE), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.ACCOUNT_REACTIVATED));
     }
 
     @Test

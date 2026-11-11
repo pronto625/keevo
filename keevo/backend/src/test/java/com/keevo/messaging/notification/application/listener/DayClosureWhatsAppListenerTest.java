@@ -52,6 +52,7 @@ class DayClosureWhatsAppListenerTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         // Story 12.4: wrapped in the production interceptor (@DeliverOnce receipts; the listener binds its tenant).
         listener = ModuleListenerTestSupport.bound(
                 new DayClosureWhatsAppListener(whatsAppSender, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver));
@@ -87,6 +88,10 @@ class DayClosureWhatsAppListenerTest {
 
         ArgumentCaptor<String> report = ArgumentCaptor.forClass(String.class);
         verify(whatsAppSender, times(1)).sendReport(eq(OWNER_PHONE), report.capture());
+        // Story 19.9c — sent as a DAY_CLOSURE platform message (template keevo_cloture_caisse once approved)
+        verify(whatsAppSender).sendNotification(eq(OWNER_PHONE), org.mockito.ArgumentMatchers.argThat(m ->
+                m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.DAY_CLOSURE
+                        && m.parameters().equals(java.util.List.of(m.text()))));
         verifyNoMoreInteractions(whatsAppSender);
         assertThat(report.getValue()).contains("Boutique Akwa");
     }

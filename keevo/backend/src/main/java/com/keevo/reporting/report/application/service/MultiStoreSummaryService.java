@@ -1,5 +1,7 @@
 package com.keevo.reporting.report.application.service;
 
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.reporting.report.domain.model.EndOfDayReport;
@@ -105,7 +107,8 @@ public class MultiStoreSummaryService {
                 .ifPresentOrElse(
                         ownerPhone -> {
                             try {
-                                whatsAppSender.sendReport(ownerPhone, combinedContent);
+                                whatsAppSender.sendNotification(ownerPhone,
+                                        PlatformWhatsAppMessage.detail(PlatformMessageKind.MULTI_STORE_REPORT, combinedContent));
                                 combined.markSent();
                             } catch (Exception e) {
                                 log.warn("Multi-store summary WhatsApp delivery failed: {}", e.getMessage());

@@ -85,6 +85,7 @@ class PlanProfilePostgresIntegrationTest extends FullContextIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         org.mockito.Mockito.doAnswer(inv -> {
             com.keevo.shared.capability.notification.NotificationPayload payload = inv.getArgument(1);
             pushes.add(inv.getArgument(0) + "|" + payload.type() + "|" + Thread.currentThread().getName());

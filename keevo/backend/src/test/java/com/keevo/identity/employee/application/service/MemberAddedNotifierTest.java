@@ -35,6 +35,11 @@ class MemberAddedNotifierTest {
 
     @Mock PushNotifier pushNotifier;
     @Mock WhatsAppSender whatsAppSender;
+
+    @org.junit.jupiter.api.BeforeEach
+    void forwardWhatsAppNotifications() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
+    }
     @Mock EmailSender emailSender;
 
     @AfterEach
@@ -72,6 +77,7 @@ class MemberAddedNotifierTest {
         assertThat(payload.getValue().title()).isEqualTo("Vous avez rejoint Boutique Awa");
         assertThat(payload.getValue().body()).contains("Employé");
         verify(whatsAppSender).sendReport(eq("+237690000001"), contains("Boutique Awa"));
+        verify(whatsAppSender).sendNotification(eq("+237690000001"), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.MEMBER_ADDED && m.parameters().equals(java.util.List.of("Boutique Awa", "Employé"))));
         verifyNoInteractions(emailSender);
     }
 

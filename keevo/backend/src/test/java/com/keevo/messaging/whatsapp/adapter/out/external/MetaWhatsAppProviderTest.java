@@ -176,4 +176,59 @@ class MetaWhatsAppProviderTest {
         assertThat(new MetaWhatsAppProvider(http, new MetaWhatsAppProperties(TOKEN, " ", null)).isConfigured())
                 .isFalse();
     }
+
+    // ── Story 19.9c — platform templates ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("19.9c template body: name, fr, one body component with the parameters in order")
+    void templateBody() {
+        when(http.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{}"));
+
+        assertThat(provider.sendTemplate(PHONE, "keevo_ajout_entreprise", "fr", List.of("Boutique Akwa", "Gérant")))
+                .isEqualTo(SendOutcome.DELIVERED);
+
+        JsonNode body = JSON.valueToTree(requests(1).get(0).getBody());
+        JsonNode expected = JSON.valueToTree(Map.of(
+                "messaging_product", "whatsapp",
+                "to", "237699000080",
+                "type", "template",
+                "template", Map.of(
+                        "name", "keevo_ajout_entreprise",
+                        "language", Map.of("code", "fr"),
+                        "components", List.of(Map.of("type", "body", "parameters", List.of(
+                                Map.of("type", "text", "text", "Boutique Akwa"),
+                                Map.of("type", "text", "text", "Gérant")))))));
+        assertThat(body).isEqualTo(expected);
+    }
+
+    @Test
+    @DisplayName("19.9c fixed template: no components")
+    void templateWithoutParameters() {
+        when(http.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(ResponseEntity.ok("{}"));
+        provider.sendTemplate(PHONE, "keevo_compte_supprime", "fr", List.of());
+        assertThat(JSON.valueToTree(requests(1).get(0).getBody()).at("/template").has("components")).isFalse();
+    }
+
+    @Test
+    @DisplayName("19.9c template refused (400, even 132001): FAILED, one call, log without parameters")
+    void templateRefused(CapturedOutput output) {
+        when(http.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(badRequest(MISSING));
+        assertThat(provider.sendTemplate(PHONE, "keevo_alerte_stock", "fr", List.of("Riz 5 kg secret")))
+                .isEqualTo(SendOutcome.FAILED);
+        requests(1);
+        assertThat(output.getAll()).contains("keevo_alerte_stock").doesNotContain("Riz 5 kg secret")
+                .doesNotContain(TOKEN);
+    }
+
+    @Test
+    @DisplayName("19.9c template read timeout: UNKNOWN")
+    void templateTimeout() {
+        when(http.exchange(anyString(), eq(HttpMethod.POST), any(HttpEntity.class), eq(String.class)))
+                .thenThrow(new ResourceAccessException("Read timed out", new SocketTimeoutException("Read timed out")));
+        assertThat(provider.sendTemplate(PHONE, "keevo_alerte_stock", "fr", List.of("x")))
+                .isEqualTo(SendOutcome.UNKNOWN);
+    }
 }

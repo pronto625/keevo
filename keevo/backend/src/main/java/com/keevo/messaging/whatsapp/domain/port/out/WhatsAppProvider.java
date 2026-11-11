@@ -2,6 +2,8 @@ package com.keevo.messaging.whatsapp.domain.port.out;
 
 import com.keevo.messaging.channel.domain.model.SendOutcome;
 
+import java.util.List;
+
 /**
  * Story 19.9b — one platform WhatsApp provider of the {@code ChainWhatsAppSender} chain (Strategy): Meta Cloud API
  * (approved templates only), Wassender and Twilio (free text), the no-op stub. Adding a provider = one adapter + its
@@ -44,6 +46,19 @@ public interface WhatsAppProvider {
      *         stops, a fallback could deliver a second code
      */
     default SendOutcome sendCode(String phone, String code, String language) {
+        return SendOutcome.FAILED;
+    }
+
+    /**
+     * Story 19.9c — sends an approved platform template with its body parameters (already fitted to Meta's rules).
+     * Never throws.
+     *
+     * @param template   Meta template name
+     * @param language   Meta language code
+     * @param parameters body variable values in order (empty: no body component)
+     * @return {@link SendOutcome#UNKNOWN} on a read timeout (the chain then sends nothing more)
+     */
+    default SendOutcome sendTemplate(String phone, String template, String language, List<String> parameters) {
         return SendOutcome.FAILED;
     }
 }

@@ -3,13 +3,19 @@ package com.keevo.messaging.whatsapp.application;
 import com.keevo.messaging.channel.domain.model.Recipients;
 import com.keevo.messaging.channel.domain.model.SendOutcome;
 import com.keevo.messaging.whatsapp.domain.exception.WhatsAppDeliveryException;
+import com.keevo.messaging.whatsapp.domain.model.PlatformTemplate;
+import com.keevo.messaging.whatsapp.domain.model.PlatformTemplateCatalog;
+import com.keevo.messaging.whatsapp.domain.model.TemplateParameters;
 import com.keevo.messaging.whatsapp.domain.port.out.WhatsAppProvider;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Story 19.9b — the platform {@link WhatsAppSender}: a chain of responsibility over the {@link WhatsAppProvider}s of
@@ -23,6 +29,10 @@ import java.util.Locale;
  *   <li>{@link #sendCode} (sign-in / reset code): the template providers first (Meta, approved template
  *       {@code bref_point_otp}); on a certain failure (HTTP error, missing keys) the fallback text goes through the
  *       text providers. An unknown outcome (read timeout) stops the chain: no fallback, no second code.</li>
+ *   <li>{@link #sendNotification} (Story 19.9c, platform message of a kind): the kind's catalogue template through
+ *       the template providers only when its name is in the approved set; on a certain failure, or when not
+ *       approved, the free text through the text providers (exactly {@link #sendReport}). An unknown template
+ *       outcome stops the chain (no duplicate message).</li>
  * </ul>
  *
  * <p>Logs carry the provider name and the phone masked to its last 3 digits; never a code, a text or a key.
@@ -39,8 +49,18 @@ public class ChainWhatsAppSender implements WhatsAppSender {
     private final List<WhatsAppProvider> textProviders;
     private final boolean configured;
     private final boolean codesConfigured;
+    private final Set<String> approvedTemplates;
 
     public ChainWhatsAppSender(List<WhatsAppProvider> providers) {
+        this(providers, Set.of());
+    }
+
+    /**
+     * @param approvedTemplates Story 19.9c — names of the platform templates approved by Meta
+     *                          ({@code keevo.whatsapp.meta.approved-templates}); only these are sent as templates
+     */
+    public ChainWhatsAppSender(List<WhatsAppProvider> providers, Set<String> approvedTemplates) {
+        this.approvedTemplates = Set.copyOf(approvedTemplates);
         List<WhatsAppProvider> all = List.copyOf(providers);
         this.templateProviders = all.stream().filter(WhatsAppProvider::supportsTemplates).toList();
         this.textProviders = all.stream().filter(p -> !p.supportsTemplates()).toList();
@@ -97,6 +117,55 @@ public class ChainWhatsAppSender implements WhatsAppSender {
             log.info("[WhatsApp] code to {} — template not delivered, fallback text", Recipients.maskPhone(phone));
         }
         sendText(phone, fallbackText, true);
+    }
+
+    @Override
+    public void sendNotification(String phoneNumber, PlatformWhatsAppMessage message) {
+        String phone = sanitizePhone(phoneNumber);
+        PlatformTemplate template = PlatformTemplateCatalog.templateFor(message.kind());
+        if (template != null && approvedTemplates.contains(template.name())
+                && sendTemplate(phone, template, message)) {
+            return;
+        }
+        sendText(phone, message.text(), false);
+    }
+
+    /** @return true when the template went out or its outcome is unknown (nothing more may be sent) */
+    private boolean sendTemplate(String phone, PlatformTemplate template, PlatformWhatsAppMessage message) {
+        Optional<List<String>> parameters = TemplateParameters.fit(template, message.parameters());
+        if (parameters.isEmpty()) {
+            log.info("[WhatsApp] template {} to {} — values too long for Meta, free text", template.name(),
+                    Recipients.maskPhone(phone));
+            return false;
+        }
+        for (WhatsAppProvider provider : templateProviders) {
+            if (!provider.isConfigured()) {
+                log.warn("[WhatsApp] {} skipped for template {} — keys not configured", provider.name(),
+                        template.name());
+                continue;
+            }
+            SendOutcome outcome;
+            try {
+                outcome = provider.sendTemplate(phone, template.name(), template.language(), parameters.get());
+            } catch (RuntimeException e) {
+                log.warn("[WhatsApp] {} template {} failed ({})", provider.name(), template.name(),
+                        e.getClass().getSimpleName());
+                continue;
+            }
+            if (outcome == SendOutcome.DELIVERED) {
+                log.debug("[WhatsApp] template {} sent to {} via {}", template.name(), Recipients.maskPhone(phone),
+                        provider.name());
+                return true;
+            }
+            if (outcome == SendOutcome.UNKNOWN) {
+                log.warn("[WhatsApp] {} template {} outcome unknown for {} — no fallback (no duplicate)",
+                        provider.name(), template.name(), Recipients.maskPhone(phone));
+                return true;
+            }
+        }
+        log.info("[WhatsApp] template {} to {} not delivered — free text fallback", template.name(),
+                Recipients.maskPhone(phone));
+        return false;
     }
 
     /** {@code code}: the fallback of a code, where a read timeout stops the chain (no second code). */

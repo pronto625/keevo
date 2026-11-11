@@ -55,6 +55,7 @@ class AccountDeletionServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         service = new AccountDeletionService(tenantRepository, userRepository,
                 whatsAppSender, eventPublisher, deletionLog);
         tenantId = UUID.randomUUID();
@@ -131,6 +132,7 @@ class AccountDeletionServiceTest {
         service.requestDeletion(actorId, schemaName);
 
         verify(whatsAppSender).sendReport(eq("+243812345678"), anyString());
+        verify(whatsAppSender).sendNotification(eq("+243812345678"), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.DELETION_SCHEDULED && m.parameters().get(0).matches("\\d{2}/\\d{2}/\\d{4}")));
     }
 
     @Test

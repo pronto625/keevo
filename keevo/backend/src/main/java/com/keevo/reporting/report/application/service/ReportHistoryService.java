@@ -96,7 +96,7 @@ public class ReportHistoryService implements GetReportHistoryUseCase, ResendRepo
         reportRepository.save(report);
 
         try {
-            whatsAppSender.sendReport(ownerPhone, report.getContent());
+            whatsAppSender.sendNotification(ownerPhone, ReportWhatsAppMessages.of(report));
             report.incrementAttempt();
             report.markSent();
             reportRepository.save(report);

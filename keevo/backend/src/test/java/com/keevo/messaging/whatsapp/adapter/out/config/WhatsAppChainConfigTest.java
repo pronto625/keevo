@@ -66,4 +66,44 @@ class WhatsAppChainConfigTest {
             @Override public SendOutcome sendText(String phone, String text) { return SendOutcome.DELIVERED; }
         };
     }
+
+    @Test
+    @DisplayName("19.9c approved templates: comma list trimmed, unknown names dropped with a WARN, blank = none")
+    void approvedTemplates() {
+        assertThat(WhatsAppChainConfig.approvedTemplates(null)).isEmpty();
+        assertThat(WhatsAppChainConfig.approvedTemplates(" ")).isEmpty();
+        assertThat(WhatsAppChainConfig.approvedTemplates(" keevo_alerte_stock , keevo_typo,,keevo_rapport_journalier"))
+                .containsExactly("keevo_alerte_stock", "keevo_rapport_journalier");
+    }
+
+    @Test
+    @DisplayName("19.9c the sender bean reads keevo.whatsapp.meta.approved-templates: preset meta sends that template")
+    void senderBeanApprovedTemplates() {
+        java.util.List<String> templates = new java.util.ArrayList<>();
+        WhatsAppProvider meta = new WhatsAppProvider() {
+            @Override public String name() { return "meta"; }
+            @Override public boolean isConfigured() { return true; }
+            @Override public boolean supportsTemplates() { return true; }
+            @Override public SendOutcome sendText(String phone, String text) { return SendOutcome.FAILED; }
+            @Override public SendOutcome sendTemplate(String phone, String template, String language,
+                                                      List<String> parameters) {
+                templates.add(template);
+                return SendOutcome.DELIVERED;
+            }
+        };
+        MockEnvironment env = new MockEnvironment().withProperty("keevo.whatsapp.provider", "meta")
+                .withProperty("keevo.whatsapp.meta.approved-templates", "keevo_alerte_stock");
+        com.keevo.shared.capability.notification.WhatsAppSender sender = new WhatsAppChainConfig().whatsAppSender(env,
+                List.of(meta, provider("wassender"), provider("twilio")));
+        sender.sendNotification("+237699000080", com.keevo.shared.capability.notification.PlatformWhatsAppMessage
+                .detail(com.keevo.shared.capability.notification.PlatformMessageKind.STOCK_ALERT, "Riz : 3"));
+        assertThat(templates).containsExactly("keevo_alerte_stock");
+    }
+
+    @Test
+    @DisplayName("19.9c the sign-in code template is not accepted in the approved list (sent by sendCode only)")
+    void otpNotApprovable() {
+        assertThat(WhatsAppChainConfig.approvedTemplates("bref_point_otp,keevo_compte_supprime"))
+                .containsExactly("keevo_compte_supprime");
+    }
 }

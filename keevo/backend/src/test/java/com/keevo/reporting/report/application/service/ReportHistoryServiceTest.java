@@ -60,6 +60,7 @@ class ReportHistoryServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         service = new ReportHistoryService(reportRepository, whatsAppSender, ownerRecipientResolver,
                 IdentityEmployeeApiTestSupport.queryPort(employeeRepository));
         reportId = UUID.randomUUID();

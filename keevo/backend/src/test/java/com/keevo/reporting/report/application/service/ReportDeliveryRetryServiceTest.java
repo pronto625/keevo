@@ -42,6 +42,7 @@ class ReportDeliveryRetryServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         service = new ReportDeliveryRetryService(reportRepository, whatsAppSender, IdentityAuthApiTestSupport.tenantQueryPort(tenantRepository), ownerRecipientResolver);
         activeTenant = mock(Tenant.class);
         lenient().when(activeTenant.getStatus()).thenReturn(TenantStatus.ACTIVE);

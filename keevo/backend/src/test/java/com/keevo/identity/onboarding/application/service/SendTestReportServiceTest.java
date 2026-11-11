@@ -66,6 +66,7 @@ class SendTestReportServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         // 12.2d: the real store API adapter over the mocked repository
         service = new SendTestReportService(
                 DailyReportTextApiTestSupport.port(endOfDayReportBuilder, dailyReportFormatter), whatsAppSender,

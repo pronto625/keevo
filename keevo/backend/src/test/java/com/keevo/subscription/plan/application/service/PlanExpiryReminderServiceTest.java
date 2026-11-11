@@ -51,6 +51,7 @@ class PlanExpiryReminderServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsApp);
         service = new PlanExpiryReminderService(jdbc, whatsApp, resolver, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
@@ -100,6 +101,7 @@ class PlanExpiryReminderServiceTest {
         verify(whatsApp).sendReport(PHONE,
                 "⏰ Votre abonnement Keevo Team expire le 20/10/2026. Contactez-nous pour renouveler."); // 19.7b label
         verify(jdbc, never()).update(eq(PlanExpiryReminderService.UNCLAIM_SQL), any(), any(), any());
+        verify(whatsApp).sendNotification(org.mockito.ArgumentMatchers.eq(PHONE), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.PLAN_REMINDER));
     }
 
     @Test

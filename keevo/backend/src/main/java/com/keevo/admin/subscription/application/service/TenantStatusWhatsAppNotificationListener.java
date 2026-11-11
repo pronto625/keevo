@@ -3,6 +3,8 @@ package com.keevo.admin.subscription.application.service;
 import com.keevo.admin.subscription.domain.model.TenantReactivatedEvent;
 import com.keevo.admin.subscription.domain.model.TenantSuspendedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
@@ -47,16 +49,18 @@ public class TenantStatusWhatsAppNotificationListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @DeliverOnce
     public void onSuspended(TenantSuspendedEvent event) {
-        send(event.tenantId(), event.schemaName(), "suspension", SUSPENDED);
+        send(event.tenantId(), event.schemaName(), "suspension",
+                PlatformWhatsAppMessage.fixed(PlatformMessageKind.ACCOUNT_SUSPENDED, SUSPENDED));
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     @DeliverOnce
     public void onReactivated(TenantReactivatedEvent event) {
-        send(event.tenantId(), event.schemaName(), "reactivation", REACTIVATED);
+        send(event.tenantId(), event.schemaName(), "reactivation",
+                PlatformWhatsAppMessage.fixed(PlatformMessageKind.ACCOUNT_REACTIVATED, REACTIVATED));
     }
 
-    private void send(UUID tenantId, String schemaName, String kind, String text) {
+    private void send(UUID tenantId, String schemaName, String kind, PlatformWhatsAppMessage message) {
         Optional<String> phone;
         try {
             phone = ownerRecipientResolver.resolveOwnerWhatsAppPhone(schemaName);
@@ -70,7 +74,7 @@ public class TenantStatusWhatsAppNotificationListener {
             return;
         }
         try {
-            whatsAppSender.sendReport(phone.get(), text);
+            whatsAppSender.sendNotification(phone.get(), message);
         } catch (RuntimeException e) {
             // Story 12.4 (R2): rethrown — the publication stays incomplete and is retried
             log.warn("Tenant {} WhatsApp failed for tenant {}: {}: {} — will be retried",

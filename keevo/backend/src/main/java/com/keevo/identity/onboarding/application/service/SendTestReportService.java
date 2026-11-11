@@ -1,5 +1,7 @@
 package com.keevo.identity.onboarding.application.service;
 
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.identity.api.DailyReportTextPort;
 import com.keevo.identity.api.DailyReportTextRequest;
@@ -74,7 +76,7 @@ public class SendTestReportService implements SendTestReportUseCase {
                 tenantId,
                 new DailyReportTextRequest(store.id(), store.name(), now, now,
                         LocalDate.now(), LocalTime.now(), false));
-            whatsAppSender.sendReport(ownerPhone, reportText);
+            whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.detail(PlatformMessageKind.DAILY_REPORT, reportText));
             return new TestReportResult(true);
         } catch (IllegalStateException | DomainException e) {
             // Tenant guard (tenantId ≠ bound tenant) or invalid report request — a programming error,

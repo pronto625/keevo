@@ -73,6 +73,7 @@ class SaleDraftValidatedNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         // Story 12.4: wrapped in the production module-listener interceptor (tenant bound from the event).
         listener = ModuleListenerTestSupport.bound(new SaleDraftValidatedNotificationListener(
                 CommerceSaleApiTestSupport.saleQueryPort(saleRepository), IdentityEmployeeApiTestSupport.queryPort(employeeRepository),

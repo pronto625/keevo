@@ -53,4 +53,17 @@ public interface WhatsAppSender {
     default void sendCode(String phoneNumber, String code, String fallbackText, String language) {
         sendReport(phoneNumber, fallbackText);
     }
+
+    /**
+     * Story 19.9c — sends a platform message (report, alert, reminder, notice…). The platform sender uses the Meta
+     * template of the message's kind when that template is declared approved and a template provider is configured;
+     * otherwise, and on a certain template failure, it sends {@link PlatformWhatsAppMessage#text()} as free text
+     * (Wassender then Twilio), exactly as {@link #sendReport}. An unknown template outcome (timeout) sends nothing
+     * more. Failure contract = {@link #sendReport}'s (a runtime exception when nothing could be sent).
+     *
+     * <p>The default sends the free text through {@link #sendReport} (test doubles).
+     */
+    default void sendNotification(String phoneNumber, PlatformWhatsAppMessage message) {
+        sendReport(phoneNumber, message.text());
+    }
 }

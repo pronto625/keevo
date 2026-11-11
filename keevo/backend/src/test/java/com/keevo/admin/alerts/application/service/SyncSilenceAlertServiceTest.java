@@ -52,6 +52,7 @@ class SyncSilenceAlertServiceTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsApp);
         service = new SyncSilenceAlertService(sources, notices, resolver, whatsApp, Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(resolver.resolveOwnerWhatsAppPhone("kv_aaa111")).thenReturn(Optional.of(PHONE));
         lenient().when(whatsApp.isConfigured()).thenReturn(true);
@@ -72,6 +73,7 @@ class SyncSilenceAlertServiceTest {
 
         verify(whatsApp).sendReport(PHONE, "Bonjour, votre boutique Keevo n'a pas été synchronisée depuis 6 jours. "
                 + "Ouvrez l'application avec une connexion internet pour sauvegarder vos ventes.");
+        verify(whatsApp).sendNotification(org.mockito.ArgumentMatchers.eq(PHONE), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.SYNC_SILENCE && m.parameters().equals(java.util.List.of("6"))));
         verify(notices).recordNotice(T1, NOW, lastPush);
     }
 

@@ -77,6 +77,7 @@ class WeeklyReportGeneratorTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         generator = new WeeklyReportGenerator(
                 reportRepository, whatsAppSender, multiStoreSummaryService,
                 builder, formatter, StoreApiTestSupport.queryPort(storeRepository), ownerRecipientResolver, transactionLock,
@@ -146,6 +147,7 @@ class WeeklyReportGeneratorTest {
         EndOfDayReport report = generator.generateWeeklyReport(command);
 
         verify(whatsAppSender).sendReport(eq("+237600072001"), anyString());
+        verify(whatsAppSender).sendNotification(org.mockito.ArgumentMatchers.eq("+237600072001"), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.WEEKLY_REPORT));
         assertThat(report.getDeliveryStatus()).isEqualTo(DeliveryStatus.SENT);
     }
 

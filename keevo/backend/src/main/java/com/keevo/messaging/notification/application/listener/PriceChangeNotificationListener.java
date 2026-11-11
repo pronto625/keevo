@@ -6,6 +6,8 @@ import com.keevo.identity.api.EmployeeView;
 import com.keevo.identity.api.OwnerRecipientResolver;
 import com.keevo.shared.capability.notification.NotificationPayload;
 import com.keevo.shared.capability.notification.PushNotifier;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.catalog.product.ProductPriceChangedEvent;
 import com.keevo.shared.event.catalog.product.SalePriceOverriddenEvent;
@@ -261,7 +263,7 @@ public class PriceChangeNotificationListener {
             return;
         }
         try {
-            whatsAppSender.sendReport(phone, whatsAppBody);
+            whatsAppSender.sendNotification(phone, PlatformWhatsAppMessage.detail(PlatformMessageKind.PRICES_CHANGED, whatsAppBody));
         } catch (Exception e) {
             log.warn("[PRICE-NOTIF] WhatsApp failed for tenant={}", tenantId, e);
         }

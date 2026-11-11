@@ -61,7 +61,7 @@ class TenantDeletionServicePostgresIntegrationTest extends FullContextIntegratio
 
     private static final int TIMEOUT_SECONDS = 30;
 
-    private final WhatsAppSender whatsAppSender = mock(WhatsAppSender.class);
+    private final WhatsAppSender whatsAppSender = com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(mock(WhatsAppSender.class));
 
     private TenantDeletionService scheduler(JdbcTemplate jdbcTemplate) {
         return new TenantDeletionService(tenantRepository, userRepository, whatsAppSender,

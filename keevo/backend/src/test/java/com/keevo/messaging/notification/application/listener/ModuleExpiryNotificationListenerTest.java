@@ -37,7 +37,7 @@ class ModuleExpiryNotificationListenerTest {
     private static final Instant GRACE = Instant.parse("2026-11-08T23:30:00Z");
 
     private final PushNotifier push = mock(PushNotifier.class);
-    private final WhatsAppSender whatsApp = mock(WhatsAppSender.class);
+    private final WhatsAppSender whatsApp = com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(mock(WhatsAppSender.class));
     private final OwnerRecipientResolver owners = mock(OwnerRecipientResolver.class);
     private final ModuleExpiryNotificationListener listener =
             new ModuleExpiryNotificationListener(push, whatsApp, owners);

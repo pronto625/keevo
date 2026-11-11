@@ -8,6 +8,8 @@ import com.keevo.identity.auth.domain.model.*;
 import com.keevo.identity.auth.domain.port.out.AccountDeletionLogRepository;
 import com.keevo.identity.auth.domain.port.out.TenantRepository;
 import com.keevo.identity.auth.domain.port.out.UserRepository;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.domain.exception.DomainException;
 import com.keevo.shared.domain.exception.ErrorCode;
@@ -167,7 +169,8 @@ public class AccountDeletionService {
                     "Toutes vos données seront supprimées le %s. " +
                     "Pour annuler, accédez à Paramètres > Mon Compte dans l'app.",
                     formattedDate);
-            whatsAppSender.sendReport(ownerPhone, message);
+            whatsAppSender.sendNotification(ownerPhone, PlatformWhatsAppMessage.of(PlatformMessageKind.DELETION_SCHEDULED,
+                    message, formattedDate));
         } catch (Exception e) {
             log.error("Failed to send deletion confirmation WhatsApp: phone={}", ownerPhone, e);
             // Non-blocking — WhatsApp failure does not abort the deletion request

@@ -6,6 +6,8 @@ import com.keevo.messaging.notification.application.strategy.ClosureReportStrate
 import com.keevo.messaging.notification.application.strategy.ManualReportStrategy;
 import com.keevo.shared.event.catalog.sale.DayClosedEvent;
 import com.keevo.identity.api.OwnerRecipientResolver;
+import com.keevo.shared.capability.notification.PlatformMessageKind;
+import com.keevo.shared.capability.notification.PlatformWhatsAppMessage;
 import com.keevo.shared.capability.notification.WhatsAppSender;
 import com.keevo.shared.event.DeliverOnce;
 import com.keevo.shared.event.DeliveryFailedException;
@@ -100,7 +102,7 @@ public class DayClosureWhatsAppListener {
             String report = strategy.buildReport(event, storeName, employeeName);
 
             try {
-                whatsAppSender.sendReport(ownerPhone.get(), report);
+                whatsAppSender.sendNotification(ownerPhone.get(), PlatformWhatsAppMessage.detail(PlatformMessageKind.DAY_CLOSURE, report));
             } catch (RuntimeException e) {
                 throw new DeliveryFailedException("Day-closure WhatsApp report send failed", e);
             }

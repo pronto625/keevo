@@ -31,6 +31,11 @@ class PlanWhatsAppNotificationListenerTest {
     private static final UUID TENANT = UUID.randomUUID();
 
     @Mock WhatsAppSender whatsApp;
+
+    @org.junit.jupiter.api.BeforeEach
+    void forwardWhatsAppNotifications() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsApp);
+    }
     @Mock OwnerRecipientResolver resolver;
     PlanWhatsAppNotificationListener listener;
 
@@ -51,6 +56,7 @@ class PlanWhatsAppNotificationListenerTest {
 
         verify(whatsApp).sendReport(PHONE,
                 "🎉 Votre abonnement Keevo est activé jusqu'au 12/11/2026. Profitez de toutes les fonctionnalités !");
+        verify(whatsApp).sendNotification(org.mockito.ArgumentMatchers.eq(PHONE), org.mockito.ArgumentMatchers.argThat(m -> m.kind() == com.keevo.shared.capability.notification.PlatformMessageKind.PLAN_CHANGE));
     }
 
     @Test

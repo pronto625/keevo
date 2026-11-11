@@ -58,6 +58,7 @@ class PriceChangeNotificationListenerTest {
 
     @BeforeEach
     void setUp() {
+        com.keevo.shared.capability.notification.WhatsAppSenderMocks.forwardNotifications(whatsAppSender);
         clock = new MutableClock(NOW);
         listener = new PriceChangeNotificationListener(pushNotifier, whatsAppSender, ownerRecipientResolver,
                 employeeQuery, WINDOW_MIN, clock);
