@@ -291,10 +291,12 @@ par fournisseur.
 | « go » | `POST …/cutovers/{id}/activation` `{"confirmation":"ACTIVER","acceptedOwners":[…]}` | 200, ou 409 avec `details.blockingOwners` |
 | Retour arrière | `POST …/cutovers/{id}/rollback` `{"confirmation":"RETOUR ARRIERE"}` | 202, avant le « go » seulement |
 | Retour arrière d'un owner (24.13) | `POST …/cutovers/{id}/owners/{ownerId}/rollback` `{"confirmation":"RETOUR ARRIERE"}` | 200 : son entreprise retirée, sa ligne « En attente », bascule « Interrompue : relancez-la » ; puis « Relancer » le réimporte (§7). Avant le « go » seulement ; 409 si la bascule tourne, est décidée, a commencé son retour arrière global, ou si la ligne n'a rien à retirer |
+| Reprise d'un owner après le « go » (24.9, 11/11/2026) | `POST …/cutovers/{id}/owners/{ownerId}/recovery` `{"confirmation":"REPRENDRE"}` | 202 : bascule « Reprise d'un compte en cours », l'owner est réimporté depuis la copie figée, réconcilié, et sa seule entreprise activée ; puis la bascule revient « Activée » (§8.3). 200 sans rien faire si l'owner est déjà « Activé ». Après le « go » seulement ; 409 avant le « go » (relancer la bascule), pendant une autre reprise, ou pour un owner « Non repris » ou « Supprimé par le retour arrière » |
 
 - **Owners acceptés** : un owner en écart, bloqué ou en échec ne passe le « go » que s'il figure dans
   `acceptedOwners` avec un motif (10 caractères au moins, l'écart documenté par la répétition 24.12). Il est activé si
-  son import est complet ; sinon il reste hors de la bascule (à reprendre à la main).
+  son import est complet ; sinon il reste hors de la bascule, puis se reprend seul après le « go » une fois sa cause
+  corrigée (§8.3).
 - Le « go » n'envoie **aucun message** : l'annonce « Bref Point est à jour » part par la campagne plateforme (21.6),
   §24.13. Les invitations des membres déjà inscrits dans Keevo sont redatées (7 jours à partir du « go »).
 - Après le « go », plus de retour arrière automatique.
@@ -638,7 +640,7 @@ Procédure complète au §7 (lire le rapport de l'owner, décider, retour arriè
 3. Owners « Import bloqué » ou « Import en échec » restants : chacun décidé (hors bascule, motif d'au moins 10
    caractères) et **au plus 1 % des owners**, aucun parmi les 20 plus gros owners en documents ; chacun sera contacté
    personnellement par le support. Accepter un owner hors bascule veut dire qu'il **n'a pas de compte Keevo au
-   « go »** : sa reprise après le « go » n'est pas encore outillée (§8.3, élément routé vers 24-9).
+   « go »** : il est repris seul après le « go », depuis la même copie figée, une fois sa cause corrigée (§8.3).
 4. Rapport : sommes Bref = sommes Keevo pour les owners réconciliés (ventes, encaissé, restant dû, dépenses) ; index de
    la copie complets.
 5. Webhooks repointés et un événement de test réussi par fournisseur (§2.4).
@@ -688,7 +690,7 @@ campagne « Envoyée » par lot, compteurs d'envoi par canal dans le tableau de 
     "SELECT count(*) FROM public.tenants WHERE status = 'SUSPENDED' AND suspended_reason LIKE 'Migration Bref%'"
   ```
   attendu : 0, ou le nombre d'owners acceptés « Import en échec » dont l'entreprise avait été créée (elle reste
-  suspendue, hors bascule).
+  suspendue, hors bascule, jusqu'à sa reprise §8.3).
 - 3 owners tirés au hasard : connexion dans la nouvelle app (avec leur accord, ou comptes de l'équipe), boutiques,
   dernières factures et abonnement visibles.
 - `docker logs --since 1h keevo_backend | grep -c ERROR` comparable à un jour normal.
@@ -759,10 +761,51 @@ messagerie super-admin (21.6, fenêtre de 24 h) et au téléphone (§12). D'où 
 Plus de retour arrière automatique (`POST …/rollback` et `…/owners/{ownerId}/rollback` répondent 409) : rallumer Bref
 ferait perdre ce qui a été écrit dans Keevo. Tout problème se corrige **sur Keevo** (support, correctif). Un incident
 visible des owners : §11.4 variante « en cours », par les campagnes plateforme Keevo (§11.6). Un owner laissé hors
-bascule au « go » reste dans la copie figée (gardée jusqu'à J+7) ; sa reprise après le « go » n'est pas encore outillée
-(élément routé vers la story 24-9 le 11/11/2026 : import et activation d'un owner seul après le « go ») : le support le
-prévient personnellement, et la copie figée est gardée tant que ces owners ne sont pas repris (le nettoyage du §10
-attend leur reprise).
+bascule au « go » reste dans la copie figée (gardée jusqu'à J+7) : le support le prévient personnellement, puis il est
+repris **seul** dès que sa cause est corrigée (procédure ci-dessous). La copie figée est gardée tant que ces owners ne
+sont pas repris (le nettoyage du §10 attend leur reprise).
+
+**Reprise d'un owner laissé hors bascule** (story 24.9, reprise du 11/11/2026) — 5–15 min par owner :
+
+1. Corriger la cause **sur Keevo** (jamais dans Bref : la source reste la copie figée) : cas d'identité (§4.5, §6.11 :
+   le titulaire du compte Keevo libère l'identifiant, l'e-mail ou le Google / Apple), ou correctif de l'outil déployé
+   (§7 étape 3). Une donnée Bref incohérente ne se corrige pas : l'owner reste hors bascule (pas d'acceptation d'écart
+   après le « go »).
+   Les owners laissés hors bascule et leur `brefOwnerId` (« Compte n » = `label`) :
+   ```bash
+   for S in BLOCKED FAILED GAP PENDING RECONCILED; do
+     curl -s "$API/api/v1/admin/migration/cutovers/$CUTOVER/owners?status=$S" "${H[@]}" \
+       | jq -r --arg s "$S" '.data[] | [$s, .label, (.companyName // "-"), (.reason // "-"), .brefOwnerId] | @tsv'
+   done
+   ```
+2. Lancer la reprise de **cet owner seul** :
+   ```bash
+   curl -s -X POST "$API/api/v1/admin/migration/cutovers/$CUTOVER/owners/<brefOwnerId>/recovery" "${H[@]}" \
+     -d '{"confirmation":"REPRENDRE"}' | jq '.data | {status: .statusLabel}'
+   ```
+   Attendu : 202, « Reprise d'un compte en cours ». Pendant la reprise, le « go », la relance et toute autre reprise
+   répondent 409 « Une reprise de compte est en cours : attendez la fin » (une seule à la fois).
+3. Suivre jusqu'au retour à « Activée » (≈ 7 s pour un owner moyen, quelques minutes pour un très gros) :
+   ```bash
+   curl -s "$API/api/v1/admin/migration/cutovers/$CUTOVER" "${H[@]}" | jq '.data | {status: .statusLabel,
+     erreur: .errorLabel, repris: [.recoveredOwners[] | {compte: .label, le: .recoveredAt}],
+     comptes: .report.recoveredOwners}'
+   ```
+   - `erreur` vide et l'owner dans `repris` : son import est réconcilié et son entreprise **seule** est active (les
+     autres entreprises ne bougent pas), ses invitations sont redatées (7 jours). **Aucun message n'est envoyé** : le
+     support le prévient lui-même (§11.3, envoi individuel).
+   - `erreur` « Compte n repris mais non activé : <motif> » : l'import est encore bloqué, en échec ou en écart ; son
+     entreprise reste suspendue (ou absente). Lire le motif (§6.11, §7 étape 1), corriger, recommencer à l'étape 2.
+   - « La reprise du compte s'est arrêtée avant la fin : relancez-la » : recommencer à l'étape 2 (l'import est
+     idempotent).
+4. Refaire la même commande sur un owner déjà « Activé » répond 200 sans rien changer. Autres refus (409, message
+   français) : avant le « go » (« Avant le « go », un compte se reprend en relançant la bascule », §7) ; bascule en
+   cours, en retour arrière ou retour arrière effectué ; owner « Non repris (rien à migrer) » ou « Supprimé par le
+   retour arrière » (« Ce compte n'a rien à reprendre… »). Un redémarrage du backend pendant une reprise laisse la
+   bascule « Reprise d'un compte en cours » : 30 minutes après le dernier signe de vie, refaire l'étape 2 **pour le
+   même owner** (la reprise interrompue est reprise, l'import est idempotent).
+5. Noter dans la fiche §14 : owner (« Compte n »), heure de reprise, cause corrigée. Quand plus aucun owner n'attend :
+   §10 point 3 (suppression de la copie) redevient possible.
 
 ## 9. J+1
 
@@ -786,8 +829,10 @@ le responsable déclare la bascule close (fiche §14). Ensuite seulement, **[UTI
    (`docker compose -f docker-compose.prod.yml up -d backend`).
 2. Vérifier que l'outil est débranché : `GET $API/api/v1/admin/migration/cutovers` répond toujours (lecture), un
    nouveau `POST …/cutovers` répond « source indisponible ».
-3. Supprimer le rôle et la copie — **sauf** si un owner laissé hors bascule (§6.13 point 3) attend encore sa reprise :
-   la copie figée est alors sa seule source ; la garder (rôle en lecture seule compris) jusqu'à sa reprise.
+3. Supprimer le rôle et la copie — **sauf** si un owner laissé hors bascule (§6.13 point 3) attend encore sa reprise
+   (§8.3, « Reprise d'un owner laissé hors bascule ») : la copie figée est alors sa seule source ; la garder (rôle en
+   lecture seule compris) **et** les lignes « Bascule Bref » de `.env` (points 1–2 reportés : la reprise lit la copie)
+   jusqu'à sa reprise.
    ```bash
    docker exec keevo_postgres psql -U "$POSTGRES_USER" -d postgres -c "DROP DATABASE bref_bascule" \
      -c "DROP ROLE keevo_bref_ro"

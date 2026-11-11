@@ -3,9 +3,9 @@ title: '24.9 — Cutover command: import every owner of a restored Bref database
 type: 'feature'
 created: '2026-11-11'
 status: 'done'
-baseline_revision: '5661e2498f3dec50abef9a9b49b80d9312335d11'
+baseline_revision: '9b42bed3b806ff0a445d78c7246af43e9bbab5f0'  # Reprise 11/11/2026 (first pass: 5661e2498f3dec50abef9a9b49b80d9312335d11)
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-24-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-24-8-reconciliation-bloquante.md'
@@ -220,7 +220,7 @@ Status: done.
 **Residual risks:** module-baseline deadlocks under parallel tenant creation (24-12); one owner's rows held in memory per worker; the reconciliation re-reads the source (D3).
 
 ### Deferred items routed 2026-11-11
-- [ ] [Deferred-from: revue 24.13, 2026-11-11] Reprise d'un owner après le « go » [keevo/backend/src/main/java/com/keevo/migration/application/BrefCutoverService.java `resume` / `rollbackOwner`] — un owner accepté hors bascule (import bloqué ou en échec) n'a aucun chemin d'import + activation une fois la bascule ACTIVATED (relance et retour arrière d'un owner refusés après le « go ») ; le runbook (§8.3, §10) garde la copie figée en attendant. Réglé par : une commande « reprendre un owner » sur une bascule activée (import depuis la copie, réconciliation, activation de cette seule entreprise, ligne mise à jour) ou la décision de ne jamais accepter d'owner hors bascule.
+- [x] (fait — reprise 11/11/2026, `…/owners/{ownerId}/recovery`) [Deferred-from: revue 24.13, 2026-11-11] Reprise d'un owner après le « go » [keevo/backend/src/main/java/com/keevo/migration/application/BrefCutoverService.java `resume` / `rollbackOwner`] — un owner accepté hors bascule (import bloqué ou en échec) n'a aucun chemin d'import + activation une fois la bascule ACTIVATED (relance et retour arrière d'un owner refusés après le « go ») ; le runbook (§8.3, §10) garde la copie figée en attendant. Réglé par : une commande « reprendre un owner » sur une bascule activée (import depuis la copie, réconciliation, activation de cette seule entreprise, ligne mise à jour) ou la décision de ne jamais accepter d'owner hors bascule.
 
 ## Mobile (React Native — dépôt AI/bref)
 
@@ -291,3 +291,179 @@ Lancer une bascule sur la base Bref restaurée, la suivre, lire son rapport arch
 ### Clé de suivi dashboard
 
 `d24-9-pilotage-vagues-rollback`
+
+## Reprise 11/11/2026
+
+### Intent (reprise)
+
+**Problem:** after the « go » the cutover refuses runs and rollbacks (409). An owner left out at go time — accepted with a reason while `BLOCKED`/`FAILED`/`PENDING`, or a `RECONCILED` line whose company the go could not activate — has no Keevo account and no way in: the runbook keeps the frozen copy « until its recovery » (§6.13 point 3, §8.3, §10) with nothing to run (routed by the 24-13 review).
+
+**Approach:** one additive super-admin command on an ACTIVATED cutover, `POST /api/v1/admin/migration/cutovers/{cutoverId}/owners/{ownerId}/recovery` `{"confirmation":"REPRENDRE"}`: under a cutover lock (new status `RECOVERING`, one conditional update), import that single owner again from the same frozen copy (the unchanged per-owner `process`: import + 24.8 reconciliation), apply the gate (line `RECONCILED` and `blockingOwners` empty for it), then activate only that company (SUSPENDED by the import → ACTIVE, its imported invitations re-dated, no message), record it (`recovered_owners` on the cutover, `recoveredOwners` in the report, `[ADMIN AUDIT]` lines) and release the lock back to `ACTIVATED`.
+
+### Boundaries & Constraints (reprise)
+
+**Always:**
+- Only on an `ACTIVATED` cutover (a stale `RECOVERING` one — heartbeat older than 30 min — is taken over like a stale run). Before the go: 409 « Avant le « go », un compte se reprend en relançant la bascule » (relaunch is the tool there).
+- Only an owner line of this cutover (else 422 `OWNER_NOT_IN_CUTOVER`); recoverable lines: `PENDING`, `GAP`, `BLOCKED`, `FAILED` (imported again), `RECONCILED` (not imported again: gate + activation only). `NOT_MIGRATED`/`ROLLED_BACK` → 409 « Ce compte n'a rien à reprendre ».
+- Idempotent: a line already `ACTIVATED` on an `ACTIVATED` cutover → 200 with the cutover, nothing written (no lock taken, no log of a recovery).
+- Asynchronous like a run: 202 with the cutover `RECOVERING`; the coordinator thread beats every minute while the owner imports; the outcome is the cutover back to `ACTIVATED` with `errorLabel` = null (activated) or the French reason the owner was not activated (« Compte n repris mais non activé : <motif> »), the owner line, `recoveredOwners[]` and the report.
+- Strict gate: the owner is activated only when its line ends `RECONCILED` **and** 24.8 `blockingOwners` is empty for it — no acceptance with a reason at recovery (D11). A gap or block leaves the company suspended (or absent) and the line with its reason; the operator fixes and recovers again.
+- Activation = the go's own unit of work, extracted and shared (`activateOwners`): `activateImportedTenants` (SUSPENDED with the import reason only) + re-dating of this owner's imported invitations, one platform transaction; line `ACTIVATED` only for a company actually activated. No event, no message, ever.
+- Source = the frozen restored copy only (`directory.available()` checked; 503 otherwise). Never a live Bref.
+- Concurrency: one lock per cutover — `transition({ACTIVATED, RECOVERING(stale)} → RECOVERING)`; while it is held the re-go (`activation`), runs, rollbacks and other recoveries are refused (409 « Une reprise de compte est en cours : attendez la fin »). Release = one fenced update `WHERE status = 'RECOVERING'`.
+- Super-admin only, French labels, ids as handles only.
+
+**Never:** a recovery before the go; a second owner in one call; acceptance of a gap at recovery; writes to the Bref copy; a message; changes to the import steps.
+
+### I/O & Edge-Case Matrix (reprise)
+
+| # | Given | When | Then |
+|---|---|---|---|
+| R1 | ACTIVATED cutover, owner `BLOCKED` (accepted out at the go), cause fixed on Keevo | recovery `REPRENDRE` | 202 `RECOVERING`; owner imported + reconciled; company ACTIVE; its invitations re-dated; line `ACTIVATED`; cutover `ACTIVATED`, `errorLabel` null, `recoveredOwners` += owner; other owners untouched; no message |
+| R2 | same owner, now `ACTIVATED` | recovery again | 200, cutover unchanged, nothing imported |
+| R3 | wrong / missing phrase | recovery | 422 « Tapez « REPRENDRE » pour confirmer la reprise du compte » |
+| R4 | owner not in the cutover / null | recovery | 422 « Ce compte ne fait pas partie de cette bascule » |
+| R5 | cutover READY / FAILED | recovery | 409 « Avant le « go », un compte se reprend en relançant la bascule » |
+| R6 | cutover RUNNING / ROLLING_BACK / ROLLED_BACK | recovery | 409 with the state's reason |
+| R7 | cutover RECOVERING (fresh heartbeat) | recovery, re-go, run, rollback | 409 « Une reprise de compte est en cours : attendez la fin » |
+| R8 | line `NOT_MIGRATED` | recovery | 409 « Ce compte n'a rien à reprendre : rien à migrer dans Bref » |
+| R9 | import still blocked / gap / failed | recovery | cutover back to ACTIVATED, `errorLabel` « Compte n repris mais non activé : <motif> », line keeps its status and reason, company not activated |
+| R10 | line `RECONCILED`, company suspended by the import | recovery | no import; gate + activation → R1 outcome |
+| R11 | company already active / suspended for another reason | recovery | not activated, `errorLabel` « … : entreprise déjà active ou suspendue pour un autre motif » (unless the line is ACTIVATED meanwhile) |
+| R12 | an exception while recovering | — | lock released: cutover ACTIVATED, `errorLabel` « La reprise du compte s'est arrêtée avant la fin : relancez-la » |
+| R13 | Bref copy not configured | recovery | 503 `MIGRATION_SOURCE_UNAVAILABLE`, nothing locked |
+
+### Code Map (reprise)
+
+- `keevo/backend/src/main/resources/db/migration/V93__migration_cutover_recovery.sql` — NEW: status check + `RECOVERING`; `uq_migration_cutovers_open` recreated excluding `RECOVERING` (a decided cutover); `recovered_owners JSONB NOT NULL DEFAULT '[]'`.
+- `migration/domain/model/CutoverStatus.java` — `RECOVERING("Reprise d'un compte en cours")`, not `open()`.
+- `migration/domain/model/Cutover.java` — `recoveredOwners` + record `RecoveredOwner(ownerId, label, recoveredBy, recoveredAt)`.
+- `migration/domain/model/CutoverReport.java` — `recoveredOwners` count (absent in older JSON → 0).
+- `migration/domain/port/in/BrefCutoverUseCase.java` — `RECOVERY_CONFIRMATION = "REPRENDRE"`, `recoverOwner(cutoverId, ownerId, confirmation, actorId)`.
+- `migration/domain/port/out/CutoverStore.java` + `adapter/out/persistence/JdbcCutoverStore.java` — `recovered(cutoverId, RecoveredOwner|null, errorLabel, report)` (fenced release); `aggregate(…, acceptedOwners, recoveredOwners)`; `TRANSITION_SQL` stale rule covers `RECOVERING`; column read.
+- `migration/application/BrefCutoverService.java` — `recoverOwner` (validation, no-op, lock, launch), `recoveryRun` (process with heartbeat, gate, `activateOwners`, release), `activateOwners` extracted from `activate`, `refusal(RECOVERING)`, `AFTER_GO_RUN` points to the recovery.
+- `migration/adapter/in/rest/AdminBrefCutoverController.java` — `POST /{cutoverId}/owners/{ownerId}/recovery` (202 started, 200 no-op), `recoveredOwners` in `CutoverResponse`.
+- Tests: `BrefCutoverServiceTest` (R1–R13 unit), `BrefCutoverFullContextTest` (R1, R2, R7 through the API with a `USERNAME_TAKEN` owner fixed on Keevo after the go).
+- Docs: `docs/RUNBOOK_BASCULE_BREF.md` §3.2, §6.13, §8.3, §10; `docs/entitlements/endpoints.md` regenerated.
+
+### Tasks & Acceptance (reprise)
+
+- [x] V93 + model/port/store changes (Code Map).
+- [x] Service `recoverOwner`/`recoveryRun`/`activateOwners`; controller route.
+- [x] Unit tests covering R1–R13; full-context scenario R1/R2/R7 (+ stale takeover through the real SQL).
+- [x] Runbook and endpoints.md; sprint-status 24-9 → done, `d24-9` updated.
+
+**AC:** Given an ACTIVATED cutover with an owner left out at the go whose cause is fixed, when the super-admin posts `…/owners/{ownerId}/recovery` with `REPRENDRE`, then 202, and polling `GET …/cutovers/{id}` shows `ACTIVATED`, the owner line `ACTIVATED`, `recoveredOwners` with that owner, its company ACTIVE and no other company changed; when posted again, then 200 and nothing changes.
+
+### Design Notes (reprise)
+
+**Patterns:** Command + State machine on the cutover (`ACTIVATED ⇄ RECOVERING`, one conditional update as the lock, fenced release — the 24.9/24.13 pattern); the asynchronous coordinator of a run reduced to one owner (worker thread + heartbeat loop); the go's activation extracted as one shared set-based Unit of Work (`activateOwners`) so the go and the recovery cannot diverge; the 24.8 Gate reused as is.
+
+**Cost:** per recovery: 1 conditional update (lock), the owner's own import + reconciliation (unchanged), 1 indexed `blockingOwners` query, 2 statements of activation + 1 targets query, 1 line update, the report's constant aggregates, 1 fenced release. No loop over owners or tenants. The idempotent no-op is 2 primary-key reads.
+
+**Decisions (default, conservative, 11/11/2026):**
+- D11 Strict gate at recovery: no acceptance with a reason after the go (an accepted gap would put a company with unexplained figures live without the go's collective decision). A gap is fixed then recovered again.
+- D12 Only owners listed by the cutover are recoverable (the source is frozen: no owner appears after the last run). A `RECONCILED` line is not imported again (the company exists, reconciled): gate + activation only.
+- D13 Serialized recoveries (one cutover lock) rather than per-owner locks: the re-go, runs and rollbacks already key on the cutover status; recoveries are rare (≤ 1 % of owners, §6.13) and 202 returns at once.
+- D14 `RECOVERING` is not « open »: it does not block the opening of a new cutover (unique index recreated).
+- D15 Recorded where the go records: `recovered_owners` (owner handle, actor, time) on the cutover, `recoveredOwners` count in the archived report, `[ADMIN AUDIT]` start/outcome log lines (ids and counts only).
+
+### Spec Change Log (reprise)
+
+_none_
+
+### Review Triage Log (reprise)
+
+#### 2026-11-11 — Review pass (reprise, 5 layers incl. FUS-NFR11)
+- verdicts: 42 findings — high 0, medium 9, low 17, false 4, maybe-false 4 (+ 8 rows rejected low/out-of-proportion counted in low)
+- findings:
+  - *FUS-NFR11 layer*
+  - `[low]` `[reject]` report fully re-aggregated for one owner (7 set-based scans of the cutover lines) — O(N) indexed, no N+1, recoveries rare; same pattern as the go/run; not worth an overload.
+  - `[medium]` `[patch]` `processBeating` heartbeats unguarded: a DB blip escapes the wait loop while the worker writes — `safeBeat` (try/catch/log) in both loops.
+  - `[low]` `[reject]` `recoverOwner` reads the cutover up to 3 times — constant per call, PK reads.
+  - `[false]` `[reject]` `recovered_owners` growth — bounded by the cutover's owners (no-op + lock prevent duplicates), same as `accepted_owners`.
+  - `[false]` `[reject]` fenced lock pattern note — confirms the design, no defect.
+  - *Intent alignment layer*
+  - `[medium]` `[patch]` concurrency only mock-tested; spec claimed R7 through the API — full-context test now puts the cutover in a live `RECOVERING` (fresh heartbeat): recovery, go and run 409 through the real SQL; then a stale heartbeat (31 min) is taken over by the recovery (202).
+  - `[low]` `[reject]` invitation re-dating not asserted through the API — the shared `activateOwners` unit of work is asserted through the API at the go (same code) and in the recovery unit test.
+  - `[low]` `[reject]` « no message » not asserted — no messaging port on the path; live check: no send through the noop adapter.
+  - `[false]` `[reject]` frozen copy not checked in code — by design the only configured source is the restored copy (runbook §6.7, §10); the code cannot tell a copy from a live base.
+  - `[medium]` `[patch]` Dashboard section did not mention the endpoint, `RECOVERING`, `recoveredOwners` — added below (spec, d24-9).
+  - `[low]` `[patch]` formatting slip `String second =json(` — fixed.
+  - `[low]` `[reject]` failed attempts not durable — the owner line keeps its status and reason; `[ADMIN AUDIT]` logs carry each outcome; an attempts history is beyond the routed item.
+  - `[medium]` `[patch]` (same root as row 6) R7 claimed in the Code Map — now true.
+  - *Verification-gap layer*
+  - `[medium]` `[patch]` live lock / stale takeover never run against the real `TRANSITION_SQL` — covered by the full-context addition above.
+  - `[low]` `[reject]` heartbeat during a > 1 min import untested — would need an injectable interval; `safeBeat` is a plain call.
+  - *Blind hunter*
+  - `[medium]` `[patch]` crash between the tenant activation and the line update leaves the line RECONCILED forever — the line update now runs inside the same platform transaction as the activation (go and recovery).
+  - `[low]` `[patch]` stale lock may be taken over by another owner's recovery — runbook step 4: redo step 2 for the same owner.
+  - `[low]` `[reject]` `error_label` shared and overwritten — the owner line keeps its own status/reason; the label is the latest outcome by design (as the go).
+  - `[low]` `[reject]` `finished_at`/`totalMs` rewritten — same behaviour as the re-go; totalMs is « start → latest stage ».
+  - `[low]` `[reject]` full aggregate per recovery — see FUS row 1.
+  - `[medium]` `[patch]` `recoveredOwners` exposed only UUIDs (no technical data in UI) — `label` (« Compte n ») stored and returned; runbook jq shows it.
+  - `[low]` `[patch]` runbook: no way to find `<brefOwnerId>` — listing command added (§8.3 step 1).
+  - `[low]` `[patch]` runbook 409 list incomplete — completed (§3.2 row, §8.3 step 4).
+  - `[low]` `[patch]` RECONCILED line without company gives a self-contradicting reason and is never re-imported — such a line is now imported again.
+  - `[low]` `[patch]` launcher failure keeps the lock 30 min — release with « relancez-la » then rethrow.
+  - `[maybe-false]` `[reject]` heartbeats every minute and unfenced — 1 min vs 30 min STALE; fencing token is the accepted D7 pattern (24.12 measures the largest owner).
+  - `[false]` `[reject]` useless `ownersStatus` on empty list — `JdbcCutoverStore.ownersStatus` returns before any SQL on an empty list.
+  - `[low]` `[patch]` test gaps (live lock, stale takeover) — full-context addition; processBeating internals rejected (see VG row 2).
+  - `[low]` `[patch]` formatting slip — duplicate of intent row, fixed.
+  - `[low]` `[patch]` work not in the diff (spec Dashboard, d24-9) — done in the spec and sprint-status.
+  - *Edge-case hunter*
+  - `[medium]` `[patch]` heartbeat throwing in the finally loop — `safeBeat` (dup of FUS row 2).
+  - `[low]` `[patch]` one heartbeat failure aborts the recovery — `safeBeat`.
+  - `[maybe-false]` `[reject]` stale takeover while the first thread lives: its release frees the new lock — needs a > 30 min silent coordinator while it beats every minute; same accepted risk as D7 (run/rollback), routed measurement in 24.12.
+  - `[medium]` `[patch]` crash between activation and line update — dup of blind row 1 (same transaction).
+  - `[low]` `[reject]` crash after the line ACTIVATED but before the release: the owner is active but missing from `recoveredOwners` — only after a crash in a few ms window; owner line, company and logs are right; an activated-at-go owner is indistinguishable without more state.
+  - `[medium]` `[patch]` recovery taking the lock just after a re-go's transition drops the re-go's acceptances (`activated()` fenced on ACTIVATED) — fence widened to ACTIVATED or RECOVERING.
+  - `[low]` `[patch]` interrupt flag set before the release may make it fail — flag cleared for the release, restored after.
+  - `[low]` `[patch]` RECONCILED without tenant — dup of blind row (re-import).
+  - `[low]` `[patch]` activated owner during another (fresh) recovery got 409 instead of the documented 200 — no-op now also on a fresh RECOVERING lock.
+  - `[medium]` `[patch]` R7 claimed but not exercised end to end — dup of intent row 1.
+  - `[maybe-false]` `[reject]` « a late thread changes nothing » overstated — dup of the fencing row.
+  - `[maybe-false]` `[reject]` R12 release failure leaves RECOVERING 30 min — logged; the next recovery takes it over after STALE (documented D7 behaviour).
+
+### Auto Run Result (reprise 11/11/2026)
+
+Status: done.
+
+**Summary.** After the « go », `POST /api/v1/admin/migration/cutovers/{cutoverId}/owners/{ownerId}/recovery` `{"confirmation":"REPRENDRE"}` recovers ONE owner left out (accepted out, blocked, failed, gap, pending, or reconciled but not activated): under the new cutover lock `RECOVERING` (V93, one conditional update, stale takeover after 30 min, fenced release), the run's own `process` imports it again from the frozen copy (beating every minute), the 24.8 gate is applied strictly (no acceptance), then the go's unit of work — now shared as `activateOwners`, line update in the same transaction — activates that company alone and re-dates its invitations, no message. Recorded in `recovered_owners` (label « Compte n », actor, time), `report.recoveredOwners`, `[ADMIN AUDIT]` logs. Idempotent (200 on an activated owner); 202 otherwise.
+
+**Files:** V93 `migration_cutover_recovery`; `CutoverStatus` (+RECOVERING), `Cutover` (+recoveredOwners, RecoveredOwner), `CutoverReport` (+recoveredOwners), `BrefCutoverUseCase` (+recoverOwner, Recovery, REPRENDRE), `CutoverStore`/`JdbcCutoverStore` (+recovered, aggregate arity, stale rule, activated fence), `BrefCutoverService` (recovery, activateOwners), `AdminBrefCutoverController` (route, response fields); tests `BrefCutoverServiceTest` (+13), `BrefCutoverFullContextTest` (recovery scenario); `docs/RUNBOOK_BASCULE_BREF.md` §3.2, §6.13, §6.18, §8.3, §10; `keevo/backend/docs/entitlements/endpoints.md`.
+
+**Review:** 42 findings; patched by verdict: 0 high, 9 medium (5 root causes: heartbeat guard, real-SQL lock tests, activation/line atomicity, re-go/recovery fence, label for the UI) + 15 low; rejected with reasons above; nothing deferred.
+
+**Verification:** migration 187 (incl. `BrefCutoverFullContextTest`), architecture 173 (endpoints.md regenerated), shared 1 398 — green. Live check (`bref_src_t249b` = test schemas + `bref-synthetic-load.sql` 6+1 owners + 1 owner blocked by a Keevo username; `keevo_dev_t249b`, port 4652, WhatsApp noop, FCM off; databases dropped): run READY 7 reconciled + 1 blocked → recovery before the go 409 → go (blocked accepted out) → username freed on Keevo → recovery 202 → ACTIVATED, `recoveredOwners` 1, report 1, its company ACTIVE without suspension, other tenants identical, no message → recovery again 200, no new batch → re-go 200.
+
+**Follow-up review recommended:** `false` — no high; the medium patches are each covered by a test (full-context lock/takeover, unit atomicity through the shared unit of work); residual risk is the D7 stale-takeover fencing shared with the run.
+
+## Dashboard super-admin — reprise 11/11/2026 (autre dépôt)
+
+### Statut
+
+API livrée (reprise 24.9 du 11/11/2026), `AdminBrefCutoverController#recoverOwner`. Clé de suivi : `d24-9-pilotage-vagues-rollback` (complétée).
+
+### Ce qui est fait côté API
+
+Après le « go », reprendre un compte resté hors bascule : import depuis la copie figée, réconciliation, activation de sa seule entreprise, en arrière-plan ; une reprise à la fois.
+
+### À utiliser
+
+- `POST /api/v1/admin/migration/cutovers/{id}/owners/{ownerId}/recovery` `{"confirmation":"REPRENDRE"}` → 202 `data` = bascule `status` `RECOVERING` (« Reprise d'un compte en cours ») ; 200 si le compte est déjà « Activé » (rien fait). 422 `VALIDATION_FAILED` « Tapez « REPRENDRE » pour confirmer la reprise du compte », « Ce compte ne fait pas partie de cette bascule » ; 409 `INVALID_STATE` « Avant le « go », un compte se reprend en relançant la bascule », « Une reprise de compte est en cours : attendez la fin », « Ce compte n'a rien à reprendre : rien à migrer dans Bref ou supprimé par le retour arrière », ou le motif de l'état (en cours, retour arrière) ; 503 `MIGRATION_SOURCE_UNAVAILABLE`.
+- `GET …/cutovers/{id}` : nouveau statut `RECOVERING` ; `errorLabel` après une reprise = `null` (compte activé) ou « Compte n repris mais non activé : <motif> » ou « La reprise du compte s'est arrêtée avant la fin : relancez-la » ; nouveau champ `recoveredOwners[]` (`ownerId` = poignée, `label` « Compte n », `recoveredAt`) ; `report.recoveredOwners` (nombre).
+- Pendant `RECOVERING`, `…/activation`, `…/runs`, `…/rollback`, `…/owners/{ownerId}/rollback` répondent 409 « Une reprise de compte est en cours : attendez la fin ».
+
+### À implémenter côté dashboard
+
+1. Sur une bascule « Activée », dans la liste des comptes, action « Reprendre ce compte » sur les lignes « Import bloqué », « Import en échec », « Écart de réconciliation », « En attente » et « Importé et réconcilié » non activées ; dialogue où l'on tape `REPRENDRE`.
+2. Suivi toutes les 3 s tant que `RECOVERING` ; à la fin, afficher `errorLabel` s'il existe, sinon « Compte n repris et activé ».
+3. Encadré « Comptes repris après le « go » » : `label` et date (`recoveredAt`), jamais l'identifiant.
+4. Désactiver les autres actions pendant `RECOVERING`.
+
+### Critères d'acceptation dashboard
+
+- **Given** une bascule activée avec un compte « Import bloqué » dont la cause est corrigée, **When** le super-admin tape REPRENDRE, **Then** il voit « Reprise d'un compte en cours » puis « Activée », le compte « Activé » et l'encadré « Comptes repris » avec « Compte n ».
+- **Given** un compte encore bloqué, **When** il le reprend, **Then** il voit « Compte n repris mais non activé : <motif> ».
+- **Given** une bascule prête (avant le « go »), **When** il tente une reprise, **Then** il voit « Avant le « go », un compte se reprend en relançant la bascule ».
