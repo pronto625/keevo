@@ -768,6 +768,28 @@ Scope: move the remaining per-tenant query loops of the super-admin services to 
 
 Interim AC: Given 500 tenants, When each of these endpoints is called, Then it issues a bounded number of statements (one per chunk of 100 tenants), and one broken tenant schema is skipped with a warning instead of failing the call.
 
+### Story 19.11c : Autres écrans et tâches super-admin sans boucle par compte
+
+As a **super-admin**,
+I want **que les écrans plateforme restants (comptes, synchronisation, revenus, alertes, santé) restent rapides quel que soit le nombre de comptes**,
+So that **la console tient la charge après la migration Bref (R1, FUS-NFR11)**.
+
+Scope: same pattern as 19.11b (`CrossTenantSql.withPresence` + chunked `UNION ALL`, presence-aware branches, per-tenant retry) for the per-tenant loops found while delivering 19.11b, outside its three routed services.
+
+- [ ] [Deferred-from: 19-11b, 2026-11-10] `AdminTenantService` — list enrichment runs 2 statements per tenant of the page (store count + last activity, owner name), the « dernière activité » filter runs one statement per candidate tenant (unbounded) [`admin/tenant/application/service/AdminTenantService.java:335-420`]
+- [ ] [Deferred-from: 19-11b, 2026-11-10] `AdminSyncMonitoringService` — 2 schema counts + 2 `user_sync_state` queries per tenant [`admin/sync_monitoring/application/service/AdminSyncMonitoringService.java:57-90`]
+- [ ] [Deferred-from: 19-11b, 2026-11-10] `AdminRevenueService` — current plan read per tenant schema [`admin/revenue/application/service/AdminRevenueService.java:358-375`]
+- [ ] [Deferred-from: 19-11b, 2026-11-10] `JdbcAlertSourcesAdapter` — two loops, one statement per live tenant each (alerts feed) [`admin/alerts/adapter/out/persistence/JdbcAlertSourcesAdapter.java:114-145`]
+- [ ] [Deferred-from: 19-11b, 2026-11-10] `JdbcPlatformProbeAdapter.syncRefusalsSince` — one count per live schema (health page) [`admin/platform/adapter/out/persistence/JdbcPlatformProbeAdapter.java:62-78`]
+- [ ] [Deferred-from: 19-11b, 2026-11-10] background jobs to review for batching: `AdminPlanService` expiry alerts (one statement per expiring tenant), `JdbcPushAudienceAdapter` (device tokens per company), `AdminFeedbackLabelService` (one employees query per distinct schema of a page — bounded by the page size)
+
+- [ ] [Deferred-from: review 19-11b, 2026-11-10] admin catalogue list: no `products(updated_at, id)` index, so each branch top-N sorts its whole products table; deep pages read chunks × (offset + size) rows — add the tenant index (catalog module migration) and consider keyset pagination on `(updated_at, tenant_id, id)` [`admin/catalog/application/service/AdminCatalogService.java` BRANCH_ORDER]
+- [ ] [Deferred-from: review 19-11b, 2026-11-10] admin catalogue export loads every product of every tenant into memory before writing the CSV — stream per chunk to the writer or cap the export [`AdminCatalogService.execute` export path, `ProductsCsvWriter`]
+- [ ] [Deferred-from: review 19-11b, 2026-11-10] `TenantLastActivitySql`: the sales leg `MAX(LEAST(COALESCE(occurred_at, created_at), now()))` scans all sales (no usable index), the audit leg walks `idx_audit_log_occurred` past SYSTEM rows, the `user_daily_activity` leg reads every row of the tenant — index-backed `ORDER BY … LIMIT 1` forms + partial indexes [`admin/TenantLastActivitySql.java`]
+- [ ] [Deferred-from: review 19-11b, 2026-11-10] catalogue search `p.name ILIKE ?` cannot use the trigram index on `lower(name)`; adoption EXISTS probes on `inventory_sessions.started_at` / `reports` lack an index [`AdminCatalogService.productFilters`, `AdminAnalyticsService.adoptionBranch`]
+
+Interim AC: Given 3 tenants then 12, When each of these endpoints is called, Then it issues the same number of statements (statement-count test as in 19.11b), and one broken tenant schema is skipped with a warning instead of failing the call.
+
 ### Story 19.12 : Boutiques étendues et préférence de parcours de vente
 
 As a **owner**,
