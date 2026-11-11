@@ -71,8 +71,8 @@ class JdbcCutoverStore implements CutoverStore {
     static final String FINISH_SQL = """
             UPDATE public.migration_cutovers SET status = ?, error_label = ?, report = ?::jsonb, finished_at = now(),
                                                  heartbeat_at = now()
-             WHERE id = ?
-            """;
+             WHERE id = ? AND status IN ('RUNNING', 'ROLLING_BACK')
+            """; // review 24.9: a late coordinator never overwrites a decision (ACTIVATED, a newer state)
 
     /** Owners appended after the last position, in the listing order; one statement per page. */
     static final String ADD_OWNERS_SQL = """
@@ -273,9 +273,11 @@ class JdbcCutoverStore implements CutoverStore {
 
     @Override
     public void activated(UUID cutoverId, UUID actor, List<Cutover.AcceptedOwner> accepted) {
-        jdbc.update("UPDATE public.migration_cutovers SET status = 'ACTIVATED', activated_by = ?, activated_at = now(), "
-                + "accepted_owners = accepted_owners || ?::jsonb, finished_at = now(), heartbeat_at = now() "
-                + "WHERE id = ?", actor, write(accepted), cutoverId);
+        // the status moved to ACTIVATED through transition(); the first « go » keeps its actor and time
+        jdbc.update("UPDATE public.migration_cutovers SET activated_by = coalesce(activated_by, ?), "
+                + "activated_at = coalesce(activated_at, now()), accepted_owners = accepted_owners || ?::jsonb, "
+                + "finished_at = now(), heartbeat_at = now() WHERE id = ? AND status = 'ACTIVATED'", actor,
+                write(accepted), cutoverId);
     }
 
     @Override

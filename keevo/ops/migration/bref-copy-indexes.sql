@@ -7,7 +7,7 @@
 --
 -- Run it as the owner of the restored database (psql -d <copie> -f bref-copy-indexes.sql), right after the restore and
 -- BEFORE granting the read-only role to the tool (runbook docs/RUNBOOK_BASCULE_BREF.md §3). Idempotent. The cutover
--- report shows « index de la copie : n / 10 ».
+-- report shows « index de la copie : n / 11 ».
 \set ON_ERROR_STOP on
 
 CREATE INDEX IF NOT EXISTS keevo_bref_shop_user ON shop ("userId");
@@ -24,6 +24,10 @@ DO $$
 BEGIN
     IF to_regclass('public.plan_payment_request') IS NOT NULL THEN
         EXECUTE 'CREATE INDEX IF NOT EXISTS keevo_bref_plan_request_owner ON plan_payment_request ("ownerId")';
+    END IF;
+    -- Story 24.6 item: the assistant's conversations are read by "userId" (no index in Bref)
+    IF to_regclass('public.ai_conversation') IS NOT NULL THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS keevo_bref_ai_conversation_user ON ai_conversation ("userId")';
     END IF;
     IF to_regclass('public.sms_recharge_request') IS NOT NULL THEN
         EXECUTE 'CREATE INDEX IF NOT EXISTS keevo_bref_sms_recharge_user ON sms_recharge_request ("userId")';

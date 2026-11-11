@@ -1,8 +1,8 @@
 -- Story 24.9 (ADR-10) — SYNTHETIC load added to a restored COPY of Bref to measure the cutover's throughput (24.9, then
 -- the dress rehearsal 24.12). Never run it on Bref, never on a copy that will be used for the real cutover.
 --
--- No real data: every id is derived from md5('t249-…'), names are « Synthèse … », phones +2376992xxxxx / +2376993xxxxx.
--- Shape: :owners owners (default 200), 1 shop each (every 10th owner has 2), 10 products and 5 clients per shop, one
+-- No real data: every id is derived from md5('t249-…'), names are « Synthèse … », phones +23769xxxxxxx (owners), +23768xxxxxxx (sellers), +23767xxxxxxx (clients).
+-- Shape: :owners + 1 owners (default 200 + the large one), 1 shop each (every 10th owner has 2), 10 products and 5 clients per shop, one
 -- seller per 5th owner, 5 to 45 documents per owner (≈ 25 on average: 90 % sales paid / pending / partial, 10 % quotes,
 -- 2 lines each), 3 expenses; plus ONE large owner with :big_docs documents (default 20 000) to measure the chunked
 -- writes. Usage:
@@ -23,7 +23,7 @@ BEGIN;
 CREATE TEMP TABLE syn_owner AS
 SELECT n,
        md5('t249-owner-' || n)::uuid AS id,
-       '+2376992' || lpad(n::text, 5, '0') AS phone,
+       '+23769' || lpad(n::text, 7, '0') AS phone,
        CASE WHEN n = 0 THEN :big_docs ELSE 5 + (n * 7) % 41 END AS docs,
        timestamp '2025-01-05 09:00:00' + (n % 300) * interval '1 day' AS created
   FROM generate_series(0, :owners) AS n;
@@ -44,7 +44,7 @@ SELECT id, owner_id, 'Boutique Synthèse ' || n || '-' || k, 'Adresse synthèse'
 INSERT INTO "user" (id, password, "firstName", "lastName", phone, role, "shopId", "isActive", "isVerified",
                     "createdAt", "updatedAt")
 SELECT md5('t249-seller-' || s.n)::uuid, '$2b$10$abcdefghijklmnopqrstuuJ0pOaKGXUqLqRZ1xWd9ycfhzbMSqHmu', 'Synthèse',
-       'Vendeur ' || s.n, '+2376993' || lpad(s.n::text, 5, '0'), 'seller', s.id::text, true, true, s.created, s.created
+       'Vendeur ' || s.n, '+23768' || lpad(s.n::text, 7, '0'), 'seller', s.id::text, true, true, s.created, s.created
   FROM syn_shop s WHERE s.k = 1 AND s.n % 5 = 0;
 
 INSERT INTO product (id, "shopId", name, "nameKey", "productKey", "unitPrice", "createdAt", "updatedAt")
@@ -54,7 +54,7 @@ SELECT md5('t249-product-' || s.n || '-' || s.k || '-' || p)::uuid, s.id::text, 
 
 INSERT INTO customer (id, "shopId", name, phone, "createdAt", "updatedAt")
 SELECT md5('t249-customer-' || s.n || '-' || s.k || '-' || c)::uuid, s.id, 'Client synthèse ' || c,
-       '+2376994' || lpad(((s.n * 2 + s.k) * 10 + c)::text, 5, '0'), s.created, s.created
+       '+23767' || lpad(((s.n * 2 + s.k) * 10 + c)::text, 7, '0'), s.created, s.created
   FROM syn_shop s, generate_series(1, 5) AS c;
 
 CREATE TEMP TABLE syn_invoice AS

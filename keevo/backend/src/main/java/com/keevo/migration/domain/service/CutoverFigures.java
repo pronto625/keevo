@@ -62,7 +62,7 @@ public final class CutoverFigures {
                 labels.add(kind == null ? c.label() : kind.label());
             }
             return new Outcome(nothing ? CutoverOwnerStatus.NOT_MIGRATED : CutoverOwnerStatus.BLOCKED,
-                    reason(String.join(" ; ", labels)));
+                    labels.isEmpty() ? UNEXPECTED : reason(String.join(" ; ", labels)));
         }
         if (batch.status() != BatchStatus.COMPLETED) {
             return new Outcome(CutoverOwnerStatus.FAILED, reason(batch.errorLabel() == null
@@ -80,8 +80,8 @@ public final class CutoverFigures {
         Set<String> checks = new LinkedHashSet<>();
         report.checks().stream().filter(c -> c.status() == ReconciliationLine.Status.GAP)
                 .forEach(c -> checks.add(c.label()));
-        return new Outcome(CutoverOwnerStatus.GAP, reason(report.gaps() + " écart(s) hors tolérance : "
-                + String.join(" ; ", checks)));
+        return new Outcome(CutoverOwnerStatus.GAP, checks.isEmpty() ? NOT_RECONCILED
+                : reason(report.gaps() + " écart(s) hors tolérance : " + String.join(" ; ", checks)));
     }
 
     /** The French label of an error that stopped one owner (the exception's message is never shown). */

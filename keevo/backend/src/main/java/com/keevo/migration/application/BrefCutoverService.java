@@ -92,6 +92,10 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             + "en échec). Corrigez-les ou acceptez-les un par un avec un motif.";
     static final String RUNNING = "La bascule est en cours : attendez la fin";
     static final String AFTER_GO = "Après le « go », plus de retour arrière automatique : corrigez sur Keevo (runbook)";
+    static final String AFTER_GO_RUN = "Le « go » est donné : la bascule ne peut plus être relancée (un owner "
+            + "retardataire s'importe seul, runbook)";
+    static final String ROLLBACK_STARTED = "Un retour arrière a commencé : terminez-le (relancez-le), puis ouvrez "
+            + "une nouvelle bascule";
     static final String ROLLED_BACK = "Retour arrière effectué : ouvrez une nouvelle bascule";
     static final String INTERRUPTED = "La bascule s'est arrêtée avant la fin : relancez-la";
     static final String ROLLBACK_INCOMPLETE = "Retour arrière incomplet : %d compte(s) à reprendre, relancez-le";
@@ -105,6 +109,8 @@ public class BrefCutoverService implements BrefCutoverUseCase {
     private final MigrationRecordStore records;
     private final LegacyIdentityImportPort identity;
     private final TenantDeletionPort deletion;
+    /** Story 24.6 item — the browser subscriptions the import added (an account the import linked keeps its own). */
+    private final com.keevo.messaging.api.NotificationImportPort notifications;
     private final MigrationUnitOfWork uow;
     private final ObjectProvider<MeterRegistry> meters;
     private final Clock clock;
@@ -113,7 +119,8 @@ public class BrefCutoverService implements BrefCutoverUseCase {
 
     public BrefCutoverService(BrefOwnerImportService imports, BrefReconciliationUseCase reconciliation,
                               BrefOwnerDirectory directory, CutoverStore store, MigrationRecordStore records,
-                              LegacyIdentityImportPort identity, TenantDeletionPort deletion, MigrationUnitOfWork uow,
+                              LegacyIdentityImportPort identity, TenantDeletionPort deletion,
+                              com.keevo.messaging.api.NotificationImportPort notifications, MigrationUnitOfWork uow,
                               ObjectProvider<MeterRegistry> meters, Clock clock) {
         this.imports = imports;
         this.reconciliation = reconciliation;
@@ -122,6 +129,7 @@ public class BrefCutoverService implements BrefCutoverUseCase {
         this.records = records;
         this.identity = identity;
         this.deletion = deletion;
+        this.notifications = notifications;
         this.uow = uow;
         this.meters = meters;
         this.clock = clock;
@@ -151,9 +159,14 @@ public class BrefCutoverService implements BrefCutoverUseCase {
     @Override
     public Cutover resume(UUID cutoverId, UUID actorId) {
         Cutover c = cutover(cutoverId);
+        if (c.progress().stream().anyMatch(p -> CutoverOwnerStatus.ROLLED_BACK.name().equals(p.status()))) {
+            // a rollback has started: re-running would leave its removed owners out of the « go » (review 24.9)
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, ROLLBACK_STARTED);
+        }
         if (!store.transition(cutoverId, EnumSet.of(CutoverStatus.READY, CutoverStatus.FAILED, CutoverStatus.RUNNING),
                 CutoverStatus.RUNNING, STALE, true)) {
-            throw DomainException.userFacing(ErrorCode.INVALID_STATE, refusal(c.status()));
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, c.status() == CutoverStatus.ACTIVATED
+                    ? AFTER_GO_RUN : refusal(c.status()));
         }
         log.info("[ADMIN AUDIT] Bref cutover resumed: actor={} cutover={}", actorId, cutoverId);
         launcher.accept(() -> run(cutoverId, actorId, c.parallelism()));
@@ -176,7 +189,15 @@ public class BrefCutoverService implements BrefCutoverUseCase {
         lines.forEach(l -> byId.put(l.brefOwnerId(), l));
         Map<UUID, String> reasons = acceptances(accepted, byId.keySet());
 
-        Map<UUID, String> blocking = reconciliation.blockingOwners(byId.keySet());
+        // the 24.8 gate, plus any line the run did not reconcile (an owner FAILED before a new batch keeps an
+        // older reconciled batch the gate would let through — review 24.9)
+        Map<UUID, String> blocking = new LinkedHashMap<>(reconciliation.blockingOwners(byId.keySet()));
+        for (CutoverOwner line : lines) {
+            if (line.status() != CutoverOwnerStatus.RECONCILED) {
+                blocking.putIfAbsent(line.brefOwnerId(), line.reason() == null ? line.status().label()
+                        : line.reason());
+            }
+        }
         List<Map<String, Object>> refused = new ArrayList<>();
         blocking.forEach((owner, reason) -> {
             if (!reasons.containsKey(owner)) {
@@ -192,6 +213,11 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             throw DomainException.userFacing(ErrorCode.INVALID_STATE, BLOCKED_GO.formatted(refused.size()),
                     Map.of("blockingOwners", refused));
         }
+        // the decision point: one conditional update (a rollback or a run started meanwhile wins — review 24.9)
+        if (!store.transition(cutoverId, EnumSet.of(CutoverStatus.READY, CutoverStatus.ACTIVATED),
+                CutoverStatus.ACTIVATED, STALE, false)) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, refusal(cutover(cutoverId).status()));
+        }
 
         // clear owners, and accepted owners whose import completed (an accepted owner without it stays out — D2)
         Map<UUID, UUID> tenantOf = new LinkedHashMap<>();
@@ -203,27 +229,36 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                 tenantOf.put(line.brefOwnerId(), line.tenantId());
             }
         }
-        List<UUID> invitations = new ArrayList<>();
-        store.targets(tenantOf.keySet(), List.of(MigrationRecord.INVITATIONS)).values()
-                .forEach(t -> invitations.addAll(t.getOrDefault(MigrationRecord.INVITATIONS, List.of())));
         int[] redated = new int[1];
+        List<UUID> activatedOwners = new ArrayList<>();
         Set<UUID> activated = uow.platform(() -> {
             Set<UUID> done = identity.activateImportedTenants(tenantOf.values(), BrefMappings.SUSPENSION_REASON);
+            tenantOf.forEach((owner, tenant) -> {
+                if (done.contains(tenant)) {
+                    activatedOwners.add(owner);
+                }
+            });
+            // only the invitations of the companies activated now (review 24.9)
+            List<UUID> invitations = new ArrayList<>();
+            store.targets(activatedOwners, List.of(MigrationRecord.INVITATIONS)).values()
+                    .forEach(t -> invitations.addAll(t.getOrDefault(MigrationRecord.INVITATIONS, List.of())));
             redated[0] = identity.redateImportedInvitations(invitations);
             return done;
         });
-        List<UUID> activatedOwners = tenantOf.entrySet().stream().filter(e -> activated.contains(e.getValue()))
-                .map(Map.Entry::getKey).toList();
         store.ownersStatus(cutoverId, activatedOwners, CutoverOwnerStatus.ACTIVATED, null);
         Instant now = clock.instant();
+        Set<UUID> alreadySigned = new java.util.HashSet<>();
+        c.acceptedOwners().forEach(a -> alreadySigned.add(a.ownerId()));
         List<Cutover.AcceptedOwner> signed = reasons.entrySet().stream()
+                .filter(e -> blocking.containsKey(e.getKey()) && !alreadySigned.contains(e.getKey()))
                 .map(e -> new Cutover.AcceptedOwner(e.getKey(), e.getValue(), actorId, now)).toList();
         store.activated(cutoverId, actorId, signed);
         CutoverReport.Durations previous = c.report().durations();
         store.saveReport(cutoverId, report(cutoverId, c, previous.listingMs(), previous.runWallMs(), ms(t0),
                 previous.rollbackMs(), c.report().sourceIndexes(), c.acceptedOwners().size() + signed.size()));
-        log.info("[ADMIN AUDIT] Bref cutover go: actor={} cutover={} companiesActivated={} invitationsRedated={} "
-                + "acceptedOwners={}", actorId, cutoverId, activated.size(), redated[0], signed.size());
+        log.info("[ADMIN AUDIT] Bref cutover go: actor={} cutover={} companiesActivated={} notActivated={} "
+                        + "invitationsRedated={} acceptedOwners={}", actorId, cutoverId, activated.size(),
+                tenantOf.size() - activated.size(), redated[0], signed.size());
         return cutover(cutoverId);
     }
 
@@ -303,11 +338,16 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                     break;
                 }
                 for (CutoverOwner owner : page) {
-                    permits.acquire();
+                    while (!permits.tryAcquire(1, TimeUnit.MINUTES)) {
+                        store.heartbeat(cutoverId); // long owners: the coordinator stays visibly alive
+                    }
                     pool.execute(() -> {
                         try {
                             process(cutoverId, owner, actorId);
                             beat(cutoverId, lastBeat);
+                        } catch (Error e) {
+                            log.error("[ADMIN AUDIT] Bref cutover owner stopped: cutover={} owner={} error={}",
+                                    cutoverId, owner.brefOwnerId(), e.getClass().getSimpleName());
                         } finally {
                             permits.release();
                         }
@@ -331,9 +371,22 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                     ? "Base Bref restaurée inaccessible : relancez la bascule quand elle l'est" : INTERRUPTED;
         } finally {
             pool.shutdownNow();
+            try {
+                // never close the run while a worker still writes (a relaunch would race it — review 24.9)
+                while (!pool.awaitTermination(1, TimeUnit.MINUTES)) {
+                    store.heartbeat(cutoverId);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
         try {
             Cutover c = cutover(cutoverId);
+            if (end == CutoverStatus.READY && c.progress().stream()
+                    .anyMatch(p -> CutoverOwnerStatus.PENDING.name().equals(p.status()))) {
+                end = CutoverStatus.FAILED; // an owner was never processed: not ready for the decision
+                error = INTERRUPTED;
+            }
             CutoverReport.Durations previous = c.report().durations();
             CutoverReport report = report(cutoverId, c, listingMs, ms(wall), previous.activationMs(),
                     previous.rollbackMs(), probe, c.acceptedOwners().size());
@@ -411,7 +464,7 @@ public class BrefCutoverService implements BrefCutoverUseCase {
         int removed = 0;
         AtomicLong lastBeat = new AtomicLong(System.currentTimeMillis());
         List<String> tables = List.of(MigrationRecord.TENANTS, MigrationRecord.USERS, MigrationRecord.LINKED_USERS,
-                MigrationRecord.AUTHENTICATORS);
+                MigrationRecord.AUTHENTICATORS, MigrationRecord.WEB_PUSH_SUBSCRIPTIONS);
         try {
             int position = 0;
             while (true) {
@@ -481,9 +534,13 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                 if (prep == RemovalPreparation.REFUSED) {
                     return ROLLBACK_REFUSED;
                 }
-                if (prep == RemovalPreparation.READY) {
-                    deletion.forgetImportedNow(tenantId);
+                if (prep == RemovalPreparation.READY && !deletion.forgetImportedNow(tenantId)) {
+                    return ROLLBACK_OWNER_FAILED; // no longer DELETION_PENDING: keep its records (review 24.9)
                 }
+            }
+            List<UUID> webPush = targets.getOrDefault(MigrationRecord.WEB_PUSH_SUBSCRIPTIONS, List.of());
+            if (!webPush.isEmpty()) {
+                uow.platform(() -> notifications.deleteImportedWebPushSubscriptions(webPush));
             }
             Set<UUID> created = new LinkedHashSet<>(targets.getOrDefault(MigrationRecord.USERS, List.of()));
             created.removeAll(new HashSet<>(linked)); // never an account that existed before the import

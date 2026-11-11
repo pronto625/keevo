@@ -55,4 +55,13 @@ public interface NotificationImportPort {
      * @return the ids inserted by this call
      */
     Set<UUID> importWebPushSubscriptions(List<ImportedWebPush> subscriptions);
+
+    /**
+     * Story 24.9 — the rollback of the Bref cutover: deletes the browser subscriptions the import added (their ids are
+     * traced), in one statement — those of an account the import linked (it existed before and is kept) would otherwise
+     * stay. Joins the caller's transaction.
+     *
+     * @return the number of rows deleted
+     */
+    int deleteImportedWebPushSubscriptions(java.util.Collection<UUID> ids);
 }

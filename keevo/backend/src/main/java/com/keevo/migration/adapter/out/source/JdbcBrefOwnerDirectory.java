@@ -19,8 +19,8 @@ import java.util.UUID;
 class JdbcBrefOwnerDirectory implements BrefOwnerDirectory {
 
     /** Deleted Bref accounts are never migrated (decision D1 of 24.9). */
-    static final String OWNERS_SQL = "SELECT u.id FROM \"user\" u WHERE u.role = 'owner' AND u.\"deletedAt\" IS NULL "
-            + "AND u.id > ?::uuid ORDER BY u.id LIMIT ?";
+    static final String OWNERS_SQL = "SELECT src.id FROM \"user\" src WHERE src.role = 'owner' "
+            + "AND src.\"deletedAt\" IS NULL AND src.id > ?::uuid ORDER BY src.id LIMIT ?";
 
     /** 00000000-0000-0000-0000-000000000000: below every uuid in PostgreSQL's (unsigned, bytewise) order. */
     static final UUID FIRST = new UUID(0L, 0L);
@@ -38,7 +38,8 @@ class JdbcBrefOwnerDirectory implements BrefOwnerDirectory {
                            ('keevo_bref_invoice_payment_invoice', 'invoice_payment'),
                            ('keevo_bref_expense_shop', 'expense'), ('keevo_bref_subscription_owner', 'subscription'),
                            ('keevo_bref_plan_request_owner', 'plan_payment_request'),
-                           ('keevo_bref_sms_recharge_user', 'sms_recharge_request')) AS x(idx, tbl)
+                           ('keevo_bref_sms_recharge_user', 'sms_recharge_request'),
+                           ('keevo_bref_ai_conversation_user', 'ai_conversation')) AS x(idx, tbl)
             """;
 
     private final JdbcBrefSource source;

@@ -5,11 +5,14 @@ public enum CutoverOwnerStatus {
     PENDING("En attente"),
     /** Imported (batch COMPLETED) and reconciled without gap. */
     RECONCILED("Importé et réconcilié"),
-    /** Imported, but the reconciliation found a gap (or could not run): blocks the « go » unless accepted. */
+    /** Imported, but the reconciliation found a gap or could not read: blocks the « go » unless accepted. */
     GAP("Écart de réconciliation"),
     /** The import found blocking cases before any write: blocks the « go » unless accepted. */
     BLOCKED("Import bloqué"),
-    /** The import or the reconciliation stopped on an error: blocks the « go » unless accepted. */
+    /**
+     * The import stopped on an error, or its reconciliation was not stored: blocks the « go » unless accepted (an
+     * accepted FAILED owner stays out of the activation).
+     */
     FAILED("Import en échec"),
     /** Nothing to migrate (account disabled in Bref, or without shop): reported, never blocks the « go ». */
     NOT_MIGRATED("Non repris (rien à migrer)"),

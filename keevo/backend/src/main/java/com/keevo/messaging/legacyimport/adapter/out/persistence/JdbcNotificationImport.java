@@ -107,6 +107,19 @@ class JdbcNotificationImport implements NotificationImportPort {
         return inserted;
     }
 
+    @Override
+    public int deleteImportedWebPushSubscriptions(java.util.Collection<UUID> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        return jdbc.update(con -> {
+            java.sql.PreparedStatement ps = con.prepareStatement(
+                    "DELETE FROM public.web_push_subscriptions WHERE id = ANY (?::uuid[])");
+            ps.setArray(1, con.createArrayOf("uuid", ids.toArray()));
+            return ps;
+        });
+    }
+
     private static Object[] webPush(List<ImportedWebPush> rows, Function<ImportedWebPush, Object> field) {
         return rows.stream().map(field).toArray();
     }

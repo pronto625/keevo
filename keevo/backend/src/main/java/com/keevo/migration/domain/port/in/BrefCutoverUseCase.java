@@ -39,6 +39,8 @@ public interface BrefCutoverUseCase {
 
     /**
      * The « go »: activates the imported companies when no owner blocks, or when every blocking owner is accepted.
+     * It may be given again on an ACTIVATED cutover: it then activates the owners cleared since (the first « go »
+     * keeps its actor and time).
      *
      * @throws com.keevo.shared.domain.exception.DomainException {@code MIGRATION_CUTOVER_NOT_FOUND},
      *         {@code VALIDATION_FAILED}, {@code INVALID_STATE} (with {@code details.blockingOwners} when owners block)

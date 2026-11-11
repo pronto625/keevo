@@ -177,3 +177,76 @@ côté Keevo). Aucun routeur ne livre aux deux backends.
 
 Remettre les trois URL Bref du tableau 2.1 (mêmes secrets), puis rallumer api-bref et vérifier un événement de test
 par fournisseur.
+
+## 3. Commande de bascule (story 24.9)
+
+> Écrit par 24.9 (outil livré). L'enchaînement complet de la journée (annonces, arrêt, dump, publication de l'app) reste
+> à rédiger par 24.13 ; les durées réelles viennent de la répétition générale 24.12.
+
+### 3.1 [UTILISATEUR] Préparer la copie restaurée
+
+1. Restaurer le dump de Bref (pris **après** l'arrêt d'api-bref) dans une base à part, par exemple `bref_bascule`.
+2. En tant que propriétaire de cette base, créer les index d'aide (jamais sur Bref lui-même) :
+   `psql -d bref_bascule -f keevo/ops/migration/bref-copy-indexes.sql` (idempotent, 11 index, puis `ANALYZE`).
+   Sans eux chaque owner parcourt les tables Bref non indexées (coût O(owners × table)) ; le rapport affiche
+   « index de la copie : n / 11 ».
+3. Créer un rôle en lecture seule (`GRANT SELECT` sur le schéma `public`, `default_transaction_read_only = on`) et
+   le donner au backend : `KEEVO_MIGRATION_BREF_JDBC_URL`, `…_USERNAME`, `…_PASSWORD` (optionnel :
+   `keevo.migration.bref.jdbc.pool-size`, 8 par défaut — jamais en dessous du parallélisme choisi).
+4. Parallélisme : chaque owner en cours tient une connexion de la base Keevo ; garder au moins 2 connexions libres
+   (`spring.datasource.hikari.maximum-pool-size` ≥ parallélisme + 2 ; 10 par défaut → parallélisme 4 conseillé).
+   Au parallélisme 4, des créations d'entreprises simultanées ont rencontré des interblocages PostgreSQL dans les
+   scripts de modules (repris automatiquement par l'étape « modules » de 24.6, réconciliation restée verte) : 24.12
+   mesure 4 puis 8 sur la copie de prod avant de fixer la valeur.
+
+### 3.2 Lancer, suivre, décider (API super-admin, écran « Bascule » du tableau de bord)
+
+| Étape | Appel | Réponse |
+|---|---|---|
+| Lancer | `POST /api/v1/admin/migration/cutovers` `{"source":"DATABASE","parallelism":4}` | 202, la bascule tourne en arrière-plan |
+| Suivre | `GET /api/v1/admin/migration/cutovers/{id}` (toutes les 2–5 s) | `status`, `progress` (owners par statut), `report` |
+| Détail | `GET …/cutovers/{id}/owners?status=GAP&after=<position>` | owners « Compte n », motif français |
+| Relancer | `POST …/cutovers/{id}/runs` | owners non réconciliés et owners ajoutés depuis |
+| « go » | `POST …/cutovers/{id}/activation` `{"confirmation":"ACTIVER","acceptedOwners":[…]}` | 200, ou 409 avec `details.blockingOwners` |
+| Retour arrière | `POST …/cutovers/{id}/rollback` `{"confirmation":"RETOUR ARRIERE"}` | 202, avant le « go » seulement |
+
+- **Owners acceptés** : un owner en écart, bloqué ou en échec ne passe le « go » que s'il figure dans
+  `acceptedOwners` avec un motif (10 caractères au moins, l'écart documenté par la répétition 24.12). Il est activé si
+  son import est complet ; sinon il reste hors de la bascule (à reprendre à la main).
+- Le « go » n'envoie **aucun message** : l'annonce « Bref Point est à jour » part par la campagne plateforme (21.6),
+  §24.13. Les invitations des membres déjà inscrits dans Keevo sont redatées (7 jours à partir du « go »).
+- Après le « go », plus de retour arrière automatique.
+- **Redémarrage du backend pendant la bascule** : la bascule reste « En cours » ; elle ne peut être relancée (ou
+  annulée) que 30 minutes après le dernier signe de vie de l'ancien coordinateur (protection contre deux coordinateurs
+  en parallèle). Un owner interrompu en plein import peut revenir « Import en échec » avec « Un import de ce compte
+  était déjà en cours » : le relancer une fois l'heure d'import périmée passée (1 h, 24.2).
+- Une bascule dont le retour arrière a commencé ne se relance plus : terminer le retour arrière, puis en ouvrir une
+  nouvelle.
+
+### 3.3 Retour arrière (avant le « go »)
+
+`POST …/rollback` supprime chaque entreprise importée (schéma, adhésions, comptes **créés** par l'import, identités
+Google/Apple et abonnements navigateur ajoutés, lignes de facturation importées, traces de migration). Les comptes Keevo
+qui existaient avant l'import (owner ou membre rattaché) sont conservés avec leur propre entreprise. Aucun message
+« compte supprimé » n'est envoyé. Puis défaire §1 et §2 et rallumer api-bref (rien n'y a été modifié).
+
+### 3.4 Mesures de 24.9 (base de travail de 24.12)
+
+Copie du dump local du 03/11 + jeu synthétique `keevo/ops/migration/bref-synthetic-load.sql` (201 owners synthétiques
+dont un de 20 000 documents, + l'owner réel) : 202 owners, 223 boutiques, 25 006 documents, 50 048 lignes, 19 414
+encaissements ; parallélisme 4, poste de développement (base et backend sur la même machine).
+
+| Essai | Index de la copie | Durée de la commande | Moyenne / owner | p95 | Owner le plus lourd | Retour arrière |
+|---|---|---|---|---|---|---|
+| 1 (sans étapes 24.6) | 0 / 10 | 392,6 s | 7,7 s | 13,8 s | 27,6 s | 20,6 s |
+| 2 (avec étapes 24.6) | 11 / 11 | 343,3 s | 6,8 s | 8,6 s | 24,7 s | 33,9 s |
+
+L'essai 1 tournait avant l'arrivée de 24.6 : son script d'index n'en comptait que 10 (l'index
+`ai_conversation("userId")` a été ajouté avec les étapes 24.6) ; sur un schéma Bref ancien sans certaines tables, le
+total attendu baisse d'autant (seules les tables présentes comptent).
+
+Lecture : le coût est surtout **fixe par owner** (création de l'entreprise et de son schéma, provisionnement des
+modules : ≈ 6,5 s), le volume de documents ajoute ≈ 1 s par 1 000 documents ; la réconciliation pèse ≈ 1 % (≈ 90 ms
+par owner). Extrapolation à vérifier par 24.12 : durée ≈ owners × 6,8 s ÷ parallélisme + owner le plus lourd, soit
+pour 1 000 owners ≈ 29 min au parallélisme 4 (≈ 15–20 min au parallélisme 8 si la base de prod le supporte). 24.12
+mesure sur la copie de prod (nombre réel d'owners, parallélisme 4 puis 8) et fixe la fenêtre de coupure annoncée.

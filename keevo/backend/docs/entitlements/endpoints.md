@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 411 — gated: 171, exempt: 240.
+Handlers: 419 — gated: 171, exempt: 248.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -59,11 +59,19 @@ Handlers: 411 — gated: 171, exempt: 240.
 | GET | `/api/v1/admin/health/status` | — | — | — | super-admin | AdminHealthController#status |
 | GET | `/api/v1/admin/jobs` | — | — | — | super-admin | AdminJobController#list |
 | GET | `/api/v1/admin/jobs/{jobId}` | — | — | — | super-admin | AdminJobController#get |
+| GET | `/api/v1/admin/migration/batches` | — | — | — | super-admin | AdminBrefMigrationController#batches |
 | GET | `/api/v1/admin/migration/batches/{batchId}` | — | — | — | super-admin | AdminBrefMigrationController#batch |
 | GET | `/api/v1/admin/migration/batches/{batchId}/reconciliation` | — | — | — | super-admin | AdminBrefReconciliationController#report |
 | POST | `/api/v1/admin/migration/batches/{batchId}/reconciliation` | — | — | — | super-admin | AdminBrefReconciliationController#reconcile |
 | POST | `/api/v1/admin/migration/bref/owners/{ownerId}/imports` | — | — | — | super-admin | AdminBrefMigrationController#importOwner |
 | GET | `/api/v1/admin/migration/bref/owners/{ownerId}/reconciliation` | — | — | — | super-admin | AdminBrefReconciliationController#latestForOwner |
+| GET | `/api/v1/admin/migration/cutovers` | — | — | — | super-admin | AdminBrefCutoverController#list |
+| POST | `/api/v1/admin/migration/cutovers` | — | — | — | super-admin | AdminBrefCutoverController#start |
+| GET | `/api/v1/admin/migration/cutovers/{cutoverId}` | — | — | — | super-admin | AdminBrefCutoverController#cutover |
+| POST | `/api/v1/admin/migration/cutovers/{cutoverId}/activation` | — | — | — | super-admin | AdminBrefCutoverController#activate |
+| GET | `/api/v1/admin/migration/cutovers/{cutoverId}/owners` | — | — | — | super-admin | AdminBrefCutoverController#owners |
+| POST | `/api/v1/admin/migration/cutovers/{cutoverId}/rollback` | — | — | — | super-admin | AdminBrefCutoverController#rollback |
+| POST | `/api/v1/admin/migration/cutovers/{cutoverId}/runs` | — | — | — | super-admin | AdminBrefCutoverController#resume |
 | DELETE | `/api/v1/admin/module-activation-rules` | — | — | — | super-admin | ModuleActivationRulesAdminController#delete |
 | GET | `/api/v1/admin/module-activation-rules` | — | — | — | super-admin | ModuleActivationRulesAdminController#list |
 | PUT | `/api/v1/admin/module-activation-rules` | — | — | — | super-admin | ModuleActivationRulesAdminController#save |

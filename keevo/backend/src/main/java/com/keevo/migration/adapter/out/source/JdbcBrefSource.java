@@ -99,7 +99,7 @@ class JdbcBrefSource implements BrefSourcePort {
 
     /**
      * Story 24.9 — rows fetched per round trip (the connection is never in auto-commit: the driver reads through a
-     * cursor instead of buffering a whole result at once).
+     * cursor). The owner's rows are still collected in memory (one owner's snapshot per worker, as before).
      */
     static final int FETCH_SIZE = 500;
     /** Story 24.9 — default pool: the cutover imports up to 8 owners at a time, each holding one read at a time. */
