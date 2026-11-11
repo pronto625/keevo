@@ -2,22 +2,32 @@ package com.keevo.whatsappcloud.webhook.application;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.keevo.crm.api.ClientCommandPort;
+import com.keevo.shared.event.catalog.campaign.PlatformWhatsAppStatusesEvent;
+import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.module.EntitlementService;
 import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.whatsappcloud.account.domain.model.RoutedAccount;
 import com.keevo.whatsappcloud.account.domain.port.out.WhatsAppAccountRepository;
+import com.keevo.whatsappcloud.campaign.domain.port.out.CampaignRepository;
+import com.keevo.whatsappcloud.config.PlatformNumberSettings;
 import com.keevo.whatsappcloud.config.WhatsAppCloudSettings;
+import com.keevo.whatsappcloud.consent.KeywordConsent;
+import com.keevo.whatsappcloud.consent.KeywordReplier;
 import com.keevo.whatsappcloud.inbox.application.WhatsAppInboxService;
 import com.keevo.whatsappcloud.inbox.domain.model.ChatMessage;
 import com.keevo.whatsappcloud.inbox.domain.model.ContactPhone;
 import com.keevo.whatsappcloud.inbox.domain.model.ConversationDelta;
+import com.keevo.whatsappcloud.inbox.domain.model.StatusChange;
 import com.keevo.whatsappcloud.inbox.domain.model.StatusUpdate;
 import com.keevo.whatsappcloud.inbox.domain.port.out.WhatsAppInboxRepository;
 import com.keevo.whatsappcloud.module.WhatsAppCloudModule;
+import com.keevo.whatsappcloud.platform.domain.port.out.PlatformOptOutRepository;
 import com.keevo.whatsappcloud.template.application.WhatsAppTemplateService;
 import com.keevo.whatsappcloud.template.domain.model.TemplateReview;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -32,6 +42,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -52,6 +63,12 @@ import java.util.UUID;
  *       back);</li>
  *   <li>after commit, one push per contact with new messages ({@link InboundMessageNotifier}).</li>
  * </ol>
+ * Story 21.6: the platform number ({@link PlatformNumberSettings}) is routed to the platform inbox
+ * ({@link WhatsAppInboxRepository#PLATFORM}, super-admin, no push); a STOP / START answer ({@link KeywordConsent}) is
+ * applied in the same transaction as its message (company number → the clients' opt-out through crm; platform number
+ * → the platform opt-out list), then confirmed once per minute ({@link KeywordReplier}); statuses that moved on
+ * campaign messages move the campaign counters (company: same transaction; platform: {@link
+ * PlatformWhatsAppStatusesEvent} to the platform campaigns).
  * One company failing never stops the others; the answer is then RETRY so Meta delivers again (what was stored is not
  * stored twice). Cost per delivery of M messages / S statuses / R reviews for T companies: 1 HMAC, ≤ 2 routing
  * lookups, per company 1 cached entitlement + 1 warm provisioning check + 1 insert batch + 1 upsert batch + 1 status
@@ -85,13 +102,22 @@ public class WhatsAppWebhookService {
     private final EntitlementService entitlements;
     private final ModuleProvisioner provisioner;
     private final InboundMessageNotifier notifier;
+    private final PlatformNumberSettings platform;
+    private final ClientCommandPort clients;
+    private final PlatformOptOutRepository platformOptOuts;
+    private final KeywordReplier replier;
+    private final CampaignRepository campaigns;
+    private final ApplicationEventPublisher events;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public WhatsAppWebhookService(WhatsAppCloudSettings settings, WhatsAppAccountRepository accounts,
                                   WhatsAppInboxRepository inbox, WhatsAppTemplateService templates,
                                   EntitlementService entitlements, ModuleProvisioner provisioner,
-                                  InboundMessageNotifier notifier, PlatformTransactionManager transactionManager,
+                                  InboundMessageNotifier notifier, PlatformNumberSettings platform,
+                                  ClientCommandPort clients, PlatformOptOutRepository platformOptOuts,
+                                  KeywordReplier replier, CampaignRepository campaigns,
+                                  ApplicationEventPublisher events, PlatformTransactionManager transactionManager,
                                   Clock clock) {
         this.settings = settings;
         this.accounts = accounts;
@@ -100,8 +126,18 @@ public class WhatsAppWebhookService {
         this.entitlements = entitlements;
         this.provisioner = provisioner;
         this.notifier = notifier;
+        this.platform = platform;
+        this.clients = clients;
+        this.platformOptOuts = platformOptOuts;
+        this.replier = replier;
+        this.campaigns = campaigns;
+        this.events = events;
         this.tx = new TransactionTemplate(transactionManager);
         this.clock = clock;
+    }
+
+    /** What one company's (or the platform's) delivery produced, to hand over after commit. */
+    record Stored(List<InboundMessageNotifier.Notice> notices, List<KeywordReplier.Reply> replies) {
     }
 
     /** The subscription check of {@code GET}: the challenge to echo, or {@code null} when refused. */
@@ -146,6 +182,8 @@ public class WhatsAppWebhookService {
         for (RoutedAccount r : accounts.routeByPhoneNumberIds(numbers)) {
             schemaByNumber.put(r.routingKey(), r.tenantSchema());
         }
+        numbers.stream().filter(platform::isPlatformNumber).findFirst()
+                .ifPresent(n -> schemaByNumber.put(n, WhatsAppInboxRepository.PLATFORM));
         Map<String, List<Inbound>> messagesBySchema = new LinkedHashMap<>();
         Map<String, List<Status>> statusesBySchema = new LinkedHashMap<>();
         int unknown = 0;
@@ -170,13 +208,16 @@ public class WhatsAppWebhookService {
         schemas.addAll(statusesBySchema.keySet());
         boolean failed = false;
         List<InboundMessageNotifier.Notice> notices = new ArrayList<>();
+        List<KeywordReplier.Reply> replies = new ArrayList<>();
         for (String schema : schemas) {
             try {
                 if (!usable(schema)) {
                     continue;
                 }
-                notices.addAll(store(schema, messagesBySchema.getOrDefault(schema, List.of()),
-                        statusesBySchema.getOrDefault(schema, List.of())));
+                Stored stored = store(schema, messagesBySchema.getOrDefault(schema, List.of()),
+                        statusesBySchema.getOrDefault(schema, List.of()));
+                notices.addAll(stored.notices());
+                replies.addAll(stored.replies());
             } catch (RuntimeException e) {
                 failed = true;
                 log.error("[WhatsApp Cloud] webhook delivery not stored for tenant {} ({})", schema,
@@ -184,11 +225,15 @@ public class WhatsAppWebhookService {
             }
         }
         notifier.dispatch(notices);
+        replier.dispatch(replies);
         return failed;
     }
 
-    /** Module enabled for the company (else its deliveries are ignored), tables ensured. */
+    /** Module enabled for the company (else its deliveries are ignored), tables ensured; the platform inbox always. */
     private boolean usable(String schema) {
+        if (WhatsAppInboxRepository.PLATFORM.equals(schema)) {
+            return true;
+        }
         if (!entitlements.isEnabled(schema, WhatsAppCloudModule.ID)) {
             log.info("[WhatsApp Cloud] delivery for tenant {} ignored: module not enabled", schema);
             return false;
@@ -197,33 +242,97 @@ public class WhatsAppWebhookService {
         return true;
     }
 
-    /** One company's messages and statuses in one transaction; returns the notices of the messages inserted now. */
-    List<InboundMessageNotifier.Notice> store(String schema, List<Inbound> received, List<Status> statuses) {
+    /**
+     * One company's (or the platform's) messages and statuses in one transaction: the messages inserted now, their
+     * conversations, the STOP / START answers among them, the statuses (and the campaign counters they move). Returns
+     * the pushes and the keyword confirmations to send after commit.
+     */
+    Stored store(String schema, List<Inbound> received, List<Status> statuses) {
+        boolean isPlatform = WhatsAppInboxRepository.PLATFORM.equals(schema);
         Map<String, Inbound> byId = new LinkedHashMap<>();
         received.forEach(m -> byId.putIfAbsent(m.id(), m)); // the same id twice in one delivery: once
         List<Inbound> unique = new ArrayList<>(byId.values());
         List<ChatMessage> rows = unique.stream().map(m -> new ChatMessage(UUID.randomUUID(), m.from(),
                 ChatMessage.Direction.IN, m.type(), m.body(), m.id(), null, null, null, m.at())).toList();
         List<StatusUpdate> updates = collapse(statuses);
-        return tx.execute(s -> {
-            boolean[] inserted = inbox.insertAll(schema, rows);
-            Map<String, ConversationAgg> perContact = new LinkedHashMap<>();
-            for (int i = 0; i < unique.size(); i++) {
-                if (inserted[i]) {
-                    perContact.computeIfAbsent(unique.get(i).from(), k -> new ConversationAgg()).add(unique.get(i));
+        String previous = TenantContext.getCurrentTenant();
+        if (!isPlatform) {
+            TenantContext.setCurrentTenant(schema); // crm's port runs in the company's schema
+        }
+        try {
+            return tx.execute(s -> {
+                boolean[] inserted = inbox.insertAll(schema, rows);
+                Map<String, ConversationAgg> perContact = new LinkedHashMap<>();
+                Map<String, Inbound> lastKeyword = new LinkedHashMap<>();
+                for (int i = 0; i < unique.size(); i++) {
+                    if (inserted[i]) {
+                        Inbound m = unique.get(i);
+                        perContact.computeIfAbsent(m.from(), k -> new ConversationAgg()).add(m);
+                        if ("text".equals(m.type()) && KeywordConsent.parse(m.body()).isPresent()) {
+                            lastKeyword.merge(m.from(), m, (a, b) -> b.at().isBefore(a.at()) ? a : b);
+                        }
+                    }
+                }
+                List<ConversationDelta> deltas = new ArrayList<>();
+                List<InboundMessageNotifier.Notice> notices = new ArrayList<>();
+                perContact.forEach((phone, agg) -> {
+                    deltas.add(new ConversationDelta(phone, agg.name, WhatsAppInboxService.preview(agg.lastPreview()),
+                            agg.last.type(), ChatMessage.Direction.IN, agg.last.at(), agg.count, agg.last.at()));
+                    if (!isPlatform) { // the platform number is followed from the dashboard only (Bref)
+                        notices.add(new InboundMessageNotifier.Notice(schema, phone, agg.name, agg.count,
+                                agg.lastPreview()));
+                    }
+                });
+                inbox.upsertConversations(schema, deltas);
+                List<KeywordReplier.Reply> replies = applyKeywords(schema, isPlatform, lastKeyword);
+                List<StatusChange> changes = inbox.applyStatuses(schema, updates);
+                List<StatusChange> campaignChanges = changes.stream().filter(c -> c.campaignId() != null).toList();
+                if (!campaignChanges.isEmpty()) {
+                    if (isPlatform) {
+                        events.publishEvent(new PlatformWhatsAppStatusesEvent(campaignChanges.stream()
+                                .map(c -> new PlatformWhatsAppStatusesEvent.Change(c.campaignId(), c.oldStatus(),
+                                        c.newStatus())).toList()));
+                    } else {
+                        campaigns.applyStatusChanges(schema, campaignChanges);
+                    }
+                }
+                return new Stored(notices, replies);
+            });
+        } finally {
+            if (!isPlatform) {
+                if (previous == null) {
+                    TenantContext.clear();
+                } else {
+                    TenantContext.setCurrentTenant(previous);
                 }
             }
-            List<ConversationDelta> deltas = new ArrayList<>();
-            List<InboundMessageNotifier.Notice> notices = new ArrayList<>();
-            perContact.forEach((phone, agg) -> {
-                deltas.add(new ConversationDelta(phone, agg.name, WhatsAppInboxService.preview(agg.lastPreview()),
-                        agg.last.type(), ChatMessage.Direction.IN, agg.last.at(), agg.count, agg.last.at()));
-                notices.add(new InboundMessageNotifier.Notice(schema, phone, agg.name, agg.count, agg.lastPreview()));
-            });
-            inbox.upsertConversations(schema, deltas);
-            inbox.applyStatuses(schema, updates);
-            return notices;
+        }
+    }
+
+    /** STOP / START of each contact (its latest keyword of the delivery), applied now; the confirmations to send. */
+    private List<KeywordReplier.Reply> applyKeywords(String schema, boolean isPlatform, Map<String, Inbound> last) {
+        List<KeywordReplier.Reply> replies = new ArrayList<>();
+        Instant now = clock.instant().truncatedTo(ChronoUnit.MICROS);
+        last.forEach((phone, m) -> {
+            Optional<KeywordConsent.Answer> answer = KeywordConsent.parse(m.body());
+            if (answer.isEmpty()) {
+                return;
+            }
+            boolean optOut = answer.get() == KeywordConsent.Answer.OPT_OUT;
+            boolean changed;
+            if (isPlatform) {
+                changed = optOut ? platformOptOuts.optOut(phone, now) : platformOptOuts.optIn(phone);
+            } else {
+                changed = clients.setMarketingOptOutByPhone(schema, "+" + phone, optOut, now) > 0;
+            }
+            if (!changed && !optOut) {
+                return; // START from a number that was not opted out: nothing to confirm (no false « réabonné »)
+            }
+            log.info("[WhatsApp Cloud] {} by a contact of {}", optOut ? "STOP" : "START",
+                    isPlatform ? "the platform number" : "tenant " + schema);
+            replies.add(new KeywordReplier.Reply(schema, phone, answer.get()));
         });
+        return replies;
     }
 
     /** One status per message id: the one that supersedes the others. */

@@ -9,7 +9,14 @@ import java.util.UUID;
  * of a sent message SENT → DELIVERED → READ, or FAILED; {@code readAt} of a received one once opened.
  */
 public record ChatMessage(UUID id, String contactPhone, Direction direction, String type, String body,
-                          String waMessageId, String status, Instant readAt, UUID sentBy, Instant createdAt) {
+                          String waMessageId, String status, Instant readAt, UUID sentBy, Instant createdAt,
+                          UUID campaignId) {
 
     public enum Direction { IN, OUT }
+
+    /** A message outside any campaign (Story 21.6 added {@code campaignId}). */
+    public ChatMessage(UUID id, String contactPhone, Direction direction, String type, String body,
+                       String waMessageId, String status, Instant readAt, UUID sentBy, Instant createdAt) {
+        this(id, contactPhone, direction, type, body, waMessageId, status, readAt, sentBy, createdAt, null);
+    }
 }

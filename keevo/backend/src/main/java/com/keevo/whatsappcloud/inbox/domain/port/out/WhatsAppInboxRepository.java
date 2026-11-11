@@ -3,6 +3,7 @@ package com.keevo.whatsappcloud.inbox.domain.port.out;
 import com.keevo.whatsappcloud.inbox.domain.model.ChatMessage;
 import com.keevo.whatsappcloud.inbox.domain.model.Conversation;
 import com.keevo.whatsappcloud.inbox.domain.model.ConversationDelta;
+import com.keevo.whatsappcloud.inbox.domain.model.StatusChange;
 import com.keevo.whatsappcloud.inbox.domain.model.StatusUpdate;
 
 import java.time.Instant;
@@ -17,6 +18,12 @@ import java.util.Optional;
 public interface WhatsAppInboxRepository {
 
     /**
+     * Story 21.6 — the key naming the platform number's inbox ({@code public.platform_whatsapp_*}) instead of a tenant
+     * schema: every method below accepts it.
+     */
+    String PLATFORM = "platform";
+
+    /**
      * Inserts the messages in one batch, skipping those already stored (Meta's id unique).
      *
      * @return per message, whether it was inserted now (false = delivered again)
@@ -26,8 +33,12 @@ public interface WhatsAppInboxRepository {
     /** Applies the conversation deltas in one batch (upsert per contact, atomic increments). */
     void upsertConversations(String schema, List<ConversationDelta> deltas);
 
-    /** Applies delivery statuses in one set-based statement, never going back; returns the rows changed. */
-    int applyStatuses(String schema, List<StatusUpdate> updates);
+    /**
+     * Applies delivery statuses in one set-based statement, never going back.
+     *
+     * @return one change per message whose status moved (Story 21.6: with its campaign, {@code null} outside one)
+     */
+    List<StatusChange> applyStatuses(String schema, List<StatusUpdate> updates);
 
     /** The conversations, most recent first. */
     List<Conversation> conversations(String schema, int limit);

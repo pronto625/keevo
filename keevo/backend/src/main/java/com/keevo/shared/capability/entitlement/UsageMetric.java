@@ -13,7 +13,9 @@ public enum UsageMetric {
     /** Emails sent (counted on provider success, 19.9). */
     EMAILS("Emails"),
     /** AI credits consumed. */
-    AI_CREDITS("Crédits IA");
+    AI_CREDITS("Crédits IA"),
+    /** Story 21.6 — WhatsApp messages a company's campaigns sent from its own number (counted when Meta accepts them). */
+    WHATSAPP_MESSAGES("Messages WhatsApp");
 
     private final String label;
 

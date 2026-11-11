@@ -5,7 +5,9 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.web.InvalidRequestParameterException;
 import com.keevo.whatsappcloud.account.application.WhatsAppAccountService;
 import com.keevo.whatsappcloud.account.application.WhatsAppAccountService.Credentials;
+import com.keevo.shared.capability.notification.PlatformWhatsApp.HeaderMedia;
 import com.keevo.whatsappcloud.config.MetaErrors;
+import com.keevo.whatsappcloud.config.PlatformNumberSettings;
 import com.keevo.whatsappcloud.graph.domain.model.MetaGraphException;
 import com.keevo.whatsappcloud.graph.domain.port.out.MetaGraphClient;
 import com.keevo.whatsappcloud.inbox.domain.model.ChatMessage;
@@ -15,6 +17,7 @@ import com.keevo.whatsappcloud.inbox.domain.model.ConversationDelta;
 import com.keevo.whatsappcloud.inbox.domain.port.out.WhatsAppInboxRepository;
 import com.keevo.whatsappcloud.template.application.WhatsAppTemplateService;
 import com.keevo.whatsappcloud.template.domain.model.MessageTemplate;
+import com.keevo.whatsappcloud.template.domain.model.TemplateComponents;
 import com.keevo.whatsappcloud.template.domain.model.TemplateText;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,16 +59,19 @@ public class WhatsAppInboxService {
     private final WhatsAppAccountService accounts;
     private final WhatsAppTemplateService templates;
     private final MetaGraphClient graph;
+    private final PlatformNumberSettings platform;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     public WhatsAppInboxService(WhatsAppInboxRepository inbox, WhatsAppAccountService accounts,
                                 WhatsAppTemplateService templates, MetaGraphClient graph,
-                                PlatformTransactionManager transactionManager, Clock clock) {
+                                PlatformNumberSettings platform, PlatformTransactionManager transactionManager,
+                                Clock clock) {
         this.inbox = inbox;
         this.accounts = accounts;
         this.templates = templates;
         this.graph = graph;
+        this.platform = platform;
         this.tx = new TransactionTemplate(transactionManager);
         this.clock = clock;
     }
@@ -132,19 +138,20 @@ public class WhatsAppInboxService {
     }
 
     /**
-     * Sends an approved template of the owner (with its body variables), at any time.
+     * Sends an approved template of the owner (with its body variables and, Story 21.6, the media of a media header:
+     * an id from {@code POST /whatsapp/media} or an https link), at any time.
      *
      * @throws DomainException {@code WHATSAPP_TEMPLATE_NOT_FOUND} 404, {@code WHATSAPP_TEMPLATE_NOT_APPROVED} 409,
      *                         {@code WHATSAPP_NOT_CONNECTED} 409, {@code WHATSAPP_CLOUD_META_ERROR} 502,
      *                         {@code WHATSAPP_SEND_UNCERTAIN} 409
      */
     public List<ChatMessage> sendTemplate(String schema, UUID actorId, String rawPhone, UUID templateId,
-                                          List<String> variables) {
+                                          List<String> variables, HeaderMedia header) {
         String phone = ContactPhone.require(rawPhone);
         MessageTemplate t = templates.approved(schema, templateId);
-        if (!"NONE".equals(t.headerFormat()) && !"TEXT".equals(t.headerFormat())) {
-            throw new InvalidRequestParameterException("templateId", "media header",
-                    "Ce modèle a un en-tête média : il s'envoie depuis une campagne");
+        String problem = TemplateComponents.headerProblem(t.headerFormat(), header);
+        if (problem != null) {
+            throw new InvalidRequestParameterException("headerMedia", "media", problem);
         }
         List<String> keys = TemplateText.variables(t.bodyText());
         List<String> values = (variables == null ? List.<String>of() : variables).stream()
@@ -154,9 +161,8 @@ public class WhatsAppInboxService {
                     "Renseignez " + keys.size() + (keys.size() > 1 ? " valeurs" : " valeur") + " pour ce modèle");
         }
         Credentials creds = credentials(schema);
-        List<Map<String, Object>> components = values.isEmpty() ? List.of()
-                : List.of(Map.of("type", "body", "parameters",
-                        values.stream().map(v -> Map.<String, Object>of("type", "text", "text", v)).toList()));
+        List<Map<String, Object>> components = TemplateComponents.build(t.bodyText(), values, t.headerFormat(),
+                header);
         String waId;
         try {
             waId = graph.sendTemplate(creds.phoneNumberId(), creds.token(), phone, t.name(), t.language(), components);
@@ -166,6 +172,28 @@ public class WhatsAppInboxService {
         }
         recordOutbound(schema, phone, "template", TemplateText.render(t.bodyText(), values), waId, actorId);
         return thread(schema, phone, null, null);
+    }
+
+    /** Same, without a header media (21.5 shape). */
+    public List<ChatMessage> sendTemplate(String schema, UUID actorId, String rawPhone, UUID templateId,
+                                          List<String> variables) {
+        return sendTemplate(schema, actorId, rawPhone, templateId, variables, null);
+    }
+
+    /**
+     * Story 21.6 — uploads a media file to the sending number (company or platform) for a media header → Meta's
+     * media id (valid 30 days at Meta).
+     *
+     * @throws DomainException {@code WHATSAPP_NOT_CONNECTED} 409, {@code WHATSAPP_CLOUD_META_ERROR} 502
+     */
+    public String uploadMedia(String schema, byte[] content, String mimeType, String filename) {
+        Credentials creds = credentials(schema);
+        try {
+            return graph.uploadMedia(creds.phoneNumberId(), creds.token(), content, mimeType, filename);
+        } catch (MetaGraphException e) {
+            log.warn("[WhatsApp Cloud] media not uploaded for {} ({})", schema, e.kind());
+            throw MetaErrors.of(e, false);
+        }
     }
 
     /**
@@ -196,7 +224,17 @@ public class WhatsAppInboxService {
         return body.length() > 500 ? body.substring(0, 499) + "…" : body;
     }
 
-    private Credentials credentials(String schema) {
+    /**
+     * The sending number of an inbox: the company's connected WABA, or (Story 21.6) the platform number for
+     * {@link WhatsAppInboxRepository#PLATFORM}.
+     */
+    public Credentials credentials(String schema) {
+        if (WhatsAppInboxRepository.PLATFORM.equals(schema)) {
+            if (!platform.isConfigured() || !graph.isEnabled()) {
+                throw new DomainException(ErrorCode.PLATFORM_WHATSAPP_UNAVAILABLE);
+            }
+            return new Credentials(platform.wabaId(), platform.phoneNumberId(), platform.token());
+        }
         return accounts.credentials(schema).orElseThrow(() -> new DomainException(ErrorCode.WHATSAPP_NOT_CONNECTED));
     }
 }

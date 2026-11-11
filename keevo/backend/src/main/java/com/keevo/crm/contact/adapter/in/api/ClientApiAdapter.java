@@ -81,6 +81,27 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
     }
 
     @Override
+    public java.util.List<com.keevo.crm.api.MarketingRecipient> marketingAudience(String tenantSchema,
+                                                                                Collection<UUID> storeIds, int limit) {
+        TenantContext.requireCurrent(tenantSchema);
+        return clientRepository.findMarketingAudience(storeIds, limit);
+    }
+
+    @Override
+    public int countMarketingAudience(String tenantSchema, Collection<UUID> storeIds, int cap) {
+        TenantContext.requireCurrent(tenantSchema);
+        return clientRepository.countMarketingAudience(storeIds, cap);
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional
+    public int setMarketingOptOutByPhone(String tenantSchema, String phoneE164, boolean optedOut,
+                                         java.time.Instant at) {
+        TenantContext.requireCurrent(tenantSchema);
+        return clientRepository.updateOptOutByPhone(phoneE164, optedOut, at);
+    }
+
+    @Override
     public ClientView update(String tenantSchema, UpdateClientInput in) {
         TenantContext.requireCurrent(tenantSchema);
         return ContactViews.of(updateClient.execute(new UpdateClientUseCase.UpdateClientCommand(

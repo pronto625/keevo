@@ -101,4 +101,37 @@ public interface ClientSpringRepository extends JpaRepository<ClientJpaEntity, U
             + "WHERE id = :id", nativeQuery = true)
     int updateConsent(@Param("id") UUID id, @Param("at") Instant at, @Param("by") UUID by,
                       @Param("now") Instant now);
+
+    /**
+     * Story 21.6 — the campaign audience: eligible clients, one per phone (most recently updated first), every store
+     * when {@code allStores}, else those of {@code storeIds} ({@code {id,…}} literal). Rows: id, name, phone, store.
+     */
+    @Query(value = "SELECT CAST(id AS text) AS id, name, phone_normalized, CAST(store_id AS text) AS store_id FROM ("
+            + "SELECT DISTINCT ON (phone_normalized) id, name, phone_normalized, store_id FROM clients "
+            + "WHERE marketing_consent_at IS NOT NULL AND marketing_opt_out_at IS NULL AND archived = FALSE "
+            + "AND phone_normalized IS NOT NULL "
+            + "AND (:allStores = TRUE OR store_id = ANY(CAST(:storeIds AS uuid[]))) "
+            + "ORDER BY phone_normalized, updated_at DESC, id) a ORDER BY phone_normalized LIMIT :limit",
+            nativeQuery = true)
+    List<Object[]> findMarketingAudience(@Param("allStores") boolean allStores, @Param("storeIds") String storeIds,
+                                         @Param("limit") int limit);
+
+    /** Story 21.6 — the audience size: distinct eligible phones, up to {@code cap} (rows never loaded). */
+    @Query(value = "SELECT CAST(count(*) AS int) FROM (SELECT DISTINCT phone_normalized FROM clients WHERE marketing_consent_at "
+            + "IS NOT NULL AND marketing_opt_out_at IS NULL AND archived = FALSE AND phone_normalized IS NOT NULL "
+            + "AND (:allStores = TRUE OR store_id = ANY(CAST(:storeIds AS uuid[]))) LIMIT :cap) a", nativeQuery = true)
+    int countMarketingAudience(@Param("allStores") boolean allStores, @Param("storeIds") String storeIds,
+                               @Param("cap") int cap);
+
+    /** Story 21.6 — a STOP: the clients of this number not opted out yet (an earlier STOP keeps its date). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE clients SET marketing_opt_out_at = :at, updated_at = :at "
+            + "WHERE phone_normalized = :phone AND marketing_opt_out_at IS NULL", nativeQuery = true)
+    int optOutByPhone(@Param("phone") String phone, @Param("at") Instant at);
+
+    /** Story 21.6 — a START: the opt-out of this number cleared. */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = "UPDATE clients SET marketing_opt_out_at = NULL, updated_at = :at "
+            + "WHERE phone_normalized = :phone AND marketing_opt_out_at IS NOT NULL", nativeQuery = true)
+    int optInByPhone(@Param("phone") String phone, @Param("at") Instant at);
 }

@@ -356,6 +356,17 @@ keevo:
     app-secret: ${KEEVO_WHATSAPP_CLOUD_APP_SECRET:}
     verify-token: ${KEEVO_WHATSAPP_CLOUD_VERIFY_TOKEN:}
     graph-url: ${KEEVO_WHATSAPP_CLOUD_GRAPH_URL:https://graph.facebook.com/v21.0}
+    # Story 21.6 — the platform number (Bref Point): its messages land in the super-admin inbox, platform WhatsApp
+    # campaigns and inbox replies leave from it (needs graph=meta). Defaults to the 19.9b platform number keys.
+    platform:
+      phone-number-id: ${KEEVO_WHATSAPP_CLOUD_PLATFORM_PHONE_NUMBER_ID:${WHATSAPP_PHONE_NUMBER_ID:}}
+      waba-id: ${KEEVO_WHATSAPP_CLOUD_PLATFORM_WABA_ID:${WHATSAPP_BUSINESS_ACCOUNT_ID:}}
+      access-token: ${KEEVO_WHATSAPP_CLOUD_PLATFORM_ACCESS_TOKEN:${WHATSAPP_ACCESS_TOKEN:}}
+  # Story 21.6 — campaigns (client WhatsApp campaigns and super-admin platform campaigns): dispatcher tick and batch
+  # size per campaign and tick (≤ batch-size / tick messages per second per sender number; Meta allows 80/s).
+  campaigns:
+    tick-ms: ${KEEVO_CAMPAIGNS_TICK_MS:2000}
+    batch-size: ${KEEVO_CAMPAIGNS_BATCH_SIZE:40}
   # Story 21.5 (FUS-NFR4) — AES-256-GCM key of the third-party secrets stored by Keevo (base64 of 32 random bytes,
   # e.g. `openssl rand -base64 32`); never in the database. Unset = WhatsApp Business cannot be connected.
   secrets:

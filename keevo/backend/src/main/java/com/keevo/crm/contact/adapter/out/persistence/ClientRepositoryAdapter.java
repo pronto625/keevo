@@ -166,6 +166,27 @@ public class ClientRepositoryAdapter implements ClientRepository {
     }
 
     @Override
+    public java.util.List<com.keevo.crm.api.MarketingRecipient> findMarketingAudience(Collection<UUID> storeIds,
+                                                                                     int limit) {
+        boolean all = storeIds == null || storeIds.isEmpty();
+        return springRepository.findMarketingAudience(all, all ? "{}" : arrayLiteral(storeIds), limit).stream()
+                .map(r -> new com.keevo.crm.api.MarketingRecipient(UUID.fromString((String) r[0]), (String) r[1],
+                        (String) r[2], r[3] == null ? null : UUID.fromString((String) r[3])))
+                .toList();
+    }
+
+    @Override
+    public int countMarketingAudience(Collection<UUID> storeIds, int cap) {
+        boolean all = storeIds == null || storeIds.isEmpty();
+        return springRepository.countMarketingAudience(all, all ? "{}" : arrayLiteral(storeIds), cap);
+    }
+
+    @Override
+    public int updateOptOutByPhone(String phoneE164, boolean optedOut, Instant at) {
+        return optedOut ? springRepository.optOutByPhone(phoneE164, at) : springRepository.optInByPhone(phoneE164, at);
+    }
+
+    @Override
     public void updateConsent(UUID id, MarketingConsent consent, Instant now) {
         springRepository.updateConsent(id, consent.consentAt(), consent.consentBy(), now);
     }

@@ -27,6 +27,11 @@ keevo:
     graph: ${KEEVO_WHATSAPP_CLOUD_GRAPH:fake}
     app-secret: ${KEEVO_WHATSAPP_CLOUD_APP_SECRET:dev-whatsapp-app-secret}
     verify-token: ${KEEVO_WHATSAPP_CLOUD_VERIFY_TOKEN:dev-whatsapp-verify-token}
+    # Story 21.6 — a fake platform number for the fake Graph API (nothing reaches Meta)
+    platform:
+      phone-number-id: ${KEEVO_WHATSAPP_CLOUD_PLATFORM_PHONE_NUMBER_ID:100000000000001}
+      waba-id: ${KEEVO_WHATSAPP_CLOUD_PLATFORM_WABA_ID:200000000000001}
+      access-token: ${KEEVO_WHATSAPP_CLOUD_PLATFORM_ACCESS_TOKEN:dev-platform-token}
   secrets:
     encryption-key: ${KEEVO_SECRETS_ENCRYPTION_KEY:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=}
   payments:

@@ -35,6 +35,15 @@ public class WhatsAppCloudGraphConfig {
                 env.getProperty("keevo.whatsapp-cloud.verify-token", ""));
     }
 
+    /** Story 21.6 — the platform number ({@code keevo.whatsapp-cloud.platform.*}). */
+    @Bean
+    public com.keevo.whatsappcloud.config.PlatformNumberSettings platformNumberSettings(Environment env) {
+        return new com.keevo.whatsappcloud.config.PlatformNumberSettings(
+                env.getProperty("keevo.whatsapp-cloud.platform.phone-number-id", ""),
+                env.getProperty("keevo.whatsapp-cloud.platform.waba-id", ""),
+                env.getProperty("keevo.whatsapp-cloud.platform.access-token", ""));
+    }
+
     @Bean
     public MetaGraphClient metaGraphClient(Environment env, SecretCipher cipher) {
         return create(env, cipher);

@@ -5,7 +5,10 @@
 // templates with Meta's review status, and the invoice / quote sending by the bref_facture template from the owner's
 // number (shared.capability.notification.TenantWhatsAppBusiness, consumed by invoicing). Depends on the shared core only;
 // Meta's Graph API sits behind the MetaGraphClient port (meta / fake / disabled).
+// Story 21.6 — the company's WhatsApp campaigns to its consenting clients (crm :: api: audience, consent at send time,
+// STOP / START; store :: api: targeted stores and their names), the platform number's inbox for the super-admin and the
+// shared PlatformWhatsApp port of the platform campaigns.
 @org.springframework.modulith.ApplicationModule(
-    allowedDependencies = {"shared"}
+    allowedDependencies = {"shared", "crm :: api", "store :: api"}
 )
 package com.keevo.whatsappcloud;

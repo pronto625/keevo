@@ -22,7 +22,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *   <li>a signup code starting with {@code invalid} is refused; any other gives the token {@code fake-token-<code>};</li>
  *   <li>a number id starting with {@code 0} is not in the WABA; any other is « +237 6 90 00 <last 4 digits> »;</li>
  *   <li>a recipient whose number (after an optional 237) starts with {@code 999} is refused by Meta, {@code 998} times
- *       out (unknown outcome);</li>
+ *       out (unknown outcome), {@code 997} is refused by Meta's throughput limit (code 130429, Story 21.6);</li>
  *   <li>templates are kept per WABA: created PENDING (a second creation of the same name / language is refused), the
  *       review result is set by {@link #review};</li>
  * </ul>
@@ -96,7 +96,8 @@ public class FakeMetaGraphClient implements MetaGraphClient {
         record("create-template", wabaId, draft.name() + ":" + draft.language());
         Map<String, MetaTemplate> waba = templates.computeIfAbsent(wabaId, k -> new ConcurrentHashMap<>());
         MetaTemplate created = new MetaTemplate(String.valueOf(Math.abs(UUID.randomUUID().getMostSignificantBits())),
-                draft.name(), draft.language(), "PENDING", null);
+                draft.name(), draft.language(), "PENDING", null, draft.category(),
+                draft.headerFormat() == null ? "NONE" : draft.headerFormat(), draft.bodyText());
         if (waba.putIfAbsent(key(draft.name(), draft.language()), created) != null) {
             throw MetaGraphException.refused("create-template: HTTP 400",
                     "Ce modèle existe déjà dans cette langue", 2388024);
@@ -126,7 +127,8 @@ public class FakeMetaGraphClient implements MetaGraphClient {
             return null;
         }
         return waba.computeIfPresent(key(name, language),
-                (k, t) -> new MetaTemplate(t.id(), t.name(), t.language(), status, reason));
+                (k, t) -> new MetaTemplate(t.id(), t.name(), t.language(), status, reason, t.category(),
+                        t.headerFormat(), t.bodyText()));
     }
 
     /** Every recorded call, oldest first. */
@@ -143,6 +145,9 @@ public class FakeMetaGraphClient implements MetaGraphClient {
         String local = to.startsWith("237") ? to.substring(3) : to;
         if (local.startsWith("999")) {
             throw MetaGraphException.refused("send: HTTP 400", "Ce numéro n'est pas sur WhatsApp", 131026);
+        }
+        if (local.startsWith("997")) {
+            throw MetaGraphException.refused("send: HTTP 429", null, 130429);
         }
         if (local.startsWith("998")) {
             throw MetaGraphException.unknown("send: read timeout");

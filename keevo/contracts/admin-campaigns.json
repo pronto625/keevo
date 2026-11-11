@@ -1,0 +1,198 @@
+{
+  "description": "Story 21.6 — super-admin platform campaigns (Bref /v1/campaigns, 20.13 route K1) and the platform WhatsApp number (inbox, templates, media). SUPER_ADMIN JWT only (/api/v1/admin/**); owners get 403. Keevo envelope: success {data}; error {error (French), code, domainCode, details?}. Show statusLabel / channelLabel / actionLabel, never the codes; ids are handles (tenantIds in the segment are for the edit form, show company names). Change this file only with both sides.",
+  "channels": {
+    "PUSH": "Notification (kept in the app inbox, type PLATFORM_CAMPAIGN)",
+    "WHATSAPP": "WhatsApp (approved template of the platform number)",
+    "SMS": "SMS (≤ 480 characters)",
+    "EMAIL": "E-mail (subject = title)"
+  },
+  "segment": {
+    "planCodes": [
+      "BUSINESS (catalogue codes)"
+    ],
+    "countries": [
+      "CM (store country, ISO-2)"
+    ],
+    "activities": [
+      "food (store category key)"
+    ],
+    "tenantIds": [
+      "uuid (explicit companies)"
+    ],
+    "notes": "All optional and cumulative; empty = every live company. Recipients are the owners (active), one per person (oldest company)."
+  },
+  "whatsapp": {
+    "templateName": "annonce_novembre",
+    "language": "fr",
+    "bodyText": "template body as approved (from GET /api/v1/admin/whatsapp/templates)",
+    "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+    "headerMediaId": "from POST /api/v1/admin/whatsapp/media, or",
+    "headerMediaLink": "https://…",
+    "variables": [
+      {
+        "source": "STATIC | FIRST_NAME | LAST_NAME | FULL_NAME | COMPANY_NAME (Bref firstName / lastName / fullName / shopName / static)",
+        "value": "fixed text or fallback"
+      }
+    ]
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/campaigns?before=&beforeId=",
+      "response": "50 newest first: [{id, name, description, status, statusLabel, channels, channelLabels, title, message, segment, whatsapp, scheduledAt, startedAt, sentAt, targetedCount, stats:[{channel, channelLabel, targeted, sent, delivered, read, failed, skipped, uncertain}], history:[], createdAt, updatedAt}]"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/campaigns/preview-targeting",
+      "request": {
+        "segment": "see segment"
+      },
+      "response": {
+        "data": {
+          "owners": 1,
+          "byChannel": {
+            "PUSH": 1,
+            "WHATSAPP": 1,
+            "SMS": 1,
+            "EMAIL": 1
+          },
+          "overLimit": false
+        }
+      },
+      "notes": "Counted in one query. WHATSAPP / SMS = owners with a usable phone (8–15 digits), EMAIL = with an email; numbers that answered STOP are skipped at send time (stats « skipped »)."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/campaigns",
+      "request": {
+        "name": "1..100",
+        "description": "≤ 500",
+        "channels": [
+          "PUSH",
+          "WHATSAPP",
+          "SMS",
+          "EMAIL"
+        ],
+        "title": "≤ 100 (push / email)",
+        "message": "≤ 1000 (≤ 480 with SMS)",
+        "segment": "see segment",
+        "whatsapp": "see whatsapp",
+        "scheduledAt": "ISO-8601 future ≤ 1 year → SCHEDULED"
+      },
+      "response": "201 campaign",
+      "errors": [
+        "400 French message (field)"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/campaigns/{id}",
+      "response": "campaign with stats and history [{action, actionLabel (Créée, Modifiée, Programmée, Envoi lancé, Annulée, Envoi terminé, Supprimée), actorName (name, « Super-administrateur » or « Système »), detail, at}]",
+      "errors": [
+        "404 CAMPAIGN_NOT_FOUND"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/campaigns/{id}",
+      "request": "fields present change; scheduledAt null unschedules",
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/admin/campaigns/{id}",
+      "response": "204 (DRAFT, SCHEDULED, CANCELLED; history kept)",
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/campaigns/{id}/send",
+      "response": "campaign SENDING (sent in the background)",
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT",
+        "422 CAMPAIGN_NOT_READY (French reason)",
+        "422 CAMPAIGN_NO_RECIPIENT",
+        "422 CAMPAIGN_TOO_MANY_RECIPIENTS (> 50 000 sends)",
+        "503 PLATFORM_WHATSAPP_UNAVAILABLE (WhatsApp chosen, platform number not configured)"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/campaigns/{id}/cancel",
+      "response": "campaign CANCELLED",
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT (not SCHEDULED)"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/whatsapp/conversations",
+      "response": "same shape as GET /api/v1/whatsapp/conversations, platform number"
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/whatsapp/conversations/unread-count",
+      "response": {
+        "data": {
+          "count": 2
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/whatsapp/conversations/{phone}/messages?before=&beforeId=",
+      "response": "same shape as the company inbox"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/whatsapp/conversations/{phone}/messages",
+      "request": {
+        "text": "1..4096"
+      },
+      "errors": [
+        "422 WHATSAPP_REPLY_WINDOW_CLOSED",
+        "409 WHATSAPP_SEND_UNCERTAIN",
+        "502 WHATSAPP_CLOUD_META_ERROR",
+        "503 PLATFORM_WHATSAPP_UNAVAILABLE"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/whatsapp/templates",
+      "response": {
+        "data": [
+          {
+            "name": "annonce_novembre",
+            "language": "fr",
+            "status": "APPROVED",
+            "statusLabel": "Approuvé",
+            "category": "MARKETING",
+            "headerFormat": "NONE",
+            "bodyText": "…",
+            "variableCount": 2
+          }
+        ]
+      },
+      "errors": [
+        "503 PLATFORM_WHATSAPP_UNAVAILABLE (number / WABA not configured)",
+        "502 WHATSAPP_CLOUD_META_ERROR"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/admin/whatsapp/media",
+      "request": "multipart file: JPEG / PNG ≤ 5 MB, MP4 / PDF ≤ 10 MB",
+      "response": {
+        "data": {
+          "mediaId": "handle"
+        }
+      }
+    }
+  ],
+  "stopStart": "An owner (or anyone) who writes STOP to the platform number is skipped by platform WhatsApp campaigns until he writes START (other channels unchanged).",
+  "notes": "A scheduled campaign that cannot leave when due (message / template missing, nobody, too many) goes back to « Brouillon » (history « Modifiée » by « Système ») instead of being retried; a header media id expires after 30 days at Meta, so a campaign scheduled further out must use a link."
+}

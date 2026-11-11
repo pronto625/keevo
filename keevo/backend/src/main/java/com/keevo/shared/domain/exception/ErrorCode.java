@@ -253,6 +253,14 @@ public enum ErrorCode {
     WHATSAPP_TEMPLATE_NAME_TAKEN,     // HTTP 409 — a template already has this name in this language
     WHATSAPP_TEMPLATE_LIMIT,          // HTTP 409 — the company already keeps the maximum number of templates
     WHATSAPP_TEMPLATE_NOT_APPROVED,   // HTTP 409 — the template is not approved by Meta (yet)
+    // ── Campaigns (Story 21.6) ─────────────────────────────────────
+    CAMPAIGN_NOT_FOUND,               // HTTP 404 — campaign unknown (or of another company)
+    CAMPAIGN_ALREADY_SENT,            // HTTP 409 — the campaign left (or is leaving, or was cancelled): frozen
+    CAMPAIGN_SENDING_IN_PROGRESS,     // HTTP 409 — another campaign of the company is being sent
+    CAMPAIGN_NOT_READY,               // HTTP 422 — no approved template / channel content to send
+    CAMPAIGN_NO_RECIPIENT,            // HTTP 422 — nobody can receive the campaign
+    CAMPAIGN_TOO_MANY_RECIPIENTS,     // HTTP 422 — audience above the per-campaign limit
+    PLATFORM_WHATSAPP_UNAVAILABLE,    // HTTP 503 — the platform WhatsApp number is not configured
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

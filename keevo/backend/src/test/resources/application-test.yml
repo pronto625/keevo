@@ -30,6 +30,14 @@ keevo:
     graph: fake
     app-secret: test-whatsapp-app-secret
     verify-token: test-whatsapp-verify-token
+    platform:
+      phone-number-id: "100000000000001"
+      waba-id: "200000000000001"
+      access-token: test-platform-token
+  # Story 21.6 — campaigns: small batches and a short tick, so tests run several batches quickly
+  campaigns:
+    tick-ms: 200
+    batch-size: 2
   secrets:
     encryption-key: ZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+f4CBgoM=
   payments:

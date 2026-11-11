@@ -19,6 +19,8 @@ public enum TenantTable {
             "issue_date", "total_ttc", "created_at"),
     INVOICE_PAYMENTS("invoice_payments", "id", "invoice_id", "amount", "paid_at"),
     STORES("stores", "id", "name", "type", "is_active", "created_at"),
+    /** Story 21.6 — the country and activity of the stores (store V2): platform campaign segments. */
+    STORE_PROFILE("stores", "is_active", "country", "category"),
     EMPLOYEES("employees", "id", "user_id", "first_name", "last_name", "store_id"),
     CATEGORIES("categories", "id", "name"),
     CLIENTS("clients", "id", "name", "phone", "email", "store_id", "archived", "created_at", "updated_at",

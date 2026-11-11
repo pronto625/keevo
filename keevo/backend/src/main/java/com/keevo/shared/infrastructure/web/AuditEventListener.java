@@ -653,6 +653,19 @@ public class AuditEventListener {
                 event.actorId());
     }
 
+    /** Story 21.6 — a WhatsApp campaign of the company: created, changed, launched, scheduled, cancelled, deleted, sent. */
+    @EventListener
+    public void on(com.keevo.shared.event.catalog.campaign.WhatsAppCampaignChangedEvent event) {
+        String action = "WHATSAPP_CAMPAIGN_" + event.change().name();
+        // the end of a send and a scheduled start are facts of the platform: the system actor (audit_log.user_id NOT NULL)
+        UUID actor = event.actorId() == null ? com.keevo.shared.event.catalog.onboarding.SaleFlowChangedEvent.SYSTEM_ACTOR
+                : event.actorId();
+        write(actor, event.tenantId(), action, "WhatsAppCampaign", event.campaignId(), null, null, null,
+                event.name(), event.detail() == null ? null : Map.of("detail", event.detail()), null);
+        log.info("AUDIT: {} tenantId={} actorId={}", action.toLowerCase(java.util.Locale.ROOT), event.tenantId(),
+                event.actorId());
+    }
+
     // ── Account deletion events (Story 14.5, FR91) ──────────────────────────
 
     @EventListener

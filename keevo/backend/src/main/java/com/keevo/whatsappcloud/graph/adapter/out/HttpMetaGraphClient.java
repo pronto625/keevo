@@ -174,14 +174,13 @@ public class HttpMetaGraphClient implements MetaGraphClient {
     public List<MetaTemplate> listTemplates(String wabaId, String token) {
         JsonNode body = call("list-templates", () -> http.get()
                 .uri(b -> b.path("/{waba}/message_templates")
-                        .queryParam("fields", "id,name,status,language,rejected_reason").queryParam("limit", 200)
+                        .queryParam("fields", "id,name,status,language,rejected_reason,category,components")
+                        .queryParam("limit", 200)
                         .build(wabaId))
                 .headers(h -> h.setBearerAuth(token)).retrieve().body(JsonNode.class));
         List<MetaTemplate> templates = new ArrayList<>();
         for (JsonNode n : body == null ? JSON.createArrayNode() : body.path("data")) {
-            String reason = text(n, "rejected_reason");
-            templates.add(new MetaTemplate(text(n, "id"), text(n, "name"), text(n, "language"), text(n, "status"),
-                    reason == null || "NONE".equals(reason) ? null : reason));
+            templates.add(template(n));
         }
         return templates;
     }
@@ -191,6 +190,23 @@ public class HttpMetaGraphClient implements MetaGraphClient {
         call("delete-template", () -> http.delete()
                 .uri(b -> b.path("/{waba}/message_templates").queryParam("name", name).build(wabaId))
                 .headers(h -> h.setBearerAuth(token)).retrieve().body(JsonNode.class));
+    }
+
+    /** One template of Meta's listing (Story 21.6: with its category, header format and body text). */
+    static MetaTemplate template(JsonNode n) {
+        String reason = text(n, "rejected_reason");
+        String header = "NONE";
+        String bodyText = null;
+        for (JsonNode c : n.path("components")) {
+            String type = c.path("type").asText("").toUpperCase(java.util.Locale.ROOT);
+            if ("HEADER".equals(type)) {
+                header = c.path("format").asText("TEXT").toUpperCase(java.util.Locale.ROOT);
+            } else if ("BODY".equals(type)) {
+                bodyText = text(c, "text");
+            }
+        }
+        return new MetaTemplate(text(n, "id"), text(n, "name"), text(n, "language"), text(n, "status"),
+                reason == null || "NONE".equals(reason) ? null : reason, text(n, "category"), header, bodyText);
     }
 
     /** Bref's {@code createTemplate} component layout. */

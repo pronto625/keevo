@@ -20,6 +20,22 @@ class WhatsAppCloudGraphConfigTest {
     private static final SecretCipher KEY = new SecretCipher(Base64.getEncoder().encodeToString(new byte[32]));
 
     @Test
+    @DisplayName("21.6: Meta's template listing → header format, body text, category; NONE reason dropped")
+    void listingParsed() throws Exception {
+        var n = new com.fasterxml.jackson.databind.ObjectMapper().readTree("{\"id\":\"1\",\"name\":\"annonce\","
+                + "\"language\":\"fr\",\"status\":\"APPROVED\",\"rejected_reason\":\"NONE\",\"category\":\"MARKETING\","
+                + "\"components\":[{\"type\":\"HEADER\",\"format\":\"IMAGE\"},{\"type\":\"BODY\",\"text\":\"Bonjour {{1}}\"}]}");
+        var t = HttpMetaGraphClient.template(n);
+        assertThat(t.headerFormat()).isEqualTo("IMAGE");
+        assertThat(t.bodyText()).isEqualTo("Bonjour {{1}}");
+        assertThat(t.category()).isEqualTo("MARKETING");
+        assertThat(t.rejectedReason()).isNull();
+        var plain = HttpMetaGraphClient.template(new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                "{\"name\":\"x\",\"status\":\"PENDING\",\"components\":[{\"type\":\"BODY\",\"text\":\"Salut\"}]}"));
+        assertThat(plain.headerFormat()).isEqualTo("NONE");
+    }
+
+    @Test
     @DisplayName("disabled by default; fake only under dev/test; meta needs every key and the encryption key")
     void strategies() {
         assertThat(WhatsAppCloudGraphConfig.create(new MockEnvironment(), KEY)).isInstanceOf(DisabledMetaGraphClient.class);

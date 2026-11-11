@@ -41,9 +41,6 @@ import java.util.UUID;
 @PreAuthorize("hasRole('OWNER')")
 public class WhatsAppTemplateController {
 
-    static final long MAX_IMAGE = 5L * 1024 * 1024;
-    static final long MAX_MEDIA = 10L * 1024 * 1024;
-
     /** Bref's {@code CreateTemplatePayload} (media header: {@code headerHandle} from {@code POST /media}). */
     public record CreateRequest(String name, String category, String language, String headerFormat,
                                 String headerText, String headerHandle, String bodyText,
@@ -121,21 +118,10 @@ public class WhatsAppTemplateController {
     @PostMapping(value = "/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponseWrapper<MediaView>> media(@RequestParam("file") MultipartFile file)
             throws IOException {
-        String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase(java.util.Locale.ROOT);
-        long max = switch (type) {
-            case "image/jpeg", "image/png" -> MAX_IMAGE;
-            case "video/mp4", "application/pdf" -> MAX_MEDIA;
-            default -> throw new InvalidRequestParameterException("file", "type",
-                    "Formats acceptés : image JPEG ou PNG, vidéo MP4, document PDF");
-        };
-        if (file.isEmpty() || file.getSize() > max) {
-            throw new InvalidRequestParameterException("file", "size", max == MAX_IMAGE
-                    ? "L'image doit faire 5 Mo au plus" : "Le fichier doit faire 10 Mo au plus");
-        }
-        String name = file.getOriginalFilename() == null || file.getOriginalFilename().isBlank() ? "media"
-                : file.getOriginalFilename().replaceAll("[^A-Za-z0-9._-]", "_");
-        String handle = templates.uploadHeaderSample(TenantContext.requireCurrent(), file.getBytes(), type,
-                name.length() > 100 ? name.substring(0, 100) : name);
+        com.keevo.whatsappcloud.inbox.adapter.in.rest.MediaUploads.Media media =
+                com.keevo.whatsappcloud.inbox.adapter.in.rest.MediaUploads.check(file);
+        String handle = templates.uploadHeaderSample(TenantContext.requireCurrent(), media.content(), media.type(),
+                media.filename());
         return ResponseEntity.ok(ApiResponseWrapper.ok(new MediaView(handle)));
     }
 

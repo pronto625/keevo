@@ -4,6 +4,7 @@ import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.whatsappcloud.inbox.domain.model.ChatMessage;
 import com.keevo.whatsappcloud.inbox.domain.model.Conversation;
 import com.keevo.whatsappcloud.inbox.domain.model.ConversationDelta;
+import com.keevo.whatsappcloud.inbox.domain.model.StatusChange;
 import com.keevo.whatsappcloud.inbox.domain.model.StatusUpdate;
 import com.keevo.whatsappcloud.inbox.domain.port.out.WhatsAppInboxRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,7 +36,7 @@ public class JdbcWhatsAppInboxRepository implements WhatsAppInboxRepository {
             rs.getString("contact_phone"), ChatMessage.Direction.valueOf(rs.getString("direction")),
             rs.getString("type"), rs.getString("body"), rs.getString("wa_message_id"), rs.getString("status"),
             instant(rs.getTimestamp("read_at")), rs.getObject("sent_by", UUID.class),
-            rs.getTimestamp("created_at").toInstant());
+            rs.getTimestamp("created_at").toInstant(), rs.getObject("campaign_id", UUID.class));
 
     private static final RowMapper<Conversation> CONVERSATION = (rs, n) -> new Conversation(
             rs.getString("contact_phone"), rs.getString("contact_name"), rs.getString("last_message"),
@@ -50,6 +51,9 @@ public class JdbcWhatsAppInboxRepository implements WhatsAppInboxRepository {
     }
 
     static String table(String schema, String table) {
+        if (PLATFORM.equals(schema)) {
+            return "public.platform_" + table; // Story 21.6 — the platform number's inbox
+        }
         TenantSchema.validate(schema);
         return "\"" + schema + "\"." + table;
     }
@@ -61,8 +65,8 @@ public class JdbcWhatsAppInboxRepository implements WhatsAppInboxRepository {
             return inserted;
         }
         int[][] counts = jdbc.batchUpdate("INSERT INTO " + table(schema, "whatsapp_messages") + " (id, contact_phone, "
-                        + "direction, type, body, wa_message_id, status, read_at, sent_by, created_at) VALUES "
-                        + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (wa_message_id) DO NOTHING",
+                        + "direction, type, body, wa_message_id, status, read_at, sent_by, created_at, campaign_id) VALUES "
+                        + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (wa_message_id) DO NOTHING",
                 messages, messages.size(), (ps, m) -> {
                     ps.setObject(1, m.id());
                     ps.setString(2, m.contactPhone());
@@ -74,6 +78,7 @@ public class JdbcWhatsAppInboxRepository implements WhatsAppInboxRepository {
                     ps.setTimestamp(8, m.readAt() == null ? null : Timestamp.from(m.readAt()));
                     ps.setObject(9, m.sentBy());
                     ps.setTimestamp(10, Timestamp.from(m.createdAt()));
+                    ps.setObject(11, m.campaignId());
                 });
         int i = 0;
         for (int[] batch : counts) {
@@ -120,21 +125,26 @@ public class JdbcWhatsAppInboxRepository implements WhatsAppInboxRepository {
     }
 
     @Override
-    public int applyStatuses(String schema, List<StatusUpdate> updates) {
+    public List<StatusChange> applyStatuses(String schema, List<StatusUpdate> updates) {
         if (updates.isEmpty()) {
-            return 0;
+            return List.of();
         }
         String[] ids = updates.stream().map(StatusUpdate::waMessageId).toArray(String[]::new);
         String[] statuses = updates.stream().map(StatusUpdate::status).toArray(String[]::new);
-        return jdbc.update(con -> {
-            var ps = con.prepareStatement("UPDATE " + table(schema, "whatsapp_messages") + " m SET status = v.status "
-                    + "FROM unnest(?::varchar[], ?::varchar[]) AS v(wa_id, status) WHERE m.wa_message_id = v.wa_id "
-                    + "AND m.direction = 'OUT' AND (" + RANK.formatted("v.status") + " > " + RANK.formatted("m.status")
-                    + " OR (v.status = 'FAILED' AND m.status = 'SENT'))");
+        String messages = table(schema, "whatsapp_messages");
+        // the rows are locked with their current status first: the change (old → new) feeds the campaign counters
+        return jdbc.query(con -> {
+            var ps = con.prepareStatement("WITH v AS (SELECT * FROM unnest(?::varchar[], ?::varchar[]) AS v(wa_id, "
+                    + "status)), o AS (SELECT m.id, m.status AS old_status FROM " + messages + " m JOIN v ON "
+                    + "m.wa_message_id = v.wa_id WHERE m.direction = 'OUT' FOR UPDATE OF m) "
+                    + "UPDATE " + messages + " m SET status = v.status FROM v, o WHERE m.id = o.id "
+                    + "AND m.wa_message_id = v.wa_id AND (" + RANK.formatted("v.status") + " > "
+                    + RANK.formatted("o.old_status") + " OR (v.status = 'FAILED' AND o.old_status = 'SENT')) "
+                    + "RETURNING m.campaign_id, o.old_status, m.status");
             ps.setArray(1, con.createArrayOf("varchar", ids));
             ps.setArray(2, con.createArrayOf("varchar", statuses));
             return ps;
-        });
+        }, (rs, n) -> new StatusChange(rs.getObject(1, UUID.class), rs.getString(2), rs.getString(3)));
     }
 
     @Override
@@ -154,7 +164,7 @@ public class JdbcWhatsAppInboxRepository implements WhatsAppInboxRepository {
     @Override
     public List<ChatMessage> thread(String schema, String contactPhone, Instant before, UUID beforeId, int limit) {
         String columns = "SELECT id, contact_phone, direction, type, body, wa_message_id, status, read_at, sent_by, "
-                + "created_at FROM " + table(schema, "whatsapp_messages") + " WHERE contact_phone = ?";
+                + "created_at, campaign_id FROM " + table(schema, "whatsapp_messages") + " WHERE contact_phone = ?";
         if (before == null) {
             return jdbc.query(columns + " ORDER BY created_at DESC, id DESC LIMIT ?", MESSAGE, contactPhone, limit);
         }

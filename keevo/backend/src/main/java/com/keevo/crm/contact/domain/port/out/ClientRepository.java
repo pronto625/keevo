@@ -42,6 +42,15 @@ public interface ClientRepository {
     /** Story 20.2 — the ids among {@code ids} eligible to marketing (consent, no STOP, not archived). */
     Set<UUID> findMarketingEligible(Collection<UUID> ids);
 
+    /** Story 21.6 — the eligible clients of the stores (empty = all), one per phone, at most {@code limit}. */
+    java.util.List<com.keevo.crm.api.MarketingRecipient> findMarketingAudience(Collection<UUID> storeIds, int limit);
+
+    /** Story 21.6 — the number of distinct eligible phones of the stores (empty = all), up to {@code cap}. */
+    int countMarketingAudience(Collection<UUID> storeIds, int cap);
+
+    /** Story 21.6 — STOP ({@code optedOut}) / START of a phone number on its clients; returns the count changed. */
+    int updateOptOutByPhone(String phoneE164, boolean optedOut, java.time.Instant at);
+
     /** Story 20.2 — writes only the consent columns (and {@code updated_at}) of a client. */
     void updateConsent(UUID id, com.keevo.crm.contact.domain.entity.MarketingConsent consent, java.time.Instant now);
 

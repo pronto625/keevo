@@ -1,5 +1,6 @@
 package com.keevo.whatsappcloud.inbox.adapter.in.rest;
 
+import com.keevo.shared.capability.notification.PlatformWhatsApp.HeaderMedia;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import com.keevo.shared.infrastructure.security.CurrentActor;
 import com.keevo.shared.infrastructure.web.ApiResponseWrapper;
@@ -44,15 +45,21 @@ public class WhatsAppConversationController {
             String text) {
     }
 
+    /**
+     * Story 21.6 — {@code headerMediaId} (from {@code POST /api/v1/whatsapp/media}) or {@code headerMediaLink}
+     * (https) for an IMAGE / VIDEO / DOCUMENT template, nothing otherwise.
+     */
     public record TemplateRequest(
             @NotNull(message = "Choisissez un modèle de message") UUID templateId,
-            @Size(max = 20, message = "20 valeurs au plus") List<String> variables) {
+            @Size(max = 20, message = "20 valeurs au plus") List<String> variables,
+            String headerMediaId,
+            String headerMediaLink) {
     }
 
     /** Bref's {@code ConversationSummary}. */
     public record ConversationView(String contactPhone, String contactName, String lastMessage, String lastType,
                                    String lastDirection, Instant lastAt, int unreadCount, Instant replyWindowEndsAt) {
-        static ConversationView of(Conversation c) {
+        public static ConversationView of(Conversation c) {
             return new ConversationView(c.contactPhone(), c.contactName(), c.lastMessage(), c.lastType(),
                     c.lastDirection().name().toLowerCase(Locale.ROOT), c.lastAt(), c.unreadCount(),
                     WhatsAppInboxService.replyWindowEndsAt(c));
@@ -62,7 +69,7 @@ public class WhatsAppConversationController {
     /** Bref's {@code WhatsAppChatMessage}: direction {@code in} / {@code out}, status of a sent message lower case. */
     public record MessageView(UUID id, String contactPhone, String direction, String type, String body,
                               String status, Instant createdAt) {
-        static MessageView of(ChatMessage m) {
+        public static MessageView of(ChatMessage m) {
             return new MessageView(m.id(), m.contactPhone(), m.direction().name().toLowerCase(Locale.ROOT), m.type(),
                     m.body(), m.status() == null ? null : m.status().toLowerCase(Locale.ROOT), m.createdAt());
         }
@@ -121,14 +128,16 @@ public class WhatsAppConversationController {
 
     /**
      * POST /api/v1/whatsapp/conversations/{phone}/template — {@code {templateId, variables}}: an approved template, at
-     * any time (it reopens the conversation) → the conversation; 409 {@code WHATSAPP_TEMPLATE_NOT_APPROVED}.
+     * any time (it reopens the conversation) → the conversation; 409 {@code WHATSAPP_TEMPLATE_NOT_APPROVED}. Story 21.6:
+     * {@code headerMediaId} / {@code headerMediaLink} for a media template (400 when missing or not expected).
      */
     @RequiresEntitlement(WhatsAppCloudModule.ID)
     @PostMapping("/{phone}/template")
     public ResponseEntity<ApiResponseWrapper<List<MessageView>>> sendTemplate(
             @PathVariable String phone, @Valid @RequestBody TemplateRequest request) {
         return ResponseEntity.ok(ApiResponseWrapper.ok(view(inbox.sendTemplate(TenantContext.requireCurrent(),
-                CurrentActor.actorId(), phone, request.templateId(), request.variables()))));
+                CurrentActor.actorId(), phone, request.templateId(), request.variables(),
+                new HeaderMedia(request.headerMediaId(), request.headerMediaLink())))));
     }
 
     private static List<MessageView> view(List<ChatMessage> messages) {

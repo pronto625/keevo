@@ -3,6 +3,7 @@ package com.keevo.whatsappcloud.invoice;
 import com.keevo.shared.capability.notification.DeliveryResult;
 import com.keevo.shared.capability.notification.TenantWhatsAppBusiness;
 import com.keevo.shared.module.EntitlementService;
+import com.keevo.shared.module.ModuleProvisioner;
 import com.keevo.shared.module.ModuleState;
 import com.keevo.whatsappcloud.account.application.WhatsAppAccountService;
 import com.keevo.whatsappcloud.account.application.WhatsAppAccountService.Credentials;
@@ -43,23 +44,29 @@ public class WhatsAppBusinessDocumentSender implements TenantWhatsAppBusiness {
     private final WhatsAppTemplateService templates;
     private final WhatsAppInboxService inbox;
     private final MetaGraphClient graph;
+    private final ModuleProvisioner provisioner;
 
     public WhatsAppBusinessDocumentSender(EntitlementService entitlements, WhatsAppAccountService accounts,
                                           WhatsAppTemplateService templates, WhatsAppInboxService inbox,
-                                          MetaGraphClient graph) {
+                                          MetaGraphClient graph, ModuleProvisioner provisioner) {
         this.entitlements = entitlements;
         this.accounts = accounts;
         this.templates = templates;
         this.inbox = inbox;
         this.graph = graph;
+        this.provisioner = provisioner;
     }
 
     @Override
     public boolean canSendDocuments(String tenantSchema) {
         try {
-            return graph.isEnabled()
-                    && entitlements.state(tenantSchema, WhatsAppCloudModule.ID) == ModuleState.ENABLED
-                    && accounts.status(tenantSchema).connected()
+            if (!graph.isEnabled()
+                    || entitlements.state(tenantSchema, WhatsAppCloudModule.ID) != ModuleState.ENABLED) {
+                return false;
+            }
+            // Story 21.6 — the module tables at their latest version (the sent document is stored in the inbox)
+            provisioner.ensureProvisioned(tenantSchema, WhatsAppCloudModule.ID);
+            return accounts.status(tenantSchema).connected()
                     && templates.invoiceTemplateApproved(tenantSchema);
         } catch (RuntimeException e) {
             // module tables not provisioned yet, database hiccup: the platform path is used

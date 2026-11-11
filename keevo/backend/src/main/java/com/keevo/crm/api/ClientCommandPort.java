@@ -23,4 +23,14 @@ public interface ClientCommandPort {
     void archive(String tenantSchema, UUID clientId, UUID actorId);
 
     void unarchive(String tenantSchema, UUID clientId, UUID actorId);
+
+    /**
+     * Story 21.6 — the client's own answer on WhatsApp: STOP ({@code optedOut}) sets {@code marketing_opt_out_at} on
+     * every client of the company with this number (any store), START clears it; the team's consent is never touched.
+     * {@code updated_at} moves so the devices pull the change. One statement on {@code idx_clients_phone_normalized}.
+     *
+     * @param phoneE164 {@code +} and digits
+     * @return the clients changed
+     */
+    int setMarketingOptOutByPhone(String tenantSchema, String phoneE164, boolean optedOut, java.time.Instant at);
 }

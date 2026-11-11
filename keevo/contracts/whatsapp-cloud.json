@@ -1,5 +1,5 @@
 {
-  "description": "Story 21.5 — « WhatsApp Business » (module whatsapp-cloud): the company connects its own WhatsApp Business number (Meta embedded signup), reads and answers its WhatsApp conversations, manages its message templates (Meta review), and its invoices / quotes sent by WhatsApp leave from its own number with the approved template bref_facture (PDF attached), the platform WhatsApp text with the link being the fallback. Plans: BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL (owner-disabled for companies that existed before it: « Mes modules »). Module refused → 403 MODULE_NOT_ENTITLED / MODULE_DISABLED_BY_OWNER. Owner only except GET /account (every member). Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. Shapes of conversations, messages and templates are Bref's (bref/features/whatsapp-inbox, whatsapp-marketing). Ids are API handles, never shown; show statusLabel, never status. Change this file only with both sides.",
+  "description": "Story 21.5 — « WhatsApp Business » (module whatsapp-cloud): the company connects its own WhatsApp Business number (Meta embedded signup), reads and answers its WhatsApp conversations, manages its message templates (Meta review), and its invoices / quotes sent by WhatsApp leave from its own number with the approved template bref_facture (PDF attached), the platform WhatsApp text with the link being the fallback. Plans: BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL (owner-disabled for companies that existed before it: « Mes modules »). Module refused → 403 MODULE_NOT_ENTITLED / MODULE_DISABLED_BY_OWNER. Owner only except GET /account (every member). Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. Shapes of conversations, messages and templates are Bref's (bref/features/whatsapp-inbox, whatsapp-marketing). Ids are API handles, never shown; show statusLabel, never status. Change this file only with both sides. Story 21.6: campaigns to consenting clients, header media for media templates, STOP / START answers (client opt-out).",
   "endpoints": [
     {
       "method": "GET",
@@ -133,7 +133,9 @@
         "templateId": "uuid of an APPROVED template",
         "variables": [
           "one value per {{n}} of the body, in order"
-        ]
+        ],
+        "headerMediaId": "21.6 — media id from POST /api/v1/whatsapp/media (IMAGE / VIDEO / DOCUMENT templates)",
+        "headerMediaLink": "21.6 — or a public https:// link (≤ 2048), fetched by Meta"
       },
       "response": "same as GET messages",
       "errors": [
@@ -144,7 +146,7 @@
         "409 WHATSAPP_SEND_UNCERTAIN",
         "502 WHATSAPP_CLOUD_META_ERROR"
       ],
-      "notes": "Works at any time (reopens the conversation). Templates with a media header are sent from campaigns (21.6), not here."
+      "notes": "Works at any time (reopens the conversation). Templates with a media header are sent from campaigns (21.6), not here. 21.6: a media template needs exactly one of headerMediaId / headerMediaLink (400 otherwise); named variables are sent with their names."
     },
     {
       "method": "GET",
@@ -241,6 +243,416 @@
       "auth": "none (Meta: verify token / X-Hub-Signature-256)",
       "module": "none",
       "notes": "Meta only, never called by the app."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/media",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": "multipart file: JPEG / PNG ≤ 5 MB, MP4 / PDF ≤ 10 MB",
+      "response": {
+        "data": {
+          "mediaId": "Meta media id (handle, valid 30 days at Meta, never shown)"
+        }
+      },
+      "errors": [
+        "400 (French: type / size)",
+        "409 WHATSAPP_NOT_CONNECTED",
+        "502 WHATSAPP_CLOUD_META_ERROR"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/campaigns?before=&beforeId=",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": [
+          {
+            "id": "uuid (handle)",
+            "name": "Soldes",
+            "description": "… or null",
+            "status": "DRAFT | SCHEDULED | SENDING | SENT | CANCELLED (never shown)",
+            "statusLabel": "Brouillon | Programmée | En cours d'envoi | Envoyée | Annulée",
+            "storeIds": [
+              "uuid (edit form only)"
+            ],
+            "storeNames": [
+              "Boutique Centre"
+            ],
+            "templateId": "uuid or null",
+            "templateName": "promo_rentree",
+            "templateLanguage": "fr",
+            "templateBody": "Bonjour {{1}} …",
+            "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+            "hasHeaderMedia": false,
+            "headerMediaLink": "https://… or null",
+            "variables": [
+              {
+                "source": "static | clientName | storeName",
+                "value": "fixed text / fallback or null"
+              }
+            ],
+            "scheduledAt": "ISO-8601 or null",
+            "startedAt": "…",
+            "sentAt": "…",
+            "targetedCount": 3,
+            "sentCount": 3,
+            "deliveredCount": 1,
+            "readCount": 1,
+            "failedCount": 0,
+            "skippedCount": 0,
+            "uncertainCount": 0,
+            "createdAt": "…",
+            "updatedAt": "…"
+          }
+        ]
+      },
+      "notes": "50 newest first; next page: before = createdAt and beforeId = id of the last row. Bref GET /customer-campaigns."
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/campaigns/templates",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": [
+          {
+            "id": "uuid",
+            "name": "promo_rentree",
+            "language": "fr",
+            "category": "MARKETING",
+            "headerFormat": "NONE",
+            "bodyText": "Bonjour {{1}} …",
+            "variableCount": 1
+          }
+        ]
+      },
+      "notes": "Approved templates of the owner. Bref GET /customer-campaigns/templates."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/campaigns/preview-targeting",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "request": {
+        "storeIds": [
+          "uuid … (empty / absent = every store)"
+        ]
+      },
+      "response": {
+        "data": {
+          "count": 3,
+          "overLimit": false
+        }
+      },
+      "errors": [
+        "400 « Boutique inconnue ou désactivée »"
+      ],
+      "notes": "Clients with the team's marketing consent, no STOP, not archived, one per phone number. overLimit = more than 5 000."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/campaigns",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": {
+        "name": "1..100",
+        "description": "≤ 500, optional",
+        "storeIds": [
+          "uuid, optional"
+        ],
+        "templateId": "uuid of an owner template, optional in a draft",
+        "variables": [
+          {
+            "source": "static | clientName | storeName (Bref customerName / shopName accepted)",
+            "value": "fixed text (static) or fallback"
+          }
+        ],
+        "headerMediaId": "optional",
+        "headerMediaLink": "optional https",
+        "scheduledAt": "ISO-8601 in the future (≤ 1 year), optional → SCHEDULED"
+      },
+      "response": {
+        "status": 201,
+        "data": {
+          "id": "uuid (handle)",
+          "name": "Soldes",
+          "description": "… or null",
+          "status": "DRAFT | SCHEDULED | SENDING | SENT | CANCELLED (never shown)",
+          "statusLabel": "Brouillon | Programmée | En cours d'envoi | Envoyée | Annulée",
+          "storeIds": [
+            "uuid (edit form only)"
+          ],
+          "storeNames": [
+            "Boutique Centre"
+          ],
+          "templateId": "uuid or null",
+          "templateName": "promo_rentree",
+          "templateLanguage": "fr",
+          "templateBody": "Bonjour {{1}} …",
+          "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+          "hasHeaderMedia": false,
+          "headerMediaLink": "https://… or null",
+          "variables": [
+            {
+              "source": "static | clientName | storeName",
+              "value": "fixed text / fallback or null"
+            }
+          ],
+          "scheduledAt": "ISO-8601 or null",
+          "startedAt": "…",
+          "sentAt": "…",
+          "targetedCount": 3,
+          "sentCount": 3,
+          "deliveredCount": 1,
+          "readCount": 1,
+          "failedCount": 0,
+          "skippedCount": 0,
+          "uncertainCount": 0,
+          "createdAt": "…",
+          "updatedAt": "…"
+        }
+      },
+      "errors": [
+        "400 (French message)",
+        "404 WHATSAPP_TEMPLATE_NOT_FOUND"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/campaigns/{id}",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": {
+          "id": "uuid (handle)",
+          "name": "Soldes",
+          "description": "… or null",
+          "status": "DRAFT | SCHEDULED | SENDING | SENT | CANCELLED (never shown)",
+          "statusLabel": "Brouillon | Programmée | En cours d'envoi | Envoyée | Annulée",
+          "storeIds": [
+            "uuid (edit form only)"
+          ],
+          "storeNames": [
+            "Boutique Centre"
+          ],
+          "templateId": "uuid or null",
+          "templateName": "promo_rentree",
+          "templateLanguage": "fr",
+          "templateBody": "Bonjour {{1}} …",
+          "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+          "hasHeaderMedia": false,
+          "headerMediaLink": "https://… or null",
+          "variables": [
+            {
+              "source": "static | clientName | storeName",
+              "value": "fixed text / fallback or null"
+            }
+          ],
+          "scheduledAt": "ISO-8601 or null",
+          "startedAt": "…",
+          "sentAt": "…",
+          "targetedCount": 3,
+          "sentCount": 3,
+          "deliveredCount": 1,
+          "readCount": 1,
+          "failedCount": 0,
+          "skippedCount": 0,
+          "uncertainCount": 0,
+          "createdAt": "…",
+          "updatedAt": "…"
+        }
+      },
+      "errors": [
+        "404 CAMPAIGN_NOT_FOUND"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/whatsapp/campaigns/{id}",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "request": "same fields as POST, only those present change; \"scheduledAt\": null unschedules",
+      "response": {
+        "data": {
+          "id": "uuid (handle)",
+          "name": "Soldes",
+          "description": "… or null",
+          "status": "DRAFT | SCHEDULED | SENDING | SENT | CANCELLED (never shown)",
+          "statusLabel": "Brouillon | Programmée | En cours d'envoi | Envoyée | Annulée",
+          "storeIds": [
+            "uuid (edit form only)"
+          ],
+          "storeNames": [
+            "Boutique Centre"
+          ],
+          "templateId": "uuid or null",
+          "templateName": "promo_rentree",
+          "templateLanguage": "fr",
+          "templateBody": "Bonjour {{1}} …",
+          "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+          "hasHeaderMedia": false,
+          "headerMediaLink": "https://… or null",
+          "variables": [
+            {
+              "source": "static | clientName | storeName",
+              "value": "fixed text / fallback or null"
+            }
+          ],
+          "scheduledAt": "ISO-8601 or null",
+          "startedAt": "…",
+          "sentAt": "…",
+          "targetedCount": 3,
+          "sentCount": 3,
+          "deliveredCount": 1,
+          "readCount": 1,
+          "failedCount": 0,
+          "skippedCount": 0,
+          "uncertainCount": 0,
+          "createdAt": "…",
+          "updatedAt": "…"
+        }
+      },
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT",
+        "400"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/whatsapp/campaigns/{id}",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "response": "204",
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT (SENDING / SENT)"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/campaigns/{id}/send",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "response": {
+        "data": {
+          "id": "uuid (handle)",
+          "name": "Soldes",
+          "description": "… or null",
+          "status": "DRAFT | SCHEDULED | SENDING | SENT | CANCELLED (never shown)",
+          "statusLabel": "Brouillon | Programmée | En cours d'envoi | Envoyée | Annulée",
+          "storeIds": [
+            "uuid (edit form only)"
+          ],
+          "storeNames": [
+            "Boutique Centre"
+          ],
+          "templateId": "uuid or null",
+          "templateName": "promo_rentree",
+          "templateLanguage": "fr",
+          "templateBody": "Bonjour {{1}} …",
+          "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+          "hasHeaderMedia": false,
+          "headerMediaLink": "https://… or null",
+          "variables": [
+            {
+              "source": "static | clientName | storeName",
+              "value": "fixed text / fallback or null"
+            }
+          ],
+          "scheduledAt": "ISO-8601 or null",
+          "startedAt": "…",
+          "sentAt": "…",
+          "targetedCount": 3,
+          "sentCount": 3,
+          "deliveredCount": 1,
+          "readCount": 1,
+          "failedCount": 0,
+          "skippedCount": 0,
+          "uncertainCount": 0,
+          "createdAt": "…",
+          "updatedAt": "…"
+        }
+      },
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT",
+        "409 CAMPAIGN_SENDING_IN_PROGRESS",
+        "409 WHATSAPP_NOT_CONNECTED",
+        "409 WHATSAPP_TEMPLATE_NOT_APPROVED",
+        "422 CAMPAIGN_NOT_READY (French reason)",
+        "422 CAMPAIGN_NO_RECIPIENT",
+        "422 CAMPAIGN_TOO_MANY_RECIPIENTS (> 5 000)",
+        "403 QUOTA_EXCEEDED (Messages WhatsApp)"
+      ],
+      "notes": "Returns SENDING at once; messages leave in the background (≤ 20 / s); poll GET /{id} for the counters."
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/whatsapp/campaigns/{id}/cancel",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (WRITE)",
+      "response": {
+        "data": {
+          "id": "uuid (handle)",
+          "name": "Soldes",
+          "description": "… or null",
+          "status": "DRAFT | SCHEDULED | SENDING | SENT | CANCELLED (never shown)",
+          "statusLabel": "Brouillon | Programmée | En cours d'envoi | Envoyée | Annulée",
+          "storeIds": [
+            "uuid (edit form only)"
+          ],
+          "storeNames": [
+            "Boutique Centre"
+          ],
+          "templateId": "uuid or null",
+          "templateName": "promo_rentree",
+          "templateLanguage": "fr",
+          "templateBody": "Bonjour {{1}} …",
+          "headerFormat": "NONE | TEXT | IMAGE | VIDEO | DOCUMENT",
+          "hasHeaderMedia": false,
+          "headerMediaLink": "https://… or null",
+          "variables": [
+            {
+              "source": "static | clientName | storeName",
+              "value": "fixed text / fallback or null"
+            }
+          ],
+          "scheduledAt": "ISO-8601 or null",
+          "startedAt": "…",
+          "sentAt": "…",
+          "targetedCount": 3,
+          "sentCount": 3,
+          "deliveredCount": 1,
+          "readCount": 1,
+          "failedCount": 0,
+          "skippedCount": 0,
+          "uncertainCount": 0,
+          "createdAt": "…",
+          "updatedAt": "…"
+        }
+      },
+      "errors": [
+        "409 CAMPAIGN_ALREADY_SENT (not SCHEDULED)"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/whatsapp/campaigns/{id}/recipients?after=",
+      "auth": "owner JWT",
+      "module": "whatsapp-cloud (READ)",
+      "response": {
+        "data": [
+          {
+            "clientName": "Awa",
+            "phone": "+237690000101",
+            "storeName": "Boutique Centre",
+            "status": "SENT | DELIVERED | READ | FAILED | SKIPPED | UNCERTAIN | PENDING | SENDING (never shown)",
+            "statusLabel": "Envoyé | Délivré | Lu | Échec | Non envoyé | Envoi incertain | En attente | En cours d'envoi",
+            "error": "French reason or null"
+          }
+        ]
+      },
+      "notes": "100 per page by phone; next page: after = digits of the last phone."
     }
   ],
   "push": {
@@ -252,5 +664,8 @@
       "contactPhone": "237690112233"
     }
   },
-  "invoiceSending": "POST /api/v1/invoices/{id}/send (channel WHATSAPP) is unchanged for the app: when the company number is connected and bref_facture is approved, the client receives the PDF from the company number; otherwise the platform text with the link."
+  "invoiceSending": "POST /api/v1/invoices/{id}/send (channel WHATSAPP) is unchanged for the app: when the company number is connected and bref_facture is approved, the client receives the PDF from the company number; otherwise the platform text with the link.",
+  "stopStart": "21.6 — a client who writes STOP / ARRÊT / ARRÊTER / DÉSABONNER / UNSUBSCRIBE to the company number is opted out (marketingOptOutAt on every client of the company with that number, team consent untouched, devices pull it); START / REPRENDRE / SUBSCRIBE clears it. A confirmation is sent back at most once per minute.",
+  "quota": "21.6 — usage metric WHATSAPP_MESSAGES « Messages WhatsApp » (GET /api/v1/subscription usage): counted per message Meta accepted; no limit unless the offer sets one.",
+  "campaignNotes": "21.6 — a scheduled campaign that cannot leave when due (template deleted / no longer approved, nobody, too many) goes back to « Brouillon »; a header media id expires after 30 days at Meta (scheduling further out with a media id is refused, use a link); START from a number that was not opted out gets no confirmation."
 }
