@@ -7,6 +7,7 @@ import com.keevo.admin.notification.domain.model.PushTenantRef;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * Audience of a global push (Story 9-5): companies neither DELETED nor SUSPENDED, never the
@@ -34,4 +35,12 @@ public interface PushAudiencePort {
 
     /** Distinct device tokens of the companies (a token in several schemas counts once), same skip / rethrow rules. */
     long countDeviceTokens(List<PushTargetTenant> tenants);
+
+    /**
+     * Story 19.11c (FUS-NFR11) — the device tokens of many companies without a statement per company: {@code action}
+     * receives each company that has tokens, in the order of {@code tenants}, with its tokens (sorted). Companies are
+     * read 100 per statement and handed over chunk by chunk (memory: one chunk). A company whose schema cannot be read
+     * is skipped (logged); connection / resource failures are rethrown.
+     */
+    void forEachTenantTokens(List<PushTargetTenant> tenants, BiConsumer<PushTargetTenant, List<String>> action);
 }

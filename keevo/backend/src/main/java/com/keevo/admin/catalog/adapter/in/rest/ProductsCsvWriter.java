@@ -35,22 +35,44 @@ final class ProductsCsvWriter {
 
     private ProductsCsvWriter() {}
 
-    static byte[] write(List<AdminProductListItem> products) {
-        StringBuilder csv = new StringBuilder(BOM).append(HEADER).append("\r\n");
-        for (AdminProductListItem item : products) {
-            String tenant = item.tenantName() == null || item.tenantName().isBlank()
-                    ? AdminLabels.UNNAMED_TENANT : item.tenantName();
-            csv.append(escape(item.name())).append(';')
-               .append(escape(tenant)).append(';')
-               .append(label(PLAN_LABELS, item.tenantPlan())).append(';')
-               .append(escape(item.categoryName())).append(';')
-               .append(item.price()).append(';')
-               .append(item.stockQuantity()).append(';')
-               .append(label(STATUS_LABELS, item.status())).append(';')
-               .append(item.updatedAt() != null ? FR_DATE.format(item.updatedAt()) : "")
-               .append("\r\n");
+    /** Story 19.11c — the BOM and the header line (streamed export). */
+    static void writeHeader(Appendable out) {
+        append(out, BOM + HEADER + "\r\n");
+    }
+
+    /** Story 19.11c — one product line (streamed export). */
+    static void writeRow(Appendable out, AdminProductListItem item) {
+        String tenant = item.tenantName() == null || item.tenantName().isBlank()
+                ? AdminLabels.UNNAMED_TENANT : item.tenantName();
+        append(out, escape(item.name()) + ';'
+                + escape(tenant) + ';'
+                + label(PLAN_LABELS, item.tenantPlan()) + ';'
+                + escape(item.categoryName()) + ';'
+                + item.price() + ';'
+                + item.stockQuantity() + ';'
+                + label(STATUS_LABELS, item.status()) + ';'
+                + (item.updatedAt() != null ? FR_DATE.format(item.updatedAt()) : "")
+                + "\r\n");
+    }
+
+    /** Story 19.11c — last line of an export cut by an error after the first rows were sent. */
+    static final String INTERRUPTED = "Export interrompu : fichier incomplet, relancez l'export";
+
+    /** Marks a streamed export cut short (best effort: the client may be gone). */
+    static void writeInterrupted(Appendable out) {
+        try {
+            out.append(INTERRUPTED).append("\r\n");
+        } catch (java.io.IOException ignored) {
+            // client gone: nothing more can be written
         }
-        return csv.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private static void append(Appendable out, String text) {
+        try {
+            out.append(text);
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e); // client gone mid-download: the request ends
+        }
     }
 
     /** {@code keevo-products-YYYY-MM-DD.csv}, the day taken in Africa/Douala. */

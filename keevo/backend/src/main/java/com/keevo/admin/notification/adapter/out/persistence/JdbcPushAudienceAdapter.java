@@ -1,5 +1,8 @@
 package com.keevo.admin.notification.adapter.out.persistence;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.notification.domain.model.GlobalNotificationTarget;
 import com.keevo.admin.notification.domain.model.PushTargetTenant;
 import com.keevo.admin.notification.domain.model.PushTenantRef;
@@ -15,12 +18,17 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * JdbcPushAudienceAdapter — audience of a global push (Story 9-5, FR82).
@@ -29,6 +37,10 @@ import java.util.UUID;
  * names come from {@code public.tenants.schema_name} and are gated by {@link TenantSchema#isValid}
  * before interpolation; a company whose schema / table cannot be read is skipped (id only in logs),
  * connection or resource failures are rethrown.
+ *
+ * <p>Story 19.11c (FUS-NFR11): the device tokens are read through {@link CrossTenantSql} — the companies' table
+ * presence in one catalogue query, then one {@code UNION ALL} per 100 companies (a failing chunk retried company by
+ * company) — never a statement per company.
  */
 @Component
 public class JdbcPushAudienceAdapter implements PushAudiencePort {
@@ -42,9 +54,17 @@ public class JdbcPushAudienceAdapter implements PushAudiencePort {
             + "'::uuid AND code <> 'KV-ADMIN' AND schema_name <> 'public'";
 
     private final JdbcTemplate jdbc;
+    private final CrossTenantSql crossTenant;
 
+    /** With cross-tenant statements of the default chunk size (tests). */
     public JdbcPushAudienceAdapter(JdbcTemplate jdbc) {
+        this(jdbc, new CrossTenantSql(jdbc, CrossTenantSql.DEFAULT_CHUNK_SIZE));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public JdbcPushAudienceAdapter(JdbcTemplate jdbc, CrossTenantSql crossTenant) {
         this.jdbc = jdbc;
+        this.crossTenant = crossTenant;
     }
 
     private static final RowMapper<PushTargetTenant> TENANT =
@@ -93,32 +113,55 @@ public class JdbcPushAudienceAdapter implements PushAudiencePort {
 
     @Override
     public List<String> deviceTokens(PushTargetTenant tenant) {
-        String schema = tenant.schemaName();
-        if (!TenantSchema.isValid(schema)) { // audience filtering gates too; re-checked at use
-            log.warn("Global push: company {} skipped (invalid schema name)", tenant.id());
-            return List.of();
-        }
-        try {
-            return jdbc.queryForList("SELECT token FROM " + schema + ".device_tokens ORDER BY token",
-                    String.class);
-        } catch (DataAccessResourceFailureException | TransientDataAccessException
-                 | RecoverableDataAccessException e) {
-            throw e; // outage / pool exhaustion: not a problem of this company
-        } catch (DataAccessException e) {
-            log.warn("Global push: company {} skipped ({})", tenant.id(), e.getClass().getSimpleName());
-            return List.of();
-        }
+        List<String> tokens = new ArrayList<>();
+        forEachTenantTokens(List.of(tenant), (t, list) -> tokens.addAll(list));
+        return tokens;
     }
 
     @Override
     public long countDeviceTokens(List<PushTargetTenant> tenants) {
-        // One statement per company so a broken schema only drops its own tokens; a device registered in
-        // several companies (same FCM token) counts once, as it receives the push once.
+        // A device registered in several companies (same FCM token) counts once, as it receives the push once:
+        // distinct per statement in SQL, then across statements here.
         Set<String> distinct = new HashSet<>();
-        for (PushTargetTenant tenant : tenants) {
-            distinct.addAll(deviceTokens(tenant));
-        }
+        crossTenant.forEachChunk(branches(tenants), (tenant, params) -> "SELECT token FROM "
+                        + TenantSchema.validate(tenant.schemaName()) + ".device_tokens",
+                union -> "SELECT DISTINCT token FROM (" + union + ") u", (rs, i) -> rs.getString("token"),
+                distinct::addAll);
         return distinct.size();
+    }
+
+    @Override
+    public void forEachTenantTokens(List<PushTargetTenant> tenants,
+                                    BiConsumer<PushTargetTenant, List<String>> action) {
+        Map<String, PushTargetTenant> byId = new HashMap<>();
+        Map<String, Integer> position = new HashMap<>();
+        for (PushTargetTenant t : tenants) {
+            String id = t.id().toString();
+            byId.putIfAbsent(id, t);
+            position.putIfAbsent(id, position.size());
+        }
+        crossTenant.forEachChunk(branches(tenants), (tenant, params) -> "SELECT " + position.get(tenant.id())
+                        + " AS pos, " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, token FROM "
+                        + TenantSchema.validate(tenant.schemaName()) + ".device_tokens",
+                union -> "SELECT tenant_id, token FROM (" + union + ") u ORDER BY pos, token",
+                (rs, i) -> new String[]{rs.getString("tenant_id"), rs.getString("token")},
+                rows -> {
+                    Map<String, List<String>> grouped = new LinkedHashMap<>();
+                    for (String[] row : rows) {
+                        grouped.computeIfAbsent(row[0], k -> new ArrayList<>()).add(row[1]);
+                    }
+                    grouped.forEach((id, tokens) -> action.accept(byId.get(id), tokens));
+                });
+    }
+
+    /** The companies holding the device tokens table (presence in one catalogue query), each once, order kept. */
+    private List<TenantBranch> branches(List<PushTargetTenant> tenants) {
+        return crossTenant.withPresence(tenants.stream()
+                        .filter(JdbcPushAudienceAdapter::validSchema)
+                        .map(t -> new TenantBranch(t.id().toString(), null, t.schemaName(), null, null))
+                        .distinct()
+                        .toList())
+                .stream().filter(t -> t.has(TenantTable.DEVICE_TOKENS)).toList();
     }
 
     private static boolean validSchema(PushTargetTenant t) {

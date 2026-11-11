@@ -1,6 +1,7 @@
 package com.keevo.admin.catalog.adapter.in.rest;
 
 import com.keevo.shared.infrastructure.security.CurrentActor;
+import jakarta.servlet.http.HttpServletResponse;
 import com.keevo.admin.catalog.adapter.in.rest.dto.AdminCatalogSummaryDto;
 import com.keevo.admin.catalog.adapter.in.rest.dto.AdminProductPageResponse;
 import com.keevo.admin.catalog.application.service.AdminCatalogService;
@@ -61,14 +62,18 @@ public class AdminCatalogController {
     }
 
     @Operation(summary = "Export all products as CSV with current filters",
-               security = @SecurityRequirement(name = "bearerAuth"))
+               security = @SecurityRequirement(name = "bearerAuth"),
+               responses = @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200",
+                       description = "Fichier CSV (UTF-8 avec BOM, séparateur ;)",
+                       content = @io.swagger.v3.oas.annotations.media.Content(mediaType = "text/csv")))
     @GetMapping("/products/export")
-    public ResponseEntity<byte[]> exportProducts(
+    public void exportProducts(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String tenantId,
             @RequestParam(required = false) String stockLevel,
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) String plan) {
+            @RequestParam(required = false) String plan,
+            HttpServletResponse response) throws java.io.IOException {
 
         CurrentActor.requireSuperAdmin();
 
@@ -76,14 +81,26 @@ public class AdminCatalogController {
                 search, tenantId, stockLevel, status, plan,
                 0, Integer.MAX_VALUE);
 
-        Page<AdminProductListItem> allProducts = adminCatalogService.execute(query);
-
-        byte[] bytes = ProductsCsvWriter.write(allProducts.getContent());
+        // Story 19.11c: prepared first (a filter error is still a JSON error, nothing written yet), then streamed
+        // to the response on the request thread, a few companies at a time — same columns and labels as before,
+        // rows grouped by company (name order), most recently updated first inside a company.
+        AdminCatalogService.ProductExport export = adminCatalogService.prepareExport(query);
         String filename = ProductsCsvWriter.filename(ProductsCsvWriter.today());
 
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
-                .header(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8")
-                .body(bytes);
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
+        response.setHeader(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8");
+        java.io.Writer out = new java.io.BufferedWriter(new java.io.OutputStreamWriter(response.getOutputStream(),
+                java.nio.charset.StandardCharsets.UTF_8));
+        ProductsCsvWriter.writeHeader(out);
+        try {
+            export.forEach(item -> ProductsCsvWriter.writeRow(out, item));
+        } catch (RuntimeException e) {
+            // The response may already be committed (200 + part of the rows): never let a cut file look complete.
+            ProductsCsvWriter.writeInterrupted(out);
+            out.flush();
+            throw e;
+        }
+        out.flush();
     }
 }

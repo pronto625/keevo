@@ -39,7 +39,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * classes may share the database). Runs outside the test transaction, as in production.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({AdminRevenueService.class, AdminRevenueServiceIntegrationTest.FixedClock.class,
+@Import({AdminRevenueService.class, AdminRevenueServiceIntegrationTest.FixedClock.class, com.keevo.admin.crosstenant.CrossTenantSql.class,
         com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class,
         com.keevo.subscription.offer.adapter.out.persistence.JdbcOfferStore.class,
         com.keevo.subscription.offer.application.service.OfferCatalogService.class,

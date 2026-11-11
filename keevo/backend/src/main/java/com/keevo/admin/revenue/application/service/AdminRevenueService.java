@@ -1,5 +1,8 @@
 package com.keevo.admin.revenue.application.service;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.identity.api.PlanKind;
 import com.keevo.shared.capability.entitlement.PlanCatalog;
 import com.keevo.subscription.api.OfferAdministration;
@@ -10,10 +13,6 @@ import com.keevo.shared.domain.exception.ErrorCode;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.RecoverableDataAccessException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +40,10 @@ import static com.keevo.admin.revenue.domain.model.RevenueMetrics.WAT;
  * <p>Deliberately NOT {@code @Transactional}: each per-schema statement runs on its own so a tenant whose
  * schema query fails (missing table, broken schema) is skipped without aborting the others; connection or
  * resource failures are rethrown (9-7 rule).
+ *
+ * <p>Story 19.11c (FUS-NFR11): the per-tenant-schema reads (current plan of every tenant, GMV of the churned tenants)
+ * are chunked {@code UNION ALL} statements ({@link CrossTenantSql}, 100 tenants each) after one table-presence query —
+ * never a statement per tenant.
  */
 @Service
 public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenueTrendUseCase, GetChurnReportUseCase {
@@ -82,13 +85,18 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
             "SELECT id, schema_name FROM public.tenants "
             + "WHERE status IN ('ACTIVE', 'SUSPENDED', 'DELETION_PENDING') AND id <> '" + SYSTEM_TENANT_ID + "'::uuid";
 
-    /** Story 19.7a: the kind of the current plan (null for a code the catalogue does not know: not counted). */
+    /**
+     * Story 19.7a: the kind of the current plan (null for a code the catalogue does not know: not counted). One branch
+     * of the 19.11c union: the tenant id literal, then the schema.
+     */
     static final String CURRENT_PLAN_SQL =
-            "SELECT p.kind FROM \"%s\".subscriptions s LEFT JOIN public.plans p ON p.code = s.plan_type "
-            + "ORDER BY s.created_at DESC LIMIT 1";
+            "SELECT %s::text AS tenant_id, (SELECT p.kind FROM \"%s\".subscriptions s "
+            + "LEFT JOIN public.plans p ON p.code = s.plan_type ORDER BY s.created_at DESC LIMIT 1) AS kind";
 
+    /** One branch of the 19.11c churn union: the tenant id literal, then the schema; binds the window bounds. */
     static final String GMV_SQL =
-            "SELECT COALESCE(SUM(total_amount), 0) FROM \"%s\".sales WHERE status = 'COMPLETED' "
+            "SELECT %s::text AS tenant_id, COALESCE(SUM(total_amount), 0) AS gmv FROM \"%s\".sales "
+            + "WHERE status = 'COMPLETED' "
             + "AND COALESCE(occurred_at, created_at) >= ? AND COALESCE(occurred_at, created_at) < ?";
 
     static final String UNKNOWN_PLAN = com.keevo.admin.AdminLabels.UNKNOWN_PLAN;
@@ -99,18 +107,26 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
     private final PlanCatalog catalog;
     /** Story 21.10 — labels and order of the billing cycles (owner: subscription.offer); null = no cycle known. */
     private final OfferAdministration offers;
+    private final CrossTenantSql crossTenant;
 
     /** With the seeded plan catalogue and no billing cycle (tests). */
     public AdminRevenueService(JdbcTemplate jdbc, Clock clock) {
         this(jdbc, clock, PlanCatalog.SEED, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    /** With cross-tenant statements of the default chunk size (tests). */
     public AdminRevenueService(JdbcTemplate jdbc, Clock clock, PlanCatalog catalog, OfferAdministration offers) {
+        this(jdbc, clock, catalog, offers, new CrossTenantSql(jdbc, CrossTenantSql.DEFAULT_CHUNK_SIZE));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminRevenueService(JdbcTemplate jdbc, Clock clock, PlanCatalog catalog, OfferAdministration offers,
+                               CrossTenantSql crossTenant) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.catalog = catalog;
         this.offers = offers;
+        this.crossTenant = crossTenant;
     }
 
     // ── By plan (Story 21.10) ─────────────────────────────────────────────────
@@ -230,6 +246,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
         Map<UUID, PlanChange> churned = metrics.churned(first, last);
         int base = metrics.churnBase(first, last);
         Map<UUID, TenantRef> tenants = loadTenants(churned.keySet());
+        Map<UUID, Long> gmv = gmvBefore(churned, tenants);
 
         List<ChurnedTenant> rows = new ArrayList<>();
         churned.forEach((tenantId, event) -> {
@@ -239,7 +256,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                     .map(start -> RevenueMetrics.monthsBetween(start, endDate))
                     .orElse(null);
             rows.add(new ChurnedTenant(tenantId, tenant == null ? null : tenant.name(), endDate, tenure,
-                    gmvBefore(tenantId, tenant, endDate)));
+                    gmv.getOrDefault(tenantId, 0L)));
         });
         rows.sort(Comparator.comparing(ChurnedTenant::planEndDate)
                 .thenComparing(ChurnedTenant::tenantName, Comparator.nullsLast(String.CASE_INSENSITIVE_ORDER)));
@@ -359,9 +376,7 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
     record PlanCounts(int free, int trial, Set<UUID> premiumTenantIds) {}
 
     PlanCounts countCurrentPlans() {
-        int free = 0;
-        int trial = 0;
-        Set<UUID> premium = new HashSet<>();
+        List<TenantBranch> tenants = new ArrayList<>();
         for (Map<String, Object> row : jdbc.queryForList(PLAN_TENANTS_SQL)) {
             String id = String.valueOf(row.get("id"));
             String schema = (String) row.get("schema_name");
@@ -369,43 +384,57 @@ public class AdminRevenueService implements GetRevenueSummaryUseCase, GetRevenue
                 log.warn("Revenue dashboard: tenant {} skipped (invalid schema name)", id);
                 continue;
             }
-            List<String> plans = safeQuery(id, () ->
-                    jdbc.queryForList(String.format(CURRENT_PLAN_SQL, schema), String.class));
-            if (plans == null || plans.isEmpty()) continue;
-            PlanKind kind = kind(plans.get(0)); // 19.7a: by kind
+            tenants.add(new TenantBranch(id, null, schema, null, null));
+        }
+        int free = 0;
+        int trial = 0;
+        Set<UUID> premium = new HashSet<>();
+        // 19.11c: one presence query + one union per 100 tenants; a tenant without subscriptions table is not counted.
+        List<TenantBranch> withPlans = crossTenant.withPresence(tenants).stream()
+                .filter(t -> t.has(TenantTable.SUBSCRIPTIONS)).toList();
+        for (String[] row : crossTenant.query(withPlans,
+                (tenant, params) -> {
+                    String schema = TenantSchema.validate(tenant.schemaName());
+                    return String.format(CURRENT_PLAN_SQL, CrossTenantSql.tenantLiteral(tenant), schema);
+                },
+                union -> "SELECT * FROM (" + union + ") u",
+                (rs, n) -> new String[]{rs.getString("tenant_id"), rs.getString("kind")})) {
+            if (row[1] == null) continue; // no subscription row, or a code the catalogue does not know
+            PlanKind kind = kind(row[1]); // 19.7a: by kind
             if (kind == PlanKind.FREE) free++;
             else if (kind == PlanKind.TRIAL) trial++;
-            else if (kind == PlanKind.PAID) premium.add(UUID.fromString(id));
+            else if (kind == PlanKind.PAID) premium.add(UUID.fromString(row[0]));
         }
         return new PlanCounts(free, trial, premium);
     }
 
     /**
-     * COMPLETED sales of the {@value #GMV_WINDOW_DAYS} WAT days ending on {@code planEndDate} (inclusive);
-     * 0 when unreadable.
+     * COMPLETED sales of the {@value #GMV_WINDOW_DAYS} WAT days ending on each churned tenant's plan end date
+     * (inclusive), by tenant id; a tenant absent (unknown, no sales table, unreadable) reads 0. One presence query and
+     * one union per 100 churned tenants, each branch with its own window.
      */
-    private long gmvBefore(UUID tenantId, TenantRef tenant, LocalDate planEndDate) {
-        if (tenant == null || !TenantSchema.isValid(tenant.schemaName())) return 0L;
-        Timestamp start = Timestamp.from(
-                planEndDate.minusDays(GMV_WINDOW_DAYS - 1L).atStartOfDay(WAT).toInstant());
-        Timestamp end = Timestamp.from(planEndDate.plusDays(1).atStartOfDay(WAT).toInstant());
-        Long gmv = safeQuery(tenantId.toString(), () ->
-                jdbc.queryForObject(String.format(GMV_SQL, tenant.schemaName()), Long.class, start, end));
-        return gmv == null ? 0L : gmv;
-    }
-
-    /** Runs a per-tenant query: null when the tenant's own schema/SQL fails, connection failures rethrown. */
-    private <T> T safeQuery(String tenantId, java.util.function.Supplier<T> query) {
-        try {
-            return query.get();
-        } catch (DataAccessResourceFailureException | TransientDataAccessException
-                 | RecoverableDataAccessException e) {
-            throw e;
-        } catch (DataAccessException e) {
-            // Tenant id only — never the schema name or SQL in logs.
-            log.warn("Revenue dashboard: tenant {} skipped ({})", tenantId, e.getClass().getSimpleName());
-            return null;
-        }
+    private Map<UUID, Long> gmvBefore(Map<UUID, PlanChange> churned, Map<UUID, TenantRef> tenants) {
+        Map<String, LocalDate> endDates = new HashMap<>();
+        List<TenantBranch> branches = new ArrayList<>();
+        churned.forEach((tenantId, event) -> {
+            TenantRef tenant = tenants.get(tenantId);
+            if (tenant == null || !TenantSchema.isValid(tenant.schemaName())) return;
+            endDates.put(tenantId.toString(), RevenueMetrics.planEndDate(event));
+            branches.add(new TenantBranch(tenantId.toString(), tenant.name(), tenant.schemaName(), null, null));
+        });
+        List<TenantBranch> withSales = crossTenant.withPresence(branches).stream()
+                .filter(t -> t.has(TenantTable.SALES_CORE)).toList();
+        Map<UUID, Long> out = new HashMap<>();
+        crossTenant.query(withSales, (tenant, params) -> {
+                    LocalDate planEndDate = endDates.get(tenant.id());
+                    params.add(Timestamp.from(planEndDate.minusDays(GMV_WINDOW_DAYS - 1L).atStartOfDay(WAT).toInstant()));
+                    params.add(Timestamp.from(planEndDate.plusDays(1).atStartOfDay(WAT).toInstant()));
+                    String schema = TenantSchema.validate(tenant.schemaName());
+                    return String.format(GMV_SQL, CrossTenantSql.tenantLiteral(tenant), schema);
+                }, union -> "SELECT * FROM (" + union + ") u",
+                (rs, n) -> Map.entry(UUID.fromString(rs.getString("tenant_id")), rs.getLong("gmv")))
+                .forEach(e -> out.put(e.getKey(), e.getValue()));
+        return out;
     }
 
     static Double trendPercent(long current, long previous) {

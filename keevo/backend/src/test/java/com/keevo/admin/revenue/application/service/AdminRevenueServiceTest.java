@@ -1,5 +1,8 @@
 package com.keevo.admin.revenue.application.service;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.revenue.domain.model.*;
 import com.keevo.admin.revenue.domain.port.in.RevenueRangeQuery;
 import com.keevo.shared.domain.exception.DomainException;
@@ -26,6 +29,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.*;
 import java.util.*;
+import java.util.EnumSet;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,14 +51,41 @@ class AdminRevenueServiceTest {
     private static final String T4 = UUID.randomUUID().toString();
 
     @Mock JdbcTemplate jdbc;
+    @Mock CrossTenantSql crossTenant;
 
     AdminRevenueService service;
     List<RevenuePayment> payments;
     List<PlanChange> events;
+    /** Story 19.11c — what the unions answer: plan kind and GMV by schema (absent = tenant skipped). */
+    final Map<String, String> kinds = new HashMap<>();
+    final Map<String, Long> gmv = new HashMap<>();
+    /** Bound values of the last GMV branch built. */
+    final List<Object> gmvParams = new ArrayList<>();
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
-        service = new AdminRevenueService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new AdminRevenueService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC),
+                com.keevo.shared.capability.entitlement.PlanCatalog.SEED, null, crossTenant);
+        when(crossTenant.withPresence(anyList())).thenAnswer(inv -> ((List<TenantBranch>) inv.getArgument(0))
+                .stream().map(t -> t.withTables(EnumSet.allOf(TenantTable.class))).toList());
+        when(crossTenant.query(anyList(), any(), any(), any())).thenAnswer(inv -> {
+            List<TenantBranch> tenants = inv.getArgument(0);
+            CrossTenantSql.BranchSql branch = inv.getArgument(1);
+            List<Object> rows = new ArrayList<>();
+            for (TenantBranch t : tenants) {
+                List<Object> params = new ArrayList<>();
+                String sql = branch.sql(t, params);
+                if (sql.contains("subscriptions") && kinds.containsKey(t.schemaName())) {
+                    rows.add(new String[]{t.id(), kinds.get(t.schemaName())});
+                } else if (sql.contains(".sales") && gmv.containsKey(t.schemaName())) {
+                    gmvParams.clear();
+                    gmvParams.addAll(params);
+                    rows.add(Map.entry(UUID.fromString(t.id()), gmv.get(t.schemaName())));
+                }
+            }
+            return rows;
+        });
         payments = new ArrayList<>();
         events = new ArrayList<>();
         when(jdbc.query(eq(AdminRevenueService.PAYMENTS_SQL), any(RowMapper.class))).thenAnswer(i -> payments);
@@ -74,14 +105,14 @@ class AdminRevenueServiceTest {
     private void planOf(String schema, String plan) {
         String kind = com.keevo.identity.api.PlanType.parse(plan).flatMap(com.keevo.identity.api.PlanType::seedKind)
                 .map(Enum::name).orElse(plan);
-        when(jdbc.queryForList(String.format(AdminRevenueService.CURRENT_PLAN_SQL, schema), String.class))
-                .thenReturn(List.of(kind));
+        kinds.put(schema, kind);
     }
 
     // ── Summary ───────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("summary: MRR/ARR today, trend vs previous month, plan counts from tenant schemas")
+    @SuppressWarnings("unchecked")
     void summary_kpis() {
         payments.add(new RevenuePayment(A, 15_000, Instant.parse("2026-10-01T09:00:00Z"),
                 LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 30)));
@@ -108,8 +139,11 @@ class AdminRevenueServiceTest {
         assertThat(s.premiumWithoutPayment()).isEqualTo(1);
         assertThat(s.newPayingTenants()).isEqualTo(1);
         assertThat(s.revenueCollected()).isEqualTo(15_000);
-        // never queries the invalid schema
-        verify(jdbc, never()).queryForList(contains("bad-schema"), eq(String.class));
+        // never queries the invalid schema; one union for every tenant schema (19.11c)
+        org.mockito.ArgumentCaptor<List<TenantBranch>> branches = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(crossTenant).query(branches.capture(), any(), any(), any());
+        assertThat(branches.getValue()).extracting(TenantBranch::schemaName)
+                .containsExactly("kv_aaaaa1", "kv_aaaaa2", "kv_aaaaa3", "kv_aaaaa4");
     }
 
     @Test
@@ -130,8 +164,7 @@ class AdminRevenueServiceTest {
     @DisplayName("plan counts: a tenant whose schema query fails is skipped")
     void planCounts_skipBrokenSchema() {
         tenants(T1, "kv_aaaaa1", T2, "kv_aaaaa2");
-        when(jdbc.queryForList(String.format(AdminRevenueService.CURRENT_PLAN_SQL, "kv_aaaaa1"), String.class))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("relation does not exist")));
+        // kv_aaaaa1 fails: the union skips it (CrossTenantSql), so it answers no row
         planOf("kv_aaaaa2", "FREE");
 
         AdminRevenueService.PlanCounts counts = service.countCurrentPlans();
@@ -144,7 +177,7 @@ class AdminRevenueServiceTest {
     @DisplayName("plan counts: a connection failure is rethrown (never answered as zeros)")
     void planCounts_connectionFailureRethrown() {
         tenants(T1, "kv_aaaaa1");
-        when(jdbc.queryForList(String.format(AdminRevenueService.CURRENT_PLAN_SQL, "kv_aaaaa1"), String.class))
+        when(crossTenant.query(anyList(), any(), any(), any()))
                 .thenThrow(new CannotGetJdbcConnectionException("pool exhausted"));
 
         assertThatThrownBy(() -> service.countCurrentPlans())
@@ -226,13 +259,12 @@ class AdminRevenueServiceTest {
         events.add(new PlanChange(A, "PREMIUM", "FREE", com.keevo.identity.api.PlanKind.PAID, com.keevo.identity.api.PlanKind.FREE, "EXPIRY", Instant.parse("2026-09-12T01:00:00Z")));
         stubTenantLookup(A, null, "kv_aaaaa1");
         // window = the 30 WAT days ending on the plan end date (11/09): [13/08 00:00, 12/09 00:00) WAT
-        when(jdbc.queryForObject(eq(String.format(AdminRevenueService.GMV_SQL, "kv_aaaaa1")), eq(Long.class),
-                eq(java.sql.Timestamp.from(Instant.parse("2026-08-12T23:00:00Z"))),
-                eq(java.sql.Timestamp.from(Instant.parse("2026-09-11T23:00:00Z")))))
-                .thenReturn(42_000L);
+        gmv.put("kv_aaaaa1", 42_000L);
 
         ChurnReport report = service.getChurn("2026-09");
 
+        assertThat(gmvParams).containsExactly(java.sql.Timestamp.from(Instant.parse("2026-08-12T23:00:00Z")),
+                java.sql.Timestamp.from(Instant.parse("2026-09-11T23:00:00Z")));
         assertThat(report.month()).isEqualTo(YearMonth.of(2026, 9));
         assertThat(report.payingAtMonthStart()).isEqualTo(2);
         assertThat(report.churnRate()).isEqualTo(0.5);
@@ -249,8 +281,7 @@ class AdminRevenueServiceTest {
     void churn_brokenSchema_gmvZero() throws SQLException {
         events.add(new PlanChange(A, "PREMIUM", "FREE", com.keevo.identity.api.PlanKind.PAID, com.keevo.identity.api.PlanKind.FREE, "ADMIN_DOWNGRADE", Instant.parse("2026-09-12T10:00:00Z")));
         stubTenantLookup(A, "Boutique", "kv_aaaaa1");
-        when(jdbc.queryForObject(anyString(), eq(Long.class), any(), any()))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("no table")));
+        // the union skips the unreadable schema: no GMV row for it
 
         ChurnReport report = service.getChurn("2026-09");
 

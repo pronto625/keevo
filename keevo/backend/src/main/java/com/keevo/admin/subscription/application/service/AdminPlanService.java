@@ -1,5 +1,8 @@
 package com.keevo.admin.subscription.application.service;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.subscription.application.service.TargetTenantLookup.TargetTenant;
 import com.keevo.admin.subscription.domain.model.PlanAlert;
 import com.keevo.admin.subscription.domain.model.TenantPayment;
@@ -30,10 +33,6 @@ import com.keevo.subscription.api.OfferAdministration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.RecoverableDataAccessException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -96,12 +95,16 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
             + "WHERE t.status NOT IN ('DELETED', 'DELETION_PENDING') AND p.kind IN (?, ?) "
             + "AND t.id <> '00000000-0000-0000-0000-000000000000'::uuid";
 
-    /** Story 19.7a: parameters: the two kinds that expire, then the window bounds. */
+    /**
+     * Story 19.7a: parameters: the two kinds that expire, then the window bounds. One branch of the 19.11c union: the
+     * tenant id literal, then the schema.
+     */
     static final String EXPIRING_SQL =
-            "SELECT s.plan_type, s.expires_at FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
+            "SELECT %s::text AS tenant_id, x.plan_type, x.expires_at FROM (SELECT s.plan_type, s.expires_at "
+            + "FROM \"%s\".subscriptions s JOIN public.plans p ON p.code = s.plan_type "
             + "WHERE p.kind IN (?, ?) AND s.status = 'ACTIVE' "
             + "AND s.expires_at IS NOT NULL AND s.expires_at >= ? AND s.expires_at < ? "
-            + "ORDER BY s.created_at ASC LIMIT 1";
+            + "ORDER BY s.created_at ASC LIMIT 1) x";
 
     static final String EXPIRED_SQL =
             "SELECT e.tenant_id, t.name, e.from_plan, e.occurred_at "
@@ -121,6 +124,8 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     private final PlanCatalog catalog;
     /** Story 21.10 — the billing cycles (owner: subscription.offer); null in tests without the catalogue. */
     private final OfferAdministration offers;
+    /** Story 19.11c — the expiring alerts read every tenant schema in chunked unions. */
+    private final CrossTenantSql crossTenant;
 
     /** With the seeded plan catalogue (tests). */
     public AdminPlanService(TargetTenantLookup tenantLookup,
@@ -143,7 +148,7 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         this(tenantLookup, changeTenantPlan, paymentRepository, eventPublisher, jdbc, clock, catalog, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    /** With cross-tenant statements of the default chunk size (tests). */
     public AdminPlanService(TargetTenantLookup tenantLookup,
                             PlanAdministrationPort changeTenantPlan,
                             TenantPaymentRepository paymentRepository,
@@ -152,6 +157,21 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
                             Clock clock,
                             PlanCatalog catalog,
                             OfferAdministration offers) {
+        this(tenantLookup, changeTenantPlan, paymentRepository, eventPublisher, jdbc, clock, catalog, offers,
+                new CrossTenantSql(jdbc, CrossTenantSql.DEFAULT_CHUNK_SIZE));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminPlanService(TargetTenantLookup tenantLookup,
+                            PlanAdministrationPort changeTenantPlan,
+                            TenantPaymentRepository paymentRepository,
+                            ApplicationEventPublisher eventPublisher,
+                            JdbcTemplate jdbc,
+                            Clock clock,
+                            PlanCatalog catalog,
+                            OfferAdministration offers,
+                            CrossTenantSql crossTenant) {
+        this.crossTenant = crossTenant;
         this.catalog = catalog;
         this.offers = offers;
         this.tenantLookup = tenantLookup;
@@ -321,8 +341,11 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
     // ── Alerts ────────────────────────────────────────────────────────────────
 
     /**
-     * Not transactional on purpose: each per-tenant query autocommits, so one broken tenant schema
-     * cannot abort the PostgreSQL transaction of the following queries.
+     * Not transactional on purpose: each statement autocommits, so one broken tenant schema cannot abort the
+     * PostgreSQL transaction of the following queries. Story 19.11c (FUS-NFR11): the expiring plans of every tenant
+     * on an expiring plan kind come from one tenants query, one table-presence query and one {@code UNION ALL} per
+     * 100 tenants ({@link CrossTenantSql}; a broken schema is skipped with a WARN, a connection failure fails the
+     * call) — never a statement per tenant.
      */
     @Override
     public List<PlanAlert> listAlerts() {
@@ -331,19 +354,36 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         // expiry within 7 WAT calendar days: before the start of day today+8
         Timestamp horizon = Timestamp.from(today.plusDays(ALERT_WINDOW_DAYS + 1L).atStartOfDay(WAT).toInstant());
 
-        List<PlanAlert> expiring = new ArrayList<>();
+        List<TenantBranch> tenants = new ArrayList<>();
         for (Map<String, Object> t : jdbc.queryForList(ALERT_TENANTS_SQL, PlanKind.TRIAL.name(),
                 PlanKind.PAID.name())) {
             String schema = (String) t.get("schema_name");
-            if (!TenantSchema.isValid(schema)) continue;
-            UUID id = toUuid(t.get("id"));
-            Map<String, Object> row = expiringRow(id, schema, Timestamp.from(now), horizon);
-            if (row == null) continue;
-            Instant expiresAt = toInstant(row.get("expires_at"));
-            int daysLeft = (int) ChronoUnit.DAYS.between(today, LocalDate.ofInstant(expiresAt, WAT));
-            expiring.add(new PlanAlert(id, (String) t.get("name"), PlanAlert.Kind.EXPIRING,
-                    (String) row.get("plan_type"), Math.max(0, daysLeft), expiresAt, null));
+            if (!TenantSchema.isValid(schema)) {
+                log.warn("Plan alerts: tenant {} skipped (invalid schema name)", t.get("id"));
+                continue;
+            }
+            tenants.add(new TenantBranch(toUuid(t.get("id")).toString(), (String) t.get("name"), schema, null, null));
         }
+        Map<String, String> names = new java.util.HashMap<>();
+        tenants.forEach(t -> names.put(t.id(), t.name()));
+        Timestamp from = Timestamp.from(now);
+        List<PlanAlert> expiring = new ArrayList<>(crossTenant.query(
+                crossTenant.withPresence(tenants).stream().filter(t -> t.has(TenantTable.SUBSCRIPTION_EXPIRY)).toList(),
+                (tenant, params) -> {
+                    params.add(PlanKind.TRIAL.name());
+                    params.add(PlanKind.PAID.name());
+                    params.add(from);
+                    params.add(horizon);
+                    String schema = TenantSchema.validate(tenant.schemaName());
+                    return String.format(EXPIRING_SQL, CrossTenantSql.tenantLiteral(tenant), schema);
+                }, union -> "SELECT * FROM (" + union + ") u",
+                (rs, i) -> {
+                    String id = rs.getString("tenant_id");
+                    Instant expiresAt = rs.getTimestamp("expires_at").toInstant();
+                    int daysLeft = (int) ChronoUnit.DAYS.between(today, LocalDate.ofInstant(expiresAt, WAT));
+                    return new PlanAlert(UUID.fromString(id), names.get(id), PlanAlert.Kind.EXPIRING,
+                            rs.getString("plan_type"), Math.max(0, daysLeft), expiresAt, null);
+                }));
         expiring.sort(Comparator.comparing(PlanAlert::daysLeft));
 
         List<PlanAlert> expired = jdbc.query(EXPIRED_SQL, (rs, i) -> new PlanAlert(
@@ -409,36 +449,11 @@ public class AdminPlanService implements ActivatePremiumUseCase, DowngradeToFree
         return DomainException.userFacing(ErrorCode.VALIDATION_ERROR, message, Map.of(field, message));
     }
 
-    private Map<String, Object> expiringRow(UUID tenantId, String schema, Timestamp now, Timestamp horizon) {
-        if (!TenantSchema.isValid(schema)) { // listAlerts() filters; re-checked at use
-            log.warn("Plan alerts: tenant {} skipped (invalid schema name)", tenantId);
-            return null;
-        }
-        try {
-            List<Map<String, Object>> rows = jdbc.queryForList(String.format(EXPIRING_SQL, schema),
-                    PlanKind.TRIAL.name(), PlanKind.PAID.name(), now, horizon);
-            return rows.isEmpty() ? null : rows.get(0);
-        } catch (DataAccessResourceFailureException | TransientDataAccessException
-                 | RecoverableDataAccessException e) {
-            throw e; // outage / pool exhaustion: fail the request, never answer an empty list
-        } catch (DataAccessException e) {
-            log.warn("Plan alerts: tenant {} skipped ({})", tenantId, e.getClass().getSimpleName());
-            return null;
-        }
-    }
-
     private static String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s.trim();
     }
 
     private static UUID toUuid(Object value) {
         return value instanceof UUID u ? u : UUID.fromString(String.valueOf(value));
-    }
-
-    private static Instant toInstant(Object value) {
-        if (value instanceof Timestamp ts) return ts.toInstant();
-        if (value instanceof java.time.OffsetDateTime odt) return odt.toInstant();
-        if (value instanceof Instant i) return i;
-        throw new IllegalStateException("Unexpected expires_at type: " + value);
     }
 }

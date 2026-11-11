@@ -42,6 +42,10 @@ import java.util.Map;
  *       yet — 19-11c), merged here;
  *       the total is one {@code COUNT} union. A chunk failing on one tenant's schema is retried tenant by tenant and
  *       only that tenant is skipped; connection / resource failures fail the request.</li>
+ *   <li>Story 19.11c: the branch order is served by the catalog V4 index {@code (updated_at DESC NULLS LAST, id)};
+ *       the name search is {@code lower(name) LIKE} (catalog V3 trigram index, the typed {@code %} / {@code _} are
+ *       literal); the CSV export ({@link #prepareExport}) streams the rows chunk by chunk (one chunk of 100 tenants
+ *       in memory), grouped by company in name order, most recently updated first inside a company.</li>
  * </ol>
  */
 @Service
@@ -89,26 +93,10 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
             // Inside a branch the tenant is constant: the product order is enough (on the input columns).
             String branchOrder = all ? "" : " ORDER BY " + BRANCH_ORDER;
             String outerOrder = all ? "" : " ORDER BY " + ORDER;
-            List<AdminProductListItem> rows = new ArrayList<>(crossTenant.query(branches, (tenant, params) -> {
-                        boolean categories = tenant.has(TenantTable.PRODUCTS_CATEGORY, TenantTable.CATEGORIES);
-                        return "SELECT " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, p.id::text AS id, "
-                                + "p.name, p.price, p.stock_quantity, p.status, p.updated_at, "
-                                + (categories ? "COALESCE(c.name, '')" : "''") + " AS category_name "
-                                + "FROM " + productsFrom(tenant)
-                                + (categories ? " LEFT JOIN " + validSchema(tenant) + ".categories c ON c.id = p.category_id"
-                                        : "")
-                                + " WHERE " + productFilters(query, params) + branchOrder + limit;
-                    },
+            List<AdminProductListItem> rows = new ArrayList<>(crossTenant.query(branches,
+                    (tenant, params) -> productRow(tenant, query, params, "") + branchOrder + limit,
                     union -> "SELECT * FROM (" + union + ") u" + outerOrder + limit,
-                    (rs, n) -> {
-                        TenantSchema tenant = byId.get(rs.getString("tenant_id"));
-                        if (tenant == null) return null; // not one of the tenants listed above: never shown
-                        Timestamp ts = rs.getTimestamp("updated_at");
-                        return new AdminProductListItem(rs.getString("id"), rs.getString("name"), tenant.id(),
-                                tenant.name(), tenant.plan(), tenant.schemaName(), rs.getString("category_name"),
-                                rs.getLong("price"), rs.getInt("stock_quantity"), rs.getString("status"),
-                                ts != null ? ts.toInstant() : null);
-                    }));
+                    (rs, n) -> productItem(rs, byId)));
             rows.removeIf(java.util.Objects::isNull);
             // Global sort: most recently updated first (chunks merged), then the same tie-break as the SQL.
             rows.sort(Comparator.comparing(AdminProductListItem::updatedAt,
@@ -122,6 +110,62 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
                 export ? 0 : query.page(),
                 pageSize == 0 ? 25 : pageSize),
                 total);
+    }
+
+    /**
+     * Story 19.11c — the CSV export of the products matching the filters, prepared then streamed: preparing loads the
+     * matching tenants and their table presence (2 statements; filter errors surface here, before any byte is
+     * written), {@link ProductExport#forEach} then reads one union per 100 tenants and hands each row to the sink —
+     * never every product of every tenant in memory. Rows are grouped by company (company name order, as the tenant
+     * list), most recently updated first inside a company.
+     */
+    public ProductExport prepareExport(ListProductsQuery query) {
+        List<TenantSchema> tenants = loadMatchingTenantSchemas(query);
+        Map<String, TenantSchema> byId = new HashMap<>();
+        Map<String, Integer> position = new HashMap<>();
+        tenants.forEach(t -> {
+            byId.put(t.id(), t);
+            position.putIfAbsent(t.id(), position.size());
+        });
+        List<TenantBranch> branches = withPresence(tenants, TenantTable.PRODUCTS_LIST);
+        // EXPORT_CHUNK tenants per statement: the rows of one statement are held at once (driver buffer + list).
+        return sink -> crossTenant.forEachChunk(branches, EXPORT_CHUNK,
+                (tenant, params) -> productRow(tenant, query, params, position.get(tenant.id()) + " AS pos, "),
+                union -> "SELECT * FROM (" + union + ") u ORDER BY pos, " + ORDER,
+                (rs, n) -> productItem(rs, byId),
+                rows -> rows.stream().filter(java.util.Objects::nonNull).forEach(sink));
+    }
+
+    /** Tenants per statement of the export (memory bound: one statement's rows). */
+    static final int EXPORT_CHUNK = 10;
+
+    /** A prepared export: streams its rows to a sink. */
+    @FunctionalInterface
+    public interface ProductExport {
+        void forEach(java.util.function.Consumer<AdminProductListItem> sink);
+    }
+
+    /** One tenant's product rows ({@code extra} columns first), filters bound to {@code params}; no order / limit. */
+    private static String productRow(TenantBranch tenant, ListProductsQuery query, List<Object> params, String extra) {
+        boolean categories = tenant.has(TenantTable.PRODUCTS_CATEGORY, TenantTable.CATEGORIES);
+        return "SELECT " + extra + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, p.id::text AS id, "
+                + "p.name, p.price, p.stock_quantity, p.status, p.updated_at, "
+                + (categories ? "COALESCE(c.name, '')" : "''") + " AS category_name "
+                + "FROM " + productsFrom(tenant)
+                + (categories ? " LEFT JOIN " + validSchema(tenant) + ".categories c ON c.id = p.category_id" : "")
+                + " WHERE " + productFilters(query, params);
+    }
+
+    /** The list item of a product row; null when the row's tenant is not one of {@code byId} (never shown). */
+    private static AdminProductListItem productItem(java.sql.ResultSet rs, Map<String, TenantSchema> byId)
+            throws java.sql.SQLException {
+        TenantSchema tenant = byId.get(rs.getString("tenant_id"));
+        if (tenant == null) return null;
+        Timestamp ts = rs.getTimestamp("updated_at");
+        return new AdminProductListItem(rs.getString("id"), rs.getString("name"), tenant.id(),
+                tenant.name(), tenant.plan(), tenant.schemaName(), rs.getString("category_name"),
+                rs.getLong("price"), rs.getInt("stock_quantity"), rs.getString("status"),
+                ts != null ? ts.toInstant() : null);
     }
 
     /** Global order of the product list: most recently updated first, ties by tenant then product id. */
@@ -191,8 +235,10 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
     private static String productFilters(ListProductsQuery q, List<Object> params) {
         StringBuilder sql = new StringBuilder("TRUE");
         if (q.search() != null && !q.search().isBlank()) {
-            sql.append(" AND p.name ILIKE ?");
-            params.add("%" + q.search().trim() + "%");
+            // 19.11c: same case-insensitive « contains » as ILIKE, in the form of the catalog V3 trigram index
+            // (lower(name)); the typed % and _ are literal characters.
+            sql.append(" AND lower(p.name) LIKE lower(?) ESCAPE '\\'");
+            params.add("%" + escapeLike(q.search().trim()) + "%");
         }
         if (q.status() != null && !q.status().isBlank() && !"ALL".equals(q.status())) {
             sql.append(" AND p.status = ?");
@@ -209,6 +255,11 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    /** Escapes the LIKE wildcards ({@code \\} first, then {@code %} and {@code _}) for {@code ESCAPE '\\'}. */
+    static String escapeLike(String term) {
+        return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
 
     /** Plan class of the product list ({@code tenantPlan} and its filter): the free kind, else paying. */
     static final String PLAN_FREE = PlanKind.FREE.name();
@@ -233,7 +284,8 @@ public class AdminCatalogService implements ListProductsUseCase, GetCatalogSumma
 
         if (q.tenantId() != null && !q.tenantId().isBlank()) {
             sql.append(" AND t.id = ?::uuid");
-            params.add(q.tenantId());
+            // 19.11c: a malformed id is 422 « Compte invalide » (was a SQL error, 500) — before any export byte
+            params.add(CrossTenantSql.requireUuid(q.tenantId(), CrossTenantSql.INVALID_TENANT));
         }
 
         // Story 19.7a: FREE / PAID are plan kinds (PAID = kinds TRIAL and PAID), joined on the catalogue

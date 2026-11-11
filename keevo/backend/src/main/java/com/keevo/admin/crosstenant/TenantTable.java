@@ -59,7 +59,23 @@ public enum TenantTable {
     NOTIFICATION_COOLDOWNS("notification_cooldowns", "cooldown_type", "last_sent_at"),
     SYNC_OPERATIONS_LOG("sync_operations_log", "processed_at"),
     SUBSCRIPTIONS("subscriptions", "plan_type", "created_at"),
-    AUDIT_LOG("audit_log", "user_id", "source", "occurred_at");
+    AUDIT_LOG("audit_log", "user_id", "source", "occurred_at"),
+    // Story 19.11c — the tables read by the tenant list, sync monitoring, revenue, alerts, health, plan alerts,
+    // global push and feedback screens / jobs (narrow, as above).
+    /** Tenant list: active stores count. */
+    STORES_ACTIVE("stores", "is_active"),
+    /** Tenant list (owner name) and feedback inbox (submitter name). */
+    EMPLOYEE_NAMES("employees", "user_id", "first_name", "last_name", "created_at"),
+    /** Sync monitoring: failed operations of the last 7 days. */
+    SYNC_OPS_STATUS("sync_operations_log", "status", "processed_at"),
+    /** Sync monitoring: conflicts of the last 7 days. */
+    SYNC_CONFLICTS("sync_conflicts_log", "resolved_at"),
+    /** Health page: sync refusals. */
+    SYNC_ERRORS("sync_error_log", "created_at"),
+    /** Alerts feed and plan alerts: an expiring / expired paying subscription. */
+    SUBSCRIPTION_EXPIRY("subscriptions", "plan_type", "status", "expires_at", "created_at"),
+    /** Global push: device tokens. */
+    DEVICE_TOKENS("device_tokens", "token");
 
     private final String table;
     private final List<String> columns;

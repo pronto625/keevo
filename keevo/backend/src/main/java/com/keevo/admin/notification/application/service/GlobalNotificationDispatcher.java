@@ -41,7 +41,8 @@ import java.util.Set;
  * configured), NO_RECIPIENT (no device), ALL_CHUNKS_FAILED (every chunk threw) or INTERRUPTED (database
  * outage during the send — counts accumulated so far). A data / SQL error of one company only skips it.
  *
- * <p>Not {@code @Transactional}: one statement per company.
+ * <p>Not {@code @Transactional}: the device tokens are read 100 companies per statement (Story 19.11c), each
+ * statement on its own.
  */
 @Service
 public class GlobalNotificationDispatcher implements DispatchGlobalNotificationsUseCase {
@@ -94,18 +95,20 @@ public class GlobalNotificationDispatcher implements DispatchGlobalNotifications
         }
         NotificationPayload payload = payload(n);
         Set<String> seen = new HashSet<>();
-        int recipients = 0;
-        PushSendResult total = PushSendResult.EMPTY;
+        Progress progress = new Progress();
         try {
-            for (PushTargetTenant tenant : audience.targetTenants(n.target(), n.targetTenantId())) {
+            // Story 19.11c: the tokens come 100 companies per statement (never one per company); a company whose
+            // schema cannot be read is skipped by the audience, a failing send skips its company only.
+            audience.forEachTenantTokens(audience.targetTenants(n.target(), n.targetTenantId()), (tenant, all) -> {
                 try {
                     List<String> tokens = new ArrayList<>();
-                    for (String token : audience.deviceTokens(tenant)) {
+                    for (String token : all) {
                         if (seen.add(token)) tokens.add(token);
                     }
-                    if (tokens.isEmpty()) continue;
-                    recipients += tokens.size();
-                    total = total.plus(pushNotifier.sendToTokens(tenant.schemaName(), tokens, payload));
+                    if (tokens.isEmpty()) return;
+                    progress.recipients += tokens.size();
+                    progress.total = progress.total.plus(pushNotifier.sendToTokens(tenant.schemaName(), tokens,
+                            payload));
                 } catch (DataAccessResourceFailureException | TransientDataAccessException
                          | RecoverableDataAccessException e) {
                     throw e; // outage: end the row below with what was sent so far
@@ -113,12 +116,14 @@ public class GlobalNotificationDispatcher implements DispatchGlobalNotifications
                     log.warn("Global push {}: company {} skipped ({})", n.id(), tenant.id(),
                             e.getClass().getSimpleName());
                 }
-            }
+            });
         } catch (RuntimeException e) {
             log.error("Global push {} interrupted: {}", n.id(), e.getClass().getSimpleName(), e);
-            fail(n, GlobalNotificationFailureReason.INTERRUPTED, recipients, total);
+            fail(n, GlobalNotificationFailureReason.INTERRUPTED, progress.recipients, progress.total);
             return;
         }
+        int recipients = progress.recipients;
+        PushSendResult total = progress.total;
 
         if (recipients == 0) {
             fail(n, GlobalNotificationFailureReason.NO_RECIPIENT, 0, total);
@@ -131,6 +136,12 @@ public class GlobalNotificationDispatcher implements DispatchGlobalNotifications
                     n.createdBy(), n.id(), n.target(), recipients, total.successCount(), total.failureCount());
             events.publishEvent(new GlobalPushSentEvent(n.createdBy(), n.target(), recipients, sentAt, n.title()));
         }
+    }
+
+    /** What one run has sent so far (updated by the per-company callback). */
+    private static final class Progress {
+        int recipients;
+        PushSendResult total = PushSendResult.EMPTY;
     }
 
     private void fail(GlobalNotification n, GlobalNotificationFailureReason reason, int recipients,

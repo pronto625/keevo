@@ -88,6 +88,8 @@ class SchedulerLockCoverageTest {
             Map.entry(com.keevo.clientportal.auth.application.PortalSessionPurgeJob.class, Duration.ofDays(1)), // 21.7
             Map.entry(com.keevo.messaging.notification.application.service.NotificationRetentionJob.class,
                     Duration.ofDays(1)), // 19.11
+            Map.entry(com.keevo.identity.employee.application.service.MembershipInvitationRetentionJob.class,
+                    Duration.ofDays(1)), // 19.11c
             Map.entry(com.keevo.invoicing.invoice.adapter.in.scheduling.InvoiceOverdueJob.class,
                     Duration.ofDays(1)), // 20.4
             // 20.8 — send outbox poller every 30 s; lockAtMostFor 10 min for a slow provider batch (claims are atomic)

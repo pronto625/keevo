@@ -1,13 +1,12 @@
 package com.keevo.admin.platform.adapter.out.persistence;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.platform.domain.port.out.PlatformProbePort;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataAccessException;
-import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.RecoverableDataAccessException;
-import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -20,9 +19,10 @@ import java.util.List;
  * JdbcPlatformProbeAdapter — live database probes of the health view (Story 9-5).
  *
  * <p>The database check runs on its own {@link JdbcTemplate} with a 5 s query timeout so a hung
- * database answers ❌ instead of blocking the page. Sync refusals loop over the live companies'
- * schemas (deliberately no transaction: each count autocommits, one broken schema cannot abort the
- * next ones); a company's own SQL error skips it, connection / resource failures are rethrown.
+ * database answers ❌ instead of blocking the page. Sync refusals are counted over the live companies'
+ * schemas (Story 19.11c, FUS-NFR11: the live companies with their table presence in one query, then one
+ * {@code UNION ALL} per 100 companies — never a statement per company); a company's own SQL error skips it,
+ * a company without the table counts 0, connection / resource failures are rethrown.
  */
 @Component
 public class JdbcPlatformProbeAdapter implements PlatformProbePort {
@@ -32,17 +32,20 @@ public class JdbcPlatformProbeAdapter implements PlatformProbePort {
     static final String DB_CHECK_SQL = "SELECT 1 FROM public.tenants LIMIT 1";
     static final int DB_CHECK_TIMEOUT_SECONDS = 5;
 
-    static final String LIVE_SCHEMAS_SQL =
-            "SELECT schema_name FROM public.tenants WHERE status <> 'DELETED' "
-            + "AND id <> '00000000-0000-0000-0000-000000000000'::uuid";
+    /** One branch of the union (the schema); parameter: the instant. */
+    static final String REFUSALS_SQL = "SELECT COUNT(*) AS n FROM \"%s\".sync_error_log WHERE created_at >= ?";
 
-    static final String REFUSALS_SQL = "SELECT COUNT(*) FROM \"%s\".sync_error_log WHERE created_at >= ?";
-
-    private final JdbcTemplate jdbc;
+    private final CrossTenantSql crossTenant;
     private final JdbcTemplate checkJdbc;
 
+    /** With cross-tenant statements of the default chunk size (tests). */
     public JdbcPlatformProbeAdapter(JdbcTemplate jdbc, DataSource dataSource) {
-        this.jdbc = jdbc;
+        this(new CrossTenantSql(jdbc, CrossTenantSql.DEFAULT_CHUNK_SIZE), dataSource);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public JdbcPlatformProbeAdapter(CrossTenantSql crossTenant, DataSource dataSource) {
+        this.crossTenant = crossTenant;
         this.checkJdbc = new JdbcTemplate(dataSource);
         this.checkJdbc.setQueryTimeout(DB_CHECK_TIMEOUT_SECONDS);
     }
@@ -61,19 +64,16 @@ public class JdbcPlatformProbeAdapter implements PlatformProbePort {
     @Override
     public long syncRefusalsSince(Instant since) {
         Timestamp from = Timestamp.from(since);
+        // Live companies (not DELETED, never KV-ADMIN) holding the table: one query; then one union per 100.
+        List<TenantBranch> tenants = crossTenant.liveTenants().stream()
+                .filter(t -> t.has(TenantTable.SYNC_ERRORS)).toList();
         long total = 0;
-        List<String> schemas = jdbc.queryForList(LIVE_SCHEMAS_SQL, String.class);
-        for (String schema : schemas) {
-            if (!TenantSchema.isValid(schema)) continue;
-            try {
-                Long n = jdbc.queryForObject(String.format(REFUSALS_SQL, schema), Long.class, from);
-                total += n == null ? 0 : n;
-            } catch (DataAccessResourceFailureException | TransientDataAccessException
-                     | RecoverableDataAccessException e) {
-                throw e; // outage / pool exhaustion: never answer a falsely low count
-            } catch (DataAccessException e) {
-                log.warn("Health: sync refusals of one company unreadable ({})", e.getClass().getSimpleName());
-            }
+        for (Long n : crossTenant.query(tenants, (tenant, params) -> {
+                    params.add(from);
+                    return String.format(REFUSALS_SQL, TenantSchema.validate(tenant.schemaName()));
+                },
+                union -> "SELECT COALESCE(SUM(n), 0) FROM (" + union + ") u", (rs, i) -> rs.getLong(1))) {
+            total += n;
         }
         return total;
     }

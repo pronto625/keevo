@@ -327,6 +327,11 @@ keevo:
   notification-retention:
     cron: ${KEEVO_NOTIFICATION_RETENTION_CRON:0 50 3 * * *}
     read-days: ${KEEVO_NOTIFICATION_RETENTION_READ_DAYS:90}
+  # Story 19.11c — nightly purge of invitations refused / cancelled / expired more than `days` ago (>= 31: the
+  # 30-day re-invite block of 19.6b; a shorter value stops the start-up).
+  invitation-retention:
+    cron: ${KEEVO_INVITATION_RETENTION_CRON:0 55 3 * * *}
+    days: ${KEEVO_INVITATION_RETENTION_DAYS:90}
   # Story 19.9 — Expo push (React Native app tokens ExponentPushToken[…]); off by default like FCM, on in prod by env.
   push:
     expo:

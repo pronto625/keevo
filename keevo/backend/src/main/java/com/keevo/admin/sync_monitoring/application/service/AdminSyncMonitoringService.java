@@ -1,11 +1,15 @@
 package com.keevo.admin.sync_monitoring.application.service;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.sync_monitoring.domain.model.*;
 import com.keevo.admin.sync_monitoring.domain.port.in.*;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +34,12 @@ import java.util.Map;
  *
  * <p>Deliberately NOT {@code @Transactional}: each per-tenant statement autocommits, so one broken
  * tenant schema cannot abort (25P02) the PostgreSQL transaction of the following tenants' queries.
+ *
+ * <p>Story 19.11c (FUS-NFR11): the overview and the list never run a statement per tenant — the active tenants in
+ * one query, their table presence in one catalogue query, the 7-day failed operations and conflicts of every tenant
+ * in chunked {@code UNION ALL} statements ({@link CrossTenantSql}, 100 tenants each; a missing table counts 0, a
+ * broken schema is skipped with a WARN, a connection failure fails the call), the devices of every tenant in one
+ * {@code GROUP BY} on {@code public.user_sync_state}.
  */
 @Service
 public class AdminSyncMonitoringService
@@ -38,9 +48,17 @@ public class AdminSyncMonitoringService
     private static final Logger log = LoggerFactory.getLogger(AdminSyncMonitoringService.class);
 
     private final JdbcTemplate jdbc;
+    private final CrossTenantSql crossTenant;
 
+    /** With cross-tenant statements of the default chunk size (tests). */
     public AdminSyncMonitoringService(JdbcTemplate jdbc) {
+        this(jdbc, new CrossTenantSql(jdbc, CrossTenantSql.DEFAULT_CHUNK_SIZE));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminSyncMonitoringService(JdbcTemplate jdbc, CrossTenantSql crossTenant) {
         this.jdbc = jdbc;
+        this.crossTenant = crossTenant;
     }
 
     // ── GetSyncOverviewUseCase ────────────────────────────────────────────────
@@ -54,17 +72,10 @@ public class AdminSyncMonitoringService
         long totalConflicts7d = 0;
         int tenantsInAlert = 0;
 
-        for (TenantSchemaRef tenant : loadActiveTenantSchemas()) {
-            if (!TenantSchema.isValid(tenant.schemaName())) { skipInvalid(tenant); continue; } // re-checked at use
-            long failed = safeCount(
-                    "SELECT COUNT(*) FROM " + tenant.schemaName() + ".sync_operations_log "
-                    + "WHERE status = 'FAILED' AND processed_at >= NOW() - INTERVAL '7 days'");
-            long conflicts = safeCount(
-                    "SELECT COUNT(*) FROM " + tenant.schemaName() + ".sync_conflicts_log "
-                    + "WHERE resolved_at >= NOW() - INTERVAL '7 days'");
-            totalFailedOps7d += failed;
-            totalConflicts7d += conflicts;
-            if (failed > 10 || conflicts > 5) tenantsInAlert++;
+        for (long[] counts : syncCounts(loadActiveTenantSchemas()).values()) {
+            totalFailedOps7d += counts[0];
+            totalConflicts7d += counts[1];
+            if (counts[0] > 10 || counts[1] > 5) tenantsInAlert++;
         }
 
         return new AdminSyncOverview(totalDevices, totalFailedOps7d, totalConflicts7d, tenantsInAlert, latestPush);
@@ -75,32 +86,18 @@ public class AdminSyncMonitoringService
     @Override
     public List<AdminTenantSyncHealth> listTenantSyncHealth() {
         List<TenantSchemaRef> tenants = loadActiveTenantSchemas();
+        Map<String, long[]> counts = syncCounts(tenants);
+        Map<String, DeviceStats> devices = deviceStats();
 
         List<AdminTenantSyncHealth> items = tenants.stream().map(tenant -> {
-            String schema = tenant.schemaName();
-            if (!TenantSchema.isValid(schema)) { skipInvalid(tenant); return null; } // re-checked at use
-
-            long deviceCount = safeCount(
-                    "SELECT COUNT(*) FROM public.user_sync_state WHERE tenant_id = ?", schema);
-            Instant lastPush = safeMaxInstant(
-                    "SELECT MAX(last_push_at) FROM public.user_sync_state WHERE tenant_id = ?", schema);
-            Instant lastPull = safeMaxInstant(
-                    "SELECT MAX(last_pull_at) FROM public.user_sync_state WHERE tenant_id = ?", schema);
-
-            long failedOps7d = safeCount(
-                    "SELECT COUNT(*) FROM " + schema + ".sync_operations_log "
-                    + "WHERE status = 'FAILED' AND processed_at >= NOW() - INTERVAL '7 days'");
-            long conflicts7d = safeCount(
-                    "SELECT COUNT(*) FROM " + schema + ".sync_conflicts_log "
-                    + "WHERE resolved_at >= NOW() - INTERVAL '7 days'");
-
-            String status = computeStatus(failedOps7d, conflicts7d, lastPush);
-
+            long[] c = counts.getOrDefault(tenant.id(), new long[2]);
+            DeviceStats d = devices.getOrDefault(tenant.schemaName(), DeviceStats.NONE);
+            String status = computeStatus(c[0], c[1], d.lastPush());
             return new AdminTenantSyncHealth(
                     tenant.id(), tenant.name(), tenant.planType(),
-                    failedOps7d, conflicts7d, (int) deviceCount,
-                    lastPush, lastPull, status);
-        }).filter(java.util.Objects::nonNull).toList();
+                    c[0], c[1], (int) d.count(),
+                    d.lastPush(), d.lastPull(), status);
+        }).toList();
 
         Map<String, Integer> statusOrder = Map.of("ERROR", 0, "WARN", 1, "OK", 2);
         return items.stream()
@@ -187,8 +184,61 @@ public class AdminSyncMonitoringService
 
     private record TenantSchemaRef(String id, String schemaName, String name, String planType) {}
 
-    private static void skipInvalid(TenantSchemaRef tenant) {
-        log.warn("Sync monitoring: tenant {} skipped (invalid schema name)", tenant.id());
+    /** Devices of one tenant: count, latest push and pull. */
+    private record DeviceStats(long count, Instant lastPush, Instant lastPull) {
+        static final DeviceStats NONE = new DeviceStats(0, null, null);
+    }
+
+    /**
+     * 7-day {failed operations, conflicts} by tenant id — one presence query and one union per 100 tenants; a table
+     * absent from a schema counts 0; a tenant whose schema fails is absent (counts 0, WARN in {@link CrossTenantSql}).
+     */
+    private Map<String, long[]> syncCounts(List<TenantSchemaRef> tenants) {
+        List<TenantBranch> branches = crossTenant.withPresence(tenants.stream()
+                .map(t -> new TenantBranch(t.id(), t.name(), t.schemaName(), "ACTIVE", null)).toList());
+        Map<String, long[]> out = new HashMap<>();
+        crossTenant.query(branches, (tenant, params) -> {
+                    String schema = TenantSchema.validate(tenant.schemaName());
+                    String failed = tenant.has(TenantTable.SYNC_OPS_STATUS)
+                            ? "(SELECT COUNT(*) FROM " + schema + ".sync_operations_log "
+                              + "WHERE status = 'FAILED' AND processed_at >= NOW() - INTERVAL '7 days')"
+                            : "CAST(0 AS bigint)";
+                    String conflicts = tenant.has(TenantTable.SYNC_CONFLICTS)
+                            ? "(SELECT COUNT(*) FROM " + schema + ".sync_conflicts_log "
+                              + "WHERE resolved_at >= NOW() - INTERVAL '7 days')"
+                            : "CAST(0 AS bigint)";
+                    return "SELECT " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, " + failed
+                            + " AS failed, " + conflicts + " AS conflicts";
+                }, union -> "SELECT * FROM (" + union + ") u",
+                (rs, n) -> new Object[]{rs.getString("tenant_id"), rs.getLong("failed"), rs.getLong("conflicts")})
+                .forEach(r -> out.put((String) r[0], new long[]{(Long) r[1], (Long) r[2]}));
+        return out;
+    }
+
+    /**
+     * Devices of every tenant, keyed by schema name ({@code user_sync_state.tenant_id}) — one statement. A SQL error of
+     * this read leaves the device columns empty (as the former per-tenant reads did); a connection failure fails.
+     */
+    private Map<String, DeviceStats> deviceStats() {
+        Map<String, DeviceStats> out = new HashMap<>();
+        try {
+            readDeviceStats(out);
+        } catch (org.springframework.dao.DataAccessResourceFailureException
+                 | org.springframework.dao.TransientDataAccessException
+                 | org.springframework.dao.RecoverableDataAccessException e) {
+            throw e;
+        } catch (org.springframework.dao.DataAccessException e) {
+            log.warn("Sync monitoring: device figures unreadable ({})", e.getClass().getSimpleName());
+            return Map.of();
+        }
+        return out;
+    }
+
+    private void readDeviceStats(Map<String, DeviceStats> out) {
+        jdbc.query("SELECT tenant_id, COUNT(*) AS devices, MAX(last_push_at) AS last_push, "
+                        + "MAX(last_pull_at) AS last_pull FROM public.user_sync_state GROUP BY tenant_id",
+                (RowCallbackHandler) rs -> out.put(rs.getString("tenant_id"), new DeviceStats(rs.getLong("devices"),
+                        toInstant(rs, "last_push"), toInstant(rs, "last_pull"))));
     }
 
     private List<TenantSchemaRef> loadActiveTenantSchemas() {
@@ -201,7 +251,11 @@ public class AdminSyncMonitoringService
                         rs.getString("id"), rs.getString("schema_name"),
                         rs.getString("name"), rs.getString("plan_type")))
                 .stream()
-                .filter(t -> TenantSchema.isValid(t.schemaName()))
+                .filter(t -> {
+                    if (TenantSchema.isValid(t.schemaName())) return true;
+                    log.warn("Sync monitoring: tenant {} skipped (invalid schema name)", t.id());
+                    return false;
+                })
                 .toList();
     }
 

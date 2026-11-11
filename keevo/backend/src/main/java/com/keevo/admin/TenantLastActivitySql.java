@@ -56,12 +56,17 @@ public final class TenantLastActivitySql {
     public static String expression(TenantBranch tenant, List<Object> params) {
         String s = TenantSchema.validate(tenant.schemaName());
         // occurred_at comes from the device clock: a phone set in the future must not push the tenant's last
-        // activity past « now ».
+        // activity past « now ». Story 19.11c: capping the maximum (CASE, NULL kept) equals the maximum of the capped
+        // values, and MAX(COALESCE(...)) is one probe of the pos V3 expression index instead of a scan of every sale.
         String sales = tenant.has(TenantTable.SALES_CORE)
-                ? "(SELECT MAX(LEAST(COALESCE(sa.occurred_at, sa.created_at), now())) FROM " + s + ".sales sa)"
+                ? "(SELECT CASE WHEN m.at > now() THEN now() ELSE m.at END FROM (SELECT MAX(COALESCE(sa.occurred_at, "
+                        + "sa.created_at)) AS at FROM " + s + ".sales sa) m)"
                 : "CAST(NULL AS timestamptz)";
         String audit = "CAST(NULL AS timestamptz)";
         if (tenant.has(TenantTable.AUDIT_LOG)) {
+            // Story 19.11c: the two first predicates are those of the core V4 partial index (merchant rows only), so
+            // the backward walk skips the SYSTEM rows (automatic day closures, schedulers); rows of non-members
+            // (super-admin actions, rare) are still filtered one by one by the membership probe.
             audit = "(SELECT a.occurred_at FROM " + s + ".audit_log a "
                     + "  WHERE a.user_id <> '" + SYSTEM_ACTOR + "'::uuid "
                     + "    AND (a.source IS NULL OR a.source <> 'SYSTEM') "
@@ -72,7 +77,7 @@ public final class TenantLastActivitySql {
             params.add(tenant.id());
         }
         String sync = tenant.has(TenantTable.SYNC_OPERATIONS_LOG)
-                ? "(SELECT MAX(so.processed_at) FROM " + s + ".sync_operations_log so)"
+                ? "(SELECT MAX(so.processed_at) FROM " + TenantSchema.validate(s) + ".sync_operations_log so)"
                 : "CAST(NULL AS timestamptz)";
         params.add(tenant.id());
         return "GREATEST(" + sales + ", " + audit + ", " + sync + ", "

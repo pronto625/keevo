@@ -30,7 +30,8 @@ import static org.mockito.Mockito.mock;
  * <p>Commits tenant rows and schemas, removed in {@link #cleanUp()}.</p>
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, AdminTenantService.class})
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, AdminTenantService.class,
+        com.keevo.admin.crosstenant.CrossTenantSql.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Admin tenant list on PostgreSQL (Story 11.5)")
 class AdminTenantListPostgresIntegrationTest extends PostgresIntegrationTest {

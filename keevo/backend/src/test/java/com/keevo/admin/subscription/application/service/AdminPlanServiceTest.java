@@ -539,12 +539,11 @@ class AdminPlanServiceTest {
                 Map.of("id", b, "name", "Boutique B", "schema_name", "kv_bbbbb2"),
                 Map.of("id", UUID.randomUUID(), "name", "Bad", "schema_name", "public")));
         Instant aExpiry = AdminPlanService.endOfDayWat(TODAY.plusDays(3));
-        when(jdbc.queryForList(contains("\"kv_aaaaa1\""), eq("TRIAL"), eq("PAID"), any(Timestamp.class),
-                any(Timestamp.class)))
-                .thenReturn(List.of(Map.of("plan_type", "PREMIUM", "expires_at", Timestamp.from(aExpiry))));
-        when(jdbc.queryForList(contains("\"kv_bbbbb2\""), eq("TRIAL"), eq("PAID"), any(Timestamp.class),
-                any(Timestamp.class)))
-                .thenThrow(new BadSqlGrammarException("q", "sql", new SQLException("no table")));
+        // Story 19.11c: one union for every tenant; kv_bbbbb2 fails and is skipped by CrossTenantSql (no row)
+        com.keevo.admin.crosstenant.CrossTenantSql crossTenant = crossTenantAnswering(Map.of(
+                "kv_aaaaa1", new Object[]{"PREMIUM", Timestamp.from(aExpiry)}));
+        List<Object> params = new java.util.ArrayList<>();
+        service = withCrossTenant(crossTenant, params);
         PlanAlert expired = new PlanAlert(UUID.randomUUID(), "Boutique C", PlanAlert.Kind.EXPIRED, "PREMIUM",
                 null, null, NOW.minusSeconds(3600));
         when(jdbc.query(eq(AdminPlanService.EXPIRED_SQL), any(RowMapper.class), any(Timestamp.class)))
@@ -556,9 +555,53 @@ class AdminPlanServiceTest {
         assertThat(alerts.get(0)).isEqualTo(new PlanAlert(a, "Boutique A", PlanAlert.Kind.EXPIRING, "PREMIUM",
                 3, aExpiry, null));
         assertThat(alerts.get(1)).isEqualTo(expired);
-        // lower bound bound from the app clock, not the DB NOW()
-        verify(jdbc).queryForList(contains("\"kv_aaaaa1\""), eq("TRIAL"), eq("PAID"), eq(Timestamp.from(NOW)),
-                any(Timestamp.class));
+        // lower bound bound from the app clock, not the DB NOW(); the invalid schema is never a branch
+        assertThat(params).hasSize(4).startsWith("TRIAL", "PAID", Timestamp.from(NOW));
+        @SuppressWarnings("rawtypes")
+        org.mockito.ArgumentCaptor<List> branches = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(crossTenant).query(branches.capture(), any(), any(), any());
+        assertThat(branches.getValue()).hasSize(2);
+    }
+
+    /** A cross-tenant reader answering, per schema, {plan_type, expires_at} through the service's row mapper. */
+    @SuppressWarnings("unchecked")
+    private static com.keevo.admin.crosstenant.CrossTenantSql crossTenantAnswering(Map<String, Object[]> rows) {
+        var crossTenant = mock(com.keevo.admin.crosstenant.CrossTenantSql.class);
+        when(crossTenant.withPresence(anyList())).thenAnswer(inv ->
+                ((List<com.keevo.admin.crosstenant.TenantBranch>) inv.getArgument(0)).stream()
+                        .map(t -> t.withTables(java.util.EnumSet.allOf(com.keevo.admin.crosstenant.TenantTable.class)))
+                        .toList());
+        when(crossTenant.query(anyList(), any(), any(), any())).thenAnswer(inv -> {
+            List<com.keevo.admin.crosstenant.TenantBranch> tenants = inv.getArgument(0);
+            com.keevo.admin.crosstenant.CrossTenantSql.BranchSql branch = inv.getArgument(1);
+            RowMapper<Object> mapper = inv.getArgument(3);
+            List<Object> params = PARAMS.get();
+            List<Object> out = new java.util.ArrayList<>();
+            for (var t : tenants) {
+                params.clear();
+                branch.sql(t, params);
+                Object[] row = rows.get(t.schemaName());
+                if (row == null) continue;
+                java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+                when(rs.getString("tenant_id")).thenReturn(t.id());
+                when(rs.getString("plan_type")).thenReturn((String) row[0]);
+                when(rs.getTimestamp("expires_at")).thenReturn((Timestamp) row[1]);
+                out.add(mapper.mapRow(rs, out.size()));
+            }
+            return out;
+        });
+        return crossTenant;
+    }
+
+    /** Bound values of the last branch built by {@link #crossTenantAnswering}. */
+    private static final ThreadLocal<List<Object>> PARAMS = ThreadLocal.withInitial(java.util.ArrayList::new);
+
+    private AdminPlanService withCrossTenant(com.keevo.admin.crosstenant.CrossTenantSql crossTenant,
+                                             List<Object> params) {
+        PARAMS.set(params);
+        return new AdminPlanService(lookup, SubscriptionApiTestSupport.administrationPort(null, changePlan), payments,
+                publisher, jdbc, Clock.fixed(NOW, ZoneOffset.UTC), com.keevo.shared.capability.entitlement.PlanCatalog.SEED,
+                null, crossTenant);
     }
 
     @Test
@@ -578,8 +621,9 @@ class AdminPlanServiceTest {
     void alerts_connectionFailureRethrown() {
         when(jdbc.queryForList(AdminPlanService.ALERT_TENANTS_SQL, "TRIAL", "PAID")).thenReturn(List.of(
                 Map.of("id", UUID.randomUUID(), "name", "A", "schema_name", "kv_aaaaa1")));
-        when(jdbc.queryForList(anyString(), eq("TRIAL"), eq("PAID"), any(Timestamp.class), any(Timestamp.class)))
-                .thenThrow(new CannotGetJdbcConnectionException("down"));
+        var crossTenant = crossTenantAnswering(Map.of());
+        when(crossTenant.query(anyList(), any(), any(), any())).thenThrow(new CannotGetJdbcConnectionException("down"));
+        service = withCrossTenant(crossTenant, new java.util.ArrayList<>());
 
         assertThatThrownBy(() -> service.listAlerts()).isInstanceOf(CannotGetJdbcConnectionException.class);
     }

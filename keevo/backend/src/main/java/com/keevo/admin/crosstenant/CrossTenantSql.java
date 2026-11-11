@@ -25,6 +25,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
@@ -53,6 +54,8 @@ public class CrossTenantSql {
     private static final Logger log = LoggerFactory.getLogger(CrossTenantSql.class);
 
     public static final String SYSTEM_TENANT_ID = "00000000-0000-0000-0000-000000000000";
+    /** Default number of tenant branches per statement ({@code keevo.admin.cross-tenant.chunk-size}). */
+    public static final int DEFAULT_CHUNK_SIZE = 100;
     public static final String INVALID_TENANT = "Compte invalide";
     static final String TENANT_NOT_FOUND = "Compte introuvable";
     /** SQL predicate of a live tenant row aliased {@code t}. */
@@ -80,7 +83,7 @@ public class CrossTenantSql {
     private final JdbcTemplate jdbc;
     private final int chunkSize;
 
-    public CrossTenantSql(JdbcTemplate jdbc, @Value("${keevo.admin.cross-tenant.chunk-size:100}") int chunkSize) {
+    public CrossTenantSql(JdbcTemplate jdbc, @Value("${keevo.admin.cross-tenant.chunk-size:" + DEFAULT_CHUNK_SIZE + "}") int chunkSize) {
         this.jdbc = jdbc;
         this.chunkSize = Math.max(1, chunkSize);
     }
@@ -143,10 +146,35 @@ public class CrossTenantSql {
     public <T> List<T> query(List<TenantBranch> tenants, BranchSql branch, UnaryOperator<String> outer,
                              RowMapper<T> mapper) {
         List<T> rows = new ArrayList<>();
-        for (int from = 0; from < tenants.size(); from += chunkSize) {
-            List<TenantBranch> chunk = tenants.subList(from, Math.min(tenants.size(), from + chunkSize));
+        forEachChunk(tenants, branch, outer, mapper, rows::addAll);
+        return rows;
+    }
+
+    /**
+     * Story 19.11c — same statements and failure policy as {@link #query}, but the rows of each statement are handed
+     * to {@code sink} as soon as it returns instead of being accumulated: a caller streaming a large result (catalogue
+     * export) holds one chunk at a time. The sink receives the chunks in tenant order; a chunk retried tenant by
+     * tenant is handed one tenant at a time, in the same order, never twice (a statement fails before returning any
+     * row).
+     */
+    public <T> void forEachChunk(List<TenantBranch> tenants, BranchSql branch, UnaryOperator<String> outer,
+                                 RowMapper<T> mapper, Consumer<List<T>> sink) {
+        forEachChunk(tenants, chunkSize, branch, outer, mapper, sink);
+    }
+
+    /**
+     * Same as {@link #forEachChunk(List, BranchSql, UnaryOperator, RowMapper, Consumer)} with at most {@code maxChunk}
+     * tenants per statement (never more than the configured chunk size): a caller streaming many rows per tenant
+     * (catalogue export) bounds the rows held at once.
+     */
+    public <T> void forEachChunk(List<TenantBranch> tenants, int maxChunk, BranchSql branch,
+                                 UnaryOperator<String> outer, RowMapper<T> mapper, Consumer<List<T>> sink) {
+        int size = Math.max(1, Math.min(maxChunk, chunkSize));
+        for (int from = 0; from < tenants.size(); from += size) {
+            List<TenantBranch> chunk = tenants.subList(from, Math.min(tenants.size(), from + size));
+            List<T> rows;
             try {
-                rows.addAll(run(chunk, branch, outer, mapper));
+                rows = run(chunk, branch, outer, mapper);
             } catch (DataAccessResourceFailureException | TransientDataAccessException
                      | RecoverableDataAccessException e) {
                 throw e;
@@ -154,19 +182,23 @@ public class CrossTenantSql {
                 log.warn("Cross-tenant read: a chunk of {} tenants failed ({}), retrying tenant by tenant",
                         chunk.size(), e.getClass().getSimpleName());
                 for (TenantBranch tenant : chunk) {
+                    List<T> single;
                     try {
-                        rows.addAll(run(List.of(tenant), branch, outer, mapper));
+                        single = run(List.of(tenant), branch, outer, mapper);
                     } catch (DataAccessResourceFailureException | TransientDataAccessException
                              | RecoverableDataAccessException resource) {
                         throw resource;
-                    } catch (DataAccessException single) {
+                    } catch (DataAccessException failure) {
                         log.warn("Cross-tenant read: tenant {} skipped ({})", tenant.id(),
-                                single.getClass().getSimpleName());
+                                failure.getClass().getSimpleName());
+                        continue;
                     }
+                    sink.accept(single);
                 }
+                continue;
             }
+            sink.accept(rows);
         }
-        return rows;
     }
 
     private <T> List<T> run(List<TenantBranch> chunk, BranchSql branch, UnaryOperator<String> outer,

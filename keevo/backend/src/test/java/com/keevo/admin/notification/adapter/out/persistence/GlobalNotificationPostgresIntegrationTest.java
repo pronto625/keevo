@@ -43,7 +43,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, JdbcGlobalNotificationRepository.class,
-        JdbcPushAudienceAdapter.class, GlobalTableStrayCopiesReporter.class})
+        JdbcPushAudienceAdapter.class, GlobalTableStrayCopiesReporter.class, com.keevo.admin.crosstenant.CrossTenantSql.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Global push SQL on PostgreSQL (Story 9-5)")
 class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest {
@@ -278,6 +278,28 @@ class GlobalNotificationPostgresIntegrationTest extends PostgresIntegrationTest 
                 .containsExactly(active.id());
         assertThat(audience.searchReachable(suspended.schemaName().substring(3), 20)).isEmpty();
         assertThat(audience.searchReachable("%", 20)).extracting(PushTenantRef::id).doesNotContain(active.id());
+    }
+
+    @Test
+    void forEachTenantTokens_groupsTokensByCompanyInOrder() {
+        // Story 19.11c: one union for the companies; each company receives its own sorted tokens, in input order,
+        // a company without token or with a broken table is left out.
+        PushTargetTenant a = tenant("ACTIVE", "FREE", "OWNER", "EMPLOYEE");
+        PushTargetTenant none = tenant("ACTIVE", "FREE");
+        PushTargetTenant broken = tenant("ACTIVE", "FREE", "OWNER");
+        jdbc.execute("DROP TABLE " + broken.schemaName() + ".device_tokens");
+        PushTargetTenant b = tenant("ACTIVE", "FREE", "OWNER");
+        List<String> aTokens = jdbc.queryForList("SELECT token FROM " + a.schemaName() + ".device_tokens ORDER BY token",
+                String.class);
+        List<String> bTokens = jdbc.queryForList("SELECT token FROM " + b.schemaName() + ".device_tokens ORDER BY token",
+                String.class);
+        List<String> seen = new ArrayList<>();
+
+        audience.forEachTenantTokens(List.of(b, none, broken, a),
+                (tenant, tokens) -> seen.add(tenant.schemaName() + "=" + tokens));
+
+        assertThat(seen).containsExactly(b.schemaName() + "=" + bTokens, a.schemaName() + "=" + aTokens);
+        assertThat(aTokens).hasSize(2);
     }
 
     @Test

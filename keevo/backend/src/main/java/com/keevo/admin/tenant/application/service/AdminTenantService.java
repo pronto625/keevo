@@ -3,6 +3,9 @@ package com.keevo.admin.tenant.application.service;
 import com.keevo.admin.MemberRolesSql;
 import com.keevo.admin.AdminLabels;
 import com.keevo.admin.TenantLastActivitySql;
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.shared.domain.PhoneNumbers;
 import com.keevo.admin.tenant.domain.model.*;
 import com.keevo.admin.tenant.domain.port.in.*;
@@ -47,8 +50,10 @@ import java.util.stream.Collectors;
  * <p><b>Architecture rules:</b>
  * <ol>
  *   <li>listTenants(): queries public schema via JdbcTemplate ONLY — no TenantContext manipulation.
- *       Cross-schema per-tenant metrics (storeCount, lastActivityAt) use schema names preloaded
- *       for the whole page in one batched query on {@code public.tenants.schema_name} (validated at provisioning and re-checked here with {@code TenantSchema}: pattern {@code ^kv_[a-z0-9]{6}$}).
+ *       Story 19.11c (FUS-NFR11): the cross-schema metrics of the page (storeCount, lastActivityAt, owner name) come
+ *       from the table presence of the page tenants in one catalogue query, then two chunked {@code UNION ALL}
+ *       statements ({@link CrossTenantSql}, 100 tenants each) — never a statement per tenant; the « dernière
+ *       activité » filter is one union over the candidates with the range in SQL.
  *   </li>
  *   <li>getTenantDetail(): switches TenantContext to the target tenant's schema for stores,
  *       employees, and audit log, then restores it — same pattern as ActivatePlanService.
@@ -82,17 +87,26 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
     private final JdbcTemplate jdbc;
     private final TenantDeletionPort tenantDeletion;
     private final PlanCatalog catalog;
+    private final CrossTenantSql crossTenant;
 
     /** With the seeded plan catalogue (tests). */
     public AdminTenantService(JdbcTemplate jdbcTemplate, TenantDeletionPort tenantDeletion) {
         this(jdbcTemplate, tenantDeletion, PlanCatalog.SEED);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
+    /** With cross-tenant statements of the default chunk size (tests). */
     public AdminTenantService(JdbcTemplate jdbcTemplate, TenantDeletionPort tenantDeletion, PlanCatalog catalog) {
+        this(jdbcTemplate, tenantDeletion, catalog,
+                new CrossTenantSql(jdbcTemplate, CrossTenantSql.DEFAULT_CHUNK_SIZE));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AdminTenantService(JdbcTemplate jdbcTemplate, TenantDeletionPort tenantDeletion, PlanCatalog catalog,
+                              CrossTenantSql crossTenant) {
         this.jdbc = jdbcTemplate;
         this.tenantDeletion = tenantDeletion;
         this.catalog = catalog;
+        this.crossTenant = crossTenant;
     }
 
     // ── ListTenantsUseCase ────────────────────────────────────────────────────
@@ -116,8 +130,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         Long total;
         if (query.lastActivityFrom() != null || query.lastActivityTo() != null) {
             // 9-1 AC3 — last activity = latest merchant event (TenantLastActivitySql, same definition
-            // as the column). It lives in each tenant schema, so the candidates are pre-filtered per schema (one
-            // statement each, acceptable at Phase 1 volumes), then paginated on their ids.
+            // as the column). It lives in each tenant schema: the candidates are filtered in chunked unions
+            // (19.11c — no statement per candidate), then paginated on their ids.
             List<UUID> active = tenantsActiveInRange(whereClause, params,
                     query.lastActivityFrom(), query.lastActivityTo());
             total = (long) active.size();
@@ -157,18 +171,13 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         listParams.add(query.pageSize());
         listParams.add(offset);
 
-        List<AdminTenantListItem> items = jdbc.query(listSql, new TenantListRowMapper(), listParams.toArray());
+        // The schema name comes with each row (was one batched lookup, Story 11.5).
+        TenantListRowMapper rowMapper = new TenantListRowMapper();
+        List<PageRow> rows = jdbc.query(listSql,
+                (rs, n) -> new PageRow(rowMapper.mapRow(rs, n), rs.getString("schema_name")), listParams.toArray());
 
-        // Story 11.5 — one batched schema_name lookup for the whole page (was one per row)
-        Map<UUID, String> schemaByTenant = loadSchemaNames(
-                items.stream().map(AdminTenantListItem::id).toList());
-
-        // Enrich each item with cross-schema metrics
-        List<AdminTenantListItem> enriched = items.stream()
-                .map(it -> enrichWithCrossSchemaMetrics(it, schemaByTenant.get(it.id())))
-                .toList();
-
-        return new PageImpl<>(enriched, PageRequest.of(query.page(), query.pageSize()), total);
+        return new PageImpl<>(enrichWithCrossSchemaMetrics(rows), PageRequest.of(query.page(), query.pageSize()),
+                total);
     }
 
     // ── GetTenantDetailUseCase ────────────────────────────────────────────────
@@ -200,7 +209,8 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         }
         // Story 11.5 — schema_name loaded once and reused for the enrichment
         String schemaName = loadSchemaName(query.tenantId());
-        AdminTenantListItem summary = enrichWithCrossSchemaMetrics(summaryRows.get(0), schemaName);
+        AdminTenantListItem summary = enrichWithCrossSchemaMetrics(List.of(new PageRow(summaryRows.get(0), schemaName)))
+                .get(0);
 
         // Switch TenantContext to load cross-schema data
         String previousTenant = TenantContext.getCurrentTenant();
@@ -334,31 +344,38 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
      * Ids (newest tenant first) of the tenants matching the public filters whose last activity —
      * the latest merchant event, see {@link TenantLastActivitySql} — falls in [{@code from}, {@code to}]. A
      * tenant never active, with an invalid schema name or an unreadable schema is excluded.
+     *
+     * <p>Story 19.11c: 1 candidates query + 1 presence query + one union per 100 candidates (the range is applied
+     * in each branch, only the matching ids come back) — was one statement per candidate.
      */
     private List<UUID> tenantsActiveInRange(String whereClause, List<Object> params, Instant from, Instant to) {
-        List<Map<String, Object>> candidates = jdbc.queryForList(
-                "SELECT t.id, t.schema_name FROM public.tenants t "
+        List<TenantBranch> candidates = jdbc.query(
+                "SELECT t.id::text AS id, t.schema_name FROM public.tenants t "
                 + "LEFT JOIN public.user_tenant_memberships m_owner "
                 + "    ON m_owner.tenant_id = t.id AND m_owner.role = 'OWNER' "
                 + "LEFT JOIN public.users owner ON owner.id = m_owner.user_id "
                 + whereClause
                 + " GROUP BY t.id ORDER BY t.created_at DESC",
+                (rs, n) -> new TenantBranch(rs.getString("id"), null, rs.getString("schema_name"), null, null),
                 params.toArray());
-        List<UUID> out = new ArrayList<>();
-        for (Map<String, Object> c : candidates) {
-            UUID id = UUID.fromString(c.get("id").toString());
-            Object schema = c.get("schema_name");
-            if (schema == null || !TenantSchema.isValid(schema.toString())) continue;
-            List<Map<String, Object>> rows = tenantRows(id,
-                    "SELECT " + TenantLastActivitySql.expression(schema.toString()) + " AS last_activity",
-                    TenantLastActivitySql.args(id));
-            Instant last = rows == null || rows.isEmpty() ? null : toInstant(rows.get(0).get("last_activity"));
-            if (last == null) continue;
-            if (from != null && last.isBefore(from)) continue;
-            if (to != null && last.isAfter(to)) continue;
-            out.add(id);
-        }
-        return out;
+        List<TenantBranch> readable = crossTenant.withPresence(candidates.stream()
+                .filter(c -> TenantSchema.isValid(c.schemaName())).toList());
+        Set<String> matching = new java.util.HashSet<>(crossTenant.query(readable, (tenant, branchParams) -> {
+                    String last = TenantLastActivitySql.expression(tenant, branchParams);
+                    StringBuilder range = new StringBuilder("x.last_activity IS NOT NULL");
+                    if (from != null) {
+                        range.append(" AND x.last_activity >= ?");
+                        branchParams.add(Timestamp.from(from));
+                    }
+                    if (to != null) {
+                        range.append(" AND x.last_activity <= ?");
+                        branchParams.add(Timestamp.from(to));
+                    }
+                    return "SELECT x.tenant_id FROM (SELECT " + CrossTenantSql.tenantLiteral(tenant)
+                            + "::text AS tenant_id, " + last + " AS last_activity) x WHERE " + range;
+                },
+                union -> "SELECT tenant_id FROM (" + union + ") u", (rs, n) -> rs.getString("tenant_id")));
+        return candidates.stream().map(TenantBranch::id).filter(matching::contains).map(UUID::fromString).toList();
     }
 
     /**
@@ -380,42 +397,72 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         return PLAN_FILTER_ALL.equals(plan) ? null : plan;
     }
 
+    /** A row of the list (or the detail summary) with its tenant schema name. */
+    private record PageRow(AdminTenantListItem item, String schemaName) {
+    }
+
     /**
-     * Fills storeCount and lastActivityAt from the tenant's own schema. The schema name is
-     * resolved by the caller (preloaded map for the list, {@link #loadSchemaName} for the detail),
-     * so no per-item {@code schema_name} lookup is made here (Story 11.5). A null or invalid
-     * schema name leaves the item with zero metrics.
+     * Fills storeCount, lastActivityAt and the owner's name of the given rows from their tenant schemas (Story
+     * 19.11c, FUS-NFR11): the table presence of the rows' tenants in one catalogue query, then one union for the
+     * store count + last activity and one union for the owner's name (100 tenants per statement) — never a statement
+     * per tenant. The two figures stay separate statements so a broken employees table only loses the name
+     * (« Propriétaire »), never the metrics. A row with an invalid schema name is returned as it is; a tenant whose
+     * schema is gone (deleted) or unreadable keeps zero metrics and « Propriétaire ». Order of the rows kept.
      */
-    private AdminTenantListItem enrichWithCrossSchemaMetrics(AdminTenantListItem item, String schemaName) {
-        if (!TenantSchema.isValid(schemaName)) return item; // gate before SQL interpolation
+    private List<AdminTenantListItem> enrichWithCrossSchemaMetrics(List<PageRow> rows) {
+        List<TenantBranch> branches = crossTenant.withPresence(rows.stream()
+                .filter(r -> TenantSchema.isValid(r.schemaName())) // gate before SQL interpolation
+                .map(r -> new TenantBranch(r.item().id().toString(), r.item().name(), r.schemaName(), r.item().status(),
+                        null))
+                .toList());
 
-        // Spec 9-1 completion (routed from 11-5) — TWO statements per tenant schema: store count +
-        // last activity together, then the owner's name on its own, so a broken employees table
-        // only loses the name (« Propriétaire »), never the metrics. The list costs 1 + 2N.
-        List<Map<String, Object>> rows = tenantRows(item.id(), "SELECT "
-                + "(SELECT COUNT(*) FROM " + schemaName + ".stores WHERE is_active = true) AS store_count, "
-                + TenantLastActivitySql.expression(schemaName) + " AS last_activity",
-                TenantLastActivitySql.args(item.id()));
-        Map<String, Object> row = rows == null || rows.isEmpty() ? Map.of() : rows.get(0);
-        Object count = row.get("store_count");
-        Instant lastActivity = toInstant(row.get("last_activity"));
+        Map<String, Object[]> metrics = new HashMap<>();
+        crossTenant.query(branches, (tenant, params) -> {
+                    String schema = TenantSchema.validate(tenant.schemaName());
+                    String stores = tenant.has(TenantTable.STORES_ACTIVE)
+                            ? "(SELECT COUNT(*) FROM " + schema + ".stores WHERE is_active = true)" : "CAST(0 AS bigint)";
+                    return "SELECT " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, " + stores
+                            + " AS store_count, " + TenantLastActivitySql.expression(tenant, params) + " AS last_activity";
+                }, union -> "SELECT * FROM (" + union + ") u",
+                (rs, n) -> new Object[]{rs.getString("tenant_id"), rs.getLong("store_count"),
+                        rs.getTimestamp("last_activity")})
+                .forEach(r -> metrics.put((String) r[0], r));
 
-        List<Map<String, Object>> ownerRows = tenantRows(item.id(),
-                "SELECT " + EMPLOYEE_FULL_NAME + " AS owner_name FROM " + schemaName + ".employees e "
-                + "JOIN public.user_tenant_memberships m ON m.user_id = e.user_id "
-                + "WHERE m.tenant_id = ? AND m.role = 'OWNER' "
-                + "ORDER BY e.created_at LIMIT 1", item.id());
-        Object owner = ownerRows == null || ownerRows.isEmpty() ? null : ownerRows.get(0).get("owner_name");
-        String ownerName = owner != null && !owner.toString().isBlank()
-                ? owner.toString().trim() : AdminLabels.OWNER;
+        Map<String, String> owners = new HashMap<>();
+        crossTenant.query(branches.stream().filter(t -> t.has(TenantTable.EMPLOYEE_NAMES)).toList(),
+                (tenant, params) -> {
+                    String schema = TenantSchema.validate(tenant.schemaName());
+                    params.add(tenant.id());
+                    return "SELECT " + CrossTenantSql.tenantLiteral(tenant) + "::text AS tenant_id, (SELECT "
+                            + EMPLOYEE_FULL_NAME + " FROM " + schema + ".employees e "
+                            + "JOIN public.user_tenant_memberships m ON m.user_id = e.user_id "
+                            + "WHERE m.tenant_id = CAST(? AS uuid) AND m.role = 'OWNER' "
+                            + "ORDER BY e.created_at LIMIT 1) AS owner_name";
+                }, union -> "SELECT * FROM (" + union + ") u",
+                (rs, n) -> new String[]{rs.getString("tenant_id"), rs.getString("owner_name")})
+                .forEach(r -> {
+                    if (r[1] != null && !r[1].isBlank()) owners.put(r[0], r[1].trim());
+                });
 
-        return new AdminTenantListItem(
-                item.id(), item.code(), item.name(), item.ownerPhone(),
-                item.plan(), item.status(),
-                item.registeredAt(), lastActivity,
-                count instanceof Number n ? n.intValue() : 0, item.employeeCount(),
-                item.deletionScheduledAt(), ownerName
-        );
+        List<AdminTenantListItem> out = new ArrayList<>(rows.size());
+        for (PageRow row : rows) {
+            AdminTenantListItem item = row.item();
+            if (!TenantSchema.isValid(row.schemaName())) {
+                out.add(item);
+                continue;
+            }
+            String id = item.id().toString();
+            Object[] m = metrics.get(id);
+            Instant lastActivity = m == null ? null : toInstant(m[2]);
+            int storeCount = m == null ? 0 : ((Number) m[1]).intValue();
+            out.add(new AdminTenantListItem(
+                    item.id(), item.code(), item.name(), item.ownerPhone(),
+                    item.plan(), item.status(),
+                    item.registeredAt(), lastActivity,
+                    storeCount, item.employeeCount(),
+                    item.deletionScheduledAt(), owners.getOrDefault(id, AdminLabels.OWNER)));
+        }
+        return out;
     }
 
     /**
@@ -447,29 +494,6 @@ public class AdminTenantService implements ListTenantsUseCase, GetTenantDetailUs
         if (value instanceof java.time.OffsetDateTime odt) return odt.toInstant();
         if (value instanceof Instant i) return i;
         return null;
-    }
-
-    /**
-     * Loads the schema names of a page of tenants in a single parameterized {@code IN (…)} query.
-     * A SQL/data failure yields an empty map (items kept with zero metrics); a connection or
-     * resource failure (database down, pool exhausted) is rethrown.
-     */
-    private Map<UUID, String> loadSchemaNames(List<UUID> ids) {
-        if (ids.isEmpty()) return Map.of();
-        String inClause = ids.stream().map(x -> "?").collect(Collectors.joining(","));
-        Map<UUID, String> out = new HashMap<>();
-        try {
-            jdbc.query("SELECT id, schema_name FROM public.tenants WHERE id IN (" + inClause + ")",
-                    (RowCallbackHandler) rs -> out.put(
-                            UUID.fromString(rs.getString("id")), rs.getString("schema_name")),
-                    ids.toArray());
-        } catch (DataAccessException e) {
-            rethrowIfResourceFailure(e);
-            log.warn("Batched schema_name lookup failed for {} tenants — metrics left empty ({})",
-                    ids.size(), e.getClass().getSimpleName());
-            return Map.of();
-        }
-        return out;
     }
 
     private String loadSchemaName(UUID tenantId) {

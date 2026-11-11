@@ -29,7 +29,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * blank the next company's labels (no transaction around the per-schema loop).
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, AdminFeedbackLabelService.class})
+@Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, AdminFeedbackLabelService.class,
+        com.keevo.admin.crosstenant.CrossTenantSql.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Feedback inbox labels on PostgreSQL (spec 9-1)")
 class AdminFeedbackLabelServicePostgresIntegrationTest extends PostgresIntegrationTest {
@@ -65,6 +66,9 @@ class AdminFeedbackLabelServicePostgresIntegrationTest extends PostgresIntegrati
         UUID storeId = jdbc.queryForObject("SELECT id FROM kv_kfb002.stores LIMIT 1", UUID.class);
         jdbc.update("INSERT INTO kv_kfb002.employees (user_id, store_id, first_name, last_name) VALUES (?, ?, 'Moussa', ' Kane ')",
                 employee, storeId);
+        // 19.11c: a later row of the same person (store change) never replaces the earliest name
+        jdbc.update("INSERT INTO kv_kfb002.employees (user_id, store_id, first_name, last_name, created_at) "
+                + "VALUES (?, ?, 'Autre', 'Nom', now() + interval '1 hour')", employee, storeId);
 
         FeedbackView fromBroken = feedback("kv_kfb001", brokenOwner);   // first: its schema error must not spread
         FeedbackView fromEmployee = feedback("kv_kfb002", employee);

@@ -1,5 +1,8 @@
 package com.keevo.admin.sync_monitoring.application.service;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.sync_monitoring.domain.model.*;
 import com.keevo.admin.sync_monitoring.domain.port.in.GetSyncTenantDetailQuery;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,6 +12,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 
 import java.sql.ResultSet;
@@ -27,12 +31,40 @@ import static org.mockito.Mockito.*;
 class AdminSyncMonitoringServiceTest {
 
     @Mock JdbcTemplate jdbc;
+    @Mock CrossTenantSql crossTenant;
 
     AdminSyncMonitoringService service;
 
+    /** Story 19.11c — per schema: {failed ops, conflicts} answered by the union; devices by the GROUP BY. */
+    private final java.util.Map<String, long[]> ops = new java.util.HashMap<>();
+    private final java.util.Map<String, Object[]> devices = new java.util.HashMap<>();
+
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
-        service = new AdminSyncMonitoringService(jdbc);
+        service = new AdminSyncMonitoringService(jdbc, crossTenant);
+        lenient().when(crossTenant.withPresence(anyList())).thenAnswer(inv -> ((List<TenantBranch>) inv.getArgument(0))
+                .stream().map(t -> t.withTables(java.util.EnumSet.allOf(TenantTable.class))).toList());
+        lenient().when(crossTenant.query(anyList(), any(), any(), any())).thenAnswer(inv -> {
+            List<Object> rows = new java.util.ArrayList<>();
+            for (TenantBranch t : (List<TenantBranch>) inv.getArgument(0)) {
+                long[] c = ops.get(t.schemaName());
+                if (c != null) rows.add(new Object[]{t.id(), c[0], c[1]});
+            }
+            return rows;
+        });
+        lenient().doAnswer(inv -> {
+            RowCallbackHandler handler = inv.getArgument(1);
+            for (var e : devices.entrySet()) {
+                ResultSet rs = mock(ResultSet.class);
+                when(rs.getString("tenant_id")).thenReturn(e.getKey());
+                when(rs.getLong("devices")).thenReturn((Long) e.getValue()[0]);
+                when(rs.getTimestamp("last_push")).thenReturn((Timestamp) e.getValue()[1]);
+                when(rs.getTimestamp("last_pull")).thenReturn((Timestamp) e.getValue()[2]);
+                handler.processRow(rs);
+            }
+            return null;
+        }).when(jdbc).query(contains("GROUP BY tenant_id"), any(RowCallbackHandler.class));
     }
 
     // ── getSyncOverview ───────────────────────────────────────────────────────
@@ -63,16 +95,17 @@ class AdminSyncMonitoringServiceTest {
         lenient().when(jdbc.queryForObject(contains("MAX(last_push_at)"), eq(Timestamp.class)))
                 .thenReturn(null);
 
-        when(jdbc.queryForObject(contains("kv_aaaaaa.sync_operations_log"), eq(Long.class)))
-                .thenReturn(3L);
-        when(jdbc.queryForObject(contains("kv_bbbbbb.sync_operations_log"), eq(Long.class)))
-                .thenReturn(7L);
-        lenient().when(jdbc.queryForObject(contains("sync_conflicts_log"), eq(Long.class)))
-                .thenReturn(0L);
+        stubTenantOps("kv_aaaaaa", 3L, 0L);
+        stubTenantOps("kv_bbbbbb", 7L, 6L);
 
         AdminSyncOverview result = service.getSyncOverview();
 
         assertThat(result.totalFailedOps7d()).isEqualTo(10L);
+        assertThat(result.totalConflicts7d()).isEqualTo(6L);
+        assertThat(result.tenantsInAlert()).isEqualTo(1);
+        // 19.11c: one union for every tenant (never a count per schema)
+        verify(crossTenant, times(1)).query(anyList(), any(), any(), any());
+        verify(jdbc, never()).queryForObject(contains("sync_operations_log"), eq(Long.class));
     }
 
     // ── listTenantSyncHealth ──────────────────────────────────────────────────
@@ -313,32 +346,36 @@ class AdminSyncMonitoringServiceTest {
     }
 
     private void stubDeviceStats(String schema, long count, Instant lastPush, Instant lastPull) {
-        when(jdbc.queryForObject(
-                argThat(s -> s != null && s.contains("COUNT(*) FROM public.user_sync_state") && s.contains("tenant_id")),
-                eq(Long.class), eq(schema)))
-                .thenReturn(count);
-
-        Timestamp pushTs = lastPush != null ? Timestamp.from(lastPush) : null;
-        lenient().when(jdbc.queryForObject(
-                argThat(s -> s != null && s.contains("MAX(last_push_at)") && s.contains("tenant_id")),
-                eq(Timestamp.class), eq(schema)))
-                .thenReturn(pushTs);
-
-        Timestamp pullTs = lastPull != null ? Timestamp.from(lastPull) : null;
-        lenient().when(jdbc.queryForObject(
-                argThat(s -> s != null && s.contains("MAX(last_pull_at)") && s.contains("tenant_id")),
-                eq(Timestamp.class), eq(schema)))
-                .thenReturn(pullTs);
+        devices.put(schema, new Object[]{count, lastPush != null ? Timestamp.from(lastPush) : null,
+                lastPull != null ? Timestamp.from(lastPull) : null});
     }
 
     private void stubTenantOps(String schema, long failedOps, long conflicts) {
-        lenient().when(jdbc.queryForObject(
-                argThat(s -> s != null && s.contains(schema + ".sync_operations_log")),
-                eq(Long.class)))
-                .thenReturn(failedOps);
-        lenient().when(jdbc.queryForObject(
-                argThat(s -> s != null && s.contains(schema + ".sync_conflicts_log")),
-                eq(Long.class)))
-                .thenReturn(conflicts);
+        ops.put(schema, new long[]{failedOps, conflicts});
+    }
+
+    @Test
+    @DisplayName("19.11c — list: one union for the counts, one GROUP BY for the devices; branch SQL per schema")
+    @SuppressWarnings("unchecked")
+    void listTenantSyncHealth_setBased() {
+        stubTenants(List.of(
+                tenantRow("11111111-1111-1111-1111-111111111111", "A", "kv_aaaaaa", "FREE"),
+                tenantRow("22222222-2222-2222-2222-222222222222", "B", "kv_bbbbbb", "FREE")));
+        stubTenantOps("kv_aaaaaa", 1L, 0L);
+
+        List<AdminTenantSyncHealth> result = service.listTenantSyncHealth();
+
+        assertThat(result).hasSize(2); // B unread (skipped by the union) is still listed, with zeros
+        org.mockito.ArgumentCaptor<List<TenantBranch>> tenants = org.mockito.ArgumentCaptor.forClass(List.class);
+        org.mockito.ArgumentCaptor<CrossTenantSql.BranchSql> branch =
+                org.mockito.ArgumentCaptor.forClass(CrossTenantSql.BranchSql.class);
+        verify(crossTenant).query(tenants.capture(), branch.capture(), any(), any());
+        String sql = branch.getValue().sql(tenants.getValue().get(0), new java.util.ArrayList<>());
+        assertThat(sql).contains("kv_aaaaaa.sync_operations_log").contains("kv_aaaaaa.sync_conflicts_log");
+        String withoutConflicts = branch.getValue().sql(tenants.getValue().get(0).withTables(
+                java.util.Set.of(TenantTable.SYNC_OPS_STATUS)), new java.util.ArrayList<>());
+        assertThat(withoutConflicts).doesNotContain("sync_conflicts_log");
+        verify(jdbc, times(1)).query(contains("GROUP BY tenant_id"), any(RowCallbackHandler.class));
+        verify(jdbc, never()).queryForObject(contains("user_sync_state WHERE tenant_id"), eq(Long.class), any(Object[].class));
     }
 }

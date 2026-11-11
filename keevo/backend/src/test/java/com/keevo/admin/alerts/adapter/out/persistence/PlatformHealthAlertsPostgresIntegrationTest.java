@@ -38,7 +38,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
 @Import({TenantSchemaProvisioner.class, com.keevo.shared.module.adapter.out.persistence.JdbcPlanCatalog.class, JdbcHealthSampleRepository.class, JdbcPlatformProbeAdapter.class,
-        JdbcAlertSourcesAdapter.class, JdbcAlertAckRepository.class, JdbcSyncSilenceNoticeRepository.class})
+        JdbcAlertSourcesAdapter.class, JdbcAlertAckRepository.class, JdbcSyncSilenceNoticeRepository.class,
+        com.keevo.admin.crosstenant.CrossTenantSql.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("Health & alerts SQL on PostgreSQL (Story 9-5)")
 class PlatformHealthAlertsPostgresIntegrationTest extends PostgresIntegrationTest {

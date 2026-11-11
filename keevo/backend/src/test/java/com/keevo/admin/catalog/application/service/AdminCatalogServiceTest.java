@@ -156,18 +156,21 @@ class AdminCatalogServiceTest {
     }
 
     @Test
-    @DisplayName("filters are bound in the branch: search ILIKE, status, stockLevel=OUT; categories joined when present")
+    @DisplayName("filters are bound in the branch: search lower(name) LIKE (trigram, 19.11c), status, stockLevel=OUT; "
+            + "categories joined when present")
     void listProducts_filtersInBranch() {
         stubTenants("t1", "kv_aaaaaa");
         stubChunks(List.of(1L), product("t1", "p1", "A", null));
 
-        service.execute(new ListProductsQuery("riz", null, "OUT", "ACTIVE", null, 0, 25));
+        service.execute(new ListProductsQuery("riz_50%", null, "OUT", "ACTIVE", null, 0, 25));
 
         List<Object> params = new ArrayList<>();
         String sql = branchSql(1, FULL, params);
         assertThat(sql).contains("FROM kv_aaaaaa.products p LEFT JOIN kv_aaaaaa.categories c ON c.id = p.category_id")
-                .contains("p.name ILIKE ?").contains("p.status = ?").contains("p.stock_quantity = 0");
-        assertThat(params).containsExactly("%riz%", "ACTIVE");
+                .contains("lower(p.name) LIKE lower(?) ESCAPE '\\'").contains("p.status = ?")
+                .contains("p.stock_quantity = 0");
+        // the typed % and _ are literal characters
+        assertThat(params).containsExactly("%riz\\_50\\%%", "ACTIVE");
         String noCategories = branchSql(1, new TenantBranch(FULL.id(), "A", "kv_aaaaaa", "ACTIVE", null,
                 EnumSet.of(TenantTable.PRODUCTS_LIST)), new ArrayList<>());
         assertThat(noCategories).doesNotContain("categories").contains("'' AS category_name");
@@ -272,6 +275,52 @@ class AdminCatalogServiceTest {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("19.11c — a malformed company id is 422 « Compte invalide », no tenant query")
+    void malformedTenantId_validationError() {
+        assertThatThrownBy(() -> service.prepareExport(
+                new ListProductsQuery(null, "pas-un-uuid", null, null, null, 0, Integer.MAX_VALUE)))
+                .isInstanceOf(DomainException.class)
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_ERROR));
+        verifyNoInteractions(jdbc);
+    }
+
+    @Test
+    @DisplayName("19.11c — export: prepared (tenants + presence), then streamed chunk by chunk, grouped by company; no count")
+    @SuppressWarnings("unchecked")
+    void prepareExport_streamsChunks() {
+        String T1 = "11111111-1111-1111-1111-111111111111";
+        String T2 = "22222222-2222-2222-2222-222222222222";
+        stubTenants(T1, "kv_aaaaaa", T2, "kv_bbbbbb");
+        doAnswer(inv -> {
+            RowMapper<Object> mapper = inv.getArgument(4);
+            java.util.function.Consumer<List<Object>> sink = inv.getArgument(5);
+            sink.accept(List.of(mapper.mapRow(resultSet(product(T1, "p1", "A", Instant.parse("2026-10-01T00:00:00Z"))), 0)));
+            sink.accept(java.util.Arrays.asList(mapper.mapRow(resultSet(product(T2, "p2", "B", Instant.parse("2026-10-05T00:00:00Z"))), 0),
+                    mapper.mapRow(resultSet(product("unknown", "p3", "C", null)), 1)));
+            return null;
+        }).when(crossTenant).forEachChunk(anyList(), anyInt(), any(), any(), any(), any());
+
+        AdminCatalogService.ProductExport export = service.prepareExport(
+                new ListProductsQuery(null, null, null, null, null, 0, Integer.MAX_VALUE));
+        verify(crossTenant, never()).forEachChunk(anyList(), anyInt(), any(), any(), any(), any()); // nothing read before forEach
+        List<AdminProductListItem> rows = new ArrayList<>();
+        export.forEach(rows::add);
+
+        // chunk order kept (company order), unknown tenant rows dropped, never a COUNT union
+        assertThat(rows).extracting(AdminProductListItem::name).containsExactly("A", "B");
+        verify(crossTenant, never()).query(anyList(), any(), any(), any());
+        ArgumentCaptor<CrossTenantSql.BranchSql> branch = ArgumentCaptor.forClass(CrossTenantSql.BranchSql.class);
+        ArgumentCaptor<UnaryOperator<String>> outer = ArgumentCaptor.forClass(UnaryOperator.class);
+        verify(crossTenant).forEachChunk(anyList(), eq(AdminCatalogService.EXPORT_CHUNK), branch.capture(), outer.capture(),
+                any(), any());
+        TenantBranch second = new TenantBranch(T2, "B", "kv_bbbbbb", "ACTIVE", null, EnumSet.allOf(TenantTable.class));
+        assertThat(branch.getValue().sql(second, new ArrayList<>())).startsWith("SELECT 1 AS pos, ")
+                .doesNotContain("LIMIT");
+        assertThat(outer.getValue().apply("U")).isEqualTo("SELECT * FROM (U) u ORDER BY pos, updated_at DESC NULLS LAST, "
+                + "tenant_id COLLATE \"C\", id COLLATE \"C\"");
+    }
 
     /** Live tenants (id, schema) pairs answered by the tenant query of the list. */
     @SuppressWarnings("unchecked")

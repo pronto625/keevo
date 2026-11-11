@@ -35,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Data is committed with unique ids / schema and removed after each test.
  */
 @DataJpaTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
-@Import(AdminSyncMonitoringService.class)
+@Import({AdminSyncMonitoringService.class, com.keevo.admin.crosstenant.CrossTenantSql.class})
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("AdminSyncMonitoringService on PostgreSQL (9-8 device labels)")
 class AdminSyncMonitoringServiceIntegrationTest extends PostgresIntegrationTest {

@@ -1,5 +1,8 @@
 package com.keevo.admin.feedback.application.service;
 
+import com.keevo.admin.crosstenant.CrossTenantSql;
+import com.keevo.admin.crosstenant.TenantBranch;
+import com.keevo.admin.crosstenant.TenantTable;
 import com.keevo.admin.feedback.application.service.AdminFeedbackLabelService.FeedbackLabels;
 import com.keevo.feedback.api.FeedbackView;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +27,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.Mockito.*;
 
@@ -33,6 +37,8 @@ import static org.mockito.Mockito.*;
 class AdminFeedbackLabelServiceTest {
 
     @Mock private JdbcTemplate jdbc;
+    @Mock private CrossTenantSql crossTenant;
+    private static final String TENANT_ID = "11111111-1111-1111-1111-111111111111";
 
     private AdminFeedbackLabelService service;
 
@@ -41,11 +47,17 @@ class AdminFeedbackLabelServiceTest {
     private final UUID stranger = UUID.randomUUID();
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
-        service = new AdminFeedbackLabelService(jdbc);
-        rows("FROM public.tenants WHERE", List.of(Map.of("schema_name", "kv_abc123", "name", "Boutique Awa")));
+        service = new AdminFeedbackLabelService(jdbc, crossTenant);
+        rows("FROM public.tenants WHERE", List.of(Map.of("id", TENANT_ID, "schema_name", "kv_abc123",
+                "name", "Boutique Awa")));
         rows("m.role = 'OWNER'", List.of(Map.of("schema_name", "kv_abc123", "user_id", owner.toString())));
-        rows("kv_abc123.employees", List.of(Map.of("user_id", employee.toString(), "full_name", "Awa Diallo")));
+        when(crossTenant.withPresence(anyList())).thenAnswer(inv -> ((List<TenantBranch>) inv.getArgument(0))
+                .stream().map(t -> t.withTables(java.util.EnumSet.allOf(TenantTable.class))).toList());
+        // Story 19.11c: the employee names of every company of the page come from one union
+        when(crossTenant.query(anyList(), any(), any(), any()))
+                .thenReturn(java.util.Collections.singletonList(new String[]{TENANT_ID, employee.toString(), "Awa Diallo"}));
     }
 
     private void rows(String fragment, List<Map<String, String>> rows) {
@@ -67,6 +79,7 @@ class AdminFeedbackLabelServiceTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
     void labels_tenantNameAndUser() {
         FeedbackView byEmployee = feedback("kv_abc123", employee);
         FeedbackView byOwner = feedback("kv_abc123", owner);
@@ -77,8 +90,16 @@ class AdminFeedbackLabelServiceTest {
         assertThat(labels.get(byEmployee.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Awa Diallo"));
         assertThat(labels.get(byOwner.id())).isEqualTo(new FeedbackLabels("Boutique Awa", "Propriétaire"));
         assertThat(labels.get(byStranger.id()).userLabel()).isEqualTo("Utilisateur inconnu");
-        // one employees query for the one schema of the page
-        verify(jdbc, times(1)).query(contains(".employees"), any(RowCallbackHandler.class), any(Object[].class));
+        // one union for the companies of the page, never a statement per company; branch bound to its users
+        org.mockito.ArgumentCaptor<List<TenantBranch>> tenants = org.mockito.ArgumentCaptor.forClass(List.class);
+        org.mockito.ArgumentCaptor<CrossTenantSql.BranchSql> branch =
+                org.mockito.ArgumentCaptor.forClass(CrossTenantSql.BranchSql.class);
+        verify(crossTenant, times(1)).query(tenants.capture(), branch.capture(), any(), any());
+        assertThat(tenants.getValue()).extracting(TenantBranch::schemaName).containsExactly("kv_abc123");
+        List<Object> params = new java.util.ArrayList<>();
+        assertThat(branch.getValue().sql(tenants.getValue().get(0), params)).contains("kv_abc123.employees")
+                .contains("user_id IN (?,?,?)");
+        assertThat(params).containsExactlyInAnyOrder(employee, owner, stranger);
     }
 
     @Test
@@ -96,14 +117,14 @@ class AdminFeedbackLabelServiceTest {
     @Test
     void labels_schemaErrorKeepsTenantName_connectionFailureRethrown() {
         FeedbackView f = feedback("kv_abc123", employee);
-        doThrow(new BadSqlGrammarException("x", "sql", new SQLException("relation does not exist")))
-                .when(jdbc).query(contains(".employees"), any(RowCallbackHandler.class), any(Object[].class));
+        // the company's schema fails: CrossTenantSql skips it, the union answers no name
+        when(crossTenant.query(anyList(), any(), any(), any())).thenReturn(List.of());
 
         assertThat(service.labels(List.of(f)).get(f.id()))
                 .isEqualTo(new FeedbackLabels("Boutique Awa", "Utilisateur inconnu"));
 
-        doThrow(new CannotGetJdbcConnectionException("pool exhausted"))
-                .when(jdbc).query(contains(".employees"), any(RowCallbackHandler.class), any(Object[].class));
+        when(crossTenant.query(anyList(), any(), any(), any()))
+                .thenThrow(new CannotGetJdbcConnectionException("pool exhausted"));
         assertThatThrownBy(() -> service.labels(List.of(f))).isInstanceOf(CannotGetJdbcConnectionException.class);
     }
 

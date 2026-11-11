@@ -115,9 +115,9 @@ class AdminCatalogControllerTest {
     void exportProducts_withSuperAdmin_returnsCsvBytes() throws Exception {
         setupFilterAs("ROLE_SUPER_ADMIN");
 
-        Page<AdminProductListItem> page = new PageImpl<>(List.of(sampleProduct()));
-        when(adminCatalogService.execute(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
-                .thenReturn(page);
+        AdminProductListItem product = sampleProduct();
+        when(adminCatalogService.prepareExport(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
+                .thenReturn(sink -> sink.accept(product));
 
         mockMvc.perform(get("/api/v1/admin/catalog/products/export"))
                 .andExpect(status().isOk())
@@ -133,8 +133,10 @@ class AdminCatalogControllerTest {
         AdminProductListItem paid = new AdminProductListItem(UUID.randomUUID().toString(), "Riz; 5kg",
                 UUID.randomUUID().toString(), "Boutique Awa", "PAID", "kv_abc123", null, 12000L, 0, "DRAFT",
                 Instant.parse("2026-10-12T23:30:00Z"));
-        when(adminCatalogService.execute(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
-                .thenReturn(new PageImpl<>(List.of(sampleProduct(), paid)));
+        AdminProductListItem free = sampleProduct();
+        // Story 19.11c: the export is prepared, then streamed row by row to the response
+        when(adminCatalogService.prepareExport(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
+                .thenReturn(sink -> List.of(free, paid).forEach(sink));
 
         byte[] body = mockMvc.perform(get("/api/v1/admin/catalog/products/export"))
                 .andExpect(status().isOk())
@@ -150,6 +152,43 @@ class AdminCatalogControllerTest {
                 .doesNotContain("kv_abc123")
                 .doesNotContainPattern("\\b(FREE|PAID|ACTIVE|DRAFT|ARCHIVED)\\b")
                 .doesNotContain("product_id");
+    }
+
+    @Test
+    @DisplayName("19.11c — a filter error raised while preparing the export is a JSON error, no CSV started")
+    void exportProducts_prepareError_isJsonError() throws Exception {
+        setupFilterAs("ROLE_SUPER_ADMIN");
+        when(adminCatalogService.prepareExport(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
+                .thenThrow(com.keevo.shared.domain.exception.DomainException.userFacing(
+                        com.keevo.shared.domain.exception.ErrorCode.VALIDATION_ERROR, "Compte invalide"));
+
+        mockMvc.perform(get("/api/v1/admin/catalog/products/export").param("tenantId", "x"))
+                .andExpect(status().is4xxClientError())
+                .andExpect(header().doesNotExist("Content-Disposition"));
+    }
+
+    @Test
+    @DisplayName("19.11c — a failure after the first rows ends the CSV with « Export interrompu », never a silent cut")
+    void exportProducts_failureMidStream_marksTheFileIncomplete() throws Exception {
+        AdminCatalogService service = org.mockito.Mockito.mock(AdminCatalogService.class);
+        AdminProductListItem first = sampleProduct();
+        when(service.prepareExport(any(com.keevo.admin.catalog.domain.port.in.ListProductsQuery.class)))
+                .thenReturn(sink -> {
+                    sink.accept(first);
+                    throw new org.springframework.dao.DataAccessResourceFailureException("down");
+                });
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                ADMIN_ID, null, List.of(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))));
+        org.springframework.mock.web.MockHttpServletResponse response =
+                new org.springframework.mock.web.MockHttpServletResponse();
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AdminCatalogController(service)
+                        .exportProducts(null, null, null, null, null, response))
+                .isInstanceOf(org.springframework.dao.DataAccessResourceFailureException.class);
+
+        String csv = response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+        org.assertj.core.api.Assertions.assertThat(csv).contains("Savon Lux")
+                .endsWith(ProductsCsvWriter.INTERRUPTED + "\r\n");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

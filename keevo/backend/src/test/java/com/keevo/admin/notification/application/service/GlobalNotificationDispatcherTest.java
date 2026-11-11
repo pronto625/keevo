@@ -40,6 +40,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
@@ -67,6 +68,44 @@ class GlobalNotificationDispatcherTest {
         dispatcher = new GlobalNotificationDispatcher(repository, audience, pushNotifier, events,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         lenient().when(repository.failStuck(any(), any())).thenReturn(List.of());
+        // Story 19.11c — the audience hands each company with tokens to the dispatcher (chunked unions in the
+        // adapter); here it replays deviceTokens(company) with the adapter's policy: a company whose own read fails
+        // is skipped, a connection failure propagates.
+        lenient().doAnswer(inv -> {
+            List<PushTargetTenant> tenants = inv.getArgument(0);
+            java.util.function.BiConsumer<PushTargetTenant, List<String>> action = inv.getArgument(1);
+            for (PushTargetTenant t : tenants) {
+                List<String> tokens;
+                try {
+                    tokens = audience.deviceTokens(t);
+                } catch (DataAccessResourceFailureException e) {
+                    throw e;
+                } catch (org.springframework.dao.DataAccessException e) {
+                    continue;
+                }
+                if (tokens != null && !tokens.isEmpty()) action.accept(t, tokens);
+            }
+            return null;
+        }).when(audience).forEachTenantTokens(anyList(), any());
+    }
+
+    @Test
+    void oneCompanySendFailing_skipped_othersStillSent() {
+        GlobalNotification n = due(GlobalNotificationTarget.ALL, null);
+        PushTargetTenant a = tenant("kv_aaaaaa");
+        PushTargetTenant b = tenant("kv_bbbbbb");
+        when(repository.claimDue(NOW)).thenReturn(List.of(n));
+        when(pushNotifier.isPushAvailable()).thenReturn(true);
+        when(audience.targetTenants(GlobalNotificationTarget.ALL, null)).thenReturn(List.of(a, b));
+        when(audience.deviceTokens(a)).thenReturn(List.of("a1"));
+        when(audience.deviceTokens(b)).thenReturn(List.of("b1"));
+        when(pushNotifier.sendToTokens(eq("kv_aaaaaa"), anyList(), any())).thenThrow(new IllegalStateException("fcm"));
+        when(pushNotifier.sendToTokens(eq("kv_bbbbbb"), anyList(), any())).thenReturn(new PushSendResult(1, 0, 1, 0));
+
+        dispatcher.dispatchDue();
+
+        // the failing company's tokens were counted as recipients before the send failed (as before 19.11c)
+        verify(repository).complete(n.id(), true, null, 2, 1, 0, NOW);
     }
 
     private GlobalNotification due(GlobalNotificationTarget target, UUID tenantId) {
