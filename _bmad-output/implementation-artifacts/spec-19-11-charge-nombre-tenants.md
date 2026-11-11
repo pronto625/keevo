@@ -176,3 +176,6 @@ Status: done
 **Verification.** Full suite package by package: 5 887 tests, 0 failures (after registering the job in `SchedulerLockCoverageTest`). Guard test 13/13. Harness runs 1–5 on the clone (results in the report; run 4 interrupted at its last step by an edit of the script, cleanup ran). Incident: during implementation the `--help` text of the first harness version executed `mvn spring-boot:run` once (≈ 2 min, port 4500, `keevo_dev`, dev profile): it applied messaging V3 to `keevo_dev`; log checked — no outgoing message of any kind, no outstanding publication; fixed (quoted here-doc, stubbed guard test).
 
 **Mobile.** No app change needed: read notifications older than 90 days and notifications of people no longer in the company disappear from `GET /api/v1/notifications`.
+
+### Deferred items routed 2026-11-10
+- [ ] [Deferred-from: revue 19-6b, 2026-11-10] Retention of `public.membership_invitations` rows that will never become memberships (DECLINED, CANCELLED, expired PENDING keep the typed phone/username and names of people who refused) [keevo/backend/src/main/resources/db/migration/V74__membership_invitations.sql] — add a set-based purge (e.g. answered or expired > 90 days, one DELETE per run) to the platform retention job.
