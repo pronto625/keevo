@@ -68,6 +68,23 @@ public class BrefReconciliationService implements BrefReconciliationUseCase {
     static final String SOURCE_UNAVAILABLE = "La source Bref n'est pas accessible : relancez la réconciliation quand "
             + "elle l'est";
     static final String NOT_RUN = "La réconciliation n'a pas pu s'exécuter : relancez-la";
+    static final String SOURCE_CHANGED = "La source Bref ne contient plus ce compte ou est illisible : vérifiez la "
+            + "base Bref restaurée avant de relancer";
+    static final String NOT_LATEST = "Un import plus récent de ce compte existe : réconciliez le dernier import";
+
+    /** The French label of a reconciliation that could not run (review 24.8: one per known cause). */
+    static String label(RuntimeException e) {
+        if (e instanceof DomainException d) {
+            if (d.getErrorCode() == ErrorCode.MIGRATION_SOURCE_UNAVAILABLE) {
+                return SOURCE_UNAVAILABLE;
+            }
+            if (d.getErrorCode() == ErrorCode.MIGRATION_OWNER_NOT_FOUND
+                    || d.getErrorCode() == ErrorCode.MIGRATION_EXPORT_INVALID) {
+                return SOURCE_CHANGED;
+            }
+        }
+        return NOT_RUN;
+    }
 
     private final Map<SourceKind, BrefSourcePort> sources = new EnumMap<>(SourceKind.class);
     private final Map<SourceKind, BrefMonetisationSourcePort> monetisation = new EnumMap<>(SourceKind.class);
@@ -103,6 +120,10 @@ public class BrefReconciliationService implements BrefReconciliationUseCase {
         if (batch.status() != BatchStatus.COMPLETED || batch.tenantId() == null) {
             throw DomainException.userFacing(ErrorCode.INVALID_STATE, NOT_COMPLETED);
         }
+        // review 24.8: only the owner's latest batch (a newer import, running or not, supersedes this one)
+        if (!reconciliations.latestBatch(batch.brefOwnerId()).map(batchId::equals).orElse(false)) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, NOT_LATEST);
+        }
         Instant started = clock.instant();
         ReconciliationReport report;
         try {
@@ -110,12 +131,11 @@ public class BrefReconciliationService implements BrefReconciliationUseCase {
             report = ReconciliationReport.of(UUID.randomUUID(), batchId, batch.brefOwnerId(), batch.tenantId(),
                     started, clock.instant(), checks);
         } catch (RuntimeException e) {
-            boolean source = e instanceof DomainException d && d.getErrorCode() == ErrorCode.MIGRATION_SOURCE_UNAVAILABLE;
             // the message may quote source values (SQL detail): only the class is logged
             log.warn("[ADMIN AUDIT] Bref reconciliation could not run: batch={} owner={} error={}", batchId,
                     batch.brefOwnerId(), e.getClass().getSimpleName());
             report = ReconciliationReport.failed(UUID.randomUUID(), batchId, batch.brefOwnerId(), batch.tenantId(),
-                    started, clock.instant(), source ? SOURCE_UNAVAILABLE : NOT_RUN);
+                    started, clock.instant(), label(e));
         }
         reconciliations.save(report, actorId);
         log.info("[ADMIN AUDIT] Bref reconciliation: actor={} batch={} owner={} tenant={} status={} gaps={} "
@@ -139,21 +159,23 @@ public class BrefReconciliationService implements BrefReconciliationUseCase {
         snapshot.members().stream().map(BrefAccount::id).forEach(accounts::add);
         BrefMonetisation m = section.load(owner, accounts);
 
-        RecordsSummary records = target.records(owner);
-        Instant planInstant = records.get(MigrationRecord.BREF_USER, TENANT_PLAN).firstAt();
         String freePlan = planCatalog.settings().freePlan().code();
-        Expected expected = BrefReconciliationExpectations.expected(snapshot, m, records, planInstant, freePlan,
-                batch.id());
-        List<UUID> sampleIds = expected.sample().stream().map(SampleDocument::id).toList();
-        List<UUID> tokens = expected.links().stream().map(ExpectedLink::token).toList();
-        Actual actual = uow.platform(() -> {
+        // review 24.8: the records and the tenant are read in ONE read transaction (same database state)
+        return uow.platform(() -> {
+            RecordsSummary records = target.records(owner);
+            Instant planInstant = records.get(MigrationRecord.BREF_USER, TENANT_PLAN).firstAt();
+            Expected expected = BrefReconciliationExpectations.expected(snapshot, m, records, planInstant, freePlan,
+                    batch.id());
+            List<UUID> sampleIds = expected.sample().stream().map(SampleDocument::id).toList();
+            List<UUID> tokens = expected.links().stream().map(ExpectedLink::token).toList();
             Actual read = target.read(schema, batch.tenantId(), sampleIds, tokens);
             CurrentPlan plan = plans.currentPlan(schema).orElse(null);
-            return new Actual(read.counts(), read.sales(), read.collected(), read.expenses(), read.outstanding(),
-                    read.sample(), read.links(), new ActualSubscription(plan == null ? null : plan.planType().code(),
-                    plan == null ? null : plan.expiresAt(), read.subscription().creditXaf()));
+            Actual actual = new Actual(read.counts(), read.sales(), read.collected(), read.expenses(),
+                    read.outstanding(), read.sample(), read.links(), new ActualSubscription(
+                    plan == null ? null : plan.planType().code(), plan == null ? null : plan.expiresAt(),
+                    read.subscription().creditXaf()));
+            return BrefReconciler.reconcile(expected, actual, notedByTable(records), this::planLabel);
         });
-        return BrefReconciler.reconcile(expected, actual, notedByTable(records), this::planLabel);
     }
 
     private static Map<String, Long> notedByTable(RecordsSummary records) {

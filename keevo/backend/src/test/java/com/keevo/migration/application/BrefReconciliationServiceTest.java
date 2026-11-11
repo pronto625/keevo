@@ -65,6 +65,7 @@ class BrefReconciliationServiceTest {
         MigrationBatch b = new MigrationBatch(UUID.randomUUID(), owner, SourceKind.DATABASE, status, tenant, actor,
                 NOW, NOW, null, null, null, null);
         when(batches.findBatch(b.id())).thenReturn(Optional.of(b));
+        when(store.latestBatch(owner)).thenReturn(Optional.of(b.id()));
         return b;
     }
 
@@ -85,6 +86,21 @@ class BrefReconciliationServiceTest {
         ArgumentCaptor<ReconciliationReport> saved = ArgumentCaptor.forClass(ReconciliationReport.class);
         verify(store).save(saved.capture(), eq(actor));
         assertThat(saved.getValue().batchId()).isEqualTo(b.id());
+    }
+
+    @Test
+    @DisplayName("source without the owner or unreadable → its own label; a superseded batch → INVALID_STATE")
+    void sourceChangedAndSuperseded() {
+        MigrationBatch b = batch(BatchStatus.COMPLETED);
+        when(tenants.findById(tenant)).thenReturn(Optional.of(new TenantView(tenant, "KV-ABCDEF", "kv_abcdef",
+                "Entreprise", TenantStatus.SUSPENDED, null, NOW, null)));
+        when(source.available()).thenReturn(true);
+        when(source.load(owner)).thenThrow(new DomainException(ErrorCode.MIGRATION_OWNER_NOT_FOUND, "gone"));
+        assertThat(service.reconcile(b.id(), actor).errorLabel()).isEqualTo(BrefReconciliationService.SOURCE_CHANGED);
+
+        when(store.latestBatch(owner)).thenReturn(Optional.of(UUID.randomUUID())); // a newer import exists
+        assertThatThrownBy(() -> service.reconcile(b.id(), actor)).isInstanceOf(DomainException.class)
+                .hasMessageContaining("plus récent");
     }
 
     @Test

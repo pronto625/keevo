@@ -346,12 +346,22 @@ class BrefReconciliationFullContextTest extends FullContextIntegrationTest {
                 "EXPENSES_BY_MONTH / avril 2026", "COUNTS / Dépenses (archivées comprises)",
                 "COUNTS / Encaissements et échéances (acomptes compris)", "COLLECTED / Total encaissé",
                 "OUTSTANDING / Restant dû total", "SUBSCRIPTION / Crédit du compte");
-        assertThat(failed.path("gaps").asInt()).isGreaterThanOrEqualTo(7);
+        assertThat(gapLabels(failed)).anyMatch(g -> g.startsWith("SAMPLE / Facture BRF-"));
+        assertThat(failed.path("gaps").asInt()).isGreaterThanOrEqualTo(8);
+        // the batch report is the batch's latest run
+        JsonNode batchLatest = body(call(get("/api/v1/admin/migration/batches/" + batchId + "/reconciliation"),
+                token)).path("data");
+        assertThat(batchLatest.path("id").asText()).isEqualTo(failed.path("id").asText());
+        assertThat(batchLatest.path("status").asText()).isEqualTo("RECONCILIATION_FAILED");
         assertThat(reconciliation.blockingOwners(List.of(owner)))
                 .containsEntry(owner, "Écart de réconciliation à corriger");
         JsonNode latest = body(call(get("/api/v1/admin/migration/bref/owners/" + owner + "/reconciliation"), token))
                 .path("data");
         assertThat(latest.path("id").asText()).isEqualTo(failed.path("id").asText());
+
+        // ── a completed import without any stored run blocks the owner just the same
+        jdbc.update("DELETE FROM public.migration_reconciliations WHERE batch_id = ?", batchId);
+        assertThat(reconciliation.blockingOwners(List.of(owner))).containsEntry(owner, "Import non réconcilié");
 
         // ── a re-run of the import writes nothing: the new batch is reconciled and still failed
         JsonNode rerun = body(importOwner(owner, token)).path("data");
@@ -359,6 +369,9 @@ class BrefReconciliationFullContextTest extends FullContextIntegrationTest {
         JsonNode rerunReport = body(call(get("/api/v1/admin/migration/batches/" + rerun.path("id").asText()
                 + "/reconciliation"), token)).path("data");
         assertThat(rerunReport.path("status").asText()).isEqualTo("RECONCILIATION_FAILED");
+        // the older batch is superseded: it can no longer be reconciled
+        MvcResult superseded = call(post("/api/v1/admin/migration/batches/" + batchId + "/reconciliation"), token);
+        assertThat(superseded.getResponse().getStatus()).isEqualTo(409);
 
         // ── correction in Keevo, then a new reconciliation: clear
         jdbc.update("UPDATE " + q + "invoices SET total_ttc = total_ttc - 10 WHERE id = ?", s2);

@@ -86,9 +86,12 @@ public final class BrefReconciliationExpectations {
                                     Instant planInstant, String freePlan, UUID seed) {
         Map<UUID, String> storeLabels = storeLabels(snapshot.shops());
         Random random = new Random(seed.getMostSignificantBits() ^ seed.getLeastSignificantBits());
+        Map<UUID, String> numbers = numbers(snapshot.invoices()); // review 24.8: computed once
+        Map<UUID, Integer> quoteNumbers = quoteNumbers(snapshot.invoices());
         return new Expected(counts(snapshot, records), sales(snapshot.invoices()), collected(snapshot.invoices()),
                 expenses(snapshot.expenses()), outstanding(snapshot.invoices()),
-                sample(snapshot.invoices(), random), links(snapshot.invoices(), random),
+                sample(snapshot.invoices(), random, numbers, quoteNumbers),
+                links(snapshot.invoices(), random, numbers, quoteNumbers),
                 subscription(monetisation, planInstant, freePlan), storeLabels);
     }
 
@@ -272,9 +275,8 @@ public final class BrefReconciliationExpectations {
     // ── sample ──────────────────────────────────────────────────────────────
 
     /** The 5 largest sales (total, then id), then 15 other documents drawn with the batch's seed. */
-    static List<SampleDocument> sample(List<BrefInvoice> invoices, Random random) {
-        Map<UUID, String> numbers = numbers(invoices);
-        Map<UUID, Integer> quoteNumbers = quoteNumbers(invoices);
+    static List<SampleDocument> sample(List<BrefInvoice> invoices, Random random, Map<UUID, String> numbers,
+                                       Map<UUID, Integer> quoteNumbers) {
         List<BrefInvoice> largest = invoices.stream().filter(i -> !i.quote())
                 .sorted(Comparator.comparing(BrefInvoice::total).reversed().thenComparing(BrefInvoice::id))
                 .limit(SAMPLE_LARGEST).toList();
@@ -359,7 +361,7 @@ public final class BrefReconciliationExpectations {
         return numbers;
     }
 
-    private static Map<UUID, Integer> quoteNumbers(List<BrefInvoice> invoices) {
+    static Map<UUID, Integer> quoteNumbers(List<BrefInvoice> invoices) {
         Map<UUID, Integer> numbers = new HashMap<>();
         int[] n = {0};
         invoices.stream().filter(BrefInvoice::quote)
@@ -371,9 +373,8 @@ public final class BrefReconciliationExpectations {
     // ── links ───────────────────────────────────────────────────────────────
 
     /** Up to 5 live documents with a readable Bref token, drawn with the batch's seed. */
-    static List<ExpectedLink> links(List<BrefInvoice> invoices, Random random) {
-        Map<UUID, String> numbers = numbers(invoices);
-        Map<UUID, Integer> quoteNumbers = quoteNumbers(invoices);
+    static List<ExpectedLink> links(List<BrefInvoice> invoices, Random random, Map<UUID, String> numbers,
+                                    Map<UUID, Integer> quoteNumbers) {
         List<BrefInvoice> candidates = new ArrayList<>(invoices.stream()
                 .filter(i -> !i.deleted() && BrefMappings.uuidOrNull(i.publicToken()) != null)
                 .sorted(Comparator.comparing(BrefInvoice::id)).toList());

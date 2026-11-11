@@ -4,7 +4,8 @@
 --                               RECONCILIATION_FAILED (an out-of-tolerance gap, or a reconciliation that could not run),
 --                               gap / explained line counts, and the report (JSONB: aggregates and French labels only,
 --                               no personal data). History kept (one row per run); the cutover's activation (24.9)
---                               reads the latest run of each owner's latest COMPLETED batch.
+--                               reads the latest run of each owner's latest batch (any status: a newer blocked,
+--                               failed or running import blocks the owner until it completes and is reconciled).
 --
 -- Platform data, public schema only. Idempotent (IF NOT EXISTS). Deleting a batch (rollback, 24.9) deletes its runs.
 SET LOCAL lock_timeout = '10s';
@@ -13,7 +14,7 @@ CREATE TABLE IF NOT EXISTS public.migration_reconciliations (
     id             UUID          PRIMARY KEY,
     batch_id       UUID          NOT NULL REFERENCES public.migration_batches (id) ON DELETE CASCADE,
     bref_owner_id  UUID          NOT NULL,
-    tenant_id      UUID,
+    tenant_id      UUID          NOT NULL,
     status         VARCHAR(30)   NOT NULL CONSTRAINT migration_reconciliations_status_check
                                  CHECK (status IN ('RECONCILED', 'RECONCILIATION_FAILED')),
     gaps           INTEGER       NOT NULL DEFAULT 0,

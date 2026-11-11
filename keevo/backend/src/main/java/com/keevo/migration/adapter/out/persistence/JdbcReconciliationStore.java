@@ -40,8 +40,16 @@ class JdbcReconciliationStore implements ReconciliationStore {
     static final String LATEST_FOR_BATCH_SQL = "SELECT " + COLUMNS + " FROM public.migration_reconciliations "
             + "WHERE batch_id = ? ORDER BY finished_at DESC, id LIMIT 1";
 
+    /** The owner's latest batch (any status) — the one the gate judges (review 24.8). */
+    static final String LATEST_BATCH_SQL = "SELECT id FROM public.migration_batches WHERE bref_owner_id = ? "
+            + "ORDER BY started_at DESC, id LIMIT 1";
+
+    /**
+     * The latest run of the owner's latest batch (any status): the same batch the gate judges, so the owner screen
+     * never shows « Réconcilié » for an owner the gate blocks (review 24.8).
+     */
     static final String LATEST_FOR_OWNER_SQL = "SELECT " + COLUMNS + " FROM public.migration_reconciliations "
-            + "WHERE bref_owner_id = ? ORDER BY finished_at DESC, id LIMIT 1";
+            + "WHERE batch_id = (" + LATEST_BATCH_SQL + ") ORDER BY finished_at DESC, id LIMIT 1";
 
     /**
      * Each owner's latest batch (any status: a later failed re-run may have written rows the reconciliation never
@@ -95,6 +103,12 @@ class JdbcReconciliationStore implements ReconciliationStore {
     @Override
     public Optional<ReconciliationReport> latestForOwner(UUID brefOwnerId) {
         return jdbc.query(LATEST_FOR_OWNER_SQL, (rs, i) -> report(rs), brefOwnerId).stream().findFirst();
+    }
+
+    @Override
+    public Optional<UUID> latestBatch(UUID brefOwnerId) {
+        return jdbc.query(LATEST_BATCH_SQL, (rs, i) -> rs.getObject(1, UUID.class), brefOwnerId).stream()
+                .findFirst();
     }
 
     @Override

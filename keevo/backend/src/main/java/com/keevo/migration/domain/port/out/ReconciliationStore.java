@@ -15,7 +15,11 @@ public interface ReconciliationStore {
 
     Optional<ReconciliationReport> latestForBatch(UUID batchId);
 
+    /** The latest run of the owner's latest batch (any status) — the batch the gate judges. */
     Optional<ReconciliationReport> latestForOwner(UUID brefOwnerId);
+
+    /** The owner's latest import batch (any status: a newer RUNNING one included). */
+    Optional<UUID> latestBatch(UUID brefOwnerId);
 
     /**
      * The owners that may not be activated, with their French reason: never imported, latest import not completed,

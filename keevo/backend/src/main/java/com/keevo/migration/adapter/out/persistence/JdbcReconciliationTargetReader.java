@@ -140,7 +140,7 @@ class JdbcReconciliationTargetReader implements ReconciliationTargetReader {
                 + "(SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ? AND role = 'OWNER') "
                 + "AS owner, "
                 + "(SELECT count(*) FROM public.user_tenant_memberships WHERE tenant_id = ? AND role <> 'OWNER') "
-                + "+ (SELECT count(*) FROM public.membership_invitations WHERE tenant_id = ? AND status = 'PENDING') "
+                + "+ (SELECT count(*) FROM public.membership_invitations WHERE tenant_id = ? AND status <> 'ACCEPTED') "
                 + "AS team, "
                 + "(SELECT coalesce(max(balance_xaf), 0) FROM public.tenant_credits WHERE tenant_id = ?) AS credit";
         long[] credit = {0};
