@@ -354,6 +354,7 @@ development_status:
   m19-2-authenticator-otp: backlog  # API c84780f4 — écrans OTP (demande, saisie du code), création d'entreprise si memberships vide, erreurs françaises
   m19-9b-canaux-bref-whatsapp-meta-web-push: backlog  # API cb99ea66 — version web : service worker + abonnement Web Push (clé VAPID, subscribe/unsubscribe) ; natif inchangé
   m19-3-authenticators-google-apple: backlog  # API 3fc1c4c0 — boutons Google/Apple, jeton brut au backend, suite selon memberships, 409 → connexion par code
+  m19-3b-comptes-sociaux-gestion: backlog  # API 7239d5a3 — nonce (SHA-256 au fournisseur, clair au backend), authorizationCode Apple, écran « Comptes Google et Apple » (lister, lier, retirer)
   m19-4-login-username-membres: backlog  # API 0238c034 — écran identifiant + mot de passe, ajout de membre par identifiant, mot de passe temporaire affiché une fois
   m19-5-roles-manager-viewer-permissions: backlog  # API 54c53a82 — navigation selon memberRole, lecteur en lecture seule, « Mon équipe » du gérant, choix du rôle à l'ajout
   m19-6-multi-roles-multi-entreprises: backlog  # API 89e4782d — sélecteur d'entreprise avec rôle, ajout d'un compte existant (existingAccount), refus sur compte partagé
@@ -450,7 +451,7 @@ development_status:
   19-1-users-identifiants-multiples: done  # 2026-11-03 build-auto done (spec-19-1-users-identifiants-multiples.md) — V41 identifiants multiples, 38 constats (15 corrigés), 5 016 tests verts, Redmi connexion OK ; essai copie prod en attente (décision user)
   19-2-authenticator-otp: done  # 2026-11-04 revue 5 couches (44 constats, 11 corrigés, 1 reporté → 19-6), 5 273 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-2-authenticator-otp.md)
   19-3-authenticators-google-apple: done  # 2026-11-05 revue 5 couches (31 constats, 12 corrigés, 5 routés → 19-6/24-7/19-3b/19-4), 5 411 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-3-authenticators-google-apple.md)
-  19-3b-comptes-sociaux-gestion: backlog  # 2026-11-04 revue 19.3 — 3 items (nonce, lier/retirer, révocation Apple)
+  19-3b-comptes-sociaux-gestion: done  # 2026-11-10 build-auto done (spec-19-3b-comptes-sociaux-gestion.md) — nonce à usage unique, GET/POST/DELETE /auth/social/accounts (409 LINKED_ELSEWHERE / PROVIDER_ALREADY_LINKED / LAST_SIGN_IN_METHOD), révocation Sign in with Apple (port désactivé par défaut, outbox + job) ; V73 ; 44 constats (12 corrigés) ; routés → 16-6, 23-1 ; revue de suivi recommandée
   19-4-login-username-membres: done  # 2026-11-05 revue 5 couches (24 constats, 15 corrigés dont 1 bug préexistant), 5 481 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-4-login-username-membres.md)
   19-5-roles-manager-viewer-permissions: done  # 2026-11-05 revue 5 couches (27 constats, 20 corrigés, 2 routés → 19-5b/19-10), 5 582 tests verts, live keevo_dev OK ; revue de suivi recommandée | build-auto (spec-19-5-roles-manager-viewer-permissions.md)
   19-5b-droits-fins-gerant-lecteur: backlog  # 2026-11-08 décisions utilisateur : dépenses propriétaire seul (fix 20-10), documents de l employé = les siens, gérant/lecteur = sa boutique (20-14) — 3 items tranchés | 2026-11-08 revues 20-7/20-14 — +2 items (un employé peut régénérer un lien public ; lecture des factures non filtrée par boutique pour les membres) | 2026-11-08 revue 20-10 — +1 item (qui voit et saisit les dépenses : propriétaire seul chez Bref) | 2026-11-06 revue 20-3 — +1 item (fin d un devis : suppression = INVOICE_CREATE, annulation = INVOICE_MANAGE) | 2026-11-06 revue 20.1 — +1 item (qui peut fusionner des produits : vendeur aujourd'hui, comme l'archivage) | 2026-11-05 revue 19.5 — 4 items (décisions produit : ventes de la boutique pour le gérant, lectures du lecteur, sessions appareils, plafond)
@@ -524,7 +525,7 @@ development_status:
   epic-22-retrospective: optional
 
   epic-23: backlog  # P3 App RN parité Bref
-  23-1-onboarding-otp-social: backlog
+  23-1-onboarding-otp-social: backlog  # 2026-11-10 revue 19-3b — +1 item (envoyer nonce + authorizationCode, puis SOCIAL_REQUIRE_NONCE=true)
   23-2-parcours-document-5-etapes: backlog
   23-3-devis-encaissements-impayes: backlog
   23-4-modeles-impression-partage: backlog

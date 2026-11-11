@@ -509,9 +509,9 @@ So that **mon compte Bref social fonctionne dans l'app unifiée**.
 
 > **Créée le 2026-11-04** (revue 19.3).
 
-- [ ] [Deferred-from: revue 19.3, 2026-11-04] nonce : l'app envoie un nonce haché à Google/Apple et le nonce clair au backend, qui vérifie la claim `nonce` (rejeu d'un jeton capturé jusqu'à son expiration) — à faire avec 23.1 côté app.
-- [ ] [Deferred-from: revue 19.3, 2026-11-04] endpoints authentifiés pour lier, lister et retirer Google/Apple (aujourd'hui un 409 `EMAIL_ALREADY_EXISTS` n'a pas d'issue : membre ou email non prouvé).
-- [ ] [Deferred-from: revue 19.3, 2026-11-04] suppression de compte : révoquer le jeton Sign in with Apple (`appleid.apple.com/auth/revoke`, exigence App Store) — demande la clé privée Apple (client secret) en configuration [AccountDeletionService].
+- [x] [Deferred-from: revue 19.3, 2026-11-04] nonce : l'app envoie un nonce haché à Google/Apple et le nonce clair au backend, qui vérifie la claim `nonce` (rejeu d'un jeton capturé jusqu'à son expiration) — à faire avec 23.1 côté app.
+- [x] [Deferred-from: revue 19.3, 2026-11-04] endpoints authentifiés pour lier, lister et retirer Google/Apple (aujourd'hui un 409 `EMAIL_ALREADY_EXISTS` n'a pas d'issue : membre ou email non prouvé).
+- [x] [Deferred-from: revue 19.3, 2026-11-04] suppression de compte : révoquer le jeton Sign in with Apple (`appleid.apple.com/auth/revoke`, exigence App Store) — demande la clé privée Apple (client secret) en configuration [AccountDeletionService].
 
 **Critère provisoire :** **Given** un compte lié à Apple **When** il est supprimé **Then** la révocation Apple est appelée et les liens `user_authenticators` disparaissent.
 
@@ -1614,6 +1614,9 @@ So that **la migration ne change pas mes habitudes (FUS-FR1)**.
 **Given** l'écran d'onboarding Bref
 **When** l'utilisateur choisit OTP (SMS/WhatsApp/email), Google ou Apple
 **Then** les authenticators 19.2/19.3 sont utilisés, et un nouveau compte sans entreprise est conduit à la création d'entreprise (secteur, boutique, parcours DOCUMENT par défaut)
+
+**Éléments reportés routés vers 23.1 (revue 19.3b, 2026-11-10) :**
+- [ ] [Deferred-from: revue 19.3b, 2026-11-10] nonce et code Apple : l'app envoie `nonce` (clair, 16–128 caractères ; SHA-256 hex donné à Google et à Apple) et, pour Apple, `authorizationCode` (spec 19.3b, section Mobile) ; quand toutes les apps en store l'envoient, passer `SOCIAL_REQUIRE_NONCE=true` côté serveur (sinon un jeton capturé sans nonce reste rejouable jusqu'à son expiration).
 
 ### Story 23.2 : Parcours Document en 5 étapes
 
