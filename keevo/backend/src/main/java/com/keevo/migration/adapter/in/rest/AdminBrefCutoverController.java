@@ -56,20 +56,30 @@ public class AdminBrefCutoverController {
     public record RollbackRequest(String confirmation) {
     }
 
+    /** Body of an owner's recovery after the « go » (reprise 11/11/2026). */
+    public record RecoveryRequest(String confirmation) {
+    }
+
     /** A cutover as the dashboard shows it. */
     public record CutoverResponse(UUID id, String source, String sourceLabel, String status, String statusLabel,
                                   int parallelism, int runs, Instant startedAt, Instant finishedAt,
                                   Instant heartbeatAt, Instant activatedAt, Instant rolledBackAt, String errorLabel,
                                   List<CutoverReport.StatusCount> progress, List<AcceptedOwnerResponse> acceptedOwners,
-                                  CutoverReport report) {
+                                  CutoverReport report, List<RecoveredOwnerResponse> recoveredOwners) {
 
         static CutoverResponse of(Cutover c) {
             return new CutoverResponse(c.id(), c.source().name(), c.source().label(), c.status().name(),
                     c.status().label(), c.parallelism(), c.runs(), c.startedAt(), c.finishedAt(), c.heartbeatAt(),
                     c.activatedAt(), c.rolledBackAt(), c.errorLabel(), c.progress(),
                     c.acceptedOwners().stream().map(a -> new AcceptedOwnerResponse(a.ownerId(), a.reason(),
-                            a.acceptedAt())).toList(), c.report());
+                            a.acceptedAt())).toList(), c.report(),
+                    c.recoveredOwners().stream().map(r -> new RecoveredOwnerResponse(r.ownerId(), r.label(),
+                            r.recoveredAt())).toList());
         }
+    }
+
+    /** An owner recovered after the « go » ({@code label} « Compte n » to display; {@code ownerId} is a handle). */
+    public record RecoveredOwnerResponse(UUID ownerId, String label, Instant recoveredAt) {
     }
 
     /** An accepted owner of the « go » ({@code ownerId} is a handle). */
@@ -174,6 +184,20 @@ public class AdminBrefCutoverController {
         CurrentActor.requireSuperAdmin();
         return ResponseEntity.ok(ApiResponseWrapper.ok(CutoverResponse.of(useCase.rollbackOwner(cutoverId, ownerId,
                 body == null ? null : body.confirmation(), CurrentActor.actorId()))));
+    }
+
+    @Operation(summary = "After the « go », recover ONE owner left out: import it again from the frozen copy, "
+            + "reconcile it and activate its company alone, in the background (202; 200 when already activated)",
+            security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/{cutoverId}/owners/{ownerId}/recovery")
+    public ResponseEntity<ApiResponseWrapper<CutoverResponse>> recoverOwner(
+            @PathVariable UUID cutoverId, @PathVariable UUID ownerId,
+            @RequestBody(required = false) RecoveryRequest body) {
+        CurrentActor.requireSuperAdmin();
+        BrefCutoverUseCase.Recovery r = useCase.recoverOwner(cutoverId, ownerId,
+                body == null ? null : body.confirmation(), CurrentActor.actorId());
+        return ResponseEntity.status(r.started() ? HttpStatus.ACCEPTED : HttpStatus.OK)
+                .body(ApiResponseWrapper.ok(CutoverResponse.of(r.cutover())));
     }
 
     private static CutoverOwnerStatus status(String code) {

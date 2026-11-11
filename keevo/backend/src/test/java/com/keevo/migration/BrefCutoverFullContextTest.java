@@ -267,6 +267,19 @@ class BrefCutoverFullContextTest extends FullContextIntegrationTest {
         assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE user_id = ?", keevoAccount))
                 .isEqualTo(1);
 
+        // reprise 11/11/2026: an owner blocked by a Keevo username (24.7 USERNAME_TAKEN), left out at the « go »
+        String takenUsername = "it249u" + ThreadLocalRandom.current().nextInt(1_000_000);
+        UUID clashKeevo = UUID.randomUUID();
+        jdbc.update("INSERT INTO public.users (id, created_at, updated_at, is_active, failed_attempts, username, role) "
+                + "VALUES (?, now(), now(), true, 0, ?, 'OWNER')", clashKeevo, takenUsername);
+        UUID blocked = owner(phone(), true);
+        UUID blockedShop = shop(blocked);
+        sale(blocked, blockedShop, "8000");
+        bref.update("INSERT INTO \"user\" (id, password, \"firstName\", \"lastName\", username, role, \"shopId\", "
+                        + "\"isActive\", \"isVerified\", \"createdAt\", \"updatedAt\") VALUES (?, ?, 'Prénom', 'Nom', ?, "
+                        + "'seller', ?, true, false, ?, ?)", UUID.randomUUID(), HASH, takenUsername.toUpperCase(),
+                blockedShop.toString(), utc(T0), utc(T0));
+
         // a new run; one company tampered → the « go » is refused, then accepted with a documented reason
         String second = json(send(post("/api/v1/admin/migration/cutovers"), "{\"source\":\"DATABASE\"}"))
                 .path("data").path("id").asText();
@@ -314,13 +327,21 @@ class BrefCutoverFullContextTest extends FullContextIntegrationTest {
                 "{\"confirmation\":\"ACTIVER\"}");
         assertThat(refused.getResponse().getStatus()).isEqualTo(409);
         JsonNode blocking = json(refused).path("details").path("blockingOwners");
-        assertThat(blocking).hasSize(1);
-        assertThat(blocking.get(0).path("reason").asText()).isEqualTo("Écart de réconciliation à corriger");
+        assertThat(blocking).hasSize(2);
+        java.util.Map<String, String> blockingReasons = new java.util.HashMap<>();
+        blocking.forEach(b -> blockingReasons.put(b.path("ownerId").asText(), b.path("reason").asText()));
+        assertThat(blockingReasons).containsEntry(clean.toString(), "Écart de réconciliation à corriger")
+                .containsKey(blocked.toString());
         assertThat(count(SUSPENDED_BY_IMPORT, clean, linked)).isEqualTo(2);
+        String recovery = "/api/v1/admin/migration/cutovers/" + second + "/owners/" + blocked + "/recovery";
+        MvcResult beforeGo = send(post(recovery), "{\"confirmation\":\"REPRENDRE\"}");
+        assertThat(beforeGo.getResponse().getStatus()).isEqualTo(409); // before the « go »: relaunch is the tool
+        assertThat(json(beforeGo).path("error").asText()).contains("relançant la bascule");
 
         MvcResult go = send(post("/api/v1/admin/migration/cutovers/" + second + "/activation"),
                 "{\"confirmation\":\"ACTIVER\",\"acceptedOwners\":[{\"ownerId\":\"" + clean
-                        + "\",\"reason\":\"Écart documenté par la répétition générale\"}]}");
+                        + "\",\"reason\":\"Écart documenté par la répétition générale\"},{\"ownerId\":\"" + blocked
+                        + "\",\"reason\":\"Identifiant Keevo à libérer, owner prévenu\"}]}");
         assertThat(go.getResponse().getStatus()).isEqualTo(200);
         assertThat(json(go).path("data").path("status").asText()).isEqualTo("ACTIVATED");
         assertThat(count("SELECT count(*) FROM public.membership_invitations WHERE user_id = ? AND status = 'PENDING' "
@@ -336,5 +357,65 @@ class BrefCutoverFullContextTest extends FullContextIntegrationTest {
                 .isEqualTo(409); // after the « go »: never
         assertThat(send(get("/api/v1/admin/migration/cutovers/" + UUID.randomUUID()), null).getResponse()
                 .getStatus()).isEqualTo(404);
+
+        // reprise 11/11/2026: the blocked owner, left out at the « go », recovered alone once its cause is fixed
+        String lineStatus = "SELECT status FROM public.migration_cutover_owners WHERE cutover_id = ?::uuid "
+                + "AND bref_owner_id = ?";
+        assertThat(jdbc.queryForObject(lineStatus, String.class, second, blocked)).isEqualTo("BLOCKED");
+        assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", blocked)).isZero();
+        assertThat(send(post(recovery), "{\"confirmation\":\"non\"}").getResponse().getStatus()).isEqualTo(422);
+        MvcResult stillBlocked = send(post(recovery), "{\"confirmation\":\"REPRENDRE\"}");
+        assertThat(stillBlocked.getResponse().getStatus()).isEqualTo(202);
+        JsonNode notActivated = waitFor(second, Set.of("ACTIVATED"));
+        assertThat(notActivated.path("errorLabel").asText()).contains("repris mais non activé");
+        assertThat(notActivated.path("recoveredOwners")).isEmpty();
+        assertThat(jdbc.queryForObject(lineStatus, String.class, second, blocked)).isEqualTo("BLOCKED");
+
+        jdbc.update("UPDATE public.users SET username = ? WHERE id = ?", takenUsername + "k", clashKeevo);
+        String tenants = "SELECT coalesce(string_agg(t.id::text || ':' || t.status, ',' ORDER BY t.id), '') "
+                + "FROM public.tenants t WHERE NOT EXISTS (SELECT 1 FROM public.migration_records r "
+                + "WHERE r.target_id = t.id AND r.target_table = 'tenants' AND r.bref_owner_id = ?)";
+        String othersBefore = jdbc.queryForObject(tenants, String.class, blocked);
+
+        // a recovery in progress (live lock: fresh heartbeat) refuses every other command through the real SQL ...
+        jdbc.update("UPDATE public.migration_cutovers SET status = 'RECOVERING', heartbeat_at = now() WHERE id = ?::uuid",
+                second);
+        MvcResult busy = send(post(recovery), "{\"confirmation\":\"REPRENDRE\"}");
+        assertThat(busy.getResponse().getStatus()).isEqualTo(409);
+        assertThat(json(busy).path("error").asText()).isEqualTo("Une reprise de compte est en cours : attendez la fin");
+        assertThat(send(post("/api/v1/admin/migration/cutovers/" + second + "/activation"),
+                "{\"confirmation\":\"ACTIVER\"}").getResponse().getStatus()).isEqualTo(409);
+        assertThat(send(post("/api/v1/admin/migration/cutovers/" + second + "/runs"), null).getResponse()
+                .getStatus()).isEqualTo(409);
+        assertThat(jdbc.queryForObject("SELECT status FROM public.migration_cutovers WHERE id = ?::uuid", String.class,
+                second)).isEqualTo("RECOVERING");
+        // ... and a stale one (no heartbeat for more than 30 min) is taken over by the next recovery
+        jdbc.update("UPDATE public.migration_cutovers SET heartbeat_at = now() - interval '31 minutes' "
+                + "WHERE id = ?::uuid", second);
+        MvcResult recovered = send(post(recovery), "{\"confirmation\":\" REPRENDRE \"}");
+        assertThat(recovered.getResponse().getStatus()).isEqualTo(202);
+        JsonNode after = waitFor(second, Set.of("ACTIVATED"));
+        assertThat(after.path("errorLabel").isNull()).isTrue();
+        assertThat(after.path("recoveredOwners")).hasSize(1);
+        assertThat(after.path("recoveredOwners").get(0).path("ownerId").asText()).isEqualTo(blocked.toString());
+        assertThat(after.path("recoveredOwners").get(0).path("label").asText()).startsWith("Compte ");
+        assertThat(after.path("report").path("recoveredOwners").asInt()).isEqualTo(1);
+        assertThat(after.path("activatedAt").asText()).isEqualTo(json(go).path("data").path("activatedAt").asText());
+        assertThat(jdbc.queryForObject(lineStatus, String.class, second, blocked)).isEqualTo("ACTIVATED");
+        assertThat(count("SELECT count(*) FROM public.tenants t JOIN public.migration_records r ON r.target_id = t.id "
+                + "AND r.target_table = 'tenants' WHERE r.bref_owner_id = ? AND t.status = 'ACTIVE' "
+                + "AND t.suspended_reason IS NULL", blocked)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(tenants, String.class, blocked)).isEqualTo(othersBefore); // others untouched
+        assertThat(count("SELECT count(*) FROM public.migration_reconciliations c JOIN public.migration_batches b "
+                + "ON b.id = c.batch_id WHERE b.bref_owner_id = ? AND c.status = 'RECONCILED'", blocked)).isEqualTo(1);
+
+        // again: a no-op (200), nothing imported again
+        long batches = count("SELECT count(*) FROM public.migration_batches WHERE bref_owner_id = ?", blocked);
+        MvcResult again = send(post(recovery), "{\"confirmation\":\"REPRENDRE\"}");
+        assertThat(again.getResponse().getStatus()).isEqualTo(200);
+        assertThat(json(again).path("data").path("status").asText()).isEqualTo("ACTIVATED");
+        assertThat(json(again).path("data").path("recoveredOwners")).hasSize(1);
+        assertThat(count("SELECT count(*) FROM public.migration_batches WHERE bref_owner_id = ?", blocked))
+                .isEqualTo(batches);
     }
 }

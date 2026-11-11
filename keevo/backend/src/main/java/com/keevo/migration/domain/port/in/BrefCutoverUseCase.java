@@ -18,6 +18,8 @@ public interface BrefCutoverUseCase {
     String GO_CONFIRMATION = "ACTIVER";
     /** The confirmation phrase of the rollback. */
     String ROLLBACK_CONFIRMATION = "RETOUR ARRIERE";
+    /** The confirmation phrase of an owner's recovery after the « go » (reprise 11/11/2026). */
+    String RECOVERY_CONFIRMATION = "REPRENDRE";
 
     /**
      * Opens a cutover and starts it in the background.
@@ -65,6 +67,23 @@ public interface BrefCutoverUseCase {
      *         decided or rolled back; nothing to remove; removal refused)
      */
     Cutover rollbackOwner(UUID cutoverId, UUID ownerId, String confirmation, UUID actorId);
+
+    /**
+     * Reprise 11/11/2026 — after the « go », imports ONE owner left out (accepted out, failed, blocked, or not
+     * activated) again from the same frozen copy, reconciles it (24.8 gate, no acceptance) and activates only its
+     * company, in the background under the cutover lock ({@code RECOVERING}); no message. An owner already activated is
+     * a no-op: the cutover is returned unchanged (status ACTIVATED).
+     *
+     * @return the cutover, and whether a recovery was started (false: the owner was already activated, nothing done)
+     * @throws com.keevo.shared.domain.exception.DomainException {@code MIGRATION_CUTOVER_NOT_FOUND},
+     *         {@code VALIDATION_FAILED} (phrase, owner not in the cutover), {@code INVALID_STATE} (before the « go »,
+     *         busy, rolled back, nothing to recover), {@code MIGRATION_SOURCE_UNAVAILABLE}
+     */
+    Recovery recoverOwner(UUID cutoverId, UUID ownerId, String confirmation, UUID actorId);
+
+    /** The outcome of a recovery call: the cutover as read after it, and whether a recovery was started. */
+    record Recovery(Cutover cutover, boolean started) {
+    }
 
     /** @throws com.keevo.shared.domain.exception.DomainException {@code MIGRATION_CUTOVER_NOT_FOUND} */
     Cutover cutover(UUID cutoverId);

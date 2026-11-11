@@ -13,7 +13,12 @@ public enum CutoverStatus {
     /** The rollback removes the imported companies. */
     ROLLING_BACK("Retour arrière en cours"),
     /** The imported companies are removed: Bref can be turned back on. */
-    ROLLED_BACK("Retour arrière effectué");
+    ROLLED_BACK("Retour arrière effectué"),
+    /**
+     * Reprise 11/11/2026 — after the « go », one owner left out is imported again, reconciled and activated alone: the
+     * lock of the ACTIVATED cutover (back to ACTIVATED at the end). A decided cutover, not an open one.
+     */
+    RECOVERING("Reprise d'un compte en cours");
 
     private final String label;
 
@@ -27,6 +32,6 @@ public enum CutoverStatus {
 
     /** An open cutover blocks the start of another one. */
     public boolean open() {
-        return this != ACTIVATED && this != ROLLED_BACK;
+        return this != ACTIVATED && this != ROLLED_BACK && this != RECOVERING;
     }
 }

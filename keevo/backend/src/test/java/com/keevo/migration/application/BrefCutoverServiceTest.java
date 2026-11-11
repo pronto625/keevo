@@ -84,7 +84,7 @@ class BrefCutoverServiceTest {
 
     private Cutover cutover(CutoverStatus status) {
         return new Cutover(cutoverId, SourceKind.DATABASE, status, 2, 1, actor, T, null, T, null, null, null, null,
-                null, List.of(), List.of(), CutoverReport.EMPTY);
+                null, List.of(), List.of(), CutoverReport.EMPTY, List.of());
     }
 
     private static CutoverOwner line(int position, CutoverOwnerStatus status, UUID tenant) {
@@ -129,7 +129,7 @@ class BrefCutoverServiceTest {
         ReconciliationReport report = ReconciliationReport.of(UUID.randomUUID(), done.id(), ok, done.tenantId(), T, T,
                 List.of());
         when(reconciliation.reconcile(done.id(), actor)).thenReturn(report);
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
 
         service.start("DATABASE", 2, actor);
 
@@ -183,7 +183,7 @@ class BrefCutoverServiceTest {
                 .thenReturn(Map.of(clean.brefOwnerId(), Map.of(MigrationRecord.INVITATIONS, List.of(invitation))));
         when(identity.activateImportedTenants(anyCollection(), eq(BrefMappings.SUSPENSION_REASON)))
                 .thenReturn(Set.of(clean.tenantId(), gap.tenantId()));
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
         when(store.transition(eq(cutoverId), anyCollection(), eq(CutoverStatus.ACTIVATED), any(), eq(false)))
                 .thenReturn(true);
 
@@ -230,7 +230,7 @@ class BrefCutoverServiceTest {
         when(identity.prepareImportedTenantRemoval(tenant, BrefMappings.SUSPENSION_REASON, List.of(linked),
                 List.of(auth))).thenReturn(RemovalPreparation.READY);
         when(deletion.forgetImportedNow(tenant)).thenReturn(true);
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
 
         service.rollback(cutoverId, "RETOUR ARRIERE", actor);
 
@@ -254,7 +254,7 @@ class BrefCutoverServiceTest {
                 Map.of(MigrationRecord.TENANTS, List.of(tenant))));
         when(identity.prepareImportedTenantRemoval(eq(tenant), anyString(), anyCollection(), anyCollection()))
                 .thenReturn(RemovalPreparation.REFUSED);
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
 
         service.rollback(cutoverId, "RETOUR ARRIERE", actor);
 
@@ -301,7 +301,7 @@ class BrefCutoverServiceTest {
 
         Cutover partlyRolledBack = new Cutover(cutoverId, SourceKind.DATABASE, CutoverStatus.FAILED, 2, 1, actor, T,
                 null, T, null, null, null, null, null, List.of(new CutoverReport.StatusCount("ROLLED_BACK", "x", 1)),
-                List.of(), CutoverReport.EMPTY);
+                List.of(), CutoverReport.EMPTY, List.of());
         when(store.find(cutoverId)).thenReturn(Optional.of(partlyRolledBack));
         assertThatThrownBy(() -> service.resume(cutoverId, actor))
                 .hasMessageContaining(BrefCutoverService.ROLLBACK_STARTED);
@@ -316,7 +316,7 @@ class BrefCutoverServiceTest {
         when(directory.owners(isNull(), anyInt())).thenReturn(first);
         when(directory.owners(eq(first.get(first.size() - 1)), anyInt())).thenReturn(List.of(UUID.randomUUID()));
         when(store.ownersToProcess(eq(cutoverId), anyInt(), anyInt())).thenReturn(List.of());
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
         service.start("DATABASE", 1, actor);
         verify(directory).owners(first.get(first.size() - 1), BrefCutoverService.PAGE);
         verify(store, org.mockito.Mockito.times(2)).addOwners(eq(cutoverId), anyList());
@@ -336,7 +336,7 @@ class BrefCutoverServiceTest {
         when(identity.prepareImportedTenantRemoval(eq(tenant), anyString(), anyCollection(), anyCollection()))
                 .thenReturn(RemovalPreparation.READY);
         when(deletion.forgetImportedNow(tenant)).thenReturn(false);
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
         service.rollback(cutoverId, "RETOUR ARRIERE", actor);
         verify(store, never()).purgeOwners(anyCollection());
         verify(store).ownersStatus(cutoverId, List.of(owner.brefOwnerId()), CutoverOwnerStatus.FAILED,
@@ -350,7 +350,7 @@ class BrefCutoverServiceTest {
         when(store.owner(cutoverId, line.brefOwnerId())).thenReturn(Optional.of(line));
         when(store.transition(eq(cutoverId), anyCollection(), eq(CutoverStatus.RUNNING), any(), eq(false)))
                 .thenReturn(true);
-        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
     }
 
     @Test
@@ -413,7 +413,7 @@ class BrefCutoverServiceTest {
         }
         Cutover partlyRolledBack = new Cutover(cutoverId, SourceKind.DATABASE, CutoverStatus.FAILED, 2, 1, actor, T,
                 null, T, null, null, null, null, null, List.of(new CutoverReport.StatusCount("ROLLED_BACK", "x", 1)),
-                List.of(), CutoverReport.EMPTY);
+                List.of(), CutoverReport.EMPTY, List.of());
         when(store.find(cutoverId)).thenReturn(Optional.of(partlyRolledBack));
         assertThatThrownBy(() -> service.rollbackOwner(cutoverId, unknown, "RETOUR ARRIERE", actor))
                 .hasMessageContaining(BrefCutoverService.ROLLBACK_STARTED);
@@ -505,12 +505,261 @@ class BrefCutoverServiceTest {
         ownerRollbackReady(owner);
         Cutover partlyRolledBack = new Cutover(cutoverId, SourceKind.DATABASE, CutoverStatus.FAILED, 2, 1, actor, T,
                 null, T, null, null, null, null, "Retour arrière incomplet : 1 compte(s) à reprendre, relancez-le",
-                List.of(new CutoverReport.StatusCount("ROLLED_BACK", "x", 1)), List.of(), CutoverReport.EMPTY);
+                List.of(new CutoverReport.StatusCount("ROLLED_BACK", "x", 1)), List.of(), CutoverReport.EMPTY,
+                List.of());
         when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.FAILED)),
                 Optional.of(partlyRolledBack));
         assertThatThrownBy(() -> service.rollbackOwner(cutoverId, owner.brefOwnerId(), "RETOUR ARRIERE", actor))
                 .hasMessageContaining(BrefCutoverService.ROLLBACK_STARTED);
         verify(store, never()).resetOwner(any(), any());
         verify(store).finish(eq(cutoverId), eq(CutoverStatus.FAILED), isNull(), any());
+    }
+
+    // ── reprise 11/11/2026: one owner recovered after the « go » ───────────────────────────────────────────────────
+
+    private static CutoverOwner withStatus(CutoverOwner o, CutoverOwnerStatus status, UUID tenant, String reason) {
+        return new CutoverOwner(o.brefOwnerId(), o.position(), o.label(), null, status, null, tenant, reason, null,
+                null, null, null);
+    }
+
+    private void recoveryReady() {
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.ACTIVATED)));
+        when(store.transition(eq(cutoverId), anyCollection(), eq(CutoverStatus.RECOVERING), any(), eq(false)))
+                .thenReturn(true);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt(), anyInt())).thenReturn(CutoverReport.EMPTY);
+    }
+
+    @Test
+    @DisplayName("reprise — a blocked owner left out at the « go »: imported again, reconciled, its company alone activated")
+    void recoveryImportsReconcilesAndActivatesOnlyThatCompany() {
+        CutoverOwner blocked = line(4, CutoverOwnerStatus.BLOCKED, null);
+        UUID tenant = UUID.randomUUID();
+        recoveryReady();
+        when(store.owner(cutoverId, blocked.brefOwnerId())).thenReturn(Optional.of(blocked), Optional.of(blocked),
+                Optional.of(withStatus(blocked, CutoverOwnerStatus.RECONCILED, tenant, null)));
+        MigrationBatch done = new MigrationBatch(UUID.randomUUID(), blocked.brefOwnerId(), SourceKind.DATABASE,
+                BatchStatus.COMPLETED, tenant, null, T, T, Map.of(), List.of(), List.of(), null);
+        when(imports.importOwner(eq(blocked.brefOwnerId()), eq("DATABASE"), eq(actor))).thenReturn(done);
+        when(reconciliation.reconcile(done.id(), actor)).thenReturn(ReconciliationReport.of(UUID.randomUUID(),
+                done.id(), blocked.brefOwnerId(), tenant, T, T, List.of()));
+        when(reconciliation.blockingOwners(Set.of(blocked.brefOwnerId()))).thenReturn(Map.of());
+        when(identity.activateImportedTenants(anyCollection(), eq(BrefMappings.SUSPENSION_REASON)))
+                .thenReturn(Set.of(tenant));
+        UUID invitation = UUID.randomUUID();
+        when(store.targets(List.of(blocked.brefOwnerId()), List.of(MigrationRecord.INVITATIONS))).thenReturn(Map.of(
+                blocked.brefOwnerId(), Map.of(MigrationRecord.INVITATIONS, List.of(invitation))));
+
+        var r = service.recoverOwner(cutoverId, blocked.brefOwnerId(), " REPRENDRE ", actor);
+
+        assertThat(r.started()).isTrue();
+        verify(store).transition(eq(cutoverId), eq(java.util.EnumSet.of(CutoverStatus.ACTIVATED,
+                CutoverStatus.RECOVERING)), eq(CutoverStatus.RECOVERING), eq(BrefCutoverService.STALE), eq(false));
+        verify(store).ownerDone(eq(cutoverId), eq(blocked.brefOwnerId()), eq(CutoverOwnerStatus.RECONCILED),
+                eq(done.id()), eq(tenant), isNull(), any(), any(), any());
+        verify(identity).activateImportedTenants(org.mockito.ArgumentMatchers.argThat(c -> c.size() == 1
+                && c.contains(tenant)), eq(BrefMappings.SUSPENSION_REASON));
+        verify(identity).redateImportedInvitations(List.of(invitation));
+        verify(store).ownersStatus(cutoverId, List.of(blocked.brefOwnerId()), CutoverOwnerStatus.ACTIVATED, null);
+        verify(store).aggregate(eq(cutoverId), any(), any(), eq(0), eq(1));
+        verify(store).recovered(eq(cutoverId), eq(new Cutover.RecoveredOwner(blocked.brefOwnerId(), "Compte 4",
+                actor, T)), isNull(), any());
+        verify(store, never()).activated(any(), any(), anyList());
+    }
+
+    @Test
+    @DisplayName("reprise — an owner already activated: no-op (no lock, no import)")
+    void recoveryOfAnActivatedOwnerIsANoOp() {
+        CutoverOwner active = line(1, CutoverOwnerStatus.ACTIVATED, UUID.randomUUID());
+        recoveryReady();
+        when(store.owner(cutoverId, active.brefOwnerId())).thenReturn(Optional.of(active));
+        var r = service.recoverOwner(cutoverId, active.brefOwnerId(), "REPRENDRE", actor);
+        assertThat(r.started()).isFalse();
+        assertThat(r.cutover().status()).isEqualTo(CutoverStatus.ACTIVATED);
+        verify(store, never()).transition(any(), anyCollection(), any(), any(),
+                org.mockito.ArgumentMatchers.anyBoolean());
+        verify(imports, never()).importOwner(any(), any(), any());
+        verify(store, never()).recovered(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("reprise — phrase, unknown owner, before the « go », busy or rolled back, nothing to recover, no source")
+    void recoveryValidations() {
+        CutoverOwner failed = line(2, CutoverOwnerStatus.FAILED, null);
+        when(store.owner(cutoverId, failed.brefOwnerId())).thenReturn(Optional.of(failed));
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.ACTIVATED)));
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, failed.brefOwnerId(), "ACTIVER", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining(BrefCutoverService.RECOVERY_PHRASE);
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, null, null, actor))
+                .hasMessageContaining(BrefCutoverService.RECOVERY_PHRASE);
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, UUID.randomUUID(), "REPRENDRE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining(BrefCutoverService.OWNER_NOT_IN_CUTOVER);
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, null, "REPRENDRE", actor))
+                .hasMessageContaining(BrefCutoverService.OWNER_NOT_IN_CUTOVER);
+        for (CutoverStatus before : List.of(CutoverStatus.READY, CutoverStatus.FAILED)) {
+            when(store.find(cutoverId)).thenReturn(Optional.of(cutover(before)));
+            assertThatThrownBy(() -> service.recoverOwner(cutoverId, failed.brefOwnerId(), "REPRENDRE", actor))
+                    .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                    .hasMessageContaining(BrefCutoverService.RECOVERY_BEFORE_GO);
+        }
+        for (CutoverStatus busy : List.of(CutoverStatus.RUNNING, CutoverStatus.ROLLING_BACK,
+                CutoverStatus.ROLLED_BACK)) {
+            when(store.find(cutoverId)).thenReturn(Optional.of(cutover(busy)));
+            assertThatThrownBy(() -> service.recoverOwner(cutoverId, failed.brefOwnerId(), "REPRENDRE", actor))
+                    .hasMessageContaining(BrefCutoverService.refusal(busy));
+        }
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.ACTIVATED)));
+        for (CutoverOwnerStatus none : List.of(CutoverOwnerStatus.NOT_MIGRATED, CutoverOwnerStatus.ROLLED_BACK)) {
+            CutoverOwner o = line(5, none, null);
+            when(store.owner(cutoverId, o.brefOwnerId())).thenReturn(Optional.of(o));
+            assertThatThrownBy(() -> service.recoverOwner(cutoverId, o.brefOwnerId(), "REPRENDRE", actor))
+                    .hasMessageContaining(BrefCutoverService.OWNER_NOTHING_TO_RECOVER);
+        }
+        when(directory.available()).thenReturn(false);
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, failed.brefOwnerId(), "REPRENDRE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.MIGRATION_SOURCE_UNAVAILABLE));
+        verify(store, never()).transition(any(), anyCollection(), any(), any(),
+                org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    @DisplayName("reprise — a recovery in progress (lock not stale): refused, and the re-go, runs and rollbacks too")
+    void aRecoveryInProgressRefusesEveryOtherCommand() {
+        CutoverOwner failed = line(2, CutoverOwnerStatus.FAILED, null);
+        when(store.owner(cutoverId, failed.brefOwnerId())).thenReturn(Optional.of(failed));
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.RECOVERING)));
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, failed.brefOwnerId(), "REPRENDRE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                .hasMessageContaining(BrefCutoverService.RECOVERING);
+        assertThatThrownBy(() -> service.activate(cutoverId, "ACTIVER", List.of(), actor))
+                .hasMessageContaining(BrefCutoverService.RECOVERING);
+        assertThatThrownBy(() -> service.resume(cutoverId, actor)).hasMessageContaining(BrefCutoverService.RECOVERING);
+        assertThatThrownBy(() -> service.rollback(cutoverId, "RETOUR ARRIERE", actor))
+                .hasMessageContaining(BrefCutoverService.RECOVERING);
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, failed.brefOwnerId(), "RETOUR ARRIERE", actor))
+                .hasMessageContaining(BrefCutoverService.RECOVERING);
+        verify(imports, never()).importOwner(any(), any(), any());
+        assertThat(CutoverStatus.RECOVERING.open()).isFalse();
+    }
+
+    @Test
+    @DisplayName("reprise — still blocked after the import: not activated, the reason on the cutover, lock released")
+    void recoveryStillBlockedIsNotActivated() {
+        CutoverOwner failed = line(7, CutoverOwnerStatus.FAILED, null);
+        recoveryReady();
+        when(store.owner(cutoverId, failed.brefOwnerId())).thenReturn(Optional.of(failed), Optional.of(failed),
+                Optional.of(withStatus(failed, CutoverOwnerStatus.BLOCKED, null, "Identifiant déjà utilisé")));
+        when(imports.importOwner(any(), any(), any())).thenReturn(batch(failed.brefOwnerId(), BatchStatus.BLOCKED));
+
+        assertThat(service.recoverOwner(cutoverId, failed.brefOwnerId(), "REPRENDRE", actor).started()).isTrue();
+
+        verify(identity, never()).activateImportedTenants(anyCollection(), any());
+        verify(store).recovered(eq(cutoverId), isNull(),
+                eq("Compte 7 repris mais non activé : Identifiant déjà utilisé"), any());
+    }
+
+    @Test
+    @DisplayName("reprise — a reconciled line with a gap found by the 24.8 gate: no import, not activated")
+    void recoveryOfAReconciledLineAppliesTheGateWithoutImporting() {
+        UUID tenant = UUID.randomUUID();
+        CutoverOwner reconciled = line(3, CutoverOwnerStatus.RECONCILED, tenant);
+        recoveryReady();
+        when(store.owner(cutoverId, reconciled.brefOwnerId())).thenReturn(Optional.of(reconciled));
+        when(reconciliation.blockingOwners(Set.of(reconciled.brefOwnerId())))
+                .thenReturn(Map.of(reconciled.brefOwnerId(), "Écart de réconciliation à corriger"));
+
+        service.recoverOwner(cutoverId, reconciled.brefOwnerId(), "REPRENDRE", actor);
+
+        verify(imports, never()).importOwner(any(), any(), any());
+        verify(identity, never()).activateImportedTenants(anyCollection(), any());
+        verify(store).recovered(eq(cutoverId), isNull(),
+                eq("Compte 3 repris mais non activé : Écart de réconciliation à corriger"), any());
+    }
+
+    @Test
+    @DisplayName("reprise — a reconciled line whose company is active or suspended for another reason: not activated")
+    void recoveryOfACompanyNotSuspendedByTheImport() {
+        UUID tenant = UUID.randomUUID();
+        CutoverOwner reconciled = line(3, CutoverOwnerStatus.RECONCILED, tenant);
+        recoveryReady();
+        when(store.owner(cutoverId, reconciled.brefOwnerId())).thenReturn(Optional.of(reconciled));
+        when(reconciliation.blockingOwners(anyCollection())).thenReturn(Map.of());
+        when(identity.activateImportedTenants(anyCollection(), any())).thenReturn(Set.of());
+        when(store.targets(anyCollection(), anyCollection())).thenReturn(Map.of());
+
+        service.recoverOwner(cutoverId, reconciled.brefOwnerId(), "REPRENDRE", actor);
+
+        verify(store).ownersStatus(cutoverId, List.of(), CutoverOwnerStatus.ACTIVATED, null);
+        verify(store).recovered(eq(cutoverId), isNull(), eq("Compte 3 repris mais non activé : "
+                + BrefCutoverService.RECOVERY_NOT_SUSPENDED), any());
+    }
+
+    @Test
+    @DisplayName("reprise — an error while recovering: the lock is released with « relancez-la »")
+    void recoveryReleasesTheLockOnError() {
+        CutoverOwner reconciled = line(3, CutoverOwnerStatus.RECONCILED, UUID.randomUUID());
+        recoveryReady();
+        when(store.owner(cutoverId, reconciled.brefOwnerId())).thenReturn(Optional.of(reconciled));
+        when(reconciliation.blockingOwners(anyCollection())).thenThrow(new IllegalStateException("db"));
+
+        service.recoverOwner(cutoverId, reconciled.brefOwnerId(), "REPRENDRE", actor);
+
+        verify(store).recovered(eq(cutoverId), isNull(), eq(BrefCutoverService.RECOVERY_STOPPED), any());
+    }
+
+    @Test
+    @DisplayName("reprise — a stale lock is taken over; an owner activated meanwhile only releases it")
+    void aStaleRecoveryOfAnActivatedOwnerOnlyReleasesTheLock() {
+        CutoverOwner active = line(1, CutoverOwnerStatus.ACTIVATED, UUID.randomUUID());
+        recoveryReady();
+        Cutover stale = new Cutover(cutoverId, SourceKind.DATABASE, CutoverStatus.RECOVERING, 2, 1, actor, T, null,
+                T.minus(BrefCutoverService.STALE).minusSeconds(60), null, null, null, null, null, List.of(), List.of(),
+                CutoverReport.EMPTY, List.of());
+        when(store.find(cutoverId)).thenReturn(Optional.of(stale));
+        when(store.owner(cutoverId, active.brefOwnerId())).thenReturn(Optional.of(active));
+
+        assertThat(service.recoverOwner(cutoverId, active.brefOwnerId(), "REPRENDRE", actor).started()).isTrue();
+
+        verify(imports, never()).importOwner(any(), any(), any());
+        verify(store).recovered(eq(cutoverId), isNull(), isNull(), any());
+    }
+
+    @Test
+    @DisplayName("reprise review — an activated owner while another recovery holds a fresh lock: still a no-op")
+    void anActivatedOwnerIsANoOpDuringAnotherRecovery() {
+        CutoverOwner active = line(1, CutoverOwnerStatus.ACTIVATED, UUID.randomUUID());
+        recoveryReady();
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.RECOVERING)));
+        when(store.owner(cutoverId, active.brefOwnerId())).thenReturn(Optional.of(active));
+        assertThat(service.recoverOwner(cutoverId, active.brefOwnerId(), "REPRENDRE", actor).started()).isFalse();
+        verify(store, never()).transition(any(), anyCollection(), any(), any(),
+                org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    @DisplayName("reprise review — the coordinator cannot start: the lock is released at once")
+    void aLauncherFailureReleasesTheLock() {
+        CutoverOwner failed = line(2, CutoverOwnerStatus.FAILED, null);
+        recoveryReady();
+        when(store.owner(cutoverId, failed.brefOwnerId())).thenReturn(Optional.of(failed));
+        service.launcher = r -> {
+            throw new IllegalStateException("no thread");
+        };
+        assertThatThrownBy(() -> service.recoverOwner(cutoverId, failed.brefOwnerId(), "REPRENDRE", actor))
+                .isInstanceOf(IllegalStateException.class);
+        verify(store).recovered(eq(cutoverId), isNull(), eq(BrefCutoverService.RECOVERY_STOPPED), any());
+    }
+
+    @Test
+    @DisplayName("reprise review — a reconciled line without its company is imported again, not refused")
+    void aReconciledLineWithoutCompanyIsImportedAgain() {
+        CutoverOwner odd = line(6, CutoverOwnerStatus.RECONCILED, null);
+        recoveryReady();
+        when(store.owner(cutoverId, odd.brefOwnerId())).thenReturn(Optional.of(odd));
+        when(imports.importOwner(any(), any(), any())).thenReturn(batch(odd.brefOwnerId(), BatchStatus.BLOCKED));
+        service.recoverOwner(cutoverId, odd.brefOwnerId(), "REPRENDRE", actor);
+        verify(imports).importOwner(eq(odd.brefOwnerId()), eq("DATABASE"), eq(actor));
     }
 }

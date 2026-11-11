@@ -15,13 +15,17 @@ import java.util.List;
  * @param anomalies     values kept as they were in Bref and noted by the import (label → number of rows)
  * @param durations     per stage and total
  * @param sourceIndexes helper indexes of the restored copy (present / expected), {@code null} when not probed
+ * @param acceptedOwners  owners accepted at the « go » despite a gap or a block
+ * @param recoveredOwners owners imported and activated alone after the « go » (reprise 11/11/2026; 0 in older
+ *                        reports)
  */
 public record CutoverReport(Instant generatedAt, int ownersTotal, List<StatusCount> owners, List<LabelCount> reasons,
                             List<FigureLine> tables, List<FigureLine> sums, List<LabelCount> anomalies,
-                            Durations durations, IndexProbe sourceIndexes, int acceptedOwners) {
+                            Durations durations, IndexProbe sourceIndexes, int acceptedOwners,
+                            int recoveredOwners) {
 
     public static final CutoverReport EMPTY = new CutoverReport(null, 0, List.of(), List.of(), List.of(), List.of(),
-            List.of(), null, null, 0);
+            List.of(), null, null, 0, 0);
 
     public CutoverReport {
         owners = owners == null ? List.of() : List.copyOf(owners);

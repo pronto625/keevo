@@ -48,7 +48,8 @@ class JdbcCutoverStore implements CutoverStore {
 
     private static final String COLUMNS = "c.id, c.source, c.status, c.parallelism, c.runs, c.started_by, "
             + "c.started_at, c.finished_at, c.heartbeat_at, c.activated_by, c.activated_at, c.rolled_back_by, "
-            + "c.rolled_back_at, c.error_label, c.accepted_owners::text AS accepted_owners, c.report::text AS report";
+            + "c.rolled_back_at, c.error_label, c.accepted_owners::text AS accepted_owners, c.report::text AS report, "
+            + "c.recovered_owners::text AS recovered_owners";
 
     static final String FIND_SQL = "SELECT " + COLUMNS + " FROM public.migration_cutovers c WHERE c.id = ?";
     static final String LIST_SQL = "SELECT " + COLUMNS + " FROM public.migration_cutovers c "
@@ -58,14 +59,23 @@ class JdbcCutoverStore implements CutoverStore {
             + "ORDER BY c.started_at DESC, c.id DESC LIMIT ?";
 
     /**
-     * One conditional update: a RUNNING / ROLLING_BACK cutover is taken over only when its coordinator stopped beating
-     * (restart, crash).
+     * One conditional update: a RUNNING / ROLLING_BACK / RECOVERING cutover is taken over only when its coordinator
+     * stopped beating (restart, crash).
      */
     static final String TRANSITION_SQL = """
             UPDATE public.migration_cutovers
                SET status = ?, heartbeat_at = now(), finished_at = NULL, error_label = NULL, runs = runs + ?
              WHERE id = ? AND status = ANY (?::varchar[])
-               AND (status NOT IN ('RUNNING', 'ROLLING_BACK') OR heartbeat_at < now() - make_interval(secs => ?))
+               AND (status NOT IN ('RUNNING', 'ROLLING_BACK', 'RECOVERING')
+                    OR heartbeat_at < now() - make_interval(secs => ?))
+            """;
+
+    /** Reprise 11/11/2026 — the release of an owner's recovery, fenced on RECOVERING (a late thread changes nothing). */
+    static final String RECOVERED_SQL = """
+            UPDATE public.migration_cutovers
+               SET status = 'ACTIVATED', error_label = ?, report = ?::jsonb,
+                   recovered_owners = recovered_owners || ?::jsonb, finished_at = now(), heartbeat_at = now()
+             WHERE id = ? AND status = 'RECOVERING'
             """;
 
     static final String FINISH_SQL = """
@@ -154,6 +164,7 @@ class JdbcCutoverStore implements CutoverStore {
             """;
 
     private static final TypeReference<List<Cutover.AcceptedOwner>> ACCEPTED = new TypeReference<>() { };
+    private static final TypeReference<List<Cutover.RecoveredOwner>> RECOVERED = new TypeReference<>() { };
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper json;
@@ -299,7 +310,8 @@ class JdbcCutoverStore implements CutoverStore {
         // the status moved to ACTIVATED through transition(); the first « go » keeps its actor and time
         jdbc.update("UPDATE public.migration_cutovers SET activated_by = coalesce(activated_by, ?), "
                 + "activated_at = coalesce(activated_at, now()), accepted_owners = accepted_owners || ?::jsonb, "
-                + "finished_at = now(), heartbeat_at = now() WHERE id = ? AND status = 'ACTIVATED'", actor,
+                + "finished_at = now(), heartbeat_at = now() WHERE id = ? AND status IN ('ACTIVATED', 'RECOVERING')",
+                actor, // a recovery that took the lock just after a re-go's transition never drops its acceptances
                 write(accepted), cutoverId);
     }
 
@@ -347,7 +359,7 @@ class JdbcCutoverStore implements CutoverStore {
 
     @Override
     public CutoverReport aggregate(UUID cutoverId, CutoverReport.Durations stages, CutoverReport.IndexProbe probe,
-                                   int acceptedOwners) {
+                                   int acceptedOwners, int recoveredOwners) {
         List<StatusCount> owners = progress(cutoverId);
         int total = (int) owners.stream().mapToLong(StatusCount::count).sum();
         List<LabelCount> reasons = jdbc.query(REASONS_SQL, (rs, i) -> new LabelCount(rs.getString("reason"),
@@ -367,7 +379,13 @@ class JdbcCutoverStore implements CutoverStore {
                 owner.importsMs(), owner.reconciliationsMs(), owner.ownerAvgMs(), owner.ownerP95Ms(),
                 owner.ownerMaxMs(), s.activationMs(), s.rollbackMs(), s.totalMs());
         return new CutoverReport(Instant.now(), total, owners, reasons, tables, sums, anomalies, durations, probe,
-                acceptedOwners);
+                acceptedOwners, recoveredOwners);
+    }
+
+    @Override
+    public void recovered(UUID cutoverId, Cutover.RecoveredOwner recovered, String errorLabel, CutoverReport report) {
+        jdbc.update(RECOVERED_SQL, errorLabel, write(report), write(recovered == null ? List.of() : List.of(recovered)),
+                cutoverId);
     }
 
     private List<FigureLine> figures(String section, UUID cutoverId) {
@@ -407,13 +425,13 @@ class JdbcCutoverStore implements CutoverStore {
                 instant(rs, "heartbeat_at"), rs.getObject("activated_by", UUID.class), instant(rs, "activated_at"),
                 rs.getObject("rolled_back_by", UUID.class), instant(rs, "rolled_back_at"),
                 rs.getString("error_label"), List.of(), read(rs.getString("accepted_owners"), ACCEPTED),
-                readReport(rs.getString("report")));
+                readReport(rs.getString("report")), read(rs.getString("recovered_owners"), RECOVERED));
     }
 
     private static Cutover withProgress(Cutover c, List<StatusCount> progress) {
         return new Cutover(c.id(), c.source(), c.status(), c.parallelism(), c.runs(), c.startedBy(), c.startedAt(),
                 c.finishedAt(), c.heartbeatAt(), c.activatedBy(), c.activatedAt(), c.rolledBackBy(),
-                c.rolledBackAt(), c.errorLabel(), progress, c.acceptedOwners(), c.report());
+                c.rolledBackAt(), c.errorLabel(), progress, c.acceptedOwners(), c.report(), c.recoveredOwners());
     }
 
     private static CutoverOwner owner(ResultSet rs) throws SQLException {

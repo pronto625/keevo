@@ -102,7 +102,16 @@ public interface CutoverStore {
 
     /** The report aggregates of the cutover (status counts, reasons, figures, anomalies, owner durations). */
     CutoverReport aggregate(UUID cutoverId, CutoverReport.Durations stages, CutoverReport.IndexProbe probe,
-                            int acceptedOwners);
+                            int acceptedOwners, int recoveredOwners);
+
+    /**
+     * Reprise 11/11/2026 — releases the lock of an owner's recovery: a RECOVERING cutover back to ACTIVATED with its
+     * label and report, the recovered owner appended when one was activated (one fenced update).
+     *
+     * @param recovered  the owner activated by the recovery, {@code null} when none
+     * @param errorLabel French reason the owner was not activated, {@code null} when it was (or nothing was to do)
+     */
+    void recovered(UUID cutoverId, Cutover.RecoveredOwner recovered, String errorLabel, CutoverReport report);
 
     /** Live counts per status. */
     List<CutoverReport.StatusCount> progress(UUID cutoverId);

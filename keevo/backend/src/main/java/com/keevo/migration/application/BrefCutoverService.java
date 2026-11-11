@@ -43,8 +43,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -92,8 +95,8 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             + "en échec). Corrigez-les ou acceptez-les un par un avec un motif.";
     static final String RUNNING = "La bascule est en cours : attendez la fin";
     static final String AFTER_GO = "Après le « go », plus de retour arrière automatique : corrigez sur Keevo (runbook)";
-    static final String AFTER_GO_RUN = "Le « go » est donné : la bascule ne peut plus être relancée (un owner "
-            + "retardataire s'importe seul, runbook)";
+    static final String AFTER_GO_RUN = "Le « go » est donné : la bascule ne peut plus être relancée (un compte "
+            + "resté hors bascule se reprend seul : « Reprendre ce compte »)";
     static final String ROLLBACK_STARTED = "Un retour arrière a commencé : terminez-le (relancez-le), puis ouvrez "
             + "une nouvelle bascule";
     static final String ROLLED_BACK = "Retour arrière effectué : ouvrez une nouvelle bascule";
@@ -112,6 +115,19 @@ public class BrefCutoverService implements BrefCutoverUseCase {
     /** Lines whose company (or traces) one owner's rollback may remove. */
     static final Set<CutoverOwnerStatus> OWNER_REMOVABLE = EnumSet.of(CutoverOwnerStatus.RECONCILED,
             CutoverOwnerStatus.GAP, CutoverOwnerStatus.BLOCKED, CutoverOwnerStatus.FAILED);
+    // reprise 11/11/2026 — one owner recovered after the « go »
+    static final String RECOVERY_PHRASE = "Tapez « " + RECOVERY_CONFIRMATION + " » pour confirmer la reprise du compte";
+    static final String RECOVERY_BEFORE_GO = "Avant le « go », un compte se reprend en relançant la bascule";
+    static final String RECOVERING = "Une reprise de compte est en cours : attendez la fin";
+    static final String OWNER_NOTHING_TO_RECOVER = "Ce compte n'a rien à reprendre : rien à migrer dans Bref ou "
+            + "supprimé par le retour arrière";
+    static final String RECOVERY_NOT_ACTIVATED = "%s repris mais non activé : %s";
+    static final String RECOVERY_NOT_SUSPENDED = "entreprise déjà active ou suspendue pour un autre motif";
+    static final String RECOVERY_STOPPED = "La reprise du compte s'est arrêtée avant la fin : relancez-la";
+    /** Lines a recovery after the « go » may import again ({@code RECONCILED}: activation only, no new import). */
+    static final Set<CutoverOwnerStatus> OWNER_RECOVERABLE = EnumSet.of(CutoverOwnerStatus.PENDING,
+            CutoverOwnerStatus.RECONCILED, CutoverOwnerStatus.GAP, CutoverOwnerStatus.BLOCKED,
+            CutoverOwnerStatus.FAILED);
 
     private final BrefOwnerImportService imports;
     private final BrefReconciliationUseCase reconciliation;
@@ -240,9 +256,39 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                 tenantOf.put(line.brefOwnerId(), line.tenantId());
             }
         }
-        int[] redated = new int[1];
+        Activation activation = activateOwners(cutoverId, tenantOf);
+        Instant now = clock.instant();
+        Set<UUID> alreadySigned = new java.util.HashSet<>();
+        c.acceptedOwners().forEach(a -> alreadySigned.add(a.ownerId()));
+        List<Cutover.AcceptedOwner> signed = reasons.entrySet().stream()
+                .filter(e -> blocking.containsKey(e.getKey()) && !alreadySigned.contains(e.getKey()))
+                .map(e -> new Cutover.AcceptedOwner(e.getKey(), e.getValue(), actorId, now)).toList();
+        store.activated(cutoverId, actorId, signed);
+        CutoverReport.Durations previous = c.report().durations();
+        store.saveReport(cutoverId, report(cutoverId, c, previous.listingMs(), previous.runWallMs(), ms(t0),
+                previous.rollbackMs(), c.report().sourceIndexes(), c.acceptedOwners().size() + signed.size(),
+                c.recoveredOwners().size()));
+        log.info("[ADMIN AUDIT] Bref cutover go: actor={} cutover={} companiesActivated={} notActivated={} "
+                        + "invitationsRedated={} acceptedOwners={}", actorId, cutoverId, activation.owners().size(),
+                tenantOf.size() - activation.owners().size(), activation.invitationsRedated(), signed.size());
+        return cutover(cutoverId);
+    }
+
+    /** What one activation did: the owners whose company it activated, the invitations it re-dated. */
+    private record Activation(List<UUID> owners, int invitationsRedated) {
+    }
+
+    /**
+     * The activation unit of work, shared by the « go » and an owner's recovery: in one platform transaction, the
+     * companies still suspended by the import become ACTIVE and the imported invitations of those activated now are
+     * re-dated (no event, no message); then their lines become {@code ACTIVATED}. 3 statements whatever the number of
+     * owners (+ 1 line update).
+     *
+     * @param tenantOf owner → its imported company
+     */
+    private Activation activateOwners(UUID cutoverId, Map<UUID, UUID> tenantOf) {
         List<UUID> activatedOwners = new ArrayList<>();
-        Set<UUID> activated = uow.platform(() -> {
+        int redated = uow.platform(() -> {
             Set<UUID> done = identity.activateImportedTenants(tenantOf.values(), BrefMappings.SUSPENSION_REASON);
             tenantOf.forEach((owner, tenant) -> {
                 if (done.contains(tenant)) {
@@ -253,24 +299,12 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             List<UUID> invitations = new ArrayList<>();
             store.targets(activatedOwners, List.of(MigrationRecord.INVITATIONS)).values()
                     .forEach(t -> invitations.addAll(t.getOrDefault(MigrationRecord.INVITATIONS, List.of())));
-            redated[0] = identity.redateImportedInvitations(invitations);
-            return done;
+            int n = identity.redateImportedInvitations(invitations);
+            // same transaction: a company never ends ACTIVE with its line left behind (review 24.9 reprise)
+            store.ownersStatus(cutoverId, activatedOwners, CutoverOwnerStatus.ACTIVATED, null);
+            return n;
         });
-        store.ownersStatus(cutoverId, activatedOwners, CutoverOwnerStatus.ACTIVATED, null);
-        Instant now = clock.instant();
-        Set<UUID> alreadySigned = new java.util.HashSet<>();
-        c.acceptedOwners().forEach(a -> alreadySigned.add(a.ownerId()));
-        List<Cutover.AcceptedOwner> signed = reasons.entrySet().stream()
-                .filter(e -> blocking.containsKey(e.getKey()) && !alreadySigned.contains(e.getKey()))
-                .map(e -> new Cutover.AcceptedOwner(e.getKey(), e.getValue(), actorId, now)).toList();
-        store.activated(cutoverId, actorId, signed);
-        CutoverReport.Durations previous = c.report().durations();
-        store.saveReport(cutoverId, report(cutoverId, c, previous.listingMs(), previous.runWallMs(), ms(t0),
-                previous.rollbackMs(), c.report().sourceIndexes(), c.acceptedOwners().size() + signed.size()));
-        log.info("[ADMIN AUDIT] Bref cutover go: actor={} cutover={} companiesActivated={} notActivated={} "
-                        + "invitationsRedated={} acceptedOwners={}", actorId, cutoverId, activated.size(),
-                tenantOf.size() - activated.size(), redated[0], signed.size());
-        return cutover(cutoverId);
+        return new Activation(activatedOwners, redated);
     }
 
     @Override
@@ -368,7 +402,7 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             CutoverReport.Durations previous = now.report().durations();
             CutoverReport report = report(cutoverId, now, previous.listingMs(), previous.runWallMs(),
                     previous.activationMs(), previous.rollbackMs(), now.report().sourceIndexes(),
-                    now.acceptedOwners().size());
+                    now.acceptedOwners().size(), now.recoveredOwners().size());
             if (refused) {
                 store.finish(cutoverId, before.status(), before.errorLabel(), report);
             } else {
@@ -379,6 +413,197 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             log.error("[ADMIN AUDIT] Bref cutover {} could not be released after an owner rollback ({}): relaunch it "
                     + "after {} min", cutoverId, e.getClass().getSimpleName(), STALE.toMinutes());
         }
+    }
+
+    // ── recovery of one owner after the « go » (reprise 11/11/2026) ─────────────────────────────────────────────
+
+    @Override
+    public Recovery recoverOwner(UUID cutoverId, UUID ownerId, String confirmation, UUID actorId) {
+        if (confirmation == null || !RECOVERY_CONFIRMATION.equals(confirmation.strip())) {
+            throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, RECOVERY_PHRASE);
+        }
+        Cutover c = cutover(cutoverId);
+        CutoverOwner line = ownerId == null ? null : store.owner(cutoverId, ownerId).orElse(null);
+        if (line == null) {
+            throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, OWNER_NOT_IN_CUTOVER);
+        }
+        if (line.status() == CutoverOwnerStatus.ACTIVATED && (c.status() == CutoverStatus.ACTIVATED
+                || c.status() == CutoverStatus.RECOVERING && !stale(c))) {
+            return new Recovery(c, false); // idempotent: activated by the « go » or by an earlier recovery
+        }
+        if (c.status() == CutoverStatus.READY || c.status() == CutoverStatus.FAILED) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, RECOVERY_BEFORE_GO);
+        }
+        if (c.status() != CutoverStatus.ACTIVATED && c.status() != CutoverStatus.RECOVERING) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, refusal(c.status()));
+        }
+        if (line.status() != CutoverOwnerStatus.ACTIVATED && !OWNER_RECOVERABLE.contains(line.status())) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, OWNER_NOTHING_TO_RECOVER);
+        }
+        if (!directory.available()) {
+            throw new DomainException(ErrorCode.MIGRATION_SOURCE_UNAVAILABLE, "Bref database not configured");
+        }
+        // the lock: one conditional update; the re-go, runs, rollbacks and other recoveries are refused while it is
+        // held, and a crashed recovery is taken over after STALE (an ACTIVATED line then only releases the lock)
+        if (!store.transition(cutoverId, EnumSet.of(CutoverStatus.ACTIVATED, CutoverStatus.RECOVERING),
+                CutoverStatus.RECOVERING, STALE, false)) {
+            CutoverStatus now = cutover(cutoverId).status();
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, now == CutoverStatus.ACTIVATED
+                    ? RECOVERING : refusal(now));
+        }
+        log.info("[ADMIN AUDIT] Bref cutover owner recovery started: actor={} cutover={} owner={}", actorId,
+                cutoverId, ownerId);
+        try {
+            launcher.accept(() -> recoveryRun(cutoverId, ownerId, actorId));
+        } catch (RuntimeException e) { // the coordinator could not start: release the lock at once
+            releaseAfterRecovery(cutoverId, null, RECOVERY_STOPPED);
+            throw e;
+        }
+        return new Recovery(cutover(cutoverId), true);
+    }
+
+    /** A RECOVERING lock whose coordinator stopped beating (taken over by the next recovery). */
+    private boolean stale(Cutover c) {
+        return c.heartbeatAt() == null || c.heartbeatAt().isBefore(clock.instant().minus(STALE));
+    }
+
+    /**
+     * Under the RECOVERING lock: imports the owner again from the frozen copy (the run's own {@link #process}, beating
+     * while it works) unless its line is already RECONCILED, applies the gate (line RECONCILED and 24.8
+     * {@code blockingOwners} empty — no acceptance), activates only its company, then releases the lock. Never throws.
+     */
+    void recoveryRun(UUID cutoverId, UUID ownerId, UUID actorId) {
+        MDC.put("cutoverId", cutoverId.toString());
+        long t0 = System.nanoTime();
+        String problem = null;
+        Cutover.RecoveredOwner recovered = null;
+        String outcome = "nothing to do";
+        boolean interrupted = false;
+        try {
+            CutoverOwner line = store.owner(cutoverId, ownerId).orElse(null); // re-read under the lock
+            if (line != null && line.status() != CutoverOwnerStatus.ACTIVATED) {
+                if (!OWNER_RECOVERABLE.contains(line.status())) {
+                    problem = OWNER_NOTHING_TO_RECOVER;
+                } else {
+                    if (line.status() != CutoverOwnerStatus.RECONCILED || line.tenantId() == null) {
+                        processBeating(cutoverId, line, actorId);
+                        line = store.owner(cutoverId, ownerId).orElseThrow();
+                    }
+                    String reason = gate(line);
+                    if (reason == null) {
+                        Activation a = activateOwners(cutoverId, Map.of(ownerId, line.tenantId()));
+                        if (a.owners().contains(ownerId)) {
+                            recovered = new Cutover.RecoveredOwner(ownerId, line.label(), actorId, clock.instant());
+                        } else if (store.owner(cutoverId, ownerId).map(o -> o.status() != CutoverOwnerStatus.ACTIVATED)
+                                .orElse(true)) {
+                            reason = RECOVERY_NOT_SUSPENDED;
+                        }
+                    }
+                    if (reason != null) {
+                        problem = label(RECOVERY_NOT_ACTIVATED.formatted(line.label(), reason));
+                    }
+                }
+                outcome = recovered != null ? "activated" : problem == null ? "already active" : "not activated";
+            }
+        } catch (InterruptedException e) {
+            interrupted = true;
+            problem = RECOVERY_STOPPED;
+            outcome = "stopped";
+        } catch (RuntimeException e) {
+            problem = RECOVERY_STOPPED;
+            outcome = "stopped";
+            log.warn("[ADMIN AUDIT] Bref cutover owner recovery stopped: cutover={} owner={} error={}", cutoverId,
+                    ownerId, e.getClass().getSimpleName());
+        } finally {
+            // the release needs a connection: the interrupt flag is restored only after it
+            interrupted |= Thread.interrupted();
+            releaseAfterRecovery(cutoverId, recovered, problem);
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        log.info("[ADMIN AUDIT] Bref cutover owner recovery: actor={} cutover={} owner={} outcome={} ms={}", actorId,
+                cutoverId, ownerId, outcome, ms(t0));
+        MDC.remove("cutoverId");
+    }
+
+    /** The French reason the owner may not be activated, {@code null} when the gate lets it through. */
+    private String gate(CutoverOwner line) {
+        if (line.status() != CutoverOwnerStatus.RECONCILED || line.tenantId() == null) {
+            return line.reason() == null ? line.status().label() : line.reason();
+        }
+        return reconciliation.blockingOwners(Set.of(line.brefOwnerId())).get(line.brefOwnerId());
+    }
+
+    /**
+     * Runs {@link #process} on a worker thread and keeps the heartbeat of the lock fresh while it works (a large owner
+     * may take minutes); never returns while the worker may still write.
+     */
+    private void processBeating(UUID cutoverId, CutoverOwner line, UUID actorId) throws InterruptedException {
+        ExecutorService worker = Executors.newSingleThreadExecutor(
+                Thread.ofPlatform().name("bref-cutover-recovery").daemon(true).factory());
+        try {
+            Future<?> done = worker.submit(() -> process(cutoverId, line, actorId));
+            while (true) {
+                try {
+                    done.get(1, TimeUnit.MINUTES);
+                    return;
+                } catch (TimeoutException beat) {
+                    safeBeat(cutoverId);
+                } catch (ExecutionException e) {
+                    throw new IllegalStateException("Owner recovery stopped", e.getCause());
+                }
+            }
+        } finally {
+            worker.shutdown();
+            boolean interrupted = false;
+            while (true) {
+                try {
+                    if (worker.awaitTermination(1, TimeUnit.MINUTES)) {
+                        break;
+                    }
+                    safeBeat(cutoverId);
+                } catch (InterruptedException e) {
+                    interrupted = true; // keep waiting: the lock is never released while the worker writes
+                }
+            }
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    /** A heartbeat that never throws (a transient database error must not end a recovery whose worker writes). */
+    private void safeBeat(UUID cutoverId) {
+        try {
+            store.heartbeat(cutoverId);
+        } catch (RuntimeException e) {
+            log.warn("Bref cutover {} heartbeat not stored ({})", cutoverId, e.getClass().getSimpleName());
+        }
+    }
+
+    /**
+     * Releases the recovery lock: the cutover back to ACTIVATED with the report recomputed and, when the owner was
+     * activated, its entry appended. Never throws: a failure leaves the cutover RECOVERING until {@link #STALE}, when a
+     * new recovery call takes it over.
+     */
+    private void releaseAfterRecovery(UUID cutoverId, Cutover.RecoveredOwner recovered, String problem) {
+        try {
+            Cutover now = cutover(cutoverId);
+            CutoverReport.Durations previous = now.report().durations();
+            CutoverReport report = report(cutoverId, now, previous.listingMs(), previous.runWallMs(),
+                    previous.activationMs(), previous.rollbackMs(), now.report().sourceIndexes(),
+                    now.acceptedOwners().size(), now.recoveredOwners().size() + (recovered == null ? 0 : 1));
+            store.recovered(cutoverId, recovered, problem, report);
+        } catch (RuntimeException e) {
+            log.error("[ADMIN AUDIT] Bref cutover {} could not be released after an owner recovery ({}): recover the "
+                    + "owner again after {} min", cutoverId, e.getClass().getSimpleName(), STALE.toMinutes());
+        }
+    }
+
+    /** A label within the 300 characters of {@code error_label}. */
+    private static String label(String text) {
+        return text.length() <= 300 ? text : text.substring(0, 299) + "…";
     }
 
     // ── reads ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -493,7 +718,8 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             }
             CutoverReport.Durations previous = c.report().durations();
             CutoverReport report = report(cutoverId, c, listingMs, ms(wall), previous.activationMs(),
-                    previous.rollbackMs(), probe, c.acceptedOwners().size());
+                    previous.rollbackMs(), probe, c.acceptedOwners().size(),
+                    c.recoveredOwners().size());
             store.finish(cutoverId, end, error, report);
             log.info("[ADMIN AUDIT] Bref cutover run finished: cutover={} status={} owners={} wallMs={}", cutoverId,
                     end, report.ownersTotal(), ms(wall));
@@ -603,7 +829,8 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             Cutover c = cutover(cutoverId);
             CutoverReport.Durations previous = c.report().durations();
             CutoverReport report = report(cutoverId, c, previous.listingMs(), previous.runWallMs(),
-                    previous.activationMs(), ms(t0), c.report().sourceIndexes(), c.acceptedOwners().size());
+                    previous.activationMs(), ms(t0), c.report().sourceIndexes(), c.acceptedOwners().size(),
+                    c.recoveredOwners().size());
             if (failures == 0) {
                 store.finish(cutoverId, CutoverStatus.ROLLED_BACK, null, report);
                 store.rolledBack(cutoverId, actorId);
@@ -671,11 +898,12 @@ public class BrefCutoverService implements BrefCutoverUseCase {
     // ── helpers ──────────────────────────────────────────────────────────────────────────────────────────────────
 
     private CutoverReport report(UUID cutoverId, Cutover c, Long listingMs, Long runWallMs, Long activationMs,
-                                 Long rollbackMs, CutoverReport.IndexProbe probe, int accepted) {
+                                 Long rollbackMs, CutoverReport.IndexProbe probe, int accepted,
+                                 int recovered) {
         Long total = Duration.between(c.startedAt(), clock.instant()).toMillis();
         CutoverReport.Durations stages = new CutoverReport.Durations(listingMs, runWallMs, null, null, null, null,
                 null, activationMs, rollbackMs, total);
-        return store.aggregate(cutoverId, stages, probe, accepted);
+        return store.aggregate(cutoverId, stages, probe, accepted, recovered);
     }
 
     /** Accepted owners → their documented reason (each in the cutover, each with a reason of 10 characters or more). */
@@ -704,6 +932,7 @@ public class BrefCutoverService implements BrefCutoverUseCase {
             case ACTIVATED -> AFTER_GO;
             case ROLLED_BACK -> ROLLED_BACK;
             case FAILED -> INTERRUPTED;
+            case RECOVERING -> RECOVERING;
             case READY -> "Action impossible dans l'état actuel de la bascule";
         };
     }
