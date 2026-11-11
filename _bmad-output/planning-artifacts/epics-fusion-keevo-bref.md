@@ -1808,11 +1808,11 @@ As a **super-admin**,
 I want **importer l'identité, les boutiques et l'équipe d'un owner**,
 So that **son tenant existe avec les bons accès (FUS-MIG1, MIG2)**.
 
-> **Routé depuis la revue 19.12 (05/11/2026) :** - [ ] [Deferred-from: revue 19.12, 2026-11-05] `default_sale_flow=DOCUMENT` s'écrit par `TenantSaleFlowCommandPort.set(schema, SaleFlow.DOCUMENT)` (identity.api, livré par 19.12, audité) ; les logos de boutiques passent par `StoreLogoUseCase` (port de stockage, nom de fichier unique, `logo_path`) — ne pas écrire ces colonnes en SQL direct.
+> **Routé depuis la revue 19.12 (05/11/2026) :** - [x] [Deferred-from: revue 19.12, 2026-11-05] (fait par 24.2 le 11/11/2026 : `ProfileStep` → `TenantSaleFlowCommandPort.set`, `LogosStep` → `StoreImportPort.importLogo` → `StoreLogoUseCase.upload`) `default_sale_flow=DOCUMENT` s'écrit par `TenantSaleFlowCommandPort.set(schema, SaleFlow.DOCUMENT)` (identity.api, livré par 19.12, audité) ; les logos de boutiques passent par `StoreLogoUseCase` (port de stockage, nom de fichier unique, `logo_path`) — ne pas écrire ces colonnes en SQL direct.
 
-> **Routé depuis 19.13 (05/11/2026) :** - [ ] [Deferred-from: spec 19.13, 2026-11-05] Profil d'interface de l'owner importé : après `TenantSaleFlowCommandPort.set(schema, DOCUMENT)`, appeler `ModuleActivationRulesPort.applyInitialRules(schema)` (19.13 : désactive caisse, stock, inventaire, transferts selon les règles en base). Les fournisseurs font partie du module `crm` avec les clients et ne peuvent pas être désactivés seuls — décider ici comment les masquer à un owner Bref (sous-module ou masquage par le préréglage DOCUMENT) [keevo/resources/keevo/modules/crm/module.json] — à trancher avec l'import des clients.
+> **Routé depuis 19.13 (05/11/2026) :** - [x] [Deferred-from: spec 19.13, 2026-11-05] (fait par 24.2 le 11/11/2026 : `applyInitialRules` après le parcours DOCUMENT ; fournisseurs masqués par le préréglage de navigation DOCUMENT côté app — clé m24-2, pas de sous-module) Profil d'interface de l'owner importé : après `TenantSaleFlowCommandPort.set(schema, DOCUMENT)`, appeler `ModuleActivationRulesPort.applyInitialRules(schema)` (19.13 : désactive caisse, stock, inventaire, transferts selon les règles en base). Les fournisseurs font partie du module `crm` avec les clients et ne peuvent pas être désactivés seuls — décider ici comment les masquer à un owner Bref (sous-module ou masquage par le préréglage DOCUMENT) [keevo/resources/keevo/modules/crm/module.json] — à trancher avec l'import des clients.
 
-> **Routé depuis la revue 19.13 (05/11/2026) :** - [ ] [Deferred-from: revue 19.13, 2026-11-05] Les règles d'activation sont par parcours (DOCUMENT) et non par plan Bref : les autres modules compris dans le plan (ex. exports, rapports avancés) restent activés pour un owner importé. Décider ici la liste exacte des fonctions équivalentes à Bref selon son plan au moment de la migration, puis l'appliquer par un jeu de règles (secteur ou jeu dédié) ou par `OwnerModuleActivation` après `applyInitialRules` [keevo/backend/src/main/resources/db/migration/V50__module_owner_activation.sql] — à trancher avec la table de correspondance des plans Bref.
+> **Routé depuis la revue 19.13 (05/11/2026) :** - [x] [Deferred-from: revue 19.13, 2026-11-05] (fait par 24.2 le 11/11/2026, décision D4 : fonctions équivalentes à Bref = catalog, crm, invoicing, expenses, finance, reporting, whatsapp-cloud, ai-assistant, client-portal ; tout autre module activable est désactivé par le propriétaire via `ModuleActivationRulesPort.ownerDisableAllBut` ; le droit d'usage reste au plan, 24.5) Les règles d'activation sont par parcours (DOCUMENT) et non par plan Bref : les autres modules compris dans le plan (ex. exports, rapports avancés) restent activés pour un owner importé. Décider ici la liste exacte des fonctions équivalentes à Bref selon son plan au moment de la migration, puis l'appliquer par un jeu de règles (secteur ou jeu dédié) ou par `OwnerModuleActivation` après `applyInitialRules` [keevo/backend/src/main/resources/db/migration/V50__module_owner_activation.sql] — à trancher avec la table de correspondance des plans Bref.
 
 **Acceptance Criteria:**
 
@@ -1840,6 +1840,9 @@ So that **le tenant respecte les règles d'unicité Keevo sans perdre d'historiq
 **When** ils sont importés (ADR-08)
 **Then** chaque fiche est importée dans l'établissement issu de sa boutique, sans fusion entre établissements ; le partage entre établissements est désactivé par défaut
 
+**Éléments routés depuis 24.2 (2026-11-11) :**
+- [ ] [Deferred-from: 24.2, 2026-11-11] Catégories du secteur d'une entreprise importée [keevo/backend/src/main/java/com/keevo/migration/application/step/ProfileStep.java] — l'entreprise importée n'émet pas `TenantOnboardedEvent` (pas d'onboarding) : aucune catégorie de secteur n'est créée. L'étape « catégories » (§10.2 étape 4, ordre 60 du pipeline) doit créer les catégories du secteur (`tenant_preferences.sector_type`, posé par 24.2) et « Produits importés ». Réglé par le test d'import des produits.
+
 ### Story 24.4 : Import des documents, paiements et dépenses
 
 As a **outil de migration**,
@@ -1858,6 +1861,9 @@ So that **l'historique commercial et les impayés sont intacts**.
 
 - [ ] [Deferred-from: review 20-7, 2026-11-08] Imported tenants must get 90-day public links and their old Bref links: set `invoicing_document_preferences.public_link_days = 90` (`DocumentPreferences.IMPORTED_LINK_DAYS`), and call `InvoicePublicLinkUseCase.attachLegacy` for each imported invoice (`legacy_public_token`, `BRF-` reference); map Bref papers 53 mm → 58 and 110 mm → A4
 
+**Éléments routés depuis 24.2 (2026-11-11) :**
+- [ ] [Deferred-from: 24.2, 2026-11-11] Réglages de facturation de l'entreprise importée depuis sa première boutique (§10.2 étape 2 : « la première boutique alimente `invoicing_settings` ») [keevo/backend/src/main/java/com/keevo/migration/application/step/StoresStep.java] — 24.2 importe les boutiques sans toucher au module invoicing ; l'étape d'import des documents (pipeline `ImportStep`, ordre 90) doit écrire `invoicing_settings` (nom, adresse, téléphone, NIU, RCCM de la boutique la plus ancienne) par le port d'import du module invoicing. Réglé par le test d'import qui vérifie l'en-tête d'une facture importée.
+
 ### Story 24.5 : Import de la monétisation (ADR-07)
 
 As a **outil de migration**,
@@ -1873,6 +1879,9 @@ So that **personne ne perd ce qu'il a payé (FUS-MIG8)**.
 **Éléments routés vers 24.5 (story 21.2, 2026-11-09) :**
 - [ ] [Deferred-from: 21.2 review, 2026-11-09] Import des événements RevenueCat déjà traités par api-bref [keevo/backend/src/main/resources/db/migration/V62__app_store_subscriptions.sql] — la table Keevo `revenuecat_webhook_event` a des colonnes différentes de celle de Bref (`id`, `type`, `app_user_id`, `original_transaction_id`, `environment`, `event_timestamp_ms`, `tenant_id`, `outcome`, détails d'achat, `processed_at` contre `subjectKey`, `eventTimestampMs`, `processedAt`, `createdAt` côté Bref) : l'import doit faire la correspondance (`subjectKey` → `original_transaction_id` quand c'est un identifiant de transaction, `outcome = 'APPLIED'`, `processed_at`) et créer les `external_subscriptions` des abonnements Apple en vigueur (`granted_expires_at` = `expires_at` importé, `last_event_ms` = dernier événement importé) pour qu'aucun événement ne soit rejoué ni qu'un événement ancien soit appliqué. Réglé par un test d'import sur une copie de la base Bref.
 - [ ] [Deferred-from: 21.3 review, 2026-11-09] Plans payés avec le crédit du compte dans les revenus super-admin [keevo/backend/src/main/java/com/keevo/payments/checkout/application/service/PaymentConfirmationService.java apply / admin/revenue/domain/model/RevenueMetrics] — `tenant_payments` ne reçoit que l'argent encaissé (la part payée par le crédit n'y est pas, un plan entièrement couvert par le crédit n'a pas de ligne) : un owner ex-Bref qui renouvelle avec son crédit importé compte comme « premium sans paiement » et hors MRR ; un paiement tardif versé au crédit (`PAYMENT_TO_CREDIT`) n'apparaît pas comme encaissement. À trancher avec l'import du crédit Bref : enregistrer la part crédit (colonne `credit_xaf` ou méthode `ACCOUNT_CREDIT`, exclue de l'encaissé mais comptée dans le MRR) et afficher l'encours de crédit. Réglé par un test de RevenueMetrics sur un plan payé 100 % crédit.
+
+**Éléments routés depuis 24.2 (2026-11-11) :**
+- [ ] [Deferred-from: 24.2, 2026-11-11] Plan de départ d'une entreprise importée [keevo/backend/src/main/java/com/keevo/identity/auth/application/service/TenantFactory.java `create(TenantCreation)`] — 24.2 crée l'entreprise sur le plan d'inscription du catalogue (essai ou FREE, avec ses lignes de modules d'essai) et enregistre l'événement `MIGRATION_BREF` (cause ajoutée par V81, ignorée par churn et conversion) ; 24.5 remplace ce plan par celui que donne `SUBSCRIPTION_IN_FORCE` à la date de migration (même cause), et retire les lignes d'essai éventuelles ; d'ici là, le job d'expiration d'essai (`SubscriptionExpiryService`, tenants non DELETED) pourrait rétrograder une entreprise importée et compter un `EXPIRY` comme churn — l'import du plan doit précéder toute expiration (ou le job doit ignorer les entreprises suspendues pour migration). Réglé par un test d'import d'un owner FREE et d'un owner payant.
 
 ### Story 24.6 : Import des données annexes et index du portail
 
@@ -1908,6 +1917,10 @@ So that **je n'ai pas deux identités (R2)**.
 **Éléments reportés routés vers 24.7 (revue 19.3, 2026-11-04) :**
 - [ ] [Deferred-from: revue 19.3, 2026-11-04] importer `users.social_id`/`provider` de Bref dans `public.user_authenticators` (V48, `(provider, subject)` unique) pour chaque owner importé — sans ces lignes, un owner Bref Google/Apple n'est pas retrouvé par son identité sociale et retombe sur la liaison par email ou un nouveau compte [`JdbcUserAuthenticatorRepository`].
 
+**Éléments routés depuis 24.2 (2026-11-11) :**
+- [ ] [Deferred-from: 24.2, 2026-11-11] Rapprochement des comptes existants [keevo/backend/src/main/java/com/keevo/migration/domain/service/BrefSnapshotValidator.java, identity.api `LegacyIdentityImportPort.findConflicts`] — 24.2 bloque tout owner ou membre dont le téléphone, l'e-mail ou l'identifiant appartient déjà à un compte Keevo (cas `ACCOUNT_EXISTS`, aucune écriture) et tout identifiant interne déjà pris (`ACCOUNT_ID_TAKEN`). 24.7 remplace ce blocage par le bridge (owner : compte Keevo conservé + membership OWNER sur l'entreprise importée, enregistrement `migration_records` vers le compte existant ; membre : invitation ou liaison selon la règle 19.6b) et garde le blocage pour les cas listés (identifiant égal à un téléphone, etc.). Réglé par un test d'import avec un téléphone déjà inscrit dans Keevo.
+- [ ] [Deferred-from: revue 24.2, 2026-11-11] Owner Bref connecté par Google/Apple [keevo/backend/src/main/java/com/keevo/migration/application/step/IdentityStep.java, note `OWNER_SOCIAL_SIGN_IN`] — 24.2 importe l'owner sans authentificateur social et le signale dans le lot ; l'import de `socialId`/`provider` (item ci-dessus) lève la note.
+
 ### Story 24.8 : Réconciliation automatique et bloquante
 
 As a **responsable de la fusion**,
@@ -1939,6 +1952,10 @@ So that **la migration est maîtrisée et observable (FUS-MIG5, MIG10, FUS-NFR10
 **Given** l'activation
 **When** elle est confirmée
 **Then** api-bref passe l'owner `migrated`, le tenant passe ACTIVE, et un WhatsApp/SMS de confirmation avec le lien store est envoyé
+
+**Éléments routés depuis 24.2 (2026-11-11) :**
+- [ ] [Deferred-from: 24.2, 2026-11-11] Activation et retour arrière d'une entreprise importée [keevo/backend/src/main/java/com/keevo/migration/application/step/ProfileStep.java `SUSPENSION_REASON`, V81] — 24.2 crée l'entreprise `SUSPENDED` (motif « Migration Bref en cours — activation en attente », sans événement ni message) : l'activation la passe `ACTIVE` et efface la trace de suspension ; le retour arrière supprime l'entreprise (`TenantDeletionService.deleteNow`), les seuls comptes dont un `migration_records` (cible `users`) prouve la création par l'import, puis les `migration_records` et `migration_batches` de l'owner (pas de cascade : les records référencent le lot qui les a créés).
+- [ ] [Deferred-from: 24.2, 2026-11-11] Pilotage des lots [keevo/backend/src/main/java/com/keevo/migration/adapter/in/rest/AdminBrefMigrationController.java] — 24.2 expose seulement l'import d'un owner et la lecture d'un lot ; 24.9 ajoute la liste des lots (keyset sur `idx_migration_batches_started`), le téléchargement de l'export api-bref (24.1) vers `keevo.migration.bref.export-dir` avec son SHA-256 (en-tête `X-Bref-Export-Sha256`), et l'enchaînement gel → export → import → réconciliation → activation.
 
 ### Story 24.10 : Continuité externe — liens publics et webhooks
 
