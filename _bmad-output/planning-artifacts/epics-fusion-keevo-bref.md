@@ -1884,7 +1884,7 @@ So that **l'owner et ses clients retrouvent tout**.
 **Then** le token WABA est rechiffré avec la clé Keevo, les modules correspondants sont activés selon le profil, `invoice_phone_index` est alimenté, `ModuleProvisioner.provisionActiveModules` est appelé et l'audit reçoit `TENANT_IMPORTED {source: bref, counts}`
 
 **Éléments reportés routés vers 24.6 (revue 21.7, 2026-11-11) :**
-- [ ] [Deferred-from: revue 21.7, 2026-11-11] factures importées absentes du portail client [keevo/backend/src/main/java/com/keevo/invoicing/invoice/adapter/in/bootstrap/InvoicePhoneIndexBackfillJob.java] — le rattrapage 21.7 ne tourne qu'une fois (marqueur `client-portal-invoice-phone-index-backfill`) ; l'import doit appeler `shared.capability.portal.InvoicePhoneIndex.indexAll(schema, entries)` pour chaque lot de factures importées (émises, payées, annulées, avec téléphone). Réglé par un test d'import vérifiant les lignes de `public.invoice_phone_index`.
+- [x] [Deferred-from: revue 21.7, 2026-11-11] (fait par 24.6 le 11/11/2026 : `PortalIndexStep`, ordre 130, `InvoicePhoneIndex.indexAll` à chaque import pour toute facture importée non devis, non supprimée, avec téléphone ; testé sur `public.invoice_phone_index`) factures importées absentes du portail client [keevo/backend/src/main/java/com/keevo/invoicing/invoice/adapter/in/bootstrap/InvoicePhoneIndexBackfillJob.java] — le rattrapage 21.7 ne tourne qu'une fois (marqueur `client-portal-invoice-phone-index-backfill`) ; l'import doit appeler `shared.capability.portal.InvoicePhoneIndex.indexAll(schema, entries)` pour chaque lot de factures importées (émises, payées, annulées, avec téléphone). Réglé par un test d'import vérifiant les lignes de `public.invoice_phone_index`.
 
 ### Story 24.7 : Bridge d'identité et cas de collision
 
@@ -1971,6 +1971,10 @@ So that **la bascule se fait en une coupure, est observable et réversible jusqu
 
 **Éléments routés depuis 24.8 (2026-11-11) :**
 - [ ] [Deferred-from: revue 24.8, 2026-11-11] Porte d'activation et seconde lecture de la source [keevo/backend/src/main/java/com/keevo/migration/application/BrefReconciliationService.java `checks`, `ReconcilingBrefOwnerImportUseCase`] — l'activation globale appelle `BrefReconciliationUseCase.blockingOwners` (une requête pour tous les owners, motif français par owner) et refuse le « go » s'il renvoie un owner ; la réconciliation relit la source après l'import (2ᵉ lecture du snapshot par owner) : la commande de bascule peut lui passer le snapshot déjà lu, ou la lancer après tous les imports. Réglé par la mesure 24.12.
+
+**Éléments routés depuis 24.6 (2026-11-11) :**
+- [ ] [Deferred-from: revue 24.6, 2026-11-11] Lecture des conversations de l'assistant de tous les owners [keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JdbcBrefAnnexesSource.java `AI_SQL`] — `ai_conversation."userId"` n'a pas d'index dans Bref : un parcours de la table par owner. Pour la bascule de tous les owners, lire la section en une passe (ou créer un index temporaire sur la copie restaurée avant de la passer en lecture seule), comme les autres lectures non indexées déjà routées (24.3–24.5). Réglé par la mesure de 24.12.
+- [ ] [Deferred-from: 24.6, 2026-11-11] Retour arrière des lignes publiques de 24.6 [keevo/backend/src/main/java/com/keevo/migration/domain/model/MigrationRecord.java `WEB_PUSH_SUBSCRIPTIONS`, `WHATSAPP_ACCOUNTS`] — `public.whatsapp_accounts` et `public.invoice_phone_index` partent avec l'entreprise (ON DELETE CASCADE), mais les abonnements Web Push importés (`public.web_push_subscriptions`, cible `web_push_subscriptions` des `migration_records`) d'un compte rattaché (24.7, compte Keevo conservé) restent : le retour arrière doit supprimer ces cibles tracées. Réglé par un test de retour arrière d'un owner rattaché avec un navigateur abonné.
 
 ### Story 24.10 : Redirection des anciens liens publics Bref vers Keevo
 
