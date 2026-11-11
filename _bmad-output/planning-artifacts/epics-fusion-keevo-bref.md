@@ -1242,10 +1242,10 @@ So that **les campagnes Bref sont reprises (FUS-FR28, FR32)**.
 **When** elle cible un segment (plan, pays, activité)
 **Then** elle part par les canaux choisis (push, WhatsApp, SMS, email) avec audit
 
-**Éléments reportés routés vers 21.6 (revue 21.5, 2026-11-10) :**
-- [ ] [Deferred-from: revue 21.5, 2026-11-10] mots-clés STOP / START reçus sur le numéro WhatsApp Business de l'entreprise → consentement marketing du client (20.2) et confirmation au client (Bref `handleIncomingMessage` :623-667, une confirmation par numéro et par minute) [whatsappcloud/webhook/application/WhatsAppWebhookService] — le webhook 21.5 stocke le message mais ne touche pas au consentement.
-- [ ] [Deferred-from: revue 21.5, 2026-11-10] envoi des modèles à en-tête média (IMAGE / VIDEO / DOCUMENT) : paramètre média à l'envoi (lien ou média déposé) [whatsappcloud/inbox/application/WhatsAppInboxService.sendTemplate] — 21.5 les crée et les fait valider, mais l'envoi depuis la messagerie les refuse (« il s'envoie depuis une campagne »).
-- [ ] [Deferred-from: revue 21.5, 2026-11-10] messagerie du numéro plateforme (Bref Point) pour le super-admin : messages reçus sur le numéro plateforme (aujourd'hui ignorés par le webhook 21.5, numéro inconnu) et réponses depuis le dashboard (Bref `ownerId NULL`).
+**Éléments reportés routés vers 21.6 (revue 21.5, 2026-11-10) :** (faits en 21-6, 2026-11-10)
+- [x] [Deferred-from: revue 21.5, 2026-11-10] mots-clés STOP / START reçus sur le numéro WhatsApp Business de l'entreprise → consentement marketing du client (20.2) et confirmation au client (Bref `handleIncomingMessage` :623-667, une confirmation par numéro et par minute) [whatsappcloud/webhook/application/WhatsAppWebhookService] — le webhook 21.5 stocke le message mais ne touche pas au consentement.
+- [x] [Deferred-from: revue 21.5, 2026-11-10] envoi des modèles à en-tête média (IMAGE / VIDEO / DOCUMENT) : paramètre média à l'envoi (lien ou média déposé) [whatsappcloud/inbox/application/WhatsAppInboxService.sendTemplate] — 21.5 les crée et les fait valider, mais l'envoi depuis la messagerie les refuse (« il s'envoie depuis une campagne »).
+- [x] [Deferred-from: revue 21.5, 2026-11-10] messagerie du numéro plateforme (Bref Point) pour le super-admin : messages reçus sur le numéro plateforme (aujourd'hui ignorés par le webhook 21.5, numéro inconnu) et réponses depuis le dashboard (Bref `ownerId NULL`).
 
 ### Story 21.7 : Module `client-portal`
 
@@ -1301,6 +1301,19 @@ So that **rien ne soit figé dans le code et que l'offre évolue sans redéploie
 - [x] [Deferred-from: revue 19.7a, 2026-11-04] (fait en 21-10, 2026-11-09) Changer la nature (kind) d'un plan déjà attribué ne resynchronise pas les lignes de modules des tenants concernés (`JdbcPlanCatalog.save`) — la CRUD doit soit interdire le changement de nature d'un plan utilisé, soit déclencher la resynchronisation des profils.
 - [x] [Deferred-from: revue 19.7a, 2026-11-04] (fait en 21-10, 2026-11-09) (les deux chemins d'activation super-admin refusent déjà un plan archivé depuis 19.7b) `archived_at` et `visible` ne sont pas appliqués à l'attribution : un plan archivé ou masqué peut encore être attribué (`AdminSubscriptionController`, `AdminPlanProfileController.parsePlanType`, `ActivatePlanService`) — refuser un plan archivé pour une nouvelle attribution.
 - [x] [Deferred-from: revue 19.7a, 2026-11-04] (fait en 21-10, 2026-11-09) Les revenus comptent tous les plans payants dans un seul seau « PREMIUM » (`RevenueMetrics`) faute de prix par plan — à ventiler par plan et cycle une fois les prix en base.
+
+### Story 21.11 : Ciblage des campagnes clients par comportement d'achat (clé seule, routée depuis 21.6)
+
+As a **owner BUSINESS**,
+I want **cibler mes campagnes WhatsApp sur les clients inactifs, récents ou par montant / nombre d'achats**,
+So that **les critères Bref de ciblage des campagnes clients sont repris (FUS-FR28)**.
+
+**Portée :** 21.6 livre les campagnes clients ciblées par boutique et consentement ; les critères Bref `inactiveForDays`, `purchasedWithinDays`, `totalSpentMin/Max`, `totalInvoicesMin/Max` (`customer-campaign.service.ts` recipients) demandent des agrégats d'achat par client (ventes POS + documents) qui appartiennent à reporting / commerce / invoicing, pas à crm : un port d'agrégats par client (set-based, index sur `client_id` des ventes et documents, ou colonnes dénormalisées maintenues à l'écriture) consommé par l'audience des campagnes.
+
+**Éléments routés :**
+- [ ] [Deferred-from: 21-6, 2026-11-10] Critères d'achat du ciblage des campagnes clients (`inactiveForDays`, `purchasedWithinDays`, `totalSpentMin/Max`, `totalInvoicesMin/Max`) [whatsappcloud/campaign/application/CampaignService.preview / start, crm/api/ClientQueryPort.marketingAudience] — ajouter les critères à `POST /api/v1/whatsapp/campaigns/preview-targeting` et au corps des campagnes, sans requête par client.
+
+**AC provisoire :** Given des clients consentants avec et sans achat dans les 30 derniers jours, When l'owner cible « inactifs depuis 30 jours », Then seuls les seconds sont comptés et reçoivent la campagne, en une requête d'audience.
 
 ## Epic 22 : App React Native — fondations et parité Keevo (P2)
 
