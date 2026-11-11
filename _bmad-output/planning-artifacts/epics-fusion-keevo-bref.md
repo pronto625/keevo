@@ -1969,6 +1969,9 @@ So that **la bascule se fait en une coupure, est observable et réversible jusqu
 **Éléments routés depuis 24.5 (2026-11-11) :**
 - [ ] [Deferred-from: revue 24.5, 2026-11-11] Lecture de la monétisation de tous les owners en une passe [keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JdbcBrefMonetisationSource.java `SUBSCRIPTIONS_SQL`, `REQUESTS_SQL`, `RECHARGES_SQL`] — Bref n'indexe pas `subscription.ownerId`, `plan_payment_request.ownerId` ni `sms_recharge_request.userId` : 24.5 lit ces tables par owner (un parcours par owner, acceptable pour un owner). La commande de bascule doit lire chaque section une fois pour tous les owners (`= ANY(...)` ou passe ordonnée groupée par owner), ou créer ces index sur la copie restaurée avant de la passer en lecture seule ; la présence des tables (`to_regclass`) peut être calculée une fois par bascule. Réglé par la mesure 24.12.
 
+**Éléments routés depuis 24.8 (2026-11-11) :**
+- [ ] [Deferred-from: revue 24.8, 2026-11-11] Porte d'activation et seconde lecture de la source [keevo/backend/src/main/java/com/keevo/migration/application/BrefReconciliationService.java `checks`, `ReconcilingBrefOwnerImportUseCase`] — l'activation globale appelle `BrefReconciliationUseCase.blockingOwners` (une requête pour tous les owners, motif français par owner) et refuse le « go » s'il renvoie un owner ; la réconciliation relit la source après l'import (2ᵉ lecture du snapshot par owner) : la commande de bascule peut lui passer le snapshot déjà lu, ou la lancer après tous les imports. Réglé par la mesure 24.12.
+
 ### Story 24.10 : Redirection des anciens liens publics Bref vers Keevo
 
 > **Réécrite le 11/11/2026 (ADR-10).** Précédemment « Continuité externe — liens publics et webhooks ». Plus de routeur de webhooks à double livraison : après la bascule, RevenueCat, MyCoolPay et Meta (webhook WhatsApp) sont reconfigurés vers Keevo pendant la coupure — **action utilisateur inscrite au runbook 24.13**.
@@ -1986,6 +1989,9 @@ So that **rien ne casse côté extérieur (FUS-MIG9, FUS-FR23)**.
 **Given** la liste des chemins publics de l'ancienne API (factures, devis, reçus, PDF)
 **When** la redirection est configurée
 **Then** chaque chemin est couvert par un test (au moins 5 liens réels de la répétition 24.12 : 302 → 200), et la configuration du proxy est versionnée avec le runbook
+
+**Éléments routés depuis 24.8 (2026-11-11) :**
+- [ ] [Deferred-from: revue 24.8, 2026-11-11] Contrôle HTTP des anciens liens [keevo/backend/src/main/java/com/keevo/migration/domain/service/BrefReconciler.java `links`] — la réconciliation 24.8 tire 5 liens Bref par owner et vérifie seulement le registre `invoice_legacy_links` (bon tenant, document vivant) ; le contrôle 302 → 200 à travers le proxy de redirection appartient à 24.10 (test des chemins, répétition 24.12).
 
 ### Story 24.11 : Pré-migrateur OTA dans l'app Bref actuelle *(retirée le 11/11/2026)*
 
@@ -2039,6 +2045,9 @@ So that **la coupure se déroule comme répétée et les owners savent quoi fair
 
 **Éléments routés depuis 24.7 (2026-11-11) :**
 - [ ] [Deferred-from: 24.7, 2026-11-11] Continuité des comptes Apple [keevo/backend/src/main/java/com/keevo/migration/application/step/SocialAccountsStep.java] — 24.7 reprend l'identifiant Apple (`sub`) des owners Bref ; il n'est valable que si l'app RN est publiée sous la même équipe Apple (Team ID) que Bref Point et que Keevo vérifie les jetons avec le bon `client_id` : le runbook vérifie l'équipe et le bundle avant J0 (action utilisateur) et prévoit, sinon, la connexion par code puis la reliaison Apple depuis le profil (19.3b). Les cas bloquants d'identité (24.7 : identité non prouvée, deux comptes Keevo, identifiant pris) sont à résoudre à la main avant la décision « go » : le runbook en donne la marche à suivre.
+
+**Éléments routés depuis 24.8 (2026-11-11) :**
+- [ ] [Deferred-from: revue 24.8, 2026-11-11] Owner en écart de réconciliation [keevo/backend/src/main/java/com/keevo/migration/adapter/in/rest/AdminBrefReconciliationController.java] — un owner `RECONCILIATION_FAILED` bloque le « go » : le runbook dit comment lire le rapport (contrôles et lignes en écart), corriger l'outil si besoin, puis retour arrière de cet owner (24.9) et nouvel import ; la source est toujours le dump figé, jamais un Bref en marche (une source vivante ferait apparaître ses nouvelles lignes comme des écarts).
 
 ### Story 24.14 : Vagues pilotes *(retirée le 11/11/2026)*
 
