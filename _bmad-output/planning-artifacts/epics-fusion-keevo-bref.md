@@ -1875,6 +1875,9 @@ So that **l'owner et ses clients retrouvent tout**.
 **When** ils sont importés
 **Then** le token WABA est rechiffré avec la clé Keevo, les modules correspondants sont activés selon le profil, `invoice_phone_index` est alimenté, `ModuleProvisioner.provisionActiveModules` est appelé et l'audit reçoit `TENANT_IMPORTED {source: bref, counts}`
 
+**Éléments reportés routés vers 24.6 (revue 21.7, 2026-11-11) :**
+- [ ] [Deferred-from: revue 21.7, 2026-11-11] factures importées absentes du portail client [keevo/backend/src/main/java/com/keevo/invoicing/invoice/adapter/in/bootstrap/InvoicePhoneIndexBackfillJob.java] — le rattrapage 21.7 ne tourne qu'une fois (marqueur `client-portal-invoice-phone-index-backfill`) ; l'import doit appeler `shared.capability.portal.InvoicePhoneIndex.indexAll(schema, entries)` pour chaque lot de factures importées (émises, payées, annulées, avec téléphone). Réglé par un test d'import vérifiant les lignes de `public.invoice_phone_index`.
+
 ### Story 24.7 : Bridge d'identité et cas de collision
 
 As a **commerçant présent dans Keevo et Bref**,

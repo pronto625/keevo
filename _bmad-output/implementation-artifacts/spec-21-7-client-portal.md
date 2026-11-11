@@ -2,10 +2,10 @@
 title: '21-7 — Module client-portal: end clients find all their invoices by phone (OTP), across merchants'
 type: 'feature'
 created: '2026-11-10'
-status: 'in-progress'
+status: 'done'
 baseline_revision: '517b2c42200d2883a169bf48ef93dfc52dae8ebf'
 review_loop_iteration: 0
-followup_review_recommended: false
+followup_review_recommended: true
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-21-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-21-5-whatsapp-cloud.md'
@@ -92,17 +92,63 @@ deferred: []
 
 ## Review Triage Log
 
+### 2026-11-10 — Review pass
+- verdicts: 33 findings — high 1, medium 5, low 19, false 8, maybe-false 0 (duplicates across layers share one row)
+- findings:
+  - `[medium]` `[patch]` (blind 1 / edge 5) the per-IP failure brake ran before the token check: one IP over 30 failures (carrier NAT) blocked valid sessions — malformed tokens still refused without DB; a well-formed token is looked up and a valid session always served; the brake only turns failures into 429 (`PortalAuthService.failed`); test `brakes`.
+  - `[low]` `[patch]` (blind 2 / edge 6) logout had no brake — `signOut(authorization, ip)`: braked IP deletes nothing, an unknown token counts as a failure; still 204.
+  - `[false]` `[reject]` (blind 3) unknown `payment_state` → 500 — the column has a CHECK on the four `PaymentState` values (invoicing V10); the import writes the same column.
+  - `[low]` `[reject]` (blind 4 / edge 2) index write inside the issue transaction can roll back an issue — chosen on purpose (index and invoice commit together, no lost row); one PK upsert on a small table, no lock contention path.
+  - `[false]` `[reject]` (blind 4b / edge 3) `INSERT … SELECT` silently writes nothing for an unknown schema — every caller passes the schema of a live tenant (issue path, back-fill reading `public.tenants`).
+  - `[low]` `[reject]` (blind 5) reassigned / mistyped phone exposes invoices forever — same behaviour as Bref's portal (no age limit, no removal); product decision, reported for the user (see Auto Run Result).
+  - `[low]` `[patch]` (blind 6) contract missing errors — contract + `@Operation` list 422 `PHONE_COUNTRY_NOT_SUPPORTED` / `VALIDATION_FAILED` / `VALIDATION_ERROR` on verify and request.
+  - `[medium]` `[patch]` (blind 7) empty page with a next cursor — entitlement filtering moved before the LIMIT (NFR11 F1); contract now says to keep paging while `nextCursor` is not null.
+  - `[medium]` `[patch]` (blind 8 / VG 1-3) untested mechanisms — tests added: `wrongCodesAreCounted` (attempts kept, 5th = 429, right code dead), `brakes` (30 made-up tokens from one IP → 429, valid session still 200, 61st call of a session → 429), `sessionCapAndPurge` (10 kept, oldest refused; purge keeps the live one).
+  - `[low]` `[patch]` (blind 9) test names over-claim — comment fixed, `activationRows` asserts « on » before the row, `JdbcPortalDocumentsTest` asserts `IllegalArgumentException` from the schema check.
+  - `[low]` `[reject]` (blind 10a) invoices shown when the merchant's invoicing module is off — they are issued legal documents whose public link already works without the module (14.2); the portal switch is the merchant's choice.
+  - `[low]` `[reject]` (blind 10b / NFR11 F2) a portal read may provision invoicing tables — in-memory no-op once warm, bounded by D merchants of one page, same path as the public link controller.
+  - `[low]` `[reject]` (blind 11) slash-stripping duplicated / `tenantId` naming in `InvoiceLifecycleUseCase` — cosmetic, the pre-existing parameter name of the whole class.
+  - `[low]` `[reject]` (blind 12 / edge 4) code consumed then session insert fails → 500 — only on a database failure; the contract tells the app to offer a new code.
+  - `[false]` `[reject]` (blind 13) portal lets anyone exhaust a merchant's OTP budget — the public merchant `/auth/otp/request` already allows exactly that; the shared budget is the SMS-cost bound.
+  - `[low]` `[reject]` (intent D1) existing companies start with the portal off — README rule for new modules (consent of existing clients); reported as a user decision.
+  - `[false]` `[reject]` (intent D2) extra hiding conditions (suspended tenant, module row, provisioning failure) — natural consequences of the tenant and module states, not a divergence from « disable ».
+  - `[false]` `[reject]` (intent D3) import not wired — 24.6 owns the import and its AC already fills `invoice_phone_index` (through `InvoicePhoneIndex.indexAll`).
+  - `[false]` `[reject]` (intent D4) one shared statement instead of per-tenant reads — each document is read from its own schema (schema-qualified), as the AC asks.
+  - `[low]` `[reject]` (intent D5) cursor tampering untested — the page query is always bound to the session's phone; a tampered position only moves within the client's own list.
+  - `[false]` `[reject]` (intent D6) rate limits only unit-tested — now covered over HTTP (`brakes`).
+  - `[low]` `[reject]` (intent D8) invoice without a valid phone silently not indexed — by design (nothing to match); same rule as the WhatsApp channel.
+  - `[medium]` `[patch]` (NFR11 F1) per-merchant `isEnabled` = 2-3 queries per merchant per page (request-scoped cache) — replaced by a PK anti-join on `tenant_modules` in the page query (free module: row status / expiry / grace is its whole state); test `moduleRowDisabled`.
+  - `[low]` `[patch]` (NFR11 F3) `indexAll` resolved the tenant per row — tenant id read once, batch of `VALUES` upserts.
+  - `[low]` `[reject]` (NFR11 F4) unbounded purge DELETE — at most 10 sessions per client, nightly, indexed.
+  - `[low]` `[reject]` (NFR11 F5) UNION ALL text varies per merchant mix — one round trip, PK probes; plan reuse not worth a different shape.
+  - `[low]` `[patch]` (edge 1) forged cursor with an extreme date → SQL error 500 — decode refuses epoch micros outside 2000–9999 (400); tests unit + `forgedCursor`.
+  - `[low]` `[reject]` (edge 7) store-review code opens the portal for the review phone — a dedicated reviewer number configured by the environment, secret code; no merchant invoices to it.
+  - `[false]` `[reject]` (edge 8) back-fill marker skips later imports — later invoices go through the issue path or the 24.6 import, which calls the index port itself.
+  - `[low]` `[reject]` (edge 9) spec names `ClientPortalCodeService`, delivered as `ClientPortalCodeAdapter` — fix would edit this build's spec.
+  - `[low]` `[reject]` (edge 10) spec test file names differ (`ClientPortalUnitTest`) — fix would edit this build's spec.
+  - `[high]` `[patch]` (VG 4 / VG other 1) V70 owner-disables client-portal for pre-existing tenants but `ModuleOwnerActivationMigrationPostgresIntegrationTest` still pinned the old rows (would fail; the migration default untested) — `client-portal=false` added to its four assertions (pins the V70 privacy default).
+  - `[medium]` `[patch]` (VG other 2) invoices replaced after a POS sale correction (`superseded_at`) were listed — filtered in `JdbcPortalDocuments` and the back-fill; asserted in `switchSuspensionAndCancelled`.
+
 ## Design Notes
 
 - **Patterns.** Ports & adapters across Modulith boundaries: `shared.capability.portal.InvoicePhoneIndex` (Observer-free direct port, called in the issue transaction so index and invoice commit together — no event to lose) implemented by `clientportal`; `PortalDocuments` (Repository/Facade over another module's tables) implemented by invoicing, so the portal never touches invoice tables and invoicing never depends on the portal. OTP: Template Method — one core (`issue` / `check` by challenge key) shared by the merchant and portal purposes (`OtpPurpose` value object builds the key `portal:` + phone; merchant key unchanged = no migration, no behaviour change). Sessions: opaque bearer token as 21.9 (hash lookup, revocation by delete, no cache). Keyset pagination with an opaque base64url cursor.
-- **Costs.** Issue: +1 `INSERT … SELECT … ON CONFLICT` (tenant id by unique `schema_name`). Sign-in: 19.2 cost + 1 upsert client + 1 insert session + 1 bounded delete (≤ 10 kept). Listing (page P ≤ 50): 1 PK session read; 1 index range scan `(phone, issued_at DESC, …) LIMIT P+1` joined to `tenants` (PK) and `tenant_module_activation` (PK, anti-join); per distinct merchant on the page D ≤ P: cached `isEnabled` + warm `ensureProvisioned` (in-memory once warm); 1 `UNION ALL` statement over D schemas (`id = ANY(?)` on each invoices PK); P HMACs. Memory O(P). Back-fill: per tenant keyset pages of 500, one batch insert per page (one-shot, boot, ShedLock). Purge: one DELETE on the `expires_at` index.
+- **Costs.** Issue: +1 `INSERT … SELECT … ON CONFLICT` (tenant id by unique `schema_name`). Sign-in: 19.2 cost + 1 upsert client + 1 insert session + 1 bounded delete (≤ 10 kept). Listing (page P ≤ 50): 1 PK session read; 1 index range scan `(phone, issued_at DESC, …) LIMIT P+1` joined to `tenants` (PK) and anti-joined to `tenant_module_activation` and `tenant_modules` (PK each: the whole effective state of a free module that requires only core — no per-merchant entitlement lookup, the page is filtered before its LIMIT); per distinct merchant on the page D ≤ P: warm `ensureProvisioned` (in-memory once warm); 1 `UNION ALL` statement over D schemas (`id = ANY(?)` on each invoices PK); P HMACs. Memory O(P). Back-fill: tenants with an invoices table in one catalog join, per tenant keyset pages of 500, tenant id resolved once, one batch of plain upserts per page (unchanged rows not rewritten) (one-shot, boot, ShedLock). Purge: one DELETE on the `expires_at` index.
 - **Decisions.** Default off for existing tenants, on for new ones (README rule; ex-Bref tenants are created by the import and so have it on, like Bref). Link validity 24 h (the portal re-signs on every listing; a forwarded link dies quickly). Cancelled invoices are listed (legal document, « Annulée ») without a link. Sessions are fixed 30 days (Bref: 1-day access + refresh; one token is simpler, revocable, re-sign-in costs one SMS a month).
+
+## Décisions (prises par défaut, à confirmer par l'utilisateur)
+
+- **Portail coupé pour les entreprises existantes** (V70, règle « Modules introduced after the go-live ») : leurs clients n'ont jamais accepté un portail inter-commerçants ; l'owner l'active dans « Mes modules ». Les nouvelles entreprises (dont celles importées de Bref) l'ont activé. Lecture inverse possible (portail actif par défaut, le commerçant le coupe) : une ligne de migration à retirer.
+- **Connexion par code seulement** : le couple inscription / mot de passe des clients Bref n'est pas porté (une session de 30 jours, un SMS par mois au plus).
+- **`GET /v1/invoices/public/count` non porté** : il révélait à n'importe qui si un numéro a des factures.
+- **Aucune limite d'ancienneté ni retrait d'une facture mal attribuée** (numéro réattribué ou mal saisi) : comportement de Bref conservé ; à trancher si l'utilisateur veut une limite (ex. 24 mois) ou une action « ne plus montrer au portail » côté commerçant.
+- **Liens PDF de 24 h** re-signés à chaque liste ; factures annulées listées sans lien ; factures remplacées après correction de vente exclues ; devis et avoirs absents.
 
 ## Verification
 
 **Commands:**
 - `kmvn.sh keevo/backend clean compile` -- expected: BUILD SUCCESS
 - `wt-pkgs.sh keevo/backend fix217 clientportal identity invoicing architecture admin shared subscription` -- expected: all green
+- Bad cursor / limit answer 400 `VALIDATION_ERROR` (`InvalidRequestParameterException`, the cursor convention of the API) — the matrix row « bad cursor 400 » is met with that domain code.
 - `-Dkeevo.entitlements.regenerate=true` on `EndpointEntitlementCoverageTest` -- expected: `docs/entitlements/endpoints.md` lists the portal endpoints as exempt
 
 **Manual checks:**
@@ -110,7 +156,7 @@ deferred: []
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit `__COMMIT__`, clé `m21-7-client-portal` dans `sprint-status.yaml`). Contrat : `keevo/contracts/client-portal.json`. Conventions d'erreur et d'affichage : spec-16-11 ; protocole de synchro : spec-16-10 (rien à synchroniser : portail en ligne uniquement).
+**Statut :** API livrée (commit `8f575524`, clé `m21-7-client-portal` dans `sprint-status.yaml`). Contrat : `keevo/contracts/client-portal.json`. Conventions d'erreur et d'affichage : spec-16-11 ; protocole de synchro : spec-16-10 (rien à synchroniser : portail en ligne uniquement).
 
 **Ce qui est fait côté API :** module gratuit `client-portal` « Portail client ». Un client final (jamais un compte Keevo) reçoit un code par SMS (et WhatsApp si configuré) sur son téléphone, le saisit et obtient une session portail de 30 jours ; il voit alors toutes les factures que les commerçants ont émises à ce numéro, du plus récent au plus ancien, avec un lien vers le PDF valable 24 h. Le commerçant coupe le portail dans « Mes modules » (module « Portail client ») : ses factures disparaissent aussitôt. Les entreprises qui existaient avant le portail démarrent avec le portail coupé ; les nouvelles (dont les entreprises importées de Bref) l'ont activé.
 
@@ -140,7 +186,7 @@ deferred: []
 
 ## Dashboard super-admin (autre dépôt)
 
-**Statut :** API livrée (commit `__COMMIT__`, clé `d21-7-client-portal`). Aucun nouvel endpoint super-admin.
+**Statut :** API livrée (commit `8f575524`, clé `d21-7-client-portal`). Aucun nouvel endpoint super-admin.
 
 **Ce qui est fait côté API :** le module `client-portal` « Portail client » (gratuit, catégorie business) apparaît dans le catalogue des modules et dans les états de modules d'une entreprise, comme les autres modules ; sa coupure par l'owner est l'activation owner existante (19.13).
 
@@ -151,3 +197,15 @@ deferred: []
 **Critères d'acceptation :** Given la fiche d'une entreprise, when ses modules s'affichent, then « Portail client » apparaît avec son état (activé / coupé par l'owner).
 
 **Clé de suivi dashboard :** `d21-7-client-portal`.
+
+## Auto Run Result
+
+**Résumé :** module gratuit `client-portal` « Portail client » : clients finaux (`public.portal_clients`, distincts des comptes commerçants) connectés par un code SMS sous un usage OTP propre (`OtpPurpose.CLIENT_PORTAL`), session opaque `kvc_` (SHA-256 seulement, 30 jours, 10 par client, purge nocturne), liste keyset de leurs factures toutes entreprises confondues depuis `public.invoice_phone_index` (alimenté dans la transaction d'émission + rattrapage unique au démarrage), filtrée en SQL (entreprise active, portail actif côté owner et ligne de module), documents lus chacun dans le schéma de leur entreprise en une requête `UNION ALL`, champs minimum + lien PDF signé 24 h. Migration publique V70.
+
+**Fichiers :** `clientportal/**` (module, auth, invoice), `identity/api/ClientPortalCodePort` + `ClientPortalCodeAdapter` + `OtpPurpose` + refactor `RequestOtpService.issue` / `VerifyOtpService.check`, `invoicing` (`InvoiceLifecycleUseCase` indexe à l'émission, `JdbcPortalDocuments`, `InvoicePhoneIndexBackfillJob`), `shared/capability/portal/*`, `PublicBaseUrl` déplacé dans `shared/infrastructure/web`, codes `PORTAL_SESSION_INVALID` (401) / `PORTAL_TOO_MANY_REQUESTS` (429), chemin public `/api/v1/portal/**`, `V70__client_portal.sql`, manifeste, contrat `keevo/contracts/client-portal.json`, `docs/entitlements/endpoints.md` régénéré, épinglages de modules (architecture, shared).
+
+**Revue :** 33 constats (5 couches) — 11 corrigés (high 1, medium 5, low 5), 22 rejetés avec motif (Review Triage Log), 0 reporté. Revue de suivi recommandée : un `high` corrigé (défaut de confidentialité de V70 non épinglé) et cinq `medium` (frein par adresse, filtrage avant LIMIT, factures remplacées, couverture de tests) — risque restant non vérifié : comportement des freins par instance derrière plusieurs instances, et l'EXPLAIN de la comparaison de ligne sur l'index DESC en volume réel.
+
+**Vérification :** compilation OK ; tests par paquet (après correctifs) : clientportal 14/14, identity 866/866, invoicing 471/471, architecture 146/146, admin 690/690, shared 1 354/1 354, subscription 153/153. Live (base `keevo_dev_217`, port 4517, WhatsApp noop, FCM off, deux entreprises neuves) : code portail refusé sur `/auth/otp/verify` (401), session `kvc_` (47 caractères), liste des 2 factures du téléphone chez 2 entreprises (pas celle de l'autre numéro), lien PDF 200 `application/pdf`, JWT commerçant refusé au portail et jeton portail refusé côté commerçant (401), coupure par l'owner → 1 facture, déconnexion → 401 en français, rattrapage marqué ; base supprimée ensuite.
+
+**Risques résiduels :** freins en mémoire par instance ; un numéro réattribué voit les factures de l'ancien titulaire (décision ci-dessus) ; l'import Bref (24.6) doit appeler `InvoicePhoneIndex.indexAll` pour les factures importées.
