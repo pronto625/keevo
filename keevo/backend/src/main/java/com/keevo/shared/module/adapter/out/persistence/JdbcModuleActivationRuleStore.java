@@ -68,6 +68,15 @@ public class JdbcModuleActivationRuleStore implements ModuleActivationRuleStore 
             ON CONFLICT (tenant_id, module_id) DO NOTHING
             """;
 
+    /** Story 24.2 — explicit modules owner-disabled for one live tenant (an existing choice is kept). */
+    static final String DISABLE_SQL = """
+            INSERT INTO public.tenant_module_activation (tenant_id, module_id, activated, updated_at)
+            SELECT t.id, m.module_id, false, ?
+            FROM public.tenants t CROSS JOIN unnest(?::varchar[]) AS m(module_id)
+            WHERE t.schema_name = ? AND t.status <> 'DELETED'
+            ON CONFLICT (tenant_id, module_id) DO NOTHING
+            """;
+
     private final JdbcTemplate jdbc;
 
     public JdbcModuleActivationRuleStore(DataSource dataSource) {
@@ -131,5 +140,20 @@ public class JdbcModuleActivationRuleStore implements ModuleActivationRuleStore 
     public int applyInitial(String tenantSchema, String saleFlow, String sectorType, Instant at) {
         String schema = TenantSchema.validate(tenantSchema);
         return jdbc.update(APPLY_SQL, Timestamp.from(at), saleFlow, sectorType, schema);
+    }
+
+    @Override
+    public int disable(String tenantSchema, List<String> moduleIds, Instant at) {
+        String schema = TenantSchema.validate(tenantSchema);
+        if (moduleIds == null || moduleIds.isEmpty()) {
+            return 0;
+        }
+        return jdbc.update(con -> {
+            var ps = con.prepareStatement(DISABLE_SQL);
+            ps.setTimestamp(1, Timestamp.from(at));
+            ps.setArray(2, con.createArrayOf("varchar", moduleIds.toArray()));
+            ps.setString(3, schema);
+            return ps;
+        });
     }
 }

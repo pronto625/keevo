@@ -1,0 +1,28 @@
+{
+  "id": "migration",
+  "version": "1.0.0",
+  "displayName": "Migration depuis Bref",
+  "category": "platform",
+  "requires": [
+    "core"
+  ],
+  "enhances": [],
+  "publishes": [],
+  "consumes": [],
+  "provides": [],
+  "needs": [],
+  "extensionPoints": {
+    "declares": [],
+    "fills": []
+  },
+  "permissions": [],
+  "routes": [],
+  "rolePermissions": {
+    "MANAGER": [],
+    "EMPLOYEE": [],
+    "VIEWER": []
+  },
+  "entitlement": "module.migration",
+  "free": true,
+  "ownerToggleable": false
+}

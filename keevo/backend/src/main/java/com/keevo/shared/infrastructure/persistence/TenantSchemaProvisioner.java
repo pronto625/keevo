@@ -122,6 +122,15 @@ public class TenantSchemaProvisioner {
      * {@code trialMonths} {@code null} = no end date (trial switched off: the free plan).
      */
     public void provision(String tenantId, String schemaName, PlanType trialPlan, Integer trialMonths) {
+        provision(tenantId, schemaName, trialPlan, trialMonths, true);
+    }
+
+    /**
+     * Same, with or without the « Ma Boutique » placeholder store. Story 24.2: a tenant imported from Bref gets its
+     * own shops (same ids) instead, so {@code seedDefaultStore} is {@code false} there.
+     */
+    public void provision(String tenantId, String schemaName, PlanType trialPlan, Integer trialMonths,
+                          boolean seedDefaultStore) {
         try {
             TenantSchema.validate(schemaName);
         } catch (IllegalArgumentException e) {
@@ -135,7 +144,7 @@ public class TenantSchemaProvisioner {
             try {
                 createSchema(conn, schemaName);
                 createTables(conn, schemaName);
-                seedData(conn, schemaName, trialPlan, trialMonths);
+                seedData(conn, schemaName, trialPlan, trialMonths, seedDefaultStore);
                 conn.commit();
             } catch (SQLException | RuntimeException e) {
                 try {
@@ -262,8 +271,8 @@ public class TenantSchemaProvisioner {
         }
     }
 
-    private void seedData(Connection conn, String schemaName, PlanType trialPlan, Integer trialMonths)
-            throws SQLException {
+    private void seedData(Connection conn, String schemaName, PlanType trialPlan, Integer trialMonths,
+                          boolean seedDefaultStore) throws SQLException {
         TenantSchema.validate(schemaName); // provision() already validated it; re-checked at use
         try (Statement stmt = conn.createStatement()) {
             stmt.execute("SET search_path TO \"" + schemaName + "\"");
@@ -285,7 +294,9 @@ public class TenantSchemaProvisioner {
                 }
                 seed.execute();
             }
-            stmt.execute(SEED_STORE);
+            if (seedDefaultStore) {
+                stmt.execute(SEED_STORE);
+            }
         }
     }
 

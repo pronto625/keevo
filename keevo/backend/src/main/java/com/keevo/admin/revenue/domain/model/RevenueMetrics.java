@@ -55,6 +55,8 @@ public final class RevenueMetrics {
     static final String REALIGNMENT = "REALIGNMENT";
     /** Story 19.7b — one-shot data migration of the merged offer (PREMIUM → TEAM): not a plan change either. */
     static final String PLAN_MIGRATION = "PLAN_MIGRATION";
+    /** Story 24.2 — a tenant imported from Bref: a data migration, not a commercial change. */
+    static final String MIGRATION_BREF = "MIGRATION_BREF";
 
     private final List<RevenuePayment> payments;
     private final Map<UUID, List<PlanChange>> eventsByTenant;
@@ -238,9 +240,9 @@ public final class RevenueMetrics {
         return EXPIRY.equals(churn.cause()) ? day.minusDays(1) : day;
     }
 
-    /** A correction or a data migration: ignored by churn and conversion. */
+    /** A correction or a data migration (19.7b offer, 24.2 Bref import): ignored by churn and conversion. */
     static boolean notAPlanChange(PlanChange e) {
-        return REALIGNMENT.equals(e.cause()) || PLAN_MIGRATION.equals(e.cause());
+        return REALIGNMENT.equals(e.cause()) || PLAN_MIGRATION.equals(e.cause()) || MIGRATION_BREF.equals(e.cause());
     }
 
     static boolean isChurn(PlanChange e) {

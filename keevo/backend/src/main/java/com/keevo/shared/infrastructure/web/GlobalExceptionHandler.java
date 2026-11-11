@@ -269,6 +269,8 @@ public class GlobalExceptionHandler {
                  "INVOICE_NOT_FOUND",
                  "CREDIT_NOTE_NOT_FOUND",
                  "ROLE_NOT_FOUND",             // 19.14
+                 "MIGRATION_OWNER_NOT_FOUND",  // 24.2
+                 "MIGRATION_BATCH_NOT_FOUND",
                  "INVOICE_LINK_INVALID",
                  "COMPANY_LOGO_NOT_FOUND",
                  "STORE_LOGO_NOT_FOUND",
@@ -344,6 +346,7 @@ public class GlobalExceptionHandler {
                  "WHATSAPP_TEMPLATE_NOT_APPROVED",
                  "CAMPAIGN_ALREADY_SENT",       // 21.6
                  "CAMPAIGN_SENDING_IN_PROGRESS",
+                 "MIGRATION_ALREADY_RUNNING",   // 24.2 — one import per owner at a time
                  "EXPORT_NOT_READY" -> HttpStatus.CONFLICT;  // Story 2.4 / 3.1 / 4.1 / 4.4 / 6.1 / 7.2 / v1s-13-1 / v1s-13-5 / v1s-14-11 / 14.5
             case "VALIDATION_ERROR", "INVALID_AMOUNT",
                  "INVALID_PHONE_NUMBER", "INVALID_PASSWORD",
@@ -383,6 +386,7 @@ public class GlobalExceptionHandler {
                  "CAMPAIGN_NOT_READY",           // 21.6
                  "CAMPAIGN_NO_RECIPIENT",
                  "CAMPAIGN_TOO_MANY_RECIPIENTS",
+                 "MIGRATION_EXPORT_INVALID",     // 24.2
                  "EXPORT_PDF_TOO_LARGE" -> HttpStatus.UNPROCESSABLE_ENTITY;  // v1s-18-3 — PDF over its row limit
             case "SERVICE_UNAVAILABLE",
                  "PRODUCT_QUOTA_UNAVAILABLE",
@@ -394,6 +398,7 @@ public class GlobalExceptionHandler {
                  "AI_ANSWER_FAILED",        // 21.4 — tool failure or answer limits: nothing counted
                  "WHATSAPP_CLOUD_UNAVAILABLE", // 21.5 — no Meta app configured
                  "PLATFORM_WHATSAPP_UNAVAILABLE", // 21.6 — platform number not configured
+                 "MIGRATION_SOURCE_UNAVAILABLE",  // 24.2 — Bref source not configured / unreachable
                  "PUBLIC_BASE_URL_MISSING" -> HttpStatus.SERVICE_UNAVAILABLE;
             case "PRODUCT_PHOTO_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "PRODUCT_PHOTO_INVALID" -> HttpStatus.UNSUPPORTED_MEDIA_TYPE;

@@ -59,6 +59,8 @@ Handlers: 406 — gated: 171, exempt: 235.
 | GET | `/api/v1/admin/health/status` | — | — | — | super-admin | AdminHealthController#status |
 | GET | `/api/v1/admin/jobs` | — | — | — | super-admin | AdminJobController#list |
 | GET | `/api/v1/admin/jobs/{jobId}` | — | — | — | super-admin | AdminJobController#get |
+| GET | `/api/v1/admin/migration/batches/{batchId}` | — | — | — | super-admin | AdminBrefMigrationController#batch |
+| POST | `/api/v1/admin/migration/bref/owners/{ownerId}/imports` | — | — | — | super-admin | AdminBrefMigrationController#importOwner |
 | DELETE | `/api/v1/admin/module-activation-rules` | — | — | — | super-admin | ModuleActivationRulesAdminController#delete |
 | GET | `/api/v1/admin/module-activation-rules` | — | — | — | super-admin | ModuleActivationRulesAdminController#list |
 | PUT | `/api/v1/admin/module-activation-rules` | — | — | — | super-admin | ModuleActivationRulesAdminController#save |

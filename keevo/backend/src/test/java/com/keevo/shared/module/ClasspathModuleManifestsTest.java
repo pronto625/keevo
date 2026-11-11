@@ -28,7 +28,7 @@ class ClasspathModuleManifestsTest {
         assertThat(byId).containsOnlyKeys("core", "catalog", "crm", "inventory", "store", "pos", "reporting",
                 "messaging", "sync", "admin", "client-portal", "multi-store", "counting", "advanced-reports", "report-config", "alerts",
                 "profitability", "exports", "invoicing", "expenses", "finance", "ai-assistant", "mcp-access",
-                "whatsapp-cloud");
+                "whatsapp-cloud", "migration"); // 24.2: migration (platform)
         assertThat(byId.values()).allSatisfy(m -> {
             // 13.6: crm provides; 13.7: pos declares an extension point; 14.3: crm search, pos needs ClientLookupPort?
             // 14.4: pos publishes sale.completed (1.3.0), invoicing consumes it (1.1.0)

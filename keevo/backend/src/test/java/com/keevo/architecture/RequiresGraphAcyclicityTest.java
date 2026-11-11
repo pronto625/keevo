@@ -34,7 +34,7 @@ class RequiresGraphAcyclicityTest {
         // throws on any invalid manifest
         List<LoadedModuleManifest> loaded = ModuleManifestLoader.loadFromClasspath(new PathMatchingResourcePatternResolver());
 
-        assertThat(loaded).as("module.json manifests on the classpath").hasSize(24); // 21.5: + whatsapp-cloud; 21.7: + client-portal
+        assertThat(loaded).as("module.json manifests on the classpath").hasSize(25); // 21.5: + whatsapp-cloud; 21.7: + client-portal; 24.2: + migration
         Map<String, List<String>> graph = new LinkedHashMap<>();
         for (LoadedModuleManifest m : loaded) {
             ModuleManifest manifest = m.manifest();
@@ -51,7 +51,7 @@ class RequiresGraphAcyclicityTest {
         Path baseDir = Path.of(getClass().getProtectionDomain().getCodeSource().getLocation().toURI())
             .getParent().getParent();
         assertThat(manifestsUnder(baseDir.resolve("src/main/resources")))
-            .hasSize(24) // 21.5: + whatsapp-cloud; 21.7: + client-portal
+            .hasSize(25) // 21.5: + whatsapp-cloud; 21.7: + client-portal; 24.2: + migration
             .allSatisfy(p -> assertThat(p).matches("keevo/modules/[a-z][a-z0-9]*(-[a-z0-9]+)*/module\\.json"));
         assertThat(manifestsUnder(baseDir.resolve("src/test/resources"))).as("module.json in test resources").isEmpty();
     }

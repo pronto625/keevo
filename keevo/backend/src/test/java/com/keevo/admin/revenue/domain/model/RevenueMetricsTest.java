@@ -302,6 +302,29 @@ class RevenueMetricsTest {
     }
 
     @Test
+    @DisplayName("24.2: MIGRATION_BREF rows (tenant imported from Bref, then its plan in force) change neither churn "
+            + "nor conversion")
+    void migrationBref_ignoredByChurnAndConversion() {
+        List<PlanChange> base = List.of(
+                event(A, null, "PREMIUM_TRIAL", "REGISTRATION", "2026-04-01T10:00:00Z"),
+                event(A, "PREMIUM_TRIAL", "PREMIUM", "ADMIN_ACTIVATION", "2026-10-05T10:00:00Z"),
+                event(B, "PREMIUM", "FREE", "ADMIN_DOWNGRADE", "2026-10-03T10:00:00Z"));
+        List<PlanChange> withImports = new java.util.ArrayList<>(base);
+        // an imported tenant starts on the registration trial, then gets its Bref plan (24.5), same cause
+        withImports.add(event(C, null, "PREMIUM_TRIAL", "MIGRATION_BREF", "2026-10-06T10:00:00Z"));
+        withImports.add(event(C, "PREMIUM_TRIAL", "PREMIUM", "MIGRATION_BREF", "2026-10-07T10:00:00Z"));
+        withImports.add(event(B, "FREE", "PREMIUM", "MIGRATION_BREF", "2026-10-08T10:00:00Z"));
+
+        LocalDate first = LocalDate.of(2026, 10, 1);
+        LocalDate last = LocalDate.of(2026, 10, 31);
+        var without = new RevenueMetrics(List.of(), base);
+        var with = new RevenueMetrics(List.of(), withImports);
+
+        assertThat(with.churned(first, last).keySet()).isEqualTo(without.churned(first, last).keySet()).containsOnly(B);
+        assertThat(with.conversion(first, last)).isEqualTo(without.conversion(first, last));
+    }
+
+    @Test
     @DisplayName("no data → zeros everywhere")
     void noData() {
         var m = new RevenueMetrics(List.of(), List.of());

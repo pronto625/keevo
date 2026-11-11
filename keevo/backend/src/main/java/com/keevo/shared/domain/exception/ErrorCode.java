@@ -273,6 +273,12 @@ public enum ErrorCode {
     ROLE_NOT_FOUND,             // HTTP 404 — custom role id unknown in the company
     ROLE_NAME_TAKEN,            // HTTP 409 — another role of the company has this name (case-insensitive)
     ROLE_IN_USE,                // HTTP 409 — the role is still assigned to members: it cannot be deleted
+    // ── Bref migration tool (Story 24.2) ──────────────────────────────────
+    MIGRATION_SOURCE_UNAVAILABLE,     // HTTP 503 — the requested Bref source (export folder / database) is not configured or unreachable
+    MIGRATION_OWNER_NOT_FOUND,        // HTTP 404 — the owner is absent from the Bref source (or is not an owner)
+    MIGRATION_EXPORT_INVALID,         // HTTP 422 — export file unreadable: checksum, format version or JSON
+    MIGRATION_ALREADY_RUNNING,        // HTTP 409 — an import of the same owner is running
+    MIGRATION_BATCH_NOT_FOUND,        // HTTP 404 — migration batch id unknown
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

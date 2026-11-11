@@ -17,4 +17,17 @@ public interface ModuleActivationRulesPort {
      * @throws IllegalArgumentException invalid schema name
      */
     int applyInitialRules(String tenantSchema);
+
+    /**
+     * Story 24.2 — owner-disables every installed, owner-toggleable, non-platform module of the tenant that is not in
+     * {@code keep} — except the modules a module left enabled (kept, or not owner-toggleable) requires, transitively —
+     * with one {@code INSERT … SELECT unnest … ON CONFLICT DO NOTHING} (an existing owner choice is kept). The Bref
+     * importer keeps the functions Bref had; the owner may enable the others in « Mes modules ». Entitlement is not
+     * touched. Joins the caller's transaction when there is one.
+     *
+     * @param keep module ids to leave as they are (unknown ids are ignored)
+     * @return the number of modules disabled by this call
+     * @throws IllegalArgumentException invalid schema name
+     */
+    int ownerDisableAllBut(String tenantSchema, java.util.Set<String> keep);
 }

@@ -73,6 +73,12 @@ class ModuleActivationRulesServiceTest {
             applied.add(tenantSchema + " " + saleFlow + " " + sectorType);
             return 4;
         }
+
+        @Override
+        public int disable(String tenantSchema, List<String> moduleIds, Instant at) {
+            applied.add(tenantSchema + " disable " + moduleIds);
+            return moduleIds.size();
+        }
     };
 
     @BeforeEach
@@ -104,6 +110,23 @@ class ModuleActivationRulesServiceTest {
         profile = Optional.empty();
         service.applyInitialRules(SCHEMA);
         assertThat(applied).containsExactly(SCHEMA + " DOCUMENT PHARMACY", SCHEMA + " POS null");
+    }
+
+    @Test
+    @DisplayName("24.2 ownerDisableAllBut: every toggleable module outside the kept set, minus what a module left on requires")
+    void ownerDisableAllBut() {
+        // exports is kept and requires reporting: reporting stays on; platform, core and fixed modules never listed
+        assertThat(service.ownerDisableAllBut(SCHEMA, java.util.Set.of("invoicing", "exports"))).isEqualTo(5);
+        // pos is kept: catalog and inventory (its requirements) stay on
+        service.ownerDisableAllBut(SCHEMA, java.util.Set.of("pos"));
+        assertThat(applied).containsExactly(
+                SCHEMA + " disable [catalog, counting, inventory, multi-store, pos]",
+                SCHEMA + " disable [counting, exports, invoicing, multi-store, reporting]");
+        // two levels: counting kept → inventory (its requirement) → catalog (inventory's) stay on
+        assertThat(service.modulesToDisable(java.util.Set.of("counting")))
+                .containsExactly("exports", "invoicing", "multi-store", "pos", "reporting");
+        assertThatThrownBy(() -> service.ownerDisableAllBut("public", java.util.Set.of()))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

@@ -95,6 +95,32 @@ public class TenantFactory {
      * @throws com.keevo.shared.domain.exception.DomainException TENANT_PROVISION_FAILED on any error
      */
     public Tenant create() {
+        return create(TenantCreation.REGISTRATION);
+    }
+
+    /**
+     * Story 24.2 — the options of a tenant creation: the registration ({@link #REGISTRATION}: code as name, ACTIVE,
+     * cause REGISTRATION, « Ma Boutique ») or an import (Bref migration: the shop name, SUSPENDED until activation,
+     * cause MIGRATION_BREF, no placeholder store since the imported shops keep their ids).
+     *
+     * @param name             human-readable name; {@code null} = the tenant code
+     * @param status           initial status
+     * @param cause            cause of the first plan event
+     * @param seedDefaultStore whether the « Ma Boutique » placeholder is seeded
+     */
+    public record TenantCreation(String name, TenantStatus status, PlanChangeCause cause, boolean seedDefaultStore) {
+
+        public static final TenantCreation REGISTRATION =
+                new TenantCreation(null, TenantStatus.ACTIVE, PlanChangeCause.REGISTRATION, true);
+
+        public TenantCreation {
+            java.util.Objects.requireNonNull(status, "status");
+            java.util.Objects.requireNonNull(cause, "cause");
+        }
+    }
+
+    /** {@link #create()} with explicit options (Story 24.2). */
+    public Tenant create(TenantCreation options) {
         // 1. Generate unique code
         String code = codeGenerator.generate();
         String schemaName = Tenant.schemaNameFromCode(code);
@@ -111,7 +137,8 @@ public class TenantFactory {
             UUID.randomUUID(),
             code,
             schemaName,
-            TenantStatus.ACTIVE,
+            options.name(),
+            options.status(),
             startPlan,
             Instant.now()
         );
@@ -124,9 +151,10 @@ public class TenantFactory {
         //    Story 9-2 — plan history starts with the trial (same registration transaction); inside
         //    the try so a failure also drops the provisioned schema.
         try {
-            schemaProvisioner.provision(savedTenant.getId().toString(), schemaName, startPlan, startMonths);
+            schemaProvisioner.provision(savedTenant.getId().toString(), schemaName, startPlan, startMonths,
+                    options.seedDefaultStore());
             planChangeRecorder.recordEvent(savedTenant.getId(), null, startPlan,
-                    PlanChangeCause.REGISTRATION, null, null);
+                    options.cause(), null, null);
             // Story 16.5 — the paid modules get their TRIAL rows (trial end = subscription end) in the
             // registration transaction, before the module provisioning that runs after commit
             if (planModuleRows != null) {

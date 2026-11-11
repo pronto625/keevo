@@ -27,4 +27,9 @@ class TenantQueryAdapter implements TenantQueryPort {
     public Optional<TenantView> findBySchemaName(String schemaName) {
         return tenantRepository.findBySchemaName(schemaName).map(TenantViews::of);
     }
+
+    @Override
+    public Optional<TenantView> findById(java.util.UUID tenantId) {
+        return tenantId == null ? Optional.empty() : tenantRepository.findById(tenantId).map(TenantViews::of);
+    }
 }

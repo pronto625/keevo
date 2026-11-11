@@ -84,6 +84,53 @@ public class ModuleActivationRulesService implements ModuleActivationRulesPort, 
         return disabled;
     }
 
+    @Override
+    public int ownerDisableAllBut(String tenantSchema, Set<String> keep) {
+        String schema = TenantSchema.validate(tenantSchema);
+        List<String> disabled = modulesToDisable(keep == null ? Set.of() : keep);
+        int inserted = store.disable(schema, disabled, clock.instant());
+        registry.evict(schema);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    registry.evict(schema);
+                }
+            });
+        }
+        log.info("Modules owner-disabled outside the kept set: disabled={} inserted={}", disabled, inserted);
+        return inserted;
+    }
+
+    /**
+     * The installed, owner-toggleable, non-platform modules outside {@code keep}, minus every module that a module left
+     * enabled (kept, or not owner-toggleable) requires — transitively, so no enabled module loses a requirement.
+     * Sorted by id. One worklist pass from the modules left enabled: O(m + r) over the m installed manifests and
+     * their r requirement edges, no I/O.
+     */
+    List<String> modulesToDisable(Set<String> keep) {
+        Map<String, ModuleManifest> modules = new java.util.HashMap<>();
+        catalog.manifests().stream().filter(m -> m.category() != ModuleCategory.PLATFORM)
+                .forEach(m -> modules.put(m.id(), m));
+        Set<String> disable = new java.util.TreeSet<>();
+        java.util.ArrayDeque<ModuleManifest> enabled = new java.util.ArrayDeque<>();
+        for (ModuleManifest m : modules.values()) {
+            if (m.ownerCanToggle() && !keep.contains(m.id())) {
+                disable.add(m.id());
+            } else {
+                enabled.add(m);
+            }
+        }
+        while (!enabled.isEmpty()) {
+            for (String required : enabled.poll().requires()) {
+                if (disable.remove(required) && modules.containsKey(required)) {
+                    enabled.add(modules.get(required)); // now enabled: its own requirements stay enabled too
+                }
+            }
+        }
+        return List.copyOf(disable);
+    }
+
     // ── admin ────────────────────────────────────────────────────────────────
 
     @Override

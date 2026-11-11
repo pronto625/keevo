@@ -27,5 +27,10 @@ public enum PlanChangeCause {
      * Story 21.1 — the owner paid the plan online (Mobile Money, module {@code payments}) or took a free offer (100 %
      * discount): a commercial activation, counted like {@link #ADMIN_ACTIVATION} by the revenue metrics.
      */
-    SELF_SERVICE_PAYMENT
+    SELF_SERVICE_PAYMENT,
+    /**
+     * Story 24.2 — the tenant was imported from Bref (migration tool): its first plan event. Not a commercial change
+     * (no conversion); the plan in force at the migration date is applied by 24.5 with this same cause.
+     */
+    MIGRATION_BREF
 }

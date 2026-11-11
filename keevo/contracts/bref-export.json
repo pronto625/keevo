@@ -1,0 +1,94 @@
+{
+  "description": "Story 24.1 / 24.2 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
+  "formatVersion": 1,
+  "transport": {
+    "file": "owner-<owner uuid>.json in the folder keevo.migration.bref.export-dir (Keevo server)",
+    "checksum": "owner-<owner uuid>.json.sha256 next to it: lower-case hex SHA-256 of the file's exact bytes, optionally followed by whitespace and the file name (sha256sum format). The HTTP export sends the same value in the header X-Bref-Export-Sha256. Missing or different → Keevo answers 422 MIGRATION_EXPORT_INVALID.",
+    "encoding": "UTF-8 JSON, one top-level object; sections in any order; unknown sections are skipped (streaming)"
+  },
+  "types": {
+    "uuid": "lower-case UUID string",
+    "instant": "ISO-8601 with offset, UTC (\"2026-11-03T21:33:48.123Z\"), milliseconds; null when absent",
+    "decimal": "JSON string with a dot (\"12500.00\") — never a float (24.3–24.5 sections)"
+  },
+  "sections": {
+    "formatVersion": "integer, 1",
+    "source": "\"api-bref\"",
+    "exportedAt": "instant of the export",
+    "owner": {
+      "description": "the owner's user row (role must be \"owner\", id = the requested owner)",
+      "fields": {
+        "id": "uuid", "role": "\"owner\"", "email": "string|null", "emailVerified": "boolean",
+        "phone": "string|null (E.164, as stored)", "isVerified": "boolean (sign-up code confirmed)",
+        "username": "string|null", "password": "string|null (bcrypt hash as stored, $2b$…; null for code / social sign-in)",
+        "firstName": "string|null", "lastName": "string|null", "shopId": "string|null", "isActive": "boolean",
+        "mustChangePassword": "boolean", "provider": "string|null (email, google, apple)", "socialId": "string|null",
+        "plan": "string (informative: the plan in force is computed from subscriptions by 24.5)",
+        "createdAt": "instant", "updatedAt": "instant", "deletedAt": "instant|null"
+      }
+    },
+    "shops": {
+      "description": "EVERY shop whose userId is the owner, soft-deleted ones included (deletedAt set)",
+      "fields": {
+        "id": "uuid", "userId": "uuid (the owner)", "name": "string", "address": "string", "category": "ShopCategory key (fashion … other)",
+        "description": "string|null", "phone": "string|null", "photoUrl": "string|null (Cloudinary URL)",
+        "photoData": "object|null — optional embedded logo {\"contentType\": \"image/png\", \"base64\": \"…\"}; when present Keevo uses it instead of downloading photoUrl",
+        "niu": "string|null", "rccm": "string|null", "country": "ISO 3166-1 alpha-2", "isActive": "boolean",
+        "totalSales": "decimal (informative)", "monthSales": "decimal (informative)", "invoices": "integer (informative)",
+        "createdAt": "instant", "updatedAt": "instant", "deletedAt": "instant|null"
+      }
+    },
+    "members": {
+      "description": "EVERY user whose shopId is one of the owner's shops (roles admin, seller, viewer), soft-deleted ones included; same fields as owner",
+      "fields": "as owner (role: admin | seller | viewer; shopId: the member's shop uuid; password: bcrypt hash)"
+    },
+    "customers": "24.3 — array of customer rows (entity property names)",
+    "products": "24.3 — array of product rows",
+    "invoices": "24.4 — array of invoice rows, each with items[] and payments[]",
+    "expenses": "24.4 — array of expense rows",
+    "subscriptions": "24.5", "planPaymentRequests": "24.5", "usageCounters": "24.5", "accountCredit": "24.5",
+    "appleTransactions": "24.5", "revenuecatEvents": "24.5",
+    "whatsapp": "24.6 — {account, templates[], campaigns[], messages[]}", "aiConversations": "24.6", "notifications": "24.6"
+  },
+  "keevoMapping24_2": {
+    "owner": "public.users (same id, bcrypt copied, phone E.164) + a new tenant SUSPENDED until activation (24.9), sale flow DOCUMENT, no « Ma Boutique »",
+    "shops": "tenant stores (same ids, dates kept; deleted → inactive), logos through the store logo use case",
+    "members": "public.users + memberships (admin → MANAGER, seller → EMPLOYEE, viewer → VIEWER) + employees (id = user id); deleted members are not imported",
+    "blocking": "an owner whose phone / email / username (or a member's) already belongs to a Keevo account is not imported (case ACCOUNT_EXISTS, bridge = 24.7)"
+  },
+  "example": {
+    "formatVersion": 1,
+    "source": "api-bref",
+    "exportedAt": "2026-11-10T08:00:00.000Z",
+    "owner": {
+      "id": "6f1d2c3b-0000-4000-8000-000000000001", "role": "owner", "email": "proprietaire@example.test",
+      "emailVerified": true, "phone": "+237600000001", "isVerified": true, "username": null, "password": null,
+      "firstName": "Awa", "lastName": "Exemple", "shopId": null, "isActive": true, "mustChangePassword": false,
+      "provider": "email", "socialId": null, "plan": "free",
+      "createdAt": "2026-01-05T09:00:00.000Z", "updatedAt": "2026-10-01T10:00:00.000Z", "deletedAt": null
+    },
+    "shops": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000101", "userId": "6f1d2c3b-0000-4000-8000-000000000001",
+        "name": "Boutique Exemple", "address": "Rue d'exemple, Douala", "category": "electronics",
+        "description": null, "phone": "+237600000002", "photoUrl": null, "photoData": null,
+        "niu": "M000000000000X", "rccm": null, "country": "CM", "isActive": true,
+        "totalSales": "0.00", "monthSales": "0.00", "invoices": 0,
+        "createdAt": "2026-01-05T09:05:00.000Z", "updatedAt": "2026-10-01T10:05:00.000Z", "deletedAt": null
+      }
+    ],
+    "members": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000201", "role": "admin", "email": null, "emailVerified": false,
+        "phone": null, "isVerified": false, "username": "gerant.exemple",
+        "password": "$2b$10$abcdefghijklmnopqrstuuAbCdEfGhIjKlMnOpQrStUvWxYz01234",
+        "firstName": "Gérant", "lastName": null, "shopId": "6f1d2c3b-0000-4000-8000-000000000101",
+        "isActive": true, "mustChangePassword": true, "provider": "email", "socialId": null, "plan": "free",
+        "createdAt": "2026-02-01T09:00:00.000Z", "updatedAt": "2026-02-01T09:00:00.000Z", "deletedAt": null
+      }
+    ],
+    "customers": [],
+    "products": [],
+    "invoices": []
+  }
+}

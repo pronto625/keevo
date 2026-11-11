@@ -35,6 +35,14 @@ public interface ModuleActivationRuleStore {
     int applyInitial(String tenantSchema, String saleFlow, String sectorType, Instant at);
 
     /**
+     * Story 24.2 — owner-disables {@code moduleIds} for the live tenant with this schema, in one
+     * {@code INSERT … SELECT unnest … ON CONFLICT DO NOTHING}.
+     *
+     * @return the number of rows inserted
+     */
+    int disable(String tenantSchema, List<String> moduleIds, Instant at);
+
+    /**
      * One stored rule set.
      *
      * @param sectorType {@code null} for the default set of the flow

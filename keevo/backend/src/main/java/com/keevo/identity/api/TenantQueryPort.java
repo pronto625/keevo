@@ -13,4 +13,7 @@ public interface TenantQueryPort {
     List<TenantView> findAll();
 
     Optional<TenantView> findBySchemaName(String schemaName);
+
+    /** Story 24.2 — a tenant by id, whatever its status (one primary-key read). */
+    Optional<TenantView> findById(java.util.UUID tenantId);
 }

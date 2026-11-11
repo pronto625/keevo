@@ -147,6 +147,12 @@ public final class ErrorMessages {
             Map.entry("INVOICE_SIGNATURE_NOT_FOUND", "Ce document n'a pas cette signature"),
             Map.entry("CREDIT_NOTE_NOT_FOUND",       "Avoir introuvable"),
             Map.entry("ROLE_NOT_FOUND",              "Rôle introuvable"),
+            // Story 24.2 — Bref migration tool (super-admin)
+            Map.entry("MIGRATION_SOURCE_UNAVAILABLE", "La source Bref demandée n'est pas disponible"),
+            Map.entry("MIGRATION_OWNER_NOT_FOUND",   "Ce compte Bref est introuvable dans la source"),
+            Map.entry("MIGRATION_EXPORT_INVALID",    "L'export Bref est illisible ou altéré"),
+            Map.entry("MIGRATION_ALREADY_RUNNING",   "Un import de ce compte Bref est déjà en cours"),
+            Map.entry("MIGRATION_BATCH_NOT_FOUND",   "Lot d'import introuvable"),
             Map.entry("ROLE_NAME_TAKEN",             "Un autre rôle porte déjà ce nom"),
             Map.entry("ROLE_IN_USE",
                     "Ce rôle est attribué à des membres : attribuez-leur un autre rôle avant de le supprimer"),

@@ -107,7 +107,7 @@ class TenantFactoryTest {
         factory.create();
 
         verify(schemaProvisioner).provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(PlanType.FREE),
-                org.mockito.ArgumentMatchers.isNull());
+                org.mockito.ArgumentMatchers.isNull(), eq(true));
         verify(planChangeRecorder).recordEvent(id, null, PlanType.FREE, PlanChangeCause.REGISTRATION, null, null);
     }
 
@@ -129,7 +129,7 @@ class TenantFactoryTest {
         factory.create(); // no transaction synchronization: the provisioning runs right away
 
         InOrder order = inOrder(schemaProvisioner, planChangeRecorder, planModuleRows, moduleProvisioner);
-        order.verify(schemaProvisioner).provision(anyString(), eq(schema), eq(BUSINESS_TRIAL), eq(1));
+        order.verify(schemaProvisioner).provision(anyString(), eq(schema), eq(BUSINESS_TRIAL), eq(1), eq(true));
         order.verify(planChangeRecorder).recordEvent(any(), any(), any(), any(), any(), any());
         order.verify(planModuleRows).sync(id, schema);
         order.verify(moduleProvisioner).provisionActiveModules(schema);
@@ -191,7 +191,7 @@ class TenantFactoryTest {
 
         // assert
         verify(schemaProvisioner, times(1))
-                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(BUSINESS_TRIAL), eq(1));
+                .provision(anyString(), eq(Tenant.schemaNameFromCode(code)), eq(BUSINESS_TRIAL), eq(1), eq(true));
     }
 
     @Test
@@ -205,7 +205,7 @@ class TenantFactoryTest {
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         doThrow(new DomainException(ErrorCode.TENANT_PROVISION_FAILED))
-                .when(schemaProvisioner).provision(anyString(), anyString(), any(), anyInt());
+                .when(schemaProvisioner).provision(anyString(), anyString(), any(), anyInt(), org.mockito.ArgumentMatchers.anyBoolean());
 
         // act + assert
         DomainException ex = catchThrowableOfType(tenantFactory::create, DomainException.class);
@@ -224,7 +224,7 @@ class TenantFactoryTest {
         when(codeGenerator.generate()).thenReturn(code);
         when(tenantRepository.save(any(Tenant.class))).thenReturn(savedTenant);
         doThrow(new DomainException(ErrorCode.TENANT_PROVISION_FAILED))
-                .when(schemaProvisioner).provision(anyString(), anyString(), any(), anyInt());
+                .when(schemaProvisioner).provision(anyString(), anyString(), any(), anyInt(), org.mockito.ArgumentMatchers.anyBoolean());
 
         catchThrowableOfType(tenantFactory::create, DomainException.class);
 

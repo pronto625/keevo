@@ -30,7 +30,8 @@ class ModuleIdsAtGoLivePinTest {
             "ai-assistant", // 21.4 — owner-disabled for existing tenants by V65
             "mcp-access", // 21.9 — owner-disabled for existing tenants by V66
             "whatsapp-cloud", // 21.5 — owner-disabled for existing tenants by V68
-            "client-portal"); // 21.7 — owner-disabled for existing tenants by V70, re-enabled by V84 (like Bref)
+            "client-portal", // 21.7 — owner-disabled for existing tenants by V70, re-enabled by V84 (like Bref)
+            "migration"); // 24.2 — platform module (Bref migration tool), owner-disabled for existing tenants by V81
 
     @Test
     @DisplayName("every shipped module id is pinned (a new module ships its owner-disabling migration first)")

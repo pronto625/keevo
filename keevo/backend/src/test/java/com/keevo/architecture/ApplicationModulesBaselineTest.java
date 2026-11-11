@@ -38,7 +38,7 @@ class ApplicationModulesBaselineTest {
     /** The top-level packages under com.keevo (story 12.1; crm split out of catalog in 12.5; payments in 21.1; assistant in 21.4; mcp in 21.9; whatsappcloud in 21.5; clientportal in 21.7). */
     private static final Set<String> EXPECTED_MODULES = Set.of(
         "admin", "assistant", "catalog", "clientportal", "commerce", "crm", "expenses", "feedback", "finance", "identity", "inventory", "invoicing", "mcp",
-        "messaging", "payments", "reporting", "shared", "store", "subscription", "sync", "whatsappcloud");
+        "messaging", "migration", "payments", "reporting", "shared", "store", "subscription", "sync", "whatsappcloud"); // 24.2: + migration
 
     /**
      * "depends on module X via ... Allowed targets: ..." — Modulith uses this format both when X is not
