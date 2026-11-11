@@ -70,6 +70,8 @@ public final class BrefAnnexPlanner {
     static final String RESERVED_TEMPLATE = "bref_facture";
     static final String RESERVED_LANGUAGE = "fr";
     static final String DEFAULT_CAMPAIGN_NAME = "Campagne importée";
+    static final Set<String> MESSAGE_STATUSES = Set.of("SENT", "DELIVERED", "READ", "FAILED");
+    private static final Pattern NON_DIGIT = Pattern.compile("\\D");
 
     private BrefAnnexPlanner() {
     }
@@ -196,7 +198,8 @@ public final class BrefAnnexPlanner {
         header = header == null ? "NONE" : header;
         String body = BrefMappings.trimmed(t.bodyText()) == null ? null : t.bodyText();
         if (name == null || !TEMPLATE_NAME.matcher(name).matches() || language == null
-                || !LANGUAGE.matcher(language).matches() || !CATEGORIES.contains(category) || !HEADERS.contains(header)
+                || !LANGUAGE.matcher(language).matches() || category == null || !CATEGORIES.contains(category)
+                || !HEADERS.contains(header)
                 || body == null || length(body) > 1024 || length(t.headerText()) > 60 || length(t.footerText()) > 60) {
             skipped.add(Kind.WHATSAPP_TEMPLATE_UNREADABLE);
             return null;
@@ -206,7 +209,7 @@ public final class BrefAnnexPlanner {
             return null;
         }
         String status = upper(t.status());
-        if (!TEMPLATE_STATUSES.contains(status)) {
+        if (status == null || !TEMPLATE_STATUSES.contains(status)) {
             status = "PENDING"; // Meta's in-between states (IN_APPEAL…), as 21.5 normalises them
         }
         List<Kind> notes = new ArrayList<>();
@@ -258,11 +261,11 @@ public final class BrefAnnexPlanner {
 
         Targeting t = c.targeting();
         dropped[0] |= t.unreadable();
-        List<UUID> stores = new ArrayList<>();
+        Set<UUID> stores = new java.util.LinkedHashSet<>();
         for (UUID shop : t.shopIds()) {
-            if (lookup.stores().contains(shop) && !stores.contains(shop)) {
+            if (lookup.stores().contains(shop)) {
                 stores.add(shop);
-            } else if (!lookup.stores().contains(shop)) {
+            } else {
                 dropped[0] = true;
             }
         }
@@ -291,6 +294,9 @@ public final class BrefAnnexPlanner {
                 dropped[0] = true;
             }
             templateId = templateName == null ? null : templateIds.get(templateName + "|" + templateLanguage);
+            if (templateName != null && templateId == null) {
+                dropped[0] = true; // its template was not imported: the campaign keeps the name, not the link
+            }
             templateBody = cut(w.bodyText() == null || w.bodyText().isBlank() ? null : w.bodyText(), 1024, cut);
             String header = upper(w.headerFormat());
             templateHeader = header != null && HEADERS.contains(header) ? header : null;
@@ -326,7 +332,8 @@ public final class BrefAnnexPlanner {
         }
         UUID author = c.createdById() == null ? null : lookup.accountId().apply(c.createdById());
         Instant sentAt = "SENT".equals(status) ? c.sentAt() : null;
-        ImportedCampaign row = new ImportedCampaign(c.id(), name, description, status, stores, templateId, variables,
+        ImportedCampaign row = new ImportedCampaign(c.id(), name, description, status, List.copyOf(stores), templateId,
+                variables,
                 link, templateName, templateLanguage, templateBody, templateHeader, sentAt, sentAt,
                 Math.max(0, c.targetedCount()), Math.max(0, c.sentCount()), Math.max(0, c.deliveredCount()),
                 Math.max(0, c.readCount()), Math.max(0, c.failedCount()), inactive, within, spentMin, spentMax,
@@ -407,7 +414,7 @@ public final class BrefAnnexPlanner {
             String status = null;
             if ("OUT".equals(direction) && m.status() != null) {
                 String s = m.status().strip().toUpperCase(Locale.ROOT);
-                status = Set.of("SENT", "DELIVERED", "READ", "FAILED").contains(s) ? s : null;
+                status = MESSAGE_STATUSES.contains(s) ? s : null;
             }
             String name = BrefMappings.trimmed(m.contactName());
             if (name != null) {
@@ -490,12 +497,18 @@ public final class BrefAnnexPlanner {
             }
             boolean[] cut = {false};
             String data = n.metadata() != null && n.metadata().startsWith("{") ? n.metadata() : null;
+            List<Kind> notes = new ArrayList<>();
+            if (n.metadata() != null && data == null) {
+                notes.add(Kind.NOTIFICATION_DATA_DROPPED);
+            }
             ImportedNotification row = new ImportedNotification(n.id(), account,
                     cut(type, NotificationImportPort.MAX_TYPE, cut), cut(title, NotificationImportPort.MAX_TITLE, cut),
                     cut(n.message(), NotificationImportPort.MAX_BODY, cut), data,
                     n.read() ? orCreated(n.updatedAt(), n.createdAt()) : null, n.createdAt());
-            rows.add(new Row<>(row, BREF_NOTIFICATION, n.id(), n.id(), Canonical.sha256(n.canonical()),
-                    cut[0] ? List.of(Kind.NOTIFICATION_SHORTENED) : List.of()));
+            if (cut[0]) {
+                notes.add(Kind.NOTIFICATION_SHORTENED);
+            }
+            rows.add(new Row<>(row, BREF_NOTIFICATION, n.id(), n.id(), Canonical.sha256(n.canonical()), notes));
         }
         return rows;
     }
@@ -544,7 +557,7 @@ public final class BrefAnnexPlanner {
         if (raw == null) {
             return null;
         }
-        String d = raw.replaceAll("\\D", "");
+        String d = NON_DIGIT.matcher(raw).replaceAll("");
         return d.length() >= min && d.length() <= max ? d : null;
     }
 

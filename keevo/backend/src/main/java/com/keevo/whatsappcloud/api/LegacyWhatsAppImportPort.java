@@ -75,8 +75,16 @@ public interface LegacyWhatsAppImportPort {
         }
     }
 
-    /** @return the ids inserted by this call */
-    Set<UUID> importTemplates(String tenantSchema, List<ImportedTemplate> templates);
+    /**
+     * What a call wrote: the ids it inserted, and every given id present afterwards (inserted, or already there with
+     * that id). A given id absent from {@code present} was refused by another unique key (a template of the same name
+     * and language, a message of the same Meta id): it is not in Keevo.
+     */
+    record Written(Set<UUID> inserted, Set<UUID> present) {
+    }
+
+    /** Templates whose (name, language) is already used by another id are left out (see {@link Written}). */
+    Written importTemplates(String tenantSchema, List<ImportedTemplate> templates);
 
     /** A template variable of a campaign ({@code source} STATIC | CLIENT_NAME | STORE_NAME). */
     record Variable(String source, String value) {
@@ -126,7 +134,7 @@ public interface LegacyWhatsAppImportPort {
      * unread count, last inbound instant) from the stored messages.
      *
      * @param contactNames the contact's name per phone (digits), the latest Bref knew
-     * @return the ids inserted by this call
+     * @return the ids inserted and present; a message whose Meta id is already stored under another id is left out
      */
-    Set<UUID> importMessages(String tenantSchema, List<ImportedMessage> messages, Map<String, String> contactNames);
+    Written importMessages(String tenantSchema, List<ImportedMessage> messages, Map<String, String> contactNames);
 }

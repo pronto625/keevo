@@ -108,7 +108,11 @@ public record ImportNote(String code, String label, int count) {
         NOTIFICATION_UNREADABLE("Notification illisible (type ou texte absent) : non reprise"),
         NOTIFICATION_SHORTENED("Texte de notification trop long, raccourci"),
         WEB_PUSH_USER_UNKNOWN("Abonnement aux notifications du navigateur d'un compte non repris : non repris"),
-        WEB_PUSH_UNREADABLE("Abonnement aux notifications du navigateur illisible : non repris");
+        WEB_PUSH_UNREADABLE("Abonnement aux notifications du navigateur illisible : non repris"),
+        WEB_PUSH_ENDPOINT_HELD("Navigateur déjà abonné aux notifications de Keevo : abonnement existant conservé"),
+        WHATSAPP_TEMPLATE_CONFLICT("Modèle WhatsApp du même nom et de la même langue déjà présent dans Keevo : non "
+                + "repris"),
+        NOTIFICATION_DATA_DROPPED("Détail de notification illisible : non repris");
 
         private final String label;
 

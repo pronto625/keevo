@@ -226,6 +226,9 @@ class BrefAnnexesImportFullContextTest extends FullContextIntegrationTest {
 
         // client portal: the issued, paid and cancelled invoices with a phone (not the quote, the deleted one, the
         // one without phone)
+        assertThat(jdbc.queryForObject("SELECT issued_at FROM public.invoice_phone_index WHERE invoice_id = "
+                + "'00000246-0000-4000-8000-000000000102'", java.sql.Timestamp.class).toInstant())
+                .isEqualTo(java.time.Instant.parse("2026-10-02T10:30:00Z")); // validatedAt, else createdAt
         assertThat(jdbc.queryForList("SELECT invoice_id::text || ':' || phone_normalized FROM "
                 + "public.invoice_phone_index WHERE tenant_id = ? ORDER BY invoice_id", String.class, tenantId))
                 .containsExactly("00000246-0000-4000-8000-000000000101:+237690024621",
@@ -288,27 +291,50 @@ class BrefAnnexesImportFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("a WhatsApp number already connected to another company is not moved (noted), the rest is imported")
+    @DisplayName("a WhatsApp number or a browser endpoint already held by another company is not moved (noted, not "
+            + "recorded); a number left by a deleted company is taken")
     void numberHeldElsewhere() throws Exception {
         String number = Long.toString(ThreadLocalRandom.current().nextLong(1_000_000_000L, 9_000_000_000L));
-        UUID first = owner(number);
+        String endpoint = "https://push.example.invalid/send/" + UUID.randomUUID();
+        UUID first = owner(number, endpoint);
         JsonNode one = data(importOwner(first, "DATABASE"));
         assertThat(one.path("status").asText()).as(one.toString()).isEqualTo("COMPLETED");
         assertThat(one.path("counts").path("whatsappAccountsImported").asInt()).isEqualTo(1);
 
-        UUID second = owner(number);
+        // the second owner's browser is already subscribed in Keevo (Bref keeps endpoints unique on its side)
+        String held = "https://push.example.invalid/send/" + UUID.randomUUID();
+        jdbc.update("INSERT INTO public.web_push_subscriptions (id, user_id, endpoint, p256dh, auth) VALUES (?, ?, ?, "
+                + "'p256', 'auth')", UUID.randomUUID(), UUID.randomUUID(), held);
+        UUID second = owner(number, held);
         JsonNode two = data(importOwner(second, "DATABASE"));
         assertThat(two.path("status").asText()).as(two.toString()).isEqualTo("COMPLETED");
         assertThat(two.path("counts").path("whatsappAccountsImported").asInt()).isZero();
-        assertThat(two.path("notes").toString()).contains("WHATSAPP_NUMBER_HELD");
+        assertThat(two.path("notes").toString()).contains("WHATSAPP_NUMBER_HELD", "WEB_PUSH_ENDPOINT_HELD");
+        assertThat(two.path("counts").path("webPushSubscriptionsImported").asInt()).isZero();
         UUID tenant = UUID.fromString(two.path("tenantId").asText());
         assertThat(number("SELECT count(*) FROM public.whatsapp_accounts WHERE tenant_id = ?", tenant)).isZero();
         assertThat(number("SELECT count(*) FROM public.whatsapp_accounts WHERE phone_number_id = ?", number))
                 .isEqualTo(1);
+        String schema = jdbc.queryForObject("SELECT schema_name FROM public.tenants WHERE id = ?", String.class,
+                tenant);
+        assertThat(number("SELECT count(*) FROM \"" + schema + "\".whatsapp_templates"))
+                .as("no system template without an account").isZero();
+        assertThat(number("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ? AND target_table IN "
+                + "('whatsapp_accounts', 'web_push_subscriptions')", second)).isZero();
+
+        // the first company deleted: its number is free for the next owner
+        UUID firstTenant = UUID.fromString(one.path("tenantId").asText());
+        jdbc.update("UPDATE public.tenants SET status = 'DELETED' WHERE id = ?", firstTenant);
+        UUID third = owner(number, "https://push.example.invalid/send/" + UUID.randomUUID());
+        JsonNode three = data(importOwner(third, "DATABASE"));
+        assertThat(three.path("status").asText()).as(three.toString()).isEqualTo("COMPLETED");
+        assertThat(three.path("counts").path("whatsappAccountsImported").asInt()).isEqualTo(1);
+        assertThat(number("SELECT count(*) FROM public.whatsapp_accounts WHERE tenant_id = ?",
+                UUID.fromString(three.path("tenantId").asText()))).isEqualTo(1);
     }
 
-    /** An owner with one shop and a connected WABA on {@code phoneNumberId}. */
-    private static UUID owner(String phoneNumberId) {
+    /** An owner with one shop, a connected WABA on {@code phoneNumberId} and a browser subscription. */
+    private static UUID owner(String phoneNumberId, String endpoint) {
         UUID id = UUID.randomUUID();
         LocalDateTime at = LocalDateTime.of(2026, 9, 1, 8, 0);
         String phone = "+2376" + String.format("%08d", ThreadLocalRandom.current().nextInt(100_000_000));
@@ -320,6 +346,9 @@ class BrefAnnexesImportFullContextTest extends FullContextIntegrationTest {
         bref.update("INSERT INTO whatsapp_account (id, \"ownerId\", \"wabaId\", \"phoneNumberId\", \"accessToken\", "
                 + "status, \"createdAt\", \"updatedAt\") VALUES (?, ?, '1234', ?, 'EAAG-synthetic', 'connected', ?, ?)",
                 UUID.randomUUID(), id, phoneNumberId, at, at);
+        bref.update("INSERT INTO web_push_subscription (id, \"userId\", endpoint, p256dh, auth, \"createdAt\", "
+                + "\"updatedAt\") VALUES (?, ?, ?, 'p256', 'auth', ?, ?)", UUID.randomUUID(), id.toString(), endpoint,
+                at, at);
         return id;
     }
 

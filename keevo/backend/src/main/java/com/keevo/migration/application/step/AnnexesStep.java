@@ -183,9 +183,9 @@ class AnnexesStep implements ImportStep {
             tables.ensure(schema, MESSAGING_MODULE);
         }
         Row<ImportedAccount> accountRow = account;
-        record Written(AccountOutcome account, Set<UUID> templates, Set<UUID> campaigns, int recipients,
-                       Set<UUID> messages, Set<UUID> conversations, Set<UUID> notifications, Set<UUID> webPush,
-                       List<MigrationRecord> records) {
+        record Written(AccountOutcome account, LegacyWhatsAppImportPort.Written templates, Set<UUID> campaigns,
+                       int recipients, LegacyWhatsAppImportPort.Written messages, Set<UUID> conversations,
+                       Set<UUID> notifications, Set<UUID> webPush, List<MigrationRecord> records) {
         }
         Written w = uow.tenant(schema, () -> {
             List<MigrationRecord> pending = new ArrayList<>();
@@ -197,21 +197,27 @@ class AnnexesStep implements ImportStep {
                     pending.add(record(accountRow, run.tenantId(), WHATSAPP_ACCOUNTS));
                 }
             }
-            Set<UUID> t = whatsapp.importTemplates(schema, rows(templates));
-            Set<UUID> c = whatsapp.importCampaigns(schema, rows(campaigns));
+            LegacyWhatsAppImportPort.Written t = whatsapp.importTemplates(schema, rows(templates));
+            // a campaign keeps its template only when that template is in Keevo (written now or by an earlier run)
+            Set<UUID> c = whatsapp.importCampaigns(schema, campaigns.stream()
+                    .map(x -> templateKnown(run, t.present(), x.row().templateId()) ? x.row()
+                            : withoutTemplate(x.row())).toList());
             int r = whatsapp.importRecipients(schema, rows(recipients));
-            Set<UUID> m = whatsapp.importMessages(schema, rows(messages), plan.contactNames());
+            LegacyWhatsAppImportPort.Written m = whatsapp.importMessages(schema, rows(messages), plan.contactNames());
             Set<UUID> a = conversations.importConversations(schema, rows(ai));
             Set<UUID> n = notifications.importNotifications(schema, rows(inbox));
             Set<UUID> b = notifications.importWebPushSubscriptions(rows(browsers));
-            // a row already there (written by a run whose record is missing) has this id: recorded too
-            templates.forEach(x -> pending.add(record(x, x.targetId(), WHATSAPP_TEMPLATES)));
+            // a row already there (written by a run whose record is missing) has this id: recorded too; a row
+            // refused by another unique key (same template name and language, same Meta id, same browser
+            // endpoint) is not in Keevo: never recorded
+            templates.stream().filter(x -> t.present().contains(x.targetId()))
+                    .forEach(x -> pending.add(record(x, x.targetId(), WHATSAPP_TEMPLATES)));
             campaigns.forEach(x -> pending.add(record(x, x.targetId(), WHATSAPP_CAMPAIGNS)));
             recipients.forEach(x -> pending.add(record(x, x.targetId(), WHATSAPP_RECIPIENTS)));
-            messages.forEach(x -> pending.add(record(x, x.targetId(), WHATSAPP_MESSAGES)));
+            messages.stream().filter(x -> m.present().contains(x.targetId()))
+                    .forEach(x -> pending.add(record(x, x.targetId(), WHATSAPP_MESSAGES)));
             ai.forEach(x -> pending.add(record(x, x.targetId(), AI_CONVERSATIONS)));
             inbox.forEach(x -> pending.add(record(x, x.targetId(), NOTIFICATIONS)));
-            // a browser endpoint already registered in Keevo is not this row: recorded only when inserted
             browsers.stream().filter(x -> b.contains(x.targetId()))
                     .forEach(x -> pending.add(record(x, x.targetId(), WEB_PUSH_SUBSCRIPTIONS)));
             records.insert(run.batchId(), run.ownerId(), pending);
@@ -227,18 +233,39 @@ class AnnexesStep implements ImportStep {
         } else if (w.account() == AccountOutcome.ALREADY_PRESENT) {
             run.count(ImportRun.ALREADY_IMPORTED, 1);
         }
-        int written = counted(run, templates, w.templates(), TEMPLATES_IMPORTED)
+        int recorded = (int) w.records().stream().filter(x -> !WHATSAPP_ACCOUNTS.equals(x.targetTable())).count();
+        int inserted = counted(run, templates, w.templates().inserted(), TEMPLATES_IMPORTED)
                 + counted(run, campaigns, w.campaigns(), CAMPAIGNS_IMPORTED)
-                + counted(run, messages, w.messages(), MESSAGES_IMPORTED)
+                + counted(run, messages, w.messages().inserted(), MESSAGES_IMPORTED)
                 + counted(run, ai, w.conversations(), CONVERSATIONS_IMPORTED)
-                + counted(run, inbox, w.notifications(), NOTIFICATIONS_IMPORTED);
-        run.count(WEB_PUSH_IMPORTED, w.webPush().size());
+                + counted(run, inbox, w.notifications(), NOTIFICATIONS_IMPORTED)
+                + counted(run, browsers, w.webPush(), WEB_PUSH_IMPORTED);
         run.count(RECIPIENTS_IMPORTED, w.recipients());
         if (w.recipients() == recipients.size()) {
             recipients.forEach(x -> x.notes().forEach(run::note));
         }
-        int attempted = templates.size() + campaigns.size() + messages.size() + ai.size() + inbox.size();
-        run.count(ImportRun.ALREADY_IMPORTED, attempted - written + recipients.size() - w.recipients());
+        refused(run, templates, w.templates().present(), ImportNote.Kind.WHATSAPP_TEMPLATE_CONFLICT);
+        refused(run, messages, w.messages().present(), ImportNote.Kind.CHAT_MESSAGE_DUPLICATE);
+        refused(run, browsers, w.webPush(), ImportNote.Kind.WEB_PUSH_ENDPOINT_HELD);
+        run.count(ImportRun.ALREADY_IMPORTED, recorded - inserted - w.recipients());
+    }
+
+    /** Notes the rows a unique key other than the id refused (not in Keevo, not recorded: retried by a re-run). */
+    private static <T> void refused(ImportRun run, List<Row<T>> rows, Set<UUID> present, ImportNote.Kind kind) {
+        rows.stream().filter(r -> !present.contains(r.targetId())).forEach(r -> run.note(kind));
+    }
+
+    private static boolean templateKnown(ImportRun run, Set<UUID> present, UUID templateId) {
+        return templateId == null || present.contains(templateId)
+                || run.imported(BrefAnnexes.BREF_TEMPLATE, templateId, WHATSAPP_TEMPLATES);
+    }
+
+    private static ImportedCampaign withoutTemplate(ImportedCampaign c) {
+        return new ImportedCampaign(c.id(), c.name(), c.description(), c.status(), c.storeIds(), null, c.variables(),
+                c.headerMediaLink(), c.templateName(), c.templateLanguage(), c.templateBody(), c.templateHeader(),
+                c.startedAt(), c.sentAt(), c.targetedCount(), c.sentCount(), c.deliveredCount(), c.readCount(),
+                c.failedCount(), c.inactiveForDays(), c.purchasedWithinDays(), c.totalSpentMin(), c.totalSpentMax(),
+                c.totalInvoicesMin(), c.totalInvoicesMax(), c.createdBy(), c.createdAt(), c.updatedAt());
     }
 
     /** Counts the rows this call inserted and notes them (a row already there is not noted again). */

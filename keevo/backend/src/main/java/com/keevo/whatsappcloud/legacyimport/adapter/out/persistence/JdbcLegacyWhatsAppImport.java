@@ -92,7 +92,13 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
                         + "updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
                 tenantId, a.wabaId(), a.phoneNumberId(), a.displayPhoneNumber(), a.verifiedName(), token,
                 a.connectedBy(), at, at);
-        return n == 1 ? AccountOutcome.INSERTED : AccountOutcome.ALREADY_PRESENT;
+        if (n == 1) {
+            return AccountOutcome.INSERTED;
+        }
+        // lost a race (the company or the number was connected meanwhile): tell which
+        Integer mine = jdbc.queryForObject("SELECT count(*) FROM public.whatsapp_accounts WHERE tenant_id = ?",
+                Integer.class, tenantId);
+        return mine != null && mine > 0 ? AccountOutcome.ALREADY_PRESENT : AccountOutcome.NUMBER_HELD;
     }
 
     @Override
@@ -120,10 +126,10 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
     }
 
     @Override
-    public Set<UUID> importTemplates(String tenantSchema, List<ImportedTemplate> templates) {
+    public Written importTemplates(String tenantSchema, List<ImportedTemplate> templates) {
         String table = table(tenantSchema, "whatsapp_templates");
         if (templates.isEmpty()) {
-            return Set.of();
+            return new Written(Set.of(), Set.of());
         }
         Set<UUID> ids = new HashSet<>();
         for (ImportedTemplate t : templates) {
@@ -138,7 +144,7 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
                     && max(t.metaTemplateId(), 64), "template fields");
             require(t.createdAt() != null && t.updatedAt() != null, "template dates");
         }
-        String sql = "INSERT INTO " + table + " (id, name, language, category, header_format, header_text, "
+        String sql = "WITH ins AS (INSERT INTO " + table + " (id, name, language, category, header_format, header_text, "
                 + "body_text, body_examples, footer_text, status, rejected_reason, submit_error, meta_template_id, "
                 + "system, created_by, created_at, updated_at) "
                 + "SELECT x.id, x.name, x.language, x.category, x.header_format, x.header_text, x.body_text, "
@@ -149,8 +155,9 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
                 + "?::varchar[], ?::text[], ?::varchar[], ?::varchar[], ?::varchar[], ?::varchar[], ?::varchar[], "
                 + "?::uuid[], ?::text[], ?::text[]) AS x(id, name, language, category, header_format, header_text, "
                 + "body_text, examples, footer_text, status, rejected_reason, submit_error, meta_template_id, "
-                + "created_by, created_at, updated_at) ON CONFLICT DO NOTHING RETURNING id";
-        return insert(sql, templates, List.of(
+                + "created_by, created_at, updated_at) ON CONFLICT DO NOTHING RETURNING id) " + PRESENT_TAIL
+                .replace("{table}", table);
+        return written(sql, templates, ImportedTemplate::id, List.of(
                 col("uuid", ImportedTemplate::id), col("varchar", ImportedTemplate::name),
                 col("varchar", ImportedTemplate::language), col("varchar", ImportedTemplate::category),
                 col("varchar", ImportedTemplate::headerFormat), col("varchar", ImportedTemplate::headerText),
@@ -159,6 +166,31 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
                 col("varchar", ImportedTemplate::rejectedReason), col("varchar", ImportedTemplate::submitError),
                 col("varchar", ImportedTemplate::metaTemplateId), col("uuid", ImportedTemplate::createdBy),
                 col("text", t -> text(t.createdAt())), col("text", t -> text(t.updatedAt()))));
+    }
+
+    /**
+     * After {@code WITH ins AS (INSERT … RETURNING id)}: the inserted ids (flag true), then the given ids that were
+     * already there (the outer query sees the table as before the statement, so an inserted row is never listed twice).
+     */
+    private static final String PRESENT_TAIL = "SELECT id, true AS inserted FROM ins UNION ALL "
+            + "SELECT t.id, false FROM {table} t WHERE t.id = ANY (?::uuid[])";
+
+    /** Runs a {@code WITH ins … PRESENT_TAIL} statement: the column arrays, then the given ids. */
+    private <T> Written written(String sql, List<T> rows, Function<T, UUID> id, List<Col<T>> cols) {
+        Set<UUID> inserted = new LinkedHashSet<>();
+        Set<UUID> present = new LinkedHashSet<>();
+        jdbc.query(con -> {
+            PreparedStatement ps = statement(con, sql, rows, cols);
+            ps.setArray(cols.size() + 1, con.createArrayOf("uuid", rows.stream().map(id).toArray()));
+            return ps;
+        }, rs -> {
+            UUID x = rs.getObject(1, UUID.class);
+            present.add(x);
+            if (rs.getBoolean(2)) {
+                inserted.add(x);
+            }
+        });
+        return new Written(inserted, present);
     }
 
     @Override
@@ -253,12 +285,12 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
     }
 
     @Override
-    public Set<UUID> importMessages(String tenantSchema, List<ImportedMessage> messages,
-                                    Map<String, String> contactNames) {
+    public Written importMessages(String tenantSchema, List<ImportedMessage> messages,
+                                 Map<String, String> contactNames) {
         String table = table(tenantSchema, "whatsapp_messages");
         String conversations = table(tenantSchema, "whatsapp_conversations");
         if (messages.isEmpty()) {
-            return Set.of();
+            return new Written(Set.of(), Set.of());
         }
         Set<UUID> ids = new HashSet<>();
         Set<String> waIds = new HashSet<>();
@@ -274,27 +306,25 @@ class JdbcLegacyWhatsAppImport implements LegacyWhatsAppImportPort {
                     "message status");
             require(m.createdAt() != null, "message date");
         }
-        String sql = "INSERT INTO " + table + " (id, contact_phone, direction, type, body, wa_message_id, status, "
+        String sql = "WITH ins AS (INSERT INTO " + table + " (id, contact_phone, direction, type, body, wa_message_id, status, "
                 + "read_at, sent_by, created_at) SELECT x.id, x.phone, x.direction, x.type, x.body, x.wa_id, x.status, "
                 + "x.read_at::timestamptz, x.sent_by, x.created_at::timestamptz "
                 + "FROM unnest(?::uuid[], ?::varchar[], ?::varchar[], ?::varchar[], ?::text[], ?::varchar[], "
                 + "?::varchar[], ?::text[], ?::uuid[], ?::text[]) AS x(id, phone, direction, type, body, wa_id, "
-                + "status, read_at, sent_by, created_at) ON CONFLICT DO NOTHING RETURNING id, contact_phone";
-        Set<UUID> inserted = new LinkedHashSet<>();
-        Set<String> touched = new LinkedHashSet<>();
-        jdbc.query(con -> statement(con, sql, messages, List.of(
+                + "status, read_at, sent_by, created_at) ON CONFLICT DO NOTHING RETURNING id) " + PRESENT_TAIL
+                .replace("{table}", table);
+        Written written = written(sql, messages, ImportedMessage::id, List.of(
                 col("uuid", ImportedMessage::id), col("varchar", ImportedMessage::contactPhone),
                 col("varchar", ImportedMessage::direction), col("varchar", ImportedMessage::type),
                 col("text", ImportedMessage::body), col("varchar", ImportedMessage::waMessageId),
                 col("varchar", ImportedMessage::status), col("text", m -> text(m.readAt())),
-                col("uuid", ImportedMessage::sentBy), col("text", m -> text(m.createdAt())))), rs -> {
-            inserted.add(rs.getObject("id", UUID.class));
-            touched.add(rs.getString("contact_phone"));
-        });
+                col("uuid", ImportedMessage::sentBy), col("text", m -> text(m.createdAt()))));
+        Set<String> touched = new LinkedHashSet<>();
+        messages.stream().filter(m -> written.inserted().contains(m.id())).forEach(m -> touched.add(m.contactPhone()));
         if (!touched.isEmpty()) {
             rebuildConversations(table, conversations, touched, contactNames);
         }
-        return inserted;
+        return written;
     }
 
     /**

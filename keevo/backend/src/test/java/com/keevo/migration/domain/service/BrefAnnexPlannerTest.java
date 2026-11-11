@@ -297,4 +297,25 @@ class BrefAnnexPlannerTest {
         assertThat(ok.canonical()).doesNotContain("auth-secret");
         assertThat(p.skipped()).containsExactlyInAnyOrder(Kind.WEB_PUSH_USER_UNKNOWN, Kind.WEB_PUSH_UNREADABLE);
     }
+
+    @Test
+    @DisplayName("review: blank category or status never fails the plan; unreadable metadata and a missing campaign "
+            + "template are noted")
+    void unreadableValues() {
+        Template noCategory = new Template(UUID.randomUUID(), owner, "promo", null, "fr", null, null, null, "Texte",
+                List.of(), null, null, null, null, null, next(), T0);
+        Template noStatus = new Template(UUID.randomUUID(), owner, "promo2", "UTILITY", "fr", null, null, null,
+                "Texte", List.of(), null, null, null, null, null, next(), T0);
+        Campaign orphan = campaign("draft", Targeting.NONE, new Content("absent", "fr", null, null, null, List.of()));
+        Notification oddData = new Notification(UUID.randomUUID(), owner.toString(), "system", "push", "T", "M",
+                false, "[1,2]", T0, T0);
+        Plan p = BrefAnnexPlanner.plan(section(null, List.of(noCategory, noStatus), List.of(orphan), List.of(),
+                List.of(), List.of(), List.of(oddData)), lookup());
+        assertThat(p.templates()).singleElement().satisfies(r -> assertThat(r.row().status()).isEqualTo("PENDING"));
+        assertThat(p.skipped()).containsExactly(Kind.WHATSAPP_TEMPLATE_UNREADABLE);
+        assertThat(p.campaigns().get(0).row().templateId()).isNull();
+        assertThat(p.campaigns().get(0).notes()).containsExactly(Kind.CAMPAIGN_FIELD_DROPPED);
+        assertThat(p.notifications().get(0).row().data()).isNull();
+        assertThat(p.notifications().get(0).notes()).containsExactly(Kind.NOTIFICATION_DATA_DROPPED);
+    }
 }

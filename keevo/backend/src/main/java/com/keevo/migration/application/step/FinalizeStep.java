@@ -30,7 +30,8 @@ import static com.keevo.migration.domain.model.MigrationRecord.TENANT_IMPORTED;
  * {@code {source: bref, counts}} in the company's journal, with its record (owner → {@code tenant_imported}) in the same
  * tenant transaction. The counts are those of the run that writes it.
  *
- * <p>Cost: the provisioning (one lock + history reads per installed module), ≤ 1 audit insert + 1 record.
+ * <p>Cost: the provisioning (one lock + history reads per installed module), ≤ 1 audit count + 1 audit insert + 1
+ * record.
  */
 @Component
 @Order(140)
@@ -80,8 +81,13 @@ class FinalizeStep implements ImportStep {
         MigrationRecord record = new MigrationRecord(TENANT_IMPORTED, run.tenantId(), BREF_USER, run.ownerId(),
                 Canonical.sha256(run.snapshot().owner().canonical()), null);
         uow.tenant(schema, () -> {
-            audit.record(new AuditPort.AuditEntry(run.actorId(), schema, ACTION, ENTITY_TYPE, run.tenantId(), null,
-                    null, null, ENTITY_LABEL, null, "SYSTEM", metadata));
+            // the audit writes in its own transaction (audit-on-attempt): an entry committed by a run whose record
+            // was lost is found here, never written twice
+            if (audit.count(new AuditPort.AuditQuery(null, null, null, null, ACTION, ENTITY_TYPE, run.tenantId()))
+                    == 0) {
+                audit.record(new AuditPort.AuditEntry(run.actorId(), schema, ACTION, ENTITY_TYPE, run.tenantId(),
+                        null, null, null, ENTITY_LABEL, null, "SYSTEM", metadata));
+            }
             records.insert(run.batchId(), run.ownerId(), List.of(record));
             return null;
         });
