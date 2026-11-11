@@ -178,4 +178,4 @@ Status: done
 **Mobile.** No app change needed: read notifications older than 90 days and notifications of people no longer in the company disappear from `GET /api/v1/notifications`.
 
 ### Deferred items routed 2026-11-10
-- [ ] [Deferred-from: revue 19-6b, 2026-11-10] Retention of `public.membership_invitations` rows that will never become memberships (DECLINED, CANCELLED, expired PENDING keep the typed phone/username and names of people who refused) [keevo/backend/src/main/resources/db/migration/V74__membership_invitations.sql] — add a set-based purge (e.g. answered or expired > 90 days, one DELETE per run) to the platform retention job.
+- [x] [Deferred-from: revue 19-6b, 2026-11-10] Retention of `public.membership_invitations` rows that will never become memberships (DECLINED, CANCELLED, expired PENDING keep the typed phone/username and names of people who refused) [keevo/backend/src/main/resources/db/migration/V74__membership_invitations.sql] — add a set-based purge (e.g. answered or expired > 90 days, one DELETE per run) to the platform retention job. — fait par 19-11c (11/11/2026 : `MembershipInvitationRetentionJob`, V79).
