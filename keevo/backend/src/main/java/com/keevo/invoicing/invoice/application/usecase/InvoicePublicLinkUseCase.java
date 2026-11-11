@@ -37,7 +37,8 @@ import java.util.UUID;
  *       Bref token; audited ({@link InvoiceLinkRotatedEvent});</li>
  *   <li>an old Bref link ({@code /api/v1/invoices/public/<uuid>}) is resolved through {@link LegacyInvoiceLinkRegistry}
  *       (one primary-key read): unknown → 404, past its Bref expiry → 410, tenant not active → 404; then, tenant bound,
- *       the invoice must still hold that token ({@link #assertLegacyCurrent}).</li>
+ *       the invoice must still hold that token and the caller is redirected to its signed link
+ *       ({@link #legacyRedirect}, Story 24.10).</li>
  * </ul>
  * Cost: link = one invoice read + one presentation read + one preferences read + at most one UPDATE (first share);
  * rotation = one locked read, one UPDATE … RETURNING (+ one DELETE by PK in public when a Bref token existed).
@@ -95,8 +96,22 @@ public class InvoicePublicLinkUseCase {
 
     /** The link of {@code invoiceId} at link version {@code version}, valid for the tenant's lifetime from now. */
     public Link signedLink(UUID invoiceId, int version, String baseUrl, String tenantSchema) {
+        return signedLink(invoiceId, version, baseUrl, tenantSchema, null);
+    }
+
+    /**
+     * The link at {@code version}, valid for the tenant's lifetime from now but never past {@code cap} (Story 24.10:
+     * Bref's own expiry; {@code null} = no cap). A capped link carries the signed second and its real number of days.
+     */
+    private Link signedLink(UUID invoiceId, int version, String baseUrl, String tenantSchema, Instant cap) {
+        Instant now = clock.instant();
         int days = presentations.preferences().linkDays();
-        Instant expiresAt = clock.instant().plus(Duration.ofDays(days));
+        Instant expiresAt = now.plus(Duration.ofDays(days));
+        if (cap != null && cap.isBefore(expiresAt)) {
+            expiresAt = cap.truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+            long seconds = Math.max(0, Duration.between(now, expiresAt).getSeconds());
+            days = (int) ((seconds + 86_399) / 86_400); // days left, rounded up
+        }
         String token = signer.sign(tenantSchema, invoiceId, expiresAt, version);
         return new Link(stripTrailingSlash(baseUrl) + SHARED_PATH + token, expiresAt, days);
     }
@@ -138,15 +153,21 @@ public class InvoicePublicLinkUseCase {
     }
 
     /**
-     * Tenant bound: the invoice of {@code target} still holds the Bref token {@code token} (unique index read) — a
-     * retired token whose registry row survived opens nothing. Else 404.
+     * Story 24.10 — where an old Bref link redirects once {@link #resolveLegacy} accepted it (tenant bound): the signed
+     * Keevo link of the document at its current link version. The invoice must still hold that token (a retired token
+     * whose registry row survived, or a deleted document → 404). The signed link never outlives Bref's own expiry:
+     * {@code min(Bref expiry, now + tenant lifetime)} ({@code validityDays} = the days actually left, rounded up). Cost:
+     * one primary-key read of the invoice row + the one-row preferences read + an HMAC.
      */
     @Transactional(readOnly = true)
-    public void assertLegacyCurrent(UUID token, LegacyInvoiceLinkRegistry.Target target) {
-        UUID holder = presentations.findByLegacyToken(token).orElseThrow(InvoicePublicLinkUseCase::invalid);
-        if (!holder.equals(target.invoiceId())) {
+    public Link legacyRedirect(UUID token, LegacyInvoiceLinkRegistry.Target target, String baseUrl) {
+        InvoicePresentation presentation = presentations.find(target.invoiceId())
+                .orElseThrow(InvoicePublicLinkUseCase::invalid);
+        if (!token.equals(presentation.legacyToken())) {
             throw invalid();
         }
+        return signedLink(target.invoiceId(), presentation.linkVersion(), baseUrl, target.tenantSchema(),
+                target.expiresAt());
     }
 
     /**

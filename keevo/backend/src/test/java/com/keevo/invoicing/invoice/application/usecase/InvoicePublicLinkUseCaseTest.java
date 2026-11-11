@@ -167,4 +167,77 @@ class InvoicePublicLinkUseCaseTest {
         verify(registry).unregister(token);
         verify(registry).register(other, SCHEMA, invoice.id(), null);
     }
+
+    // ── Story 24.10 — redirect of an old Bref link ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("24.10 redirect: signed link at the current version, capped by Bref's expiry")
+    void legacyRedirectCappedByBrefExpiry() {
+        UUID token = UUID.randomUUID();
+        UUID invoiceId = UUID.randomUUID();
+        Instant bref = NOW.plus(Duration.ofDays(10));
+        when(presentations.find(invoiceId)).thenReturn(Optional.of(version(2, token)));
+        when(presentations.preferences()).thenReturn(new DocumentPreferences(null, null, 90));
+
+        InvoicePublicLinkUseCase.Link link = links.legacyRedirect(token,
+                new LegacyInvoiceLinkRegistry.Target(SCHEMA, invoiceId, bref), "https://keevo.ad2s.cm/");
+
+        assertThat(link.url()).startsWith("https://keevo.ad2s.cm/api/v1/invoices/shared?token=")
+                .doesNotContain(token.toString());
+        assertThat(link.expiresAt()).isEqualTo(bref);
+        InvoiceLinkSigner.Claims claims = signer.verify(token(link));
+        assertThat(claims.tenantSchema()).isEqualTo(SCHEMA);
+        assertThat(claims.invoiceId()).isEqualTo(invoiceId);
+        assertThat(claims.version()).isEqualTo(2);
+        assertThat(claims.expiresAt()).isEqualTo(bref);
+        assertThat(link.validityDays()).isEqualTo(10);
+
+        // a Bref expiry with a fraction of a second: the link carries the signed second, days rounded up
+        InvoicePublicLinkUseCase.Link frac = links.legacyRedirect(token, new LegacyInvoiceLinkRegistry.Target(SCHEMA,
+                invoiceId, NOW.plus(Duration.ofHours(30)).plusMillis(500)), "https://keevo.ad2s.cm");
+        assertThat(frac.expiresAt()).isEqualTo(NOW.plus(Duration.ofHours(30)))
+                .isEqualTo(signer.verify(token(frac)).expiresAt());
+        assertThat(frac.validityDays()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("24.10 redirect: no Bref expiry, or a later one → the tenant lifetime from now")
+    void legacyRedirectTenantLifetime() {
+        UUID token = UUID.randomUUID();
+        UUID invoiceId = UUID.randomUUID();
+        when(presentations.find(invoiceId)).thenReturn(Optional.of(version(0, token)));
+        when(presentations.preferences()).thenReturn(new DocumentPreferences(null, null, 90));
+
+        InvoicePublicLinkUseCase.Link none = links.legacyRedirect(token,
+                new LegacyInvoiceLinkRegistry.Target(SCHEMA, invoiceId, null), "https://keevo.ad2s.cm");
+        assertThat(none.expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(90)));
+        assertThat(none.validityDays()).isEqualTo(90);
+
+        InvoicePublicLinkUseCase.Link later = links.legacyRedirect(token,
+                new LegacyInvoiceLinkRegistry.Target(SCHEMA, invoiceId, NOW.plus(Duration.ofDays(400))),
+                "https://keevo.ad2s.cm");
+        assertThat(later.expiresAt()).isEqualTo(NOW.plus(Duration.ofDays(90)));
+        assertThat(signer.verify(token(later)).version()).isZero();
+    }
+
+    @Test
+    @DisplayName("24.10 redirect: the invoice no longer holds the token, holds none, or is gone → 404")
+    void legacyRedirectNotHolder() {
+        UUID token = UUID.randomUUID();
+        UUID invoiceId = UUID.randomUUID();
+        LegacyInvoiceLinkRegistry.Target target = new LegacyInvoiceLinkRegistry.Target(SCHEMA, invoiceId, null);
+
+        when(presentations.find(invoiceId)).thenReturn(Optional.of(version(1, UUID.randomUUID())));
+        assertThatThrownBy(() -> links.legacyRedirect(token, target, "https://k"))
+                .hasFieldOrPropertyWithValue("domainCode", "INVOICE_LINK_INVALID");
+
+        when(presentations.find(invoiceId)).thenReturn(Optional.of(version(1, null)));
+        assertThatThrownBy(() -> links.legacyRedirect(token, target, "https://k"))
+                .hasFieldOrPropertyWithValue("domainCode", "INVOICE_LINK_INVALID");
+
+        when(presentations.find(invoiceId)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> links.legacyRedirect(token, target, "https://k"))
+                .hasFieldOrPropertyWithValue("domainCode", "INVOICE_LINK_INVALID");
+        verify(presentations, never()).preferences();
+    }
 }

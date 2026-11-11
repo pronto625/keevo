@@ -117,13 +117,6 @@ public class JdbcInvoicePresentationRepository implements InvoicePresentationRep
     }
 
     @Override
-    public Optional<UUID> findByLegacyToken(UUID legacyToken) {
-        // uq_invoices_legacy_public_token (V15)
-        return jdbc.queryForList("SELECT id FROM " + invoices() + " WHERE legacy_public_token = ? "
-                + "AND deleted_at IS NULL", UUID.class, legacyToken).stream().findFirst();
-    }
-
-    @Override
     public DocumentPreferences preferences() {
         List<DocumentPreferences> rows = jdbc.query("SELECT invoice_template, ticket_width, public_link_days FROM "
                         + InvoicingTables.qualified(PREFERENCES) + " WHERE id = 1",

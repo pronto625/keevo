@@ -489,44 +489,58 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("legacy Bref link: the imported invoice opens without login with its BRF- reference next to the "
-            + "number; unknown / malformed → 404, past its Bref expiry → 410, rotation retires it")
+    @DisplayName("legacy Bref link (24.10): 302 to the signed Keevo link, which opens the PDF with its BRF- reference "
+            + "next to the number; unknown / malformed → 404, past its Bref expiry → 410, rotation retires it")
     void legacyBrefLink() throws Exception {
         String id = issued();
         UUID token = UUID.randomUUID();
         legacyTokens.add(token);
-        TenantContext.setCurrentTenant(schema);
-        try {
-            links.attachLegacy(UUID.fromString(id), token, "BRF-1A2B3C4D", Instant.now().plus(Duration.ofDays(60)),
-                    schema);
-        } finally {
-            TenantContext.clear();
-        }
+        Instant brefExpiry = Instant.now().plus(Duration.ofDays(10)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+        attachLegacy(id, token, "BRF-1A2B3C4D", brefExpiry);
         assertThat(data(owner(HttpMethod.GET, "/api/v1/invoices/" + id, null), 200).path("legacyReference").asText())
                 .isEqualTo("BRF-1A2B3C4D");
-        String text = pdfText(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null));
+        MvcResult redirect = legacy(token.toString(), "10.24.10.1", null);
+        String location = redirected(redirect);
+        assertThat(location).startsWith("http://localhost/api/v1/invoices/shared?token=")
+                .doesNotContain(token.toString());
+        // the signed link: current version, never longer than Bref's own expiry (10 days < the tenant's 30 days)
+        com.keevo.invoicing.invoice.application.service.InvoiceLinkSigner.Claims claims =
+                signer.verify(location.substring(location.indexOf("token=") + 6));
+        assertThat(claims.invoiceId()).hasToString(id);
+        assertThat(claims.expiresAt()).isEqualTo(brefExpiry);
+        String text = pdfText(call(null, HttpMethod.GET, path(location), null));
         assertThat(text).contains("BRF-1A2B3C4D", "FAC-").doesNotContain(token.toString());
 
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + UUID.randomUUID(), null), 404,
-                "INVOICE_LINK_INVALID");
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/not-a-token", null), 404, "INVOICE_LINK_INVALID");
+        error(legacy(UUID.randomUUID().toString(), "10.24.10.1", null), 404, "INVOICE_LINK_INVALID");
+        error(legacy("not-a-token", "10.24.10.1", null), 404, "INVOICE_LINK_INVALID");
 
         jdbc.update("UPDATE public.invoice_legacy_links SET expires_at = now() - interval '1 day' WHERE token = ?",
                 token);
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 410, "INVOICE_LINK_EXPIRED");
+        error(legacy(token.toString(), "10.24.10.1", null), 410, "INVOICE_LINK_EXPIRED");
         jdbc.update("UPDATE public.invoice_legacy_links SET expires_at = NULL WHERE token = ?", token);
 
         // the invoice no longer holds the token (registry row left behind): 404
         jdbc.update("UPDATE \"" + schema + "\".invoices SET legacy_public_token = NULL WHERE id = ?::uuid", id);
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 404, "INVOICE_LINK_INVALID");
+        error(legacy(token.toString(), "10.24.10.1", null), 404, "INVOICE_LINK_INVALID");
         jdbc.update("UPDATE \"" + schema + "\".invoices SET legacy_public_token = ? WHERE id = ?::uuid", token, id);
 
         jdbc.update("UPDATE public.tenants SET status = 'SUSPENDED' WHERE id = ?", tenantId);
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 404, "INVOICE_LINK_INVALID");
+        error(legacy(token.toString(), "10.24.10.1", null), 404, "INVOICE_LINK_INVALID");
         jdbc.update("UPDATE public.tenants SET status = 'ACTIVE' WHERE id = ?", tenantId);
 
+        // a deleted document: its old link opens nothing
+        String deleted = issued();
+        UUID deletedToken = UUID.randomUUID();
+        legacyTokens.add(deletedToken);
+        attachLegacy(deleted, deletedToken, "BRF-2B3C4D5E", null);
+        jdbc.update("UPDATE \"" + schema + "\".invoices SET deleted_at = now() WHERE id = ?::uuid", deleted);
+        error(legacy(deletedToken.toString(), "10.24.10.1", null), 404, "INVOICE_LINK_INVALID");
+
+        // once rotated, both the old Bref link and a redirect obtained before stop opening the PDF
+        String early = redirected(legacy(token.toString(), "10.24.10.1", null));
         data(owner(HttpMethod.POST, "/api/v1/invoices/" + id + "/public-link/rotate", null), 200);
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 404, "INVOICE_LINK_INVALID");
+        error(legacy(token.toString(), "10.24.10.1", null), 404, "INVOICE_LINK_INVALID");
+        error(call(null, HttpMethod.GET, path(early), null), 404, "INVOICE_LINK_INVALID");
     }
 
     @Test
@@ -536,14 +550,8 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         String id = issued();
         UUID token = UUID.randomUUID();
         legacyTokens.add(token);
-        TenantContext.setCurrentTenant(schema);
-        try {
-            links.attachLegacy(UUID.fromString(id), token, "BRF-0A0B0C0D", null, schema);
-            String other = id; // same target again: accepted (expiry refreshed)
-            links.attachLegacy(UUID.fromString(other), token, "BRF-0A0B0C0D", null, schema);
-        } finally {
-            TenantContext.clear();
-        }
+        attachLegacy(id, token, "BRF-0A0B0C0D", null);
+        attachLegacy(id, token, "BRF-0A0B0C0D", null); // same target again: accepted (expiry refreshed)
         String second = issued();
         TenantContext.setCurrentTenant(schema);
         try {
@@ -554,10 +562,93 @@ class InvoiceTemplatesLinksFullContextTest extends FullContextIntegrationTest {
         }
         for (int i = 0; i < com.keevo.invoicing.invoice.application.service.InvoiceLinkRateLimiter.MAX_PER_WINDOW;
              i++) {
-            assertThat(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null).getResponse().getStatus())
-                    .isEqualTo(200);
+            redirected(legacy(token.toString(), "10.24.10.2", null));
         }
-        error(call(null, HttpMethod.GET, "/api/v1/invoices/public/" + token, null), 429, "INVOICE_LINK_RATE_LIMITED");
+        error(legacy(token.toString(), "10.24.10.2", null), 429, "INVOICE_LINK_RATE_LIMITED");
+    }
+
+    @Test
+    @DisplayName("24.10 — misses are counted per client address behind the proxy (X-Forwarded-For): 20 unknown "
+            + "tokens lock that address only, another client still opens its link")
+    void legacyMissesPerForwardedAddress() throws Exception {
+        String id = issued();
+        UUID token = UUID.randomUUID();
+        legacyTokens.add(token);
+        attachLegacy(id, token, "BRF-3C4D5E6F", null);
+        for (int i = 0; i < com.keevo.invoicing.invoice.application.service.InvoiceLinkRateLimiter
+                .MAX_MISSES_PER_WINDOW; i++) {
+            error(legacy(UUID.randomUUID().toString(), "10.24.10.3", null), 404, "INVOICE_LINK_INVALID");
+        }
+        error(legacy(token.toString(), "10.24.10.3", null), 429, "INVOICE_LINK_RATE_LIMITED");
+        redirected(legacy(token.toString(), "10.24.10.4", null));
+    }
+
+    @Test
+    @DisplayName("24.10 — a browser gets French pages (404 introuvable, 410 expiré, 429, shared link without token), "
+            + "no token or code in them; API clients keep the JSON")
+    void browserPages() throws Exception {
+        String browser = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+        UUID unknown = UUID.randomUUID();
+        MvcResult notFound = legacy(unknown.toString(), "10.24.10.5", browser);
+        page(notFound, 404, "Lien introuvable");
+        assertThat(body(notFound)).doesNotContain(unknown.toString(), "INVOICE_LINK", "domainCode");
+
+        String id = issued();
+        UUID token = UUID.randomUUID();
+        legacyTokens.add(token);
+        attachLegacy(id, token, "BRF-4D5E6F7A", Instant.now().minus(Duration.ofDays(1)));
+        MvcResult expired = legacy(token.toString(), "10.24.10.5", browser);
+        page(expired, 410, "Lien expiré");
+        assertThat(body(expired)).doesNotContain(token.toString(), "BRF-4D5E6F7A", "FAC-");
+        error(legacy(token.toString(), "10.24.10.5", "application/json"), 410, "INVOICE_LINK_EXPIRED");
+
+        for (int i = 0; i < com.keevo.invoicing.invoice.application.service.InvoiceLinkRateLimiter
+                .MAX_MISSES_PER_WINDOW; i++) {
+            legacy(UUID.randomUUID().toString(), "10.24.10.6", null);
+        }
+        page(legacy(UUID.randomUUID().toString(), "10.24.10.6", browser), 429, "Trop de tentatives");
+
+        MvcResult tampered = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/invoices/shared?token=abc.def")
+                .header("Accept", browser)).andReturn();
+        page(tampered, 404, "Lien introuvable");
+        MvcResult noToken = mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/invoices/shared")
+                .header("Accept", browser)).andReturn();
+        page(noToken, 400, "Lien introuvable");
+    }
+
+    private void attachLegacy(String id, UUID token, String reference, Instant expiresAt) {
+        TenantContext.setCurrentTenant(schema);
+        try {
+            links.attachLegacy(UUID.fromString(id), token, reference, expiresAt, schema);
+        } finally {
+            TenantContext.clear();
+        }
+    }
+
+    /** An old Bref link opened by the client at {@code address} (as Traefik forwards it). */
+    private MvcResult legacy(String token, String address, String accept) throws Exception {
+        MockHttpServletRequestBuilder request = MockMvcRequestBuilders.get("/api/v1/invoices/public/" + token)
+                .header("X-Forwarded-For", address);
+        if (accept != null) {
+            request.header("Accept", accept);
+        }
+        return mockMvc.perform(request).andReturn();
+    }
+
+    /** 302 not cached, no referrer: the Location. */
+    private static String redirected(MvcResult r) throws Exception {
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(302);
+        assertThat(r.getResponse().getHeader("Cache-Control")).isEqualTo("no-store");
+        assertThat(r.getResponse().getHeader("Referrer-Policy")).isEqualTo("no-referrer");
+        String location = r.getResponse().getHeader("Location");
+        assertThat(location).isNotNull();
+        return location;
+    }
+
+    private static void page(MvcResult r, int status, String title) throws Exception {
+        assertThat(r.getResponse().getStatus()).as(body(r)).isEqualTo(status);
+        assertThat(r.getResponse().getContentType()).startsWith("text/html");
+        assertThat(body(r)).contains("<h1>" + title + "</h1>", "lang=\"fr\"").doesNotContain("domainCode");
     }
 
     @Test

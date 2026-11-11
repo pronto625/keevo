@@ -51,9 +51,6 @@ public interface InvoicePresentationRepository {
     /** Story 24.4 import — records the Bref token and reference of an imported invoice. */
     void attachLegacy(UUID invoiceId, UUID legacyToken, String legacyReference, Instant now);
 
-    /** The invoice holding the Bref token {@code legacyToken} in this tenant (unique index). */
-    Optional<UUID> findByLegacyToken(UUID legacyToken);
-
     /** The tenant's document defaults; {@link DocumentPreferences#DEFAULTS} when never saved. */
     DocumentPreferences preferences();
 
