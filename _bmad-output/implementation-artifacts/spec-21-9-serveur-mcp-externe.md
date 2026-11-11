@@ -3,9 +3,10 @@ title: '21-9 — External MCP server (personal access tokens, paid module mcp-ac
 type: 'feature'
 created: '2026-11-10'
 status: 'done'
-baseline_revision: '12442aa3812d9b37d118b50e7f356d6e339a9393'
+baseline_revision: '717aacdc0ddb2ab787a2dacb4cb76325e877177b'
+previous_baseline_revision: '12442aa3812d9b37d118b50e7f356d6e339a9393'
 review_loop_iteration: 0
-followup_review_recommended: true
+followup_review_recommended: false
 context:
   - '{project-root}/_bmad-output/implementation-artifacts/epic-21-context.md'
   - '{project-root}/_bmad-output/implementation-artifacts/spec-21-8-couche-outils-ia-mcp.md'
@@ -148,6 +149,33 @@ deferred: []
   - `[maybe-false]` `reject` (nfr11) cache invalidation — no token cache; access state cache is 16-11's (evicted cluster-wide).
   - `[false]` `reject` (edge) duplicate of VG other (consume rethrow) — grouped with the consume patch above.
 
+### 2026-11-11 — Review pass (reprise co-owners)
+- verdicts: 23 findings — high 0, medium 2, low 11, false 5, maybe-false 5
+- findings:
+  - `[low]` `patch` (nfr11 a) inline comment in `list` said cut tokens are deleted only by the next creation — now names the nightly `purgeDead` too.
+  - `[false]` `reject` (nfr11 b) fold both nightly deletes into one statement — the reviewer itself recommends no change; separate deletes keep the « one failing never stops the other » guarantee.
+  - `[false]` `reject` (blind 1) deactivation of a co-owner not refused at once — `DeactivateEmployeeService` moves `tokens_valid_after` (`revokeAllSessions`) and the filter refuses an inactive membership (`ownerChanges` → `ACCOUNT_INACTIVE`); same code path for any OWNER.
+  - `[low]` `reject` (blind 2) sweep ignores `users.is_active` — the 16-11 access state (JWT and MCP alike) is membership-based; a globally closed account goes through the RGPD deletion (16-6, rows deleted with the user). Adding a second notion of « dead » to the sweep only would diverge from the filter.
+  - `[low]` `patch` (blind 3) repository class javadoc claimed every statement is one indexed access — now documents `purgeDead` as a scan of the small table with one unique-index probe per row.
+  - `[low]` `reject` (blind 4) test membership updates filter on user only — `owner()` creates a fresh user per call; the role-only step added below filters by tenant.
+  - `[low]` `patch` (blind 5) audit assertion relied on a single MCP row — filtered on the co-owner's token id and tool.
+  - `[maybe-false]` `reject` (blind 6) re-promotion before the purge revives old tokens through a path that moves no cutoff — demotion through the role endpoint always moves the cutoff; any other demotion leaves a non-OWNER membership whose tokens the filter refuses and the nightly sweep now deletes; a demote-then-repromote within the same day by raw SQL only is not a product path.
+  - `[low]` `patch` (blind 7) contract did not say what the AI client / the demoted person get, nor that the per-access limit stays per access — wording added (401 `MCP_TOKEN_INVALID` / `ACCOUNT_INACTIVE`, 403 `FORBIDDEN`, per-access vs per-company limits).
+  - `[low]` `reject` (blind 8) `purgeNow()` relies on the ShedLock table — documented helper; a lock still held makes the deletion assertions fail loudly, never pass wrongly.
+  - `[false]` `reject` (blind 9) spec change not in the diff — the diff was scoped to `keevo/`; the spec section « Reprise 11/11/2026 » records decisions R1–R4.
+  - `[low]` `patch` (blind 10) fully-qualified `McpTokenSecrets` in the test — imported; the raw SQL row (rejected part) is a deliberate « row left behind » fixture.
+  - `[medium]` `patch` (vg 1) the `role = 'OWNER'` condition of `purgeDead` untested on its own (role endpoint also moves the cutoff) — `purgeDeadTokens` now changes a former owner's role only (cutoff untouched) and asserts the purge deletes their token and keeps the owner's.
+  - `[medium]` `patch` (vg 2) the independence of the two nightly deletes untested — `McpTokenPurgeJobTest` (both run; expired failing still runs the dead delete; dead failing never fails the job).
+  - `[low]` `reject` (edge 1) a DELETED company's tokens are not swept — refused by the filter, removed with the company (FK cascade on tenant deletion, 16-6/16-7); the port javadoc now says so (edge 5).
+  - `[maybe-false]` `reject` (edge 2) global `purgeNow` in a shared test database may delete other suites' token rows — surefire runs classes sequentially (no parallel config); other suites' tokens belong to OWNER members created through `TestAccess`.
+  - `[false]` `reject` (edge 3) a token deleted after a role change away from OWNER then restored without cutoff — intended (decision R2): a former owner's access never revives; the only product demotion path moves the cutoff anyway.
+  - `[low]` `patch` (edge 4) member purger javadoc implied a deactivated co-owner can be removed — corrected (an OWNER membership is never removable, even inactive; a deactivated co-owner's rows go with the nightly purge).
+  - `[low]` `patch` (edge 5) port javadoc claimed « every token that can never work again » — reworded to the holder no longer being an owner, deleted companies excluded.
+  - `[maybe-false]` `reject` (intent i) the sweep also deletes a primary owner's tokens cut by a cutoff (password change, suspension) — documented in R2: such tokens were already hidden from the list and refused; deleting them changes no visible behaviour.
+  - `[false]` `reject` (intent ii) unrelated test changes (re-sign-in after the cutoff, ShedLock release) — required for the new purge tests and a second-boundary flake of `ownerChanges` met while running them.
+  - `[maybe-false]` `reject` (intent iii) co-owner created and deactivated by SQL rather than by the 19-6 flows — the authorization reads only the membership row (same row the 19-6 flows write); demotion goes through the real role endpoint.
+  - `[maybe-false]` `reject` (intent iv) module gate not tested for a co-owner — the gate is per company (`assertEnabled(schema)`), independent of the person; covered by `moduleNotEntitled` / `moduleDisabledByOwner`.
+
 ## Design Notes
 
 - **Transport decision:** Spring AI 1.1.8's `spring-ai-starter-mcp-server-webmvc` auto-configures a server with one fixed tool list built at startup; Keevo needs the list of the token and the owner's live rights per request, and no auto-config in the app (21-4 rule). So the SDK transport the starter uses (`WebMvcStatelessServerTransport`, Streamable HTTP, protocol 2025-11-25, no server session) is wired manually and the request handler is Keevo's (`McpStatelessServerHandler`). Stateless fits: every POST carries its token, nothing to share between instances, SSE `GET` answers 405 (allowed by the spec).
@@ -167,6 +195,32 @@ deferred: []
 **Manual checks (if no CLI):**
 - Local dev backend: curl `initialize` / `tools/list` / `tools/call` with a token of KV-EW02A2 after granting the module; revoke → 401 at once; a FREE company's token → 403 `MODULE_NOT_ENTITLED`.
 
+## Reprise 11/11/2026 — co-owners
+
+**Routed item (spec-21-4-2, 2026-11-10):** « Co-owners cannot see or revoke each other's MCP accesses — routed to 21-9 (product decision) ».
+
+**User decision (11/11/2026):** yes, co-owners have access to the external MCP server. A co-owner is any active `OWNER` membership of a company other than its primary owner (19-6 model: roles live on `user_tenant_memberships`, several OWNER rows per company; the « primary owner » is only the oldest active one, used for notifications). Each co-owner creates, lists and revokes **their own** `kvp_` tokens for that company with the same controls: module `mcp-access` active, cap of 10 live tokens per person and company, rate limits (30/token, 60/company — the company window is shared by all its owners), the company's AI credits, audit naming the token (`entity_label`, `ai_tool_calls.access_token_id`) and the person (`actor_id`).
+
+**Decisions (taken by default, most conservative):**
+- **R1 — Per-person isolation, no cross-owner management.** A co-owner never sees nor revokes another owner's tokens, and the primary owner has no special power over them either: `GET /tokens` returns the caller's tokens only, `DELETE /tokens/{id}` of another owner's token answers 404 `MCP_TOKEN_NOT_FOUND` (same answer as an unknown id: existence never leaked). The existing spec never gave the primary owner a revocation right; adding one would expose a co-owner's access names and grow the surface. The levers that already cut another owner's tokens stay: demoting or deactivating that co-owner (`tokens_valid_after` → refused at the next request), a password change of that person, company suspension.
+- **R2 — Leaving co-owner: tokens dead at once, rows purged.** Demotion or deactivation of a co-owner already sets `tokens_valid_after` (refused at once, the filter also refuses any non-OWNER or inactive membership). A removal of a co-owner (demoted first: an OWNER cannot be removed, 20.13) runs `McpTokenMemberPurger` (16-6), which deletes the person's tokens of that company — unchanged, javadoc now says co-owners. New: the nightly `McpTokenPurgeJob` also deletes, in one set-based statement, every token whose holder no longer has an active OWNER membership in the company or that a revocation cutoff killed (demoted / deactivated co-owner never removed, password change, suspension) — such a token can never work again (a cutoff is never moved back), so it must not linger with the person's id and token name until its expiry (≤ 365 + 30 days).
+- **R3 — No migration.** The sweep is an anti-join on the unique `(user_id, tenant_id)` index of memberships; V83 not used.
+- **R4 — No primary-owner lookup anywhere in `com.keevo.mcp`** (the authorization stays « role OWNER of the membership of this company », evaluated per request by the 16-11 access state).
+
+**Tasks:**
+- `mcp/token/domain/port/out/McpAccessTokenRepository.java` + `JdbcMcpAccessTokenRepository.java` -- `purgeDead()`: `DELETE … WHERE NOT EXISTS (active OWNER membership of the holder in the token's company with no cutoff after the token's creation)`.
+- `mcp/token/application/service/McpTokenPurgeJob.java` -- runs `purgeExpiredBefore` then `purgeDead` (each logged, failures isolated).
+- `mcp/token/adapter/out/persistence/McpTokenMemberPurger.java`, `McpAccessTokenController.java`, `McpAccessTokenService.java` -- javadoc: every OWNER of the company (co-owners included) manages their own tokens only.
+- `keevo/contracts/mcp-access.json` -- co-owner note (own tokens only, 404 on another owner's token, shared company limits and credits).
+- `McpServerFullContextTest` -- `coOwners` (two owners: own lists, other's token 404 and still working, caps per person, MCP call by the co-owner audited with their id and token id, credits on the company) and `coOwnerLeaves` (demotion through `PATCH /employees/{id}/role` → 401 at once, owner's token unaffected; nightly purge deletes the dead tokens and keeps live ones; removal through `RemoveEmployeeUseCase` purges any remaining row).
+
+**Acceptance Criteria:**
+- Given a company with an owner and a co-owner both holding tokens, when each lists `GET /api/v1/mcp/tokens`, then each sees only their own tokens; when the co-owner deletes the owner's token, then 404 `MCP_TOKEN_NOT_FOUND` and the owner's token still serves MCP calls.
+- Given the co-owner's token, when an MCP client calls a tool, then the call is served, audited with the co-owner as actor and the token id, and one AI credit is counted on the company.
+- Given the owner demotes the co-owner, when the co-owner's token is used, then 401 at once; when the nightly purge runs, then the co-owner's tokens are deleted and the owner's live token is kept; when the co-owner is then removed from the company, then no token of theirs remains.
+
+**Cost:** sweep = 1 DELETE per night, anti-join over `mcp_access_tokens` (≤ 10 rows per owner) with one unique-index probe per row — O(tokens); no per-tenant loop.
+
 ## Mobile (React Native — dépôt AI/bref)
 
 **Statut :** API livrée (commit `7e98bea5`, voir `sprint-status.yaml`, clé `m21-9-serveur-mcp-externe`). Contrat : `keevo/contracts/mcp-access.json`. Conventions d'erreur et d'affichage : spec-16-11 ; protocole de synchro : spec-16-10 (rien à synchroniser ici : écran en ligne uniquement).
@@ -179,6 +233,7 @@ deferred: []
 - `POST /api/v1/mcp/tokens` `{name, tools[], expiresInDays?}` → 201 `{data: {accessToken, token, mcpUrl}}`. Erreurs : 400 `VALIDATION_ERROR` (message français à afficher tel quel : durée, données indisponibles, nom), 422 `VALIDATION_ERROR` (nom vide, aucune donnée), 409 `MCP_TOKEN_LIMIT` « Vous avez atteint le nombre maximum d'accès IA externes : révoquez-en un avant d'en créer un autre. », 403 module.
 - `DELETE /api/v1/mcp/tokens/{id}` → 204 ; 404 `MCP_TOKEN_NOT_FOUND` « Accès IA externe introuvable » (rafraîchir la liste).
 - Autres rôles : 403 `FORBIDDEN` → l'écran n'est pas proposé.
+- **Co-propriétaires (reprise 11/11/2026)** : tout propriétaire de l'entreprise (co-propriétaires compris) a le même écran et les mêmes appels ; chacun ne voit et ne révoque que **ses** accès (révoquer l'accès d'un autre propriétaire → 404 `MCP_TOKEN_NOT_FOUND`, comme un accès inconnu) ; le plafond de 10 est par personne ; la limite de débit et les crédits IA sont ceux de l'entreprise, partagés entre ses propriétaires. Un co-propriétaire rétrogradé ou désactivé perd ses accès immédiatement (supprimés la nuit suivante ou à son retrait).
 
 **À implémenter côté mobile :**
 1. Écran « Accès IA externe » dans Paramètres (owner seulement, visible si le module est actif ; sinon carte d'offre).
@@ -187,6 +242,7 @@ deferred: []
 4. Révocation avec confirmation « Révoquer cet accès ? L'assistant connecté perdra l'accès immédiatement. ».
 5. Aide courte : comment coller l'adresse et le jeton dans Claude / ChatGPT (en-tête `Authorization: Bearer <jeton>`). Pas de partage automatique (pas de feuille de partage).
 6. En ligne uniquement : hors connexion, message « Connexion requise ».
+7. (Reprise 11/11/2026) Proposer l'écran à tout propriétaire de l'entreprise courante (rôle OWNER de l'adhésion, co-propriétaires compris) ; ne jamais présenter la liste comme « les accès de l'entreprise » : libellé « Mes accès IA externes ».
 
 **Implémentation de référence :** aucune dans `keevo/app` (client de test uniquement).
 
@@ -195,6 +251,7 @@ deferred: []
 - Given cet accès, When `curl -X POST <mcpUrl> -H "Authorization: Bearer <jeton>" -H "Accept: application/json, text/event-stream" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`, Then seul `revenue_summary` est listé ; après « Révoquer », le même appel répond 401 `MCP_TOKEN_INVALID`.
 - Given un employé, When il ouvre les paramètres, Then l'écran n'apparaît pas (API 403).
 - Given 10 accès, When l'owner en crée un 11e, Then le message 409 s'affiche tel quel.
+- Given une entreprise avec deux propriétaires A et B ayant chacun un accès, When B ouvre « Mes accès IA externes », Then seul son accès apparaît ; When B (par curl) révoque l'id de l'accès de A, Then 404 `MCP_TOKEN_NOT_FOUND` et l'accès de A fonctionne toujours.
 
 **Clé de suivi mobile :** `m21-9-serveur-mcp-externe`.
 
@@ -215,3 +272,18 @@ Status: done
 **Verification.** Clean compile; packages after the last fix: mcp 24, architecture 139, assistant 40, identity 866, shared 1 349 — 0 failure (shared/module 555 and the security / config / persistence sub-packages also run after the pin updates). Live keevo_dev (profile dev, WhatsApp noop, FCM off): V66 applied (5 plans granted, 377 owner-disable rows); new BUSINESS_TRIAL company: tools listed in French, token created (32-byte hash, clear token nowhere in DB/list), curl initialize 2025-06-18 / tools/list (2 tools) / tools/call ×2 (credits 0 → 2, audit MCP OK ×2), out of scope → isError French, no token / JWT → 401 MCP_TOKEN_INVALID, revoke → 401 at once, admin downgrade to FREE → 403 MODULE_NOT_ENTITLED, list still open, creation 403, audit « Accès IA externe créé / révoqué ». kv_11b5zm untouched except the V66 owner-disable row.
 
 **Residual risks.** Rate-limit counters are per instance (single-instance deployment, like the other limiters). No SSE stream (clients needing legacy HTTP+SSE cannot connect). Set `KEEVO_PUBLIC_BASE_URL` in prod so `mcpUrl` shows the public address.
+
+### Reprise 2026-11-11 — co-owners
+
+Status: done
+
+**Summary.** User decision (11/11/2026): co-owners have access to the external MCP server. The existing design already keyed tokens by (company, person) and authorised any OWNER membership, so co-owners create, list and revoke their own `kvp_` tokens with the same controls; this pass proves it end to end and closes the exit path: the nightly `McpTokenPurgeJob` now also deletes, in one set-based anti-join (`purgeDead`), every token whose holder is no longer an active OWNER of the company or that a revocation cutoff killed; the removal of a (demoted) co-owner still runs `McpTokenMemberPurger` (16-6). Decisions R1–R4 in « Reprise 11/11/2026 — co-owners ». No migration (V83 unused), no new endpoint (endpoints.md unchanged). Commit `629f32cd654998280e285f40628a885ac8aeebeb`.
+
+**Files.** `McpAccessTokenRepository` / `JdbcMcpAccessTokenRepository` (`purgeDead`, javadoc), `McpTokenPurgeJob` (second isolated purge), `McpTokenMemberPurger` / `McpAccessTokenService` / `McpAccessTokenController` (javadoc co-owners), `keevo/contracts/mcp-access.json` (co-owner note), `McpServerFullContextTest` (`coOwners`, `coOwnerLeaves`, `purgeDeadTokens`, `purgeNow` helper, `ownerChanges` second-boundary flake fixed), new `McpTokenPurgeJobTest`.
+
+**Review.** 5 layers, 23 findings: 9 patched (medium 2, low 7), 0 deferred, 14 rejected (5 false, 5 maybe-false, 4 low — reasons in the 2026-11-11 triage log). Follow-up review: not recommended (no high patched; follow-up pass on a done spec).
+
+**Verification.** Packages: mcp 36 tests, architecture 171 (1 skipped) — 0 failure. Live `keevo_dev_t219` (public + `kv_ew02a2` only, port 4629, WhatsApp noop, FCM off, purge cron every minute): owner activated `mcp-access` through « Mes modules »; co-owner created by SQL (OWNER membership + employee row); both created a token (201); each list shows only its own; cross revocation → 404 `MCP_TOKEN_NOT_FOUND` both ways; co-owner's token: initialize / tools/list (its 2 tools) / tools/call `list_stores` OK, AI credits 16 → 17, `ai_tool_calls` actor = co-owner and `access_token_id` = its token, audit « MCP_TOKEN_CREATED » with the co-owner as user; owner's token still served; owner demoted the co-owner via `PATCH /employees/{id}/role` → co-owner token 401 `MCP_TOKEN_INVALID` at once, co-owner JWT 401 `SESSION_REVOKED`; nightly purge (cron set to every minute through `KEEVO_MCP_TOKEN_PURGE_CRON`) logged « 1 token(s) of a former owner or cut by a revocation deleted »: the co-owner's row gone, the owner's « Claude du proprio » kept. Backend stopped by port, DB dropped. kv_11b5zm untouched (not in the copy).
+
+**Residual risks.** The sweep relies on memberships only (`users.is_active` is not a 16-11 access criterion either); a deleted company's tokens wait for the company's own removal (cascade).
+
