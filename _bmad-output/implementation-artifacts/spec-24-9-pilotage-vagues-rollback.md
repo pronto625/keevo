@@ -219,6 +219,9 @@ Status: done.
 
 **Residual risks:** module-baseline deadlocks under parallel tenant creation (24-12); one owner's rows held in memory per worker; the reconciliation re-reads the source (D3).
 
+### Deferred items routed 2026-11-11
+- [ ] [Deferred-from: revue 24.13, 2026-11-11] Reprise d'un owner après le « go » [keevo/backend/src/main/java/com/keevo/migration/application/BrefCutoverService.java `resume` / `rollbackOwner`] — un owner accepté hors bascule (import bloqué ou en échec) n'a aucun chemin d'import + activation une fois la bascule ACTIVATED (relance et retour arrière d'un owner refusés après le « go ») ; le runbook (§8.3, §10) garde la copie figée en attendant. Réglé par : une commande « reprendre un owner » sur une bascule activée (import depuis la copie, réconciliation, activation de cette seule entreprise, ligne mise à jour) ou la décision de ne jamais accepter d'owner hors bascule.
+
 ## Mobile (React Native — dépôt AI/bref)
 
 > Conventions : spec-16-11 ; protocole de synchronisation : spec-16-10 (non répétés ici).
