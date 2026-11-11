@@ -131,6 +131,26 @@ class SchedulerLockCoverageTest {
         });
     }
 
+    /**
+     * Story 21.6 — work-queue dispatchers ticking every few seconds: they claim their work row by row with
+     * {@code FOR UPDATE SKIP LOCKED} and a lease (at-most-once per recipient), so every instance may run them; a
+     * ShedLock (lockAtLeastFor ≥ 30 s) would cap the campaign throughput at one batch per 30 s.
+     */
+    private static final List<Class<?>> SKIP_LOCKED_DISPATCHERS = List.of(
+            com.keevo.whatsappcloud.campaign.adapter.in.scheduling.CampaignScheduler.class,
+            com.keevo.admin.campaign.adapter.in.scheduling.PlatformCampaignScheduler.class);
+
+    @Test
+    @DisplayName("21.6: SKIP LOCKED dispatchers are scheduled and NOT locked")
+    void skipLockedDispatchersAreNotLocked() {
+        for (Class<?> type : SKIP_LOCKED_DISPATCHERS) {
+            List<Method> scheduled = scheduledMethods(type);
+            assertThat(scheduled).as("%s has a tick", type.getSimpleName()).isNotEmpty();
+            scheduled.forEach(m -> assertThat(m.getAnnotation(SchedulerLock.class))
+                    .as("%s.%s claims with SKIP LOCKED", type.getSimpleName(), m.getName()).isNull());
+        }
+    }
+
     @Test
     @DisplayName("in-memory flush/evict sweeps are scheduled but NOT locked")
     void inMemorySweepsAreNotLocked() {
@@ -154,6 +174,7 @@ class SchedulerLockCoverageTest {
         Set<String> classified = new HashSet<>();
         LOCKED_JOBS.keySet().forEach(c -> classified.add(c.getName()));
         IN_MEMORY_SWEEPS.forEach(c -> classified.add(c.getName()));
+        SKIP_LOCKED_DISPATCHERS.forEach(c -> classified.add(c.getName()));
         assertThat(found).as("new @Scheduled job? add @SchedulerLock and list it here")
                 .containsExactlyInAnyOrderElementsOf(classified);
     }

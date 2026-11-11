@@ -136,7 +136,7 @@ public class PlatformCampaignService {
             campaigns.insert(c);
             audit(c, "CREATED", actorId, null, now);
             if (c.status() == PlatformCampaignStatus.SCHEDULED) {
-                audit(c, "SCHEDULED", actorId, null, now);
+                audit(c, "SCHEDULED", actorId, null, now.plusNanos(1_000)); // after « Créée » in the history
             }
         });
         return get(c.id());
@@ -160,7 +160,7 @@ public class PlatformCampaignService {
             }
             audit(merged, "UPDATED", actorId, null, now);
             if (merged.status() == PlatformCampaignStatus.SCHEDULED && !merged.scheduledAt().equals(cur.scheduledAt())) {
-                audit(merged, "SCHEDULED", actorId, null, now);
+                audit(merged, "SCHEDULED", actorId, null, now.plusNanos(1_000)); // after « Modifiée »
             }
         });
         return get(id);

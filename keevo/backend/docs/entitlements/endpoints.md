@@ -5,7 +5,7 @@ Regenerate: `cd keevo/backend && mvn test -Dtest=EndpointEntitlementCoverageTest
 
 Gated handlers run only when the tenant's module state allows it (`READ`: enabled or read-only; `WRITE`: enabled) — otherwise 403 `MODULE_NOT_ENTITLED` / `MODULE_READ_ONLY`, or `MODULE_DISABLED_BY_OWNER` for a plan module the owner disabled in « Mes modules » (Story 19.13). Exempt handlers state why. A permission (Story 14.1, `@RequiresPermission`, from the module manifests) is checked first: missing → 403 `FORBIDDEN`; `OWNER` holds every permission, `MANAGER`, `EMPLOYEE` and `VIEWER` those their module manifests grant (`rolePermissions`, Story 19.5), `SUPER_ADMIN` none. A `VIEWER` never writes: any non-GET handler outside the self-service allow-list answers 403 `FORBIDDEN` (Story 19.5).
 
-Handlers: 356 — gated: 160, exempt: 196.
+Handlers: 381 — gated: 171, exempt: 210.
 
 | Method | Path | Module | Access | Permission | Exemption | Handler |
 |---|---|---|---|---|---|---|
@@ -31,6 +31,14 @@ Handlers: 356 — gated: 160, exempt: 196.
 | GET | `/api/v1/admin/bundles` | — | — | — | super-admin | BundleAdminController#list |
 | DELETE | `/api/v1/admin/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#delete |
 | PUT | `/api/v1/admin/bundles/{bundleId}` | — | — | — | super-admin | BundleAdminController#save |
+| GET | `/api/v1/admin/campaigns` | — | — | — | super-admin | AdminCampaignController#list |
+| POST | `/api/v1/admin/campaigns` | — | — | — | super-admin | AdminCampaignController#create |
+| POST | `/api/v1/admin/campaigns/preview-targeting` | — | — | — | super-admin | AdminCampaignController#preview |
+| DELETE | `/api/v1/admin/campaigns/{id}` | — | — | — | super-admin | AdminCampaignController#delete |
+| GET | `/api/v1/admin/campaigns/{id}` | — | — | — | super-admin | AdminCampaignController#get |
+| PATCH | `/api/v1/admin/campaigns/{id}` | — | — | — | super-admin | AdminCampaignController#update |
+| POST | `/api/v1/admin/campaigns/{id}/cancel` | — | — | — | super-admin | AdminCampaignController#cancel |
+| POST | `/api/v1/admin/campaigns/{id}/send` | — | — | — | super-admin | AdminCampaignController#send |
 | GET | `/api/v1/admin/catalog/products` | — | — | — | super-admin | AdminCatalogController#listProducts |
 | GET | `/api/v1/admin/catalog/products/export` | — | — | — | super-admin | AdminCatalogController#exportProducts |
 | GET | `/api/v1/admin/catalog/summary` | — | — | — | super-admin | AdminCatalogController#getCatalogSummary |
@@ -133,6 +141,12 @@ Handlers: 356 — gated: 160, exempt: 196.
 | GET | `/api/v1/admin/users/stats` | — | — | — | super-admin | AdminUserController#getStats |
 | GET | `/api/v1/admin/users/{userId}` | — | — | — | super-admin | AdminUserController#getUser |
 | GET | `/api/v1/admin/users/{userId}/devices` | — | — | — | super-admin | AdminUserController#listDevices |
+| GET | `/api/v1/admin/whatsapp/conversations` | — | — | — | super-admin | AdminWhatsAppController#conversations |
+| GET | `/api/v1/admin/whatsapp/conversations/unread-count` | — | — | — | super-admin | AdminWhatsAppController#unreadCount |
+| GET | `/api/v1/admin/whatsapp/conversations/{phone}/messages` | — | — | — | super-admin | AdminWhatsAppController#messages |
+| POST | `/api/v1/admin/whatsapp/conversations/{phone}/messages` | — | — | — | super-admin | AdminWhatsAppController#reply |
+| POST | `/api/v1/admin/whatsapp/media` | — | — | — | super-admin | AdminWhatsAppController#media |
+| GET | `/api/v1/admin/whatsapp/templates` | — | — | — | super-admin | AdminWhatsAppController#templates |
 | POST | `/api/v1/ai/chat` | `ai-assistant` | WRITE | — |  | AiChatController#chat |
 | GET | `/api/v1/ai/conversations` | `ai-assistant` | READ | — |  | AiConversationController#list |
 | POST | `/api/v1/ai/conversations` | `ai-assistant` | WRITE | — |  | AiConversationController#create |
@@ -354,11 +368,22 @@ Handlers: 356 — gated: 160, exempt: 196.
 | DELETE | `/api/v1/whatsapp/account` | — | — | — | déconnexion du WhatsApp Business — toujours possible pour le propriétaire, même sans le module | WhatsAppAccountController#disconnect |
 | GET | `/api/v1/whatsapp/account` | `whatsapp-cloud` | READ | — |  | WhatsAppAccountController#status |
 | POST | `/api/v1/whatsapp/account` | `whatsapp-cloud` | WRITE | — |  | WhatsAppAccountController#connect |
+| GET | `/api/v1/whatsapp/campaigns` | `whatsapp-cloud` | READ | — |  | WhatsAppCampaignController#list |
+| POST | `/api/v1/whatsapp/campaigns` | `whatsapp-cloud` | WRITE | — |  | WhatsAppCampaignController#create |
+| POST | `/api/v1/whatsapp/campaigns/preview-targeting` | `whatsapp-cloud` | READ (compte les clients ciblés, sans rien enregistrer ni envoyer) | — |  | WhatsAppCampaignController#preview |
+| GET | `/api/v1/whatsapp/campaigns/templates` | `whatsapp-cloud` | READ | — |  | WhatsAppCampaignController#templates |
+| DELETE | `/api/v1/whatsapp/campaigns/{id}` | `whatsapp-cloud` | WRITE | — |  | WhatsAppCampaignController#delete |
+| GET | `/api/v1/whatsapp/campaigns/{id}` | `whatsapp-cloud` | READ | — |  | WhatsAppCampaignController#get |
+| PATCH | `/api/v1/whatsapp/campaigns/{id}` | `whatsapp-cloud` | WRITE | — |  | WhatsAppCampaignController#update |
+| POST | `/api/v1/whatsapp/campaigns/{id}/cancel` | `whatsapp-cloud` | WRITE | — |  | WhatsAppCampaignController#cancel |
+| GET | `/api/v1/whatsapp/campaigns/{id}/recipients` | `whatsapp-cloud` | READ | — |  | WhatsAppCampaignController#recipients |
+| POST | `/api/v1/whatsapp/campaigns/{id}/send` | `whatsapp-cloud` | WRITE | — |  | WhatsAppCampaignController#send |
 | GET | `/api/v1/whatsapp/conversations` | `whatsapp-cloud` | READ | — |  | WhatsAppConversationController#conversations |
 | GET | `/api/v1/whatsapp/conversations/unread-count` | `whatsapp-cloud` | READ | — |  | WhatsAppConversationController#unreadCount |
 | GET | `/api/v1/whatsapp/conversations/{phone}/messages` | `whatsapp-cloud` | READ | — |  | WhatsAppConversationController#messages |
 | POST | `/api/v1/whatsapp/conversations/{phone}/messages` | `whatsapp-cloud` | WRITE | — |  | WhatsAppConversationController#reply |
 | POST | `/api/v1/whatsapp/conversations/{phone}/template` | `whatsapp-cloud` | WRITE | — |  | WhatsAppConversationController#sendTemplate |
+| POST | `/api/v1/whatsapp/media` | `whatsapp-cloud` | WRITE | — |  | WhatsAppMediaController#upload |
 | GET | `/api/v1/whatsapp/my-templates` | `whatsapp-cloud` | READ | — |  | WhatsAppTemplateController#list |
 | POST | `/api/v1/whatsapp/my-templates` | `whatsapp-cloud` | WRITE | — |  | WhatsAppTemplateController#create |
 | POST | `/api/v1/whatsapp/my-templates/media` | `whatsapp-cloud` | WRITE | — |  | WhatsAppTemplateController#media |

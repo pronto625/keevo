@@ -371,6 +371,10 @@ public class TenantDeletionService {
                 + "AND (phone IS NOT NULL OR failure_reason IS NOT NULL)", (Object) tenantId);
         // 21.5 — encrypted WhatsApp Business token, WABA and number ids (the inbox went with the schema)
         jdbcTemplate.update("DELETE FROM public.whatsapp_accounts WHERE tenant_id = ?", (Object) tenantId);
+        // 21.6 — campaign work queue rows; the owner's contact data frozen in platform campaign recipients (counts kept)
+        jdbcTemplate.update("DELETE FROM public.whatsapp_campaign_jobs WHERE tenant_id = ?", (Object) tenantId);
+        jdbcTemplate.update("UPDATE public.platform_campaign_recipients SET address = NULL, first_name = NULL, "
+                + "last_name = NULL, company_name = NULL WHERE tenant_id = ?", (Object) tenantId);
         // 21.9 — MCP personal access tokens (a multi-tenant owner keeps the user row, so no user cascade)
         jdbcTemplate.update("DELETE FROM public.mcp_access_tokens WHERE tenant_id = ?", (Object) tenantId);
         // 21.8 — tool-call journal (actor ids)

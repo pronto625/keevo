@@ -385,7 +385,8 @@ class UsageQuotaPostgresIntegrationTest {
         assertThat(status.quotas()).extracting(q -> q.metric() + "/" + q.period() + "/" + q.limit() + "/"
                         + q.used() + "/" + q.remaining())
                 .containsExactly("DOCUMENTS/MONTH/null/1/null", "SMS/MONTH/null/0/null", "SMS/LIFETIME/5/0/5",
-                        "EMAILS/MONTH/null/0/null", "AI_CREDITS/MONTH/500/3/497", "AI_CREDITS/DAY/20/3/17");
+                        "EMAILS/MONTH/null/0/null", "AI_CREDITS/MONTH/500/3/497", "AI_CREDITS/DAY/20/3/17",
+                        "WHATSAPP_MESSAGES/MONTH/null/0/null"); // 21.6 — counted, no limit seeded
         assertThat(status.quotas()).filteredOn(q -> q.period() == QuotaPeriod.LIFETIME)
                 .allSatisfy(q -> assertThat(q.resetAt()).isNull());
         assertThat(status.credits()).isEqualTo(Map.of(UsageMetric.SMS, 7L));
