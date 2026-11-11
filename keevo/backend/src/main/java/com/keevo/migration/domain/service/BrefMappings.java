@@ -3,6 +3,7 @@ package com.keevo.migration.domain.service;
 import com.keevo.identity.api.LegacyIdentityImportPort.LegacyAccount;
 import com.keevo.identity.api.Role;
 import com.keevo.migration.domain.model.BrefAccount;
+import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.shared.domain.PhoneNumbers;
 
 import java.util.Locale;
@@ -99,6 +100,40 @@ public final class BrefMappings {
 
     public static boolean supportedHash(String hash) {
         return hash == null || BCRYPT.matcher(hash).matches();
+    }
+
+    /**
+     * Story 24.3 — the sector of an owner: the category of the oldest shop that has one (live shops before deleted
+     * ones); {@code null} when none. The profile (24.2) and the categories step (24.3) share this choice.
+     */
+    public static String ownerSector(java.util.List<BrefShop> shops) {
+        return shops.stream()
+                .sorted(java.util.Comparator.comparing(BrefShop::deleted).thenComparing(BrefShop::createdAt)
+                        .thenComparing(BrefShop::id))
+                .map(s -> sector(s.category()))
+                .filter(java.util.Objects::nonNull)
+                .findFirst().orElse(null);
+    }
+
+    /** Story 24.3 — a UUID written as text by Bref (trimmed, any case); {@code null} when blank or malformed. */
+    public static java.util.UUID uuidOrNull(String raw) {
+        String v = trimmed(raw);
+        if (v == null) {
+            return null;
+        }
+        try {
+            return java.util.UUID.fromString(v);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Story 24.3 — {@code value} cut to {@code max} code points (never a half surrogate pair). */
+    public static String cut(String value, int max) {
+        if (value == null || value.codePointCount(0, value.length()) <= max) {
+            return value;
+        }
+        return value.substring(0, value.offsetByCodePoints(0, max));
     }
 
     /** Trimmed value, {@code null} when blank. */

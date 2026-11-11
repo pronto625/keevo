@@ -19,10 +19,16 @@ public record MigrationRecord(String targetTable, UUID targetId, String sourceTa
     public static final String STORES = "stores";
     public static final String STORE_LOGOS = "store_logo";
     public static final String EMPLOYEES = "employees";
+    /** Target tables written by 24.3. */
+    public static final String CATEGORIES = "categories";
+    public static final String PRODUCTS = "products";
+    public static final String CLIENTS = "clients";
 
     /** Bref source tables. */
     public static final String BREF_USER = "user";
     public static final String BREF_SHOP = "shop";
+    public static final String BREF_PRODUCT = "product";
+    public static final String BREF_CUSTOMER = "customer";
 
     public MigrationRecord {
         Objects.requireNonNull(targetTable, "targetTable");

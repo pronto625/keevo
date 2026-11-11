@@ -17,7 +17,21 @@ public record ImportNote(String code, String label, int count) {
         OWNER_SOCIAL_SIGN_IN("Propriétaire connecté par Google ou Apple dans Bref : reliaison du compte social à faire "
                 + "(story 24.7), connexion par code en attendant"),
         LOGO_NOT_FETCHED("Logo non rapatrié (téléchargement désactivé ou adresse non autorisée)"),
-        LOGO_FAILED("Logo non rapatrié (image indisponible ou refusée)");
+        LOGO_FAILED("Logo non rapatrié (image indisponible ou refusée)"),
+        // Story 24.3 — catalogue and clients
+        PRODUCT_MERGED_BY_KEY("Produit présent dans plusieurs boutiques : un seul produit importé"),
+        PRODUCT_MERGED_IN_BREF("Produit fusionné dans Bref, importé archivé"),
+        PRODUCT_MERGE_BROKEN("Produit fusionné dans Bref vers un produit introuvable : importé archivé, sans "
+                + "redirection"),
+        PRODUCT_RENAMED("Nom de produit déjà pris : numéro ajouté au nom"),
+        PRODUCT_NAME_SHORTENED("Nom de produit trop long, raccourci à 200 caractères"),
+        PRODUCT_NAME_MISSING("Produit sans nom : nommé « Produit importé »"),
+        PRODUCT_PRICE_ROUNDED("Prix de produit avec centimes, arrondi au franc"),
+        PRODUCT_REFERENCE_DROPPED("Référence de produit trop longue, non reprise"),
+        CLIENT_NAME_MISSING("Client sans nom : son téléphone sert de nom"),
+        CLIENT_FIELD_SHORTENED("Information de client trop longue, raccourcie"),
+        CLIENT_FIELD_DROPPED("Information de client invalide (e-mail, date de naissance ou type), non reprise"),
+        CLIENT_CONSENT_AUTHOR_UNKNOWN("Accord marketing déclaré par un compte inconnu : auteur non repris");
 
         private final String label;
 

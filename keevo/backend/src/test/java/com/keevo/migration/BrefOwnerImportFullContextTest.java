@@ -254,7 +254,8 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
                         sleeper + ":" + shopB + ":INACTIVE:true");
         assertThat(count("SELECT count(*) FROM \"" + schema + "\".user_roles WHERE user_id = ?", owner)).isEqualTo(1);
         int records = count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", owner);
-        assertThat(records).isEqualTo(1 + 1 + 1 + 2 + 3 * 3);
+        // tenant, owner, owner membership, 2 stores, 3 × (user, membership, employee), « Produits importés » (24.3)
+        assertThat(records).isEqualTo(1 + 1 + 1 + 2 + 3 * 3 + 1);
 
         // ── re-run: nothing written
         JsonNode again = data(importOwner(owner, "DATABASE", token));
@@ -307,6 +308,179 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
         assertThat(viaExport.path("status").asText()).isEqualTo("COMPLETED");
         assertThat(viaExport.path("counts").path("storesCreated").asInt()).isZero();
         assertThat(viaExport.path("counts").path("usersCreated").asInt()).isZero();
+    }
+
+    // ── Story 24.3 fixtures: synthetic catalogue and customers (no real data) ──────────────────────────────
+
+    private static UUID product(String shopId, String name, String key, String reference, String price, boolean manual,
+                                Instant lastSoldAt, boolean archived, String mergedInto, Instant createdAt) {
+        UUID id = UUID.randomUUID();
+        bref.update("INSERT INTO product (id, \"shopId\", name, \"nameKey\", \"productKey\", reference, "
+                        + "\"unitPrice\", \"priceManual\", \"timesSold\", \"totalQuantity\", \"totalRevenue\", "
+                        + "\"lastSoldAt\", \"isArchived\", \"mergedIntoId\", \"createdAt\", \"updatedAt\") "
+                        + "VALUES (?, ?, ?, ?, ?, ?, ?::numeric, ?, 3, 4.5, ?::numeric, ?, ?, ?, ?, ?)",
+                id, shopId, name, name.toLowerCase(java.util.Locale.ROOT), key, reference, price, manual, price,
+                utc(lastSoldAt), archived, mergedInto, utc(createdAt), utc(createdAt.plusSeconds(5)));
+        return id;
+    }
+
+    private static UUID customer(UUID shop, String name, String phone, String email, String type, String nui,
+                                 String birthDate, UUID consentBy, Instant createdAt) {
+        UUID id = UUID.randomUUID();
+        bref.update("INSERT INTO customer (id, \"shopId\", name, phone, email, type, nui, \"birthDate\", "
+                        + "\"marketingConsentAt\", \"marketingConsentById\", \"totalInvoices\", \"totalSpent\", "
+                        + "\"createdAt\", \"updatedAt\") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, 12500.50, ?, ?)",
+                id, shop, name, phone, email, type, nui, birthDate, consentBy == null ? null : utc(createdAt),
+                consentBy, utc(createdAt), utc(createdAt.plusSeconds(7)));
+        return id;
+    }
+
+    @Test
+    @DisplayName("24.3 — categories, products merged by key across shops, Bref merges, name clash, clients per store; "
+            + "re-run, partial re-run, export = database")
+    void catalogueAndClients() throws Exception {
+        UUID owner = user("owner", phone(), null, null, null, null, true, false, null);
+        UUID shopA = shop(owner, "Electro " + tag(), "electronics", null, T0, null);
+        UUID shopB = shop(owner, "Epicerie " + tag(), "food", null, T0.plusSeconds(100), null);
+        UUID seller = user("seller", null, null, "p" + tag(), HASH_SELLER, shopA.toString(), true, false, null);
+        String a = shopA.toString();
+        String bUpper = shopB.toString().toUpperCase(java.util.Locale.ROOT); // Bref keeps product.shopId as text
+        // same key in both shops: one product; the price of the latest sale (shop B)
+        UUID rizA = product(a, "Riz parfumé", "nm:riz parfume", null, "1500.00", false, T0.plusSeconds(10), false,
+                null, T0.plusSeconds(1));
+        UUID rizB = product(bUpper, "riz parfume", "nm:riz parfume", null, "1600.00", false, T0.plusSeconds(20), false,
+                null, T0.plusSeconds(2));
+        // barcode key, typed price with cents; same name, other key in shop B → renamed
+        UUID savonBc = product(a, "Savon", "bc:6111234567890", "6111234567890", "250.50", true, null, false, null,
+                T0.plusSeconds(3));
+        String bMixed = " " + shopB.toString().substring(0, 8).toUpperCase(java.util.Locale.ROOT)
+                + shopB.toString().substring(8) + " "; // any case, padded: still the shop's
+        UUID savonNm = product(bMixed, "Savon", "nm:savon", null, "300.00", false, null, false, null,
+                T0.plusSeconds(4));
+        // merged in Bref (shop A), and a merge whose target is gone
+        UUID cola = product(a, "Coca-Cola 50cl", "nm:coca-cola 50cl", null, "500.00", false, null, false, null,
+                T0.plusSeconds(5));
+        UUID coca = product(a, "Coca", "nm:coca", null, "450.00", false, null, true, cola.toString(),
+                T0.plusSeconds(6));
+        UUID ghost = product(a, "Fantôme", "nm:fantome", null, "100.00", false, null, true,
+                UUID.randomUUID().toString(), T0.plusSeconds(7));
+        // the same phone in both shops: two clients; a local number; a company with a too long NIU
+        String shared = phone();
+        UUID c1 = customer(shopA, "Client Un", shared, "un@example.test", "person", null, "1990-05-01", owner,
+                T0.plusSeconds(8));
+        UUID c2 = customer(shopB, " ", shared, "pas-un-email", null, null, "2999-01-01", UUID.randomUUID(),
+                T0.plusSeconds(9));
+        UUID c3 = customer(shopA, "Entreprise Trois", "699000222", null, "company", "N".repeat(60), null, seller,
+                T0.plusSeconds(10));
+        String token = adminToken();
+
+        JsonNode batch = data(importOwner(owner, "DATABASE", token));
+        assertThat(batch.path("status").asText()).as(batch.toString()).isEqualTo("COMPLETED");
+        JsonNode counts = batch.path("counts");
+        assertThat(counts.path("productsCreated").asInt()).isEqualTo(6);
+        assertThat(counts.path("productsMerged").asInt()).isEqualTo(1);
+        assertThat(counts.path("clientsCreated").asInt()).isEqualTo(3);
+        assertThat(counts.path("categoriesCreated").asInt()).isGreaterThan(1);
+        assertThat(batch.path("notes").toString()).contains("PRODUCT_MERGED_BY_KEY", "PRODUCT_MERGED_IN_BREF",
+                "PRODUCT_MERGE_BROKEN", "PRODUCT_RENAMED", "PRODUCT_PRICE_ROUNDED", "CLIENT_NAME_MISSING",
+                "CLIENT_FIELD_DROPPED", "CLIENT_FIELD_SHORTENED", "CLIENT_CONSENT_AUTHOR_UNKNOWN");
+        String schema = jdbc.queryForObject("SELECT schema_name FROM public.tenants WHERE id = ?", String.class,
+                UUID.fromString(batch.path("tenantId").asText()));
+
+        // categories: the ELECTRONICS template + « Produits importés » (custom), every product in it
+        UUID imported = jdbc.queryForObject("SELECT id FROM \"" + schema + "\".categories WHERE name = "
+                + "'Produits importés' AND parent_id IS NULL AND is_custom", UUID.class);
+        assertThat(count("SELECT count(*) FROM \"" + schema + "\".categories WHERE NOT is_custom"))
+                .isEqualTo(counts.path("categoriesCreated").asInt() - 1).isPositive();
+        assertThat(count("SELECT count(*) FROM \"" + schema + "\".products WHERE category_id IS DISTINCT FROM ?",
+                imported)).isZero();
+
+        // products
+        Map<UUID, Map<String, Object>> products = new java.util.HashMap<>();
+        jdbc.queryForList("SELECT id, name, sku, price, price_manual, barcode, product_key, archived, merged_into_id, "
+                + "track_stock, stock_quantity, status, created_at FROM \"" + schema + "\".products")
+                .forEach(r -> products.put((UUID) r.get("id"), r));
+        assertThat(products.keySet()).containsExactlyInAnyOrder(rizA, savonBc, savonNm, cola, coca, ghost);
+        assertThat(products.values()).allSatisfy(p -> {
+            assertThat(p.get("track_stock")).isEqualTo(false);
+            assertThat(p.get("stock_quantity")).isEqualTo(0);
+            assertThat(p.get("status")).isEqualTo("ACTIVE");
+            assertThat((String) p.get("sku")).matches("KEV-[A-Z0-9]{6}");
+        });
+        assertThat(products.get(rizA)).containsEntry("name", "Riz parfumé").containsEntry("price", 1600)
+                .containsEntry("archived", false).containsEntry("product_key", "nm:riz parfume");
+        assertThat(((Timestamp) products.get(rizA).get("created_at")).toInstant()).isEqualTo(T0.plusSeconds(1));
+        assertThat(products.get(savonBc)).containsEntry("name", "Savon").containsEntry("price", 251)
+                .containsEntry("price_manual", true).containsEntry("barcode", "6111234567890");
+        assertThat(products.get(savonNm)).containsEntry("name", "Savon (2)").containsEntry("price", 300);
+        assertThat(products.get(coca)).containsEntry("archived", true).containsEntry("merged_into_id", cola);
+        assertThat(products.get(ghost)).containsEntry("archived", true).containsEntry("merged_into_id", null);
+        // records: one per Bref product; the shop B rice points to the shop A rice
+        assertThat(jdbc.queryForObject("SELECT target_id FROM public.migration_records WHERE source_table = 'product' "
+                + "AND source_id = ?", UUID.class, rizB)).isEqualTo(rizA);
+        assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ? AND source_table = "
+                + "'product'", owner)).isEqualTo(7);
+
+        // clients: one per Bref customer, in the store of its shop; sharing stays off
+        Map<UUID, Map<String, Object>> clients = new java.util.HashMap<>();
+        jdbc.queryForList("SELECT id, store_id, name, phone, phone_normalized, email, client_type, niu, birth_date, "
+                + "marketing_consent_at, marketing_consent_by FROM \"" + schema + "\".clients")
+                .forEach(r -> clients.put((UUID) r.get("id"), r));
+        assertThat(clients.keySet()).containsExactlyInAnyOrder(c1, c2, c3);
+        assertThat(clients.get(c1)).containsEntry("store_id", shopA).containsEntry("phone", shared)
+                .containsEntry("phone_normalized", shared).containsEntry("client_type", "PERSON")
+                .containsEntry("marketing_consent_by", owner);
+        assertThat(clients.get(c1).get("birth_date").toString()).isEqualTo("1990-05-01");
+        assertThat(clients.get(c2)).containsEntry("store_id", shopB).containsEntry("name", shared)
+                .containsEntry("email", null).containsEntry("birth_date", null)
+                .containsEntry("marketing_consent_by", null);
+        assertThat(clients.get(c2).get("marketing_consent_at")).isNotNull();
+        assertThat(clients.get(c3)).containsEntry("phone", "+237699000222").containsEntry("client_type", "COMPANY")
+                .containsEntry("niu", "N".repeat(50)).containsEntry("marketing_consent_by", seller);
+        assertThat(jdbc.queryForList("SELECT share_clients FROM \"" + schema + "\".stores", Boolean.class))
+                .containsOnly(false);
+
+        // ── re-run: nothing written
+        int records = count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", owner);
+        JsonNode again = data(importOwner(owner, "DATABASE", token));
+        assertThat(again.path("status").asText()).isEqualTo("COMPLETED");
+        for (String key : List.of("categoriesCreated", "productsCreated", "productsMerged", "clientsCreated")) {
+            assertThat(again.path("counts").path(key).asInt()).as(key).isZero();
+        }
+        assertThat(again.path("counts").path("alreadyImported").asInt()).isEqualTo(records);
+        assertThat(count("SELECT count(*) FROM public.migration_records WHERE bref_owner_id = ?", owner))
+                .isEqualTo(records);
+
+        // ── partial re-run: a product and a customer added since
+        UUID added = product(bUpper, "Huile", "nm:huile", null, "1200.00", false, null, false, null,
+                T0.plusSeconds(11));
+        UUID late = customer(shopB, "Client Tard", phone(), null, null, null, null, null, T0.plusSeconds(12));
+        // a new live product named like the stored merged « Coca »: it never takes a stored name
+        UUID newCoca = product(a, "COCA", "nm:coca nouveau", null, "200.00", false, null, false, null,
+                T0.plusSeconds(13));
+        JsonNode partial = data(importOwner(owner, "DATABASE", token));
+        assertThat(partial.path("status").asText()).as(partial.toString()).isEqualTo("COMPLETED");
+        assertThat(partial.path("counts").path("productsCreated").asInt()).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT name FROM \"" + schema + "\".products WHERE id = ?", String.class,
+                newCoca)).isEqualTo("COCA (2)");
+        assertThat(jdbc.queryForObject("SELECT name FROM \"" + schema + "\".products WHERE id = ?", String.class,
+                coca)).isEqualTo("Coca");
+        assertThat(partial.path("notes").toString()).doesNotContain("PRODUCT_MERGED_IN_BREF"); // only new rows
+        assertThat(partial.path("counts").path("clientsCreated").asInt()).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM \"" + schema + "\".products WHERE id = ?", added)).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM \"" + schema + "\".clients WHERE id = ? AND store_id = ?", late,
+                shopB)).isEqualTo(1);
+
+        // ── the export of the same owner: same products and customers (same canonical forms), nothing new
+        writeExport(owner, null, null);
+        BrefSnapshot fromDb = source(SourceKind.DATABASE).load(owner);
+        BrefSnapshot fromExport = source(SourceKind.EXPORT).load(owner);
+        assertThat(fromExport.products()).hasSize(9).containsExactlyInAnyOrderElementsOf(fromDb.products());
+        assertThat(fromExport.customers()).hasSize(4).containsExactlyInAnyOrderElementsOf(fromDb.customers());
+        JsonNode viaExport = data(importOwner(owner, "EXPORT", token));
+        assertThat(viaExport.path("status").asText()).isEqualTo("COMPLETED");
+        assertThat(viaExport.path("counts").path("productsCreated").asInt()).isZero();
+        assertThat(viaExport.path("counts").path("clientsCreated").asInt()).isZero();
     }
 
     @Test
@@ -434,8 +608,17 @@ class BrefOwnerImportFullContextTest extends FullContextIntegrationTest {
                   'members', COALESCE((SELECT jsonb_agg(to_jsonb(u) ORDER BY u."createdAt") FROM "user" u
                                        WHERE u."shopId" IN (SELECT id::text FROM shop WHERE "userId" = ?)
                                          AND u.id <> ?), '[]'::jsonb),
-                  'invoices', '[]'::jsonb, 'customers', '[]'::jsonb)::text
-                """, String.class, owner, owner, owner, owner);
+                  'products', COALESCE((SELECT jsonb_agg(to_jsonb(p) || jsonb_build_object(
+                                          'unitPrice', p."unitPrice"::text, 'totalQuantity', p."totalQuantity"::text,
+                                          'totalRevenue', p."totalRevenue"::text) ORDER BY p."createdAt")
+                                        FROM product p WHERE lower(btrim(p."shopId")) IN
+                                          (SELECT id::text FROM shop WHERE "userId" = ?)), '[]'::jsonb),
+                  'customers', COALESCE((SELECT jsonb_agg(to_jsonb(c) || jsonb_build_object(
+                                           'totalSpent', c."totalSpent"::text) ORDER BY c."createdAt")
+                                         FROM customer c WHERE c."shopId" IN
+                                           (SELECT id FROM shop WHERE "userId" = ?)), '[]'::jsonb),
+                  'invoices', '[]'::jsonb)::text
+                """, String.class, owner, owner, owner, owner, owner, owner);
         if (logoShop != null) {
             JsonNode root = objectMapper.readTree(json);
             for (JsonNode s : root.path("shops")) {

@@ -27,6 +27,12 @@ public final class ImportRun {
     public static final String EMPLOYEES_CREATED = "employeesCreated";
     public static final String ALREADY_IMPORTED = "alreadyImported";
     public static final String MEMBERS_SKIPPED_DELETED = "membersSkippedDeleted";
+    /** Story 24.3. */
+    public static final String CATEGORIES_CREATED = "categoriesCreated";
+    public static final String PRODUCTS_CREATED = "productsCreated";
+    /** Bref products recorded against another product (same key in another shop): no row of their own. */
+    public static final String PRODUCTS_MERGED = "productsMerged";
+    public static final String CLIENTS_CREATED = "clientsCreated";
 
     private final BrefSnapshot snapshot;
     private final UUID batchId;
@@ -43,7 +49,8 @@ public final class ImportRun {
         this.actorId = actorId;
         this.records = records; // the store's mutable map, kept up to date by the steps (no copy)
         for (String key : List.of(TENANTS_CREATED, USERS_CREATED, MEMBERSHIPS_CREATED, STORES_CREATED,
-                LOGOS_IMPORTED, EMPLOYEES_CREATED, ALREADY_IMPORTED, MEMBERS_SKIPPED_DELETED)) {
+                LOGOS_IMPORTED, EMPLOYEES_CREATED, ALREADY_IMPORTED, MEMBERS_SKIPPED_DELETED, CATEGORIES_CREATED,
+                PRODUCTS_CREATED, PRODUCTS_MERGED, CLIENTS_CREATED)) {
             counts.put(key, 0);
         }
     }

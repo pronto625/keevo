@@ -82,6 +82,35 @@ class JsonExportBrefSourceTest {
             assertThat(m.mustChangePassword()).isTrue();
             assertThat(m.lastName()).isNull();
         });
+        // 24.3 sections: decimals from strings, ids, instants
+        assertThat(s.products()).singleElement().satisfies(p -> {
+            assertThat(p.productKey()).isEqualTo("nm:riz parfume 5 kg");
+            assertThat(p.unitPrice()).isEqualByComparingTo("12500");
+            assertThat(p.mergedIntoId()).isNull();
+            assertThat(p.lastSoldAt()).isEqualTo(Instant.parse("2026-03-01T10:00:00Z"));
+        });
+        assertThat(s.customers()).singleElement().satisfies(c -> {
+            assertThat(c.shopId()).isEqualTo("6f1d2c3b-0000-4000-8000-000000000101");
+            assertThat(c.type()).isEqualTo("person");
+            assertThat(c.marketingConsentById()).isEqualTo(OWNER);
+            assertThat(c.totalSpent()).isEqualByComparingTo("12500");
+        });
+    }
+
+    @Test
+    @DisplayName("24.3 — a decimal as a JSON number gives the same row (same checksum) as the contract's string")
+    void decimalAsNumber() throws Exception {
+        write(example, null);
+        String canonical = source.load(OWNER).products().get(0).canonical();
+        ObjectNode numbers = example.deepCopy();
+        ((ObjectNode) numbers.path("products").get(0)).put("unitPrice", 12500).put("totalRevenue", 12500.0);
+        write(numbers, null);
+        assertThat(source.load(OWNER).products().get(0).canonical()).isEqualTo(canonical);
+
+        ObjectNode bad = example.deepCopy();
+        ((ObjectNode) bad.path("products").get(0)).put("unitPrice", "douze");
+        write(bad, null);
+        assertThat(refusal()).isEqualTo("MIGRATION_EXPORT_INVALID");
     }
 
     @Test

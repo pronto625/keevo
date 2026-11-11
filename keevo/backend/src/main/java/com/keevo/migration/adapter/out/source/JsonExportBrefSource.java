@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.migration.domain.model.BrefAccount;
+import com.keevo.migration.domain.model.BrefCustomer;
+import com.keevo.migration.domain.model.BrefProduct;
 import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.migration.domain.model.BrefSnapshot;
 import com.keevo.migration.domain.model.SourceKind;
@@ -38,8 +40,8 @@ import java.util.UUID;
  * of the file's exact bytes, optionally followed by the file name as {@code sha256sum} writes it) in the folder
  * {@code keevo.migration.bref.export-dir}.
  *
- * <p>One streaming pass: the sections this story imports (owner, shops, members) are read, every other section is
- * skipped without being loaded (memory bounded by the owner's shops and team), the digest is computed on the way, and
+ * <p>One streaming pass: the sections the import reads (owner, shops, members; products and customers since 24.3) are
+ * read, every other section is skipped without being loaded (memory bounded by the owner's rows), the digest is computed on the way, and
  * the snapshot is used only when the digest matches.
  */
 @Component
@@ -94,6 +96,8 @@ class JsonExportBrefSource implements BrefSourcePort {
         BrefAccount owner = null;
         List<BrefShop> shops = new ArrayList<>();
         List<BrefAccount> members = new ArrayList<>();
+        List<BrefProduct> products = new ArrayList<>();
+        List<BrefCustomer> customers = new ArrayList<>();
         try (DigestInputStream in = new DigestInputStream(new BufferedInputStream(raw), digest)) {
             JsonParser p = mapper.getFactory().createParser(in);
             p.disable(JsonParser.Feature.AUTO_CLOSE_SOURCE);
@@ -108,7 +112,9 @@ class JsonExportBrefSource implements BrefSourcePort {
                     case "owner" -> owner = BrefRows.account(mapper.readTree(p));
                     case "shops" -> readArray(p, value, n -> shops.add(BrefRows.shop(n)));
                     case "members" -> readArray(p, value, n -> members.add(BrefRows.account(n)));
-                    default -> p.skipChildren(); // 24.3–24.6 sections: not read here
+                    case "products" -> readArray(p, value, n -> products.add(BrefRows.product(n)));
+                    case "customers" -> readArray(p, value, n -> customers.add(BrefRows.customer(n)));
+                    default -> p.skipChildren(); // 24.4–24.6 sections: not read here
                 }
             }
             p.close();
@@ -125,7 +131,7 @@ class JsonExportBrefSource implements BrefSourcePort {
         if (owner == null || !owner.id().equals(ownerId) || !BrefMappings.BREF_OWNER_ROLE.equals(owner.role())) {
             throw new DomainException(ErrorCode.MIGRATION_OWNER_NOT_FOUND, "Export owner mismatch");
         }
-        return new BrefSnapshot(owner, shops, members, SourceKind.EXPORT);
+        return new BrefSnapshot(owner, shops, members, products, customers, SourceKind.EXPORT);
     }
 
     private interface NodeConsumer {

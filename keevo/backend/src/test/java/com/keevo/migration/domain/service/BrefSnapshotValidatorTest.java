@@ -187,4 +187,43 @@ class BrefSnapshotValidatorTest {
         assertThat(Canonical.sha256("abc"))
                 .isEqualTo("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
     }
+
+    private com.keevo.migration.domain.model.BrefProduct product(UUID id, String shop, String price) {
+        return new com.keevo.migration.domain.model.BrefProduct(id, shop, "P", "p", "nm:p", null,
+                new java.math.BigDecimal(price), false, 0, null, null, null, false, null, T, T);
+    }
+
+    private com.keevo.migration.domain.model.BrefCustomer customer(UUID id, String shop, String phone) {
+        return new com.keevo.migration.domain.model.BrefCustomer(id, shop, "C", phone, null, null, null, null, null,
+                null, null, null, null, 0, null, null, null, null, null, T, T);
+    }
+
+    @Test
+    @DisplayName("24.3 — products and customers: own shop (any case), once, price in range, customer phone E.164")
+    void catalogueCases() {
+        UUID dup = UUID.randomUUID();
+        UUID dupC = UUID.randomUUID();
+        BrefSnapshot ok = new BrefSnapshot(owner("+237600000001"), List.of(shop()), List.of(),
+                List.of(product(UUID.randomUUID(), shopId.toString().toUpperCase(), "1500.50")),
+                List.of(customer(UUID.randomUUID(), shopId.toString(), "699000111")), SourceKind.DATABASE);
+        assertThat(codes(ok, Map.of(), Set.of())).isEmpty();
+
+        BrefSnapshot bad = new BrefSnapshot(owner("+237600000001"), List.of(shop()), List.of(),
+                List.of(product(dup, shopId.toString(), "1"), product(dup, shopId.toString(), "1"),
+                        product(UUID.randomUUID(), UUID.randomUUID().toString(), "1"),
+                        product(UUID.randomUUID(), "pas-une-boutique", "1"),
+                        product(UUID.randomUUID(), shopId.toString(), "-5"),
+                        product(UUID.randomUUID(), shopId.toString(), "3000000000")),
+                List.of(customer(dupC, shopId.toString(), "699000111"), customer(dupC, shopId.toString(), "699000112"),
+                        customer(UUID.randomUUID(), UUID.randomUUID().toString(), "699000113"),
+                        customer(UUID.randomUUID(), shopId.toString(), "abc")),
+                SourceKind.DATABASE);
+        List<BlockedCase> cases = BrefSnapshotValidator.validate(bad, Map.of(), Set.of(), VALID);
+        assertThat(cases.stream().filter(c -> c.code().equals("PRODUCT_INVALID")).count()).isEqualTo(5);
+        assertThat(cases.stream().filter(c -> c.code().equals("CLIENT_INVALID")).count()).isEqualTo(3);
+        assertThat(cases).extracting(BlockedCase::label).contains("Client invalide : téléphone invalide",
+                "Produit invalide : prix négatif ou trop grand",
+                "Produit invalide : produit d'une autre boutique ou en double");
+        assertThat(cases).allSatisfy(c -> assertThat(c.sourceTable()).isIn("product", "customer"));
+    }
 }

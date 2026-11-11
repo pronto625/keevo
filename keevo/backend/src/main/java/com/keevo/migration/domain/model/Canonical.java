@@ -28,6 +28,14 @@ public final class Canonical {
         return sb.toString();
     }
 
+    /**
+     * Story 24.3 — a decimal in its canonical text (trailing zeros stripped, plain notation: {@code 12500.00} and
+     * {@code 12500} give {@code 12500}), so the export ({@code "12500.00"}) and the database give the same checksum.
+     */
+    public static String decimal(java.math.BigDecimal value) {
+        return value == null ? null : value.stripTrailingZeros().toPlainString();
+    }
+
     /** Lower-case hex SHA-256 of the UTF-8 text. */
     public static String sha256(String text) {
         return sha256(text.getBytes(StandardCharsets.UTF_8));

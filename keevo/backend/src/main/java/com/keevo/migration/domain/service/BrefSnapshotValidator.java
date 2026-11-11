@@ -4,6 +4,8 @@ import com.keevo.identity.api.LegacyIdentityImportPort.ConflictKind;
 import com.keevo.migration.domain.model.BlockedCase;
 import com.keevo.migration.domain.model.BlockedCase.Kind;
 import com.keevo.migration.domain.model.BrefAccount;
+import com.keevo.migration.domain.model.BrefCustomer;
+import com.keevo.migration.domain.model.BrefProduct;
 import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.migration.domain.model.BrefSnapshot;
 
@@ -16,6 +18,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.keevo.migration.domain.model.MigrationRecord.BREF_CUSTOMER;
+import static com.keevo.migration.domain.model.MigrationRecord.BREF_PRODUCT;
 import static com.keevo.migration.domain.model.MigrationRecord.BREF_SHOP;
 import static com.keevo.migration.domain.model.MigrationRecord.BREF_USER;
 
@@ -90,7 +94,41 @@ public final class BrefSnapshotValidator {
             }
             account(member, conflicts, importedUserIds, seen, cases);
         }
+        catalogue(snapshot, shopIds, cases);
         return cases;
+    }
+
+    /**
+     * Story 24.3 — products and customers: each of one of the owner's shops and present once (an export must hold the
+     * owner's own rows; the database adapter filters on the shops), a product price that fits a Keevo price, a
+     * customer phone readable as E.164 (a Keevo client without it cannot be read back). O(n).
+     */
+    private static void catalogue(BrefSnapshot snapshot, Set<String> shopIds, List<BlockedCase> cases) {
+        Set<UUID> productIds = new java.util.HashSet<>();
+        for (BrefProduct p : snapshot.products()) {
+            if (!productIds.add(p.id()) || !ownShop(p.shopId(), shopIds)) {
+                cases.add(BlockedCase.of(Kind.PRODUCT_INVALID, "produit d'une autre boutique ou en double",
+                        BREF_PRODUCT, p.id()));
+            }
+            if (!BrefCatalogPlanner.priceInRange(p.unitPrice())) {
+                cases.add(BlockedCase.of(Kind.PRODUCT_INVALID, "prix négatif ou trop grand", BREF_PRODUCT, p.id()));
+            }
+        }
+        Set<UUID> customerIds = new java.util.HashSet<>();
+        for (BrefCustomer c : snapshot.customers()) {
+            if (!customerIds.add(c.id()) || !ownShop(c.shopId(), shopIds)) {
+                cases.add(BlockedCase.of(Kind.CLIENT_INVALID, "client d'une autre boutique ou en double",
+                        BREF_CUSTOMER, c.id()));
+            }
+            if (BrefMappings.e164(c.phone()) == null) {
+                cases.add(BlockedCase.of(Kind.CLIENT_INVALID, "téléphone invalide", BREF_CUSTOMER, c.id()));
+            }
+        }
+    }
+
+    private static boolean ownShop(String shopId, Set<String> shopIds) {
+        UUID id = BrefMappings.uuidOrNull(shopId);
+        return id != null && shopIds.contains(id.toString());
     }
 
     private static void account(BrefAccount a, Map<UUID, Set<ConflictKind>> conflicts, Set<UUID> imported,

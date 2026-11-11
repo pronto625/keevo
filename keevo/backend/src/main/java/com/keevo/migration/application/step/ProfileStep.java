@@ -6,13 +6,10 @@ import com.keevo.identity.api.TenantSaleFlowCommandPort;
 import com.keevo.migration.application.ImportRun;
 import com.keevo.migration.application.ImportStep;
 import com.keevo.migration.application.MigrationUnitOfWork;
-import com.keevo.migration.domain.model.BrefShop;
 import com.keevo.migration.domain.service.BrefMappings;
 import com.keevo.shared.module.ModuleActivationRulesPort;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
-
-import java.util.Comparator;
 
 /**
  * Story 24.2, §10.2 step 1 (profile) — once per tenant, in one transaction: the preferences (sector of the oldest shop,
@@ -54,12 +51,7 @@ class ProfileStep implements ImportStep {
     @Override
     public void run(ImportRun run) {
         String schema = run.tenantSchema();
-        String sector = run.snapshot().shops().stream()
-                .sorted(Comparator.comparing(BrefShop::deleted).thenComparing(BrefShop::createdAt)
-                        .thenComparing(BrefShop::id))
-                .map(s -> BrefMappings.sector(s.category()))
-                .filter(s -> s != null)
-                .findFirst().orElse(null);
+        String sector = BrefMappings.ownerSector(run.snapshot().shops());
         uow.platform(() -> {
             if (!identity.prepareImportedProfile(schema, run.tenantId(), sector, SUSPENSION_REASON)) {
                 return null; // profile already applied by a previous run

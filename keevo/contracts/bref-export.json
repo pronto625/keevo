@@ -1,5 +1,5 @@
 {
-  "description": "Story 24.1 / 24.2 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
+  "description": "Story 24.2 / 24.3 — export of ONE Bref owner by api-bref for the Keevo migration tool (format 1). Produced by api-bref (GET /v1/admin/migration/owners/:id/export, superadmin, owner frozen — story 24.1, built by the Bref team), read by Keevo (keevo/backend/src/main/java/com/keevo/migration/adapter/out/source/JsonExportBrefSource.java). One JSON object per owner; property names are the api-bref entity property names (TypeORM, camelCase) so each row is the entity serialized as is. Change this file only with both sides; a breaking change bumps formatVersion (Keevo refuses an unknown version).",
   "formatVersion": 1,
   "transport": {
     "file": "owner-<owner uuid>.json in the folder keevo.migration.bref.export-dir (Keevo server)",
@@ -42,8 +42,29 @@
       "description": "EVERY user whose shopId is one of the owner's shops (roles admin, seller, viewer), soft-deleted ones included; same fields as owner",
       "fields": "as owner (role: admin | seller | viewer; shopId: the member's shop uuid; password: bcrypt hash)"
     },
-    "customers": "24.3 — array of customer rows (entity property names)",
-    "products": "24.3 — array of product rows",
+    "customers": {
+      "description": "24.3 — EVERY customer whose shopId is one of the owner's shops (one row per shop and phone)",
+      "fields": {
+        "id": "uuid", "shopId": "uuid", "name": "string", "phone": "string (as stored)", "email": "string|null",
+        "type": "\"person\"|\"company\"|null", "nui": "string|null", "rccm": "string|null", "address": "string|null",
+        "contactName": "string|null", "website": "string|null", "birthDate": "string|null (YYYY-MM-DD as stored)",
+        "notes": "string|null", "totalInvoices": "integer (informative: recomputed from documents, 24.4)",
+        "totalSpent": "decimal (informative)", "lastPurchaseAt": "instant|null (informative)",
+        "marketingConsentAt": "instant|null", "marketingConsentById": "uuid|null", "marketingOptOutAt": "instant|null",
+        "createdAt": "instant", "updatedAt": "instant"
+      }
+    },
+    "products": {
+      "description": "24.3 — EVERY product whose shopId is one of the owner's shops (any case), archived and merged ones included",
+      "fields": {
+        "id": "uuid", "shopId": "string (the shop uuid as stored)", "name": "string", "nameKey": "string",
+        "productKey": "string (bc:<barcode> | nm:<normalized name>)", "reference": "string|null",
+        "unitPrice": "decimal", "priceManual": "boolean", "timesSold": "integer (informative)",
+        "totalQuantity": "decimal (informative)", "totalRevenue": "decimal (informative)",
+        "lastSoldAt": "instant|null", "isArchived": "boolean", "mergedIntoId": "string|null (target product uuid)",
+        "createdAt": "instant", "updatedAt": "instant"
+      }
+    },
     "invoices": "24.4 — array of invoice rows, each with items[] and payments[]",
     "expenses": "24.4 — array of expense rows",
     "subscriptions": "24.5", "planPaymentRequests": "24.5", "usageCounters": "24.5", "accountCredit": "24.5",
@@ -55,6 +76,12 @@
     "shops": "tenant stores (same ids, dates kept; deleted → inactive), logos through the store logo use case",
     "members": "public.users + memberships (admin → MANAGER, seller → EMPLOYEE, viewer → VIEWER) + employees (id = user id); deleted members are not imported",
     "blocking": "an owner whose phone / email / username (or a member's) already belongs to a Keevo account is not imported (case ACCOUNT_EXISTS, bridge = 24.7)"
+  },
+  "keevoMapping24_3": {
+    "categories": "the root categories of the sector template (sector of the oldest shop) + « Produits importés » (custom), once per tenant",
+    "products": "ONE untracked Keevo product per productKey across the owner's shops (id, name, creation date of the oldest; price of the latest typed price, else of the latest sale, cents rounded); merged products (mergedIntoId) imported archived and redirected; names made unique with « (2) »…; category « Produits importés »; every Bref product traced",
+    "customers": "one Keevo client per customer (same id) in the store of its shop (ADR-08: no merge across stores, sharing off); E.164 phone required (else blocking case CLIENT_INVALID); fields beyond the client limits cut or dropped with a note",
+    "blocking": "a product or customer of another shop or duplicated, a price out of range (PRODUCT_INVALID), a customer phone not readable as E.164 (CLIENT_INVALID)"
   },
   "example": {
     "formatVersion": 1,
@@ -87,8 +114,27 @@
         "createdAt": "2026-02-01T09:00:00.000Z", "updatedAt": "2026-02-01T09:00:00.000Z", "deletedAt": null
       }
     ],
-    "customers": [],
-    "products": [],
+    "customers": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000301", "shopId": "6f1d2c3b-0000-4000-8000-000000000101",
+        "name": "Client Exemple", "phone": "+237600000003", "email": null, "type": "person", "nui": null,
+        "rccm": null, "address": null, "contactName": null, "website": null, "birthDate": "1990-05-01",
+        "notes": null, "totalInvoices": 1, "totalSpent": "12500.00", "lastPurchaseAt": "2026-03-01T10:00:00.000Z",
+        "marketingConsentAt": "2026-03-01T10:00:00.000Z",
+        "marketingConsentById": "6f1d2c3b-0000-4000-8000-000000000001", "marketingOptOutAt": null,
+        "createdAt": "2026-03-01T10:00:00.000Z", "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    ],
+    "products": [
+      {
+        "id": "6f1d2c3b-0000-4000-8000-000000000401", "shopId": "6f1d2c3b-0000-4000-8000-000000000101",
+        "name": "Riz parfumé 5 kg", "nameKey": "riz parfume 5 kg", "productKey": "nm:riz parfume 5 kg",
+        "reference": null, "unitPrice": "12500.00", "priceManual": false, "timesSold": 1,
+        "totalQuantity": "1.000", "totalRevenue": "12500.00", "lastSoldAt": "2026-03-01T10:00:00.000Z",
+        "isArchived": false, "mergedIntoId": null,
+        "createdAt": "2026-03-01T10:00:00.000Z", "updatedAt": "2026-03-01T10:00:00.000Z"
+      }
+    ],
     "invoices": []
   }
 }

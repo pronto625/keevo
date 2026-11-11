@@ -63,10 +63,13 @@ class JdbcMigrationRecordStore implements MigrationRecordStore {
               FROM public.migration_records WHERE bref_owner_id = ? AND target_table = ANY (?::varchar[])
             """;
 
+    /** Story 24.3 review — one statement whatever the number of records (thousands per owner with the catalogue). */
     static final String INSERT_RECORD_SQL = """
             INSERT INTO public.migration_records (batch_id, bref_owner_id, target_table, target_id, source_table,
                                                   source_id, checksum, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            SELECT ?, ?, t.target_table, t.target_id, t.source_table, t.source_id, t.checksum, t.note
+              FROM unnest(?::varchar[], ?::uuid[], ?::varchar[], ?::uuid[], ?::varchar[], ?::text[])
+                   AS t(target_table, target_id, source_table, source_id, checksum, note)
             ON CONFLICT (source_table, source_id, target_table) DO NOTHING
             """;
 
@@ -130,15 +133,17 @@ class JdbcMigrationRecordStore implements MigrationRecordStore {
             return;
         }
         List<MigrationRecord> list = List.copyOf(records);
-        jdbc.batchUpdate(INSERT_RECORD_SQL, list, list.size(), (ps, r) -> {
+        jdbc.update(con -> {
+            java.sql.PreparedStatement ps = con.prepareStatement(INSERT_RECORD_SQL);
             ps.setObject(1, batchId);
             ps.setObject(2, brefOwnerId);
-            ps.setString(3, r.targetTable());
-            ps.setObject(4, r.targetId());
-            ps.setString(5, r.sourceTable());
-            ps.setObject(6, r.sourceId());
-            ps.setString(7, r.checksum());
-            ps.setString(8, r.note());
+            ps.setArray(3, con.createArrayOf("varchar", list.stream().map(MigrationRecord::targetTable).toArray()));
+            ps.setArray(4, con.createArrayOf("uuid", list.stream().map(MigrationRecord::targetId).toArray()));
+            ps.setArray(5, con.createArrayOf("varchar", list.stream().map(MigrationRecord::sourceTable).toArray()));
+            ps.setArray(6, con.createArrayOf("uuid", list.stream().map(MigrationRecord::sourceId).toArray()));
+            ps.setArray(7, con.createArrayOf("varchar", list.stream().map(MigrationRecord::checksum).toArray()));
+            ps.setArray(8, con.createArrayOf("text", list.stream().map(MigrationRecord::note).toArray()));
+            return ps;
         });
     }
 

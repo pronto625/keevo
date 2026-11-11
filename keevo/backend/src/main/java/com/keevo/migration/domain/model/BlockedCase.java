@@ -20,7 +20,7 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
                 : kind.label() + " : " + detail, sourceTable, sourceId);
     }
 
-    /** Every blocking case of 24.2 (24.7 adds the identity bridge cases). */
+    /** Every blocking case of 24.2 and 24.3 (24.7 adds the identity bridge cases). */
     public enum Kind {
         OWNER_DELETED("Compte supprimé dans Bref"),
         OWNER_INACTIVE("Compte désactivé dans Bref"),
@@ -38,7 +38,10 @@ public record BlockedCase(String code, String label, String sourceTable, UUID so
                 + "(rapprochement des comptes : story 24.7)"),
         ACCOUNT_ID_TAKEN("Un compte Keevo non issu de cet import porte déjà le même identifiant interne"),
         SHOP_INVALID("Boutique invalide"),
-        TENANT_GONE("L'entreprise importée précédemment n'existe plus (retour arrière à terminer)");
+        TENANT_GONE("L'entreprise importée précédemment n'existe plus (retour arrière à terminer)"),
+        // Story 24.3
+        PRODUCT_INVALID("Produit invalide"),
+        CLIENT_INVALID("Client invalide");
 
         private final String label;
 

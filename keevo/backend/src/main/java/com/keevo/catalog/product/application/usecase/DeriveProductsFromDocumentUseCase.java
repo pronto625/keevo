@@ -7,6 +7,7 @@ import com.keevo.catalog.product.domain.port.out.ProductDerivationRepository.Can
 import com.keevo.catalog.product.domain.port.out.ProductDerivationRepository.NewProduct;
 import com.keevo.catalog.product.domain.port.out.ProductDerivationRepository.Target;
 import com.keevo.catalog.product.domain.service.ProductKeys;
+import com.keevo.catalog.product.domain.service.ProductSkus;
 import com.keevo.shared.application.port.TransactionLockPort;
 import com.keevo.shared.capability.entitlement.PlanLimitCheck;
 import com.keevo.shared.capability.entitlement.PlanView;
@@ -32,7 +33,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * Story 20.6 — the catalogue products of an issued document's lines, found or created (Bref
@@ -59,8 +59,6 @@ import java.util.concurrent.ThreadLocalRandom;
 public class DeriveProductsFromDocumentUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(DeriveProductsFromDocumentUseCase.class);
-
-    private static final String SKU_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
     private final ProductDerivationRepository products;
     private final TransactionLockPort transactionLock;
@@ -213,36 +211,13 @@ public class DeriveProductsFromDocumentUseCase {
 
     /** Auto SKUs ({@code KEV-} + 6), unique among themselves and against the catalogue (one query). */
     private List<NewProduct> withUniqueSkus(List<NewProduct> toCreate) {
-        Set<String> skus = new HashSet<>();
-        for (int i = 0; i < toCreate.size(); i++) {
-            String sku;
-            do {
-                sku = generateSku();
-            } while (!skus.add(sku));
-        }
-        Set<String> taken = new HashSet<>(products.existingSkus(skus));
-        List<String> free = new ArrayList<>(skus);
-        for (int i = 0; i < free.size(); i++) {
-            while (taken.contains(free.get(i))) { // ~1 in 2 billion: regenerate (unchecked twice, still not unique)
-                String sku = generateSku();
-                if (skus.add(sku)) free.set(i, sku);
-            }
-        }
+        List<String> free = ProductSkus.unique(toCreate.size(), products::existingSkus);
         List<NewProduct> result = new ArrayList<>(toCreate.size());
         for (int i = 0; i < toCreate.size(); i++) {
             NewProduct p = toCreate.get(i);
             result.add(new NewProduct(p.id(), p.name(), free.get(i), p.price(), p.barcode(), p.productKey()));
         }
         return result;
-    }
-
-    private static String generateSku() {
-        ThreadLocalRandom random = ThreadLocalRandom.current();
-        StringBuilder sb = new StringBuilder("KEV-");
-        for (int i = 0; i < 6; i++) {
-            sb.append(SKU_CHARS.charAt(random.nextInt(SKU_CHARS.length())));
-        }
-        return sb.toString();
     }
 
     /**
