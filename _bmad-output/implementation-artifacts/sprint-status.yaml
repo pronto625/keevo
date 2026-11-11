@@ -546,7 +546,7 @@ development_status:
   23-8-portail-client: backlog
   23-9-securite-langues-notifications: backlog
   23-10-bascule-caisse-document: backlog
-  23-11-double-backend-mode-legacy: backlog
+  23-11-double-backend-mode-legacy: backlog  # 2026-11-11 retirée (décision utilisateur, ADR-10) : app RN publiée le jour de la bascule, plus de routage double ni de mode legacy
   23-12-publication-identite-bref: backlog
   epic-23-retrospective: optional
 

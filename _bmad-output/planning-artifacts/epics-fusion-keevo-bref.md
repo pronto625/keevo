@@ -134,7 +134,7 @@ Les epics 16 et 17 restent liés à la fusion :
 - **FUS-FR34 :** L'app fonctionne hors ligne pour toutes les écritures métier (ventes, documents, paiements, stock, catalogue, clients, dépenses) via la file d'opérations du protocole Keevo.
 - **FUS-FR35 :** L'app n'affiche que les modules actifs du tenant et les permissions du rôle ; une route d'un module inactif n'est jamais atteignable.
 - **FUS-FR36 :** L'app propose verrouillage par PIN et biométrie, 7 langues (fr et en exposées d'abord), thème clair/sombre.
-- **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy, ADR-09).
+- **FUS-FR37 :** L'app ex-Bref publiée sur `com.brefpoint.app` sait dire à un owner non encore migré quand il le sera et lui laisse consulter ses factures (mode legacy, ADR-09). *(11/11/2026 : sans objet — bascule unique (ADR-10), 23.11 retirée.)*
 - **FUS-FR38 :** L'API Keevo absorbe **toute** l'API Bref, y compris sa partie super-admin (dashboard Bref) : vue plateforme (`/v1/dashboard` overview, growth, top-shops, activity, owner-summary), listes inter-comptes (clients, produits, dépenses `*-admin`), gestion des utilisateurs (liste, stats, appareils, statut, plan, suppression), versions d'app, offres, campagnes plateforme. Après la convergence, aucun client (app ou dashboard) n'appelle plus api-bref. *(Décision utilisateur du 01/11/2026.)*
 - **FUS-FR39 :** Une **couche d'outils IA** unique, construite sur les use cases Keevo (ports `in/` purs, commandes/requêtes `{Action}{Entity}Command/Query`), sert deux consommateurs : l'assistant intégré (`ai-assistant`, appel d'outils par le fournisseur de modèle) et un **serveur MCP** (Spring AI MCP Server, `adapter/in/mcp/` de chaque module) pour les clients IA externes. Chaque outil applique les mêmes contrôles que le REST (tenant, module `@RequiresEntitlement`, rôle, périmètre employé, quota) ; l'acteur et le tenant viennent toujours de la session, jamais du modèle ; outils en lecture d'abord, écriture seulement avec confirmation explicite ; chaque appel est audité. *(Décision utilisateur du 02/11/2026 : approche par outils MCP directement, sans porter le constructeur SQL de Bref.)*
 
@@ -145,7 +145,7 @@ Les epics 16 et 17 restent liés à la fusion :
 - **FUS-MIG3 :** L'activation est bloquée tant que la réconciliation (§10.3) présente un écart hors tolérance. *(11/11/2026, ADR-10 : activation globale ; un owner en écart non documenté par la répétition générale 24.12 empêche le « go » de la bascule.)*
 - **FUS-MIG4 (révisée 11/11/2026, ADR-10) :** Pendant la bascule, api-bref est arrêté (aucune écriture possible) ; aucun gel par owner ni modification d'api-bref n'est nécessaire. La source de l'import est le dump pris après l'arrêt, restauré dans une base à part et lu en lecture seule.
 - **FUS-MIG5 (révisée 11/11/2026, ADR-10) :** Le retour arrière est possible jusqu'à la décision « go » de la bascule : rallumer api-bref (rien n'y a été modifié) ; les entreprises importées sont supprimées (24.9).
-- **FUS-MIG6 (révisée 11/11/2026, ADR-10) :** Les mutations locales Bref non synchronisées avant l'arrêt sont le risque résiduel de la bascule (pas de pré-migrateur OTA) : la communication (24.13) demande d'ouvrir l'app connectée avant l'heure d'arrêt, et le runbook prévoit une fenêtre d'annonce ; le risque est accepté par l'owner produit.
+- **FUS-MIG6 (révisée 11/11/2026, ADR-10) :** Les mutations locales Bref non synchronisées avant l'arrêt sont le risque résiduel de la bascule (pas de pré-migrateur OTA) : la communication (24.13) demande d'ouvrir l'app connectée avant l'heure d'arrêt, et le runbook prévoit une fenêtre d'annonce ; le risque est accepté par l'owner produit. **Risque accepté explicitement par l'utilisateur le 11/11/2026.**
 - **FUS-MIG7 :** Aucune opération Keevo locale n'est perdue : l'app Flutter ne propose la mise à jour que file vide et sans quarantaine.
 - **FUS-MIG8 :** Abonnements en vigueur, crédits, packs SMS et compteurs du mois sont reportés à l'identique ; la règle `SUBSCRIPTION_IN_FORCE` à la date de migration fait foi, jamais `user.plan` ⚠️§7.10.
 - **FUS-MIG9 (révisée 11/11/2026, ADR-10) :** Les liens publics Bref restent fonctionnels après la bascule (redirection vers Keevo, 24.10) ; les webhooks RevenueCat/MyCoolPay/Meta et les comptes WhatsApp Business sont reconfigurés vers Keevo pendant la coupure (action utilisateur du runbook 24.13, pas de routeur à double livraison).
@@ -357,7 +357,7 @@ So that **je pose mes questions depuis l'outil de mon choix (FUS-FR39)**.
 ### Ordonnancement
 
 ```
-Epic 16 (socle, branche) ─────┐   GL = 19–21 + app RN à parité (22.1–22.13, 23.1–23.11) + outil 24.2–24.10/24.12/24.13 ──► 17.9 + 16.7 GO-LIVE = BASCULE (24.9, 23.12) ──► 22.14–22.16
+Epic 16 (socle, branche) ─────┐   GL = 19–21 + app RN à parité (22.1–22.13, 23.1–23.10) + outil 24.2–24.10/24.12/24.13 ──► 17.9 + 16.7 GO-LIVE = BASCULE (24.9, 23.12) ──► 22.14–22.16
 Epic 18 (P0) ─────────────────┼──► Epic 19 (P1a) ──► Epic 20 + 21 (P1b) ──► Epic 24.2–24.10 (outil) ──► 24.12 (répétition) ──► 24.13 (runbook)
                               │          │                                          │
                               │          └─(+4 sem)──► Epic 22 (P2, app RN Keevo) ──┤
@@ -1743,7 +1743,7 @@ So that **chaque type de commerce a l'accueil qui lui convient (FUS-FR17)**.
 
 ### Story 23.11 : Routage double backend et mode legacy (ADR-09)
 
-> **11/11/2026 (ADR-10, bascule unique) :** `api-bref /v1/auth/me/migration` (24.1) n'existe plus et il n'y a plus d'owner « pas encore migré » après la bascule. À revoir dans la spec de 23.11 : l'app publiée le jour de la bascule pointe sur Keevo seul ; le routage double et le mode legacy ne servent que si l'app est publiée avant la bascule (sinon la story se réduit à l'écran « Votre application a été mise à jour »).
+> **11/11/2026 — RETIRÉE (décision utilisateur, ADR-10, bascule unique) :** l'app RN n'est publiée que le jour de la bascule ; il n'existe plus d'owner « pas encore migré » ni d'API `api-bref /v1/auth/me/migration` (24.1 retirée). Aucun routage double ni mode legacy. La clé reste dans sprint-status (`backlog`, commentaire daté). Le texte ci-dessous est conservé pour mémoire.
 
 As a **owner Bref pas encore migré qui a reçu la mise à jour**,
 I want **comprendre ce qui se passe et consulter mes factures**,
@@ -2121,7 +2121,7 @@ So that **la documentation reflète le système réel**.
 |---|---|---|---|
 | **G0** fin P0 | après 18.2 | décisions écrites, chiffres connus (la refonte n'a plus à être en prod : décision du 03/11/2026) — **ouvert le 03/11/2026** (ADR-01 à 09 ; mesures `research/fusion-mesures/rapport-mesures-2026-11-03-fusion.md`, source Bref retenue par l'utilisateur) | on ne démarre pas P1 |
 | **G1** fin P1b | après 20.12, 20.13 et l'epic 21 | **toutes** les fonctionnalités Bref répliquées dans l'API Keevo (parcours Bref vert, API super-admin héritée), suite Flutter verte, charge 19.11 tenue | corriger avant P3 / avant l'outil |
-| **GL** go-live de la refonte | après G1, 22.13, 23.11 et 24.12 | tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et répétition générale 100 % réconciliée sur copie de prod (24.2–24.10, 24.12), runbook 24.13 relu ; puis 17.9 (régression multi-surface : parcours Keevo et Bref, app Flutter V1 et app RN) | **pas de mise en production de la refonte** (16.7) |
+| **GL** go-live de la refonte | après G1, 22.13, 23.10 et 24.12 (23.11 retirée le 11/11/2026) | tout le merge Keevo × Bref : (1) epics 19, 20, 21 — toutes les fonctionnalités Bref dans l'API Keevo ; (2) app React Native à parité Keevo et Bref, validée sur staging (22.1–22.13, 23.1–23.11) ; (3) outil de migration prêt et répétition générale 100 % réconciliée sur copie de prod (24.2–24.10, 24.12), runbook 24.13 relu ; puis 17.9 (régression multi-surface : parcours Keevo et Bref, app Flutter V1 et app RN) | **pas de mise en production de la refonte** (16.7) |
 | **G2** fin bêta P2 | 22.15 palier 10 % | zéro perte de donnée, crash-free ≥ 99,5 %, quarantaine < 0,5 % des opérations | rester à 10 %, corriger |
 | **G3** décision « go » de la bascule (ADR-10) | jour J, après la commande 24.9 | tous les owners réconciliés (ou écart décidé en 24.12), critères du runbook 24.13 remplis, app RN prête à publier (23.12) | rallumer Bref, supprimer les entreprises importées (24.9) |
 | **G4** J+7 après la bascule | 24.13 (vérification J+7) | aucun écart de données signalé, webhooks et liens vérifiés | corriger sur Keevo (Bref n'est plus rallumable sans perte) |
@@ -2159,7 +2159,7 @@ So that **la documentation reflète le système réel**.
 | ADR-06 | PREMIUM Keevo | **TEAM, prix inchangé** jusqu'à la fin de la période payée | suivie | 19.7 |
 | ADR-07 | §7.10 expirés | **FREE à la migration**, sans grâce : on applique `SUBSCRIPTION_IN_FORCE` comme Bref le fait déjà, l'owner ne doit pas sentir la migration | contraire (recommandait 30 j de grâce) | 24.5 |
 | ADR-08 | §7.5 clients | **Clients par établissement** (boutique, restaurant…) : liste filtrée sur l'établissement courant, employé limité au sien, owner « tous mes établissements », **partage optionnel** réglé par l'owner pour chaque établissement, pas de fusion automatique, doublon signalé seulement dans le même établissement | contraire (recommandait des clients au niveau tenant avec fusion) | FUS-FR15, 20.2, 20.6 (dérivation dans l'établissement courant), 24.3, 21.6 (cibles de campagne par établissement) |
-| ADR-09 | §9.5 publication | **Publication précoce** de l'app unifiée sous `com.brefpoint.app` avec mode legacy | suivie | 23.11, 23.12 |
+| ADR-09 | §9.5 publication | **Publication précoce** de l'app unifiée sous `com.brefpoint.app` avec mode legacy | **abandonnée le 11/11/2026** (ADR-10 : app publiée le jour de la bascule, 23.11 retirée) | 23.11, 23.12 |
 
 **Points à reprendre dans les specs (pas de nouvelle décision nécessaire) :**
 - ADR-01 : la devise de chaque pays (XAF pour CM/GA/TD, XOF pour SN, CDF ou USD pour CD) doit reproduire Bref ; 20.5 le vérifie dans le code Bref avant d'écrire sa spec.
@@ -2186,7 +2186,7 @@ So that **la documentation reflète le système réel**.
 ```yaml
   # ─────────────────────────────────────────────────────────
   # FUSION KEEVO × BREF POINT — epics-fusion-keevo-bref.md
-  # Ordre (03/11/2026, révisé 11/11 ADR-10) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.11 → 24.2–24.10, 24.12, 24.13) = GL → go-live refonte (17-9, 16-7) = bascule unique Bref (24.9, 23.12) → 22.14–22.16 → 25
+  # Ordre (03/11/2026, révisé 11/11 ADR-10) : tout le merge sur branche/staging (18 → 19–21 → 22.1–22.13, 23.1–23.10 → 24.2–24.10, 24.12, 24.13) = GL → go-live refonte (17-9, 16-7) = bascule unique Bref (24.9, 23.12) → 22.14–22.16 → 25
   # ─────────────────────────────────────────────────────────
   epic-18: backlog  # P0 Cadrage
   18-1-mesures-bases-bref-keevo: backlog
