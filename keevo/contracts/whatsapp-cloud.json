@@ -1,5 +1,5 @@
 {
-  "description": "Story 21.5 — « WhatsApp Business » (module whatsapp-cloud): the company connects its own WhatsApp Business number (Meta embedded signup), reads and answers its WhatsApp conversations, manages its message templates (Meta review), and its invoices / quotes sent by WhatsApp leave from its own number with the approved template bref_facture (PDF attached), the platform WhatsApp text with the link being the fallback. Plans: BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL (owner-disabled for companies that existed before it: « Mes modules »). Module refused → 403 MODULE_NOT_ENTITLED / MODULE_DISABLED_BY_OWNER. Owner only except GET /account (every member). Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. Shapes of conversations, messages and templates are Bref's (bref/features/whatsapp-inbox, whatsapp-marketing). Ids are API handles, never shown; show statusLabel, never status. Change this file only with both sides. Story 21.6: campaigns to consenting clients, header media for media templates, STOP / START answers (client opt-out).",
+  "description": "Story 21.5 — « WhatsApp Business » (module whatsapp-cloud): the company connects its own WhatsApp Business number (Meta embedded signup), reads and answers its WhatsApp conversations, manages its message templates (Meta review), and its invoices / quotes sent by WhatsApp leave from its own number with the approved template bref_facture (PDF attached), the platform WhatsApp text with the link being the fallback. Plans: BUSINESS, BUSINESS_TRIAL, PREMIUM, PREMIUM_TRIAL (owner-disabled for companies that existed before it: « Mes modules »). Module refused → 403 MODULE_NOT_ENTITLED / MODULE_DISABLED_BY_OWNER. Owner only except GET /account (every member). Responses use Keevo's envelope: success {data, …}; error {error: French message to show, code: HTTP name, domainCode, details?}. Shapes of conversations, messages and templates are Bref's (bref/features/whatsapp-inbox, whatsapp-marketing). Ids are API handles, never shown; show statusLabel, never status. Change this file only with both sides. Story 21.6: campaigns to consenting clients, header media for media templates, STOP / START answers (client opt-out). Story 21.11: purchase-behaviour targeting of campaigns (inactiveForDays, purchasedWithinDays, totalSpentMin/Max, totalInvoicesMin/Max; purchaseCriteriaLabels to show).",
   "endpoints": [
     {
       "method": "GET",
@@ -304,7 +304,16 @@
             "skippedCount": 0,
             "uncertainCount": 0,
             "createdAt": "…",
-            "updatedAt": "…"
+            "updatedAt": "…",
+            "inactiveForDays": 30,
+            "purchasedWithinDays": null,
+            "totalSpentMin": null,
+            "totalSpentMax": null,
+            "totalInvoicesMin": null,
+            "totalInvoicesMax": null,
+            "purchaseCriteriaLabels": [
+              "Sans achat depuis 30 jours"
+            ]
           }
         ]
       },
@@ -338,7 +347,13 @@
       "request": {
         "storeIds": [
           "uuid … (empty / absent = every store)"
-        ]
+        ],
+        "inactiveForDays": "21.11, optional: integer 0..3650 — no purchase for N days (never-buyers included); 0 or null = not set",
+        "purchasedWithinDays": "21.11, optional: integer 0..3650 — a purchase in the last N days; must be > inactiveForDays when both are set",
+        "totalSpentMin": "21.11, optional: FCFA 0..1e12 — net total of purchases ≥ (decimals rounded up; 0 or null = not set; a range holding no whole amount → 400)",
+        "totalSpentMax": "21.11, optional: FCFA 0..1e12 — net total of purchases ≤ (decimals rounded down; never-buyers count as 0); ≥ totalSpentMin",
+        "totalInvoicesMin": "21.11, optional: integer 0..10 000 000 — number of purchases (POS sales + invoices) ≥ (0 or null = not set)",
+        "totalInvoicesMax": "21.11, optional: integer 0..10 000 000 — number of purchases ≤; ≥ totalInvoicesMin"
       },
       "response": {
         "data": {
@@ -347,9 +362,10 @@
         }
       },
       "errors": [
-        "400 « Boutique inconnue ou désactivée »"
+        "400 « Boutique inconnue ou désactivée »",
+        "400 (French message): a purchase criterion out of range, minimum above maximum, purchasedWithinDays ≤ inactiveForDays"
       ],
-      "notes": "Clients with the team's marketing consent, no STOP, not archived, one per phone number. overLimit = more than 5 000."
+      "notes": "Clients with the team's marketing consent, no STOP, not archived, one per phone number. overLimit = more than 5 000. 21.11: optional purchase criteria (Bref targetingCriteria) — purchases = completed POS sales + issued / paid invoices (a sale invoiced automatically counted once), credit notes deducted from the total, quotes / drafts / cancelled never count; aggregated per phone number over all its client records; with storeIds, only the purchases made in those stores. No criterion = the 21.6 count. Days are 24-hour periods back from the moment of the count (preview, save, and the send itself — a scheduled campaign is evaluated when it leaves). A credit note lowers the total but is not a purchase."
     },
     {
       "method": "POST",
@@ -371,7 +387,13 @@
         ],
         "headerMediaId": "optional",
         "headerMediaLink": "optional https",
-        "scheduledAt": "ISO-8601 in the future (≤ 1 year), optional → SCHEDULED"
+        "scheduledAt": "ISO-8601 in the future (≤ 1 year), optional → SCHEDULED",
+        "inactiveForDays": "21.11, optional: integer 0..3650 — no purchase for N days (never-buyers included); 0 or null = not set",
+        "purchasedWithinDays": "21.11, optional: integer 0..3650 — a purchase in the last N days; must be > inactiveForDays when both are set",
+        "totalSpentMin": "21.11, optional: FCFA 0..1e12 — net total of purchases ≥ (decimals rounded up; 0 or null = not set; a range holding no whole amount → 400)",
+        "totalSpentMax": "21.11, optional: FCFA 0..1e12 — net total of purchases ≤ (decimals rounded down; never-buyers count as 0); ≥ totalSpentMin",
+        "totalInvoicesMin": "21.11, optional: integer 0..10 000 000 — number of purchases (POS sales + invoices) ≥ (0 or null = not set)",
+        "totalInvoicesMax": "21.11, optional: integer 0..10 000 000 — number of purchases ≤; ≥ totalInvoicesMin"
       },
       "response": {
         "status": 201,
@@ -411,12 +433,22 @@
           "skippedCount": 0,
           "uncertainCount": 0,
           "createdAt": "…",
-          "updatedAt": "…"
+          "updatedAt": "…",
+          "inactiveForDays": 30,
+          "purchasedWithinDays": null,
+          "totalSpentMin": null,
+          "totalSpentMax": null,
+          "totalInvoicesMin": null,
+          "totalInvoicesMax": null,
+          "purchaseCriteriaLabels": [
+            "Sans achat depuis 30 jours"
+          ]
         }
       },
       "errors": [
         "400 (French message)",
-        "404 WHATSAPP_TEMPLATE_NOT_FOUND"
+        "404 WHATSAPP_TEMPLATE_NOT_FOUND",
+        "400 (French message): a purchase criterion out of range, minimum above maximum, purchasedWithinDays ≤ inactiveForDays"
       ]
     },
     {
@@ -461,7 +493,16 @@
           "skippedCount": 0,
           "uncertainCount": 0,
           "createdAt": "…",
-          "updatedAt": "…"
+          "updatedAt": "…",
+          "inactiveForDays": 30,
+          "purchasedWithinDays": null,
+          "totalSpentMin": null,
+          "totalSpentMax": null,
+          "totalInvoicesMin": null,
+          "totalInvoicesMax": null,
+          "purchaseCriteriaLabels": [
+            "Sans achat depuis 30 jours"
+          ]
         }
       },
       "errors": [
@@ -473,7 +514,7 @@
       "path": "/api/v1/whatsapp/campaigns/{id}",
       "auth": "owner JWT",
       "module": "whatsapp-cloud (WRITE)",
-      "request": "same fields as POST, only those present change; \"scheduledAt\": null unschedules",
+      "request": "same fields as POST, only those present change; \"scheduledAt\": null unschedules; 21.11: each purchase criterion present changes (null removes it), absent ones are kept; targetedCount is recomputed",
       "response": {
         "data": {
           "id": "uuid (handle)",
@@ -511,7 +552,16 @@
           "skippedCount": 0,
           "uncertainCount": 0,
           "createdAt": "…",
-          "updatedAt": "…"
+          "updatedAt": "…",
+          "inactiveForDays": 30,
+          "purchasedWithinDays": null,
+          "totalSpentMin": null,
+          "totalSpentMax": null,
+          "totalInvoicesMin": null,
+          "totalInvoicesMax": null,
+          "purchaseCriteriaLabels": [
+            "Sans achat depuis 30 jours"
+          ]
         }
       },
       "errors": [
@@ -571,7 +621,16 @@
           "skippedCount": 0,
           "uncertainCount": 0,
           "createdAt": "…",
-          "updatedAt": "…"
+          "updatedAt": "…",
+          "inactiveForDays": 30,
+          "purchasedWithinDays": null,
+          "totalSpentMin": null,
+          "totalSpentMax": null,
+          "totalInvoicesMin": null,
+          "totalInvoicesMax": null,
+          "purchaseCriteriaLabels": [
+            "Sans achat depuis 30 jours"
+          ]
         }
       },
       "errors": [
@@ -628,7 +687,16 @@
           "skippedCount": 0,
           "uncertainCount": 0,
           "createdAt": "…",
-          "updatedAt": "…"
+          "updatedAt": "…",
+          "inactiveForDays": 30,
+          "purchasedWithinDays": null,
+          "totalSpentMin": null,
+          "totalSpentMax": null,
+          "totalInvoicesMin": null,
+          "totalInvoicesMax": null,
+          "purchaseCriteriaLabels": [
+            "Sans achat depuis 30 jours"
+          ]
         }
       },
       "errors": [

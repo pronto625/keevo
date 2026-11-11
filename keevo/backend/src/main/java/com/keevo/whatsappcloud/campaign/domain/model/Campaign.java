@@ -14,9 +14,11 @@ import java.util.UUID;
 public record Campaign(UUID id, String name, String description, CampaignStatus status, List<UUID> storeIds,
                        UUID templateId, List<VariableMapping> variables, String headerMediaId, String headerMediaLink,
                        Instant scheduledAt, Instant startedAt, Instant sentAt, Counters counters,
-                       FrozenTemplate frozen, UUID createdBy, Instant createdAt, Instant updatedAt) {
+                       FrozenTemplate frozen, UUID createdBy, Instant createdAt, Instant updatedAt,
+                       PurchaseCriteria criteria) {
 
     public Campaign {
+        criteria = criteria == null ? PurchaseCriteria.NONE : criteria;
         storeIds = storeIds == null ? List.of() : List.copyOf(storeIds);
         variables = variables == null ? List.of() : List.copyOf(variables);
         counters = counters == null ? Counters.ZERO : counters;

@@ -67,6 +67,7 @@ class WhatsAppCampaignFullContextTest extends FullContextIntegrationTest {
     @Autowired ModuleRegistry moduleRegistry;
     @Autowired MetaGraphClient graph;
     @Autowired CampaignDispatcher dispatcher;
+    @Autowired com.keevo.shared.module.ModuleProvisioner provisioner;
 
     record Member(UUID user, String schema, String jwt) {
     }
@@ -606,5 +607,161 @@ class WhatsAppCampaignFullContextTest extends FullContextIntegrationTest {
             jdbc.update("DELETE FROM public.platform_whatsapp_conversations WHERE contact_phone = ?", contact);
             jdbc.update("DELETE FROM public.whatsapp_marketing_opt_outs WHERE phone = ?", contact);
         }
+    }
+
+    // ── Story 21.11: purchase-behaviour targeting ─────────────────────────────────────────────────────────
+
+    private void sale(UUID storeId, UUID client, int total, String status, Instant at) {
+        jdbc.update("INSERT INTO \"" + schema + "\".sales (id, created_at, employee_id, occurred_at, payment_mode, "
+                        + "status, store_id, total_amount, discount_amount, client_id) VALUES (?, ?, ?, ?, 'CASH', ?, ?, ?, "
+                        + "0, ?)", UUID.randomUUID(), java.sql.Timestamp.from(at), UUID.randomUUID(),
+                java.sql.Timestamp.from(at), status, storeId, total, client);
+    }
+
+    private UUID invoice(UUID storeId, UUID client, long total, String kind, Instant at) {
+        UUID id = UUID.randomUUID();
+        boolean quote = "QUOTE".equals(kind);
+        jdbc.update("INSERT INTO \"" + schema + "\".invoices (id, number, status, issue_date, issued_at, client_name, "
+                        + "client_id, store_id, vat_registered, vat_rate, prices_include_vat, total_ht, total_vat, "
+                        + "total_ttc, created_by, kind) VALUES (?, ?, ?, ?, ?, 'Client', ?, ?, false, 0, true, ?, 0, ?, "
+                        + "?, ?)", id, quote ? null : "F" + metaId(), quote ? "DRAFT" : "ISSUED",
+                quote ? null : java.sql.Date.valueOf(java.time.LocalDate.ofInstant(at, java.time.ZoneOffset.UTC)),
+                quote ? null : java.sql.Timestamp.from(at), client, storeId, total, total, owner.user(), kind);
+        return id;
+    }
+
+    private int previewCount(Map<String, Object> body) throws Exception {
+        return data(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting", body), 200)
+                .path("count").asInt();
+    }
+
+    private JsonNode patch(UUID campaign, String json) throws Exception {
+        var request = MockMvcRequestBuilders.patch("/api/v1/whatsapp/campaigns/" + campaign)
+                .header("Authorization", "Bearer " + owner.jwt()).contentType(MediaType.APPLICATION_JSON).content(json);
+        MvcResult r = mockMvc.perform(request).andReturn();
+        SecurityContextHolder.clearContext();
+        TenantContext.clear();
+        return data(r, 200);
+    }
+
+    @Test
+    @DisplayName("21.11 purchase criteria: inactive, recent, total spent, number of purchases over sales + invoices − credit notes, per number, per store; frozen at send")
+    void purchaseTargeting() throws Exception {
+        provisioner.ensureProvisioned(schema, "invoicing");
+        UUID north = UUID.randomUUID();
+        jdbc.update("INSERT INTO \"" + schema + "\".stores (id, name) VALUES (?, 'Boutique Nord')", north);
+        Instant now = Instant.now();
+        java.time.Duration day = java.time.Duration.ofDays(1);
+        // A: two POS sales (5 and 10 days ago), 15 000 in all
+        UUID a = client(schema, "Awa", "+237690000701", store, true);
+        sale(store, a, 7_500, "COMPLETED", now.minus(day.multipliedBy(5)));
+        sale(store, a, 7_500, "COMPLETED", now.minus(day.multipliedBy(10)));
+        // B: one invoice 40 days ago; a quote and a cancelled sale yesterday are not purchases
+        UUID b = client(schema, "Ben", "+237690000702", store, true);
+        invoice(store, b, 3_000, "INVOICE", now.minus(day.multipliedBy(40)));
+        invoice(store, b, 50_000, "QUOTE", now.minus(day));
+        sale(store, b, 9_000, "CANCELLED", now.minus(day));
+        // C: never bought
+        client(schema, "Carl", "+237690000703", store, true);
+        // D: invoice 10 000 50 days ago, credit note 4 000 → total 6 000, one purchase
+        UUID d = client(schema, "Dora", "+237690000704", store, true);
+        UUID inv = invoice(store, d, 10_000, "INVOICE", now.minus(day.multipliedBy(50)));
+        jdbc.update("INSERT INTO \"" + schema + "\".credit_notes (id, number, invoice_id, reason, total_ht, total_vat, "
+                + "total_ttc, issued_at) VALUES (?, ?, ?, 'Retour', 4000, 0, 4000, ?)", UUID.randomUUID(),
+                "A" + metaId(), inv, java.sql.Timestamp.from(now.minus(day.multipliedBy(49))));
+        // E: one number, two records — bought yesterday in the main store, nothing in Boutique Nord
+        UUID e1 = client(schema, "Eve", "+237690000705", store, true);
+        client(schema, "Eve Nord", "+237690000705", north, true);
+        sale(store, e1, 2_000, "COMPLETED", now.minus(day));
+        // F: no consent, never bought — never targeted
+        client(schema, "Fred", "+237690000706", store, false);
+        // G: invoice 8 000 50 days ago, refunded 1 000 yesterday — a credit note is not a purchase (still inactive)
+        UUID g = client(schema, "Gina", "+237690000707", store, true);
+        UUID invG = invoice(store, g, 8_000, "INVOICE", now.minus(day.multipliedBy(50)));
+        jdbc.update("INSERT INTO \"" + schema + "\".credit_notes (id, number, invoice_id, reason, total_ht, total_vat, "
+                + "total_ttc, issued_at) VALUES (?, ?, ?, 'Geste', 1000, 0, 1000, ?)", UUID.randomUUID(),
+                "A" + metaId(), invG, java.sql.Timestamp.from(now.minus(day)));
+
+        assertThat(previewCount(Map.of())).as("no criterion: the 21.6 audience").isEqualTo(6);
+        assertThat(previewCount(Map.of("inactiveForDays", 0))).as("0 days = not set (Bref)").isEqualTo(6);
+        assertThat(previewCount(Map.of("totalInvoicesMin", 0, "totalSpentMin", 0))).as("0 minimums = not set")
+                .isEqualTo(6);
+        assertThat(previewCount(Map.of("inactiveForDays", 30))).as("B, C, D, G (E bought yesterday; G's credit "
+                + "note of yesterday is no purchase)").isEqualTo(4);
+        assertThat(previewCount(Map.of("purchasedWithinDays", 30))).as("A, E").isEqualTo(2);
+        assertThat(previewCount(Map.of("purchasedWithinDays", 60, "inactiveForDays", 30))).as("B, D, G").isEqualTo(3);
+        assertThat(previewCount(Map.of("totalSpentMin", 10_000))).as("A only: D is 6 000 after its credit note")
+                .isEqualTo(1);
+        assertThat(previewCount(Map.of("totalSpentMin", 5_999.5, "totalSpentMax", 6_000.7))).as("D, decimals rounded")
+                .isEqualTo(1);
+        MvcResult noWholeAmount = rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("totalSpentMin", 0.3, "totalSpentMax", 0.7));
+        assertBad(noWholeAmount);
+        assertThat(noWholeAmount.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .contains("Aucun total d'achats en francs entiers");
+        assertThat(previewCount(Map.of("totalInvoicesMin", 2))).as("A").isEqualTo(1);
+        assertThat(previewCount(Map.of("totalInvoicesMax", 0))).as("C: the quote and the cancelled sale do not count")
+                .isEqualTo(1);
+        assertThat(previewCount(Map.of("storeIds", List.of(north.toString()), "inactiveForDays", 30)))
+                .as("Boutique Nord: E has bought nothing there").isEqualTo(1);
+        assertThat(previewCount(Map.of("storeIds", List.of(store.toString()), "inactiveForDays", 30)))
+                .as("main store: B, C, D, G").isEqualTo(4);
+
+        assertBad(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("inactiveForDays", 4000)));
+        assertBad(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("inactiveForDays", 1.5)));
+        assertBad(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("totalSpentMin", "abc")));
+        assertBad(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("totalInvoicesMin", -1)));
+        MvcResult huge = mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/whatsapp/campaigns/preview-targeting")
+                .header("Authorization", "Bearer " + owner.jwt()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"totalSpentMin\": 1e400}")).andReturn();
+        SecurityContextHolder.clearContext();
+        TenantContext.clear();
+        assertBad(huge);
+        MvcResult minMax = rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("totalSpentMin", 5_000, "totalSpentMax", 1_000));
+        assertBad(minMax);
+        assertThat(minMax.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .contains("Le montant minimum des achats ne peut pas dépasser le maximum");
+        assertBad(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/preview-targeting",
+                Map.of("purchasedWithinDays", 10, "inactiveForDays", 30)));
+
+        UUID tpl = template(schema, "relance_" + metaId(), "NONE", "Vous nous manquez {{1}} !");
+        UUID campaign = createCampaign(Map.of("name", "Relance", "templateId", tpl.toString(), "variables",
+                List.of(Map.of("source", "clientName", "value", "cher client")), "inactiveForDays", 30));
+        JsonNode created = data(rest(owner, HttpMethod.GET, "/api/v1/whatsapp/campaigns/" + campaign, null), 200);
+        assertThat(created.path("targetedCount").asInt()).isEqualTo(4);
+        assertThat(created.path("inactiveForDays").asInt()).isEqualTo(30);
+        assertThat(created.path("totalSpentMin").isNull()).isTrue();
+        assertThat(created.path("purchaseCriteriaLabels").toString()).contains("Sans achat depuis 30 jours");
+
+        JsonNode both = patch(campaign, "{\"totalSpentMin\": 5000}");
+        assertThat(both.path("inactiveForDays").asInt()).as("absent field kept").isEqualTo(30);
+        assertThat(both.path("targetedCount").asInt()).as("inactive and ≥ 5 000: D, G").isEqualTo(2);
+        assertThat(both.path("purchaseCriteriaLabels")).hasSize(2);
+        JsonNode cleared = patch(campaign, "{\"inactiveForDays\": null}");
+        assertThat(cleared.path("inactiveForDays").isNull()).as("present null clears").isTrue();
+        assertThat(cleared.path("targetedCount").asInt()).as("≥ 5 000: A, D, G").isEqualTo(3);
+        JsonNode back = patch(campaign, "{\"inactiveForDays\": 30, \"totalSpentMin\": null, \"name\": \"Relance 30 j\"}");
+        assertThat(back.path("targetedCount").asInt()).isEqualTo(4);
+        assertThat(back.path("totalSpentMin").isNull()).isTrue();
+        assertThat(rest(owner, HttpMethod.PATCH, "/api/v1/whatsapp/campaigns/" + campaign,
+                Map.of("totalInvoicesMin", 3, "totalInvoicesMax", 1)).getResponse().getStatus()).isEqualTo(400);
+
+        // frozen at start: a purchase by B after the start does not change who receives it
+        int before = fake.calls("send-template", number).size();
+        data(rest(owner, HttpMethod.POST, "/api/v1/whatsapp/campaigns/" + campaign + "/send", null), 200);
+        sale(store, b, 1_000, "COMPLETED", Instant.now());
+        assertThat(runUntilSent(campaign)).isEqualTo("SENT");
+        assertThat(fake.calls("send-template", number).subList(before, fake.calls("send-template", number).size()))
+                .extracting(c -> c.detail().split(":")[0])
+                .containsExactlyInAnyOrder("237690000702", "237690000703", "237690000704", "237690000707");
+        JsonNode sent = data(rest(owner, HttpMethod.GET, "/api/v1/whatsapp/campaigns/" + campaign, null), 200);
+        assertThat(sent.path("sentCount").asInt()).isEqualTo(4);
+        assertThat(sent.toString()).doesNotContain(b.toString()).doesNotContain(d.toString());
+        assertThat(previewCount(Map.of("inactiveForDays", 30))).as("B bought: no longer inactive").isEqualTo(3);
     }
 }

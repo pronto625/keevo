@@ -20,14 +20,16 @@ public interface ClientQueryPort {
     /**
      * Story 21.6 — the audience of a marketing campaign: the eligible clients (same rule as {@link #marketingEligible})
      * of the given stores ({@code storeIds} empty = every client, legacy ones without a store included), one per phone
-     * number (the most recently updated record wins), at most {@code limit}, ordered by phone. One query on the partial
-     * index {@code idx_clients_marketing_audience}.
+     * number (the most recently updated record wins), at most {@code limit}, ordered by phone.
+     *
+     * <p>Story 21.11 — restricted by the purchase behaviour of each number ({@link PurchaseFilter}); an empty or
+     * {@code null} filter is exactly the 21.6 query on the partial index {@code idx_clients_marketing_audience}.
+     * Otherwise one query: eligible clients in phone order, each number's purchases aggregated from the revenue source
+     * by client index probes.
      */
-    List<MarketingRecipient> marketingAudience(String tenantSchema, Collection<UUID> storeIds, int limit);
+    List<MarketingRecipient> marketingAudience(String tenantSchema, Collection<UUID> storeIds, PurchaseFilter filter,
+                                               int limit);
 
-    /**
-     * Story 21.6 — the size of {@link #marketingAudience} (distinct phones), counted up to {@code cap} without loading
-     * the rows. One query on {@code idx_clients_marketing_audience}.
-     */
-    int countMarketingAudience(String tenantSchema, Collection<UUID> storeIds, int cap);
+    /** The size of {@link #marketingAudience} (distinct phones), counted up to {@code cap} without loading the rows. */
+    int countMarketingAudience(String tenantSchema, Collection<UUID> storeIds, PurchaseFilter filter, int cap);
 }

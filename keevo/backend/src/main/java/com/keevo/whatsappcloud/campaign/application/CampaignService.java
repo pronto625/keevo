@@ -2,6 +2,7 @@ package com.keevo.whatsappcloud.campaign.application;
 
 import com.keevo.crm.api.ClientQueryPort;
 import com.keevo.crm.api.MarketingRecipient;
+import com.keevo.crm.api.PurchaseFilter;
 import com.keevo.shared.capability.entitlement.UsageMetric;
 import com.keevo.shared.capability.entitlement.UsageQuotaPort;
 import com.keevo.shared.capability.notification.PlatformWhatsApp.HeaderMedia;
@@ -13,6 +14,7 @@ import com.keevo.store.api.StoreQueryPort;
 import com.keevo.store.api.StoreView;
 import com.keevo.whatsappcloud.campaign.domain.model.Campaign;
 import com.keevo.whatsappcloud.campaign.domain.model.CampaignStatus;
+import com.keevo.whatsappcloud.campaign.domain.model.PurchaseCriteria;
 import com.keevo.whatsappcloud.campaign.domain.model.Recipient;
 import com.keevo.whatsappcloud.campaign.domain.model.VariableMapping;
 import com.keevo.whatsappcloud.campaign.domain.model.VariableSource;
@@ -56,8 +58,14 @@ import java.util.UUID;
  * SCHEDULED → SENDING (guarded; one SENDING per company by a unique index), inserts the recipients in batches and
  * queues the job; the messages leave asynchronously ({@link CampaignDispatcher}).
  *
- * <p>Costs: preview / start = 1 audience query (partial index, LIMIT 5 001) + 1 store-names query; list = 1 keyset
- * query; start = + 1 guarded UPDATE + batched recipient insert + 1 job upsert.
+ * <p>Story 21.11 — optional purchase criteria ({@link PurchaseCriteria}) restrict the audience: validated on save
+ * and preview, evaluated (as absolute cut-offs) by the same single crm audience query at preview, save and start.
+ *
+ * <p>Costs (no purchase criterion): preview / start = 1 audience query (partial index, LIMIT 5 001) + 1 store-names query; list = 1 keyset
+ * query; start = + 1 guarded UPDATE + batched recipient insert + 1 job upsert. With purchase criteria the audience
+ * query aggregates each eligible number's purchases by client index probes until LIMIT matches are found (worst case
+ * every eligible number of the company; ~80 ms for 5 400 numbers / 60 000 sales measured) — still one statement.
+ * Days are counted as 24-hour periods back from the computing instant (preview, save, start).
  */
 @Service
 public class CampaignService {
@@ -76,17 +84,26 @@ public class CampaignService {
     /** What the owner edits (create, or the fields present in a PATCH). */
     public record Draft(String name, String description, List<UUID> storeIds, UUID templateId,
                         List<VariableInput> variables, String headerMediaId, String headerMediaLink,
-                        Instant scheduledAt) {
+                        Instant scheduledAt, PurchaseCriteria criteria) {
     }
 
     /** One variable as the app sends it: source {@code static | clientName | storeName} (Bref spellings too). */
     public record VariableInput(String source, String value) {
     }
 
-    /** Which fields a PATCH carries (absent = unchanged; {@code scheduledAt} present and null = not scheduled). */
+    /**
+     * Which fields a PATCH carries (absent = unchanged; {@code scheduledAt} present and null = not scheduled).
+     * Story 21.11 — {@code criteria}: the purchase-criteria fields present ({@link PurchaseCriteria#FIELDS} names; a
+     * present {@code null} removes that criterion).
+     */
     public record Presence(boolean name, boolean description, boolean storeIds, boolean template, boolean variables,
-                           boolean headerMedia, boolean scheduledAt) {
-        public static final Presence ALL = new Presence(true, true, true, true, true, true, true);
+                           boolean headerMedia, boolean scheduledAt, Set<String> criteria) {
+        public static final Presence ALL = new Presence(true, true, true, true, true, true, true,
+                Set.copyOf(PurchaseCriteria.FIELDS));
+
+        public Presence {
+            criteria = criteria == null ? Set.of() : Set.copyOf(criteria);
+        }
     }
 
     /** The audience preview: eligible clients, one per phone; {@code overLimit} above {@value #MAX_RECIPIENTS}. */
@@ -146,9 +163,11 @@ public class CampaignService {
         return ids.isEmpty() ? Map.of() : stores.namesByIds(schema, ids);
     }
 
-    public Preview preview(String schema, List<UUID> storeIds) {
+    /** Story 21.11 — {@code criteria} optional ({@code null} / empty = the 21.6 preview). */
+    public Preview preview(String schema, List<UUID> storeIds, PurchaseCriteria criteria) {
         List<UUID> ids = checkStores(schema, storeIds);
-        int n = clients.countMarketingAudience(schema, ids, MAX_RECIPIENTS + 1);
+        PurchaseCriteria c = checkCriteria(criteria);
+        int n = clients.countMarketingAudience(schema, ids, filter(c, now()), MAX_RECIPIENTS + 1);
         return new Preview(Math.min(n, MAX_RECIPIENTS), n > MAX_RECIPIENTS);
     }
 
@@ -158,7 +177,7 @@ public class CampaignService {
         Instant now = now();
         Campaign c = validated(schema, Presence.ALL, new Campaign(UUID.randomUUID(), d.name(), d.description(), CampaignStatus.DRAFT,
                 d.storeIds(), d.templateId(), variables(d.variables()), d.headerMediaId(), d.headerMediaLink(),
-                d.scheduledAt(), null, null, null, null, actorId, now, now), now);
+                d.scheduledAt(), null, null, null, null, actorId, now, now, d.criteria()), now);
         tx.executeWithoutResult(s -> {
             campaigns.insert(schema, c);
             if (c.status() == CampaignStatus.SCHEDULED) {
@@ -182,7 +201,8 @@ public class CampaignService {
                 p.headerMedia() ? d.headerMediaId() : current.headerMediaId(),
                 p.headerMedia() ? d.headerMediaLink() : current.headerMediaLink(),
                 p.scheduledAt() ? d.scheduledAt() : current.scheduledAt(), null, null, null, null,
-                current.createdBy(), current.createdAt(), now), now);
+                current.createdBy(), current.createdAt(), now,
+                current.criteria().merge(d.criteria(), p.criteria())), now);
         tx.executeWithoutResult(s -> {
             if (!campaigns.updateEditable(schema, merged)) {
                 throw new DomainException(ErrorCode.CAMPAIGN_ALREADY_SENT);
@@ -264,7 +284,9 @@ public class CampaignService {
             throw DomainException.userFacing(ErrorCode.CAMPAIGN_NOT_READY, problem);
         }
         inbox.credentials(schema); // WHATSAPP_NOT_CONNECTED before anything else
-        List<MarketingRecipient> audience = clients.marketingAudience(schema, c.storeIds(), MAX_RECIPIENTS + 1);
+        // Story 21.11 — the purchase criteria are evaluated now, once: the audience is frozen below
+        List<MarketingRecipient> audience = clients.marketingAudience(schema, c.storeIds(), filter(c.criteria(), now()),
+                MAX_RECIPIENTS + 1);
         if (audience.isEmpty()) {
             throw new DomainException(ErrorCode.CAMPAIGN_NO_RECIPIENT);
         }
@@ -384,11 +406,35 @@ public class CampaignService {
             throw new InvalidRequestParameterException("headerMediaId", "lifetime",
                     "Un fichier joint expire après 30 jours : programmez l'envoi plus tôt ou indiquez un lien https");
         }
-        int targeted = clients.countMarketingAudience(schema, storeIds, MAX_RECIPIENTS + 1);
+        PurchaseCriteria criteria = checkCriteria(c.criteria());
+        int targeted = clients.countMarketingAudience(schema, storeIds, filter(criteria, now), MAX_RECIPIENTS + 1);
         return new Campaign(c.id(), name, description, scheduledAt == null ? CampaignStatus.DRAFT
                 : CampaignStatus.SCHEDULED, storeIds, c.templateId(), c.variables(), mediaId, mediaLink, scheduledAt,
                 null, null, new Campaign.Counters(Math.min(targeted, MAX_RECIPIENTS), 0, 0, 0, 0, 0, 0), null,
-                c.createdBy(), c.createdAt(), c.updatedAt());
+                c.createdBy(), c.createdAt(), c.updatedAt(), criteria);
+    }
+
+    /** Story 21.11 — the criteria, or a 400 with the French reason. */
+    static PurchaseCriteria checkCriteria(PurchaseCriteria criteria) {
+        if (criteria == null) {
+            return PurchaseCriteria.NONE;
+        }
+        PurchaseCriteria.Problem problem = criteria.problem();
+        if (problem != null) {
+            throw new InvalidRequestParameterException(problem.field(), "range", problem.message());
+        }
+        return criteria;
+    }
+
+    /** Story 21.11 — the criteria as absolute cut-offs at {@code now} (crm evaluates them in SQL). */
+    static PurchaseFilter filter(PurchaseCriteria c, Instant now) {
+        if (c == null || c.isEmpty()) {
+            return PurchaseFilter.NONE;
+        }
+        return new PurchaseFilter(
+                c.inactiveForDays() == null ? null : now.minus(Duration.ofDays(c.inactiveForDays())),
+                c.purchasedWithinDays() == null ? null : now.minus(Duration.ofDays(c.purchasedWithinDays())),
+                c.totalSpentMin(), c.totalSpentMax(), c.totalInvoicesMin(), c.totalInvoicesMax());
     }
 
     private List<UUID> checkStores(String schema, List<UUID> storeIds) {

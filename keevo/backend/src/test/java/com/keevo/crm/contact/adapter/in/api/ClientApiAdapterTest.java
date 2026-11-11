@@ -47,6 +47,7 @@ class ClientApiAdapterTest {
     @Mock private UnarchiveClientUseCase unarchiveClient;
     @Mock private com.keevo.crm.contact.application.usecase.CreateClientUseCase createClient;
     @Mock private com.keevo.crm.contact.application.usecase.SetClientMarketingConsentUseCase consent;
+    @Mock private com.keevo.crm.contact.domain.port.out.MarketingAudienceQuery purchaseAudience;
 
     private ClientApiAdapter adapter;
 
@@ -58,7 +59,7 @@ class ClientApiAdapterTest {
     @BeforeEach
     void setUp() {
         adapter = new ClientApiAdapter(clientRepository, updateClient, archiveClient, unarchiveClient, createClient,
-                consent);
+                consent, purchaseAudience);
     }
 
     @Test
@@ -128,6 +129,25 @@ class ClientApiAdapterTest {
         when(clientRepository.findMarketingEligible(java.util.List.of(ID, other))).thenReturn(java.util.Set.of(ID));
 
         assertThat(adapter.marketingEligible(TENANT, java.util.List.of(ID, other))).containsExactly(ID);
+    }
+
+    @Test
+    void marketingAudience_emptyPurchaseFilterKeepsThe21_6Query_21_11() {
+        java.util.List<UUID> stores = java.util.List.of(ID);
+        when(clientRepository.countMarketingAudience(stores, 10)).thenReturn(4);
+        when(clientRepository.findMarketingAudience(stores, 10)).thenReturn(java.util.List.of());
+
+        assertThat(adapter.countMarketingAudience(TENANT, stores, com.keevo.crm.api.PurchaseFilter.NONE, 10))
+                .isEqualTo(4);
+        assertThat(adapter.countMarketingAudience(TENANT, stores, null, 10)).isEqualTo(4);
+        assertThat(adapter.marketingAudience(TENANT, stores, com.keevo.crm.api.PurchaseFilter.NONE, 10)).isEmpty();
+        verifyNoInteractions(purchaseAudience);
+
+        var filter = new com.keevo.crm.api.PurchaseFilter(T0, null, null, null, 2, null);
+        when(purchaseAudience.count(stores, filter, 10)).thenReturn(1);
+        assertThat(adapter.countMarketingAudience(TENANT, stores, filter, 10)).isEqualTo(1);
+        adapter.marketingAudience(TENANT, stores, filter, 10);
+        verify(purchaseAudience).audience(stores, filter, 10);
     }
 
     // 12.2e: the explicit tenantSchema must be the bound tenant — another or a missing schema fails fast

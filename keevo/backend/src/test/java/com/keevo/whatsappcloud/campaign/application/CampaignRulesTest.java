@@ -57,4 +57,25 @@ class CampaignRulesTest {
         assertThat(failed.sentDelta()).isEqualTo(-1);
         assertThat(failed.failedDelta()).isEqualTo(1);
     }
+
+    @Test
+    @DisplayName("21.11 purchase criteria → absolute cut-offs at the computing instant; invalid criteria → 400 French")
+    void purchaseFilter() {
+        java.time.Instant now = java.time.Instant.parse("2026-11-11T10:00:00Z");
+        var c = new com.keevo.whatsappcloud.campaign.domain.model.PurchaseCriteria(30, 90, 1_000L, 9_000L, 1, 4);
+        var f = CampaignService.filter(c, now);
+        assertThat(f.noPurchaseSince()).isEqualTo(java.time.Instant.parse("2026-10-12T10:00:00Z"));
+        assertThat(f.purchasedSince()).isEqualTo(java.time.Instant.parse("2026-08-13T10:00:00Z"));
+        assertThat(f.spentMin()).isEqualTo(1_000L);
+        assertThat(f.spentMax()).isEqualTo(9_000L);
+        assertThat(f.countMin()).isEqualTo(1);
+        assertThat(f.countMax()).isEqualTo(4);
+        assertThat(CampaignService.filter(null, now).isEmpty()).isTrue();
+        assertThat(CampaignService.filter(com.keevo.whatsappcloud.campaign.domain.model.PurchaseCriteria.NONE, now)
+                .isEmpty()).isTrue();
+        assertThat(CampaignService.checkCriteria(null).isEmpty()).isTrue();
+        assertThatThrownBy(() -> CampaignService.checkCriteria(
+                new com.keevo.whatsappcloud.campaign.domain.model.PurchaseCriteria(null, null, null, null, 5, 2)))
+                .isInstanceOf(InvalidRequestParameterException.class);
+    }
 }

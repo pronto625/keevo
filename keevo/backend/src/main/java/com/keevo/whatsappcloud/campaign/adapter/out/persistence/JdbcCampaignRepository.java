@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.keevo.shared.infrastructure.persistence.TenantSchema;
 import com.keevo.whatsappcloud.campaign.domain.model.Campaign;
 import com.keevo.whatsappcloud.campaign.domain.model.CampaignStatus;
+import com.keevo.whatsappcloud.campaign.domain.model.PurchaseCriteria;
 import com.keevo.whatsappcloud.campaign.domain.model.Recipient;
 import com.keevo.whatsappcloud.campaign.domain.model.RecipientStatus;
 import com.keevo.whatsappcloud.campaign.domain.model.VariableMapping;
@@ -48,7 +49,8 @@ public class JdbcCampaignRepository implements CampaignRepository {
             + "c.template_language, c.template_body, c.template_header, c.scheduled_at, c.started_at, c.sent_at, "
             + "c.targeted_count, c.sent_count, c.delivered_count, c.read_count, c.failed_count, c.skipped_count, "
             + "c.uncertain_count, c.created_by, c.created_at, c.updated_at, t.name AS t_name, t.language AS t_language, "
-            + "t.body_text AS t_body, t.header_format AS t_header";
+            + "t.body_text AS t_body, t.header_format AS t_header, c.inactive_for_days, c.purchased_within_days, "
+            + "c.total_spent_min, c.total_spent_max, c.total_invoices_min, c.total_invoices_max";
 
     private final JdbcTemplate jdbc;
 
@@ -66,8 +68,9 @@ public class JdbcCampaignRepository implements CampaignRepository {
         jdbc.update(con -> {
             var ps = con.prepareStatement("INSERT INTO " + table(schema, "whatsapp_campaigns") + " (id, name, "
                     + "description, status, store_ids, template_id, variables, header_media_id, header_media_link, "
-                    + "scheduled_at, targeted_count, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, "
-                    + "?::jsonb, ?, ?, ?, ?, ?, ?, ?)");
+                    + "scheduled_at, targeted_count, created_by, created_at, updated_at, inactive_for_days, "
+                    + "purchased_within_days, total_spent_min, total_spent_max, total_invoices_min, total_invoices_max) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
             ps.setObject(1, c.id());
             ps.setString(2, c.name());
             ps.setString(3, c.description());
@@ -82,6 +85,7 @@ public class JdbcCampaignRepository implements CampaignRepository {
             ps.setObject(12, c.createdBy());
             ps.setTimestamp(13, ts(c.createdAt()));
             ps.setTimestamp(14, ts(c.updatedAt()));
+            setCriteria(ps, 15, c.criteria());
             return ps;
         });
     }
@@ -92,7 +96,9 @@ public class JdbcCampaignRepository implements CampaignRepository {
             var ps = con.prepareStatement("UPDATE " + table(schema, "whatsapp_campaigns") + " SET name = ?, "
                     + "description = ?, status = ?, store_ids = ?, template_id = ?, variables = ?::jsonb, "
                     + "header_media_id = ?, header_media_link = ?, scheduled_at = ?, targeted_count = ?, "
-                    + "updated_at = ? WHERE id = ? AND status IN ('DRAFT', 'SCHEDULED')");
+                    + "updated_at = ?, inactive_for_days = ?, purchased_within_days = ?, total_spent_min = ?, "
+                    + "total_spent_max = ?, total_invoices_min = ?, total_invoices_max = ? "
+                    + "WHERE id = ? AND status IN ('DRAFT', 'SCHEDULED')");
             ps.setString(1, c.name());
             ps.setString(2, c.description());
             ps.setString(3, c.status().name());
@@ -104,9 +110,20 @@ public class JdbcCampaignRepository implements CampaignRepository {
             ps.setTimestamp(9, ts(c.scheduledAt()));
             ps.setInt(10, c.counters().targeted());
             ps.setTimestamp(11, ts(c.updatedAt()));
-            ps.setObject(12, c.id());
+            setCriteria(ps, 12, c.criteria());
+            ps.setObject(18, c.id());
             return ps;
         }) == 1;
+    }
+
+    /** Story 21.11 — the six criteria columns from {@code first} (null = not set). */
+    private static void setCriteria(java.sql.PreparedStatement ps, int first, PurchaseCriteria c) throws SQLException {
+        ps.setObject(first, c.inactiveForDays(), java.sql.Types.INTEGER);
+        ps.setObject(first + 1, c.purchasedWithinDays(), java.sql.Types.INTEGER);
+        ps.setObject(first + 2, c.totalSpentMin(), java.sql.Types.BIGINT);
+        ps.setObject(first + 3, c.totalSpentMax(), java.sql.Types.BIGINT);
+        ps.setObject(first + 4, c.totalInvoicesMin(), java.sql.Types.INTEGER);
+        ps.setObject(first + 5, c.totalInvoicesMax(), java.sql.Types.INTEGER);
     }
 
     @Override
@@ -322,7 +339,12 @@ public class JdbcCampaignRepository implements CampaignRepository {
                 new Campaign.Counters(rs.getInt("targeted_count"), rs.getInt("sent_count"),
                         rs.getInt("delivered_count"), rs.getInt("read_count"), rs.getInt("failed_count"),
                         rs.getInt("skipped_count"), rs.getInt("uncertain_count")),
-                frozen, rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"));
+                frozen, rs.getObject("created_by", UUID.class), instant(rs, "created_at"), instant(rs, "updated_at"),
+                new PurchaseCriteria(rs.getObject("inactive_for_days", Integer.class),
+                        rs.getObject("purchased_within_days", Integer.class),
+                        rs.getObject("total_spent_min", Long.class), rs.getObject("total_spent_max", Long.class),
+                        rs.getObject("total_invoices_min", Integer.class),
+                        rs.getObject("total_invoices_max", Integer.class)));
         return frozen != null
                 ? new CampaignRow(c, frozen.name(), frozen.language(), frozen.bodyText(), frozen.headerFormat())
                 : new CampaignRow(c, rs.getString("t_name"), rs.getString("t_language"), rs.getString("t_body"),

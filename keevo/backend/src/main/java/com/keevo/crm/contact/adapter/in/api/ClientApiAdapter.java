@@ -6,6 +6,7 @@ import com.keevo.crm.api.CreateClientInput;
 import com.keevo.crm.api.CreatedClient;
 import com.keevo.crm.api.ClientQueryPort;
 import com.keevo.crm.api.ClientView;
+import com.keevo.crm.api.PurchaseFilter;
 import com.keevo.crm.api.UpdateClientInput;
 import com.keevo.crm.contact.application.service.ClientAccess;
 import com.keevo.crm.contact.application.usecase.ArchiveClientUseCase;
@@ -14,6 +15,7 @@ import com.keevo.crm.contact.application.usecase.SetClientMarketingConsentUseCas
 import com.keevo.crm.contact.application.usecase.UnarchiveClientUseCase;
 import com.keevo.crm.contact.application.usecase.UpdateClientUseCase;
 import com.keevo.crm.contact.domain.port.out.ClientRepository;
+import com.keevo.crm.contact.domain.port.out.MarketingAudienceQuery;
 import com.keevo.shared.infrastructure.persistence.TenantContext;
 import org.springframework.stereotype.Component;
 
@@ -38,13 +40,16 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
     private final UnarchiveClientUseCase unarchiveClient;
     private final CreateClientUseCase createClient;
     private final SetClientMarketingConsentUseCase consent;
+    private final MarketingAudienceQuery purchaseAudience;
 
     ClientApiAdapter(ClientRepository clientRepository,
                      UpdateClientUseCase updateClient,
                      ArchiveClientUseCase archiveClient,
                      UnarchiveClientUseCase unarchiveClient,
                      CreateClientUseCase createClient,
-                     SetClientMarketingConsentUseCase consent) {
+                     SetClientMarketingConsentUseCase consent,
+                     MarketingAudienceQuery purchaseAudience) {
+        this.purchaseAudience = purchaseAudience;
         this.clientRepository = clientRepository;
         this.updateClient = updateClient;
         this.archiveClient = archiveClient;
@@ -80,17 +85,22 @@ class ClientApiAdapter implements ClientQueryPort, ClientCommandPort {
         return clientRepository.findMarketingEligible(clientIds);
     }
 
+    /** Story 21.11 — an empty filter keeps the 21.6 query untouched. */
     @Override
     public java.util.List<com.keevo.crm.api.MarketingRecipient> marketingAudience(String tenantSchema,
-                                                                                Collection<UUID> storeIds, int limit) {
+                                                                                Collection<UUID> storeIds,
+                                                                                PurchaseFilter filter, int limit) {
         TenantContext.requireCurrent(tenantSchema);
-        return clientRepository.findMarketingAudience(storeIds, limit);
+        return PurchaseFilter.isEmpty(filter) ? clientRepository.findMarketingAudience(storeIds, limit)
+                : purchaseAudience.audience(storeIds, filter, limit);
     }
 
     @Override
-    public int countMarketingAudience(String tenantSchema, Collection<UUID> storeIds, int cap) {
+    public int countMarketingAudience(String tenantSchema, Collection<UUID> storeIds, PurchaseFilter filter,
+                                      int cap) {
         TenantContext.requireCurrent(tenantSchema);
-        return clientRepository.countMarketingAudience(storeIds, cap);
+        return PurchaseFilter.isEmpty(filter) ? clientRepository.countMarketingAudience(storeIds, cap)
+                : purchaseAudience.count(storeIds, filter, cap);
     }
 
     @Override

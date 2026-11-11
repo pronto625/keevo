@@ -11,6 +11,7 @@ import com.keevo.whatsappcloud.campaign.application.CampaignService.Draft;
 import com.keevo.whatsappcloud.campaign.application.CampaignService.Presence;
 import com.keevo.whatsappcloud.campaign.application.CampaignService.VariableInput;
 import com.keevo.whatsappcloud.campaign.domain.model.Campaign;
+import com.keevo.whatsappcloud.campaign.domain.model.PurchaseCriteria;
 import com.keevo.whatsappcloud.campaign.domain.model.Recipient;
 import com.keevo.whatsappcloud.campaign.domain.model.RecipientStatus;
 import com.keevo.whatsappcloud.campaign.domain.model.VariableMapping;
@@ -69,7 +70,10 @@ public class WhatsAppCampaignController {
                                boolean hasHeaderMedia, String headerMediaLink, List<VariableView> variables,
                                Instant scheduledAt, Instant startedAt, Instant sentAt, int targetedCount,
                                int sentCount, int deliveredCount, int readCount, int failedCount, int skippedCount,
-                               int uncertainCount, Instant createdAt, Instant updatedAt) {
+                               int uncertainCount, Instant createdAt, Instant updatedAt, Integer inactiveForDays,
+                               Integer purchasedWithinDays, Long totalSpentMin, Long totalSpentMax,
+                               Integer totalInvoicesMin, Integer totalInvoicesMax,
+                               List<String> purchaseCriteriaLabels) {
         static CampaignView of(CampaignRow row, Map<UUID, String> names) {
             Campaign c = row.campaign();
             Campaign.Counters n = c.counters();
@@ -80,7 +84,9 @@ public class WhatsAppCampaignController {
                     c.headerMediaId() != null || c.headerMediaLink() != null, c.headerMediaLink(),
                     c.variables().stream().map(VariableView::of).toList(), c.scheduledAt(), c.startedAt(), c.sentAt(),
                     n.targeted(), n.sent(), n.delivered(), n.read(), n.failed(), n.skipped(), n.uncertain(),
-                    c.createdAt(), c.updatedAt());
+                    c.createdAt(), c.updatedAt(), c.criteria().inactiveForDays(), c.criteria().purchasedWithinDays(),
+                    c.criteria().totalSpentMin(), c.criteria().totalSpentMax(), c.criteria().totalInvoicesMin(),
+                    c.criteria().totalInvoicesMax(), c.criteria().labels());
         }
     }
 
@@ -102,9 +108,6 @@ public class WhatsAppCampaignController {
             return new RecipientView(r.clientName(), "+" + r.phone(), r.storeName(), status,
                     RecipientStatus.label(r.status().name(), r.deliveryStatus()), r.error());
         }
-    }
-
-    public record PreviewRequest(List<UUID> storeIds) {
     }
 
     private final CampaignService campaigns;
@@ -131,14 +134,24 @@ public class WhatsAppCampaignController {
                 .stream().map(TemplateOption::of).toList()));
     }
 
-    /** POST /api/v1/whatsapp/campaigns/preview-targeting {@code {storeIds}} → {@code {count, overLimit}}. */
+    /**
+     * POST /api/v1/whatsapp/campaigns/preview-targeting {@code {storeIds?, inactiveForDays?, purchasedWithinDays?,
+     * totalSpentMin?, totalSpentMax?, totalInvoicesMin?, totalInvoicesMax?}} → {@code {count, overLimit}}.
+     */
     @RequiresEntitlement(value = WhatsAppCloudModule.ID, access = RequiresEntitlement.Access.READ,
             readJustification = "compte les clients ciblés, sans rien enregistrer ni envoyer")
     @PostMapping("/preview-targeting")
     public ResponseEntity<ApiResponseWrapper<CampaignService.Preview>> preview(
-            @RequestBody(required = false) PreviewRequest request) {
+            @RequestBody(required = false) JsonNode body) {
+        if (body == null || body.isNull()) {
+            return ResponseEntity.ok(ApiResponseWrapper.ok(campaigns.preview(TenantContext.requireCurrent(), null,
+                    PurchaseCriteria.NONE)));
+        }
+        if (!body.isObject()) {
+            throw new InvalidRequestParameterException("body", "object", "Requête invalide");
+        }
         return ResponseEntity.ok(ApiResponseWrapper.ok(campaigns.preview(TenantContext.requireCurrent(),
-                request == null ? null : request.storeIds())));
+                uuids(body.get("storeIds"), "storeIds"), criteria(body))));
     }
 
     @RequiresEntitlement(value = WhatsAppCloudModule.ID, access = RequiresEntitlement.Access.READ)
@@ -150,7 +163,9 @@ public class WhatsAppCampaignController {
 
     /**
      * POST /api/v1/whatsapp/campaigns {@code {name, description?, storeIds?, templateId?, variables?, headerMediaId?,
-     * headerMediaLink?, scheduledAt?}} → 201 DRAFT (SCHEDULED with {@code scheduledAt}); 400 French.
+     * headerMediaLink?, scheduledAt?}} + Story 21.11 purchase criteria ({@code inactiveForDays?, purchasedWithinDays?,
+     * totalSpentMin?, totalSpentMax?, totalInvoicesMin?, totalInvoicesMax?}) → 201 DRAFT (SCHEDULED with
+     * {@code scheduledAt}); 400 French.
      */
     @RequiresEntitlement(WhatsAppCloudModule.ID)
     @PostMapping
@@ -167,8 +182,15 @@ public class WhatsAppCampaignController {
                                                                    @RequestBody(required = false) JsonNode body) {
         String schema = TenantContext.requireCurrent();
         JsonNode b = body == null ? com.fasterxml.jackson.databind.node.NullNode.getInstance() : body;
+        Set<String> criteria = new HashSet<>();
+        for (String field : PurchaseCriteria.FIELDS) {
+            if (b.has(field)) {
+                criteria.add(field);
+            }
+        }
         Presence p = new Presence(b.has("name"), b.has("description"), b.has("storeIds"), b.has("templateId"),
-                b.has("variables"), b.has("headerMediaId") || b.has("headerMediaLink"), b.has("scheduledAt"));
+                b.has("variables"), b.has("headerMediaId") || b.has("headerMediaLink"), b.has("scheduledAt"),
+                criteria);
         return ResponseEntity.ok(ApiResponseWrapper.ok(view(schema, campaigns.update(schema, CurrentActor.actorId(),
                 id, draft(body), p))));
     }
@@ -228,14 +250,79 @@ public class WhatsAppCampaignController {
 
     static Draft draft(JsonNode body) {
         if (body == null || body.isNull()) {
-            return new Draft(null, null, null, null, null, null, null, null);
+            return new Draft(null, null, null, null, null, null, null, null, PurchaseCriteria.NONE);
         }
         if (!body.isObject()) {
             throw new InvalidRequestParameterException("body", "object", "Requête invalide");
         }
         return new Draft(text(body, "name"), text(body, "description"), uuids(body.get("storeIds"), "storeIds"),
                 uuid(body.get("templateId"), "templateId"), variables(body.get("variables")),
-                text(body, "headerMediaId"), text(body, "headerMediaLink"), instant(body.get("scheduledAt")));
+                text(body, "headerMediaId"), text(body, "headerMediaLink"), instant(body.get("scheduledAt")),
+                criteria(body));
+    }
+
+    /**
+     * Story 21.11 — the purchase criteria of a body (Bref spellings, flat). Days and counts: whole numbers (0 days =
+     * not set, as Bref; a minimum of 0 = not set); amounts: numbers (whole francs: a minimum is rounded up, a maximum down; a minimum of 0 = not set).
+     */
+    static PurchaseCriteria criteria(JsonNode body) {
+        Integer inactive = days(body, PurchaseCriteria.INACTIVE_FOR_DAYS);
+        Integer within = days(body, PurchaseCriteria.PURCHASED_WITHIN_DAYS);
+        Integer countMin = count(body, PurchaseCriteria.TOTAL_INVOICES_MIN);
+        Long spentMin = amount(body, PurchaseCriteria.TOTAL_SPENT_MIN, true);
+        Long spentMax = amount(body, PurchaseCriteria.TOTAL_SPENT_MAX, false);
+        if (spentMin != null && spentMax != null && spentMin > spentMax
+                && body.get(PurchaseCriteria.TOTAL_SPENT_MIN).decimalValue()
+                .compareTo(body.get(PurchaseCriteria.TOTAL_SPENT_MAX).decimalValue()) <= 0) {
+            // e.g. 0,3 .. 0,7: the bounds are in order but hold no whole amount
+            throw new InvalidRequestParameterException(PurchaseCriteria.TOTAL_SPENT_MIN, "range",
+                    "Aucun total d'achats en francs entiers n'est compris entre ces deux montants");
+        }
+        return new PurchaseCriteria(inactive, within, spentMin, spentMax,
+                countMin == null || countMin == 0 ? null : countMin, // a minimum of 0 filters nothing
+                count(body, PurchaseCriteria.TOTAL_INVOICES_MAX));
+    }
+
+    private static Integer days(JsonNode body, String field) {
+        JsonNode n = body.get(field);
+        if (n == null || n.isNull()) {
+            return null;
+        }
+        if (!n.isIntegralNumber() || !n.canConvertToInt() || n.intValue() < 0 || n.intValue() > PurchaseCriteria.MAX_DAYS) {
+            throw new InvalidRequestParameterException(field, "range",
+                    "Indiquez un nombre de jours entier entre 0 et 3 650 (0 : aucun critère)");
+        }
+        return n.intValue() == 0 ? null : n.intValue();
+    }
+
+    private static Long amount(JsonNode body, String field, boolean min) {
+        JsonNode n = body.get(field);
+        if (n == null || n.isNull()) {
+            return null;
+        }
+        if (!n.isNumber() || (n.isFloatingPointNumber() && !Double.isFinite(n.doubleValue()))
+                || n.decimalValue().signum() < 0
+                || n.decimalValue().compareTo(java.math.BigDecimal.valueOf(PurchaseCriteria.MAX_AMOUNT)) > 0) {
+            throw new InvalidRequestParameterException(field, "range",
+                    "Indiquez un montant d'achats entre 0 et 1 000 000 000 000 FCFA");
+        }
+        // totals are whole francs: « ≥ 5 999,5 » is « ≥ 6 000 », « ≤ 6 000,7 » is « ≤ 6 000 »; a minimum of 0 filters nothing
+        long v = n.decimalValue().setScale(0, min ? java.math.RoundingMode.CEILING : java.math.RoundingMode.FLOOR)
+                .longValueExact();
+        return min && v == 0 ? null : v;
+    }
+
+    private static Integer count(JsonNode body, String field) {
+        JsonNode n = body.get(field);
+        if (n == null || n.isNull()) {
+            return null;
+        }
+        if (!n.isIntegralNumber() || !n.canConvertToInt() || n.intValue() < 0
+                || n.intValue() > PurchaseCriteria.MAX_COUNT) {
+            throw new InvalidRequestParameterException(field, "range",
+                    "Indiquez un nombre d'achats entier entre 0 et 10 000 000");
+        }
+        return n.intValue();
     }
 
     private static String text(JsonNode body, String field) {
