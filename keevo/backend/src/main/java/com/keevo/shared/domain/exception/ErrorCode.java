@@ -279,6 +279,7 @@ public enum ErrorCode {
     MIGRATION_EXPORT_INVALID,         // HTTP 422 — export file unreadable: checksum, format version or JSON
     MIGRATION_ALREADY_RUNNING,        // HTTP 409 — an import of the same owner is running
     MIGRATION_BATCH_NOT_FOUND,        // HTTP 404 — migration batch id unknown
+    MIGRATION_RECONCILIATION_NOT_FOUND, // HTTP 404 — no reconciliation yet for the batch / Bref owner (Story 24.8)
     // ── Generic ───────────────────────────────────────────────────
     NOT_FOUND,
     VALIDATION_FAILED,

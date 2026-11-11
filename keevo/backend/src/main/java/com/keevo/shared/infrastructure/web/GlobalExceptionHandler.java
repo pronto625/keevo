@@ -271,6 +271,7 @@ public class GlobalExceptionHandler {
                  "ROLE_NOT_FOUND",             // 19.14
                  "MIGRATION_OWNER_NOT_FOUND",  // 24.2
                  "MIGRATION_BATCH_NOT_FOUND",
+                 "MIGRATION_RECONCILIATION_NOT_FOUND", // 24.8
                  "INVOICE_LINK_INVALID",
                  "COMPANY_LOGO_NOT_FOUND",
                  "STORE_LOGO_NOT_FOUND",
