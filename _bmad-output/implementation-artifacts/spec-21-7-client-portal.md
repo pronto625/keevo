@@ -2,7 +2,7 @@
 title: '21-7 — Module client-portal: end clients find all their invoices by phone (OTP), across merchants'
 type: 'feature'
 created: '2026-11-10'
-status: 'done'
+status: done
 baseline_revision: '517b2c42200d2883a169bf48ef93dfc52dae8ebf'
 review_loop_iteration: 0
 followup_review_recommended: true
@@ -129,6 +129,54 @@ deferred: []
   - `[high]` `[patch]` (VG 4 / VG other 1) V70 owner-disables client-portal for pre-existing tenants but `ModuleOwnerActivationMigrationPostgresIntegrationTest` still pinned the old rows (would fail; the migration default untested) — `client-portal=false` added to its four assertions (pins the V70 privacy default).
   - `[medium]` `[patch]` (VG other 2) invoices replaced after a POS sale correction (`superseded_at`) were listed — filtered in `JdbcPortalDocuments` and the back-fill; asserted in `switchSuspensionAndCancelled`.
 
+### 2026-11-11 — Review pass (reprise 11/11/2026, alignment on Bref)
+- verdicts: 44 findings (rows merged where layers reported the same defect) — high 0, medium 6, low 24, false 9, maybe-false 5
+- findings:
+  - `[medium]` `[patch]` (NFR11 1 / blind 11 / edge 7) first-page totals moved up to 10 000 ids each way and silently capped `invoiceCount` / `totalTtc` — `PortalIndexReader.merchantsOf` (one `SELECT DISTINCT` row per visible merchant) + `PortalDocuments.summarize(tenantIdBySchema, phone)` joining the phone's index rows to each merchant's invoices by PK in one `UNION ALL` aggregate: exact, no id transferred, memory O(D); `allBySchema` / `SUMMARY_CAP` removed.
+  - `[low]` `[reject]` (NFR11 2 / edge 8) provisioning now runs for every merchant of the phone — bounded by the client's merchants, in-memory no-op once warm (`ModuleProvisionerService.ensured`), one call per schema per request (shared `shown` map).
+  - `[low]` `[patch]` (NFR11 3 / blind 12) `query()` chose its binds from the SQL text — every `find` template selects the schema column and always binds it; the summary has its own explicit binder.
+  - `[medium]` `[patch]` (VG 1 / blind 3) credit notes in `amountRemaining` / legacy payment untested — `detailsAndSummary` inserts a credit note and asserts remaining = total − credit − paid and the legacy payment = total − credit; contract states the header sums printed totals (credit notes per invoice).
+  - `[medium]` `[patch]` (VG 2) BCrypt 72-byte guard untested — 40 × « é » → register 422 `VALIDATION_FAILED`, login 401 `INVALID_CREDENTIALS`.
+  - `[low]` `[patch]` (VG 3) session cap on the password path untested — `registerThenPasswordSignIn` opens 10 sessions then logs in: 10 kept, oldest refused.
+  - `[medium]` `[patch]` (VG 4) summary not checked against a switched-off merchant — `detailsAndSummary` switches merchant B off: summary counts 1, amount of A only.
+  - `[low]` `[patch]` (VG 5) line order untested — a second line (position 2, quantity 10.000) asserted after the first, and printed « 10 ».
+  - `[maybe-false]` `[reject]` (VG 6) `DuplicateKeyException` race path untested — needs a concurrent registration; catch narrowed to the e-mail index name (any other duplicate rethrown); if wrong only a rare 500 (low).
+  - `[medium]` `[patch]` (VG other / blind 8) failed password sign-ins blocked the « mot de passe oublié » path (register shared the per-identifier bucket) — registration counts under its own key (`register:` + phone); test: 11 failed logins → 429, then register with a code → 201.
+  - `[low]` `[reject]` (intent 1) Bref app wire shape (paths, `{data}`, `code` vs `otpCode`, no `refreshToken`, paged object) not compatible as is — reading C of the intent is not required ("additive and compatible" = compatible with Keevo's V1 apps); the Mobile section maps every Bref call.
+  - `[low]` `[reject]` (intent 2) public count / locked screen not ported — security gap, justified in table row 11.
+  - `[low]` `[reject]` (intent 3) gaps kept for non-security reasons (re-register resets password, code sign-in kept, keyset pages, totals without cancelled, quotes absent, owner switch) — each justified in the table and listed under « Décisions » for the user.
+  - `[false]` `[reject]` (intent 4) sprint-status not updated — done at finalize (21-7 comment, m21-7 / d21-7 keys).
+  - `[false]` `[reject]` (intent 5) `docs/entitlements/endpoints.md` not regenerated — regenerated at verification.
+  - `[false]` `[reject]` (intent 6) spec / review write-up not in the diff — the spec is tracked outside `keevo/` and committed at finalize.
+  - `[low]` `[patch]` (blind 1) `stripTrailingZeros` could print `1E+1` — `plainQuantity` (scale ≥ 0); unit + full-context assertions.
+  - `[low]` `[patch]` (blind 2 / edge 12) a PAID invoice could show a remainder — remaining forced to 0 when the shown state is PAID.
+  - `[low]` `[reject]` (blind 4) lines lack a VAT flag / breakdown — the PDF behind the link carries the VAT breakdown; Bref's screen shows `quantity × unitPrice` and `total` only; contract documents `unitPrice` semantics.
+  - `[low]` `[patch]` (blind 5) e-mail uniqueness relied on application lower-casing — V84 adds `CHECK (email IS NULL OR email = lower(email))`.
+  - `[low]` `[patch]` (blind 6) any duplicate turned into « e-mail taken » — catch limited to `uq_portal_clients_email`.
+  - `[false]` `[reject]` (blind 7) two phone normalizations in register — the e-mail check now uses the verified phone, after the code.
+  - `[low]` `[reject]` (blind 8b) no delete-account / change-e-mail endpoint — Bref has none either; out of the alignment scope.
+  - `[false]` `[reject]` (blind 9) security logic lacks tests — decoy path, multi-byte password, brakes now covered (`registerThenPasswordSignIn`, `loginBrake`, unit `loginBrake`); remaining race path see VG 6.
+  - `[false]` `[reject]` (blind 10) integration tests share one per-IP login bucket — `call()` rotates `X-Forwarded-For` over 250 addresses (`ClientIps` honours it, as the 21.7 brake tests rely on).
+  - `[maybe-false]` `[reject]` (blind 13 / edge 9) V84 silently re-enables nothing without a V70 history row — every environment (prod baseline 0, dev, tests) runs V70 through Flyway's default table; the migration test asserts the re-enable.
+  - `[low]` `[reject]` (blind 14) new configuration keys only in `@Value` defaults — same convention as the 21.7 portal keys; defaults are the product values.
+  - `[low]` `[reject]` (blind 14b) `Credentials.phone` unused — cheap, kept for a future « signed in as » need; harmless.
+  - `[maybe-false]` `[reject]` (blind 13b) no audit row / merchant notice for the re-enable — the user's decision is to behave like Bref (no switch at all there); documented in README and spec.
+  - `[medium]` `[patch]` (edge 1) 409 before the code let anyone probe registered e-mails — the e-mail check runs after a valid code; wrong code → 401 whatever the e-mail (test `probe`).
+  - `[low]` `[reject]` (edge 2) code burned on a 409 / failed transaction — consequence of edge 1's fix (security first); contract tells the app to ask a new code.
+  - `[low]` `[patch]` (edge 3) lower-casing could push an e-mail past 254 → 500 — length checked after lower-casing (422).
+  - `[low]` `[reject]` (edge 4) phone and e-mail of one account have separate 10-attempt buckets — Bref behaves the same; BCrypt cost 12 keeps 20 attempts / 15 min harmless.
+  - `[low]` `[reject]` (edge 5) limits configured to 0 refuse every login — operator misconfiguration only, defaults are Bref's.
+  - `[low]` `[reject]` (edge 6) a failing summary fails the page — only on a database error, which fails the page anyway.
+  - `[maybe-false]` `[reject]` (edge 10) a tenant created while V70 runs loses its rule row — migrations run at boot before the API serves; impossible in practice.
+  - `[low]` `[patch]` (edge 11) fully credited PAID invoice showed a 0 FCFA payment — legacy payment only when the amount due is positive.
+  - `[false]` `[reject]` (edge 12b) PAID with only unpaid instalments shows remaining — patched with blind 2 (PAID → remaining 0).
+  - `[low]` `[reject]` (edge 13) Intent says 30-day sessions — superseded by the « Reprise 11/11/2026 » section (user decision); fix would edit this build's spec intent.
+  - `[low]` `[reject]` (edge 14) AC1 « minimum fields / one cross-schema read » no longer holds — superseded by the reprise (Bref's screens); still no identifier, client data or note.
+  - `[low]` `[reject]` (edge 15) existing merchants exposed without opt-in — the user's explicit decision (behave like Bref); V84 keeps an owner's own switch-off.
+  - `[maybe-false]` `[reject]` (blind 13c / edge 9b) timestamp vs timestamptz comparison of `installed_on` — same JVM/session time zone for Flyway runs; the migration test passes on it.
+  - `[false]` `[reject]` (blind 2b) `PaymentStateCalculator` called the single source while sums are re-done — the adapter applies its exact rules (due, paid rows, legacy row); javadoc says so.
+  - `[false]` `[reject]` (edge 12c) summary ignores credit notes « inconsistently » — documented choice (printed totals); per-invoice remaining carries the credit.
+
 ## Design Notes
 
 - **Patterns.** Ports & adapters across Modulith boundaries: `shared.capability.portal.InvoicePhoneIndex` (Observer-free direct port, called in the issue transaction so index and invoice commit together — no event to lose) implemented by `clientportal`; `PortalDocuments` (Repository/Facade over another module's tables) implemented by invoicing, so the portal never touches invoice tables and invoicing never depends on the portal. OTP: Template Method — one core (`issue` / `check` by challenge key) shared by the merchant and portal purposes (`OtpPurpose` value object builds the key `portal:` + phone; merchant key unchanged = no migration, no behaviour change). Sessions: opaque bearer token as 21.9 (hash lookup, revocation by delete, no cache). Keyset pagination with an opaque base64url cursor.
@@ -143,6 +191,71 @@ deferred: []
 - **Aucune limite d'ancienneté ni retrait d'une facture mal attribuée** (numéro réattribué ou mal saisi) : comportement de Bref conservé ; à trancher si l'utilisateur veut une limite (ex. 24 mois) ou une action « ne plus montrer au portail » côté commerçant.
 - **Liens PDF de 24 h** re-signés à chaque liste ; factures annulées listées sans lien ; factures remplacées après correction de vente exclues ; devis et avoirs absents.
 
+> **Remplacées le 11/11/2026** par la section « Reprise 11/11/2026 » ci-dessous (décision explicite de l'utilisateur : le portail se comporte comme prévu par Bref). Les trois premières décisions par défaut ci-dessus ne s'appliquent plus.
+
+## Reprise 11/11/2026 — alignement sur Bref
+
+**Trigger.** User decision (11/11/2026): « le portail client doit se comporter comme prévu par Bref ». The 21.7 defaults (portal off for existing companies, code-only sign-in, 30-day session, minimum fields) are revisited point by point against Bref `develop` (api-bref `src/clients/clients.{controller,service}.ts`, `src/invoice/invoice-public.controller.ts`, `invoice.repository.ts:263 findByCustomerPhone`, `docs/clients.md`, `docs/otp.md`; app bref `features/client-auth/**`, `features/find-invoice/screens/{my-phone,locked,client-register,client-login,my-invoices,find-invoice-detail}-screen.tsx`, `docs/client-auth.md`, `docs/find-invoice.md`), read-only (`git show develop:<path>`). Baseline `717aacdc`. Public migration **V84**. Additive only: no field removed or renamed, the 21.7 endpoints keep their bodies.
+
+### Bref ↔ Keevo, point by point
+
+| # | Point | Bref (develop) | Keevo after this reprise | Kept gap (why) |
+|---|---|---|---|---|
+| 1 | Activation | No merchant switch: every shop's invoices are visible to whoever owns the phone. | **On for every company.** V84 deletes V70's own rows (owner-disabled, `updated_by IS NULL`, tenant created before V70 ran); new companies already had it on. | The owner can still switch it off in « Mes modules » (Keevo extra, required by FUS-FR29's AC « un commerçant qui désactive le portail »); an owner who switched it off himself keeps his choice. |
+| 2 | Account | `POST /v1/clients/otp/request` (1 SMS) → `POST /v1/clients/register {name, phone, email?, password ≥ 6, otpCode}` → tokens; `client` table (phone unique, email unique nullable, name, bcrypt 12). | `POST /api/v1/portal/auth/register {name, phone, code, password, email?}` → 201 session; `portal_clients` + `name`, `email` (unique, lower-cased), `password_hash` (BCrypt 12, the platform encoder). | Password **8–72** (Keevo's merchant rule, stronger than Bref's 6; > 72 bytes refused instead of silently truncated). A phone that already has an account is **not refused** (Bref: 422 `phoneAlreadyExists`): the code proves the phone, so the password is replaced and the other sessions end — Bref had no way back for a client who forgot his password. An e-mail of another client → 409 `EMAIL_ALREADY_EXISTS`, answered only after a valid code (no e-mail probing; the code is then used). Registration has its own brake bucket, so failed password sign-ins never block the way back. |
+| 3 | Sign-in | `POST /v1/clients/login {identifier: phone or e-mail, password}` — 0 SMS; 401 `invalidCredentials`. | `POST /api/v1/portal/auth/login {identifier, password}` — phone normalized like the invoices (`+237` for 9 digits) or e-mail lower-cased; one 401 `INVALID_CREDENTIALS` « Numéro, e-mail ou mot de passe incorrect. ». | An unknown identifier costs the same BCrypt check as a wrong password (no account enumeration by timing; Bref answers faster for an unknown client). The 21.7 code sign-in (`/otp/verify`) stays: FUS-FR29 says « par OTP », and it is the path of a client without password. |
+| 4 | Brakes | `otp-send` 10/IP, 5/identifier per hour; `login` (login + register) 30/IP, 10/identifier per 15 min, every request counted; in-memory per instance. | Code request = 19.2 limits (stricter: 3/10 min, 5/h per phone, 10/h per IP, daily failure cap); register + login = Bref's `login` limit (30/IP, 10/identifier, 15 min, every attempt), checked before any hash → 429 `PORTAL_TOO_MANY_REQUESTS` « Trop de tentatives de connexion : réessayez dans quelques minutes. ». | In-memory per instance, like Bref. |
+| 5 | Session | JWT `role: client`, access **1 day**; a refresh token is returned but no client refresh route exists → 1 day in practice. | Opaque `kvc_` token, **24 h** (`keevo.portal.session-ttl`, default `PT24H`); V84 cuts live sessions to 24 h after their creation. | Opaque, revocable token (logout, password change) instead of a JWT; no useless refresh token returned. 10 live sessions per client. |
+| 6 | Visible invoices | `WHERE customerPhone = :phone` (exact string), every type (sales and quotes `DV-`), every status, no tenant filter, `ORDER BY date DESC`, no limit. | Phone normalized E.164 index; issued / paid / cancelled invoices, newest first; tenant ACTIVE; merchant switch. | Normalization finds « 677… » and « +237677… » alike (Bref misses one of them). **Quotes not listed**: a Keevo quote is never issued, numbered nor sent to the client (20.3: it becomes an invoice, which is listed) — Bref quotes are handed out with a link. Drafts do not exist in Bref (every Bref document is final). Credit notes have no Bref equivalent (Bref cancels; a cancelled invoice is listed « Annulée »). A suspended / deleted company is hidden. No age limit and no per-invoice removal: same as Bref. |
+| 7 | Statuses | `pending / partial / paid / overdue / cancelled` + badge. | `UNPAID / PARTIAL / PAID / OVERDUE / CANCELLED` + French label — 1:1. | — |
+| 8 | PDF / link | None in the client portal (in-app detail only; public link `/invoices/public/:token` shared by the merchant, 90 days). | In-app detail data now in each item (row 10) **and** the 24 h signed link to the PDF (kept, additive). | Short link lifetime (a forwarded link dies quickly); cancelled invoice: no link. |
+| 9 | Pagination | None: the whole list at once (unbounded). | Keyset pages (`limit` 1–50, `nextCursor`), plus the totals Bref's header shows on the first page (`summary {invoiceCount, totalTtc}`). | Bounded responses (a phone typed on every sale of a shop would otherwise return thousands of rows). The app pages with `nextCursor` (infinite scroll); the header reads `summary` instead of summing the list. `totalTtc` leaves out cancelled invoices (Bref summed them too — a cancelled invoice is not owed). Totals exact (aggregated in SQL per merchant, no cap). |
+| 10 | What the client sees | List: short id, date, total, status badge; header: count + total; detail (from the list cache): shop name + phone (only on the enriched path — not on `/clients/invoices`), payments (paid, remaining, % settled, method, schedule `amount / dueDate / isPaid / paidDate`), items (`reference, name, quantity × unitPrice, total`), notes. The whole invoice entity is returned (ids, user id, shop id, public token, customer data…). | Each item adds `merchantPhone`, `amountPaid`, `amountRemaining`, `lines [{reference, description, quantity, unitPrice, totalTtc}]`, `payments [{amount, dueDate, paid, paidDate, method}]` to the 21.7 fields (`merchantName`, `reference` = invoice number, dates, `totalTtc`, state + label, `link`). | Never an identifier, the client's own data, an internal note nor the seller's user (Bref leaked them). Keevo invoices have no free « notes » field: the printed footer is on the PDF. A payment's internal note is not shown. |
+| 11 | Public count | `GET /v1/invoices/public/count?identifier=` (locked screen with the number of invoices before sign-in). | **Not ported.** | It tells anyone whether — and how much — a phone has invoices (enumeration). The app goes straight from the phone screen to sign-in / register. |
+
+### Décisions (prises par défaut, à valider par l'utilisateur)
+
+- **Le commerçant garde son interrupteur** (Bref n'en a pas) : exigé par l'AC de FUS-FR29 ; un owner qui l'avait coupé lui-même le garde coupé.
+- **Réinscription = nouveau mot de passe** (Bref : refus 422) : le code SMS prouve le numéro ; c'est le chemin « mot de passe oublié » qui manquait à Bref. Les autres appareils sont déconnectés.
+- **Mot de passe 8–72 caractères** (Bref : 6 minimum) : règle des comptes commerçants Keevo.
+- **Connexion par code seule conservée** (`/otp/verify`) à côté du mot de passe.
+- **Totaux sans les factures annulées** ; **devis non listés** (jamais remis au client dans Keevo).
+- **Session 24 h** comme Bref (au lieu de 30 jours) : la reconnexion par mot de passe ne coûte aucun SMS.
+
+### Tasks (reprise)
+
+- `resources/db/migration/V84__client_portal_bref_alignment.sql` -- `portal_clients` + `name`, `email`, `password_hash` (+ partial unique index on `email`); delete V70's own `client-portal` owner-disabled rows; cut live sessions to 24 h.
+- `clientportal/auth/domain/port/out/PortalSessionRepository.java`, `adapter/out/persistence/JdbcPortalSessionRepository.java` -- `Credentials`, `findByPhone` / `findByEmail` (unique indexes), `emailTakenByOther`, `register` (one upsert), `touchLogin`, `deleteSessionsOf`.
+- `clientportal/auth/application/PortalRateLimiter.java` -- Bref's `login` window (30/IP, 10/identifier, 15 min), `tryLogin`.
+- `clientportal/auth/application/PortalAuthService.java` -- `register`, `login`, `identifierKey`, configurable TTL (24 h), decoy BCrypt for unknown identifiers.
+- `clientportal/auth/adapter/in/rest/PortalAuthController.java` -- `POST /api/v1/portal/auth/register` (201), `POST /api/v1/portal/auth/login`.
+- `shared/capability/portal/PortalDocuments.java` -- `PortalDocument` + `merchantPhone`, `amountPaid`, `amountRemaining`, `lines`, `payments`; `Line`, `Payment`, `Summary`; `summarize`.
+- `invoicing/invoice/adapter/out/portal/JdbcPortalDocuments.java` -- seller phone + credited total in the documents statement; lines and payments in one `UNION ALL` each; collection figures by `PaymentStateCalculator` rules (legacy paid invoice = one payment); `summarize` (one aggregate statement).
+- `clientportal/invoice/domain/port/out/PortalIndexReader.java`, `adapter/out/persistence/JdbcInvoicePhoneIndex.java` -- `merchantsOf(phone)` (same filter, one row per visible merchant).
+- `clientportal/invoice/application/PortalInvoiceService.java`, `adapter/in/rest/PortalInvoiceController.java` -- `summary` on the first page; new item fields.
+- `shared/infrastructure/web/ErrorMessages.java` -- `PORTAL_SESSION_INVALID` « Votre session a expiré : reconnectez-vous. » (no longer code-only).
+- `keevo/contracts/client-portal.json`, `db/modules/README.md` (exception documented), `ModuleIdsAtGoLivePinTest`, `ModuleOwnerActivationMigrationPostgresIntegrationTest` (client-portal no longer off after V84), `docs/entitlements/endpoints.md` (regenerated).
+- Tests: `ClientPortalFullContextTest` (`registerThenPasswordSignIn`, `loginBrake`, `detailsAndSummary`), `ClientPortalBrefAlignmentMigrationPostgresIntegrationTest` (V84), `ClientPortalUnitTest` (`loginBrake`, `identifierKeys`), `JdbcPortalDocumentsTest` (`summarize` empty).
+
+### Acceptance (reprise)
+
+- Given a company that existed before V70 with the V70 row, when V84 runs, then the portal is on for it; given an owner who switched it off himself, then it stays off; a re-run changes nothing.
+- Given a client who registers with the code, a name, a password and an e-mail, when he later signs in with his phone (typed locally) or his e-mail and the password, then he gets a 24-hour session and no code is sent; a wrong password, an unknown identifier and a code-only account all answer the same 401.
+- Given an e-mail already used by another client, when a registration sends it with a wrong code, then 401 (nothing revealed); with a valid code, then 409.
+- Given a phone that already has an account, when it registers again with a new code, then the new password works, the old one does not, and its previous sessions are refused.
+- Given 10 sign-in attempts on one identifier within 15 minutes, when an 11th arrives, then 429 before any password check.
+- Given an invoice with a payment received and an instalment, when the client lists, then the item shows its lines, both payments, the amount paid and remaining, and the merchant phone; the first page carries `summary` (count of listed invoices, amount without the cancelled ones), the next pages do not.
+
+### Design Notes (reprise)
+
+- **Patterns.** Façade (`PortalAuthService`) over the code port, the repository and the limiter — the two new sign-ins reuse the same session opening as the code sign-in. Repository (`PortalSessionRepository`) with one statement per method. Template / single source for collection figures: the adapter applies `PaymentStateCalculator.amountDue` and the « paid = rows with a payment date, legacy PAID = one payment » rule, so the portal never disagrees with the merchant's screens. Fixed-window limiter (Caffeine, Clock ticker) like 21.7.
+- **Costs.** Register: 1 limiter check, the 19.2 check, 1 `EXISTS` on the e-mail index (after the code: no e-mail probing), 1 BCrypt (cost 12), 1 upsert + 1 delete (client's sessions, ≤ 10) + 1 insert. Login: 1 limiter check, 1 lookup on a unique index, 1 BCrypt (also on a miss), 1 update + 1 insert + 1 bounded delete. Listing page P over D merchants: 21.7 cost + the documents statement now reads one credited sum per row (`idx_credit_notes_invoice`), + 1 `UNION ALL` for the lines (`(invoice_id, position)` key) + 1 for the payments (`idx_invoice_payments_invoice`): 3 round trips, memory O(P + lines + payments). First page only: + 1 `SELECT DISTINCT` of the phone's visible merchants (range of the phone index, D rows) + 1 aggregate `UNION ALL` joining, per merchant, the phone's index rows to its invoices by PK — no id transferred, memory O(D), exact totals; DB work O(N) index rows for a client with N invoices. No per-row or per-merchant query.
+- **Migration.** V84 is set-based (one `DELETE … USING tenants` with one scalar sub-query on `flyway_schema_history`, one `UPDATE`), idempotent; no tenant DDL.
+
+### Mobile / dashboard (reprise)
+
+The Mobile section below is rewritten for Bref's flow (register / login / code sign-in, new item fields, summary). Dashboard: no super-admin API change; the module's default changes (on for every company) — the `d21-7` key is updated. Flutter `keevo/app`: nothing (test client, no portal screen).
+
 ## Verification
 
 **Commands:**
@@ -151,50 +264,56 @@ deferred: []
 - Bad cursor / limit answer 400 `VALIDATION_ERROR` (`InvalidRequestParameterException`, the cursor convention of the API) — the matrix row « bad cursor 400 » is met with that domain code.
 - `-Dkeevo.entitlements.regenerate=true` on `EndpointEntitlementCoverageTest` -- expected: `docs/entitlements/endpoints.md` lists the portal endpoints as exempt
 
+- Reprise: `wt-pkgs.sh keevo/backend t217r clientportal invoicing identity architecture shared admin` -- expected: all green (incl. `ClientPortalBrefAlignmentMigrationPostgresIntegrationTest`, `ModuleOwnerActivationMigrationPostgresIntegrationTest`).
+
 **Manual checks:**
 - Live on `keevo_dev_217`, port 4517 (WhatsApp noop, FCM off): two fresh test companies, invoices issued to one phone, portal sign-in (known code by hash), listing, owner switch, link opens the PDF, logout.
+- Reprise: live on `keevo_dev_t217r`, port 4627 (WhatsApp noop, FCM off): V84 applied, register (known code by hash) → login by phone and by e-mail → listing with lines / payments / summary → PDF link → wrong password 401 → logout; database dropped afterwards.
 
 ## Mobile (React Native — dépôt AI/bref)
 
-**Statut :** API livrée (commit `8f575524`, clé `m21-7-client-portal` dans `sprint-status.yaml`). Contrat : `keevo/contracts/client-portal.json`. Conventions d'erreur et d'affichage : spec-16-11 ; protocole de synchro : spec-16-10 (rien à synchroniser : portail en ligne uniquement).
+**Statut :** API livrée (21.7 : commit `8f575524` ; reprise du 11/11/2026, alignement sur Bref : commit `cc8b8530`, clé `m21-7-client-portal` dans `sprint-status.yaml`). Contrat : `keevo/contracts/client-portal.json`. Conventions d'erreur et d'affichage : spec-16-11 ; protocole de synchro : spec-16-10 (rien à synchroniser : portail en ligne uniquement).
 
-**Ce qui est fait côté API :** module gratuit `client-portal` « Portail client ». Un client final (jamais un compte Keevo) reçoit un code par SMS (et WhatsApp si configuré) sur son téléphone, le saisit et obtient une session portail de 30 jours ; il voit alors toutes les factures que les commerçants ont émises à ce numéro, du plus récent au plus ancien, avec un lien vers le PDF valable 24 h. Le commerçant coupe le portail dans « Mes modules » (module « Portail client ») : ses factures disparaissent aussitôt. Les entreprises qui existaient avant le portail démarrent avec le portail coupé ; les nouvelles (dont les entreprises importées de Bref) l'ont activé.
+**Ce qui est fait côté API :** module gratuit `client-portal` « Portail client », **qui se comporte comme le portail de Bref** (« Je suis client » / « retrouver mes factures »). Un client final (jamais un compte Keevo) crée son compte une fois : code reçu par SMS (et WhatsApp si configuré) + nom + mot de passe + e-mail facultatif ; ensuite il se connecte par numéro ou e-mail + mot de passe, sans SMS. La connexion par code seul reste possible (client sans mot de passe, ou mot de passe oublié : il refait l'inscription avec un nouveau code, ce qui remplace le mot de passe). Une session dure 24 h (comme le jeton client de Bref). Il voit toutes les factures que les commerçants ont émises à ce numéro, du plus récent au plus ancien, avec tout ce que l'écran de détail de Bref affiche (lignes, paiements et échéances, payé / reste à payer, téléphone du commerçant) et un lien vers le PDF valable 24 h ; la première page porte les totaux de l'en-tête (nombre de factures, montant). Comme Bref, le portail est actif pour toutes les entreprises ; un commerçant peut encore le couper dans « Mes modules » (module « Portail client ») : ses factures disparaissent aussitôt.
 
 **À utiliser** (code : `keevo/backend/src/main/java/com/keevo/clientportal/**/adapter/in/rest/*Controller.java`) — correspondance Bref → Keevo :
 - `POST /v1/clients/otp/request {phone}` → `POST /api/v1/portal/auth/otp/request {phone}` → `{data:{expiresIn:300}}`. Erreurs : 422 `PHONE_COUNTRY_NOT_SUPPORTED` (message à afficher), 422 `VALIDATION_FAILED` (pas un numéro de téléphone), 429 `OTP_TOO_MANY_REQUESTS` « Trop de demandes de code. Réessayez plus tard » → bloquer « Renvoyer le code » quelques minutes.
-- `POST /v1/clients/register` et `POST /v1/clients/login` (mot de passe) → **remplacés** par `POST /api/v1/portal/auth/otp/verify {phone, code}` → `{data:{accessToken:"kvc_…", expiresAt}}`. Plus de mot de passe ni d'inscription : le code suffit à chaque connexion (une session dure 30 jours). Erreurs : 401 `OTP_INVALID` « Code incorrect ou expiré » → laisser ressaisir ou redemander un code ; 429 `OTP_TOO_MANY_ATTEMPTS` → redemander un code ; 429 `OTP_TOO_MANY_REQUESTS`.
-- `GET /v1/clients/invoices` → `GET /api/v1/portal/invoices?limit=20&cursor=…` avec `Authorization: Bearer kvc_…` → `{data:{items:[{merchantName, reference, issueDate, dueDate, totalTtc, paymentState, paymentStateLabel, link:{url, expiresAt}|null}], nextCursor}}`. Erreurs : 401 `PORTAL_SESSION_INVALID` « Votre session a expiré : reconnectez-vous avec le code reçu par SMS. » → effacer le jeton, retour à l'écran du numéro ; 429 `PORTAL_TOO_MANY_REQUESTS` « Trop de demandes : patientez une minute avant de réessayer. » ; 400 `VALIDATION_ERROR` (curseur ou taille de page) → recharger depuis la première page.
-- `GET /v1/invoices/public/count?identifier=` (écran « verrouillé » avec le nombre de factures avant connexion) → **non porté** : il révélait à n'importe qui si un numéro a des factures. L'écran « verrouillé » disparaît ; on va directement au code.
-- Nouveau : `POST /api/v1/portal/auth/logout` (Bearer) → 204, même si le jeton est inconnu.
+- `POST /v1/clients/register {name, phone, email?, password, otpCode}` → `POST /api/v1/portal/auth/register {name, phone, code, password, email?}` → **201** `{data:{accessToken:"kvc_…", expiresAt}}` (pas de `refreshToken` : Bref n'avait pas de route de renouvellement pour les clients). Mot de passe **8 à 72 caractères** (Bref : 6) — adapter la validation de l'écran. Erreurs : 401 `OTP_INVALID` « Code incorrect ou expiré » ; 429 `OTP_TOO_MANY_ATTEMPTS` → redemander un code ; 429 `OTP_TOO_MANY_REQUESTS` / `PORTAL_TOO_MANY_REQUESTS` « Trop de tentatives de connexion : réessayez dans quelques minutes. » ; 409 `EMAIL_ALREADY_EXISTS` « Cette adresse e-mail est déjà utilisée par un autre client. » → message sous le champ e-mail ; le code est alors consommé (l'erreur n'est donnée qu'après un code valide, pour que personne ne puisse sonder les e-mails) : redemander un code et renvoyer sans e-mail ou avec un autre ; 422 `VALIDATION_ERROR` (champ manquant, mot de passe trop court) / `VALIDATION_FAILED` « Adresse e-mail invalide. » ou mot de passe trop long → message sous le champ. Différence avec Bref : un numéro qui a déjà un compte n'est pas refusé ; son mot de passe est remplacé et ses autres appareils sont déconnectés (c'est le « mot de passe oublié »).
+- `POST /v1/clients/login {identifier, password}` → `POST /api/v1/portal/auth/login {identifier, password}` (numéro, avec ou sans +237, ou e-mail) → `{data:{accessToken, expiresAt}}`. Erreurs : 401 `INVALID_CREDENTIALS` « Numéro, e-mail ou mot de passe incorrect. » (même réponse pour un compte inconnu, sans mot de passe ou un mauvais mot de passe) → proposer « Recevoir un code » (inscription) ; 429 `PORTAL_TOO_MANY_REQUESTS` (30 essais par adresse, 10 par numéro / e-mail en 15 min) → message, réessayer plus tard.
+- Connexion par code seul (sans compte) : `POST /api/v1/portal/auth/otp/verify {phone, code}` → `{data:{accessToken, expiresAt}}` ; mêmes erreurs que l'inscription côté code.
+- `GET /v1/clients/invoices` → `GET /api/v1/portal/invoices?limit=20&cursor=…` avec `Authorization: Bearer kvc_…` → `{data:{items:[{merchantName, reference, issueDate, dueDate, totalTtc, paymentState, paymentStateLabel, link:{url, expiresAt}|null, merchantPhone, amountPaid, amountRemaining, lines:[{reference, description, quantity, unitPrice, totalTtc}], payments:[{amount, dueDate, paid, paidDate, method}]}], nextCursor, summary:{invoiceCount, totalTtc}}}` (`summary` sur la première page seulement). Erreurs : 401 `PORTAL_SESSION_INVALID` « Votre session a expiré : reconnectez-vous. » → effacer le jeton, retour à l'écran de connexion ; 429 `PORTAL_TOO_MANY_REQUESTS` « Trop de demandes : patientez une minute avant de réessayer. » ; 400 `VALIDATION_ERROR` (curseur ou taille de page) → recharger depuis la première page.
+- `GET /v1/invoices/public/count?identifier=` (écran « verrouillé ») → **non porté** : il révélait à n'importe qui si un numéro a des factures. L'écran « verrouillé » disparaît ; après le numéro, on propose directement « J'ai déjà un compte » (connexion) ou « Recevoir un code » (inscription).
+- `POST /api/v1/portal/auth/logout` (Bearer) → 204, même si le jeton est inconnu.
 
 **À implémenter côté mobile :**
-1. Entrée « Je suis client » (23.8) : écran numéro → écran code → liste ; le jeton `kvc_…` va dans le stockage sécurisé, jamais dans les journaux.
-2. Liste : `merchantName`, `reference`, `issueDate` (format local), `totalTtc` en FCFA, badge `paymentStateLabel` (couleur selon `paymentState`, code jamais affiché), échéance si `dueDate`. Pagination par `nextCursor` (défilement infini) ; aucun identifiant à afficher ni à stocker.
-3. Détail : ouvrir `link.url` (PDF, navigateur intégré ou téléchargement). Facture annulée : pas de lien, badge « Annulée ». Le lien expire en 24 h : ne pas le mettre en cache, relister pour un lien neuf.
-4. Déconnexion : appeler `logout` puis effacer le jeton quoi qu'il arrive. 401 à tout moment → même chose.
+1. Parcours « Je suis client » (23.8), comme Bref : écran numéro → connexion (identifiant + mot de passe) ou inscription (nom, mot de passe, e-mail facultatif, puis code à 6 chiffres avec compte à rebours et « Renvoyer le code ») → liste. Le jeton `kvc_…` va dans le stockage sécurisé client (distinct de la session commerçant), jamais dans les journaux. Lien « Mot de passe oublié ? » → inscription avec un nouveau code.
+2. Liste : `merchantName`, `reference`, `issueDate` (format local), `totalTtc` en FCFA, badge `paymentStateLabel` (couleur selon `paymentState`, code jamais affiché). En-tête : `summary.invoiceCount` et `summary.totalTtc` de la première page (ne pas additionner la liste). Pagination par `nextCursor` (défilement infini, continuer tant qu'il n'est pas null). Aucun identifiant à afficher ni à stocker.
+3. Détail (lu depuis l'élément de liste, comme Bref lisait son cache) : commerçant et `merchantPhone`, total, payé (`amountPaid`), reste (`amountRemaining`), pourcentage réglé, `payments` (reçus : montant + `paidDate` + `method` ; échéances : montant + `dueDate`, « Payée » si `paid`), `lines` (référence, désignation, quantité × prix unitaire, total TTC). Bouton « Voir la facture (PDF) » → `link.url` ; facture annulée : pas de lien, badge « Annulée », reste à payer 0. Le lien expire en 24 h : ne pas le mettre en cache, relister pour un lien neuf.
+4. Déconnexion : appeler `logout` puis effacer le jeton quoi qu'il arrive. 401 à tout moment (session de 24 h écoulée) → même chose, retour à la connexion par mot de passe (aucun SMS).
 5. En ligne uniquement : hors connexion, message « Connexion requise pour voir vos factures ».
 
-**Implémentation de référence :** aucune dans `keevo/app` (Flutter = client de test).
+**Implémentation de référence :** aucune dans `keevo/app` (Flutter = client de test). Écrans Bref à adapter : `bref/features/find-invoice/screens/*`, `bref/features/client-auth/api/client-auth.api.ts`.
 
 **Critères d'acceptation mobile / scénarios de test :**
-- Given une facture émise au `+237677000111` par deux commerçants, when le client se connecte avec ce numéro, then il voit les deux factures (plus récente en premier) et ouvre le PDF de chacune.
+- Given un numéro sans compte, when le client s'inscrit (code + nom + mot de passe), then il arrive sur la liste ; when il se déconnecte puis se reconnecte avec son numéro et son mot de passe, then aucune SMS n'est envoyé.
+- Given une facture émise au `+237677000111` par deux commerçants, when le client se connecte, then il voit les deux factures (plus récente en premier), l'en-tête « 2 factures », le détail avec lignes et paiements, et ouvre le PDF de chacune.
 - Given le commerçant A coupe « Portail client », when le client rafraîchit, then seule la facture de B reste.
-- Given un jeton expiré ou révoqué, when la liste est demandée, then 401 → retour à l'écran du numéro.
-- Mise en place (curl) : `curl -X POST $API/api/v1/portal/auth/otp/request -H 'Content-Type: application/json' -d '{"phone":"677000111"}'` puis `…/otp/verify -d '{"phone":"677000111","code":"<code SMS>"}'` puis `curl $API/api/v1/portal/invoices -H "Authorization: Bearer kvc_…"`.
+- Given un jeton expiré (24 h) ou révoqué, when la liste est demandée, then 401 → retour à l'écran de connexion.
+- Mise en place (curl) : `curl -X POST $API/api/v1/portal/auth/otp/request -H 'Content-Type: application/json' -d '{"phone":"677000111"}'` puis `…/register -d '{"name":"Awa","phone":"677000111","code":"<code SMS>","password":"motdepasse1"}'` puis `…/login -d '{"identifier":"677000111","password":"motdepasse1"}'` puis `curl $API/api/v1/portal/invoices -H "Authorization: Bearer kvc_…"`.
 
 **Clé de suivi mobile :** `m21-7-client-portal`.
 
 ## Dashboard super-admin (autre dépôt)
 
-**Statut :** API livrée (commit `8f575524`, clé `d21-7-client-portal`). Aucun nouvel endpoint super-admin.
+**Statut :** API livrée (commit `8f575524` ; reprise du 11/11/2026 : commit `cc8b8530`, clé `d21-7-client-portal`). Aucun nouvel endpoint super-admin.
 
-**Ce qui est fait côté API :** le module `client-portal` « Portail client » (gratuit, catégorie business) apparaît dans le catalogue des modules et dans les états de modules d'une entreprise, comme les autres modules ; sa coupure par l'owner est l'activation owner existante (19.13).
+**Ce qui est fait côté API :** le module `client-portal` « Portail client » (gratuit, catégorie business) apparaît dans le catalogue des modules et dans les états de modules d'une entreprise, comme les autres modules ; sa coupure par l'owner est l'activation owner existante (19.13). Reprise : comme Bref, il est désormais **activé pour toutes les entreprises** (V84 retire la coupure posée par V70 sur les entreprises existantes, sauf si l'owner l'avait coupé lui-même).
 
 **À utiliser :** endpoints admin existants du catalogue de modules et des modules d'une entreprise (`/api/v1/admin/**`, inchangés) ; libellé `displayName` « Portail client ».
 
 **À implémenter côté dashboard :** 1. afficher le module avec son libellé (jamais l'identifiant) dans le catalogue et la fiche entreprise ; 2. aucun écran de gestion des clients du portail (données personnelles des clients finaux, pas d'administration prévue).
 
-**Critères d'acceptation :** Given la fiche d'une entreprise, when ses modules s'affichent, then « Portail client » apparaît avec son état (activé / coupé par l'owner).
+**Critères d'acceptation :** Given la fiche d'une entreprise existante, when ses modules s'affichent, then « Portail client » apparaît activé (sauf coupure par l'owner).
 
 **Clé de suivi dashboard :** `d21-7-client-portal`.
 
@@ -209,3 +328,15 @@ deferred: []
 **Vérification :** compilation OK ; tests par paquet (après correctifs) : clientportal 14/14, identity 866/866, invoicing 471/471, architecture 146/146, admin 690/690, shared 1 354/1 354, subscription 153/153. Live (base `keevo_dev_217`, port 4517, WhatsApp noop, FCM off, deux entreprises neuves) : code portail refusé sur `/auth/otp/verify` (401), session `kvc_` (47 caractères), liste des 2 factures du téléphone chez 2 entreprises (pas celle de l'autre numéro), lien PDF 200 `application/pdf`, JWT commerçant refusé au portail et jeton portail refusé côté commerçant (401), coupure par l'owner → 1 facture, déconnexion → 401 en français, rattrapage marqué ; base supprimée ensuite.
 
 **Risques résiduels :** freins en mémoire par instance ; un numéro réattribué voit les factures de l'ancien titulaire (décision ci-dessus) ; l'import Bref (24.6) doit appeler `InvoicePhoneIndex.indexAll` pour les factures importées.
+
+### Reprise 11/11/2026 — résultat
+
+**Résumé :** portail client aligné sur Bref (décision utilisateur du 11/11/2026). V84 : portail réactivé pour les entreprises existantes (seules les lignes posées par V70 sont retirées ; un owner qui l'avait coupé lui-même le garde coupé), `portal_clients` + `name` / `email` (minuscules, unique) / `password_hash` (BCrypt 12), sessions vivantes ramenées à 24 h. Nouveaux `POST /api/v1/portal/auth/register` (code une fois + nom + mot de passe 8–72 + e-mail facultatif ; un numéro déjà inscrit reçoit le nouveau mot de passe et ses autres sessions tombent) et `POST /api/v1/portal/auth/login` (numéro ou e-mail + mot de passe, sans SMS, freins Bref 30/IP et 10/identifiant par 15 min, BCrypt leurre pour un identifiant inconnu). Session 24 h (`keevo.portal.session-ttl`). Chaque facture listée porte en plus `merchantPhone`, `amountPaid`, `amountRemaining`, `lines`, `payments` ; la première page porte `summary {invoiceCount, totalTtc}` exact. Écarts gardés et justifiés : tableau Bref ↔ Keevo ci-dessus.
+
+**Fichiers :** `V84__client_portal_bref_alignment.sql` ; `clientportal/auth/**` (service, limiteur, dépôt, contrôleur) ; `clientportal/invoice/**` (service, lecteur d'index `merchantsOf`, contrôleur) ; `shared/capability/portal/PortalDocuments` ; `invoicing/.../JdbcPortalDocuments` ; `ErrorMessages` ; `db/modules/README.md` ; contrat `keevo/contracts/client-portal.json` ; `docs/entitlements/endpoints.md` régénéré ; tests (`ClientPortalFullContextTest`, `ClientPortalBrefAlignmentMigrationPostgresIntegrationTest`, `ClientPortalUnitTest`, `JdbcPortalDocumentsTest`, `ModuleOwnerActivationMigrationPostgresIntegrationTest`, `ModuleIdsAtGoLivePinTest`).
+
+**Revue :** 44 constats (5 couches) — 15 corrigés (medium 6, low 9), 29 rejetés avec motif (journal ci-dessus), 0 reporté. Revue de suivi recommandée (6 `medium` corrigés) : risque non vérifié — le chemin de course `DuplicateKeyException` de l'inscription (catch restreint à l'index e-mail, non testé) et le coût du `SELECT DISTINCT` des commerçants d'un téléphone en très gros volume.
+
+**Vérification :** tests par paquet (après correctifs) : clientportal 20/20, invoicing 475/475, identity 966/966, shared 1 397/1 397, admin 721/721, architecture 171 (1 ignoré, préexistant) ; `docs/entitlements/endpoints.md` régénéré (406 handlers, +register/+login exemptés). Live (base `keevo_dev_t217r`, port 4627, WhatsApp noop, FCM off, deux entreprises neuves) : V84 appliquée ; inscription avec code connu → jeton `kvc_` 47 caractères expirant à +24 h, nom / e-mail en minuscules / hash `$2a$` en base ; connexion par numéro local et par e-mail 200 ; mauvais mot de passe 401 « Numéro, e-mail ou mot de passe incorrect. » ; liste : `summary` 2 factures / 56 700, lignes dans l'ordre, paiement Mobile Money, payé 5 000 / reste 23 350 ; aucun identifiant technique dans la réponse ; lien PDF 200 `application/pdf` ; déconnexion 204 puis 401 « Votre session a expiré : reconnectez-vous. » ; base supprimée ensuite.
+
+**Risques résiduels :** freins en mémoire par instance (comme Bref) ; le module de l'app (m21-7) doit passer au parcours inscription / connexion ; les comptes clients n'ont pas encore de suppression (Bref non plus).
