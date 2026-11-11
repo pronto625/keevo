@@ -1134,7 +1134,14 @@
       "USER_AUTHENTICATED" : "Connexion",
       "USER_REGISTERED" : "Inscription",
       "WHATSAPP_ACCOUNT_CONNECTED" : "WhatsApp Business connecté",
-      "WHATSAPP_ACCOUNT_DISCONNECTED" : "WhatsApp Business déconnecté"
+      "WHATSAPP_ACCOUNT_DISCONNECTED" : "WhatsApp Business déconnecté",
+      "WHATSAPP_CAMPAIGN_CANCELLED" : "Campagne WhatsApp annulée",
+      "WHATSAPP_CAMPAIGN_COMPLETED" : "Campagne WhatsApp envoyée",
+      "WHATSAPP_CAMPAIGN_CREATED" : "Campagne WhatsApp créée",
+      "WHATSAPP_CAMPAIGN_DELETED" : "Campagne WhatsApp supprimée",
+      "WHATSAPP_CAMPAIGN_SCHEDULED" : "Campagne WhatsApp programmée",
+      "WHATSAPP_CAMPAIGN_SEND_STARTED" : "Envoi de campagne WhatsApp lancé",
+      "WHATSAPP_CAMPAIGN_UPDATED" : "Campagne WhatsApp modifiée"
     },
     "audit_log.entityType" : {
       "Category" : "Catégorie",
@@ -1160,7 +1167,8 @@
       "Supplier" : "Fournisseur",
       "Tenant" : "Compte",
       "User" : "Compte utilisateur",
-      "WhatsAppAccount" : "WhatsApp Business"
+      "WhatsAppAccount" : "WhatsApp Business",
+      "WhatsAppCampaign" : "Campagne WhatsApp"
     }
   },
   "constants" : {
