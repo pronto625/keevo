@@ -109,6 +109,71 @@ public final class PlatformTemplateCatalog {
             List.of("Aminata", "facture", "FAC-2026-000001", "Boutique Mode Akwa", "28 850",
                     "https://keevo.ad2s.cm/d/AbC123"));
 
+    // ── Story 24.13 — the messages of the Bref cutover (ADR-10), sent by hand through campaigns ──────────────────────
+    // Not mapped to a kind and not part of all(): a campaign names its template itself (21.6 in Keevo, the campaigns
+    // of the Bref admin before the « go » — same Meta number). One Meta name per message, in French and in English.
+
+    static final String CUTOVER_FOOTER = "Bref Point";
+
+    public static final PlatformTemplate CUTOVER_ANNOUNCE_FR = cutover("bref_bascule_annonce", "fr",
+            "Bonjour, Bref Point passe à sa nouvelle version. Le service sera arrêté le {{1}} et reviendra au plus "
+                    + "tard le {{2}}.\n\nAvant l'arrêt, ouvrez l'application Bref Point avec une connexion internet "
+                    + "pour envoyer vos ventes en attente : une vente restée hors connexion sur un téléphone ne sera "
+                    + "pas reprise.\n\nVos boutiques, factures, clients et votre abonnement seront conservés.",
+            List.of("samedi 12/12 à 20 h", "dimanche 13/12 à 8 h"));
+
+    public static final PlatformTemplate CUTOVER_ANNOUNCE_EN = cutover("bref_bascule_annonce", "en",
+            "Hello, Bref Point is moving to its new version. The service will stop on {{1}} and will be back by "
+                    + "{{2}} at the latest.\n\nBefore the stop, open the Bref Point app with an internet connection "
+                    + "to send your pending sales: a sale left offline on a phone will not be carried over.\n\n"
+                    + "Your shops, invoices, customers and subscription will be kept.",
+            List.of("Saturday 12/12 at 8 pm", "Sunday 13/12 at 8 am"));
+
+    public static final PlatformTemplate CUTOVER_REMINDER_FR = cutover("bref_bascule_rappel", "fr",
+            "Rappel : Bref Point sera arrêté le {{1}} pour passer à sa nouvelle version. Ouvrez dès maintenant "
+                    + "l'application avec une connexion internet pour envoyer vos ventes en attente.\n\nLes ventes "
+                    + "enregistrées dans l'application pendant l'arrêt ne seront pas reprises : notez-les sur papier "
+                    + "et saisissez-les dans la nouvelle version.",
+            List.of("samedi 12/12 à 20 h"));
+
+    public static final PlatformTemplate CUTOVER_REMINDER_EN = cutover("bref_bascule_rappel", "en",
+            "Reminder: Bref Point will stop on {{1}} to move to its new version. Open the app now with an internet "
+                    + "connection to send your pending sales.\n\nSales recorded in the app during the stop will not "
+                    + "be carried over: write them down on paper and enter them in the new version.",
+            List.of("Saturday 12/12 at 8 pm"));
+
+    public static final PlatformTemplate CUTOVER_DONE_FR = cutover("bref_bascule_terminee", "fr",
+            "Bonjour, la nouvelle version de Bref Point est disponible. Mettez à jour l'application depuis {{1}}, "
+                    + "puis connectez-vous avec vos identifiants habituels (un nouveau mot de passe peut vous être "
+                    + "demandé).\n\nVos boutiques, factures, clients et votre abonnement ont été repris. Vous pouvez "
+                    + "maintenant saisir les ventes notées pendant l'arrêt.",
+            List.of("le Play Store ou l'App Store"));
+
+    public static final PlatformTemplate CUTOVER_DONE_EN = cutover("bref_bascule_terminee", "en",
+            "Hello, the new version of Bref Point is available. Update the app from {{1}}, then sign in with your "
+                    + "usual credentials (you may be asked to choose a new password).\n\nYour shops, invoices, "
+                    + "customers and subscription have been carried over. You can now enter the sales written down "
+                    + "during the stop.",
+            List.of("the Play Store or the App Store"));
+
+    public static final PlatformTemplate CUTOVER_INCIDENT_FR = cutover("bref_bascule_incident", "fr",
+            "Bonjour, voici une information sur le passage de Bref Point à sa nouvelle version.\n\n{{1}}\n\n"
+                    + "Vos boutiques, factures et clients restent conservés. Nous vous tiendrons informé de la suite par "
+                    + "ce même canal. Pour toute question, contactez le support Bref Point au {{2}}.",
+            List.of("La mise à jour prend plus de temps que prévu. Le service reviendra au plus tard dimanche 13/12 "
+                    + "à 12 h.", "+237 6XX XX XX XX"));
+
+    public static final PlatformTemplate CUTOVER_INCIDENT_EN = cutover("bref_bascule_incident", "en",
+            "Hello, here is an update about the move of Bref Point to its new version.\n\n{{1}}\n\n"
+                    + "Your shops, invoices and customers remain safe. We will keep you informed through this same "
+                    + "channel. For any question, contact Bref Point support at {{2}}.",
+            List.of("The update is taking longer than planned. The service will be back by Sunday 13/12 at 12 pm "
+                    + "at the latest.", "+237 6XX XX XX XX"));
+
+    private static final List<PlatformTemplate> CUTOVER_CAMPAIGN = List.of(CUTOVER_ANNOUNCE_FR, CUTOVER_ANNOUNCE_EN,
+            CUTOVER_REMINDER_FR, CUTOVER_REMINDER_EN, CUTOVER_DONE_FR, CUTOVER_DONE_EN, CUTOVER_INCIDENT_FR,
+            CUTOVER_INCIDENT_EN);
+
     private static final Map<PlatformMessageKind, PlatformTemplate> BY_KIND;
     private static final Map<String, PlatformTemplate> BY_NAME;
 
@@ -164,9 +229,21 @@ public final class PlatformTemplateCatalog {
         return List.copyOf(BY_NAME.values());
     }
 
+    /**
+     * Story 24.13 — the templates of the Bref cutover messages (announcement, reminder, « done », incident), French then
+     * English for each name. Used only by campaigns created by hand; never by a kind nor the approved-templates list.
+     */
+    public static List<PlatformTemplate> campaignTemplates() {
+        return CUTOVER_CAMPAIGN;
+    }
+
     /** Kind → template mapping (unmodifiable). */
     public static Map<PlatformMessageKind, PlatformTemplate> mapping() {
         return BY_KIND;
+    }
+
+    private static PlatformTemplate cutover(String name, String language, String body, List<String> examples) {
+        return new PlatformTemplate(name, Category.UTILITY, language, body, CUTOVER_FOOTER, examples);
     }
 
     private static PlatformTemplate detail(String name, String body, String example) {

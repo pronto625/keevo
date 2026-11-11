@@ -79,6 +79,15 @@ public interface CutoverStore {
     /** Sets the status of owners (activation, rollback). */
     void ownersStatus(UUID cutoverId, Collection<UUID> ownerIds, CutoverOwnerStatus status, String reason);
 
+    /** Story 24.13 — one owner line of a cutover (primary key), with its company name. */
+    Optional<CutoverOwner> owner(UUID cutoverId, UUID ownerId);
+
+    /**
+     * Story 24.13 — puts one owner line back to {@code PENDING} after its company was removed: batch, tenant, reason,
+     * durations, figures and times cleared, so the next run imports it again and the report no longer counts it.
+     */
+    void resetOwner(UUID cutoverId, UUID ownerId);
+
     /** Records the « go »: actor, time, accepted owners (appended), status ACTIVATED. */
     void activated(UUID cutoverId, UUID actor, List<Cutover.AcceptedOwner> accepted);
 

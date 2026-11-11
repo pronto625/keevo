@@ -101,6 +101,17 @@ public class BrefCutoverService implements BrefCutoverUseCase {
     static final String ROLLBACK_INCOMPLETE = "Retour arrière incomplet : %d compte(s) à reprendre, relancez-le";
     static final String ROLLBACK_OWNER_FAILED = "Retour arrière impossible pour ce compte : relancez-le";
     static final String ROLLBACK_REFUSED = "Entreprise déjà active ou suspendue pour un autre motif : non supprimée";
+    /** The migration records a rollback reads to compensate an owner. */
+    static final List<String> ROLLBACK_TABLES = List.of(MigrationRecord.TENANTS, MigrationRecord.USERS,
+            MigrationRecord.LINKED_USERS, MigrationRecord.AUTHENTICATORS, MigrationRecord.WEB_PUSH_SUBSCRIPTIONS);
+    static final String OWNER_NOT_IN_CUTOVER = "Ce compte ne fait pas partie de cette bascule";
+    static final String OWNER_NOTHING_TO_REMOVE = "Ce compte n'a rien à retirer : il est en attente, non repris, "
+            + "activé ou déjà retiré";
+    static final String OWNER_RESET = "Compte retiré et remis en attente : relancez la bascule pour le réimporter";
+    static final String OWNER_RESET_FAILED = "Retour arrière du compte impossible : voir son motif, puis relancez";
+    /** Lines whose company (or traces) one owner's rollback may remove. */
+    static final Set<CutoverOwnerStatus> OWNER_REMOVABLE = EnumSet.of(CutoverOwnerStatus.RECONCILED,
+            CutoverOwnerStatus.GAP, CutoverOwnerStatus.BLOCKED, CutoverOwnerStatus.FAILED);
 
     private final BrefOwnerImportService imports;
     private final BrefReconciliationUseCase reconciliation;
@@ -275,6 +286,99 @@ public class BrefCutoverService implements BrefCutoverUseCase {
         log.info("[ADMIN AUDIT] Bref cutover rollback started: actor={} cutover={}", actorId, cutoverId);
         launcher.accept(() -> rollbackRun(cutoverId, actorId));
         return cutover(cutoverId);
+    }
+
+    @Override
+    public Cutover rollbackOwner(UUID cutoverId, UUID ownerId, String confirmation, UUID actorId) {
+        if (confirmation == null || !ROLLBACK_CONFIRMATION.equals(confirmation.strip())) {
+            throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, ROLLBACK_PHRASE);
+        }
+        Cutover c = cutover(cutoverId);
+        if (c.status() == CutoverStatus.READY || c.status() == CutoverStatus.FAILED) {
+            if (c.progress().stream().anyMatch(p -> CutoverOwnerStatus.ROLLED_BACK.name().equals(p.status()))) {
+                throw DomainException.userFacing(ErrorCode.INVALID_STATE, ROLLBACK_STARTED);
+            }
+            CutoverOwner line = ownerId == null ? null : store.owner(cutoverId, ownerId).orElse(null);
+            if (line == null) {
+                throw DomainException.userFacing(ErrorCode.VALIDATION_FAILED, OWNER_NOT_IN_CUTOVER);
+            }
+            if (!OWNER_REMOVABLE.contains(line.status())) {
+                throw DomainException.userFacing(ErrorCode.INVALID_STATE, OWNER_NOTHING_TO_REMOVE);
+            }
+        }
+        // the lock: no coordinator, global rollback or « go » can start while this owner is removed (review 24.9
+        // pattern: one conditional update); RUNNING so that a crash is taken over by a relaunch after STALE
+        if (!store.transition(cutoverId, EnumSet.of(CutoverStatus.READY, CutoverStatus.FAILED), CutoverStatus.RUNNING,
+                STALE, false)) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, c.status() == CutoverStatus.ACTIVATED
+                    ? AFTER_GO : refusal(cutover(cutoverId).status()));
+        }
+        long t0 = System.nanoTime();
+        DomainException refused = null; // a refusal found under the lock: nothing touched, previous state restored
+        String problem = null;          // a removal that failed: line FAILED with its reason, cutover FAILED
+        try {
+            Cutover locked = cutover(cutoverId);
+            CutoverOwner line = store.owner(cutoverId, ownerId).orElse(null); // re-read under the lock
+            if (locked.progress().stream().anyMatch(p -> CutoverOwnerStatus.ROLLED_BACK.name().equals(p.status()))) {
+                refused = DomainException.userFacing(ErrorCode.INVALID_STATE, ROLLBACK_STARTED);
+            } else if (line == null) {
+                refused = DomainException.userFacing(ErrorCode.VALIDATION_FAILED, OWNER_NOT_IN_CUTOVER);
+            } else if (!OWNER_REMOVABLE.contains(line.status())) {
+                refused = DomainException.userFacing(ErrorCode.INVALID_STATE, OWNER_NOTHING_TO_REMOVE);
+            } else {
+                problem = removeOwner(cutoverId, ownerId, store.targets(List.of(ownerId), ROLLBACK_TABLES)
+                        .getOrDefault(ownerId, Map.of()), false);
+            }
+        } catch (RuntimeException e) {
+            problem = ROLLBACK_OWNER_FAILED;
+            log.warn("[ADMIN AUDIT] Bref cutover owner rollback stopped: cutover={} owner={} error={}", cutoverId,
+                    ownerId, e.getClass().getSimpleName());
+        } finally {
+            releaseAfterOwnerRollback(cutoverId, ownerId, c, refused != null, problem);
+        }
+        log.info("[ADMIN AUDIT] Bref cutover owner rollback: actor={} cutover={} owner={} outcome={} ms={}", actorId,
+                cutoverId, ownerId, refused != null ? "refused" : problem == null ? "pending again" : "failed",
+                ms(t0));
+        if (refused != null) {
+            throw refused;
+        }
+        if (problem != null) {
+            throw DomainException.userFacing(ErrorCode.INVALID_STATE, problem);
+        }
+        return cutover(cutoverId);
+    }
+
+    /**
+     * Releases the lock of {@link #rollbackOwner}: a refusal found under the lock restores the previous status and label
+     * (nothing was touched); otherwise the cutover is FAILED (a line is pending again, or could not be removed: the next
+     * action is a relaunch). Never throws: a failure here leaves the cutover RUNNING until {@link #STALE}, logged.
+     */
+    private void releaseAfterOwnerRollback(UUID cutoverId, UUID ownerId, Cutover before, boolean refused,
+                                           String problem) {
+        if (problem != null) {
+            try {
+                store.ownersStatus(cutoverId, List.of(ownerId), CutoverOwnerStatus.FAILED, problem);
+            } catch (RuntimeException e) {
+                log.warn("[ADMIN AUDIT] Bref cutover owner line not marked failed: cutover={} owner={} error={}",
+                        cutoverId, ownerId, e.getClass().getSimpleName());
+            }
+        }
+        try {
+            Cutover now = cutover(cutoverId);
+            CutoverReport.Durations previous = now.report().durations();
+            CutoverReport report = report(cutoverId, now, previous.listingMs(), previous.runWallMs(),
+                    previous.activationMs(), previous.rollbackMs(), now.report().sourceIndexes(),
+                    now.acceptedOwners().size());
+            if (refused) {
+                store.finish(cutoverId, before.status(), before.errorLabel(), report);
+            } else {
+                store.finish(cutoverId, CutoverStatus.FAILED, problem == null ? OWNER_RESET : OWNER_RESET_FAILED,
+                        report);
+            }
+        } catch (RuntimeException e) {
+            log.error("[ADMIN AUDIT] Bref cutover {} could not be released after an owner rollback ({}): relaunch it "
+                    + "after {} min", cutoverId, e.getClass().getSimpleName(), STALE.toMinutes());
+        }
     }
 
     // ── reads ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -463,8 +567,6 @@ public class BrefCutoverService implements BrefCutoverUseCase {
         int failures = 0;
         int removed = 0;
         AtomicLong lastBeat = new AtomicLong(System.currentTimeMillis());
-        List<String> tables = List.of(MigrationRecord.TENANTS, MigrationRecord.USERS, MigrationRecord.LINKED_USERS,
-                MigrationRecord.AUTHENTICATORS, MigrationRecord.WEB_PUSH_SUBSCRIPTIONS);
         try {
             int position = 0;
             while (true) {
@@ -474,13 +576,13 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                 }
                 List<UUID> ids = page.stream().filter(o -> o.status() != CutoverOwnerStatus.ROLLED_BACK)
                         .map(CutoverOwner::brefOwnerId).toList();
-                Map<UUID, Map<String, List<UUID>>> targets = store.targets(ids, tables); // one query per page
+                Map<UUID, Map<String, List<UUID>>> targets = store.targets(ids, ROLLBACK_TABLES); // one query per page
                 for (CutoverOwner owner : page) {
                     if (owner.status() == CutoverOwnerStatus.ROLLED_BACK) {
                         continue;
                     }
                     String problem = removeOwner(cutoverId, owner.brefOwnerId(),
-                            targets.getOrDefault(owner.brefOwnerId(), Map.of()));
+                            targets.getOrDefault(owner.brefOwnerId(), Map.of()), true);
                     if (problem == null) {
                         removed++;
                     } else {
@@ -522,9 +624,11 @@ public class BrefCutoverService implements BrefCutoverUseCase {
      * One owner's compensation: its imported company (only when still suspended by the import), the accounts the import
      * created (never the linked ones), the identities it added, then its migration records and batches.
      *
+     * @param global {@code true} for the rollback of the whole cutover (line ROLLED_BACK), {@code false} for one owner
+     *               (line back to PENDING, imported again by the next run — 24.13)
      * @return {@code null} when done, else the French reason it is not
      */
-    private String removeOwner(UUID cutoverId, UUID ownerId, Map<String, List<UUID>> targets) {
+    private String removeOwner(UUID cutoverId, UUID ownerId, Map<String, List<UUID>> targets, boolean global) {
         try {
             List<UUID> linked = targets.getOrDefault(MigrationRecord.LINKED_USERS, List.of());
             List<UUID> authenticators = targets.getOrDefault(MigrationRecord.AUTHENTICATORS, List.of());
@@ -548,7 +652,11 @@ public class BrefCutoverService implements BrefCutoverUseCase {
                 uow.platform(() -> identity.deleteOrphanImportedAccounts(created));
             }
             store.purgeOwners(List.of(ownerId));
-            store.ownersStatus(cutoverId, List.of(ownerId), CutoverOwnerStatus.ROLLED_BACK, null);
+            if (global) {
+                store.ownersStatus(cutoverId, List.of(ownerId), CutoverOwnerStatus.ROLLED_BACK, null);
+            } else {
+                store.resetOwner(cutoverId, ownerId);
+            }
             log.info("[ADMIN AUDIT] Bref cutover owner rolled back: cutover={} owner={} companies={} "
                     + "createdAccounts={}", cutoverId, ownerId, targets.getOrDefault(MigrationRecord.TENANTS,
                     List.of()).size(), created.size());

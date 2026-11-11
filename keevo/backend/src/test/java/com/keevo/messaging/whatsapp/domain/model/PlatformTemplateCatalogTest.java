@@ -120,4 +120,46 @@ class PlatformTemplateCatalogTest {
         assertThat(new PlatformTemplate("t", Category.UTILITY, "fr", "a {{0}} b", null, List.of()).render(List.of("x")))
                 .isEqualTo("a {{0}} b");
     }
+
+    @Test
+    @DisplayName("24.13 — cutover campaign templates: fr + en per name, Meta rules, UTILITY, never a kind nor approved")
+    void cutoverCampaignTemplates() {
+        List<PlatformTemplate> campaign = PlatformTemplateCatalog.campaignTemplates();
+        assertThat(campaign).hasSize(8);
+        Set<String> keys = new HashSet<>();
+        java.util.Map<String, Integer> variables = new java.util.HashMap<>();
+        Pattern promo = Pattern.compile("(?i)profitez|promo|offre spéciale|réduction|gratuit|!|discount|free");
+        for (PlatformTemplate t : campaign) {
+            assertThat(keys.add(t.name() + "/" + t.language())).as("duplicate %s/%s", t.name(), t.language()).isTrue();
+            assertThat(t.name()).matches(NAME).startsWith("bref_bascule_");
+            assertThat(t.language()).isIn("fr", "en");
+            assertThat(t.category()).isEqualTo(Category.UTILITY);
+            assertThat(t.body()).hasSizeLessThanOrEqualTo(1024);
+            assertThat(t.body().strip()).as("%s starts with a variable", t.name()).doesNotStartWith("{{");
+            assertThat(t.body().strip()).as("%s ends with a variable", t.name()).doesNotEndWith("}}");
+            assertThat(t.body()).doesNotContain("}}{{");
+            Matcher m = VARIABLE.matcher(t.body());
+            Set<Integer> seen = new HashSet<>();
+            while (m.find()) seen.add(Integer.parseInt(m.group(1)));
+            for (int i = 1; i <= t.variableCount(); i++) {
+                assertThat(seen).as("%s numbering", t.name()).contains(i);
+            }
+            assertThat(t.examples()).hasSize(t.variableCount());
+            assertThat(t.footer()).isEqualTo("Bref Point");
+            assertThat(t.render(t.examples())).doesNotContain("{{");
+            assertThat(t.body() + String.join(" ", t.examples())).as(t.name()).doesNotContainPattern(promo)
+                    .doesNotContainPattern(UUID_LIKE);
+            // Meta rejects templates where variables outweigh the fixed text: at least 60 fixed characters per variable
+            assertThat(t.fixedLength()).as("%s fixed text", t.name()).isGreaterThanOrEqualTo(60 * t.variableCount());
+            Integer other = variables.putIfAbsent(t.name(), t.variableCount());
+            assertThat(other == null || other == t.variableCount()).as("%s same variables in fr and en", t.name())
+                    .isTrue();
+            assertThat(PlatformTemplateCatalog.byName(t.name())).as("%s outside the kind catalogue", t.name()).isEmpty();
+            assertThat(PlatformTemplateCatalog.kindTemplateByName(t.name())).isEmpty();
+        }
+        assertThat(keys).hasSize(8);
+        assertThat(variables.keySet()).containsExactlyInAnyOrder("bref_bascule_annonce", "bref_bascule_rappel",
+                "bref_bascule_terminee", "bref_bascule_incident");
+        assertThat(PlatformTemplateCatalog.all()).doesNotContainAnyElementsOf(campaign);
+    }
 }

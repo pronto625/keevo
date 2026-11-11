@@ -165,6 +165,17 @@ public class AdminBrefCutoverController {
                 useCase.rollback(cutoverId, body == null ? null : body.confirmation(), CurrentActor.actorId()))));
     }
 
+    @Operation(summary = "Roll back ONE owner before the « go » (its company removed, its line back to pending; "
+            + "relaunch the cutover to import it again)", security = @SecurityRequirement(name = "bearerAuth"))
+    @PostMapping("/{cutoverId}/owners/{ownerId}/rollback")
+    public ResponseEntity<ApiResponseWrapper<CutoverResponse>> rollbackOwner(
+            @PathVariable UUID cutoverId, @PathVariable UUID ownerId,
+            @RequestBody(required = false) RollbackRequest body) {
+        CurrentActor.requireSuperAdmin();
+        return ResponseEntity.ok(ApiResponseWrapper.ok(CutoverResponse.of(useCase.rollbackOwner(cutoverId, ownerId,
+                body == null ? null : body.confirmation(), CurrentActor.actorId()))));
+    }
+
     private static CutoverOwnerStatus status(String code) {
         if (code == null || code.isBlank()) {
             return null;

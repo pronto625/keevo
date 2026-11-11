@@ -188,7 +188,7 @@ class BrefCutoverFullContextTest extends FullContextIntegrationTest {
     }
 
     @Test
-    @DisplayName("run → report → rollback to the initial state → run → « go » gated, accepted, active; no rollback after")
+    @DisplayName("run → report → rollback to the initial state → run → one owner rolled back and re-imported (24.13) → « go » gated, accepted, active; no rollback after")
     void cutoverEndToEnd() throws Exception {
         token(); // the super-admin row exists before the initial state is read
         UUID clean = owner(phone(), true);
@@ -271,6 +271,39 @@ class BrefCutoverFullContextTest extends FullContextIntegrationTest {
         String second = json(send(post("/api/v1/admin/migration/cutovers"), "{\"source\":\"DATABASE\"}"))
                 .path("data").path("id").asText();
         assertThat(waitFor(second, Set.of("READY", "FAILED")).path("status").asText()).isEqualTo("READY");
+
+        // 24.13: one owner rolled back alone (wrong phrase refused), then imported again from the frozen copy
+        String ownerRollback = "/api/v1/admin/migration/cutovers/" + second + "/owners/" + clean + "/rollback";
+        assertThat(send(post(ownerRollback), "{\"confirmation\":\"non\"}").getResponse().getStatus())
+                .isEqualTo(422);
+        assertThat(send(post("/api/v1/admin/migration/cutovers/" + second + "/owners/" + UUID.randomUUID()
+                + "/rollback"), "{\"confirmation\":\"RETOUR ARRIERE\"}").getResponse().getStatus()).isEqualTo(422);
+        MvcResult reset = send(post(ownerRollback), "{\"confirmation\":\"RETOUR ARRIERE\"}");
+        assertThat(reset.getResponse().getStatus()).isEqualTo(200);
+        assertThat(json(reset).path("data").path("status").asText()).isEqualTo("FAILED");
+        assertThat(json(reset).path("data").path("errorLabel").asText()).contains("remis en attente");
+        assertThat(count(SUSPENDED_BY_IMPORT, clean, linked)).isEqualTo(1);
+        assertThat(count("SELECT count(*) FROM public.migration_batches WHERE bref_owner_id = ?", clean)).isZero();
+        assertThat(jdbc.queryForObject("SELECT status FROM public.migration_cutover_owners WHERE cutover_id = ?::uuid "
+                + "AND bref_owner_id = ?", String.class, second, clean)).isEqualTo("PENDING");
+        java.util.Map<String, Object> resetLine = jdbc.queryForMap("SELECT batch_id, tenant_id, reason, import_ms, "
+                + "reconcile_ms, figures::text AS figures, started_at, finished_at FROM public.migration_cutover_owners "
+                + "WHERE cutover_id = ?::uuid AND bref_owner_id = ?", second, clean);
+        assertThat(resetLine.get("figures")).isEqualTo("{}");
+        assertThat(resetLine).containsEntry("batch_id", null).containsEntry("tenant_id", null).containsEntry("reason", null)
+                .containsEntry("import_ms", null).containsEntry("reconcile_ms", null)
+                .containsEntry("started_at", null).containsEntry("finished_at", null);
+        assertThat(count("SELECT count(*) FROM public.user_tenant_memberships WHERE user_id = ?", keevoAccount))
+                .isEqualTo(2); // the other owner's linked account keeps both companies
+        assertThat(send(post(ownerRollback), "{\"confirmation\":\"RETOUR ARRIERE\"}").getResponse().getStatus())
+                .isEqualTo(409); // pending: nothing to remove
+        assertThat(send(post("/api/v1/admin/migration/cutovers/" + second + "/runs"), null).getResponse()
+                .getStatus()).isEqualTo(202);
+        assertThat(waitFor(second, Set.of("READY", "FAILED")).path("status").asText()).isEqualTo("READY");
+        assertThat(jdbc.queryForObject("SELECT status FROM public.migration_cutover_owners WHERE cutover_id = ?::uuid "
+                + "AND bref_owner_id = ?", String.class, second, clean)).isEqualTo("RECONCILED");
+        assertThat(count(SUSPENDED_BY_IMPORT, clean, linked)).isEqualTo(2);
+
         String schema = jdbc.queryForObject("SELECT t.schema_name FROM public.tenants t JOIN public.migration_records r "
                 + "ON r.target_id = t.id AND r.target_table = 'tenants' WHERE r.bref_owner_id = ?", String.class, clean);
         jdbc.update("UPDATE \"" + schema + "\".invoices SET total_ttc = total_ttc + 50");
@@ -299,6 +332,8 @@ class BrefCutoverFullContextTest extends FullContextIntegrationTest {
                 linked)).isEqualTo(2);
         assertThat(send(post("/api/v1/admin/migration/cutovers/" + second + "/rollback"),
                 "{\"confirmation\":\"RETOUR ARRIERE\"}").getResponse().getStatus()).isEqualTo(409);
+        assertThat(send(post(ownerRollback), "{\"confirmation\":\"RETOUR ARRIERE\"}").getResponse().getStatus())
+                .isEqualTo(409); // after the « go »: never
         assertThat(send(get("/api/v1/admin/migration/cutovers/" + UUID.randomUUID()), null).getResponse()
                 .getStatus()).isEqualTo(404);
     }

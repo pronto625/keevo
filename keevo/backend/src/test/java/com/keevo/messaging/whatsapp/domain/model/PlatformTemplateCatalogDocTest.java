@@ -192,7 +192,38 @@ class PlatformTemplateCatalogDocTest {
         }
         md.append("\nRepli de chaque ligne : texte libre actuel (Wassender puis Twilio) tant que le modèle n'est pas "
                 + "listé dans `WHATSAPP_APPROVED_TEMPLATES` ou si Meta le refuse.\n");
+        cutoverSection(md);
         return md.toString();
+    }
+
+    /** Story 24.13 — the cutover campaign templates (fr + en per name), sent by hand through campaigns. */
+    private static void cutoverSection(StringBuilder md) {
+        List<PlatformTemplate> campaign = PlatformTemplateCatalog.campaignTemplates();
+        md.append("\n## 5. Modèles des campagnes de la bascule Bref (story 24.13, ").append(campaign.size())
+                .append(")\n\n")
+                .append("- Envoyés **à la main** par une campagne (aucun envoi automatique) : avant le « go », par les "
+                        + "campagnes de l'admin Bref (les owners n'existent que dans Bref) ; après le « go », par les "
+                        + "campagnes plateforme Keevo (21.6). Textes et étapes : `docs/RUNBOOK_BASCULE_BREF.md` §11.\n")
+                .append("- Même numéro et même compte WhatsApp Business que les modèles ci-dessus (numéro de Bref "
+                        + "repris par Keevo) : un modèle approuvé sert aux deux outils.\n")
+                .append("- Un **nom** par message, créé deux fois dans Meta : langue Français (`fr`) puis Anglais "
+                        + "(`en`) — Meta range les deux langues sous le même nom.\n")
+                .append("- Ne **pas** les ajouter à `WHATSAPP_APPROVED_TEMPLATES` : ce réglage ne concerne que les "
+                        + "messages automatiques de la section 4 ; une campagne nomme son modèle elle-même.\n")
+                .append("- À soumettre au plus tard à J-10 (approbation jusqu'à 48 h) pour l'annonce de J-7.\n\n");
+        int n = 1;
+        for (PlatformTemplate t : campaign) {
+            md.append("### 5.").append(n++).append(" `").append(t.name()).append("` — ")
+                    .append("fr".equals(t.language()) ? "Français (`fr`)" : "Anglais (`en`)").append("\n\n")
+                    .append("- Catégorie : ").append(category(t.category())).append("\n")
+                    .append("- Pied de page : « ").append(t.footer()).append(" »\n\nCorps :\n\n```text\n")
+                    .append(t.body()).append("\n```\n\n| Variable | Exemple |\n|---|---|\n");
+            for (int i = 0; i < t.variableCount(); i++) {
+                md.append("| `{{").append(i + 1).append("}}` | ").append(t.examples().get(i).replace("|", "\\|"))
+                        .append(" |\n");
+            }
+            md.append("\n");
+        }
     }
 
     private static String category(PlatformTemplate.Category category) {

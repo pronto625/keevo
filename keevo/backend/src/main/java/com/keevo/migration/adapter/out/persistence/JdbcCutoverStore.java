@@ -101,6 +101,19 @@ class JdbcCutoverStore implements CutoverStore {
             + "FROM public.migration_cutover_owners o LEFT JOIN public.tenants t ON t.id = o.tenant_id "
             + "WHERE o.cutover_id = ? AND o.status = ? AND o.position > ? ORDER BY o.position LIMIT ?";
 
+    /** Story 24.13 — one line by primary key (company name from the tenant row, absent once removed). */
+    static final String OWNER_SQL = "SELECT " + OWNER_COLUMNS + ", t.name AS company_name "
+            + "FROM public.migration_cutover_owners o LEFT JOIN public.tenants t ON t.id = o.tenant_id "
+            + "WHERE o.cutover_id = ? AND o.bref_owner_id = ?";
+
+    /** Story 24.13 — the line of an owner removed alone, back to the start (figures no longer counted). */
+    static final String RESET_OWNER_SQL = """
+            UPDATE public.migration_cutover_owners
+               SET status = 'PENDING', batch_id = NULL, tenant_id = NULL, reason = NULL, import_ms = NULL,
+                   reconcile_ms = NULL, figures = '{}'::jsonb, started_at = NULL, finished_at = NULL
+             WHERE cutover_id = ? AND bref_owner_id = ?
+            """;
+
     static final String OWNER_DONE_SQL = """
             UPDATE public.migration_cutover_owners
                SET status = ?, batch_id = ?, tenant_id = coalesce(?, tenant_id), reason = ?, import_ms = ?,
@@ -269,6 +282,16 @@ class JdbcCutoverStore implements CutoverStore {
             ps.setArray(4, con.createArrayOf("uuid", ownerIds.toArray()));
             return ps;
         });
+    }
+
+    @Override
+    public Optional<CutoverOwner> owner(UUID cutoverId, UUID ownerId) {
+        return jdbc.query(OWNER_SQL, (rs, i) -> owner(rs), cutoverId, ownerId).stream().findFirst();
+    }
+
+    @Override
+    public void resetOwner(UUID cutoverId, UUID ownerId) {
+        jdbc.update(RESET_OWNER_SQL, cutoverId, ownerId);
     }
 
     @Override

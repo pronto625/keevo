@@ -342,4 +342,175 @@ class BrefCutoverServiceTest {
         verify(store).ownersStatus(cutoverId, List.of(owner.brefOwnerId()), CutoverOwnerStatus.FAILED,
                 BrefCutoverService.ROLLBACK_OWNER_FAILED);
     }
+
+    // ── 24.13: one owner's rollback before the « go » ─────────────────────────────────────────────────────────────
+
+    private void ownerRollbackReady(CutoverOwner line) {
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.READY)));
+        when(store.owner(cutoverId, line.brefOwnerId())).thenReturn(Optional.of(line));
+        when(store.transition(eq(cutoverId), anyCollection(), eq(CutoverStatus.RUNNING), any(), eq(false)))
+                .thenReturn(true);
+        when(store.aggregate(eq(cutoverId), any(), any(), anyInt())).thenReturn(CutoverReport.EMPTY);
+    }
+
+    @Test
+    @DisplayName("24.13 — one owner in gap: its company removed, its line back to pending, the cutover to relaunch")
+    void ownerRollbackRemovesOneCompanyAndPutsTheLineBackToPending() {
+        UUID tenant = UUID.randomUUID();
+        UUID created = UUID.randomUUID();
+        UUID linked = UUID.randomUUID();
+        CutoverOwner owner = line(3, CutoverOwnerStatus.GAP, tenant);
+        ownerRollbackReady(owner);
+        when(store.targets(List.of(owner.brefOwnerId()), BrefCutoverService.ROLLBACK_TABLES)).thenReturn(Map.of(
+                owner.brefOwnerId(), Map.of(MigrationRecord.TENANTS, List.of(tenant), MigrationRecord.USERS,
+                        List.of(created, linked), MigrationRecord.LINKED_USERS, List.of(linked))));
+        when(identity.prepareImportedTenantRemoval(eq(tenant), eq(BrefMappings.SUSPENSION_REASON), anyCollection(),
+                anyCollection())).thenReturn(RemovalPreparation.READY);
+        when(deletion.forgetImportedNow(tenant)).thenReturn(true);
+
+        service.rollbackOwner(cutoverId, owner.brefOwnerId(), " RETOUR ARRIERE ", actor);
+
+        verify(store).transition(eq(cutoverId), eq(java.util.EnumSet.of(CutoverStatus.READY, CutoverStatus.FAILED)),
+                eq(CutoverStatus.RUNNING), any(), eq(false));
+        verify(deletion).forgetImportedNow(tenant);
+        verify(identity).deleteOrphanImportedAccounts(Set.of(created));
+        verify(store).purgeOwners(List.of(owner.brefOwnerId()));
+        verify(store).resetOwner(cutoverId, owner.brefOwnerId());
+        verify(store, never()).ownersStatus(any(), anyCollection(), eq(CutoverOwnerStatus.ROLLED_BACK), any());
+        verify(store).finish(eq(cutoverId), eq(CutoverStatus.FAILED), eq(BrefCutoverService.OWNER_RESET), any());
+    }
+
+    @Test
+    @DisplayName("24.13 — a blocked owner (nothing written) is only purged and put back to pending")
+    void ownerRollbackOfABlockedOwnerOnlyResetsIt() {
+        CutoverOwner owner = line(1, CutoverOwnerStatus.BLOCKED, null);
+        ownerRollbackReady(owner);
+        when(store.targets(anyCollection(), anyCollection())).thenReturn(Map.of());
+        service.rollbackOwner(cutoverId, owner.brefOwnerId(), "RETOUR ARRIERE", actor);
+        verify(deletion, never()).forgetImportedNow(any());
+        verify(store).resetOwner(cutoverId, owner.brefOwnerId());
+    }
+
+    @Test
+    @DisplayName("24.13 — wrong phrase, unknown owner, nothing to remove, global rollback started")
+    void ownerRollbackValidations() {
+        UUID unknown = UUID.randomUUID();
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.READY)));
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, unknown, "oui", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining(BrefCutoverService.ROLLBACK_PHRASE);
+        when(store.owner(cutoverId, unknown)).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, unknown, "RETOUR ARRIERE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining(BrefCutoverService.OWNER_NOT_IN_CUTOVER);
+        for (CutoverOwnerStatus st : List.of(CutoverOwnerStatus.PENDING, CutoverOwnerStatus.NOT_MIGRATED,
+                CutoverOwnerStatus.ACTIVATED, CutoverOwnerStatus.ROLLED_BACK)) {
+            CutoverOwner l = line(1, st, null);
+            when(store.owner(cutoverId, l.brefOwnerId())).thenReturn(Optional.of(l));
+            assertThatThrownBy(() -> service.rollbackOwner(cutoverId, l.brefOwnerId(), "RETOUR ARRIERE", actor))
+                    .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                    .hasMessageContaining(BrefCutoverService.OWNER_NOTHING_TO_REMOVE);
+        }
+        Cutover partlyRolledBack = new Cutover(cutoverId, SourceKind.DATABASE, CutoverStatus.FAILED, 2, 1, actor, T,
+                null, T, null, null, null, null, null, List.of(new CutoverReport.StatusCount("ROLLED_BACK", "x", 1)),
+                List.of(), CutoverReport.EMPTY);
+        when(store.find(cutoverId)).thenReturn(Optional.of(partlyRolledBack));
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, unknown, "RETOUR ARRIERE", actor))
+                .hasMessageContaining(BrefCutoverService.ROLLBACK_STARTED);
+        verify(store, never()).transition(any(), anyCollection(), any(), any(), org.mockito.ArgumentMatchers.anyBoolean());
+    }
+
+    @Test
+    @DisplayName("24.13 — refused while running, rolling back, after the « go » or once rolled back: nothing removed")
+    void ownerRollbackRefusedWhenTheCutoverIsBusyOrDecided() {
+        UUID owner = UUID.randomUUID();
+        for (CutoverStatus st : List.of(CutoverStatus.RUNNING, CutoverStatus.ROLLING_BACK, CutoverStatus.ACTIVATED,
+                CutoverStatus.ROLLED_BACK)) {
+            when(store.find(cutoverId)).thenReturn(Optional.of(cutover(st)));
+            when(store.transition(eq(cutoverId), anyCollection(), any(), any(),
+                    org.mockito.ArgumentMatchers.anyBoolean())).thenReturn(false);
+            assertThatThrownBy(() -> service.rollbackOwner(cutoverId, owner, "RETOUR ARRIERE", actor))
+                    .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                    .hasMessageContaining(st == CutoverStatus.ACTIVATED ? BrefCutoverService.AFTER_GO
+                            : BrefCutoverService.refusal(st));
+        }
+        verify(store, never()).purgeOwners(anyCollection());
+        verify(store, never()).finish(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("24.13 — an active company is never removed: line failed with the reason, error returned")
+    void ownerRollbackKeepsAnActiveCompany() {
+        UUID tenant = UUID.randomUUID();
+        CutoverOwner owner = line(1, CutoverOwnerStatus.RECONCILED, tenant);
+        ownerRollbackReady(owner);
+        when(store.targets(anyCollection(), anyCollection())).thenReturn(Map.of(owner.brefOwnerId(),
+                Map.of(MigrationRecord.TENANTS, List.of(tenant))));
+        when(identity.prepareImportedTenantRemoval(eq(tenant), anyString(), anyCollection(), anyCollection()))
+                .thenReturn(RemovalPreparation.REFUSED);
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, owner.brefOwnerId(), "RETOUR ARRIERE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                .hasMessageContaining(BrefCutoverService.ROLLBACK_REFUSED);
+        verify(deletion, never()).forgetImportedNow(any());
+        verify(store, never()).purgeOwners(anyCollection());
+        verify(store, never()).resetOwner(any(), any());
+        verify(store).ownersStatus(cutoverId, List.of(owner.brefOwnerId()), CutoverOwnerStatus.FAILED,
+                BrefCutoverService.ROLLBACK_REFUSED);
+        verify(store).finish(eq(cutoverId), eq(CutoverStatus.FAILED), eq(BrefCutoverService.OWNER_RESET_FAILED),
+                any());
+    }
+
+    @Test
+    @DisplayName("24.13 review — a store failure under the lock: line failed, cutover released (FAILED), error returned")
+    void ownerRollbackReleasesTheLockWhenAStoreCallThrows() {
+        CutoverOwner owner = line(2, CutoverOwnerStatus.GAP, UUID.randomUUID());
+        ownerRollbackReady(owner);
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.FAILED)));
+        when(store.targets(anyCollection(), anyCollection())).thenThrow(new IllegalStateException("db"));
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, owner.brefOwnerId(), "RETOUR ARRIERE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                .hasMessageContaining(BrefCutoverService.ROLLBACK_OWNER_FAILED);
+        verify(store).ownersStatus(cutoverId, List.of(owner.brefOwnerId()), CutoverOwnerStatus.FAILED,
+                BrefCutoverService.ROLLBACK_OWNER_FAILED);
+        verify(store).finish(eq(cutoverId), eq(CutoverStatus.FAILED), eq(BrefCutoverService.OWNER_RESET_FAILED),
+                any());
+        verify(store, never()).resetOwner(any(), any());
+    }
+
+    @Test
+    @DisplayName("24.13 review — a refusal found under the lock restores the previous status and label, same error code")
+    void ownerRollbackRefusedUnderTheLockRestoresThePreviousState() {
+        CutoverOwner gap = line(2, CutoverOwnerStatus.GAP, UUID.randomUUID());
+        CutoverOwner nowPending = new CutoverOwner(gap.brefOwnerId(), 2, gap.label(), null, CutoverOwnerStatus.PENDING,
+                null, null, null, null, null, null, null);
+        ownerRollbackReady(gap);
+        when(store.owner(cutoverId, gap.brefOwnerId())).thenReturn(Optional.of(gap), Optional.of(nowPending));
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, gap.brefOwnerId(), "RETOUR ARRIERE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.INVALID_STATE))
+                .hasMessageContaining(BrefCutoverService.OWNER_NOTHING_TO_REMOVE);
+        verify(store).finish(eq(cutoverId), eq(CutoverStatus.READY), isNull(), any());
+        verify(store, never()).purgeOwners(anyCollection());
+
+        CutoverOwner gone = line(3, CutoverOwnerStatus.GAP, UUID.randomUUID());
+        when(store.owner(cutoverId, gone.brefOwnerId())).thenReturn(Optional.of(gone), Optional.empty());
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, gone.brefOwnerId(), "RETOUR ARRIERE", actor))
+                .satisfies(e -> assertThat(((DomainException) e).getErrorCode()).isEqualTo(ErrorCode.VALIDATION_FAILED))
+                .hasMessageContaining(BrefCutoverService.OWNER_NOT_IN_CUTOVER);
+    }
+
+    @Test
+    @DisplayName("24.13 review — a global rollback started between the check and the lock: refused, nothing reset")
+    void ownerRollbackRefusedWhenAGlobalRollbackStartedMeanwhile() {
+        CutoverOwner owner = line(1, CutoverOwnerStatus.FAILED, UUID.randomUUID());
+        ownerRollbackReady(owner);
+        Cutover partlyRolledBack = new Cutover(cutoverId, SourceKind.DATABASE, CutoverStatus.FAILED, 2, 1, actor, T,
+                null, T, null, null, null, null, "Retour arrière incomplet : 1 compte(s) à reprendre, relancez-le",
+                List.of(new CutoverReport.StatusCount("ROLLED_BACK", "x", 1)), List.of(), CutoverReport.EMPTY);
+        when(store.find(cutoverId)).thenReturn(Optional.of(cutover(CutoverStatus.FAILED)),
+                Optional.of(partlyRolledBack));
+        assertThatThrownBy(() -> service.rollbackOwner(cutoverId, owner.brefOwnerId(), "RETOUR ARRIERE", actor))
+                .hasMessageContaining(BrefCutoverService.ROLLBACK_STARTED);
+        verify(store, never()).resetOwner(any(), any());
+        verify(store).finish(eq(cutoverId), eq(CutoverStatus.FAILED), isNull(), any());
+    }
 }

@@ -55,6 +55,17 @@ public interface BrefCutoverUseCase {
      */
     Cutover rollback(UUID cutoverId, String confirmation, UUID actorId);
 
+    /**
+     * Story 24.13 — removes the company of ONE owner (before the « go » only, same compensation as {@link #rollback})
+     * and puts its line back to « En attente », so that {@link #resume} imports it again from the frozen copy. Runs
+     * synchronously; the cutover is then FAILED (« relancez la bascule »).
+     *
+     * @throws com.keevo.shared.domain.exception.DomainException {@code MIGRATION_CUTOVER_NOT_FOUND},
+     *         {@code VALIDATION_FAILED} (phrase, owner not in the cutover), {@code INVALID_STATE} (cutover running,
+     *         decided or rolled back; nothing to remove; removal refused)
+     */
+    Cutover rollbackOwner(UUID cutoverId, UUID ownerId, String confirmation, UUID actorId);
+
     /** @throws com.keevo.shared.domain.exception.DomainException {@code MIGRATION_CUTOVER_NOT_FOUND} */
     Cutover cutover(UUID cutoverId);
 

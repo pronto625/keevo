@@ -373,3 +373,160 @@ Merci pour votre confiance.
 | Lien d'une facture ou d'un devis envoyé au client depuis le numéro Keevo (quand le WhatsApp Business de l'entreprise n'est pas utilisable, 21.5) | `WhatsAppInvoiceChannel` | `keevo_document_lien` | {{1}} = client, {{2}} = « facture » ou « devis », {{3}} = référence, {{4}} = vendeur, {{5}} = montant, {{6}} = lien |
 
 Repli de chaque ligne : texte libre actuel (Wassender puis Twilio) tant que le modèle n'est pas listé dans `WHATSAPP_APPROVED_TEMPLATES` ou si Meta le refuse.
+
+## 5. Modèles des campagnes de la bascule Bref (story 24.13, 8)
+
+- Envoyés **à la main** par une campagne (aucun envoi automatique) : avant le « go », par les campagnes de l'admin Bref (les owners n'existent que dans Bref) ; après le « go », par les campagnes plateforme Keevo (21.6). Textes et étapes : `docs/RUNBOOK_BASCULE_BREF.md` §11.
+- Même numéro et même compte WhatsApp Business que les modèles ci-dessus (numéro de Bref repris par Keevo) : un modèle approuvé sert aux deux outils.
+- Un **nom** par message, créé deux fois dans Meta : langue Français (`fr`) puis Anglais (`en`) — Meta range les deux langues sous le même nom.
+- Ne **pas** les ajouter à `WHATSAPP_APPROVED_TEMPLATES` : ce réglage ne concerne que les messages automatiques de la section 4 ; une campagne nomme son modèle elle-même.
+- À soumettre au plus tard à J-10 (approbation jusqu'à 48 h) pour l'annonce de J-7.
+
+### 5.1 `bref_bascule_annonce` — Français (`fr`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Bonjour, Bref Point passe à sa nouvelle version. Le service sera arrêté le {{1}} et reviendra au plus tard le {{2}}.
+
+Avant l'arrêt, ouvrez l'application Bref Point avec une connexion internet pour envoyer vos ventes en attente : une vente restée hors connexion sur un téléphone ne sera pas reprise.
+
+Vos boutiques, factures, clients et votre abonnement seront conservés.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | samedi 12/12 à 20 h |
+| `{{2}}` | dimanche 13/12 à 8 h |
+
+### 5.2 `bref_bascule_annonce` — Anglais (`en`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Hello, Bref Point is moving to its new version. The service will stop on {{1}} and will be back by {{2}} at the latest.
+
+Before the stop, open the Bref Point app with an internet connection to send your pending sales: a sale left offline on a phone will not be carried over.
+
+Your shops, invoices, customers and subscription will be kept.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | Saturday 12/12 at 8 pm |
+| `{{2}}` | Sunday 13/12 at 8 am |
+
+### 5.3 `bref_bascule_rappel` — Français (`fr`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Rappel : Bref Point sera arrêté le {{1}} pour passer à sa nouvelle version. Ouvrez dès maintenant l'application avec une connexion internet pour envoyer vos ventes en attente.
+
+Les ventes enregistrées dans l'application pendant l'arrêt ne seront pas reprises : notez-les sur papier et saisissez-les dans la nouvelle version.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | samedi 12/12 à 20 h |
+
+### 5.4 `bref_bascule_rappel` — Anglais (`en`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Reminder: Bref Point will stop on {{1}} to move to its new version. Open the app now with an internet connection to send your pending sales.
+
+Sales recorded in the app during the stop will not be carried over: write them down on paper and enter them in the new version.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | Saturday 12/12 at 8 pm |
+
+### 5.5 `bref_bascule_terminee` — Français (`fr`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Bonjour, la nouvelle version de Bref Point est disponible. Mettez à jour l'application depuis {{1}}, puis connectez-vous avec vos identifiants habituels (un nouveau mot de passe peut vous être demandé).
+
+Vos boutiques, factures, clients et votre abonnement ont été repris. Vous pouvez maintenant saisir les ventes notées pendant l'arrêt.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | le Play Store ou l'App Store |
+
+### 5.6 `bref_bascule_terminee` — Anglais (`en`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Hello, the new version of Bref Point is available. Update the app from {{1}}, then sign in with your usual credentials (you may be asked to choose a new password).
+
+Your shops, invoices, customers and subscription have been carried over. You can now enter the sales written down during the stop.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | the Play Store or the App Store |
+
+### 5.7 `bref_bascule_incident` — Français (`fr`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Bonjour, voici une information sur le passage de Bref Point à sa nouvelle version.
+
+{{1}}
+
+Vos boutiques, factures et clients restent conservés. Nous vous tiendrons informé de la suite par ce même canal. Pour toute question, contactez le support Bref Point au {{2}}.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | La mise à jour prend plus de temps que prévu. Le service reviendra au plus tard dimanche 13/12 à 12 h. |
+| `{{2}}` | +237 6XX XX XX XX |
+
+### 5.8 `bref_bascule_incident` — Anglais (`en`)
+
+- Catégorie : Utilitaire (UTILITY)
+- Pied de page : « Bref Point »
+
+Corps :
+
+```text
+Hello, here is an update about the move of Bref Point to its new version.
+
+{{1}}
+
+Your shops, invoices and customers remain safe. We will keep you informed through this same channel. For any question, contact Bref Point support at {{2}}.
+```
+
+| Variable | Exemple |
+|---|---|
+| `{{1}}` | The update is taking longer than planned. The service will be back by Sunday 13/12 at 12 pm at the latest. |
+| `{{2}}` | +237 6XX XX XX XX |
+
